@@ -204,6 +204,7 @@ enum class AntiAliasingMode
     SMAA,
     TAA,
     SMAAT2X,
+    NaiveTAA,
 };
 
 enum class SMAAEdgeDetectionMode : int32_t
@@ -551,6 +552,14 @@ struct ViewFamily
     ArenaVector<SpriteBatch> spriteBatches{};
 };
 
+enum class ReSTIRDebugStop : uint8_t
+{
+    Spatial2 = 0,
+    Spatial1,
+    Temporal,
+    Generate,
+};
+
 struct FrameBuffer
 {
     FrameBuffer() = default;
@@ -595,6 +604,8 @@ struct FrameBuffer
     bool bLogRDG = false;
     bool bGroundTruthMode = false;
     bool bResetGroundTruth = false;
+    bool bAtrousDenoiser = false;
+    ReSTIRDebugStop restirDebugStop = ReSTIRDebugStop::Spatial2;
 
     bool bTakeScreenshot{false};
 };

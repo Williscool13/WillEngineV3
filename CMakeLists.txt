@@ -449,6 +449,7 @@ compile_shaders(will-engine
 
 
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/temporal_antialiasing.slang compute ComputeMain temporal_antialiasing
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/naive_temporal_antialiasing.slang compute ComputeMain naive_temporal_antialiasing
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute LumaEdgeDetectionMain smaa_luma_edge_detection
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute ColorEdgeDetectionMain smaa_color_edge_detection
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute DepthEdgeDetectionMain smaa_depth_edge_detection
@@ -457,6 +458,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtao_depth_prepass
         ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtao_main
         ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtao_denoise
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/atrous_wavelet.slang compute ATrousWaveletMain atrous_wavelet
         ${CMAKE_SOURCE_DIR}/shaders/post-process/tonemapping.slang compute ComputeSDRTonemap tonemap_sdr
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeBuildHistogramExposure exposure_build_histogram
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeAverageExposure exposure_calculate_average

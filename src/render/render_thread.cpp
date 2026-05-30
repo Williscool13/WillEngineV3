@@ -199,9 +199,7 @@ void RenderThread::ThreadMain()
 
             FrameMark;
             engineRenderSynchronization->gameFrames.fetch_add(1, std::memory_order_release);
-        }
-
-        {
+        } {
             AssetLoad::GPUDispatchRequest req{};
             uint32_t dispatched = 0;
             while (dispatched < AssetLoad::PROCEDURAL_TEXTURE_DISPATCHES_PER_FRAME && asyncAssetLoadManager->graphicsDispatchQueue.try_dequeue(req)) {
@@ -518,11 +516,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 if (frameBuffer.bResetGroundTruth) { groundTruthAccumCount = 0; }
                 SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, frameBuffer.bResetGroundTruth, groundTruthAccumCount, frameNumber);
                 groundTruthAccumCount += 4;
-            } else {
-                SetupReSTIRPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
-                SetupReSTIRTemporalPass(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
-                SetupReSTIRSpatialPass(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
+            }
+            else {
+                SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber, frameBuffer.restirDebugStop);
                 SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
+                if (frameBuffer.bAtrousDenoiser) {
+                    SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets);
+                }
             }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
         }
@@ -569,7 +569,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 finalOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
                 break;
             case Core::AntiAliasingMode::TAA:
-                finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+                finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, SID("temporal_antialiasing"));
+                break;
+            case Core::AntiAliasingMode::NaiveTAA:
+                finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, SID("naive_temporal_antialiasing"));
                 break;
             case Core::AntiAliasingMode::SMAAT2X:
                 finalOutput = SetupSMAA_T2X(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
@@ -1253,16 +1256,15 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     memcpy(shadowDataUploadAllocation.ptr, &shadowData, sizeof(ShadowData));
 
     // Lights
-    LightData lightData{};
-    {
+    LightData lightData{}; {
         const glm::vec3& dir = viewFamily.directionalLight.direction;
         const glm::vec3& col = viewFamily.directionalLight.color;
         lightData.directionalLight.directionIntensity = {dir, viewFamily.directionalLight.intensity};
         lightData.directionalLight.packedColor =
-            (static_cast<uint32_t>(glm::clamp(col.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
-            (static_cast<uint32_t>(glm::clamp(col.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
-            (static_cast<uint32_t>(glm::clamp(col.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-            (0xFFu << 24);
+                (static_cast<uint32_t>(glm::clamp(col.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
+                (static_cast<uint32_t>(glm::clamp(col.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
+                (static_cast<uint32_t>(glm::clamp(col.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+                (0xFFu << 24);
 
         lightData.pointLightCount = static_cast<int32_t>(viewFamily.pointLights.Size());
         for (int32_t i = 0; i < lightData.pointLightCount; i++) {
@@ -1657,10 +1659,10 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) cons
             .worldPosition = s.worldPosition,
             .pixelSize = s.pixelSize,
             .packedColor =
-                (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f))       |
-                (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8)  |
-                (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-                (static_cast<uint32_t>(glm::clamp(c.a, 0.0f, 1.0f) * 255.0f + 0.5f) << 24),
+            (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
+            (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
+            (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+            (static_cast<uint32_t>(glm::clamp(c.a, 0.0f, 1.0f) * 255.0f + 0.5f) << 24),
             .stableIdLo = static_cast<uint32_t>(s.stableId & 0xFFFFFFFFu),
             .stableIdHi = static_cast<uint32_t>(s.stableId >> 32u),
             .flags = s.billboard ? SPRITE_FLAG_BILLBOARD : 0u,
@@ -1697,8 +1699,8 @@ void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const Re
         RenderPass& uploadPass = renderGraph->AddPass(SID("Upload UI Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT);
         uploadPass.WriteTransferBuffer(UI_GLYPH_QUAD_BUFFER);
         uploadPass.Execute([&, srcOffset = upload.offset, totalSize = quadCount * sizeof(UIGlyphQuad)](VkCommandBuffer cmd) {
-            VkBufferCopy2 copy{ .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = srcOffset, .dstOffset = 0, .size = totalSize };
-            VkCopyBufferInfo2 copyInfo{ .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2, .srcBuffer = renderGraph->GetTransientUploadBuffer(), .dstBuffer = renderGraph->GetBufferHandle(UI_GLYPH_QUAD_BUFFER), .regionCount = 1, .pRegions = &copy };
+            VkBufferCopy2 copy{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = srcOffset, .dstOffset = 0, .size = totalSize};
+            VkCopyBufferInfo2 copyInfo{.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2, .srcBuffer = renderGraph->GetTransientUploadBuffer(), .dstBuffer = renderGraph->GetBufferHandle(UI_GLYPH_QUAD_BUFFER), .regionCount = 1, .pRegions = &copy};
             vkCmdCopyBuffer2(cmd, &copyInfo);
         });
     }
@@ -2160,5 +2162,4 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     return;
 #endif
 }
-
 } // Render

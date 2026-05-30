@@ -312,6 +312,8 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bEnableShadeDispatchBucketingVisualization = state->debug.bEnableShadeDispatchBucketingVisualization;
     frameBuffer->bEnableLightingBucketingVisualization = state->debug.bEnableLightingBucketingVisualization;
     frameBuffer->bGroundTruthMode = state->debug.bGroundTruthMode;
+    frameBuffer->bAtrousDenoiser = state->debug.bAtrousDenoiser;
+    frameBuffer->restirDebugStop = state->debug.restirDebugStop;
     if (state->debug.bGroundTruthMode) {
         const Core::RenderView& rv = frameBuffer->mainViewFamily.mainView;
         if (rv.currentViewData.view != rv.previousViewData.view) {

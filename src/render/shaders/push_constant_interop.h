@@ -950,4 +950,19 @@ SHADER_PUBLIC struct SpritePushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
+SHADER_PUBLIC struct ATrousWaveletPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t inputColorIndex;
+    SHADER_PUBLIC uint32_t outputColorIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t stepSize;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+    SHADER_PUBLIC float sigmaLuminance;
+    SHADER_PUBLIC float sigmaNormal;
+    SHADER_PUBLIC float sigmaDepth;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

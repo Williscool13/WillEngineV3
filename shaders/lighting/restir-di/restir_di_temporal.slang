@@ -89,7 +89,8 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
 
-    uint h = (pixel.x * 2654435761u) ^ (pixel.y * 805459861u) ^ (pc.frameIndex * 1973u);
+    uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
+    h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
 

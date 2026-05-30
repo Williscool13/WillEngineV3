@@ -61,30 +61,15 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                      const VisibilityShadingTargets& targets,
                                      uint32_t sceneIndex);
 
-void SetupReSTIRPass(RenderGraph& graph,
-                     PipelineManager* pipelineManager,
-                     const Core::ViewFamily& viewFamily,
-                     Core::Array<uint32_t, 2> renderExtent,
-                     const DeferredResolveTargets& targets,
-                     uint32_t sceneIndex,
-                     Core::Arena& arena,
-                     uint64_t frameNumber);
-
-void SetupReSTIRTemporalPass(RenderGraph& graph,
-                             PipelineManager* pipelineManager,
-                             Core::Array<uint32_t, 2> renderExtent,
-                             const DeferredResolveTargets& targets,
-                             uint32_t sceneIndex,
-                             Core::Arena& arena,
-                             uint64_t frameNumber);
-
-void SetupReSTIRSpatialPass(RenderGraph& graph,
-                            PipelineManager* pipelineManager,
-                            Core::Array<uint32_t, 2> renderExtent,
-                            const DeferredResolveTargets& targets,
-                            uint32_t sceneIndex,
-                            Core::Arena& arena,
-                            uint64_t frameNumber);
+void SetupReSTIRPasses(RenderGraph& graph,
+                       PipelineManager* pipelineManager,
+                       const Core::ViewFamily& viewFamily,
+                       Core::Array<uint32_t, 2> renderExtent,
+                       const DeferredResolveTargets& targets,
+                       uint32_t sceneIndex,
+                       Core::Arena& arena,
+                       uint64_t frameNumber,
+                       Core::ReSTIRDebugStop debugStop = Core::ReSTIRDebugStop::Spatial2);
 
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
@@ -94,6 +79,11 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
                                         uint64_t frameNumber);
+
+void SetupATrousWaveletDenoiser(RenderGraph& graph,
+                                PipelineManager* pipelineManager,
+                                Core::Array<uint32_t, 2> renderExtent,
+                                const DeferredResolveTargets& targets);
 
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
@@ -154,7 +144,8 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    PipelineManager* pipelineManager,
                                    const Core::ViewFamily& viewFamily,
                                    Core::Array<uint32_t, 2> renderExtent,
-                                   const MainRenderTargets& ppTargets);
+                                   const MainRenderTargets& ppTargets,
+                                   StringID pipelineSID);
 
 StringID SetupSMAA_T2X(RenderGraph& graph,
                        PipelineManager* pipelineManager,

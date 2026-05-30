@@ -443,6 +443,8 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline(SID("temporal_antialiasing"), src / "temporal_antialiasing_compute.spv",
                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
+    RegisterComputePipeline(SID("naive_temporal_antialiasing"), src / "naive_temporal_antialiasing_compute.spv",
+                            sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
 
     RegisterComputePipeline(SID("smaa_luma_edge_detection"), src / "smaa_luma_edge_detection_compute.spv",
                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
@@ -463,6 +465,9 @@ void PipelineManager::RegisterPipelines()
                             sizeof(GTAOMainPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gtao_denoise"), src / "gtao_denoise_compute.spv",
                             sizeof(GTAODenoisePushConstant), PipelineCategory::Critical);
+
+    RegisterComputePipeline(SID("atrous_wavelet"), src / "atrous_wavelet_compute.spv",
+                            sizeof(ATrousWaveletPushConstant), PipelineCategory::Critical);
 
 
     RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure_build_histogram_compute.spv",

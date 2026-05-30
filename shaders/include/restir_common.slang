@@ -86,7 +86,7 @@ public float3 SampleAreaLightPos(AreaLightVS vs, float uU, float uV)
 public float HashStep(inout uint h)
 {
     h = h ^ (h >> 17u); h *= 0xbf324c81u; h = h ^ (h >> 13u); h *= 0x9c7d2d49u; h = h ^ (h >> 16u);
-    return float(h & 0xFFFFu) / 65536.0;
+    return float(h >> 8) * (1.0f / float(1u << 24));
 }
 
 public Reservoir ReservoirEmpty()

@@ -25,7 +25,7 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
     sceneData.view = viewMatrix;
     sceneData.prevView = prevViewMatrix;
 
-    if (aaMode == Core::AntiAliasingMode::TAA) {
+    if (aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA) {
         glm::mat4 jitteredProj = projMatrix;
         float haltonX = 2.0f * Halton((frameNumber + 1) % HALTON_SEQUENCE_COUNT + 1, 2) - 1.0f;
         float haltonY = 2.0f * Halton((frameNumber + 1) % HALTON_SEQUENCE_COUNT + 1, 3) - 1.0f;

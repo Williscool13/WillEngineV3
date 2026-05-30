@@ -62,7 +62,8 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
-    uint h = (pixel.x * 2654435761u) ^ (pixel.y * 805459861u) ^ (pc.frameIndex * 1973u);
+    uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
+    h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
     // Center-domain target of whichever sample currently wins; finalise divides by this.
     float p_hat_winner = 0.0;

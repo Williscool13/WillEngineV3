@@ -519,7 +519,15 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Checkbox("Enable V-Buffer Lighting Bucketing Visualization", &state->debug.bEnableLightingBucketingVisualization);
 
         ImGui::Separator();
-        ImGui::Checkbox("Ground Truth Mode", &state->debug.bGroundTruthMode);
+        if (ImGui::CollapsingHeader("ReSTIR DI Settings")) {
+            ImGui::Checkbox("Ground Truth Mode", &state->debug.bGroundTruthMode);
+            ImGui::Checkbox("A-Trous Wavelet Denoiser", &state->debug.bAtrousDenoiser);
+            const char* stopLabels[] = {"After Spatial 2", "After Spatial 1", "After Temporal", "After Generate"};
+            int stopIdx = static_cast<int>(state->debug.restirDebugStop);
+            if (ImGui::Combo("ReSTIR Stop", &stopIdx, stopLabels, 4)) {
+                state->debug.restirDebugStop = static_cast<Core::ReSTIRDebugStop>(stopIdx);
+            }
+        }
 
         ImGui::Separator();
         ImGui::BeginDisabled(state->debug.bGroundTruthMode);
@@ -604,7 +612,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (ImGui::Button("Visibility Bucketing (Shading)")) setDebugTarget("visibility_target", DebugTransformationType::VisBucketShading, Core::DebugViewAspect::None);
             if (ImGui::Button("Visibility Bucketing (Lighting)")) setDebugTarget("visibility_target", DebugTransformationType::VisBucketLighting, Core::DebugViewAspect::None);
         }
-        if (ImGui::CollapsingHeader("ReSTIR DI")) {
+        if (ImGui::CollapsingHeader("ReSTIR DI Visualize")) {
             if (ImGui::Button("Generate Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirLightIdx, Core::DebugViewAspect::Depth);
             if (ImGui::Button("Generate W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirGenerateW, Core::DebugViewAspect::Depth);
             if (ImGui::Button("Temporal Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirTemporalLightIdx, Core::DebugViewAspect::Depth);
@@ -1585,7 +1593,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         ImGui::Spacing();
         ImGui::SeparatorText("Anti-Aliasing"); {
-            const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X"};
+            const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA"};
             int currentAA = static_cast<int>(state->lighting.aaMode);
             if (ImGui::Combo("Mode##aa", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
                 state->lighting.aaMode = static_cast<Core::AntiAliasingMode>(currentAA);

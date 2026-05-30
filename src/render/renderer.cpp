@@ -807,28 +807,31 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph, PipelineManager* pipeli
         });
 }
 
-void SetupReSTIRPass(RenderGraph& graph,
-                     PipelineManager* pipelineManager,
-                     const Core::ViewFamily& viewFamily,
-                     Core::Array<uint32_t, 2> renderExtent,
-                     const DeferredResolveTargets& targets,
-                     uint32_t sceneIndex,
-                     Core::Arena& arena,
-                     uint64_t frameNumber)
+void SetupReSTIRPasses(RenderGraph& graph,
+                       PipelineManager* pipelineManager,
+                       const Core::ViewFamily& viewFamily,
+                       Core::Array<uint32_t, 2> renderExtent,
+                       const DeferredResolveTargets& targets,
+                       uint32_t sceneIndex,
+                       Core::Arena& arena,
+                       uint64_t frameNumber,
+                       Core::ReSTIRDebugStop debugStop)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+
+    // Generate
     graph.CreateBuffer(SID("restir_reservoir_buffer"), pixelCount * sizeof(Reservoir), true);
 
-    RenderPass& pass = graph.AddPass(SID("ReSTIR DI Generate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadBuffer(SID("light_data"));
-    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    pass.ReadSampledImage(targets.visibility);
-    pass.ReadSampledImage(targets.gbufferOne);
-    pass.ReadSampledImage(targets.gbufferTwo);
-    pass.ReadSampledImage(targets.depthStencil);
-    pass.WriteBuffer(SID("restir_reservoir_buffer"));
-    pass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,depth = targets.depthStencil](VkCommandBuffer cmd) {
+    RenderPass& genPass = graph.AddPass(SID("ReSTIR DI Generate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    genPass.ReadBuffer(SCENE_DATA_BUFFER);
+    genPass.ReadBuffer(SID("light_data"));
+    genPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    genPass.ReadSampledImage(targets.visibility);
+    genPass.ReadSampledImage(targets.gbufferOne);
+    genPass.ReadSampledImage(targets.gbufferTwo);
+    genPass.ReadSampledImage(targets.depthStencil);
+    genPass.WriteBuffer(SID("restir_reservoir_buffer"));
+    genPass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_generate"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -851,88 +854,77 @@ void SetupReSTIRPass(RenderGraph& graph,
         const uint32_t groupsY = (renderExtent[1] + 15) / 16;
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
-}
 
-void SetupReSTIRTemporalPass(RenderGraph& graph,
-                             PipelineManager* pipelineManager,
-                             Core::Array<uint32_t, 2> renderExtent,
-                             const DeferredResolveTargets& targets,
-                             uint32_t sceneIndex,
-                             Core::Arena& arena,
-                             uint64_t frameNumber)
-{
-    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
-
-    if (!graph.HasBuffer(SID("restir_reservoir_history"))) {
-        graph.AliasBuffer(SID("restir_reservoir_temporal"), SID("restir_reservoir_buffer"));
+    if (debugStop == Core::ReSTIRDebugStop::Generate) {
+        graph.CarryBufferToNextFrame(SID("restir_reservoir_buffer"), SID("restir_reservoir_history"), 0);
+        graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_buffer"));
         return;
     }
 
-    graph.CreateBuffer(SID("restir_reservoir_temporal"), pixelCount * sizeof(Reservoir), true);
+    // Temporal Reuse
+    if (!graph.HasBuffer(SID("restir_reservoir_history"))) {
+        graph.AliasBuffer(SID("restir_reservoir_temporal"), SID("restir_reservoir_buffer"));
+    } else {
+        graph.CreateBuffer(SID("restir_reservoir_temporal"), pixelCount * sizeof(Reservoir), true);
 
-    RenderPass& pass = graph.AddPass(SID("ReSTIR DI Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadBuffer(SID("light_data"));
-    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    pass.ReadBuffer(SID("restir_reservoir_buffer"));
-    pass.ReadBuffer(SID("restir_reservoir_history"));
-    pass.ReadSampledImage(targets.visibility);
-    pass.ReadSampledImage(targets.gbufferOne);
-    pass.ReadSampledImage(targets.gbufferTwo);
-    pass.ReadSampledImage(targets.depthStencil);
-    pass.WriteBuffer(SID("restir_reservoir_temporal"));
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        RenderPass& temporalPass = graph.AddPass(SID("ReSTIR DI Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        temporalPass.ReadBuffer(SCENE_DATA_BUFFER);
+        temporalPass.ReadBuffer(SID("light_data"));
+        temporalPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+        temporalPass.ReadBuffer(SID("restir_reservoir_buffer"));
+        temporalPass.ReadBuffer(SID("restir_reservoir_history"));
+        temporalPass.ReadSampledImage(targets.visibility);
+        temporalPass.ReadSampledImage(targets.gbufferOne);
+        temporalPass.ReadSampledImage(targets.gbufferTwo);
+        temporalPass.ReadSampledImage(targets.depthStencil);
+        temporalPass.WriteBuffer(SID("restir_reservoir_temporal"));
+        temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
-        ReSTIRDITemporalPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .lightData = graph.GetBufferAddress(SID("light_data")),
-            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-            .currentBuffer = graph.GetBufferAddress(SID("restir_reservoir_buffer")),
-            .historyBuffer = graph.GetBufferAddress(SID("restir_reservoir_history")),
-            .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
-            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
-            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-            .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
-            .renderExtent = {renderExtent[0], renderExtent[1]},
-            .sceneDataIndex = sceneIndex,
-            .frameIndex = static_cast<uint32_t>(frameNumber),
-        };
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            ReSTIRDITemporalPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .lightData = graph.GetBufferAddress(SID("light_data")),
+                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                .currentBuffer = graph.GetBufferAddress(SID("restir_reservoir_buffer")),
+                .historyBuffer = graph.GetBufferAddress(SID("restir_reservoir_history")),
+                .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
+                .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .sceneDataIndex = sceneIndex,
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-        const uint32_t groupsX = (renderExtent[0] + 15) / 16;
-        const uint32_t groupsY = (renderExtent[1] + 15) / 16;
-        vkCmdDispatch(cmd, groupsX, groupsY, 1);
-    });
-}
+            const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+            vkCmdDispatch(cmd, groupsX, groupsY, 1);
+        });
+    }
 
-void SetupReSTIRSpatialPass(RenderGraph& graph,
-                            PipelineManager* pipelineManager,
-                            Core::Array<uint32_t, 2> renderExtent,
-                            const DeferredResolveTargets& targets,
-                            uint32_t sceneIndex,
-                            Core::Arena& arena,
-                            uint64_t frameNumber)
-{
-    if (!graph.HasBuffer(SID("restir_reservoir_temporal"))) { return; }
+    if (debugStop == Core::ReSTIRDebugStop::Temporal) {
+        graph.CarryBufferToNextFrame(SID("restir_reservoir_temporal"), SID("restir_reservoir_history"), 0);
+        graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_temporal"));
+        return;
+    }
 
-    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    // Spatial Reuse 1
     graph.CreateBuffer(SID("restir_reservoir_spatial"), pixelCount * sizeof(Reservoir), true);
-    graph.CarryBufferToNextFrame(SID("restir_reservoir_spatial"), SID("restir_reservoir_history"), 0);
 
-    RenderPass& pass = graph.AddPass(SID("ReSTIR DI Spatial"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadBuffer(SID("light_data"));
-    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    pass.ReadBuffer(SID("restir_reservoir_temporal"));
-    pass.ReadSampledImage(targets.visibility);
-    pass.ReadSampledImage(targets.gbufferOne);
-    pass.ReadSampledImage(targets.gbufferTwo);
-    pass.ReadSampledImage(targets.depthStencil);
-    pass.WriteBuffer(SID("restir_reservoir_spatial"));
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
+    RenderPass& spatial1Pass = graph.AddPass(SID("ReSTIR DI Spatial"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    spatial1Pass.ReadBuffer(SCENE_DATA_BUFFER);
+    spatial1Pass.ReadBuffer(SID("light_data"));
+    spatial1Pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    spatial1Pass.ReadBuffer(SID("restir_reservoir_temporal"));
+    spatial1Pass.ReadSampledImage(targets.visibility);
+    spatial1Pass.ReadSampledImage(targets.gbufferOne);
+    spatial1Pass.ReadSampledImage(targets.gbufferTwo);
+    spatial1Pass.ReadSampledImage(targets.depthStencil);
+    spatial1Pass.WriteBuffer(SID("restir_reservoir_spatial"));
+    spatial1Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -958,6 +950,55 @@ void SetupReSTIRSpatialPass(RenderGraph& graph,
         const uint32_t groupsY = (renderExtent[1] + 15) / 16;
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
+
+    if (debugStop == Core::ReSTIRDebugStop::Spatial1) {
+        graph.CarryBufferToNextFrame(SID("restir_reservoir_spatial"), SID("restir_reservoir_history"), 0);
+        graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_spatial"));
+        return;
+    }
+
+    // Spatial Reuse 2
+    graph.CreateBuffer(SID("restir_reservoir_spatial2"), pixelCount * sizeof(Reservoir), true);
+    graph.CarryBufferToNextFrame(SID("restir_reservoir_spatial2"), SID("restir_reservoir_history"), 0);
+
+    RenderPass& spatial2Pass = graph.AddPass(SID("ReSTIR DI Spatial 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    spatial2Pass.ReadBuffer(SCENE_DATA_BUFFER);
+    spatial2Pass.ReadBuffer(SID("light_data"));
+    spatial2Pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    spatial2Pass.ReadBuffer(SID("restir_reservoir_spatial"));
+    spatial2Pass.ReadSampledImage(targets.visibility);
+    spatial2Pass.ReadSampledImage(targets.gbufferOne);
+    spatial2Pass.ReadSampledImage(targets.gbufferTwo);
+    spatial2Pass.ReadSampledImage(targets.depthStencil);
+    spatial2Pass.WriteBuffer(SID("restir_reservoir_spatial2"));
+    spatial2Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        ReSTIRDISpatialPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .lightData = graph.GetBufferAddress(SID("light_data")),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .inputBuffer = graph.GetBufferAddress(SID("restir_reservoir_spatial")),
+            .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_spatial2")),
+            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .sceneDataIndex = sceneIndex,
+            .frameIndex = static_cast<uint32_t>(frameNumber),
+            .spatialRadius = 30,
+            .spatialNeighbors = 5,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+        const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+        vkCmdDispatch(cmd, groupsX, groupsY, 1);
+    });
+
+    graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_spatial2"));
 }
 
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
@@ -988,8 +1029,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
     lightingResolve.ReadBuffer(SHADOW_DATA_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
-    if (graph.HasBuffer(SID("restir_reservoir_spatial"))) {
-        lightingResolve.ReadBuffer(SID("restir_reservoir_spatial"));
+    if (graph.HasBuffer(SID("restir_reservoir_final"))) {
+        lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
     }
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightingResolve.ReadSampledImage(targets.gbufferOne);
@@ -1021,7 +1062,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .lightData = graph.GetBufferAddress(SID("light_data")),
                     .lightDispatchBuffer = lightDispatchAddress,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                    .reservoirBuffer = graph.TryGetBufferAddress(SID("restir_reservoir_spatial")),
+                    .reservoirBuffer = graph.TryGetBufferAddress(SID("restir_reservoir_final")),
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
@@ -1117,6 +1158,68 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
         });
 
     graph.CarryBufferToNextFrame(SID("gt_accum"), SID("gt_accum"), 0);
+}
+
+void SetupATrousWaveletDenoiser(RenderGraph& graph,
+                                PipelineManager* pipelineManager,
+                                Core::Array<uint32_t, 2> renderExtent,
+                                const DeferredResolveTargets& targets)
+{
+    const StringID gbufferOne = targets.gbufferOne;
+    const StringID depthStencil = targets.depthStencil;
+    const StringID lightingOutput = targets.output;
+
+    constexpr int32_t ATROUS_ITERATIONS = 4;
+    constexpr float SIGMA_LUMINANCE = 2.0f;
+    constexpr float SIGMA_NORMAL = 128.0f;
+    constexpr float SIGMA_DEPTH = 0.01f;
+
+    const uint32_t width = renderExtent[0];
+    const uint32_t height = renderExtent[1];
+    const TextureInfo texInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1};
+
+    graph.CreateTexture(SID("atrous_0"), texInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("atrous_1"), texInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("atrous_2"), texInfo, {std::nullopt}, true);
+
+    const StringID inputs[ATROUS_ITERATIONS]  = { lightingOutput,    SID("atrous_0"), SID("atrous_1"), SID("atrous_2") };
+    const StringID outputs[ATROUS_ITERATIONS] = { SID("atrous_0"), SID("atrous_1"), SID("atrous_2"), lightingOutput    };
+    const char* passNames[ATROUS_ITERATIONS]  = { "[ATrous] Iteration 0", "[ATrous] Iteration 1", "[ATrous] Iteration 2", "[ATrous] Iteration 3" };
+
+    for (int32_t i = 0; i < ATROUS_ITERATIONS; i++) {
+        const StringID inputTex  = inputs[i];
+        const StringID outputTex = outputs[i];
+        const uint32_t stepSize  = 1u << static_cast<uint32_t>(i);
+
+        auto& pass = graph.AddPass(SID(passNames[i]), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        pass.ReadBuffer(SCENE_DATA_BUFFER);
+        pass.ReadSampledImage(inputTex);
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(depthStencil);
+        pass.WriteStorageImage(outputTex);
+        pass.Execute([&graph, pipelineManager, inputTex, outputTex, gbufferOne, depthStencil,
+                     width, height, stepSize](VkCommandBuffer cmd) {
+            ATrousWaveletPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(inputTex),
+                .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(outputTex),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
+                .stepSize = stepSize,
+                .width = width,
+                .height = height,
+                .sigmaLuminance = SIGMA_LUMINANCE,
+                .sigmaNormal = SIGMA_NORMAL,
+                .sigmaDepth = SIGMA_DEPTH,
+            };
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("atrous_wavelet"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            const uint32_t groupsX = (width + 7) / 8;
+            const uint32_t groupsY = (height + 7) / 8;
+            vkCmdDispatch(cmd, groupsX, groupsY, 1);
+        });
+    }
 }
 
 void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
@@ -1721,7 +1824,8 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    PipelineManager* pipelineManager,
                                    const Core::ViewFamily& viewFamily,
                                    Core::Array<uint32_t, 2> renderExtent,
-                                   const MainRenderTargets& ppTargets)
+                                   const MainRenderTargets& ppTargets,
+                                   StringID pipelineSID)
 {
     graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -1771,7 +1875,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     taaPass.WriteStorageImage(SID("taa_current"));
     taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = ppTargets.outputColor, depthStencil = ppTargets.depthStencil,
-            gbufferOne = ppTargets.gbufferOne](VkCommandBuffer cmd) {
+            gbufferOne = ppTargets.gbufferOne, pipelineSID](VkCommandBuffer cmd) {
             TemporalAntialiasingPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
@@ -1782,7 +1886,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_current")),
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("temporal_antialiasing"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(pipelineSID);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
 
