@@ -103,7 +103,12 @@ bool StaticModelGenerateSlot::LoadGltf()
     int32_t _progress = 0;
     int32_t stepDiff = 50 / 9;
 
-    fastgltf::Parser parser{fastgltf::Extensions::KHR_texture_basisu | fastgltf::Extensions::KHR_mesh_quantization | fastgltf::Extensions::KHR_texture_transform};
+    fastgltf::Parser parser{
+        fastgltf::Extensions::KHR_texture_basisu
+        | fastgltf::Extensions::KHR_mesh_quantization
+        | fastgltf::Extensions::KHR_texture_transform
+        | fastgltf::Extensions::KHR_materials_pbrSpecularGlossiness
+    };
     constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember
                                  | fastgltf::Options::AllowDouble
                                  | fastgltf::Options::LoadExternalBuffers;
@@ -1184,6 +1189,15 @@ MaterialProperties StaticModelGenerateSlot::ExtractMaterial(fastgltf::Asset& glt
     material.metalRoughFactors.x = gltfMaterial.pbrData.metallicFactor;
     material.metalRoughFactors.y = gltfMaterial.pbrData.roughnessFactor;
 
+#if FASTGLTF_ENABLE_DEPRECATED_EXT
+    if (gltfMaterial.specularGlossiness) {
+        const auto& sg = *gltfMaterial.specularGlossiness;
+        material.colorFactor = glm::vec4(sg.diffuseFactor[0], sg.diffuseFactor[1], sg.diffuseFactor[2], sg.diffuseFactor[3]);
+        material.metalRoughFactors.x = glm::max(glm::max(sg.specularFactor[0], sg.specularFactor[1]), sg.specularFactor[2]);
+        material.metalRoughFactors.y = 1.0f - sg.glossinessFactor;
+    }
+#endif
+
     material.alphaProperties.x = gltfMaterial.alphaCutoff;
     material.alphaProperties.z = gltfMaterial.doubleSided ? 1.0f : 0.0f;
     material.alphaProperties.w = gltfMaterial.unlit ? 1.0f : 0.0f;
@@ -1219,6 +1233,12 @@ MaterialProperties StaticModelGenerateSlot::ExtractMaterial(fastgltf::Asset& glt
         LoadTextureIndicesAndUV(gltfMaterial.pbrData.baseColorTexture.value(), gltf, material.textureImageIndices.x, material.textureSamplerIndices.x, material.colorUvTransform);
         fixTextureIndices(material.textureImageIndices.x, material.textureSamplerIndices.x);
     }
+#if FASTGLTF_ENABLE_DEPRECATED_EXT
+    else if (gltfMaterial.specularGlossiness && gltfMaterial.specularGlossiness->diffuseTexture.has_value()) {
+        LoadTextureIndicesAndUV(gltfMaterial.specularGlossiness->diffuseTexture.value(), gltf, material.textureImageIndices.x, material.textureSamplerIndices.x, material.colorUvTransform);
+        fixTextureIndices(material.textureImageIndices.x, material.textureSamplerIndices.x);
+    }
+#endif
 
 
     if (gltfMaterial.pbrData.metallicRoughnessTexture.has_value()) {
