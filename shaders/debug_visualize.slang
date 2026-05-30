@@ -218,9 +218,13 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = abs(vsPos) / 100.0;
             break;
         }
-        case 26: {
-            float3 N = UnpackNormalOct16(asuint(srcPixel.x));
-            float ndotv = N.z;
+        case 26: { // NDotV
+            float3 N = normalize(UnpackNormalOct16(asuint(srcPixel.x)));
+            float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
+            float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
+            float3 viewPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
+            float3 V = normalize(-viewPos);
+            float ndotv = max(dot(N, V), 0.0);
             srcPixel.xyz = ndotv < 0.0 ? float3(-ndotv, 0, 0) : float3(0, ndotv, 0);
             break;
         }

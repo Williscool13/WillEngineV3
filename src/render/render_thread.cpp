@@ -596,6 +596,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             if (bDebugBuffersReady && renderGraph->HasTexture(debugTargetName)) {
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
                 debugVisPass.ReadSampledImage(debugTargetName);
+                debugVisPass.ReadSampledImage(targets.depthStencil);
                 debugVisPass.WriteStorageImage(finalOutput);
                 debugVisPass.Execute([&, debugTargetName, finalOutput](VkCommandBuffer _cmd) {
                     const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
@@ -667,6 +668,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .textureIndexInArray = textureIndexInArray,
                         .valueTransformationType = static_cast<uint32_t>(viewFamily.debugTransformationType),
                         .outputImageIndex = outputIndexIndex,
+                        .depthTextureIndex = renderGraph->GetDepthOnlySampledImageViewDescriptorIndex(targets.depthStencil),
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

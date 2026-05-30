@@ -82,6 +82,7 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint textureIndexInArray;
     SHADER_PUBLIC uint valueTransformationType;
     SHADER_PUBLIC uint outputImageIndex;
+    SHADER_PUBLIC uint depthTextureIndex;
 };
 
 SHADER_PUBLIC struct InstanceLODPushConstant
