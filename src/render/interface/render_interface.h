@@ -564,8 +564,14 @@ struct ReSTIRParams
 {
     bool bGroundTruthMode{false};
     bool bResetGroundTruth{false};
-    bool bAtrousDenoiser{false};
+
     ReSTIRDebugStop debugStop{ReSTIRDebugStop::Spatial2};
+    uint32_t spatialRadius{30};
+    uint32_t spatialNeighbors{5};
+    uint32_t spatialMCap{500};
+    uint32_t temporalMCap{20u * 33u};
+
+    bool bAtrousDenoiser{false};
     int32_t atrousIterations{4};
     float atrousSigmaLuminance{2.0f};
     float atrousSigmaNormal{128.0f};

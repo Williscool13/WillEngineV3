@@ -452,6 +452,7 @@ SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t mCap;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -470,6 +471,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t spatialRadius;
     SHADER_PUBLIC uint32_t spatialNeighbors;
+    SHADER_PUBLIC uint32_t mCap;
 };
 
 SHADER_PUBLIC struct LightingResolvePushConstant

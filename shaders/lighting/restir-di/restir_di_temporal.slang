@@ -108,9 +108,6 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         }
     }
 
-    // Paper suggests 5-30 for param
-    // param x 32 + 1 from base pass
-    const uint M_cap = 20 * 33;
     uint clampedHistoryM = 0u;
 
     if (validHistoryReservoir) {
@@ -122,7 +119,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         float3 historyLightColor = UnpackUnorm4x8(alHistory.packedColor).rgb;
         float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, alHistory.intensity);
 
-        clampedHistoryM = min(history.M, M_cap);
+        clampedHistoryM = min(history.M, pc.mCap);
         float w_history = p_hat_history * history.W * float(clampedHistoryM);
         if (ReservoirAddSample(accum, combined, w_history, uSelect1)) {
             combined.lightIdx = history.lightIdx;

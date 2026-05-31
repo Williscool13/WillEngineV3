@@ -815,7 +815,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
                        uint64_t frameNumber,
-                       Core::ReSTIRDebugStop debugStop)
+                       const Core::ReSTIRParams& restirParams)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
 
@@ -855,7 +855,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 
-    if (debugStop == Core::ReSTIRDebugStop::Generate) {
+    if (restirParams.debugStop == Core::ReSTIRDebugStop::Generate) {
         graph.CarryBufferToNextFrame(SID("restir_reservoir_buffer"), SID("restir_reservoir_history"), 0);
         graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_buffer"));
         return;
@@ -896,6 +896,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
+                .mCap = restirParams.temporalMCap,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -905,7 +906,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         });
     }
 
-    if (debugStop == Core::ReSTIRDebugStop::Temporal) {
+    if (restirParams.debugStop == Core::ReSTIRDebugStop::Temporal) {
         graph.CarryBufferToNextFrame(SID("restir_reservoir_temporal"), SID("restir_reservoir_history"), 0);
         graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_temporal"));
         return;
@@ -941,8 +942,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .renderExtent = {renderExtent[0], renderExtent[1]},
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
-            .spatialRadius = 30,
-            .spatialNeighbors = 5,
+            .spatialRadius = restirParams.spatialRadius,
+            .spatialNeighbors = restirParams.spatialNeighbors,
+            .mCap = restirParams.spatialMCap,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -951,7 +953,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 
-    if (debugStop == Core::ReSTIRDebugStop::Spatial1) {
+    if (restirParams.debugStop == Core::ReSTIRDebugStop::Spatial1) {
         graph.CarryBufferToNextFrame(SID("restir_reservoir_spatial"), SID("restir_reservoir_history"), 0);
         graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_spatial"));
         return;
@@ -988,8 +990,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .renderExtent = {renderExtent[0], renderExtent[1]},
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
-            .spatialRadius = 30,
-            .spatialNeighbors = 5,
+            .spatialRadius = restirParams.spatialRadius,
+            .spatialNeighbors = restirParams.spatialNeighbors,
+            .mCap = restirParams.spatialMCap,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

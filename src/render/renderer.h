@@ -69,7 +69,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
                        uint64_t frameNumber,
-                       Core::ReSTIRDebugStop debugStop = Core::ReSTIRDebugStop::Spatial2);
+                       const Core::ReSTIRParams& restirParams);
 
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,

@@ -529,10 +529,20 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             ImGui::SliderFloat("ATrous Sigma Normal", &restir.atrousSigmaNormal, 1.0f, 256.0f);
             ImGui::SliderFloat("ATrous Sigma Depth", &restir.atrousSigmaDepth, 0.0001f, 1.0f);
             ImGui::EndDisabled();
+
             const char* stopLabels[] = {"After Spatial 2", "After Spatial 1", "After Temporal", "After Generate"};
             int stopIdx = static_cast<int>(restir.debugStop);
             if (ImGui::Combo("ReSTIR Stop", &stopIdx, stopLabels, 4)) {
                 restir.debugStop = static_cast<Core::ReSTIRDebugStop>(stopIdx);
+            }
+            ImGui::Separator();
+            int spatialRadius = static_cast<int>(restir.spatialRadius);
+            if (ImGui::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
+                restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
+            }
+            int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
+            if (ImGui::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
+                restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
             }
         }
 

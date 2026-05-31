@@ -170,11 +170,12 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     // M_total here is the pair count k (the shared 1/k), distinct from combined.M.
     if (combined.lightIdx != ~0u && p_hat_winner > 0.0) {
         ReservoirFinalise(combined, accum, p_hat_winner, float(neighborCount));
-        const float W_CLAMP = 20.0;
-        combined.W = min(combined.W, W_CLAMP);
     } else {
         combined.W = 0.0;
     }
+    const float W_CLAMP = 20.0;
+    combined.W = min(combined.W, W_CLAMP);
+    combined.M = min(combined.M, pc.mCap);
 
     pc.outputBuffer[centerIdx] = combined;
 }
