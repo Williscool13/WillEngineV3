@@ -311,17 +311,15 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bWireframe = state->debug.bWireframe;
     frameBuffer->bEnableShadeDispatchBucketingVisualization = state->debug.bEnableShadeDispatchBucketingVisualization;
     frameBuffer->bEnableLightingBucketingVisualization = state->debug.bEnableLightingBucketingVisualization;
-    frameBuffer->bGroundTruthMode = state->debug.bGroundTruthMode;
-    frameBuffer->bAtrousDenoiser = state->debug.bAtrousDenoiser;
-    frameBuffer->restirDebugStop = state->debug.restirDebugStop;
-    if (state->debug.bGroundTruthMode) {
+    frameBuffer->restir = state->debug.restir;
+    if (state->debug.restir.bGroundTruthMode) {
         const Core::RenderView& rv = frameBuffer->mainViewFamily.mainView;
         if (rv.currentViewData.view != rv.previousViewData.view) {
-            state->debug.bResetGroundTruth = true;
+            state->debug.restir.bResetGroundTruth = true;
         }
     }
-    frameBuffer->bResetGroundTruth = state->debug.bResetGroundTruth;
-    state->debug.bResetGroundTruth = false;
+    frameBuffer->restir.bResetGroundTruth = state->debug.restir.bResetGroundTruth;
+    state->debug.restir.bResetGroundTruth = false;
     frameBuffer->mainViewFamily.shadingShaderOverride = state->debug.shadingShaderOverride;
     frameBuffer->mainViewFamily.lightingShaderOverride = state->debug.lightingShaderOverride;
     if (state->debug.bEnablePortal) {

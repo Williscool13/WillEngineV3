@@ -48,6 +48,7 @@ void ATrousWaveletMain(uniform ATrousWaveletPushConstant pc, uint3 dtid : SV_Dis
     const uint4 centerGbuf1  = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
     const float centerDepth  = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
 
+
     if (centerDepth == 0.0) {
         rdgStorageFloat4[pc.outputColorIndex][pixel] = centerColor;
         return;

@@ -83,7 +83,11 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
 void SetupATrousWaveletDenoiser(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 Core::Array<uint32_t, 2> renderExtent,
-                                const DeferredResolveTargets& targets);
+                                const DeferredResolveTargets& targets,
+                                int32_t iterations,
+                                float sigmaLuminance,
+                                float sigmaNormal,
+                                float sigmaDepth);
 
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,

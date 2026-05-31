@@ -560,6 +560,18 @@ enum class ReSTIRDebugStop : uint8_t
     Generate,
 };
 
+struct ReSTIRParams
+{
+    bool bGroundTruthMode{false};
+    bool bResetGroundTruth{false};
+    bool bAtrousDenoiser{false};
+    ReSTIRDebugStop debugStop{ReSTIRDebugStop::Spatial2};
+    int32_t atrousIterations{4};
+    float atrousSigmaLuminance{2.0f};
+    float atrousSigmaNormal{128.0f};
+    float atrousSigmaDepth{0.01f};
+};
+
 struct FrameBuffer
 {
     FrameBuffer() = default;
@@ -602,10 +614,7 @@ struct FrameBuffer
     bool bEnableShadeDispatchBucketingVisualization = false;
     bool bEnableLightingBucketingVisualization = false;
     bool bLogRDG = false;
-    bool bGroundTruthMode = false;
-    bool bResetGroundTruth = false;
-    bool bAtrousDenoiser = false;
-    ReSTIRDebugStop restirDebugStop = ReSTIRDebugStop::Spatial2;
+    ReSTIRParams restir{};
 
     bool bTakeScreenshot{false};
 };

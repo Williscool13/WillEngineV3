@@ -1163,16 +1163,18 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
 void SetupATrousWaveletDenoiser(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 Core::Array<uint32_t, 2> renderExtent,
-                                const DeferredResolveTargets& targets)
+                                const DeferredResolveTargets& targets,
+                                int32_t iterations,
+                                float sigmaLuminance,
+                                float sigmaNormal,
+                                float sigmaDepth)
 {
     const StringID gbufferOne = targets.gbufferOne;
     const StringID depthStencil = targets.depthStencil;
     const StringID lightingOutput = targets.output;
 
-    constexpr int32_t ATROUS_ITERATIONS = 4;
-    constexpr float SIGMA_LUMINANCE = 2.0f;
-    constexpr float SIGMA_NORMAL = 128.0f;
-    constexpr float SIGMA_DEPTH = 0.01f;
+    constexpr int32_t ATROUS_PASS_COUNT = 4;
+    const int32_t ATROUS_ITERATIONS = iterations;
 
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
@@ -1182,35 +1184,40 @@ void SetupATrousWaveletDenoiser(RenderGraph& graph,
     graph.CreateTexture(SID("atrous_1"), texInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("atrous_2"), texInfo, {std::nullopt}, true);
 
-    const StringID inputs[ATROUS_ITERATIONS]  = { lightingOutput,    SID("atrous_0"), SID("atrous_1"), SID("atrous_2") };
-    const StringID outputs[ATROUS_ITERATIONS] = { SID("atrous_0"), SID("atrous_1"), SID("atrous_2"), lightingOutput    };
-    const char* passNames[ATROUS_ITERATIONS]  = { "[ATrous] Iteration 0", "[ATrous] Iteration 1", "[ATrous] Iteration 2", "[ATrous] Iteration 3" };
+    const StringID inputs[ATROUS_PASS_COUNT]  = { lightingOutput,    SID("atrous_0"), SID("atrous_1"), SID("atrous_2") };
+    const StringID outputs[ATROUS_PASS_COUNT] = { SID("atrous_0"), SID("atrous_1"), SID("atrous_2"), lightingOutput    };
+    const char* passNames[ATROUS_PASS_COUNT]  = { "[ATrous] Iteration 0", "[ATrous] Iteration 1", "[ATrous] Iteration 2", "[ATrous] Iteration 3" };
 
     for (int32_t i = 0; i < ATROUS_ITERATIONS; i++) {
+        const bool isLast = (i == ATROUS_ITERATIONS - 1);
         const StringID inputTex  = inputs[i];
-        const StringID outputTex = outputs[i];
+        const StringID outputTex = isLast ? outputs[ATROUS_PASS_COUNT - 1] : outputs[i];
         const uint32_t stepSize  = 1u << static_cast<uint32_t>(i);
 
         auto& pass = graph.AddPass(SID(passNames[i]), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
-        pass.ReadSampledImage(inputTex);
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depthStencil);
-        pass.WriteStorageImage(outputTex);
+        if (inputTex == outputTex) {
+            pass.ReadWriteImage(inputTex);
+        } else {
+            pass.ReadSampledImage(inputTex);
+            pass.WriteStorageImage(outputTex);
+        }
         pass.Execute([&graph, pipelineManager, inputTex, outputTex, gbufferOne, depthStencil,
-                     width, height, stepSize](VkCommandBuffer cmd) {
+        width, height, stepSize, sigmaLuminance, sigmaNormal, sigmaDepth](VkCommandBuffer cmd) {
             ATrousWaveletPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(inputTex),
                 .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(outputTex),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
+                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
                 .stepSize = stepSize,
                 .width = width,
                 .height = height,
-                .sigmaLuminance = SIGMA_LUMINANCE,
-                .sigmaNormal = SIGMA_NORMAL,
-                .sigmaDepth = SIGMA_DEPTH,
+                .sigmaLuminance = sigmaLuminance,
+                .sigmaNormal = sigmaNormal,
+                .sigmaDepth = sigmaDepth,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("atrous_wavelet"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

@@ -520,17 +520,24 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         ImGui::Separator();
         if (ImGui::CollapsingHeader("ReSTIR DI Settings")) {
-            ImGui::Checkbox("Ground Truth Mode", &state->debug.bGroundTruthMode);
-            ImGui::Checkbox("A-Trous Wavelet Denoiser", &state->debug.bAtrousDenoiser);
+            Core::ReSTIRParams& restir = state->debug.restir;
+            ImGui::Checkbox("Ground Truth Mode", &restir.bGroundTruthMode);
+            ImGui::Checkbox("A-Trous Wavelet Denoiser", &restir.bAtrousDenoiser);
+            ImGui::BeginDisabled(!restir.bAtrousDenoiser);
+            ImGui::SliderInt("ATrous Iterations", &restir.atrousIterations, 1, 4);
+            ImGui::SliderFloat("ATrous Sigma Luminance", &restir.atrousSigmaLuminance, 0.0f, 10.0f);
+            ImGui::SliderFloat("ATrous Sigma Normal", &restir.atrousSigmaNormal, 1.0f, 256.0f);
+            ImGui::SliderFloat("ATrous Sigma Depth", &restir.atrousSigmaDepth, 0.0001f, 1.0f);
+            ImGui::EndDisabled();
             const char* stopLabels[] = {"After Spatial 2", "After Spatial 1", "After Temporal", "After Generate"};
-            int stopIdx = static_cast<int>(state->debug.restirDebugStop);
+            int stopIdx = static_cast<int>(restir.debugStop);
             if (ImGui::Combo("ReSTIR Stop", &stopIdx, stopLabels, 4)) {
-                state->debug.restirDebugStop = static_cast<Core::ReSTIRDebugStop>(stopIdx);
+                restir.debugStop = static_cast<Core::ReSTIRDebugStop>(stopIdx);
             }
         }
 
         ImGui::Separator();
-        ImGui::BeginDisabled(state->debug.bGroundTruthMode);
+        ImGui::BeginDisabled(state->debug.restir.bGroundTruthMode);
         {
             Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
             const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());

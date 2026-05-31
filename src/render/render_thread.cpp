@@ -512,16 +512,17 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 .output = shadingOutputTarget,
             };
 
-            if (frameBuffer.bGroundTruthMode) {
-                if (frameBuffer.bResetGroundTruth) { groundTruthAccumCount = 0; }
-                SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, frameBuffer.bResetGroundTruth, groundTruthAccumCount, frameNumber);
+            const Core::ReSTIRParams& restir = frameBuffer.restir;
+            if (restir.bGroundTruthMode) {
+                if (restir.bResetGroundTruth) { groundTruthAccumCount = 0; }
+                SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, restir.bResetGroundTruth, groundTruthAccumCount, frameNumber);
                 groundTruthAccumCount += 4;
             }
             else {
-                SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber, frameBuffer.restirDebugStop);
+                SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber, restir.debugStop);
                 SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
-                if (frameBuffer.bAtrousDenoiser) {
-                    SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets);
+                if (restir.bAtrousDenoiser) {
+                    SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.atrousIterations, restir.atrousSigmaLuminance, restir.atrousSigmaNormal, restir.atrousSigmaDepth);
                 }
             }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);

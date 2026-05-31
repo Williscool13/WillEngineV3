@@ -211,10 +211,7 @@ struct DebugState
     bool bEnablePortal{true};
     bool bEnableShadeDispatchBucketingVisualization{false};
     bool bEnableLightingBucketingVisualization{false};
-    bool bGroundTruthMode{false};
-    bool bResetGroundTruth{false};
-    bool bAtrousDenoiser{false};
-    Core::ReSTIRDebugStop restirDebugStop{Core::ReSTIRDebugStop::Spatial2};
+    Core::ReSTIRParams restir{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
     Core::InlineString<> resourceName{};
