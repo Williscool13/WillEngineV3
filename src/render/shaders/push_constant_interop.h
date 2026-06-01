@@ -449,6 +449,8 @@ SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t prevGbufferOneIndex;
+    SHADER_PUBLIC uint32_t prevDepthIndex;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;

@@ -877,6 +877,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
         temporalPass.ReadSampledImage(targets.gbufferOne);
         temporalPass.ReadSampledImage(targets.gbufferTwo);
         temporalPass.ReadSampledImage(targets.depthStencil);
+        temporalPass.ReadSampledImage(SID("gbuffer_one_history"));
+        temporalPass.ReadSampledImage(SID("depth_history"));
         temporalPass.WriteBuffer(SID("restir_reservoir_temporal"));
         temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
@@ -893,6 +895,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .prevGbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")),
+                .prevDepthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(SID("depth_history")),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
@@ -2108,11 +2112,6 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
 {
     graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-
-    // For velocity
-    if (graph.HasTexture(ppTargets.gbufferOne)) {
-        graph.CarryTextureToNextFrame(ppTargets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    }
 
     if (!graph.HasTexture(SID("taa_history")) || !graph.HasTexture(SID("gbuffer_one_history"))) {
         RenderPass& taaPass = graph.AddPass(SID("TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT);

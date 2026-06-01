@@ -846,7 +846,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             1,
             &copy
         );
-    }); {
+    });
+
+    // For Hi-Z, ReSTIR-DI, SVGF
+    renderGraph->CarryTextureToNextFrame(targets.depthStencil, SID("depth_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    renderGraph->CarryTextureToNextFrame(targets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
         renderGraph->Compile(frameNumber);

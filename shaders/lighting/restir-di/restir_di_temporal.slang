@@ -43,8 +43,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     // Normal disocclusion rejection.
     float3 currentN = normalize(UnpackNormalOct16(g1.r));
-    // TODO: should sample previous-frame gbuffer for proper disocclusion
-    float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(historyPixel, 0)).r));
+    float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyPixel, 0)).r));
     if (dot(currentN, historyN) < 0.906) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;
@@ -57,7 +56,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         return;
     }
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-    float historyRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(historyPixel, 0)).r;
+    float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyPixel, 0)).r;
     float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     if (abs(historyViewDepth - viewSpaceDepth) > 0.1 * viewSpaceDepth) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
