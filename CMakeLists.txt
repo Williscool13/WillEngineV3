@@ -459,6 +459,12 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtao_main
         ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtao_denoise
         ${CMAKE_SOURCE_DIR}/shaders/denoising/atrous_wavelet.slang compute ATrousWaveletMain atrous_wavelet
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_gradient_samples.slang compute SVGFGradientSamplesMain svgf_gradient_samples
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_gradient_temporal.slang compute SVGFGradientTemporalMain svgf_gradient_temporal
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_gradient_atrous.slang compute SVGFGradientAtrousMain svgf_gradient_atrous
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_temporal_accumulation.slang compute SVGFTemporalAccumulationMain svgf_temporal_accumulation
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_variance_estimate.slang compute SVGFVarianceEstimateMain svgf_variance_estimate
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_atrous_wavelet.slang compute SVGFAtrousWaveletMain svgf_atrous_wavelet
         ${CMAKE_SOURCE_DIR}/shaders/post-process/tonemapping.slang compute ComputeSDRTonemap tonemap_sdr
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeBuildHistogramExposure exposure_build_histogram
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeAverageExposure exposure_calculate_average

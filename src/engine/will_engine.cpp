@@ -258,6 +258,11 @@ void WillEngine::Initialize(Utils::Logger* logger)
 
         engineState = new(memoryManager.PersistentAllocRaw(sizeof(EngineState), Core::AllocTag::AssetGenerator)) EngineState(&memoryManager.General());
         engineState->projectConfig = ReadProjectConfig();
+        engineState->debug.restir = engineState->projectConfig.restir;
+        engineState->lighting.aaMode = engineState->projectConfig.aaMode;
+        engineState->lighting.gtaoConfig = engineState->projectConfig.gtaoConfig;
+        engineState->lighting.smaaConfig = engineState->projectConfig.smaaConfig;
+        engineState->lighting.postProcess = engineState->projectConfig.postProcess;
 
 #if LOGGING_ENABLED
         engineContext->engineLogger = engineLogger;

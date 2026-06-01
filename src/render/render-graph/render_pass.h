@@ -88,8 +88,8 @@ public: // DAG compile-time fields
     uint32_t passIndex{UINT_MAX};
     uint32_t waveIndex{0};
     uint32_t inDegree{0};
-    Core::InlineVector<uint32_t, 32> inEdges{};
-    Core::InlineVector<uint32_t, 32> outEdges{};
+    Core::InlineVector<uint32_t, 64> inEdges{};
+    Core::InlineVector<uint32_t, 64> outEdges{};
 
 private:
     friend class RenderGraph;

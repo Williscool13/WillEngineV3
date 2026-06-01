@@ -469,6 +469,19 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("atrous_wavelet"), src / "atrous_wavelet_compute.spv",
                             sizeof(ATrousWaveletPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("svgf_gradient_samples"), src / "svgf_gradient_samples_compute.spv",
+                            sizeof(SVGFGradientSamplesPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("svgf_gradient_temporal"), src / "svgf_gradient_temporal_compute.spv",
+                            sizeof(SVGFGradientTemporalPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("svgf_gradient_atrous"), src / "svgf_gradient_atrous_compute.spv",
+                            sizeof(SVGFGradientAtrousPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("svgf_temporal_accumulation"), src / "svgf_temporal_accumulation_compute.spv",
+                            sizeof(SVGFTemporalAccumulationPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("svgf_variance_estimate"), src / "svgf_variance_estimate_compute.spv",
+                            sizeof(SVGFVarianceEstimatePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("svgf_atrous_wavelet"), src / "svgf_atrous_wavelet_compute.spv",
+                            sizeof(SVGFAtrousWaveletPushConstant), PipelineCategory::Critical);
+
 
     RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure_build_histogram_compute.spv",
                             sizeof(HistogramBuildPushConstant), PipelineCategory::Critical);

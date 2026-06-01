@@ -571,11 +571,28 @@ struct ReSTIRParams
     uint32_t spatialMCap{500};
     uint32_t temporalMCap{20u * 33u};
 
-    bool bAtrousDenoiser{false};
-    int32_t atrousIterations{4};
-    float atrousSigmaLuminance{2.0f};
-    float atrousSigmaNormal{128.0f};
-    float atrousSigmaDepth{0.01f};
+    enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2 };
+    DenoiserMode denoiserMode{DenoiserMode::ASVGF};
+
+    struct ATrousParams
+    {
+        int32_t iterations{4};
+        float sigmaLuminance{2.0f};
+        float sigmaNormal{128.0f};
+        float sigmaDepth{0.01f};
+    };
+    ATrousParams atrous{};
+
+    struct SVGFParams
+    {
+        float alphaMin{0.2f};
+        float gradientThreshold{0.025f};
+        float sigmaLuminance{0.5f};
+        float sigmaNormal{32.0f};
+        float sigmaDepth{0.1f};
+        int32_t atrousIterations{4};
+    };
+    SVGFParams svgf{};
 };
 
 struct FrameBuffer

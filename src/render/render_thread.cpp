@@ -521,8 +521,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             else {
                 SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber, restir);
                 SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
-                if (restir.bAtrousDenoiser) {
-                    SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.atrousIterations, restir.atrousSigmaLuminance, restir.atrousSigmaNormal, restir.atrousSigmaDepth);
+                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF) {
+                    SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.svgf);
+                } else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous) {
+                    SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.atrous);
                 }
             }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);

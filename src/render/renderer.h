@@ -84,10 +84,13 @@ void SetupATrousWaveletDenoiser(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 Core::Array<uint32_t, 2> renderExtent,
                                 const DeferredResolveTargets& targets,
-                                int32_t iterations,
-                                float sigmaLuminance,
-                                float sigmaNormal,
-                                float sigmaDepth);
+                                const Core::ReSTIRParams::ATrousParams& params);
+
+void SetupASVGFDenoiser(RenderGraph& graph,
+                        PipelineManager* pipelineManager,
+                        Core::Array<uint32_t, 2> renderExtent,
+                        const DeferredResolveTargets& targets,
+                        const Core::ReSTIRParams::SVGFParams& params);
 
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,

@@ -507,6 +507,25 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 
     if (ImGui::Begin("Debug View")) {
+        bool bProjectConfigChanged = false;
+
+        ImGui::SeparatorText("Project Config");
+        bool& bAutoSave = state->projectConfig.bAutoSave;
+        ImGui::BeginDisabled(bAutoSave);
+        if (ImGui::Button("Save Config")) {
+            state->projectConfig.restir = state->debug.restir;
+            Engine::WriteProjectConfig(state->projectConfig);
+        }
+        ImGui::EndDisabled();
+        if (bAutoSave && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Auto-save is enabled");
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Auto-save", &bAutoSave)) {
+            Engine::WriteProjectConfig(state->projectConfig);
+        }
+
+        ImGui::Separator();
         ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
         ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
 
@@ -521,28 +540,34 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Separator();
         if (ImGui::CollapsingHeader("ReSTIR DI Settings")) {
             Core::ReSTIRParams& restir = state->debug.restir;
-            ImGui::Checkbox("Ground Truth Mode", &restir.bGroundTruthMode);
-            ImGui::Checkbox("A-Trous Wavelet Denoiser", &restir.bAtrousDenoiser);
-            ImGui::BeginDisabled(!restir.bAtrousDenoiser);
-            ImGui::SliderInt("ATrous Iterations", &restir.atrousIterations, 1, 4);
-            ImGui::SliderFloat("ATrous Sigma Luminance", &restir.atrousSigmaLuminance, 0.0f, 10.0f);
-            ImGui::SliderFloat("ATrous Sigma Normal", &restir.atrousSigmaNormal, 1.0f, 256.0f);
-            ImGui::SliderFloat("ATrous Sigma Depth", &restir.atrousSigmaDepth, 0.0001f, 1.0f);
-            ImGui::EndDisabled();
-
-            const char* stopLabels[] = {"After Spatial 2", "After Spatial 1", "After Temporal", "After Generate"};
-            int stopIdx = static_cast<int>(restir.debugStop);
-            if (ImGui::Combo("ReSTIR Stop", &stopIdx, stopLabels, 4)) {
-                restir.debugStop = static_cast<Core::ReSTIRDebugStop>(stopIdx);
-            }
+            if (ImGui::Checkbox("Ground Truth Mode", &restir.bGroundTruthMode)) { bProjectConfigChanged = true; }
             ImGui::Separator();
             int spatialRadius = static_cast<int>(restir.spatialRadius);
             if (ImGui::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
                 restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
+                bProjectConfigChanged = true;
             }
             int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
             if (ImGui::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
                 restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
+                bProjectConfigChanged = true;
+            }
+            int spatialMCap = static_cast<int>(restir.spatialMCap);
+            if (ImGui::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
+                restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
+                bProjectConfigChanged = true;
+            }
+            int temporalMCap = static_cast<int>(restir.temporalMCap);
+            if (ImGui::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
+                restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
+                bProjectConfigChanged = true;
+            }
+            ImGui::Separator();
+            const char* stopLabels[] = {"After Spatial 2", "After Spatial 1", "After Temporal", "After Generate"};
+            int stopIdx = static_cast<int>(restir.debugStop);
+            if (ImGui::Combo("ReSTIR Stop", &stopIdx, stopLabels, 4)) {
+                restir.debugStop = static_cast<Core::ReSTIRDebugStop>(stopIdx);
+                bProjectConfigChanged = true;
             }
         }
 
@@ -696,6 +721,11 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (ImGui::Button("Color Grading Output")) setDebugTarget("color_grading_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Vignette Aberration Output")) setDebugTarget("vignette_aberration_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Post Process Output")) setDebugTarget("post_process_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+
+        if (bProjectConfigChanged && state->projectConfig.bAutoSave) {
+            state->projectConfig.restir = state->debug.restir;
+            Engine::WriteProjectConfig(state->projectConfig);
         }
     }
     ImGui::End();
@@ -1586,9 +1616,32 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 
     if (ImGui::Begin("Post-Processing")) {
+        bool bPPConfigChanged = false;
         constexpr Core::PostProcessConfiguration defaultPP{};
+
+        bool& bAutoSavePP = state->projectConfig.bAutoSave;
+        ImGui::BeginDisabled(bAutoSavePP);
+        if (ImGui::Button("Save Config")) {
+            state->projectConfig.aaMode = state->lighting.aaMode;
+            state->projectConfig.gtaoConfig = state->lighting.gtaoConfig;
+            state->projectConfig.smaaConfig = state->lighting.smaaConfig;
+            state->projectConfig.postProcess = state->lighting.postProcess;
+            state->projectConfig.restir = state->debug.restir;
+            Engine::WriteProjectConfig(state->projectConfig);
+        }
+        ImGui::EndDisabled();
+        if (bAutoSavePP && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Auto-save is enabled");
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Auto-save##pp", &bAutoSavePP)) {
+            Engine::WriteProjectConfig(state->projectConfig);
+        }
+
+        ImGui::Separator();
         if (ImGui::Button("Reset All to Defaults")) {
             state->lighting.postProcess = defaultPP;
+            bPPConfigChanged = true;
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable All Effects")) {
@@ -1602,11 +1655,12 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->lighting.postProcess.bPaniniEnabled = false;
             state->lighting.postProcess.bFilmGrainEnabled = false;
             state->lighting.postProcess.bDitherEnabled = false;
+            bPPConfigChanged = true;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Ground Truth Ambient Occlusion");
-        ImGui::Checkbox("Enable GTAO", &state->lighting.gtaoConfig.bEnabled);
+        if (ImGui::Checkbox("Enable GTAO", &state->lighting.gtaoConfig.bEnabled)) { bPPConfigChanged = true; }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Anti-Aliasing"); {
@@ -1614,23 +1668,55 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             int currentAA = static_cast<int>(state->lighting.aaMode);
             if (ImGui::Combo("Mode##aa", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
                 state->lighting.aaMode = static_cast<Core::AntiAliasingMode>(currentAA);
+                bPPConfigChanged = true;
+            }
+            const bool bSMAA = state->lighting.aaMode == Core::AntiAliasingMode::SMAA || state->lighting.aaMode == Core::AntiAliasingMode::SMAAT2X;
+            if (bSMAA) {
+                Core::SMAAConfiguration& smaa = state->lighting.smaaConfig;
+                constexpr Core::SMAAConfiguration defaultSMAA{};
+                const char* edgeModes[] = {"Luma", "Color", "Depth"};
+                int currentMode = static_cast<int>(smaa.edgeDetectionMode);
+                if (ImGui::Combo("Edge Detection##smaa", &currentMode, edgeModes, IM_ARRAYSIZE(edgeModes))) {
+                    smaa.edgeDetectionMode = static_cast<Core::SMAAEdgeDetectionMode>(currentMode);
+                    bPPConfigChanged = true;
+                }
+                if (ImGui::SliderFloat("Threshold##smaa", &smaa.threshold, 0.01f, 0.5f, "%.3f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Local Contrast Adapt.##smaa", &smaa.localContrastAdaptation, 0.5f, 4.0f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderInt("Max Search Steps##smaa", &smaa.maxSearchSteps, 1, 112)) { bPPConfigChanged = true; }
+                if (ImGui::SliderInt("Max Search Steps Diag##smaa", &smaa.maxSearchStepsDiag, 1, 20)) { bPPConfigChanged = true; }
+                if (ImGui::Button("Reset SMAA")) { smaa = defaultSMAA; bPPConfigChanged = true; }
             }
         }
 
         ImGui::Spacing();
-        ImGui::SeparatorText("SMAA"); {
-            Core::SMAAConfiguration& smaa = state->lighting.smaaConfig;
-            constexpr Core::SMAAConfiguration defaultSMAA{};
-            const char* edgeModes[] = {"Luma", "Color", "Depth"};
-            int currentMode = static_cast<int>(smaa.edgeDetectionMode);
-            if (ImGui::Combo("Edge Detection##smaa", &currentMode, edgeModes, IM_ARRAYSIZE(edgeModes))) {
-                smaa.edgeDetectionMode = static_cast<Core::SMAAEdgeDetectionMode>(currentMode);
+        ImGui::SeparatorText("Denoiser"); {
+            Core::ReSTIRParams& restir = state->debug.restir;
+            const char* denoiserModes[] = {"None", "A-Trous Wavelet", "A-SVGF"};
+            int currentDenoiser = static_cast<int>(restir.denoiserMode);
+            if (ImGui::Combo("Mode##denoiser", &currentDenoiser, denoiserModes, IM_ARRAYSIZE(denoiserModes))) {
+                restir.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(currentDenoiser);
+                bPPConfigChanged = true;
             }
-            ImGui::SliderFloat("Threshold##smaa", &smaa.threshold, 0.01f, 0.5f, "%.3f");
-            ImGui::SliderFloat("Local Contrast Adapt.##smaa", &smaa.localContrastAdaptation, 0.5f, 4.0f, "%.2f");
-            ImGui::SliderInt("Max Search Steps##smaa", &smaa.maxSearchSteps, 1, 112);
-            ImGui::SliderInt("Max Search Steps Diag##smaa", &smaa.maxSearchStepsDiag, 1, 20);
-            if (ImGui::Button("Reset SMAA")) { smaa = defaultSMAA; }
+
+            const bool bATrous = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous;
+            const bool bSVGF   = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
+
+            if (bATrous) {
+                ImGui::SeparatorText("A-Trous");
+                if (ImGui::SliderInt("Iterations##atrous",        &restir.atrous.iterations,     1,       4))       { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Luminance##atrous", &restir.atrous.sigmaLuminance, 0.0f,    10.0f))   { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Normal##atrous",    &restir.atrous.sigmaNormal,    1.0f,    256.0f))  { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Depth##atrous",     &restir.atrous.sigmaDepth,     0.0001f, 1.0f))   { bPPConfigChanged = true; }
+            }
+            if (bSVGF) {
+                ImGui::SeparatorText("A-SVGF");
+                if (ImGui::SliderInt("ATrous Iterations##svgf",      &restir.svgf.atrousIterations,  1,       4))       { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Alpha Min##svgf",            &restir.svgf.alphaMin,           0.01f,   1.0f))   { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Gradient Threshold##svgf",   &restir.svgf.gradientThreshold,  0.001f,  0.2f))   { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Luminance##svgf",      &restir.svgf.sigmaLuminance,     0.1f,    20.0f))  { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Normal##svgf",         &restir.svgf.sigmaNormal,        1.0f,    256.0f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Depth##svgf",          &restir.svgf.sigmaDepth,         0.0001f, 1.0f))   { bPPConfigChanged = true; }
+            }
         }
 
         ImGui::Spacing();
@@ -1639,31 +1725,32 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         int currentItem = state->lighting.postProcess.tonemapOperator + 1;
         if (ImGui::Combo("Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
             state->lighting.postProcess.tonemapOperator = currentItem - 1;
+            bPPConfigChanged = true;
         }
 
         Core::PostProcessConfiguration& pp = state->lighting.postProcess;
         switch (pp.tonemapOperator) {
             case 1: // Hable
-                ImGui::SliderFloat("White Point##hable", &pp.hableParams.whitePoint, 1.0f, 20.0f, "%.2f");
+                if (ImGui::SliderFloat("White Point##hable", &pp.hableParams.whitePoint, 1.0f, 20.0f, "%.2f")) { bPPConfigChanged = true; }
                 break;
             case 2: // Reinhard
-                ImGui::SliderFloat("White Point##reinhard", &pp.reinhardParams.whitePoint, 1.0f, 20.0f, "%.2f");
+                if (ImGui::SliderFloat("White Point##reinhard", &pp.reinhardParams.whitePoint, 1.0f, 20.0f, "%.2f")) { bPPConfigChanged = true; }
                 break;
             case 7: // Uchimura
-                ImGui::SliderFloat("Max Brightness##uchimura", &pp.uchimuraParams.P, 0.5f, 2.0f, "%.2f");
-                ImGui::SliderFloat("Contrast##uchimura", &pp.uchimuraParams.a, 0.5f, 2.0f, "%.2f");
-                ImGui::SliderFloat("Linear Start##uchimura", &pp.uchimuraParams.m, 0.0f, 0.5f, "%.3f");
-                ImGui::SliderFloat("Linear Length##uchimura", &pp.uchimuraParams.l, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("Toe Power##uchimura", &pp.uchimuraParams.c, 0.5f, 3.0f, "%.2f");
-                ImGui::SliderFloat("Pedestal##uchimura", &pp.uchimuraParams.b, 0.0f, 0.1f, "%.3f");
+                if (ImGui::SliderFloat("Max Brightness##uchimura", &pp.uchimuraParams.P, 0.5f, 2.0f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Contrast##uchimura", &pp.uchimuraParams.a, 0.5f, 2.0f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Linear Start##uchimura", &pp.uchimuraParams.m, 0.0f, 0.5f, "%.3f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Linear Length##uchimura", &pp.uchimuraParams.l, 0.0f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Toe Power##uchimura", &pp.uchimuraParams.c, 0.5f, 3.0f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Pedestal##uchimura", &pp.uchimuraParams.b, 0.0f, 0.1f, "%.3f")) { bPPConfigChanged = true; }
                 break;
             case 9: // AgX
-                ImGui::SliderFloat("Min EV##agx", &pp.agxParams.minEV, -20.0f, -1.0f, "%.3f");
-                ImGui::SliderFloat("Max EV##agx", &pp.agxParams.maxEV, 0.0f, 10.0f, "%.3f");
+                if (ImGui::SliderFloat("Min EV##agx", &pp.agxParams.minEV, -20.0f, -1.0f, "%.3f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Max EV##agx", &pp.agxParams.maxEV, 0.0f, 10.0f, "%.3f")) { bPPConfigChanged = true; }
                 break;
             case 10: // Khronos PBR Neutral
-                ImGui::SliderFloat("Start Compression##khronos", &pp.khronosParams.startCompression, 0.5f, 0.95f, "%.3f");
-                ImGui::SliderFloat("Desaturation##khronos", &pp.khronosParams.desaturation, 0.0f, 0.5f, "%.3f");
+                if (ImGui::SliderFloat("Start Compression##khronos", &pp.khronosParams.startCompression, 0.5f, 0.95f, "%.3f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Desaturation##khronos", &pp.khronosParams.desaturation, 0.0f, 0.5f, "%.3f")) { bPPConfigChanged = true; }
                 break;
             default:
                 break;
@@ -1671,99 +1758,117 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         ImGui::Spacing();
         ImGui::SeparatorText("Exposure");
-        ImGui::Checkbox("Enabled##exposure", &state->lighting.postProcess.bExposureEnabled);
-        ImGui::SliderFloat("Target Luminance", &state->lighting.postProcess.exposureTargetLuminance, 0.01f, 1.0f, "%.3f");
-        ImGui::SliderFloat("Adaptation Speed", &state->lighting.postProcess.exposureAdaptationRate, 0.1f, 50.0f, "%.1f");
+        if (ImGui::Checkbox("Enabled##exposure", &state->lighting.postProcess.bExposureEnabled)) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Target Luminance", &state->lighting.postProcess.exposureTargetLuminance, 0.01f, 1.0f, "%.3f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Adaptation Speed", &state->lighting.postProcess.exposureAdaptationRate, 0.1f, 50.0f, "%.1f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Exposure")) {
             state->lighting.postProcess.exposureTargetLuminance = defaultPP.exposureTargetLuminance;
             state->lighting.postProcess.exposureAdaptationRate = defaultPP.exposureAdaptationRate;
+            bPPConfigChanged = true;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Bloom");
-        ImGui::Checkbox("Enabled##bloom", &state->lighting.postProcess.bBloomEnabled);
-        ImGui::SliderFloat("Intensity", &state->lighting.postProcess.bloomIntensity, 0.0f, 0.2f, "%.3f");
-        ImGui::SliderFloat("Threshold", &state->lighting.postProcess.bloomThreshold, 0.0f, 2.0f, "%.2f");
-        ImGui::SliderFloat("Soft Threshold", &state->lighting.postProcess.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Radius", &state->lighting.postProcess.bloomRadius, 0.5f, 2.0f, "%.2f");
+        if (ImGui::Checkbox("Enabled##bloom", &state->lighting.postProcess.bBloomEnabled)) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Intensity", &state->lighting.postProcess.bloomIntensity, 0.0f, 0.2f, "%.3f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Threshold", &state->lighting.postProcess.bloomThreshold, 0.0f, 2.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Soft Threshold", &state->lighting.postProcess.bloomSoftThreshold, 0.0f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Radius", &state->lighting.postProcess.bloomRadius, 0.5f, 2.0f, "%.2f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Bloom")) {
             state->lighting.postProcess.bloomIntensity = defaultPP.bloomIntensity;
             state->lighting.postProcess.bloomThreshold = defaultPP.bloomThreshold;
             state->lighting.postProcess.bloomSoftThreshold = defaultPP.bloomSoftThreshold;
             state->lighting.postProcess.bloomRadius = defaultPP.bloomRadius;
+            bPPConfigChanged = true;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Motion Blur");
-        ImGui::DragFloat("Velocity Scale", &state->lighting.postProcess.motionBlurVelocityScale, 0.05f, 0.0f, 4.0f, "%.2f");
-        ImGui::DragFloat("Depth Scale", &state->lighting.postProcess.motionBlurDepthScale, 0.1f, 2.0f, 10.0f, "%.2f");
+        if (ImGui::DragFloat("Velocity Scale", &state->lighting.postProcess.motionBlurVelocityScale, 0.05f, 0.0f, 4.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::DragFloat("Depth Scale", &state->lighting.postProcess.motionBlurDepthScale, 0.1f, 2.0f, 10.0f, "%.2f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Motion Blur")) {
             state->lighting.postProcess.motionBlurVelocityScale = defaultPP.motionBlurVelocityScale;
             state->lighting.postProcess.motionBlurDepthScale = defaultPP.motionBlurDepthScale;
+            bPPConfigChanged = true;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Color Grading");
-        ImGui::Checkbox("Enabled##colorgrading", &state->lighting.postProcess.bColorGradingEnabled);
-        ImGui::SliderFloat("Exposure Offset", &state->lighting.postProcess.colorGradingExposure, -2.0f, 2.0f, "%.2f");
-        ImGui::SliderFloat("Contrast", &state->lighting.postProcess.colorGradingContrast, 0.5f, 2.0f, "%.2f");
-        ImGui::SliderFloat("Saturation", &state->lighting.postProcess.colorGradingSaturation, 0.0f, 2.0f, "%.2f");
-        ImGui::SliderFloat("Temperature", &state->lighting.postProcess.colorGradingTemperature, -1.0f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Tint", &state->lighting.postProcess.colorGradingTint, -1.0f, 1.0f, "%.2f");
+        if (ImGui::Checkbox("Enabled##colorgrading", &state->lighting.postProcess.bColorGradingEnabled)) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Exposure Offset", &state->lighting.postProcess.colorGradingExposure, -2.0f, 2.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Contrast", &state->lighting.postProcess.colorGradingContrast, 0.5f, 2.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Saturation", &state->lighting.postProcess.colorGradingSaturation, 0.0f, 2.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Temperature", &state->lighting.postProcess.colorGradingTemperature, -1.0f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Tint", &state->lighting.postProcess.colorGradingTint, -1.0f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Color Grading")) {
             state->lighting.postProcess.colorGradingExposure = defaultPP.colorGradingExposure;
             state->lighting.postProcess.colorGradingContrast = defaultPP.colorGradingContrast;
             state->lighting.postProcess.colorGradingSaturation = defaultPP.colorGradingSaturation;
             state->lighting.postProcess.colorGradingTemperature = defaultPP.colorGradingTemperature;
             state->lighting.postProcess.colorGradingTint = defaultPP.colorGradingTint;
+            bPPConfigChanged = true;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Vignette & Chromatic Aberration");
-        ImGui::Checkbox("Enabled##vigab", &state->lighting.postProcess.bVignetteAberrationEnabled);
-        ImGui::SliderFloat("Aberration Strength", &state->lighting.postProcess.chromaticAberrationStrength, 0.0f, 100.0f, "%.2f");
-        ImGui::SliderFloat("Vignette Strength", &state->lighting.postProcess.vignetteStrength, 0.0f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Vignette Radius", &state->lighting.postProcess.vignetteRadius, 0.5f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Vignette Smoothness", &state->lighting.postProcess.vignetteSmoothness, 0.1f, 1.0f, "%.2f");
+        if (ImGui::Checkbox("Enabled##vigab", &state->lighting.postProcess.bVignetteAberrationEnabled)) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Aberration Strength", &state->lighting.postProcess.chromaticAberrationStrength, 0.0f, 100.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Vignette Strength", &state->lighting.postProcess.vignetteStrength, 0.0f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Vignette Radius", &state->lighting.postProcess.vignetteRadius, 0.5f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Vignette Smoothness", &state->lighting.postProcess.vignetteSmoothness, 0.1f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Vignette & Aberration")) {
             state->lighting.postProcess.chromaticAberrationStrength = defaultPP.chromaticAberrationStrength;
             state->lighting.postProcess.vignetteStrength = defaultPP.vignetteStrength;
             state->lighting.postProcess.vignetteRadius = defaultPP.vignetteRadius;
             state->lighting.postProcess.vignetteSmoothness = defaultPP.vignetteSmoothness;
+            bPPConfigChanged = true;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Sharpening");
-        ImGui::Checkbox("Enabled##sharpening", &state->lighting.postProcess.bSharpeningEnabled);
-        ImGui::SliderFloat("Sharpening Strength", &state->lighting.postProcess.sharpeningStrength, 0.0f, 100.0f, "%.02f");
+        if (ImGui::Checkbox("Enabled##sharpening", &state->lighting.postProcess.bSharpeningEnabled)) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Sharpening Strength", &state->lighting.postProcess.sharpeningStrength, 0.0f, 100.0f, "%.02f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Sharpening")) {
             state->lighting.postProcess.sharpeningStrength = defaultPP.sharpeningStrength;
+            bPPConfigChanged = true;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Panini Projection");
-        ImGui::Checkbox("Enabled##panini", &state->lighting.postProcess.bPaniniEnabled);
-        ImGui::SliderFloat("Panini Strength", &state->lighting.postProcess.paniniStrength, 0.0f, 1.0f, "%.2f");
+        if (ImGui::Checkbox("Enabled##panini", &state->lighting.postProcess.bPaniniEnabled)) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Panini Strength", &state->lighting.postProcess.paniniStrength, 0.0f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Panini")) {
             state->lighting.postProcess.paniniStrength = defaultPP.paniniStrength;
+            bPPConfigChanged = true;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Film Grain");
-        ImGui::Checkbox("Enabled##filmgrain", &state->lighting.postProcess.bFilmGrainEnabled);
-        ImGui::SliderFloat("Grain Strength", &state->lighting.postProcess.grainStrength, 0.0f, 0.15f, "%.3f");
-        ImGui::SliderFloat("Grain Size", &state->lighting.postProcess.grainSize, 1.0f, 3.0f, "%.2f");
+        if (ImGui::Checkbox("Enabled##filmgrain", &state->lighting.postProcess.bFilmGrainEnabled)) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Grain Strength", &state->lighting.postProcess.grainStrength, 0.0f, 0.15f, "%.3f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Grain Size", &state->lighting.postProcess.grainSize, 1.0f, 3.0f, "%.2f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Grain")) {
             state->lighting.postProcess.grainStrength = defaultPP.grainStrength;
             state->lighting.postProcess.grainSize = defaultPP.grainSize;
+            bPPConfigChanged = true;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Dither");
-        ImGui::Checkbox("Enabled##dither", &state->lighting.postProcess.bDitherEnabled);
-        ImGui::SliderFloat("Dither Strength", &state->lighting.postProcess.ditherStrength, 0.0f, 4.0f, "%.2f");
+        if (ImGui::Checkbox("Enabled##dither", &state->lighting.postProcess.bDitherEnabled)) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Dither Strength", &state->lighting.postProcess.ditherStrength, 0.0f, 4.0f, "%.2f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Dither")) {
             state->lighting.postProcess.ditherStrength = defaultPP.ditherStrength;
+            bPPConfigChanged = true;
+        }
+
+        if (bPPConfigChanged && state->projectConfig.bAutoSave) {
+            state->projectConfig.aaMode = state->lighting.aaMode;
+            state->projectConfig.gtaoConfig = state->lighting.gtaoConfig;
+            state->projectConfig.smaaConfig = state->lighting.smaaConfig;
+            state->projectConfig.postProcess = state->lighting.postProcess;
+            state->projectConfig.restir = state->debug.restir;
+            Engine::WriteProjectConfig(state->projectConfig);
         }
     }
     ImGui::End();

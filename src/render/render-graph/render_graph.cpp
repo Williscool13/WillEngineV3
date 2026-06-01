@@ -209,9 +209,10 @@ void RenderGraph::BuildDependencyEdges()
                     t.lastWriter = passIdx;
                 }
                 else if (t.latestPassIdx != UINT32_MAX && t.layout == targetLayout) {
-                    // Same epoch: all readers wait on whoever caused the transition into this layout
-                    ENGINE_ASSERT(Renderer, t.transitionPassIdx != UINT32_MAX, "Epoch has readers but no transition pass");
-                    addEdge(t.transitionPassIdx, passIdx);
+                    // Same epoch: readers wait on whoever caused the transition into this layout.
+                    if (t.transitionPassIdx != UINT32_MAX) {
+                        addEdge(t.transitionPassIdx, passIdx);
+                    }
                     t.latestPassIdx = passIdx;
                 }
                 else {

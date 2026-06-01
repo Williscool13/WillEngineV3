@@ -967,4 +967,86 @@ SHADER_PUBLIC struct ATrousWaveletPushConstant
     SHADER_PUBLIC float sigmaDepth;
 };
 
+SHADER_PUBLIC struct SVGFGradientSamplesPushConstant
+{
+    SHADER_PUBLIC uint32_t colorIndex;
+    SHADER_PUBLIC uint32_t colorHistoryIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputGradientIndex;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+    SHADER_PUBLIC uint32_t stride;
+};
+
+SHADER_PUBLIC struct SVGFGradientTemporalPushConstant
+{
+    SHADER_PUBLIC uint32_t gradientSamplesIndex;
+    SHADER_PUBLIC uint32_t gradientHistoryIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputGradientIndex;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+    SHADER_PUBLIC uint32_t stride;
+};
+
+SHADER_PUBLIC struct SVGFGradientAtrousPushConstant
+{
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+    SHADER_PUBLIC uint32_t stepSize;
+};
+
+SHADER_PUBLIC struct SVGFTemporalAccumulationPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t colorIndex;
+    SHADER_PUBLIC uint32_t colorHistoryIndex;
+    SHADER_PUBLIC uint32_t momentsHistoryIndex;
+    SHADER_PUBLIC uint32_t historyLengthIndex;
+    SHADER_PUBLIC uint32_t gradientIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputColorIndex;
+    SHADER_PUBLIC uint32_t outputMomentsIndex;
+    SHADER_PUBLIC uint32_t outputHistoryLengthIndex;
+    SHADER_PUBLIC uint32_t outputVarianceIndex;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+    SHADER_PUBLIC float alphaMin;
+    SHADER_PUBLIC float gradientThreshold;
+};
+
+SHADER_PUBLIC struct SVGFVarianceEstimatePushConstant
+{
+    SHADER_PUBLIC uint32_t momentsIndex;
+    SHADER_PUBLIC uint32_t historyLengthIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t inputVarianceIndex;
+    SHADER_PUBLIC uint32_t outputVarianceIndex;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+};
+
+SHADER_PUBLIC struct SVGFAtrousWaveletPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t inputColorIndex;
+    SHADER_PUBLIC uint32_t outputColorIndex;
+    SHADER_PUBLIC uint32_t inputVarianceIndex;
+    SHADER_PUBLIC uint32_t outputVarianceIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t stepSize;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+    SHADER_PUBLIC float sigmaLuminance;
+    SHADER_PUBLIC float sigmaNormal;
+    SHADER_PUBLIC float sigmaDepth;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

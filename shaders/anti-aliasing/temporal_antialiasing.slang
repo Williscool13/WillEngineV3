@@ -128,6 +128,8 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     float2 historyUv = uv + velocity;
     bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
 
+    // todo add depth disocclusion. Perhaps replace velocity disocclusion
+
     float velocityDisocclusion = ComputeVelocityDisocclusion(uv, velocity);
 
     float3 currentColor = rdgTexturesFloat4[pc.colorResolvedIndex].Load(int3(texelCoord, 0)).rgb;
