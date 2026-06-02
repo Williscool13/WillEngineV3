@@ -4,7 +4,9 @@
       "Bash(dir:*)",
       "Bash(git log:*)",
       "Bash(xargs grep:*)",
-      "Bash(grep -E \"\\\\.h$|\\\\.cpp$\")"
+      "Bash(grep -E \"\\\\.h$|\\\\.cpp$\")",
+      "PowerShell(head *)",
+      "Bash(grep -E \"\\\\.\\(cpp|h\\)$\")"
     ],
     "deny": [],
     "ask": []

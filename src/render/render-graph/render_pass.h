@@ -93,6 +93,7 @@ public: // DAG compile-time fields
 
 private:
     friend class RenderGraph;
+    friend class RenderGraphInspector;
     RenderGraph& graph;
 
     Core::InlineVector<uint32_t, 8> colorAttachments{};

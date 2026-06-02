@@ -1,16 +1,5 @@
 add_executable(engine-tests
-        data-structures/ring_buffer_tests.cpp
-        data-structures/free_list_tests.cpp
-        data-structures/handle_tests.cpp
-        data-structures/handle_allocator_tests.cpp
-        renderer/model_data_tests.cpp
-        renderer/render_extents_tests.cpp
-        renderer/shader_interop_tests.cpp
-        renderer/vk_helpers_tests.cpp
-        renderer/pipeline_builder_tests.cpp
-        renderer/allocated_resources_tests.cpp
-        renderer/descriptor_layout_builder_tests.cpp
-        renderer/frustum_tests.cpp
+        render-graph/render_graph_tests.cpp
 )
 
 target_link_libraries(engine-tests PRIVATE

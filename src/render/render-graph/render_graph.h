@@ -8,6 +8,7 @@
 #include "core/containers/arena_fixed_map.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/array.h"
+#include "core/containers/inline_function.h"
 #include "core/containers/vector.h"
 #include "core/memory/arena.h"
 #include "core/memory/handle_allocator.h"
@@ -23,10 +24,35 @@ class RenderPass;
 struct TextureResource;
 using TransientImageHandle = Core::Handle<TextureResource>;
 
+struct RenderGraphAllocFns
+{
+    struct ImageAlloc { VkImage image; VmaAllocation allocation; };
+    struct BufferAlloc { VkBuffer buffer; VmaAllocation allocation; };
+
+    static ImageAlloc DefaultCreateImage(const VulkanContext*, const VkImageCreateInfo&);
+    static VkImageView DefaultCreateImageView(const VulkanContext*, const VkImageViewCreateInfo&);
+    static void DefaultDestroyImage(const VulkanContext*, VkImage, VmaAllocation);
+    static void DefaultDestroyImageView(const VulkanContext*, VkImageView);
+    static BufferAlloc DefaultCreateBuffer(const VulkanContext*, const VkBufferCreateInfo&);
+    static void DefaultDestroyBuffer(const VulkanContext*, VkBuffer, VmaAllocation);
+    static VkDeviceAddress DefaultGetBufferDeviceAddress(const VulkanContext*, VkBuffer);
+
+    Core::InlineFunction<AllocatedBuffer(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&)> createAllocatedBuffer{AllocatedBuffer::CreateAllocatedBuffer};
+    Core::InlineFunction<ImageAlloc(const VulkanContext*, const VkImageCreateInfo&), 64> createImage{DefaultCreateImage};
+    Core::InlineFunction<VkImageView(const VulkanContext*, const VkImageViewCreateInfo&), 64> createImageView{DefaultCreateImageView};
+    Core::InlineFunction<void(const VulkanContext*, VkImage, VmaAllocation), 64> destroyImage{DefaultDestroyImage};
+    Core::InlineFunction<void(const VulkanContext*, VkImageView), 64> destroyImageView{DefaultDestroyImageView};
+    Core::InlineFunction<BufferAlloc(const VulkanContext*, const VkBufferCreateInfo&), 64> createBuffer{DefaultCreateBuffer};
+    Core::InlineFunction<void(const VulkanContext*, VkBuffer, VmaAllocation), 64> destroyBuffer{DefaultDestroyBuffer};
+    Core::InlineFunction<VkDeviceAddress(const VulkanContext*, VkBuffer), 64> getBufferDeviceAddress{DefaultGetBufferDeviceAddress};
+    // Optional: when set, replaces the entire NeedsDescriptorWrite block for a physical resource. Tests set this to a no-op.
+    Core::InlineFunction<void(PhysicalResource&), 64> writeDescriptors;
+};
+
 class RenderGraph
 {
 public:
-    RenderGraph(VulkanContext* context, ResourceManager* resourceManager, Core::TlsfAllocator& alloc, Core::Arena& arena);
+    RenderGraph(VulkanContext* context, ResourceManager* resourceManager, Core::TlsfAllocator& alloc, Core::Arena& arena, RenderGraphAllocFns allocFns = {});
 
     ~RenderGraph();
 
@@ -185,10 +211,12 @@ public: // Readback
 
 private:
     friend class RenderPass;
+    friend class RenderGraphInspector;
     VulkanContext* context;
     ResourceManager* resourceManager;
     Core::TlsfAllocator* alloc;
     Core::Arena* arena;
+    RenderGraphAllocFns allocFns;
 
     // Logical resources
     Core::ArenaFixedVector<TextureResource> textures;

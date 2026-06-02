@@ -22,19 +22,21 @@
 
 namespace Render
 {
-RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManager, Core::TlsfAllocator& alloc, Core::Arena& arena)
+RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManager, Core::TlsfAllocator& alloc, Core::Arena& arena, RenderGraphAllocFns inAllocFns)
     : context(context),
       resourceManager(resourceManager),
       alloc(&alloc),
       arena(&arena),
+      allocFns(std::move(inAllocFns)),
       physicalResources(&alloc, Core::AllocTag::Render, 256),
-      textureCarryovers(&alloc, Core::AllocTag::Render),
-      bufferCarryovers(&alloc, Core::AllocTag::Render),
       waveOffsets(&alloc, Core::AllocTag::Render),
       compiledImageBarriers(&alloc, Core::AllocTag::Render),
       compiledBufferBarriers(&alloc, Core::AllocTag::Render),
-      compiledWaveRanges(&alloc, Core::AllocTag::Render)
+      compiledWaveRanges(&alloc, Core::AllocTag::Render),
+      textureCarryovers(&alloc, Core::AllocTag::Render),
+      bufferCarryovers(&alloc, Core::AllocTag::Render)
 {
+    ENGINE_ASSERT(Renderer, context != nullptr, "RenderGraph requires a valid VulkanContext");
     for (int32_t i = 0; i < uploadArenas.Size(); ++i) {
         VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bufferInfo.pNext = nullptr;
@@ -44,20 +46,24 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
         vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         bufferInfo.size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
 
-        uploadArenas[i].buffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        auto debugName = Core::InlineString<>("rdgFrameBufferUploader_");
-        debugName.Append(i);
-        uploadArenas[i].buffer.SetDebugName(debugName.c_str());
+        uploadArenas[i].buffer = std::move(allocFns.createAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
+        if (uploadArenas[i].buffer.handle != VK_NULL_HANDLE) {
+            auto debugName = Core::InlineString<>("rdgFrameBufferUploader_");
+            debugName.Append(i);
+            uploadArenas[i].buffer.SetDebugName(debugName.c_str());
+        }
         uploadArenas[i].allocator = Core::LinearAllocator(RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE);
         uploadArenas[i].size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
 
         bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
         vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        meshletCountReadbacks[i].buffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        auto readbackDebugName = Core::InlineString("rdgReadbackBuffer__");
-        readbackDebugName.Append(i);
-        meshletCountReadbacks[i].buffer.SetDebugName(readbackDebugName.c_str());
+        meshletCountReadbacks[i].buffer = std::move(allocFns.createAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
+        if (meshletCountReadbacks[i].buffer.handle != VK_NULL_HANDLE) {
+            auto readbackDebugName = Core::InlineString("rdgReadbackBuffer__");
+            readbackDebugName.Append(i);
+            meshletCountReadbacks[i].buffer.SetDebugName(readbackDebugName.c_str());
+        }
     }
 }
 
@@ -584,6 +590,11 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
 
     for (auto& phys : physicalResources) {
         if (phys.NeedsDescriptorWrite() && phys.imageView != VK_NULL_HANDLE) {
+            if (allocFns.writeDescriptors) {
+                allocFns.writeDescriptors(phys);
+                phys.descriptorWritten = true;
+                continue;
+            }
             if ((phys.dimensions.imageUsage & VK_IMAGE_USAGE_SAMPLED_BIT) == VK_IMAGE_USAGE_SAMPLED_BIT) {
                 ImageChannelType sampledChannelType = GetImageChannelType(phys.dimensions.format, phys.aspect);
                 switch (sampledChannelType) {
@@ -721,9 +732,7 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
         }
 
         if (phys.NeedsAddressRetrieval()) {
-            VkBufferDeviceAddressInfo info = {VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
-            info.buffer = phys.buffer;
-            phys.bufferAddress = vkGetBufferDeviceAddress(context->device, &info);
+            phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);
             phys.addressRetrieved = true;
         }
     }
@@ -1829,9 +1838,7 @@ VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
     auto& phys = physicalResources[buf.physicalIndex];
 
     if (!phys.addressRetrieved) {
-        VkBufferDeviceAddressInfo info = {VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
-        info.buffer = phys.buffer;
-        phys.bufferAddress = vkGetBufferDeviceAddress(context->device, &info);
+        phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);
         phys.addressRetrieved = true;
     }
 
@@ -1849,9 +1856,7 @@ VkDeviceAddress RenderGraph::TryGetBufferAddress(StringID bufferId)
     auto& phys = physicalResources[buf.physicalIndex];
 
     if (!phys.addressRetrieved) {
-        VkBufferDeviceAddressInfo info = {VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
-        info.buffer = phys.buffer;
-        phys.bufferAddress = vkGetBufferDeviceAddress(context->device, &info);
+        phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);
         phys.addressRetrieved = true;
     }
 
@@ -1946,7 +1951,7 @@ void RenderGraph::RecreateTransientArena(uint32_t frameIndex, size_t newSize)
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
     vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
     bufferInfo.size = newSize;
-    AllocatedBuffer newBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
+    AllocatedBuffer newBuffer = allocFns.createAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     newBuffer.SetDebugName(("frameBufferUploader_" + std::to_string(frameIndex)).c_str());
 
     memcpy(newBuffer.allocationInfo.pMappedData, arena.buffer.allocationInfo.pMappedData, arena.allocator.GetUsed());
@@ -2125,6 +2130,55 @@ BufferResource* RenderGraph::GetOrCreateBuffer(StringID bufferId)
     return &buffers[index];
 }
 
+RenderGraphAllocFns::ImageAlloc RenderGraphAllocFns::DefaultCreateImage(const VulkanContext* context, const VkImageCreateInfo& imageInfo)
+{
+    VkImage image = VK_NULL_HANDLE;
+    VmaAllocation alloc = VK_NULL_HANDLE;
+    VmaAllocationCreateInfo allocInfo = {};
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    VK_CHECK(vmaCreateImage(context->allocator, &imageInfo, &allocInfo, &image, &alloc, nullptr));
+    return {image, alloc};
+}
+
+VkImageView RenderGraphAllocFns::DefaultCreateImageView(const VulkanContext* context, const VkImageViewCreateInfo& info)
+{
+    VkImageView view = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateImageView(context->device, &info, nullptr, &view));
+    return view;
+}
+
+void RenderGraphAllocFns::DefaultDestroyImage(const VulkanContext* context, VkImage image, VmaAllocation allocation)
+{
+    vmaDestroyImage(context->allocator, image, allocation);
+}
+
+void RenderGraphAllocFns::DefaultDestroyImageView(const VulkanContext* context, VkImageView view)
+{
+    vkDestroyImageView(context->device, view, nullptr);
+}
+
+RenderGraphAllocFns::BufferAlloc RenderGraphAllocFns::DefaultCreateBuffer(const VulkanContext* context, const VkBufferCreateInfo& bufferInfo)
+{
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VmaAllocation alloc = VK_NULL_HANDLE;
+    VmaAllocationCreateInfo allocInfo = {};
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &allocInfo, &buffer, &alloc, nullptr));
+    return {buffer, alloc};
+}
+
+void RenderGraphAllocFns::DefaultDestroyBuffer(const VulkanContext* context, VkBuffer buffer, VmaAllocation allocation)
+{
+    vmaDestroyBuffer(context->allocator, buffer, allocation);
+}
+
+VkDeviceAddress RenderGraphAllocFns::DefaultGetBufferDeviceAddress(const VulkanContext* context, VkBuffer buffer)
+{
+    VkBufferDeviceAddressInfo info = {VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
+    info.buffer = buffer;
+    return vkGetBufferDeviceAddress(context->device, &info);
+}
+
 void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
 {
     if (resource.bIsImported) {
@@ -2134,7 +2188,7 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
     if (resource.dimensions.IsImage()) {
         for (uint32_t mip = 0; mip < resource.dimensions.levels; ++mip) {
             if (resource.mipViews[mip] != VK_NULL_HANDLE) {
-                vkDestroyImageView(context->device, resource.mipViews[mip], nullptr);
+                allocFns.destroyImageView(context, resource.mipViews[mip]);
                 resource.mipViews[mip] = VK_NULL_HANDLE;
             }
             if (resource.storageMipDescriptorHandles[mip].IsValid()) {
@@ -2164,7 +2218,7 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
         }
 
         if (resource.imageView != VK_NULL_HANDLE) {
-            vkDestroyImageView(context->device, resource.imageView, nullptr);
+            allocFns.destroyImageView(context, resource.imageView);
             resource.imageView = VK_NULL_HANDLE;
         }
         if (resource.sampledDescriptorHandle.IsValid()) {
@@ -2193,7 +2247,7 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
         }
 
         if (resource.depthOnlyView != VK_NULL_HANDLE) {
-            vkDestroyImageView(context->device, resource.depthOnlyView, nullptr);
+            allocFns.destroyImageView(context, resource.depthOnlyView);
             resource.depthOnlyView = VK_NULL_HANDLE;
         }
         if (resource.depthOnlyDescriptorHandle.IsValid()) {
@@ -2202,7 +2256,7 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
         }
 
         if (resource.stencilOnlyView != VK_NULL_HANDLE) {
-            vkDestroyImageView(context->device, resource.stencilOnlyView, nullptr);
+            allocFns.destroyImageView(context, resource.stencilOnlyView);
             resource.stencilOnlyView = VK_NULL_HANDLE;
         }
         if (resource.stencilOnlyDescriptorHandle.IsValid()) {
@@ -2211,14 +2265,14 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
         }
 
         if (resource.image != VK_NULL_HANDLE) {
-            vmaDestroyImage(context->allocator, resource.image, resource.imageAllocation);
+            allocFns.destroyImage(context, resource.image, resource.imageAllocation);
             resource.image = VK_NULL_HANDLE;
             resource.imageAllocation = VK_NULL_HANDLE;
         }
     }
     else {
         if (resource.buffer != VK_NULL_HANDLE) {
-            vmaDestroyBuffer(context->allocator, resource.buffer, resource.bufferAllocation);
+            allocFns.destroyBuffer(context, resource.buffer, resource.bufferAllocation);
             resource.buffer = VK_NULL_HANDLE;
             resource.bufferAllocation = VK_NULL_HANDLE;
         }
@@ -2234,19 +2288,15 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     auto debugName = Core::InlineString<>("PhysicalImage");
     debugName.Append(debugNameCounter++);
     resource.debugName = debugName;
-    VkImageCreateInfo imageInfo = VkHelpers::ImageCreateInfo(
-        dim.format,
-        {dim.width, dim.height, dim.depth},
-        dim.imageUsage
-    );
+    VkImageCreateInfo imageInfo = VkHelpers::ImageCreateInfo(dim.format, {dim.width, dim.height, dim.depth}, dim.imageUsage);
     imageInfo.mipLevels = dim.levels;
     imageInfo.arrayLayers = dim.layers;
     imageInfo.samples = static_cast<VkSampleCountFlagBits>(dim.samples);
 
-    VmaAllocationCreateInfo allocInfo = {};
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    auto imageAlloc = allocFns.createImage(context, imageInfo);
+    resource.image = imageAlloc.image;
+    resource.imageAllocation = imageAlloc.allocation;
 
-    VK_CHECK(vmaCreateImage(context->allocator, &imageInfo, &allocInfo, &resource.image, &resource.imageAllocation, nullptr));
 #ifdef ENABLE_VULKAN_VALIDATION
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
@@ -2256,7 +2306,6 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
 #endif
 
     VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
-
     if (dim.format == VK_FORMAT_D16_UNORM || dim.format == VK_FORMAT_D32_SFLOAT || dim.format == VK_FORMAT_X8_D24_UNORM_PACK32) {
         aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
     }
@@ -2276,28 +2325,22 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
         return;
     }
 
-
-    VkImageViewCreateInfo viewInfo = VkHelpers::ImageViewCreateInfo(
-        resource.image,
-        dim.format,
-        aspectFlags
-    );
+    VkImageViewCreateInfo viewInfo = VkHelpers::ImageViewCreateInfo(resource.image, dim.format, aspectFlags);
 
     VkImageViewCreateInfo sampledViewInfo = viewInfo;
     sampledViewInfo.subresourceRange.levelCount = dim.levels;
-    VK_CHECK(vkCreateImageView(context->device, &sampledViewInfo, nullptr, &resource.imageView));
+    resource.imageView = allocFns.createImageView(context, sampledViewInfo);
 
     if ((aspectFlags & VK_IMAGE_ASPECT_DEPTH_BIT) && (aspectFlags & VK_IMAGE_ASPECT_STENCIL_BIT)) {
-        // If Depth+Stencil, imageView is combined. Make 2 additional separate imageViews
         VkImageViewCreateInfo depthViewInfo = viewInfo;
         depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         depthViewInfo.subresourceRange.levelCount = dim.levels;
-        VK_CHECK(vkCreateImageView(context->device, &depthViewInfo, nullptr, &resource.depthOnlyView));
+        resource.depthOnlyView = allocFns.createImageView(context, depthViewInfo);
 
         VkImageViewCreateInfo stencilViewInfo = viewInfo;
         stencilViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
         stencilViewInfo.subresourceRange.levelCount = dim.levels;
-        VK_CHECK(vkCreateImageView(context->device, &stencilViewInfo, nullptr, &resource.stencilOnlyView));
+        resource.stencilOnlyView = allocFns.createImageView(context, stencilViewInfo);
     }
 
     for (uint32_t mip = 0; mip < dim.levels; ++mip) {
@@ -2310,13 +2353,13 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
             mipViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         }
 
-        VK_CHECK(vkCreateImageView(context->device, &mipViewInfo, nullptr, &resource.mipViews[mip]));
+        resource.mipViews[mip] = allocFns.createImageView(context, mipViewInfo);
     }
 }
 
 void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const ResourceDimensions& dim)
 {
-    auto debugName = Core::InlineString<>("PhysicalImage");
+    auto debugName = Core::InlineString<>("PhysicalBuffer");
     debugName.Append(debugNameCounter++);
     resource.debugName = debugName;
     VkBufferCreateInfo bufferInfo = {};
@@ -2324,14 +2367,9 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
     bufferInfo.size = dim.bufferSize;
     bufferInfo.usage = dim.bufferUsage;
 
-    VmaAllocationCreateInfo allocInfo = {};
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-
-    VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &allocInfo,
-        &resource.buffer, &resource.bufferAllocation, nullptr));
-
-    resource.dimensions = dim;
-    resource.event = {};
+    auto bufAlloc = allocFns.createBuffer(context, bufferInfo);
+    resource.buffer = bufAlloc.buffer;
+    resource.bufferAllocation = bufAlloc.allocation;
 
 #ifdef ENABLE_VULKAN_VALIDATION
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
@@ -2340,6 +2378,9 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
     nameInfo.pObjectName = resource.debugName.c_str();
     vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
 #endif
+
+    resource.dimensions = dim;
+    resource.event = {};
 }
 
 void RenderGraph::AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool bCanAlias, bool debugLogging)
