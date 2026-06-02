@@ -1712,15 +1712,23 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 if (ImGui::SliderFloat("Sigma Luminance##atrous", &restir.atrous.sigmaLuminance, 0.0f, 10.0f)) { bPPConfigChanged = true; }
                 if (ImGui::SliderFloat("Sigma Normal##atrous", &restir.atrous.sigmaNormal, 1.0f, 256.0f)) { bPPConfigChanged = true; }
                 if (ImGui::SliderFloat("Sigma Depth##atrous", &restir.atrous.sigmaDepth, 0.0001f, 1.0f)) { bPPConfigChanged = true; }
+                if (ImGui::Button("Reset A-Trous")) {
+                    restir.atrous = Core::ReSTIRParams::ATrousParams{};
+                    bPPConfigChanged = true;
+                }
             }
             if (bSVGF) {
                 ImGui::SeparatorText("A-SVGF");
                 if (ImGui::SliderInt("ATrous Iterations##svgf", &restir.svgf.atrousIterations, 0, 4)) { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Alpha Min##svgf", &restir.svgf.alphaMin, 0.01f, 1.0f)) { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Gradient Threshold##svgf", &restir.svgf.gradientThreshold, 0.001f, 0.2f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Alpha Min##svgf", &restir.svgf.alphaMin, 0.005f, 1.0f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Gradient Threshold##svgf", &restir.svgf.gradientThreshold, 0.0f, 0.2f)) { bPPConfigChanged = true; }
                 if (ImGui::SliderFloat("Sigma Luminance##svgf", &restir.svgf.sigmaLuminance, 0.1f, 20.0f)) { bPPConfigChanged = true; }
                 if (ImGui::SliderFloat("Sigma Normal##svgf", &restir.svgf.sigmaNormal, 1.0f, 256.0f)) { bPPConfigChanged = true; }
                 if (ImGui::SliderFloat("Sigma Depth##svgf", &restir.svgf.sigmaDepth, 0.0001f, 1.0f)) { bPPConfigChanged = true; }
+                if (ImGui::Button("Reset A-SVGF")) {
+                    restir.svgf = Core::ReSTIRParams::SVGFParams{};
+                    bPPConfigChanged = true;
+                }
             }
         }
 

@@ -64,20 +64,17 @@ void SVGFTemporalAccumulationMain(uniform SVGFTemporalAccumulationPushConstant p
         }
     }
 
-    // Gradient-adaptive accumulation: a strong temporal gradient means the lighting integrand
-    // changed here, so discard part of the accumulated history. Knocking down historyLength
-    // (rather than only raising alpha) keeps alpha and the history count consistent and lets the
-    // spatial variance estimate fall back to its bilateral estimate on freshly-changed pixels.
     const float gradient = rdgTexturesFloat[pc.gradientIndex].Load(int3(pixel, 0)).r;
     float historyLength = 0.0;
     if (validHistory) {
         historyLength = rdgTexturesFloat[pc.historyLengthIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], historyUV, 0).r;
     }
 
-    const float gradientScale = max(pc.gradientThreshold, 0.001);
-    const float resetFactor = clamp(gradient / gradientScale, 0.0, 1.0);
-    historyLength *= (1.0 - resetFactor);
-    historyLength = min(historyLength + 1.0, 30.0);
+    if (pc.gradientThreshold > 0.0) {
+        const float resetFactor = clamp((gradient - pc.gradientThreshold) / pc.gradientThreshold, 0.0, 1.0);
+        historyLength *= (1.0 - resetFactor);
+    }
+    historyLength = min(historyLength + 1.0, 256.0);
 
     float alpha = clamp(max(pc.alphaMin, 1.0 / historyLength), 0.0, 1.0);
 
