@@ -215,9 +215,6 @@ struct AllocBase
 static Render::RenderGraphAllocFns MakeStubAllocFns()
 {
     Render::RenderGraphAllocFns fns;
-    fns.createAllocatedBuffer = [](const Render::VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&) {
-        return Render::AllocatedBuffer{};
-    };
     fns.createImage = [](const Render::VulkanContext*, const VkImageCreateInfo&) -> Render::RenderGraphAllocFns::ImageAlloc {
         static uint64_t counter = 1;
         return {reinterpret_cast<VkImage>(counter++), VK_NULL_HANDLE};
@@ -237,6 +234,7 @@ static Render::RenderGraphAllocFns MakeStubAllocFns()
         return static_cast<VkDeviceAddress>(Core::fnv1a64(reinterpret_cast<const uint8_t*>(&val), sizeof(val)));
     };
     fns.writeDescriptors = [](Render::PhysicalResource&) {};
+    fns.setDebugName = [](const Render::VulkanContext*, VkObjectType, uint64_t, const char*) {};
     return fns;
 }
 
@@ -245,8 +243,12 @@ struct RdgFixture : AllocBase
     Render::RenderGraph rdg;
     Render::RenderGraphInspector inspector;
 
+    // Fake context satisfies constructor asserts; all GPU calls route through allocFns stubs that ignore it.
+    inline static VmaAllocator_T fakeVmaAllocator{};
+    inline static Render::VulkanContext fakeContext{.allocator = &fakeVmaAllocator};
+
     RdgFixture()
-        : rdg(reinterpret_cast<Render::VulkanContext*>(1), nullptr, alloc, arena, MakeStubAllocFns()),
+        : rdg(&fakeContext, nullptr, alloc, arena, MakeStubAllocFns()),
           inspector(rdg)
     {
         rdg.Reset(0, 0, 100);

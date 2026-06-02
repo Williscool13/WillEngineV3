@@ -257,13 +257,19 @@ struct UploadAllocation {
 
 struct TransientUploadArena
 {
-    AllocatedBuffer buffer;
+    VkBuffer buffer{VK_NULL_HANDLE};
+    VmaAllocation bufferAllocation{VK_NULL_HANDLE};
+    void* mappedData{nullptr};
+    VkDeviceAddress address{0};
     Core::LinearAllocator allocator{RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE};
-    size_t size;
+    size_t size{RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE};
 };
 
-struct TransientReadback {
-    AllocatedBuffer buffer;
+struct TransientReadback
+{
+    VkBuffer buffer{VK_NULL_HANDLE};
+    VmaAllocation bufferAllocation{VK_NULL_HANDLE};
+    void* mappedData{nullptr};
 };
 
 struct TextureFrameCarryover

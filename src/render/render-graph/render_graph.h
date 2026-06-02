@@ -36,8 +36,8 @@ struct RenderGraphAllocFns
     static BufferAlloc DefaultCreateBuffer(const VulkanContext*, const VkBufferCreateInfo&);
     static void DefaultDestroyBuffer(const VulkanContext*, VkBuffer, VmaAllocation);
     static VkDeviceAddress DefaultGetBufferDeviceAddress(const VulkanContext*, VkBuffer);
+    static void DefaultSetDebugName(const VulkanContext*, VkObjectType, uint64_t handle, const char* name);
 
-    Core::InlineFunction<AllocatedBuffer(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&)> createAllocatedBuffer{AllocatedBuffer::CreateAllocatedBuffer};
     Core::InlineFunction<ImageAlloc(const VulkanContext*, const VkImageCreateInfo&), 64> createImage{DefaultCreateImage};
     Core::InlineFunction<VkImageView(const VulkanContext*, const VkImageViewCreateInfo&), 64> createImageView{DefaultCreateImageView};
     Core::InlineFunction<void(const VulkanContext*, VkImage, VmaAllocation), 64> destroyImage{DefaultDestroyImage};
@@ -45,6 +45,7 @@ struct RenderGraphAllocFns
     Core::InlineFunction<BufferAlloc(const VulkanContext*, const VkBufferCreateInfo&), 64> createBuffer{DefaultCreateBuffer};
     Core::InlineFunction<void(const VulkanContext*, VkBuffer, VmaAllocation), 64> destroyBuffer{DefaultDestroyBuffer};
     Core::InlineFunction<VkDeviceAddress(const VulkanContext*, VkBuffer), 64> getBufferDeviceAddress{DefaultGetBufferDeviceAddress};
+    Core::InlineFunction<void(const VulkanContext*, VkObjectType, uint64_t, const char*), 64> setDebugName{DefaultSetDebugName};
     // Optional: when set, replaces the entire NeedsDescriptorWrite block for a physical resource. Tests set this to a no-op.
     Core::InlineFunction<void(PhysicalResource&), 64> writeDescriptors;
 };
@@ -202,12 +203,12 @@ public: // Compile and execute
 public: // Transient Uploader
     UploadAllocation AllocateTransient(size_t size);
 
-    [[nodiscard]] VkBuffer GetTransientUploadBuffer() const { return uploadArenas[currentFrameIndex].buffer.handle; }
+    [[nodiscard]] VkBuffer GetTransientUploadBuffer() const { return uploadArenas[currentFrameIndex].buffer; }
 
 public: // Readback
-    [[nodiscard]] VkBuffer GetReadback() const { return meshletCountReadbacks[currentFrameIndex].buffer.handle; }
+    [[nodiscard]] VkBuffer GetReadback() const { return meshletCountReadbacks[currentFrameIndex].buffer; }
 
-    [[nodiscard]] ReadbackStruct* GetReadbackData() const { return static_cast<ReadbackStruct*>(meshletCountReadbacks[currentFrameIndex].buffer.allocationInfo.pMappedData); }
+    [[nodiscard]] ReadbackStruct* GetReadbackData() const { return static_cast<ReadbackStruct*>(meshletCountReadbacks[currentFrameIndex].mappedData); }
 
 private:
     friend class RenderPass;

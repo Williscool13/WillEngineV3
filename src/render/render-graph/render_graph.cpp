@@ -37,32 +37,35 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
       bufferCarryovers(&alloc, Core::AllocTag::Render)
 {
     ENGINE_ASSERT(Renderer, context != nullptr, "RenderGraph requires a valid VulkanContext");
+    ENGINE_ASSERT(Renderer, context->allocator != nullptr, "RenderGraph requires an initialized VMA allocator");
     for (int32_t i = 0; i < uploadArenas.Size(); ++i) {
         VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-        bufferInfo.pNext = nullptr;
         bufferInfo.usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+        bufferInfo.size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
         VmaAllocationCreateInfo vmaAllocInfo = {};
         vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        bufferInfo.size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
 
-        uploadArenas[i].buffer = std::move(allocFns.createAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        if (uploadArenas[i].buffer.handle != VK_NULL_HANDLE) {
+        VmaAllocationInfo allocInfo;
+        VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &uploadArenas[i].buffer, &uploadArenas[i].bufferAllocation, &allocInfo));
+        uploadArenas[i].mappedData = allocInfo.pMappedData;
+        {
             auto debugName = Core::InlineString<>("rdgFrameBufferUploader_");
             debugName.Append(i);
-            uploadArenas[i].buffer.SetDebugName(debugName.c_str());
+            allocFns.setDebugName(context, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(uploadArenas[i].buffer), debugName.c_str());
         }
-        uploadArenas[i].allocator = Core::LinearAllocator(RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE);
-        uploadArenas[i].size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
 
         bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
         vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        meshletCountReadbacks[i].buffer = std::move(allocFns.createAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        if (meshletCountReadbacks[i].buffer.handle != VK_NULL_HANDLE) {
+
+        VmaAllocationInfo readbackAllocInfo;
+        VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &meshletCountReadbacks[i].buffer, &meshletCountReadbacks[i].bufferAllocation, &readbackAllocInfo));
+        meshletCountReadbacks[i].mappedData = readbackAllocInfo.pMappedData;
+        {
             auto readbackDebugName = Core::InlineString("rdgReadbackBuffer__");
             readbackDebugName.Append(i);
-            meshletCountReadbacks[i].buffer.SetDebugName(readbackDebugName.c_str());
+            allocFns.setDebugName(context, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(meshletCountReadbacks[i].buffer), readbackDebugName.c_str());
         }
     }
 }
@@ -71,6 +74,16 @@ RenderGraph::~RenderGraph()
 {
     for (auto& phys : physicalResources) {
         DestroyPhysicalResource(phys);
+    }
+    for (auto& arena : uploadArenas) {
+        if (arena.buffer != VK_NULL_HANDLE) {
+            vmaDestroyBuffer(context->allocator, arena.buffer, arena.bufferAllocation);
+        }
+    }
+    for (auto& readback : meshletCountReadbacks) {
+        if (readback.buffer != VK_NULL_HANDLE) {
+            vmaDestroyBuffer(context->allocator, readback.buffer, readback.bufferAllocation);
+        }
     }
 }
 
@@ -1933,8 +1946,8 @@ UploadAllocation RenderGraph::AllocateTransient(size_t size)
     }
 
     return {
-        .ptr = static_cast<char*>(arena.buffer.allocationInfo.pMappedData) + offset,
-        .address = arena.buffer.address + offset,
+        .ptr = static_cast<char*>(arena.mappedData) + offset,
+        .address = arena.address + offset,
         .offset = offset
     };
 }
@@ -1945,18 +1958,28 @@ void RenderGraph::RecreateTransientArena(uint32_t frameIndex, size_t newSize)
     Core::LinearAllocator newAllocator = Core::LinearAllocator::CreateExpanded(arena.allocator, newSize);
 
     VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufferInfo.pNext = nullptr;
     bufferInfo.usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+    bufferInfo.size = newSize;
     VmaAllocationCreateInfo vmaAllocInfo = {};
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
     vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    bufferInfo.size = newSize;
-    AllocatedBuffer newBuffer = allocFns.createAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
-    newBuffer.SetDebugName(("frameBufferUploader_" + std::to_string(frameIndex)).c_str());
 
-    memcpy(newBuffer.allocationInfo.pMappedData, arena.buffer.allocationInfo.pMappedData, arena.allocator.GetUsed());
+    VkBuffer newBuffer = VK_NULL_HANDLE;
+    VmaAllocation newAllocation = VK_NULL_HANDLE;
+    VmaAllocationInfo newAllocInfo;
+    VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &newBuffer, &newAllocation, &newAllocInfo));
+    {
+        auto debugName = Core::InlineString<>("rdgFrameBufferUploader_");
+        debugName.Append(frameIndex);
+        allocFns.setDebugName(context, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(newBuffer), debugName.c_str());
+    }
 
-    arena.buffer = std::move(newBuffer);
+    memcpy(newAllocInfo.pMappedData, arena.mappedData, arena.allocator.GetUsed());
+    vmaDestroyBuffer(context->allocator, arena.buffer, arena.bufferAllocation);
+
+    arena.buffer = newBuffer;
+    arena.bufferAllocation = newAllocation;
+    arena.mappedData = newAllocInfo.pMappedData;
     arena.allocator = newAllocator;
     arena.size = newSize;
 }
@@ -2179,6 +2202,17 @@ VkDeviceAddress RenderGraphAllocFns::DefaultGetBufferDeviceAddress(const VulkanC
     return vkGetBufferDeviceAddress(context->device, &info);
 }
 
+void RenderGraphAllocFns::DefaultSetDebugName(const VulkanContext* context, VkObjectType type, uint64_t handle, const char* name)
+{
+#ifdef ENABLE_VULKAN_VALIDATION
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = type;
+    nameInfo.objectHandle = handle;
+    nameInfo.pObjectName = name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
+}
+
 void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
 {
     if (resource.bIsImported) {
@@ -2297,13 +2331,7 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     resource.image = imageAlloc.image;
     resource.imageAllocation = imageAlloc.allocation;
 
-#ifdef ENABLE_VULKAN_VALIDATION
-    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
-    nameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
-    nameInfo.objectHandle = reinterpret_cast<uint64_t>(resource.image);
-    nameInfo.pObjectName = resource.debugName.c_str();
-    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
-#endif
+    allocFns.setDebugName(context, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(resource.image), resource.debugName.c_str());
 
     VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
     if (dim.format == VK_FORMAT_D16_UNORM || dim.format == VK_FORMAT_D32_SFLOAT || dim.format == VK_FORMAT_X8_D24_UNORM_PACK32) {
@@ -2371,13 +2399,7 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
     resource.buffer = bufAlloc.buffer;
     resource.bufferAllocation = bufAlloc.allocation;
 
-#ifdef ENABLE_VULKAN_VALIDATION
-    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
-    nameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
-    nameInfo.objectHandle = reinterpret_cast<uint64_t>(resource.buffer);
-    nameInfo.pObjectName = resource.debugName.c_str();
-    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
-#endif
+    allocFns.setDebugName(context, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(resource.buffer), resource.debugName.c_str());
 
     resource.dimensions = dim;
     resource.event = {};
