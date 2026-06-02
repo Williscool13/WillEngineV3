@@ -12,6 +12,7 @@
 #include "core/hash/fnv_1_a.h"
 #include "core/memory/tlsf_allocator.h"
 #include "core/memory/arena.h"
+#include "render/vulkan/vk_context.h"
 #include "render/render-graph/render_graph.h"
 #include "render/render-graph/render_pass.h"
 
@@ -224,14 +225,14 @@ static Render::RenderGraphAllocFns MakeStubAllocFns()
     };
     fns.destroyImage = [](const Render::VulkanContext*, VkImage, VmaAllocation) {};
     fns.destroyImageView = [](const Render::VulkanContext*, VkImageView) {};
-    fns.createBuffer = [](const Render::VulkanContext*, const VkBufferCreateInfo&) -> Render::RenderGraphAllocFns::BufferAlloc {
+    fns.createBuffer = [](const Render::VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&) -> Render::RenderGraphAllocFns::BufferAlloc {
         static uint64_t counter = 1;
-        return {reinterpret_cast<VkBuffer>(counter++), VK_NULL_HANDLE};
+        return {reinterpret_cast<VkBuffer>(counter++), VK_NULL_HANDLE, nullptr};
     };
     fns.destroyBuffer = [](const Render::VulkanContext*, VkBuffer, VmaAllocation) {};
     fns.getBufferDeviceAddress = [](const Render::VulkanContext*, VkBuffer buffer) -> VkDeviceAddress {
-        uint64_t val = reinterpret_cast<uint64_t>(buffer);
-        return static_cast<VkDeviceAddress>(Core::fnv1a64(reinterpret_cast<const uint8_t*>(&val), sizeof(val)));
+        auto val = reinterpret_cast<uint64_t>(buffer);
+        return fnv1a64(reinterpret_cast<const uint8_t*>(&val), sizeof(val));
     };
     fns.writeDescriptors = [](Render::PhysicalResource&) {};
     fns.setDebugName = [](const Render::VulkanContext*, VkObjectType, uint64_t, const char*) {};
@@ -244,13 +245,21 @@ struct RdgFixture : AllocBase
     Render::RenderGraphInspector inspector;
 
     // Fake context satisfies constructor asserts; all GPU calls route through allocFns stubs that ignore it.
-    inline static VmaAllocator_T fakeVmaAllocator{};
-    inline static Render::VulkanContext fakeContext{.allocator = &fakeVmaAllocator};
+    struct FakeContextHolder {
+        Render::VulkanContext ctx;
+        FakeContextHolder() {
+            ctx.allocator = reinterpret_cast<VmaAllocator>(uintptr_t{1});
+        }
+    };
+    inline static FakeContextHolder fakeContextHolder{};
 
     RdgFixture()
-        : rdg(&fakeContext, nullptr, alloc, arena, MakeStubAllocFns()),
+        : rdg(&fakeContextHolder.ctx, nullptr, alloc, arena, MakeStubAllocFns()),
           inspector(rdg)
     {
+        if (fakeContextHolder.ctx.allocator == nullptr) {
+            fakeContextHolder.ctx.allocator = reinterpret_cast<VmaAllocator>(uintptr_t{1});
+        }
         rdg.Reset(0, 0, 100);
     }
 

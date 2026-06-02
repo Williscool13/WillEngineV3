@@ -27,13 +27,13 @@ using TransientImageHandle = Core::Handle<TextureResource>;
 struct RenderGraphAllocFns
 {
     struct ImageAlloc { VkImage image; VmaAllocation allocation; };
-    struct BufferAlloc { VkBuffer buffer; VmaAllocation allocation; };
+    struct BufferAlloc { VkBuffer buffer; VmaAllocation allocation; void* mappedData; };
 
     static ImageAlloc DefaultCreateImage(const VulkanContext*, const VkImageCreateInfo&);
     static VkImageView DefaultCreateImageView(const VulkanContext*, const VkImageViewCreateInfo&);
     static void DefaultDestroyImage(const VulkanContext*, VkImage, VmaAllocation);
     static void DefaultDestroyImageView(const VulkanContext*, VkImageView);
-    static BufferAlloc DefaultCreateBuffer(const VulkanContext*, const VkBufferCreateInfo&);
+    static BufferAlloc DefaultCreateBuffer(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&);
     static void DefaultDestroyBuffer(const VulkanContext*, VkBuffer, VmaAllocation);
     static VkDeviceAddress DefaultGetBufferDeviceAddress(const VulkanContext*, VkBuffer);
     static void DefaultSetDebugName(const VulkanContext*, VkObjectType, uint64_t handle, const char* name);
@@ -42,7 +42,7 @@ struct RenderGraphAllocFns
     Core::InlineFunction<VkImageView(const VulkanContext*, const VkImageViewCreateInfo&), 64> createImageView{DefaultCreateImageView};
     Core::InlineFunction<void(const VulkanContext*, VkImage, VmaAllocation), 64> destroyImage{DefaultDestroyImage};
     Core::InlineFunction<void(const VulkanContext*, VkImageView), 64> destroyImageView{DefaultDestroyImageView};
-    Core::InlineFunction<BufferAlloc(const VulkanContext*, const VkBufferCreateInfo&), 64> createBuffer{DefaultCreateBuffer};
+    Core::InlineFunction<BufferAlloc(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&), 64> createBuffer{DefaultCreateBuffer};
     Core::InlineFunction<void(const VulkanContext*, VkBuffer, VmaAllocation), 64> destroyBuffer{DefaultDestroyBuffer};
     Core::InlineFunction<VkDeviceAddress(const VulkanContext*, VkBuffer), 64> getBufferDeviceAddress{DefaultGetBufferDeviceAddress};
     Core::InlineFunction<void(const VulkanContext*, VkObjectType, uint64_t, const char*), 64> setDebugName{DefaultSetDebugName};

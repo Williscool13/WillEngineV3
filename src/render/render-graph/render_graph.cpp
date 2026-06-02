@@ -46,10 +46,10 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
         vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-        VmaAllocationInfo allocInfo;
-        VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &uploadArenas[i].buffer, &uploadArenas[i].bufferAllocation, &allocInfo));
-        uploadArenas[i].mappedData = allocInfo.pMappedData;
-        {
+        auto uploadAlloc = allocFns.createBuffer(context, bufferInfo, vmaAllocInfo);
+        uploadArenas[i].buffer = uploadAlloc.buffer;
+        uploadArenas[i].bufferAllocation = uploadAlloc.allocation;
+        uploadArenas[i].mappedData = uploadAlloc.mappedData; {
             auto debugName = Core::InlineString<>("rdgFrameBufferUploader_");
             debugName.Append(i);
             allocFns.setDebugName(context, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(uploadArenas[i].buffer), debugName.c_str());
@@ -59,10 +59,10 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
         vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-        VmaAllocationInfo readbackAllocInfo;
-        VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &meshletCountReadbacks[i].buffer, &meshletCountReadbacks[i].bufferAllocation, &readbackAllocInfo));
-        meshletCountReadbacks[i].mappedData = readbackAllocInfo.pMappedData;
-        {
+        auto readbackAlloc = allocFns.createBuffer(context, bufferInfo, vmaAllocInfo);
+        meshletCountReadbacks[i].buffer = readbackAlloc.buffer;
+        meshletCountReadbacks[i].bufferAllocation = readbackAlloc.allocation;
+        meshletCountReadbacks[i].mappedData = readbackAlloc.mappedData; {
             auto readbackDebugName = Core::InlineString("rdgReadbackBuffer__");
             readbackDebugName.Append(i);
             allocFns.setDebugName(context, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(meshletCountReadbacks[i].buffer), readbackDebugName.c_str());
@@ -75,14 +75,14 @@ RenderGraph::~RenderGraph()
     for (auto& phys : physicalResources) {
         DestroyPhysicalResource(phys);
     }
-    for (auto& arena : uploadArenas) {
-        if (arena.buffer != VK_NULL_HANDLE) {
-            vmaDestroyBuffer(context->allocator, arena.buffer, arena.bufferAllocation);
+    for (auto& _arena : uploadArenas) {
+        if (_arena.buffer != VK_NULL_HANDLE) {
+            allocFns.destroyBuffer(context, _arena.buffer, _arena.bufferAllocation);
         }
     }
     for (auto& readback : meshletCountReadbacks) {
         if (readback.buffer != VK_NULL_HANDLE) {
-            vmaDestroyBuffer(context->allocator, readback.buffer, readback.bufferAllocation);
+            allocFns.destroyBuffer(context, readback.buffer, readback.bufferAllocation);
         }
     }
 }
@@ -749,7 +749,6 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
             phys.addressRetrieved = true;
         }
     }
-
 }
 
 void RenderGraph::PrecomputeBarriers()
@@ -1964,22 +1963,18 @@ void RenderGraph::RecreateTransientArena(uint32_t frameIndex, size_t newSize)
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
     vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    VkBuffer newBuffer = VK_NULL_HANDLE;
-    VmaAllocation newAllocation = VK_NULL_HANDLE;
-    VmaAllocationInfo newAllocInfo;
-    VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &newBuffer, &newAllocation, &newAllocInfo));
-    {
+    auto newAlloc = allocFns.createBuffer(context, bufferInfo, vmaAllocInfo); {
         auto debugName = Core::InlineString<>("rdgFrameBufferUploader_");
         debugName.Append(frameIndex);
-        allocFns.setDebugName(context, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(newBuffer), debugName.c_str());
+        allocFns.setDebugName(context, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(newAlloc.buffer), debugName.c_str());
     }
 
-    memcpy(newAllocInfo.pMappedData, arena.mappedData, arena.allocator.GetUsed());
-    vmaDestroyBuffer(context->allocator, arena.buffer, arena.bufferAllocation);
+    memcpy(newAlloc.mappedData, arena.mappedData, arena.allocator.GetUsed());
+    allocFns.destroyBuffer(context, arena.buffer, arena.bufferAllocation);
 
-    arena.buffer = newBuffer;
-    arena.bufferAllocation = newAllocation;
-    arena.mappedData = newAllocInfo.pMappedData;
+    arena.buffer = newAlloc.buffer;
+    arena.bufferAllocation = newAlloc.allocation;
+    arena.mappedData = newAlloc.mappedData;
     arena.allocator = newAllocator;
     arena.size = newSize;
 }
@@ -2180,14 +2175,13 @@ void RenderGraphAllocFns::DefaultDestroyImageView(const VulkanContext* context, 
     vkDestroyImageView(context->device, view, nullptr);
 }
 
-RenderGraphAllocFns::BufferAlloc RenderGraphAllocFns::DefaultCreateBuffer(const VulkanContext* context, const VkBufferCreateInfo& bufferInfo)
+RenderGraphAllocFns::BufferAlloc RenderGraphAllocFns::DefaultCreateBuffer(const VulkanContext* context, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& vmaAllocInfo)
 {
     VkBuffer buffer = VK_NULL_HANDLE;
     VmaAllocation alloc = VK_NULL_HANDLE;
-    VmaAllocationCreateInfo allocInfo = {};
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &allocInfo, &buffer, &alloc, nullptr));
-    return {buffer, alloc};
+    VmaAllocationInfo allocInfo;
+    VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &buffer, &alloc, &allocInfo));
+    return {buffer, alloc, allocInfo.pMappedData};
 }
 
 void RenderGraphAllocFns::DefaultDestroyBuffer(const VulkanContext* context, VkBuffer buffer, VmaAllocation allocation)
@@ -2395,7 +2389,9 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
     bufferInfo.size = dim.bufferSize;
     bufferInfo.usage = dim.bufferUsage;
 
-    auto bufAlloc = allocFns.createBuffer(context, bufferInfo);
+    VmaAllocationCreateInfo vmaAllocInfo = {};
+    vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    auto bufAlloc = allocFns.createBuffer(context, bufferInfo, vmaAllocInfo);
     resource.buffer = bufAlloc.buffer;
     resource.bufferAllocation = bufAlloc.allocation;
 
