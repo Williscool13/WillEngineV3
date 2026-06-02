@@ -864,7 +864,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
     // Temporal Reuse
     if (!graph.HasBuffer(SID("restir_reservoir_history"))) {
         graph.AliasBuffer(SID("restir_reservoir_temporal"), SID("restir_reservoir_buffer"));
-    } else {
+    }
+    else {
         graph.CreateBuffer(SID("restir_reservoir_temporal"), pixelCount * sizeof(Reservoir), true);
 
         RenderPass& temporalPass = graph.AddPass(SID("ReSTIR DI Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -1188,15 +1189,15 @@ void SetupATrousWaveletDenoiser(RenderGraph& graph,
     graph.CreateTexture(SID("atrous_1"), texInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("atrous_2"), texInfo, {std::nullopt}, true);
 
-    const StringID inputs[ATROUS_PASS_COUNT]  = { lightingOutput,    SID("atrous_0"), SID("atrous_1"), SID("atrous_2") };
-    const StringID outputs[ATROUS_PASS_COUNT] = { SID("atrous_0"), SID("atrous_1"), SID("atrous_2"), lightingOutput    };
-    const char* passNames[ATROUS_PASS_COUNT]  = { "[ATrous] Iteration 0", "[ATrous] Iteration 1", "[ATrous] Iteration 2", "[ATrous] Iteration 3" };
+    const StringID inputs[ATROUS_PASS_COUNT] = {lightingOutput, SID("atrous_0"), SID("atrous_1"), SID("atrous_2")};
+    const StringID outputs[ATROUS_PASS_COUNT] = {SID("atrous_0"), SID("atrous_1"), SID("atrous_2"), lightingOutput};
+    const char* passNames[ATROUS_PASS_COUNT] = {"[ATrous] Iteration 0", "[ATrous] Iteration 1", "[ATrous] Iteration 2", "[ATrous] Iteration 3"};
 
     for (int32_t i = 0; i < ATROUS_ITERATIONS; i++) {
         const bool isLast = (i == ATROUS_ITERATIONS - 1);
-        const StringID inputTex  = inputs[i];
+        const StringID inputTex = inputs[i];
         const StringID outputTex = isLast ? outputs[ATROUS_PASS_COUNT - 1] : outputs[i];
-        const uint32_t stepSize  = 1u << static_cast<uint32_t>(i);
+        const uint32_t stepSize = 1u << static_cast<uint32_t>(i);
 
         auto& pass = graph.AddPass(SID(passNames[i]), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -1204,32 +1205,33 @@ void SetupATrousWaveletDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(depthStencil);
         if (inputTex == outputTex) {
             pass.ReadWriteImage(inputTex);
-        } else {
+        }
+        else {
             pass.ReadSampledImage(inputTex);
             pass.WriteStorageImage(outputTex);
         }
         pass.Execute([&graph, pipelineManager, inputTex, outputTex, gbufferOne, depthStencil,
-        width, height, stepSize, params](VkCommandBuffer cmd) {
-            ATrousWaveletPushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(inputTex),
-                .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(outputTex),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
-                .stepSize = stepSize,
-                .width = width,
-                .height = height,
-                .sigmaLuminance = params.sigmaLuminance,
-                .sigmaNormal = params.sigmaNormal,
-                .sigmaDepth = params.sigmaDepth,
-            };
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("atrous_wavelet"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            const uint32_t groupsX = (width + 7) / 8;
-            const uint32_t groupsY = (height + 7) / 8;
-            vkCmdDispatch(cmd, groupsX, groupsY, 1);
-        });
+                width, height, stepSize, params](VkCommandBuffer cmd) {
+                ATrousWaveletPushConstant pc{
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                    .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(inputTex),
+                    .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(outputTex),
+                    .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                    .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
+                    .stepSize = stepSize,
+                    .width = width,
+                    .height = height,
+                    .sigmaLuminance = params.sigmaLuminance,
+                    .sigmaNormal = params.sigmaNormal,
+                    .sigmaDepth = params.sigmaDepth,
+                };
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("atrous_wavelet"));
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                const uint32_t groupsX = (width + 7) / 8;
+                const uint32_t groupsY = (height + 7) / 8;
+                vkCmdDispatch(cmd, groupsX, groupsY, 1);
+            });
     }
 }
 
@@ -1260,7 +1262,6 @@ void SetupASVGFDenoiser(RenderGraph& graph,
     graph.CreateTexture(SID("svgf_gradient"), TextureInfo{VK_FORMAT_R16_SFLOAT, gradW, gradH, 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_gradient_full"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_gradient_spread_0"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_variance_filtered"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_atrous_0"), colorHistInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_atrous_1"), colorHistInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_atrous_2"), colorHistInfo, {std::nullopt}, true);
@@ -1299,7 +1300,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_gradient_samples"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            const uint32_t gx = ((width  + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
+            const uint32_t gx = ((width + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
             const uint32_t gy = ((height + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
             vkCmdDispatch(cmd, gx, gy, 1);
         });
@@ -1308,20 +1309,30 @@ void SetupASVGFDenoiser(RenderGraph& graph,
     // Pass 2: Gradient Temporal Filter
     {
         auto& pass = graph.AddPass(SID("[SVGF] Gradient Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadSampledImage(SID("svgf_gradient_samples"));
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depth);
         if (graph.HasTexture(SID("svgf_gradient_history"))) {
             pass.ReadSampledImage(SID("svgf_gradient_history"));
         }
+        if (graph.HasTexture(SID("gbuffer_one_history"))) {
+            pass.ReadSampledImage(SID("gbuffer_one_history"));
+        }
+        if (graph.HasTexture(SID("depth_history"))) {
+            pass.ReadSampledImage(SID("depth_history"));
+        }
         pass.WriteStorageImage(SID("svgf_gradient"));
         pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd) {
             const bool hasHistory = graph.HasTexture(SID("svgf_gradient_history"));
             SVGFGradientTemporalPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .gradientSamplesIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_samples")),
                 .gradientHistoryIndex = hasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_history")) : graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_samples")),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .gbufferOneHistoryIndex = graph.HasTexture(SID("gbuffer_one_history")) ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .depthHistoryIndex = graph.HasTexture(SID("depth_history")) ? graph.GetDepthOnlySampledImageViewDescriptorIndex(SID("depth_history")) : graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
                 .outputGradientIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_gradient")),
                 .width = width,
                 .height = height,
@@ -1330,7 +1341,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_gradient_temporal"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            const uint32_t gx = ((width  + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
+            const uint32_t gx = ((width + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
             const uint32_t gy = ((height + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
             vkCmdDispatch(cmd, gx, gy, 1);
         });
@@ -1392,6 +1403,12 @@ void SetupASVGFDenoiser(RenderGraph& graph,
         if (graph.HasTexture(SID("svgf_history_length_history"))) {
             pass.ReadSampledImage(SID("svgf_history_length_history"));
         }
+        if (graph.HasTexture(SID("gbuffer_one_history"))) {
+            pass.ReadSampledImage(SID("gbuffer_one_history"));
+        }
+        if (graph.HasTexture(SID("depth_history"))) {
+            pass.ReadSampledImage(SID("depth_history"));
+        }
         pass.WriteStorageImage(SID("svgf_color_accum"));
         pass.WriteStorageImage(SID("svgf_moments"));
         pass.WriteStorageImage(SID("svgf_history_length"));
@@ -1408,7 +1425,9 @@ void SetupASVGFDenoiser(RenderGraph& graph,
                 .historyLengthIndex = hasLenHist ? graph.GetSampledImageViewDescriptorIndex(SID("svgf_history_length_history")) : graph.GetSampledImageViewDescriptorIndex(SID("svgf_history_length")),
                 .gradientIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_spread_0")),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .gbufferOneHistoryIndex = graph.HasTexture(SID("gbuffer_one_history")) ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .depthHistoryIndex = graph.HasTexture(SID("depth_history")) ? graph.GetDepthOnlySampledImageViewDescriptorIndex(SID("depth_history")) : graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
                 .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_color_accum")),
                 .outputMomentsIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_moments")),
                 .outputHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_history_length")),
@@ -1425,83 +1444,86 @@ void SetupASVGFDenoiser(RenderGraph& graph,
         });
     }
 
-    // Pass 5: Variance Estimate
-    {
-        auto& pass = graph.AddPass(SID("[SVGF] Variance Estimate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        pass.ReadSampledImage(SID("svgf_moments"));
-        pass.ReadSampledImage(SID("svgf_history_length"));
-        pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depth);
-        pass.ReadSampledImage(SID("svgf_variance"));
-        pass.WriteStorageImage(SID("svgf_variance_filtered"));
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd) {
-            SVGFVarianceEstimatePushConstant pc{
-                .momentsIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_moments")),
-                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_history_length")),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
-                .inputVarianceIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_variance")),
-                .outputVarianceIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_variance_filtered")),
-                .width = width,
-                .height = height,
-            };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_variance_estimate"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
-        });
-    }
 
     // Pass 6: Variance-Guided Atrous
-    constexpr int32_t ATROUS_PASS_COUNT = 4;
-    const StringID atrousColorIn[ATROUS_PASS_COUNT]  = { SID("svgf_color_accum"), SID("svgf_atrous_0"), SID("svgf_atrous_1"), SID("svgf_atrous_2") };
-    const StringID atrousColorOut[ATROUS_PASS_COUNT] = { SID("svgf_atrous_0"),    SID("svgf_atrous_1"), SID("svgf_atrous_2"), lightingOutput       };
-    const StringID atrousVarIn[ATROUS_PASS_COUNT]    = { SID("svgf_variance_filtered"),    SID("svgf_atrous_variance_0"), SID("svgf_atrous_variance_1"), SID("svgf_atrous_variance_2") };
-    const StringID atrousVarOut[ATROUS_PASS_COUNT]   = { SID("svgf_atrous_variance_0"),    SID("svgf_atrous_variance_1"), SID("svgf_atrous_variance_2"), SID("svgf_atrous_variance_last") };
-    const char* atrousNames[ATROUS_PASS_COUNT] = { "[SVGF] ATrous 0", "[SVGF] ATrous 1", "[SVGF] ATrous 2", "[SVGF] ATrous 3" };
-
-    for (int32_t i = 0; i < params.atrousIterations; i++) {
-        const bool isLast = (i == params.atrousIterations - 1);
-        const StringID colorIn  = atrousColorIn[i];
-        const StringID colorOut = isLast ? atrousColorOut[ATROUS_PASS_COUNT - 1] : atrousColorOut[i];
-        const StringID varIn    = atrousVarIn[i];
-        const StringID varOut   = isLast ? atrousVarOut[ATROUS_PASS_COUNT - 1] : atrousVarOut[i];
-        const uint32_t stepSize = 1u << static_cast<uint32_t>(i);
-
-        auto& pass = graph.AddPass(SID(atrousNames[i]), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        pass.ReadBuffer(SCENE_DATA_BUFFER);
-        pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depth);
-        if (colorIn == colorOut) {
-            pass.ReadWriteImage(colorIn);
-        } else {
-            pass.ReadSampledImage(colorIn);
-            pass.WriteStorageImage(colorOut);
-        }
-        pass.ReadSampledImage(varIn);
-        pass.WriteStorageImage(varOut);
-        pass.Execute([&graph, pipelineManager, colorIn, colorOut, varIn, varOut, gbufferOne, depth,
-                      width, height, stepSize, params](VkCommandBuffer cmd) {
-            SVGFAtrousWaveletPushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(colorIn),
-                .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(colorOut),
-                .inputVarianceIndex = graph.GetSampledImageViewDescriptorIndex(varIn),
-                .outputVarianceIndex = graph.GetStorageImageViewDescriptorIndex(varOut),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
-                .stepSize = stepSize,
-                .width = width,
-                .height = height,
-                .sigmaLuminance = params.sigmaLuminance,
-                .sigmaNormal = params.sigmaNormal,
-                .sigmaDepth = params.sigmaDepth,
-            };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_atrous_wavelet"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+    if (params.atrousIterations == 0) {
+        auto& pass = graph.AddPass(SID("[SVGF] ATrous Bypass"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        pass.ReadCopyImage(SID("svgf_color_accum"));
+        pass.WriteCopyImage(lightingOutput);
+        pass.Execute([&graph, lightingOutput, width, height](VkCommandBuffer cmd) {
+            VkImage src = graph.GetImageHandle(SID("svgf_color_accum"));
+            VkImage dst = graph.GetImageHandle(lightingOutput);
+            VkOffset3D extent = {static_cast<int32_t>(width), static_cast<int32_t>(height), 1};
+            VkImageCopy2 region{};
+            region.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
+            region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            region.srcOffset = {};
+            region.dstOffset = {};
+            region.extent = {static_cast<uint32_t>(extent.x), static_cast<uint32_t>(extent.y), 1};
+            VkCopyImageInfo2 copyInfo{};
+            copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
+            copyInfo.srcImage = src;
+            copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            copyInfo.dstImage = dst;
+            copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            copyInfo.regionCount = 1;
+            copyInfo.pRegions = &region;
+            vkCmdCopyImage2(cmd, &copyInfo);
         });
+    }
+    else {
+        constexpr int32_t ATROUS_PASS_COUNT = 4;
+        const StringID atrousColorIn[ATROUS_PASS_COUNT] = {SID("svgf_color_accum"), SID("svgf_atrous_0"), SID("svgf_atrous_1"), SID("svgf_atrous_2")};
+        const StringID atrousColorOut[ATROUS_PASS_COUNT] = {SID("svgf_atrous_0"), SID("svgf_atrous_1"), SID("svgf_atrous_2"), lightingOutput};
+        const StringID atrousVarIn[ATROUS_PASS_COUNT] = {SID("svgf_variance"), SID("svgf_atrous_variance_0"), SID("svgf_atrous_variance_1"), SID("svgf_atrous_variance_2")};
+        const StringID atrousVarOut[ATROUS_PASS_COUNT] = {SID("svgf_atrous_variance_0"), SID("svgf_atrous_variance_1"), SID("svgf_atrous_variance_2"), SID("svgf_atrous_variance_last")};
+        const char* atrousNames[ATROUS_PASS_COUNT] = {"[SVGF] ATrous 0", "[SVGF] ATrous 1", "[SVGF] ATrous 2", "[SVGF] ATrous 3"};
+
+        for (int32_t i = 0; i < params.atrousIterations; i++) {
+            const bool isLast = (i == params.atrousIterations - 1);
+            const StringID colorIn = atrousColorIn[i];
+            const StringID colorOut = isLast ? atrousColorOut[ATROUS_PASS_COUNT - 1] : atrousColorOut[i];
+            const StringID varIn = atrousVarIn[i];
+            const StringID varOut = isLast ? atrousVarOut[ATROUS_PASS_COUNT - 1] : atrousVarOut[i];
+            const uint32_t stepSize = 1u << static_cast<uint32_t>(i);
+
+            auto& pass = graph.AddPass(SID(atrousNames[i]), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            pass.ReadBuffer(SCENE_DATA_BUFFER);
+            pass.ReadSampledImage(gbufferOne);
+            pass.ReadSampledImage(depth);
+            if (colorIn == colorOut) {
+                pass.ReadWriteImage(colorIn);
+            }
+            else {
+                pass.ReadSampledImage(colorIn);
+                pass.WriteStorageImage(colorOut);
+            }
+            pass.ReadSampledImage(varIn);
+            pass.WriteStorageImage(varOut);
+            pass.Execute([&graph, pipelineManager, colorIn, colorOut, varIn, varOut, gbufferOne, depth,
+                    width, height, stepSize, params](VkCommandBuffer cmd) {
+                    SVGFAtrousWaveletPushConstant pc{
+                        .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                        .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(colorIn),
+                        .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(colorOut),
+                        .inputVarianceIndex = graph.GetSampledImageViewDescriptorIndex(varIn),
+                        .outputVarianceIndex = graph.GetStorageImageViewDescriptorIndex(varOut),
+                        .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                        .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                        .stepSize = stepSize,
+                        .width = width,
+                        .height = height,
+                        .sigmaLuminance = params.sigmaLuminance,
+                        .sigmaNormal = params.sigmaNormal,
+                        .sigmaDepth = params.sigmaDepth,
+                        };
+                    const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_atrous_wavelet"));
+                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+                    vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                    vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+                });
+        }
     }
 }
 

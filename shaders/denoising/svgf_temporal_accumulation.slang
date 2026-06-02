@@ -47,7 +47,7 @@ void SVGFTemporalAccumulationMain(uniform SVGFTemporalAccumulationPushConstant p
 
         // Normal disocclusion
         const float3 currentN = normalize(UnpackNormalOct16(g1.r));
-        const float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(historyPixel, 0)).r));
+        const float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(historyPixel, 0)).r));
         if (dot(currentN, historyN) < 0.906) {
             validHistory = false;
         }
@@ -56,7 +56,7 @@ void SVGFTemporalAccumulationMain(uniform SVGFTemporalAccumulationPushConstant p
         if (validHistory) {
             SceneData sd = *pc.sceneData;
             const float viewDepthCurrent = ScreenToViewSpaceDepth(currentDepth, sd.depthLinearizeMult, sd.depthLinearizeAdd);
-            const float rawReprojDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(historyPixel, 0)).r;
+            const float rawReprojDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(historyPixel, 0)).r;
             const float viewDepthReproj = ScreenToViewSpaceDepth(rawReprojDepth, sd.depthLinearizeMult, sd.depthLinearizeAdd);
             if (abs(viewDepthReproj - viewDepthCurrent) > 0.1 * abs(viewDepthCurrent)) {
                 validHistory = false;

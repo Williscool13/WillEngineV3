@@ -431,8 +431,6 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 
 
-
-
     for (const auto& hotkey : DEBUG_HOTKEYS) {
         if (state->inputFrame->GetKey(hotkey.key).pressed) {
             if (state->debug.resourceName == hotkey.resourceName && state->debug.viewAspect == hotkey.aspect && state->debug.transformationType == hotkey.transform) {
@@ -572,43 +570,47 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
 
         ImGui::Separator();
-        ImGui::BeginDisabled(state->debug.restir.bGroundTruthMode);
-        {
+        ImGui::BeginDisabled(state->debug.restir.bGroundTruthMode); {
             Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
             const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
             Core::Arena& arena = ctx->editorArena.Get();
 
             int currentShader = pipelineCount; // "None"
             for (int32_t i = 0; i < pipelineCount; ++i) {
-                if (state->debug.shadingShaderOverride == shadingPipelines[i]) { currentShader = i; break; }
+                if (state->debug.shadingShaderOverride == shadingPipelines[i]) {
+                    currentShader = i;
+                    break;
+                }
             }
 
-            Core::ArenaArray<Core::InlineString<64>> labels(&arena, pipelineCount + 1);
+            Core::ArenaArray<Core::InlineString<64> > labels(&arena, pipelineCount + 1);
             labels[0] = Core::InlineString<64>("None");
             for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString<64>(shadingPipelines[i].ToString()); }
             const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
             int selected = comboIndex;
-            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64> >*>(data))[idx].c_str(); };
             if (ImGui::Combo("Shading Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
                 state->debug.shadingShaderOverride = selected == 0 ? StringID{} : shadingPipelines[selected - 1];
             }
-        }
-        {
+        } {
             Core::Span<const StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelines();
             const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
             Core::Arena& arena = ctx->editorArena.Get();
 
             int currentShader = pipelineCount; // "None"
             for (int32_t i = 0; i < pipelineCount; ++i) {
-                if (state->debug.lightingShaderOverride == lightingPipelines[i]) { currentShader = i; break; }
+                if (state->debug.lightingShaderOverride == lightingPipelines[i]) {
+                    currentShader = i;
+                    break;
+                }
             }
 
-            Core::ArenaArray<Core::InlineString<64>> labels(&arena, pipelineCount + 1);
+            Core::ArenaArray<Core::InlineString<64> > labels(&arena, pipelineCount + 1);
             labels[0] = Core::InlineString<64>("None");
             for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString<64>(lightingPipelines[i].ToString()); }
             const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
             int selected = comboIndex;
-            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64> >*>(data))[idx].c_str(); };
             if (ImGui::Combo("Lighting Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
                 state->debug.lightingShaderOverride = selected == 0 ? StringID{} : lightingPipelines[selected - 1];
             }
@@ -1684,7 +1686,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 if (ImGui::SliderFloat("Local Contrast Adapt.##smaa", &smaa.localContrastAdaptation, 0.5f, 4.0f, "%.2f")) { bPPConfigChanged = true; }
                 if (ImGui::SliderInt("Max Search Steps##smaa", &smaa.maxSearchSteps, 1, 112)) { bPPConfigChanged = true; }
                 if (ImGui::SliderInt("Max Search Steps Diag##smaa", &smaa.maxSearchStepsDiag, 1, 20)) { bPPConfigChanged = true; }
-                if (ImGui::Button("Reset SMAA")) { smaa = defaultSMAA; bPPConfigChanged = true; }
+                if (ImGui::Button("Reset SMAA")) {
+                    smaa = defaultSMAA;
+                    bPPConfigChanged = true;
+                }
             }
         }
 
@@ -1699,23 +1704,23 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
 
             const bool bATrous = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous;
-            const bool bSVGF   = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
+            const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
 
             if (bATrous) {
                 ImGui::SeparatorText("A-Trous");
-                if (ImGui::SliderInt("Iterations##atrous",        &restir.atrous.iterations,     1,       4))       { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Sigma Luminance##atrous", &restir.atrous.sigmaLuminance, 0.0f,    10.0f))   { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Sigma Normal##atrous",    &restir.atrous.sigmaNormal,    1.0f,    256.0f))  { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Sigma Depth##atrous",     &restir.atrous.sigmaDepth,     0.0001f, 1.0f))   { bPPConfigChanged = true; }
+                if (ImGui::SliderInt("Iterations##atrous", &restir.atrous.iterations, 1, 4)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Luminance##atrous", &restir.atrous.sigmaLuminance, 0.0f, 10.0f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Normal##atrous", &restir.atrous.sigmaNormal, 1.0f, 256.0f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Depth##atrous", &restir.atrous.sigmaDepth, 0.0001f, 1.0f)) { bPPConfigChanged = true; }
             }
             if (bSVGF) {
                 ImGui::SeparatorText("A-SVGF");
-                if (ImGui::SliderInt("ATrous Iterations##svgf",      &restir.svgf.atrousIterations,  1,       4))       { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Alpha Min##svgf",            &restir.svgf.alphaMin,           0.01f,   1.0f))   { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Gradient Threshold##svgf",   &restir.svgf.gradientThreshold,  0.001f,  0.2f))   { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Sigma Luminance##svgf",      &restir.svgf.sigmaLuminance,     0.1f,    20.0f))  { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Sigma Normal##svgf",         &restir.svgf.sigmaNormal,        1.0f,    256.0f)) { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Sigma Depth##svgf",          &restir.svgf.sigmaDepth,         0.0001f, 1.0f))   { bPPConfigChanged = true; }
+                if (ImGui::SliderInt("ATrous Iterations##svgf", &restir.svgf.atrousIterations, 0, 4)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Alpha Min##svgf", &restir.svgf.alphaMin, 0.01f, 1.0f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Gradient Threshold##svgf", &restir.svgf.gradientThreshold, 0.001f, 0.2f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Luminance##svgf", &restir.svgf.sigmaLuminance, 0.1f, 20.0f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Normal##svgf", &restir.svgf.sigmaNormal, 1.0f, 256.0f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Sigma Depth##svgf", &restir.svgf.sigmaDepth, 0.0001f, 1.0f)) { bPPConfigChanged = true; }
             }
         }
 
@@ -2090,19 +2095,22 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                             int currentShader = -1;
                             for (int32_t i = 0; i < pipelineCount; ++i) {
-                                if (editMat.fragmentShader == shadingPipelines[i]) { currentShader = i; break; }
+                                if (editMat.fragmentShader == shadingPipelines[i]) {
+                                    currentShader = i;
+                                    break;
+                                }
                             }
 
                             const bool isUnknown = currentShader < 0;
                             const int32_t optionCount = isUnknown ? pipelineCount + 1 : pipelineCount;
-                            Core::ArenaArray<Core::InlineString<64>> labels(&arena, optionCount);
+                            Core::ArenaArray<Core::InlineString<64> > labels(&arena, optionCount);
                             for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString<64>(shadingPipelines[i].ToString()); }
                             if (isUnknown) {
                                 labels[pipelineCount] = Core::InlineString<64>("(unknown) ");
                                 labels[pipelineCount].Append(editMat.fragmentShader.ToString());
                                 currentShader = pipelineCount;
                             }
-                            auto shadingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+                            auto shadingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64> >*>(data))[idx].c_str(); };
                             if (ImGui::Combo("Fragment Shader", &currentShader, shadingGetter, &labels, static_cast<int32_t>(labels.Size()))) {
                                 if (currentShader < pipelineCount) {
                                     editMat.fragmentShader = shadingPipelines[currentShader];
@@ -2116,19 +2124,22 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                             int currentShader = -1;
                             for (int32_t i = 0; i < pipelineCount; ++i) {
-                                if (editMat.lightingShader == lightingPipelines[i]) { currentShader = i; break; }
+                                if (editMat.lightingShader == lightingPipelines[i]) {
+                                    currentShader = i;
+                                    break;
+                                }
                             }
 
                             const bool isUnknown = currentShader < 0;
                             const int32_t optionCount = isUnknown ? pipelineCount + 1 : pipelineCount;
-                            Core::ArenaArray<Core::InlineString<64>> labels(&arena, optionCount);
+                            Core::ArenaArray<Core::InlineString<64> > labels(&arena, optionCount);
                             for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString<64>(lightingPipelines[i].ToString()); }
                             if (isUnknown) {
                                 labels[pipelineCount] = Core::InlineString<64>("(unknown) ");
                                 labels[pipelineCount].Append(editMat.lightingShader.ToString());
                                 currentShader = pipelineCount;
                             }
-                            auto lightingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+                            auto lightingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64> >*>(data))[idx].c_str(); };
                             if (ImGui::Combo("Lighting Shader", &currentShader, lightingGetter, &labels, static_cast<int32_t>(labels.Size()))) {
                                 if (currentShader < pipelineCount) {
                                     editMat.lightingShader = lightingPipelines[currentShader];
