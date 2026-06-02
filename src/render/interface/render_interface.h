@@ -585,11 +585,11 @@ struct ReSTIRParams
 
     struct SVGFParams
     {
-        float alphaMin{0.2f};
-        float gradientThreshold{0.025f};
-        float sigmaLuminance{0.5f};
-        float sigmaNormal{32.0f};
-        float sigmaDepth{0.1f};
+        float alphaMin{0.1f};
+        float gradientThreshold{0.06f};
+        float sigmaLuminance{4.0f};
+        float sigmaNormal{64.0f};
+        float sigmaDepth{0.05f};
         int32_t atrousIterations{4};
     };
     SVGFParams svgf{};

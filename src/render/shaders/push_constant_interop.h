@@ -497,6 +497,17 @@ SHADER_PUBLIC struct LightingResolvePushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t accumulationCount;
+    SHADER_PUBLIC uint32_t bDemodulateAlbedo;
+};
+
+SHADER_PUBLIC struct SVGFRemodulatePushConstant
+{
+    SHADER_PUBLIC uint32_t irradianceIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
 };
 
 SHADER_PUBLIC struct DeferredResolvePushConstant

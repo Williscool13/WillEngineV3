@@ -82,6 +82,11 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
         }
     }
 
-    float3 finalColor = directLight + li.emissiveRGB;
-    rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(finalColor, 1.0);
+    if (pc.bDemodulateAlbedo != 0) {
+        float3 irradiance = directLight / max(li.albedo.rgb, float3(0.01, 0.01, 0.01));
+        rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(irradiance, 1.0);
+    } else {
+        float3 finalColor = directLight + li.emissiveRGB;
+        rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(finalColor, 1.0);
+    }
 }

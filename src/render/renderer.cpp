@@ -1016,7 +1016,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         const DeferredResolveTargets& targets,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
-                                        uint64_t frameNumber)
+                                        uint64_t frameNumber,
+                                        bool bDemodulateAlbedo)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -1048,7 +1049,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadSampledImage(targets.shadows);
     }
     lightingResolve.WriteStorageImage(targets.output);
-    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber,
+    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, bDemodulateAlbedo,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthStencil, shadows = targets.shadows,
             output = targets.output, skyboxIndex = viewFamily.skyboxIndex,
@@ -1081,6 +1082,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .sceneDataIndex = sceneIndex,
                     .lightingIndex = entry.bucketIndex,
                     .frameIndex = static_cast<uint32_t>(frameNumber),
+                    .bDemodulateAlbedo = bDemodulateAlbedo ? 1u : 0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
@@ -1248,6 +1250,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
     const uint32_t gradH = (height + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE;
 
     const StringID gbufferOne = targets.gbufferOne;
+    const StringID gbufferTwo = targets.gbufferTwo;
     const StringID depth = targets.depthStencil;
     const StringID lightingOutput = targets.output;
 
@@ -1265,10 +1268,12 @@ void SetupASVGFDenoiser(RenderGraph& graph,
     graph.CreateTexture(SID("svgf_atrous_0"), colorHistInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_atrous_1"), colorHistInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_atrous_2"), colorHistInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("svgf_denoised"), colorHistInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_atrous_variance_0"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_atrous_variance_1"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_atrous_variance_2"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("svgf_atrous_variance_last"), TextureInfo{VK_FORMAT_R32_SFLOAT, width, height, 1}, {std::nullopt}, true);
+    graph.CreateTexture(SID("svgf_variance_estimated"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
 
     graph.CarryTextureToNextFrame(SID("svgf_color_accum"), SID("svgf_color_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CarryTextureToNextFrame(SID("svgf_moments"), SID("svgf_moments_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -1445,14 +1450,41 @@ void SetupASVGFDenoiser(RenderGraph& graph,
     }
 
 
+    // Pass 5: Spatial Variance Estimate
+    if (params.atrousIterations > 0) {
+        auto& pass = graph.AddPass(SID("[SVGF] Variance Estimate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        pass.ReadSampledImage(SID("svgf_moments"));
+        pass.ReadSampledImage(SID("svgf_history_length"));
+        pass.ReadSampledImage(SID("svgf_variance"));
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(depth);
+        pass.WriteStorageImage(SID("svgf_variance_estimated"));
+        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd) {
+            SVGFVarianceEstimatePushConstant pc{
+                .momentsIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_moments")),
+                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_history_length")),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .inputVarianceIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_variance")),
+                .outputVarianceIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_variance_estimated")),
+                .width = width,
+                .height = height,
+            };
+            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_variance_estimate"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
+    }
+
     // Pass 6: Variance-Guided Atrous
     if (params.atrousIterations == 0) {
         auto& pass = graph.AddPass(SID("[SVGF] ATrous Bypass"), VK_PIPELINE_STAGE_2_COPY_BIT);
         pass.ReadCopyImage(SID("svgf_color_accum"));
-        pass.WriteCopyImage(lightingOutput);
-        pass.Execute([&graph, lightingOutput, width, height](VkCommandBuffer cmd) {
+        pass.WriteCopyImage(SID("svgf_denoised"));
+        pass.Execute([&graph, width, height](VkCommandBuffer cmd) {
             VkImage src = graph.GetImageHandle(SID("svgf_color_accum"));
-            VkImage dst = graph.GetImageHandle(lightingOutput);
+            VkImage dst = graph.GetImageHandle(SID("svgf_denoised"));
             VkOffset3D extent = {static_cast<int32_t>(width), static_cast<int32_t>(height), 1};
             VkImageCopy2 region{};
             region.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
@@ -1475,8 +1507,8 @@ void SetupASVGFDenoiser(RenderGraph& graph,
     else {
         constexpr int32_t ATROUS_PASS_COUNT = 4;
         const StringID atrousColorIn[ATROUS_PASS_COUNT] = {SID("svgf_color_accum"), SID("svgf_atrous_0"), SID("svgf_atrous_1"), SID("svgf_atrous_2")};
-        const StringID atrousColorOut[ATROUS_PASS_COUNT] = {SID("svgf_atrous_0"), SID("svgf_atrous_1"), SID("svgf_atrous_2"), lightingOutput};
-        const StringID atrousVarIn[ATROUS_PASS_COUNT] = {SID("svgf_variance"), SID("svgf_atrous_variance_0"), SID("svgf_atrous_variance_1"), SID("svgf_atrous_variance_2")};
+        const StringID atrousColorOut[ATROUS_PASS_COUNT] = {SID("svgf_atrous_0"), SID("svgf_atrous_1"), SID("svgf_atrous_2"), SID("svgf_denoised")};
+        const StringID atrousVarIn[ATROUS_PASS_COUNT] = {SID("svgf_variance_estimated"), SID("svgf_atrous_variance_0"), SID("svgf_atrous_variance_1"), SID("svgf_atrous_variance_2")};
         const StringID atrousVarOut[ATROUS_PASS_COUNT] = {SID("svgf_atrous_variance_0"), SID("svgf_atrous_variance_1"), SID("svgf_atrous_variance_2"), SID("svgf_atrous_variance_last")};
         const char* atrousNames[ATROUS_PASS_COUNT] = {"[SVGF] ATrous 0", "[SVGF] ATrous 1", "[SVGF] ATrous 2", "[SVGF] ATrous 3"};
 
@@ -1524,6 +1556,29 @@ void SetupASVGFDenoiser(RenderGraph& graph,
                     vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
                 });
         }
+    }
+
+    // Remodulate: multiply denoised irradiance by albedo from gbuffer
+    {
+        auto& pass = graph.AddPass(SID("[SVGF] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        pass.ReadSampledImage(SID("svgf_denoised"));
+        pass.ReadSampledImage(gbufferTwo);
+        pass.ReadSampledImage(depth);
+        pass.WriteStorageImage(lightingOutput);
+        pass.Execute([&graph, pipelineManager, gbufferTwo, depth, lightingOutput, width, height](VkCommandBuffer cmd) {
+            SVGFRemodulatePushConstant pc{
+                .irradianceIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_denoised")),
+                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(lightingOutput),
+                .width = width,
+                .height = height,
+            };
+            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_remodulate"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
     }
 }
 

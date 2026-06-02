@@ -465,6 +465,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_temporal_accumulation.slang compute SVGFTemporalAccumulationMain svgf_temporal_accumulation
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_variance_estimate.slang compute SVGFVarianceEstimateMain svgf_variance_estimate
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_atrous_wavelet.slang compute SVGFAtrousWaveletMain svgf_atrous_wavelet
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_remodulate.slang compute SVGFRemodulateMain svgf_remodulate
         ${CMAKE_SOURCE_DIR}/shaders/post-process/tonemapping.slang compute ComputeSDRTonemap tonemap_sdr
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeBuildHistogramExposure exposure_build_histogram
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeAverageExposure exposure_calculate_average

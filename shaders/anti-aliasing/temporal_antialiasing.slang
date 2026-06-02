@@ -100,7 +100,7 @@ float2 GetVelocityDilated(int2 pixelCoord) {
 }
 
 float ComputeVelocityDisocclusion(float2 uv, float2 currentVelocityUV) {
-    float2 historyUv = uv - currentVelocityUV;
+    float2 historyUv = uv + currentVelocityUV;
 
     if (any(historyUv < float2(0.0)) || any(historyUv > float2(1.0))) {
         return 1.0;

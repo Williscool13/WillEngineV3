@@ -481,6 +481,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(SVGFVarianceEstimatePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("svgf_atrous_wavelet"), src / "svgf_atrous_wavelet_compute.spv",
                             sizeof(SVGFAtrousWaveletPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("svgf_remodulate"), src / "svgf_remodulate_compute.spv",
+                            sizeof(SVGFRemodulatePushConstant), PipelineCategory::Critical);
 
 
     RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure_build_histogram_compute.spv",

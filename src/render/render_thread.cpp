@@ -520,8 +520,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
             else {
                 SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber, restir);
-                SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
-                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF) {
+                const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
+                SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber, bSVGF);
+                if (bSVGF) {
                     SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.svgf);
                 } else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous) {
                     SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.atrous);

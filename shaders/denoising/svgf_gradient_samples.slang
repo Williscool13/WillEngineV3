@@ -32,8 +32,16 @@ void SVGFGradientSamplesMain(uniform SVGFGradientSamplesPushConstant pc, uint3 d
         return;
     }
 
-    const float4 currentColor = rdgTexturesFloat4[pc.colorIndex].Load(int3(clampedPixel, 0));
-    const float currentLum = Luminance(currentColor.rgb);
+    float currentLum = 0.0;
+    float lumCount = 0.0;
+    for (uint ty = 0; ty < pc.stride; ty++) {
+        for (uint tx = 0; tx < pc.stride; tx++) {
+            const uint2 p = min(pixel + uint2(tx, ty), uint2(pc.width - 1, pc.height - 1));
+            currentLum += Luminance(rdgTexturesFloat4[pc.colorIndex].Load(int3(p, 0)).rgb);
+            lumCount += 1.0;
+        }
+    }
+    currentLum /= max(lumCount, 1.0);
 
     // Reproject to previous frame using motion vectors
     const uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(clampedPixel, 0));

@@ -78,7 +78,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         const DeferredResolveTargets& targets,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
-                                        uint64_t frameNumber);
+                                        uint64_t frameNumber,
+                                        bool bDemodulateAlbedo = false);
 
 void SetupATrousWaveletDenoiser(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
