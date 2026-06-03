@@ -751,6 +751,105 @@ void WillEngine::EditorImgui()
                     }
                     ImGui::EndTable();
                 }
+
+                ImGui::SeparatorText("VRAM Attribution");
+                {
+                    static int vramCategoryFilter = 0;
+                    static Render::VRAMReport vramSnapshot{};
+
+                    const char* filterPreview = (vramCategoryFilter == 0) ? "All" : Render::RESOURCE_CATEGORY_NAMES[vramCategoryFilter - 1];
+                    if (ImGui::BeginCombo("Category##vram_filter", filterPreview)) {
+                        if (ImGui::Selectable("All", vramCategoryFilter == 0)) { vramCategoryFilter = 0; }
+                        for (int i = 0; i < static_cast<int>(Render::RESOURCE_CATEGORY_BIT_COUNT); ++i) {
+                            if (ImGui::Selectable(Render::RESOURCE_CATEGORY_NAMES[i], vramCategoryFilter == i + 1)) {
+                                vramCategoryFilter = i + 1;
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Refresh##vram")) {
+                        renderThread->RequestVRAMReport();
+                    }
+                    {
+                        Render::VRAMReport fresh = renderThread->GetVRAMReport();
+                        if (fresh.physicalTotal > 0) { vramSnapshot = fresh; }
+                    }
+                    const Render::VRAMReport& vram = vramSnapshot;
+                    auto fmtMB = [](VkDeviceSize bytes) -> double { return static_cast<double>(bytes) / (1024.0 * 1024.0); };
+
+                    constexpr ImGuiTableFlags vramTableFlags = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+
+                    ImGui::Spacing();
+                    ImGui::TextUnformatted("Logical (pre-alias, declared demand)");
+                    if (ImGui::BeginTable("##vram_logical", 3, vramTableFlags)) {
+                        ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch);
+                        ImGui::TableSetupColumn("MB", ImGuiTableColumnFlags_WidthFixed, 70.f);
+                        ImGui::TableSetupColumn("% of Total", ImGuiTableColumnFlags_WidthFixed, 80.f);
+                        ImGui::TableHeadersRow();
+
+                        auto LogicalRow = [&](const char* name, VkDeviceSize bytes) {
+                            ImGui::TableNextRow();
+                            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(name);
+                            ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f", fmtMB(bytes));
+                            ImGui::TableSetColumnIndex(2);
+                            if (vram.logicalTotal > 0) { ImGui::Text("%.1f%%", 100.0 * static_cast<double>(bytes) / static_cast<double>(vram.logicalTotal)); }
+                            else { ImGui::TextUnformatted("-"); }
+                        };
+
+                        if (vramCategoryFilter == 0) {
+                            for (uint32_t i = 0; i < Render::RESOURCE_CATEGORY_BIT_COUNT; ++i) {
+                                if (vram.logical[i] > 0) { LogicalRow(Render::RESOURCE_CATEGORY_NAMES[i], vram.logical[i]); }
+                            }
+                            LogicalRow("Total", vram.logicalTotal);
+                        } else {
+                            const uint32_t idx = static_cast<uint32_t>(vramCategoryFilter - 1);
+                            LogicalRow(Render::RESOURCE_CATEGORY_NAMES[idx], vram.logical[idx]);
+                        }
+                        ImGui::EndTable();
+                    }
+
+                    ImGui::Spacing();
+                    ImGui::TextUnformatted("Physical (post-alias, committed)");
+                    if (ImGui::BeginTable("##vram_physical", 3, vramTableFlags)) {
+                        ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch);
+                        ImGui::TableSetupColumn("MB", ImGuiTableColumnFlags_WidthFixed, 70.f);
+                        ImGui::TableSetupColumn("% of Total", ImGuiTableColumnFlags_WidthFixed, 80.f);
+                        ImGui::TableHeadersRow();
+
+                        auto PhysRow = [&](const char* name, VkDeviceSize bytes) {
+                            ImGui::TableNextRow();
+                            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(name);
+                            ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f", fmtMB(bytes));
+                            ImGui::TableSetColumnIndex(2);
+                            if (vram.physicalTotal > 0) { ImGui::Text("%.1f%%", 100.0 * static_cast<double>(bytes) / static_cast<double>(vram.physicalTotal)); }
+                            else { ImGui::TextUnformatted("-"); }
+                        };
+
+                        if (vramCategoryFilter == 0) {
+                            for (uint32_t i = 0; i < Render::RESOURCE_CATEGORY_BIT_COUNT; ++i) {
+                                if (vram.physicalExclusive[i] > 0) { PhysRow(Render::RESOURCE_CATEGORY_NAMES[i], vram.physicalExclusive[i]); }
+                            }
+                            if (vram.physicalSharedPoolBytes > 0) {
+                                char sharedLabel[272] = "Shared [";
+                                int written = static_cast<int>(strlen(sharedLabel));
+                                const uint64_t mask = static_cast<uint64_t>(vram.sharedPoolCategories);
+                                for (uint32_t i = 0; i < Render::RESOURCE_CATEGORY_BIT_COUNT; ++i) {
+                                    if (mask & (1ull << i)) {
+                                        written += snprintf(sharedLabel + written, sizeof(sharedLabel) - written, written > 8 ? ", %s" : "%s", Render::RESOURCE_CATEGORY_NAMES[i]);
+                                    }
+                                }
+                                snprintf(sharedLabel + written, sizeof(sharedLabel) - written, "]");
+                                PhysRow(sharedLabel, vram.physicalSharedPoolBytes);
+                            }
+                            PhysRow("Total", vram.physicalTotal);
+                        } else {
+                            const uint32_t idx = static_cast<uint32_t>(vramCategoryFilter - 1);
+                            PhysRow(Render::RESOURCE_CATEGORY_NAMES[idx], vram.physicalExclusive[idx]);
+                        }
+                        ImGui::EndTable();
+                    }
+                }
             }
         } // bMemoryOpen + outer block
 

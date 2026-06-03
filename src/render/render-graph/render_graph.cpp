@@ -5,6 +5,7 @@
 #include "render_graph.h"
 
 #include <utility>
+#include <bit>
 
 #include "render_graph_config.h"
 #include "platform/file_utils.h"
@@ -87,9 +88,9 @@ RenderGraph::~RenderGraph()
     }
 }
 
-RenderPass& RenderGraph::AddPass(StringID passId, VkPipelineStageFlags2 stages)
+RenderPass& RenderGraph::AddPass(StringID passId, VkPipelineStageFlags2 stages, ResourceCategory category)
 {
-    auto* pass = new(arena->AllocRaw(sizeof(RenderPass), alignof(RenderPass))) RenderPass(*this, passId, stages, arena);
+    auto* pass = new(arena->AllocRaw(sizeof(RenderPass), alignof(RenderPass))) RenderPass(*this, passId, stages, category, arena);
     passes.PushBack(pass);
     return *pass;
 }
@@ -391,14 +392,16 @@ void RenderGraph::CalculateLifetimes()
     for (uint32_t passIdx = 0; passIdx < sortedPasses.Size(); passIdx++) {
         auto& pass = sortedPasses[passIdx];
 
-        auto UpdateTextureLifetime = [passIdx](TextureResource& tex) {
+        auto UpdateTextureLifetime = [passIdx, &pass](TextureResource& tex) {
             tex.firstPass = std::min(tex.firstPass, passIdx);
             tex.lastPass = std::max(tex.lastPass, passIdx);
+            tex.category |= pass->category;
         };
 
-        auto UpdateBufferLifetime = [passIdx](BufferResource& buf) {
+        auto UpdateBufferLifetime = [passIdx, &pass](BufferResource& buf) {
             buf.firstPass = std::min(buf.firstPass, passIdx);
             buf.lastPass = std::max(buf.lastPass, passIdx);
+            buf.category |= pass->category;
         };
 
         for (const uint32_t texIndex : pass->storageImageWrites) { UpdateTextureLifetime(textures[texIndex]); }
@@ -433,7 +436,7 @@ void RenderGraph::PopulateAutoClearTextures()
     }
 }
 
-void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
+void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
 {
     for (auto& tex : textures) {
         if (tex.accumulatedUsage == 0) {
@@ -506,6 +509,7 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
                     phys.logicalResourceIndices.PushBack(tex.index);
                     phys.bCanAlias = tex.bCanUseAliasedTexture;
                     phys.bIsViewportScaled |= tex.bIsViewportScaled;
+                    phys.category |= tex.category;
                     AppendUsageChain(phys, tex.textureId, tex.bCanUseAliasedTexture, bDebugLogging);
                     foundAlias = true;
                     break;
@@ -521,6 +525,7 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
                 newPhys.logicalResourceIndices.PushBack(tex.index);
                 newPhys.bCanAlias = tex.bCanUseAliasedTexture;
                 newPhys.bIsViewportScaled = tex.bIsViewportScaled;
+                newPhys.category = tex.category;
                 AppendUsageChain(newPhys, tex.textureId, tex.bCanUseAliasedTexture, bDebugLogging);
             }
         }
@@ -601,6 +606,7 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
                     }
                     phys.bCanAlias = buf.bCanUseAliasedBuffer;
                     phys.bIsViewportScaled |= buf.bIsViewportScaled;
+                    phys.category |= buf.category;
                     AppendUsageChain(phys, buf.bufferId, buf.bCanUseAliasedBuffer, bDebugLogging);
                     foundAlias = true;
                     break;
@@ -615,6 +621,7 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
                 newPhys.logicalResourceIndices.PushBack(buf.index);
                 newPhys.bCanAlias = buf.bCanUseAliasedBuffer;
                 newPhys.bIsViewportScaled = buf.bIsViewportScaled;
+                newPhys.category = buf.category;
                 AppendUsageChain(newPhys, buf.bufferId, buf.bCanUseAliasedBuffer, bDebugLogging);
             }
         }
@@ -1169,7 +1176,7 @@ void RenderGraph::PrecomputeBarriers()
     }
 }
 
-void RenderGraph::Compile(int64_t currentFrame)
+void RenderGraph::Compile(uint64_t currentFrame)
 {
     AccumulateUsage();
 
@@ -2455,6 +2462,70 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
 
     resource.dimensions = dim;
     resource.event = {};
+}
+
+VRAMReport RenderGraph::GenerateVramReport() const
+{
+    VRAMReport report;
+
+    // Logical VRAM (no aliasing)
+    // Sum declared sizes per category. Resources with multiple category bits are counted in each.
+    auto AddLogicalBytes = [&](ResourceCategory cat, VkDeviceSize bytes) {
+        const auto mask = static_cast<uint64_t>(cat);
+        for (uint32_t bit = 0; bit < RESOURCE_CATEGORY_BIT_COUNT; ++bit) {
+            if (mask & (1ull << bit)) {
+                report.logical[bit] += bytes;
+            }
+        }
+    };
+
+    for (const auto& tex : textures) {
+        if (tex.accumulatedUsage == 0) { continue; }
+        const VkDeviceSize rowBytes = static_cast<VkDeviceSize>(tex.textureInfo.width) * tex.textureInfo.height * 4;
+        AddLogicalBytes(tex.category, rowBytes);
+        report.logicalTotal += rowBytes;
+    }
+    for (const auto& buf : buffers) {
+        if (buf.accumulatedUsage == 0) { continue; }
+        AddLogicalBytes(buf.category, buf.bufferInfo.size);
+        report.logicalTotal += buf.bufferInfo.size;
+    }
+
+    // Physical VRAM Usage (w/ aliasing)
+    for (const auto& phys : physicalResources) {
+        if (!phys.IsAllocated()) { continue; }
+
+        VkDeviceSize size = 0;
+        if (phys.dimensions.IsImage() && phys.imageAllocation != VK_NULL_HANDLE) {
+            VmaAllocationInfo info{};
+            vmaGetAllocationInfo(context->allocator, phys.imageAllocation, &info);
+            size = info.size;
+        } else if (phys.dimensions.IsBuffer() && phys.bufferAllocation != VK_NULL_HANDLE) {
+            VmaAllocationInfo info{};
+            vmaGetAllocationInfo(context->allocator, phys.bufferAllocation, &info);
+            size = info.size;
+        }
+
+        if (size == 0) { continue; }
+        report.physicalTotal += size;
+
+        const auto mask = static_cast<uint64_t>(phys.category);
+        const auto popCount = static_cast<uint32_t>(std::popcount(mask));
+
+        if (popCount == 1) {
+            for (uint32_t bit = 0; bit < RESOURCE_CATEGORY_BIT_COUNT; ++bit) {
+                if (mask & (1ull << bit)) {
+                    report.physicalExclusive[bit] += size;
+                    break;
+                }
+            }
+        } else if (popCount > 1) {
+            report.physicalSharedPoolBytes += size;
+            report.sharedPoolCategories |= phys.category;
+        }
+    }
+
+    return report;
 }
 
 void RenderGraph::AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool bCanAlias, bool debugLogging)

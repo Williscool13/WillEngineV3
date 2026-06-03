@@ -440,20 +440,20 @@ TEST_CASE_METHOD(RdgFixture, "RDG: mini-frame schedule, usage, aliasing and barr
     rdg.CreateBuffer(SID("drawBuf"), 4096);
     rdg.CreateBuffer(SID("indirectBuf"), 4096);
 
-    rdg.AddPass(SID("cull"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+    rdg.AddPass(SID("cull"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged)
             .WriteBuffer(SID("drawBuf"))
             .WriteBuffer(SID("indirectBuf"));
-    rdg.AddPass(SID("depthPrepass"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT)
+    rdg.AddPass(SID("depthPrepass"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, Render::ResourceCategory::Untagged)
             .WriteDepthAttachment(SID("depth"));
-    rdg.AddPass(SID("gbuffer"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+    rdg.AddPass(SID("gbuffer"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, Render::ResourceCategory::Untagged)
             .WriteColorAttachment(SID("gbuffer"))
             .ReadDepthAttachment(SID("depth"))
             .ReadIndirectBuffer(SID("indirectBuf"))
             .ReadBuffer(SID("drawBuf"));
-    rdg.AddPass(SID("lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+    rdg.AddPass(SID("lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged)
             .ReadSampledImage(SID("gbuffer"))
             .WriteStorageImage(SID("hdr"));
-    rdg.AddPass(SID("post"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+    rdg.AddPass(SID("post"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, Render::ResourceCategory::Untagged)
             .ReadSampledImage(SID("hdr"))
             .WriteColorAttachment(SID("swap"));
 
@@ -516,7 +516,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: mini-frame schedule, usage, aliasing and barr
 
 TEST_CASE_METHOD(RdgFixture, "RDG: single pass is wave 0 with no edges", "[rdg][schedule]")
 {
-    rdg.AddPass(SID("only"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    rdg.AddPass(SID("only"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged);
     Compile();
     CHECK(inspector.SortedPassCount() == 1);
     CHECK(inspector.WaveCount() == 1);
@@ -527,8 +527,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: independent passes share wave 0 and have no e
 {
     rdg.CreateTexture(SID("a"), TexInfo());
     rdg.CreateTexture(SID("b"), TexInfo(640, 480));
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("a"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("b"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("a"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("b"));
     Compile();
     CHECK(inspector.WaveCount() == 1);
     CHECK_FALSE(inspector.HasEdge(SID("pA"), SID("pB")));
@@ -539,9 +539,9 @@ TEST_CASE_METHOD(RdgFixture, "RDG: linear chain produces sequential waves and ed
 {
     rdg.CreateTexture(SID("t0"), TexInfo());
     rdg.CreateTexture(SID("t1"), TexInfo(640, 480));
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("t0"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("t0")).WriteStorageImage(SID("t1"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("t1"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("t0"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("t0")).WriteStorageImage(SID("t1"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("t1"));
     Compile();
     CHECK(inspector.WaveCount() == 3);
     CHECK(inspector.PassWaveIndex(SID("pA")) == 0);
@@ -557,10 +557,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: diamond has exactly the four expected edges, 
     rdg.CreateTexture(SID("in"), TexInfo());
     rdg.CreateTexture(SID("b"), TexInfo(640, 480));
     rdg.CreateTexture(SID("c"), TexInfo(320, 240));
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("in"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("in")).WriteStorageImage(SID("b"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("in")).WriteStorageImage(SID("c"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("b")).ReadStorageImage(SID("c"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("in"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("in")).WriteStorageImage(SID("b"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("in")).WriteStorageImage(SID("c"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("b")).ReadStorageImage(SID("c"));
     Compile();
     CHECK(inspector.HasEdge(SID("pA"), SID("pB")));
     CHECK(inspector.HasEdge(SID("pA"), SID("pC")));
@@ -574,9 +574,9 @@ TEST_CASE_METHOD(RdgFixture, "RDG: diamond has exactly the four expected edges, 
 TEST_CASE_METHOD(RdgFixture, "RDG: write-read-write produces RAW, WAR and WAW edges", "[rdg][schedule]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
-    rdg.AddPass(SID("p2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("p2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
     Compile();
     CHECK(inspector.HasEdge(SID("p0"), SID("p1"))); // RAW
     CHECK(inspector.HasEdge(SID("p1"), SID("p2"))); // WAR
@@ -586,9 +586,9 @@ TEST_CASE_METHOD(RdgFixture, "RDG: write-read-write produces RAW, WAR and WAW ed
 TEST_CASE_METHOD(RdgFixture, "RDG: same-layout readers depend on the transition cause, not each other", "[rdg][schedule]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex"));
     Compile();
     CHECK(inspector.HasEdge(SID("pA"), SID("pB")));
     CHECK(inspector.HasEdge(SID("pA"), SID("pC")));
@@ -601,9 +601,9 @@ TEST_CASE_METHOD(RdgFixture, "RDG: readers in different layouts serialize on lay
     // Storage-read (GENERAL) then sampled-read (SHADER_READ_ONLY) of the same texture: the second
     // reader must wait on the first because the layout epoch changes.
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("pStorageRead"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
-    rdg.AddPass(SID("pSampledRead"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pStorageRead"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("pSampledRead"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex"));
     Compile();
     CHECK(inspector.HasEdge(SID("pStorageRead"), SID("pSampledRead")));
 }
@@ -611,9 +611,9 @@ TEST_CASE_METHOD(RdgFixture, "RDG: readers in different layouts serialize on lay
 TEST_CASE_METHOD(RdgFixture, "RDG: buffer RAW, WAW and WAR edges", "[rdg][schedule]")
 {
     rdg.CreateBuffer(SID("buf"), 1024);
-    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
-    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("buf"));
-    rdg.AddPass(SID("p2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
+    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("buf"));
+    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("buf"));
+    rdg.AddPass(SID("p2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("buf"));
     Compile();
     CHECK(inspector.HasEdge(SID("p0"), SID("p1")));
     CHECK(inspector.HasEdge(SID("p1"), SID("p2")));
@@ -624,11 +624,11 @@ TEST_CASE_METHOD(RdgFixture, "RDG: cross-epoch RAWs on same texture both produce
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
     rdg.CreateTexture(SID("other"), TexInfo(640, 480));
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("other"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex")).ReadStorageImage(SID("other"));
-    rdg.AddPass(SID("pE"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("other"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex")).ReadStorageImage(SID("other"));
+    rdg.AddPass(SID("pE"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
     Compile();
     CHECK(inspector.HasEdge(SID("pA"), SID("pB")));
     CHECK(inspector.HasEdge(SID("pB"), SID("pD")));
@@ -643,10 +643,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: cross-epoch RAWs on same texture both produce
 TEST_CASE_METHOD(RdgFixture, "RDG: parallel texture readers both produce WAR edges to next write", "[rdg][schedule]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadSampledImage(SID("tex"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
     Compile();
     CHECK(inspector.HasEdge(SID("pA"), SID("pB")));
     CHECK(inspector.HasEdge(SID("pA"), SID("pC")));
@@ -660,10 +660,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: parallel texture readers both produce WAR edg
 TEST_CASE_METHOD(RdgFixture, "RDG: parallel readers both edge to reader in new layout", "[rdg][schedule]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex"));
     Compile();
     CHECK(inspector.HasEdge(SID("pB"), SID("pD")));
     CHECK(inspector.HasEdge(SID("pC"), SID("pD")));
@@ -675,10 +675,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: parallel readers both edge to reader in new l
 TEST_CASE_METHOD(RdgFixture, "RDG: parallel buffer readers both produce WAR edges to next write", "[rdg][schedule]")
 {
     rdg.CreateBuffer(SID("buf"), 1024);
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("buf"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("buf"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("buf"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("buf"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("buf"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("buf"));
     Compile();
     CHECK(inspector.HasEdge(SID("pA"), SID("pB")));
     CHECK(inspector.HasEdge(SID("pA"), SID("pC")));
@@ -693,9 +693,9 @@ TEST_CASE_METHOD(RdgFixture, "RDG: two producers feeding a merger put the merger
 {
     rdg.CreateTexture(SID("tA"), TexInfo());
     rdg.CreateTexture(SID("tB"), TexInfo(640, 480));
-    rdg.AddPass(SID("prodA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tA"));
-    rdg.AddPass(SID("prodB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tB"));
-    rdg.AddPass(SID("merge"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tA")).ReadStorageImage(SID("tB"));
+    rdg.AddPass(SID("prodA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tA"));
+    rdg.AddPass(SID("prodB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tB"));
+    rdg.AddPass(SID("merge"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("tA")).ReadStorageImage(SID("tB"));
     Compile();
     CHECK(inspector.WaveCount() == 2);
     CHECK(inspector.PassWaveIndex(SID("prodA")) == 0);
@@ -710,8 +710,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: two producers feeding a merger put the merger
 TEST_CASE_METHOD(RdgFixture, "RDG: storage write/read sets STORAGE_BIT", "[rdg][usage]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("tex"));
     rdg.AccumulateUsage();
     CHECK((inspector.TextureAccumulatedUsage(SID("tex")) & VK_IMAGE_USAGE_STORAGE_BIT) != 0);
 }
@@ -719,7 +719,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: storage write/read sets STORAGE_BIT", "[rdg][
 TEST_CASE_METHOD(RdgFixture, "RDG: sampled read sets SAMPLED_BIT", "[rdg][usage]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex"));
     rdg.AccumulateUsage();
     CHECK((inspector.TextureAccumulatedUsage(SID("tex")) & VK_IMAGE_USAGE_SAMPLED_BIT) != 0);
 }
@@ -727,7 +727,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: sampled read sets SAMPLED_BIT", "[rdg][usage]
 TEST_CASE_METHOD(RdgFixture, "RDG: color attachment sets COLOR_ATTACHMENT_BIT", "[rdg][usage]")
 {
     rdg.CreateTexture(SID("color"), TexInfo());
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT).WriteColorAttachment(SID("color"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, Render::ResourceCategory::Untagged).WriteColorAttachment(SID("color"));
     rdg.AccumulateUsage();
     CHECK((inspector.TextureAccumulatedUsage(SID("color")) & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0);
 }
@@ -735,7 +735,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: color attachment sets COLOR_ATTACHMENT_BIT", 
 TEST_CASE_METHOD(RdgFixture, "RDG: depth attachment sets DEPTH_STENCIL and SAMPLED", "[rdg][usage]")
 {
     rdg.CreateTexture(SID("depth"), TexInfo());
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT).WriteDepthAttachment(SID("depth"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, Render::ResourceCategory::Untagged).WriteDepthAttachment(SID("depth"));
     rdg.AccumulateUsage();
     const VkImageUsageFlags usage = inspector.TextureAccumulatedUsage(SID("depth"));
     CHECK((usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0);
@@ -748,7 +748,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: blit and copy read/write set TRANSFER_SRC/DST
     rdg.CreateTexture(SID("bdst"), TexInfo(640, 480));
     rdg.CreateTexture(SID("csrc"), TexInfo(320, 240));
     rdg.CreateTexture(SID("cdst"), TexInfo(160, 120));
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_BLIT_BIT)
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::ResourceCategory::Untagged)
             .ReadBlitImage(SID("bsrc")).WriteBlitImage(SID("bdst")).ReadCopyImage(SID("csrc")).WriteCopyImage(SID("cdst"));
     rdg.AccumulateUsage();
     CHECK((inspector.TextureAccumulatedUsage(SID("bsrc")) & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0);
@@ -762,7 +762,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: clear-value texture gets TRANSFER_DST automat
     VkClearValue cv{};
     cv.color = {{0.f, 0.f, 0.f, 1.f}};
     rdg.CreateTexture(SID("tex"), TexInfo(), cv);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
     rdg.AccumulateUsage();
     CHECK((inspector.TextureAccumulatedUsage(SID("tex")) & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0);
 }
@@ -770,7 +770,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: clear-value texture gets TRANSFER_DST automat
 TEST_CASE_METHOD(RdgFixture, "RDG: buffer write sets STORAGE and DEVICE_ADDRESS", "[rdg][usage]")
 {
     rdg.CreateBuffer(SID("buf"), 1024);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("buf"));
     rdg.AccumulateUsage();
     const VkBufferUsageFlags usage = inspector.BufferAccumulatedUsage(SID("buf"));
     CHECK((usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) != 0);
@@ -782,7 +782,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: index, indirect and indirect-count buffer usa
     rdg.CreateBuffer(SID("idx"), 1024);
     rdg.CreateBuffer(SID("indirect"), 1024);
     rdg.CreateBuffer(SID("count"), 1024);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT)
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, Render::ResourceCategory::Untagged)
             .ReadIndexBuffer(SID("idx")).ReadIndirectBuffer(SID("indirect")).ReadIndirectCountBuffer(SID("count"));
     rdg.AccumulateUsage();
     CHECK((inspector.BufferAccumulatedUsage(SID("idx")) & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) != 0);
@@ -794,7 +794,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: transfer buffer read/write set TRANSFER_SRC/D
 {
     rdg.CreateBuffer(SID("src"), 1024);
     rdg.CreateBuffer(SID("dst"), 1024);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COPY_BIT).ReadTransferBuffer(SID("src")).WriteTransferBuffer(SID("dst"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged).ReadTransferBuffer(SID("src")).WriteTransferBuffer(SID("dst"));
     rdg.AccumulateUsage();
     CHECK((inspector.BufferAccumulatedUsage(SID("src")) & VK_BUFFER_USAGE_TRANSFER_SRC_BIT) != 0);
     CHECK((inspector.BufferAccumulatedUsage(SID("dst")) & VK_BUFFER_USAGE_TRANSFER_DST_BIT) != 0);
@@ -803,8 +803,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: transfer buffer read/write set TRANSFER_SRC/D
 TEST_CASE_METHOD(RdgFixture, "RDG: multiple access types union into accumulated usage", "[rdg][usage]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex"));
     rdg.AccumulateUsage();
     const VkImageUsageFlags usage = inspector.TextureAccumulatedUsage(SID("tex"));
     CHECK((usage & VK_IMAGE_USAGE_STORAGE_BIT) != 0);
@@ -815,7 +815,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: writes through an alias accumulate on the bas
 {
     rdg.CreateTexture(SID("base"), TexInfo());
     rdg.AliasTexture(SID("alias"), SID("base"));
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("alias"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("alias"));
     rdg.AccumulateUsage();
     CHECK((inspector.TextureAccumulatedUsage(SID("base")) & VK_IMAGE_USAGE_STORAGE_BIT) != 0);
 }
@@ -827,9 +827,9 @@ TEST_CASE_METHOD(RdgFixture, "RDG: writes through an alias accumulate on the bas
 TEST_CASE_METHOD(RdgFixture, "RDG: lifetime spans first and last sorted pass that use a texture", "[rdg][lifetime]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("tex"));
     Compile();
     CHECK(inspector.TextureFirstPass(SID("tex")) == 0);
     CHECK(inspector.TextureLastPass(SID("tex")) == 2);
@@ -840,10 +840,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: middle-only resource has a tight lifetime", "
     rdg.CreateTexture(SID("t0"), TexInfo());
     rdg.CreateTexture(SID("t1"), TexInfo(640, 480));
     rdg.CreateTexture(SID("t2"), TexInfo(320, 240));
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("t0"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("t0")).WriteStorageImage(SID("t1"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("t1")).WriteStorageImage(SID("t2"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("t2"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("t0"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("t0")).WriteStorageImage(SID("t1"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("t1")).WriteStorageImage(SID("t2"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("t2"));
     Compile();
     CHECK(inspector.TextureFirstPass(SID("t1")) == 1);
     CHECK(inspector.TextureLastPass(SID("t1")) == 2);
@@ -852,8 +852,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: middle-only resource has a tight lifetime", "
 TEST_CASE_METHOD(RdgFixture, "RDG: buffer lifetime tracked across passes", "[rdg][lifetime]")
 {
     rdg.CreateBuffer(SID("buf"), 1024);
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("buf"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("buf"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("buf"));
     Compile();
     CHECK(inspector.BufferFirstPass(SID("buf")) == 0);
     CHECK(inspector.BufferLastPass(SID("buf")) == 1);
@@ -868,8 +868,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: clear-value texture is cleared only in its fi
     VkClearValue cv{};
     cv.color = {{0.f, 0.f, 0.f, 1.f}};
     rdg.CreateTexture(SID("clearTex"), TexInfo(), cv);
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("clearTex"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("clearTex"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("clearTex"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("clearTex"));
     Compile();
     CHECK(inspector.TextureHasClearInPass(SID("clearTex"), SID("pA")));
     CHECK_FALSE(inspector.TextureHasClearInPass(SID("clearTex"), SID("pB")));
@@ -878,7 +878,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: clear-value texture is cleared only in its fi
 TEST_CASE_METHOD(RdgFixture, "RDG: texture without a clear value is never auto-cleared", "[rdg][autoclear]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
     Compile();
     CHECK_FALSE(inspector.TextureHasClearInPass(SID("tex"), SID("pA")));
 }
@@ -890,8 +890,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: clear-value texture first used in a later wav
     cv.color = {{1.f, 0.f, 0.f, 1.f}};
     rdg.CreateTexture(SID("seed"), TexInfo());
     rdg.CreateTexture(SID("clearTex"), TexInfo(640, 480), cv);
-    rdg.AddPass(SID("produce"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("seed"));
-    rdg.AddPass(SID("consume"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+    rdg.AddPass(SID("produce"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("seed"));
+    rdg.AddPass(SID("consume"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged)
             .ReadStorageImage(SID("seed")).WriteStorageImage(SID("clearTex"));
     Compile();
 
@@ -913,10 +913,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: non-overlapping same-dim textures share one p
     rdg.CreateTexture(SID("texA"), TexInfo());
     rdg.CreateTexture(SID("texB"), TexInfo(640, 480));
     rdg.CreateTexture(SID("texC"), TexInfo()); // same dims as texA
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("texA"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("texA")).WriteStorageImage(SID("texB"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("texB")).WriteStorageImage(SID("texC"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("texC"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("texA"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("texA")).WriteStorageImage(SID("texB"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("texB")).WriteStorageImage(SID("texC"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("texC"));
     Compile();
     CHECK(inspector.TexturesSharePhysical(SID("texA"), SID("texC")));
     CHECK(inspector.TextureImage(SID("texA")) == inspector.TextureImage(SID("texC")));
@@ -927,7 +927,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: overlapping same-dim textures do not alias", 
 {
     rdg.CreateTexture(SID("texA"), TexInfo());
     rdg.CreateTexture(SID("texB"), TexInfo());
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("texA")).WriteStorageImage(SID("texB"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("texA")).WriteStorageImage(SID("texB"));
     Compile();
     CHECK_FALSE(inspector.TexturesSharePhysical(SID("texA"), SID("texB")));
     CHECK(inspector.PhysicalCount() >= 2);
@@ -937,8 +937,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: different-dimension textures never alias", "[
 {
     rdg.CreateTexture(SID("big"), TexInfo(1920, 1080));
     rdg.CreateTexture(SID("small"), TexInfo(960, 540));
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("big"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("small"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("big"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("small"));
     Compile();
     CHECK_FALSE(inspector.TexturesSharePhysical(SID("big"), SID("small")));
 }
@@ -950,8 +950,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: imported textures are never aliased with tran
     rdg.ImportTexture(SID("imported"), img, view, TexInfo(), VK_IMAGE_USAGE_STORAGE_BIT,
                       VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL);
     rdg.CreateTexture(SID("transient"), TexInfo());
-    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("imported"));
-    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("transient"));
+    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("imported"));
+    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("transient"));
     Compile();
     CHECK_FALSE(inspector.TexturesSharePhysical(SID("imported"), SID("transient")));
     CHECK(inspector.PhysicalIsImported(inspector.TexturePhysicalIndex(SID("imported"))));
@@ -964,10 +964,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: aliased physical grows usage to the union of 
     rdg.CreateTexture(SID("texA"), TexInfo());
     rdg.CreateTexture(SID("texB"), TexInfo(640, 480));
     rdg.CreateTexture(SID("texC"), TexInfo());
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("texA"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("texA")).WriteStorageImage(SID("texB"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("texB")).WriteStorageImage(SID("texC"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("texC"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("texA"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("texA")).WriteStorageImage(SID("texB"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("texB")).WriteStorageImage(SID("texC"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("texC"));
     Compile();
     REQUIRE(inspector.TexturesSharePhysical(SID("texA"), SID("texC")));
     const VkImageUsageFlags physUsage = inspector.PhysicalImageUsage(inspector.TexturePhysicalIndex(SID("texA")));
@@ -978,7 +978,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: aliased physical grows usage to the union of 
 TEST_CASE_METHOD(RdgFixture, "RDG: viewport-scaled flag propagates onto the physical", "[rdg][aliasing]")
 {
     rdg.CreateTexture(SID("vp"), TexInfo(), std::nullopt, /*bIsViewportScaled=*/true);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("vp"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("vp"));
     Compile();
     CHECK(inspector.PhysicalIsViewportScaled(inspector.TexturePhysicalIndex(SID("vp"))));
 }
@@ -991,10 +991,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: a carried-over texture cannot alias even with
     rdg.CreateTexture(SID("texB"), TexInfo(640, 480));
     rdg.CreateTexture(SID("texC"), TexInfo());
     rdg.CarryTextureToNextFrame(SID("texA"), SID("texA_next"), VK_IMAGE_USAGE_STORAGE_BIT);
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("texA"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("texA")).WriteStorageImage(SID("texB"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("texB")).WriteStorageImage(SID("texC"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("texC"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("texA"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("texA")).WriteStorageImage(SID("texB"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("texB")).WriteStorageImage(SID("texC"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("texC"));
     Compile();
     CHECK_FALSE(inspector.TexturesSharePhysical(SID("texA"), SID("texC")));
 }
@@ -1004,10 +1004,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: chain reuses head/tail into one physical, dis
     rdg.CreateTexture(SID("A"), TexInfo());
     rdg.CreateTexture(SID("B"), TexInfo(640, 480));
     rdg.CreateTexture(SID("C"), TexInfo());
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("A"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("A")).WriteStorageImage(SID("B"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("B")).WriteStorageImage(SID("C"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("C"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("A"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("A")).WriteStorageImage(SID("B"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("B")).WriteStorageImage(SID("C"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadStorageImage(SID("C"));
     Compile();
     CHECK(inspector.TexturesSharePhysical(SID("A"), SID("C")));
     CHECK(inspector.PhysicalCount() == 2);
@@ -1017,9 +1017,9 @@ TEST_CASE_METHOD(RdgFixture, "RDG: overlapping same-size buffers do not alias", 
 {
     rdg.CreateBuffer(SID("bufA"), 4096);
     rdg.CreateBuffer(SID("bufB"), 4096);
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("bufA"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("bufA")).WriteBuffer(SID("bufB"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("bufB"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("bufA"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("bufA")).WriteBuffer(SID("bufB"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("bufB"));
     Compile();
     CHECK_FALSE(inspector.BuffersSharePhysical(SID("bufA"), SID("bufB")));
 }
@@ -1030,10 +1030,10 @@ TEST_CASE_METHOD(RdgFixture, "RDG: non-overlapping same-size buffers alias", "[r
     rdg.CreateBuffer(SID("bufA"), 4096);
     rdg.CreateBuffer(SID("bufB"), 2048);
     rdg.CreateBuffer(SID("bufC"), 4096);
-    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("bufA"));
-    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("bufA")).WriteBuffer(SID("bufB"));
-    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("bufB")).WriteBuffer(SID("bufC"));
-    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("bufC"));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("bufA"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("bufA")).WriteBuffer(SID("bufB"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("bufB")).WriteBuffer(SID("bufC"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("bufC"));
     Compile();
     CHECK(inspector.BuffersSharePhysical(SID("bufA"), SID("bufC")));
 }
@@ -1042,8 +1042,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: bCanAlias=false buffer is always its own phys
 {
     rdg.CreateBuffer(SID("noAlias"), 4096, false, /*bCanAlias=*/false);
     rdg.CreateBuffer(SID("normal"), 4096);
-    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("noAlias"));
-    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("normal"));
+    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("noAlias"));
+    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("normal"));
     Compile();
     CHECK_FALSE(inspector.BuffersSharePhysical(SID("noAlias"), SID("normal")));
     CHECK_FALSE(inspector.PhysicalCanAlias(inspector.BufferPhysicalIndex(SID("noAlias"))));
@@ -1056,7 +1056,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: bCanAlias=false buffer is always its own phys
 TEST_CASE_METHOD(RdgFixture, "RDG: first storage write barrier transitions UNDEFINED to GENERAL", "[rdg][barrier]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
     Compile();
     const VkImageMemoryBarrier2* b = inspector.FindImageBarrier(0, SID("tex"));
     REQUIRE(b != nullptr);
@@ -1071,8 +1071,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: first storage write barrier transitions UNDEF
 TEST_CASE_METHOD(RdgFixture, "RDG: a later wave's barrier sources from the previous wave's flushed event", "[rdg][barrier]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
-    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("tex"));
     Compile();
     const VkImageMemoryBarrier2* b = inspector.FindImageBarrier(1, SID("tex"));
     REQUIRE(b != nullptr);
@@ -1087,7 +1087,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: a later wave's barrier sources from the previ
 TEST_CASE_METHOD(RdgFixture, "RDG: color attachment barrier uses output stage and write|read access", "[rdg][barrier]")
 {
     rdg.CreateTexture(SID("color"), TexInfo());
-    rdg.AddPass(SID("draw"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT).WriteColorAttachment(SID("color"));
+    rdg.AddPass(SID("draw"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, Render::ResourceCategory::Untagged).WriteColorAttachment(SID("color"));
     Compile();
     const VkImageMemoryBarrier2* b = inspector.FindImageBarrier(0, SID("color"));
     REQUIRE(b != nullptr);
@@ -1099,7 +1099,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: color attachment barrier uses output stage an
 TEST_CASE_METHOD(RdgFixture, "RDG: depth write barrier uses fragment-test stages and write access", "[rdg][barrier]")
 {
     rdg.CreateTexture(SID("depth"), DepthTexInfo());
-    rdg.AddPass(SID("z"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT).WriteDepthAttachment(SID("depth"));
+    rdg.AddPass(SID("z"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, Render::ResourceCategory::Untagged).WriteDepthAttachment(SID("depth"));
     Compile();
     const VkImageMemoryBarrier2* b = inspector.FindImageBarrier(0, SID("depth"));
     REQUIRE(b != nullptr);
@@ -1112,8 +1112,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: depth write barrier uses fragment-test stages
 TEST_CASE_METHOD(RdgFixture, "RDG: read-only depth barrier carries read access only", "[rdg][barrier]")
 {
     rdg.CreateTexture(SID("depth"), DepthTexInfo());
-    rdg.AddPass(SID("z"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT).WriteDepthAttachment(SID("depth"));
-    rdg.AddPass(SID("read"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT).ReadDepthAttachment(SID("depth"));
+    rdg.AddPass(SID("z"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, Render::ResourceCategory::Untagged).WriteDepthAttachment(SID("depth"));
+    rdg.AddPass(SID("read"), VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, Render::ResourceCategory::Untagged).ReadDepthAttachment(SID("depth"));
     Compile();
     const VkImageMemoryBarrier2* b = inspector.FindImageBarrier(1, SID("depth"));
     REQUIRE(b != nullptr);
@@ -1124,8 +1124,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: blit read/write barriers use BLIT stage and T
 {
     rdg.CreateTexture(SID("src"), TexInfo());
     rdg.CreateTexture(SID("dst"), TexInfo(640, 480));
-    rdg.AddPass(SID("seed"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("src"));
-    rdg.AddPass(SID("blit"), VK_PIPELINE_STAGE_2_BLIT_BIT).ReadBlitImage(SID("src")).WriteBlitImage(SID("dst"));
+    rdg.AddPass(SID("seed"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("src"));
+    rdg.AddPass(SID("blit"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::ResourceCategory::Untagged).ReadBlitImage(SID("src")).WriteBlitImage(SID("dst"));
     Compile();
     const VkImageMemoryBarrier2* read = inspector.FindImageBarrier(1, SID("src"));
     const VkImageMemoryBarrier2* write = inspector.FindImageBarrier(1, SID("dst"));
@@ -1141,8 +1141,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: blit read/write barriers use BLIT stage and T
 TEST_CASE_METHOD(RdgFixture, "RDG: buffer RAW barrier sources writer, targets reader", "[rdg][barrier]")
 {
     rdg.CreateBuffer(SID("buf"), 1024);
-    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
-    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("buf"));
+    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("buf"));
+    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("buf"));
     Compile();
     const VkBufferMemoryBarrier2* b = inspector.FindBufferBarrier(1, SID("buf"));
     REQUIRE(b != nullptr);
@@ -1155,8 +1155,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: buffer RAW barrier sources writer, targets re
 TEST_CASE_METHOD(RdgFixture, "RDG: index buffer barrier uses INDEX_INPUT stage and INDEX_READ access", "[rdg][barrier]")
 {
     rdg.CreateBuffer(SID("idx"), 1024);
-    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("idx"));
-    rdg.AddPass(SID("draw"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT).ReadIndexBuffer(SID("idx"));
+    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("idx"));
+    rdg.AddPass(SID("draw"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, Render::ResourceCategory::Untagged).ReadIndexBuffer(SID("idx"));
     Compile();
     const VkBufferMemoryBarrier2* b = inspector.FindBufferBarrier(1, SID("idx"));
     REQUIRE(b != nullptr);
@@ -1167,8 +1167,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: index buffer barrier uses INDEX_INPUT stage a
 TEST_CASE_METHOD(RdgFixture, "RDG: indirect buffer barrier carries draw-indirect and shader-read", "[rdg][barrier]")
 {
     rdg.CreateBuffer(SID("indirect"), 1024);
-    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("indirect"));
-    rdg.AddPass(SID("draw"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT).ReadIndirectBuffer(SID("indirect"));
+    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("indirect"));
+    rdg.AddPass(SID("draw"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, Render::ResourceCategory::Untagged).ReadIndirectBuffer(SID("indirect"));
     Compile();
     const VkBufferMemoryBarrier2* b = inspector.FindBufferBarrier(1, SID("indirect"));
     REQUIRE(b != nullptr);
@@ -1183,8 +1183,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: same image read two ways in one wave merges i
     auto img = reinterpret_cast<VkImage>(0xABCD01ull);
     auto view = reinterpret_cast<VkImageView>(0xABCD02ull);
     rdg.ImportTexture(SID("shared"), img, view, TexInfo(), VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL);
-    rdg.AddPass(SID("readA"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("shared"));
-    rdg.AddPass(SID("readB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadSampledImage(SID("shared"));
+    rdg.AddPass(SID("readA"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("shared"));
+    rdg.AddPass(SID("readB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("shared"));
     Compile();
     CHECK(inspector.PassWaveIndex(SID("readA")) == 0);
     CHECK(inspector.PassWaveIndex(SID("readB")) == 0);
@@ -1199,8 +1199,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: no-barrier imported buffer emits no buffer ba
 {
     auto buf = reinterpret_cast<VkBuffer>(0xB0FFEEull);
     rdg.ImportBufferNoBarrier(SID("ext"), buf, 0x1000, {1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("ext"));
-    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("ext"));
+    rdg.AddPass(SID("w"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("ext"));
+    rdg.AddPass(SID("r"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).ReadBuffer(SID("ext"));
     Compile();
     CHECK(inspector.PhysicalDisableBarriers(inspector.BufferPhysicalIndex(SID("ext"))));
     CHECK(inspector.TotalBufferBarriers() == 0);
@@ -1231,14 +1231,14 @@ TEST_CASE_METHOD(RdgFixture, "RDG: re-importing the same image next frame reuses
     auto view = reinterpret_cast<VkImageView>(0xE0E0E1ull);
     rdg.ImportTexture(SID("imp"), img, view, TexInfo(), VK_IMAGE_USAGE_STORAGE_BIT,
                       VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("imp"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("imp"));
     Compile(0);
     const size_t physCount = inspector.PhysicalCount();
 
     NextFrame(0, 1);
     rdg.ImportTexture(SID("imp"), img, view, TexInfo(), VK_IMAGE_USAGE_STORAGE_BIT,
                       VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("imp"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("imp"));
     Compile(1);
     CHECK(inspector.PhysicalCount() == physCount);
     CHECK(inspector.PhysicalImage(inspector.TexturePhysicalIndex(SID("imp"))) == img);
@@ -1249,7 +1249,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: ImportBuffer with device-address usage retrie
     auto buf = reinterpret_cast<VkBuffer>(0xF00001ull);
     PipelineEvent state{VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT};
     rdg.ImportBuffer(SID("ext"), buf, 0, {2048, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, state);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("ext"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("ext"));
     Compile();
 
     const uint32_t physIdx = inspector.BufferPhysicalIndex(SID("ext"));
@@ -1278,8 +1278,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: identical consecutive frames reuse physicals 
 {
     auto build = [&]() {
         rdg.CreateTexture(SID("t"), TexInfo());
-        rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("t"));
-        rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("t"));
+        rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("t"));
+        rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged).ReadSampledImage(SID("t"));
     };
     build();
     Compile(0);
@@ -1296,7 +1296,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: identical consecutive frames reuse physicals 
 TEST_CASE_METHOD(RdgFixture, "RDG: a physical unused beyond maxFramesUnused is evicted", "[rdg][reset]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
     Compile(0);
     CHECK(inspector.PhysicalCount() >= 1);
 
@@ -1309,7 +1309,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: a physical unused beyond maxFramesUnused is e
 TEST_CASE_METHOD(RdgFixture, "RDG: texture carryover preserves the physical under the new name", "[rdg][reset][carryover]")
 {
     rdg.CreateTexture(SID("history"), TexInfo());
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("history"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("history"));
     rdg.CarryTextureToNextFrame(SID("history"), SID("historyPrev"), VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     CHECK(inspector.TextureCarryoverCount() == 1);
     Compile(0);
@@ -1326,7 +1326,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: texture carryover preserves the physical unde
 TEST_CASE_METHOD(RdgFixture, "RDG: buffer carryover preserves the physical under the new name", "[rdg][reset][carryover]")
 {
     rdg.CreateBuffer(SID("accum"), 4096);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("accum"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("accum"));
     rdg.CarryBufferToNextFrame(SID("accum"), SID("accumPrev"), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     Compile(0);
     VkBuffer carriedBuffer = inspector.BufferHandle(SID("accum"));
@@ -1339,7 +1339,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: buffer carryover preserves the physical under
 TEST_CASE_METHOD(RdgFixture, "RDG: viewport-scaled physical is evicted on InvalidateAllViewportAssociated", "[rdg][reset][viewport]")
 {
     rdg.CreateTexture(SID("vp"), TexInfo(), std::nullopt, true);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("vp"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("vp"));
     Compile(0);
     CHECK(inspector.PhysicalCount() == 1);
     rdg.InvalidateAllViewportAssociated();
@@ -1351,8 +1351,8 @@ TEST_CASE_METHOD(RdgFixture, "RDG: non-viewport physical survives InvalidateAllV
 {
     rdg.CreateTexture(SID("vp"), TexInfo(), std::nullopt, true);
     rdg.CreateTexture(SID("static"), TexInfo(64, 64));
-    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("vp"));
-    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("static"));
+    rdg.AddPass(SID("p0"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("vp"));
+    rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("static"));
     Compile(0);
     rdg.InvalidateAllViewportAssociated();
     rdg.Reset(0, 1, 100);
@@ -1366,7 +1366,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: swapchain physical is removed on InvalidateAl
     auto view = reinterpret_cast<VkImageView>(0x5C0002ull);
     rdg.ImportTexture(SID("swap"), img, view, TexInfo(), VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                       VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, true);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT).WriteColorAttachment(SID("swap"));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, Render::ResourceCategory::Untagged).WriteColorAttachment(SID("swap"));
     Compile(0);
     CHECK(inspector.PhysicalCount() == 1);
     rdg.InvalidateAllSwapchainAssociated();
@@ -1425,11 +1425,11 @@ TEST_CASE_METHOD(RdgFixture, "RDG: readback buffer and mapping are available", "
 TEST_CASE_METHOD(RdgFixture, "RDG: Execute runs passes and descriptor indices resolve inside the lambda", "[rdg][execute]")
 {
     rdg.CreateTexture(SID("tex"), TexInfo());
-    rdg.AddPass(SID("write"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("write"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteStorageImage(SID("tex"));
 
     bool ran = false;
     uint32_t resolvedIndex = Core::INVALID_HANDLE_INDEX;
-    rdg.AddPass(SID("read"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
+    rdg.AddPass(SID("read"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged)
             .ReadSampledImage(SID("tex"))
             .Execute([&](VkCommandBuffer) {
                 ran = true;
@@ -1449,11 +1449,11 @@ TEST_CASE_METHOD(RdgFixture, "RDG: Execute runs passes and descriptor indices re
 TEST_CASE_METHOD(RdgFixture, "RDG: Execute resolves buffer device address inside the lambda", "[rdg][execute]")
 {
     rdg.CreateBuffer(SID("buf"), 1024);
-    rdg.AddPass(SID("write"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
+    rdg.AddPass(SID("write"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged).WriteBuffer(SID("buf"));
 
     bool ran = false;
     VkDeviceAddress resolvedAddress = 0;
-    rdg.AddPass(SID("read"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+    rdg.AddPass(SID("read"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged)
             .ReadBuffer(SID("buf"))
             .Execute([&](VkCommandBuffer) {
                 ran = true;

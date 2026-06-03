@@ -13,6 +13,7 @@
 #include "core/containers/array.h"
 #include "interface/render_interface.h"
 #include "render/renderer_statistics.h"
+#include "render/render-graph/render_graph_resources.h"
 #include "render/vulkan/vk_pipeline_stats.h"
 #include "render/vulkan/vk_resources.h"
 #include "render/vulkan/vk_synchronization.h"
@@ -111,6 +112,18 @@ public:
     ResourceManager* GetResourceManager() const { return resourceManager; }
     PipelineManager* GetPipelineManager() const { return pipelineManager; }
     RendererStatistics GetRendererStatistics() { return statisticsManager.GetPublished(); }
+    void RequestVRAMReport() { bVRAMReportShouldWrite.store(true, std::memory_order_relaxed); }
+
+    /** @returns the latest VRAM snapshot if one is ready, otherwise an empty report. */
+    Render::VRAMReport GetVRAMReport()
+    {
+        if (!bVRAMReportShouldRead.load(std::memory_order_acquire)) {
+            return {};
+        }
+        Render::VRAMReport snapshot = vramReport;
+        bVRAMReportShouldRead.store(false, std::memory_order_relaxed);
+        return snapshot;
+    }
 
 private:
     void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
@@ -165,6 +178,9 @@ private:
     Core::Array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
     PipelineStatsQueryPool pipelineStatsQuery{};
     RendererStatisticsManager statisticsManager{};
+    std::atomic<bool> bVRAMReportShouldWrite{false};
+    std::atomic<bool> bVRAMReportShouldRead{false};
+    Render::VRAMReport vramReport{};
 
     Core::Vector<VkBufferMemoryBarrier2> tempBufferBarriers;
     Core::Vector<VkImageMemoryBarrier2> tempImageBarriers;

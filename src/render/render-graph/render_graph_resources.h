@@ -24,6 +24,63 @@ namespace Render
 struct TextureResource;
 using TransientImageHandle = Core::Handle<TextureResource>;
 
+enum class ResourceCategory : uint64_t
+{
+    Untagged = 0,
+    Geometry = 1ull << 0,
+    Lighting = 1ull << 1,
+    Denoising = 1ull << 2,
+    AmbientOcclusion = 1ull << 3,
+    Shadow = 1ull << 4,
+    Scene = 1ull << 5,
+    AntiAliasing = 1ull << 6,
+    UI = 1ull << 7,
+    PostProcessing = 1ull << 8,
+    Debug = 1ull << 9,
+};
+
+inline constexpr uint32_t RESOURCE_CATEGORY_BIT_COUNT = 10;
+inline constexpr const char* RESOURCE_CATEGORY_NAMES[RESOURCE_CATEGORY_BIT_COUNT] = {
+    "Geometry",
+    "Lighting",
+    "Denoising",
+    "AmbientOcclusion",
+    "Shadow",
+    "Scene",
+    "AntiAliasing",
+    "UI",
+    "PostProcessing",
+    "Debug",
+};
+
+inline ResourceCategory operator|(ResourceCategory a, ResourceCategory b)
+{
+    return static_cast<ResourceCategory>(static_cast<uint64_t>(a) | static_cast<uint64_t>(b));
+}
+
+inline ResourceCategory& operator|=(ResourceCategory& a, ResourceCategory b)
+{
+    a = a | b;
+    return a;
+}
+
+inline bool HasResourceCategory(ResourceCategory flags, ResourceCategory check)
+{
+    return (static_cast<uint64_t>(flags) & static_cast<uint64_t>(check)) != 0;
+}
+
+struct VRAMReport
+{
+    VkDeviceSize logical[RESOURCE_CATEGORY_BIT_COUNT]{};
+    VkDeviceSize logicalTotal{0};
+
+    VkDeviceSize physicalExclusive[RESOURCE_CATEGORY_BIT_COUNT]{};
+    VkDeviceSize physicalSharedPoolBytes{0};
+    VkDeviceSize physicalTotal{0};
+
+    ResourceCategory sharedPoolCategories{ResourceCategory::Untagged};
+};
+
 enum class DepthAccessType
 {
     None = 0,
@@ -31,24 +88,29 @@ enum class DepthAccessType
     Write = 1 << 1,
 };
 
-inline DepthAccessType operator|(DepthAccessType a, DepthAccessType b) {
+inline DepthAccessType operator|(DepthAccessType a, DepthAccessType b)
+{
     return static_cast<DepthAccessType>(static_cast<int>(a) | static_cast<int>(b));
 }
 
-inline DepthAccessType& operator|=(DepthAccessType& a, DepthAccessType b) {
+inline DepthAccessType& operator|=(DepthAccessType& a, DepthAccessType b)
+{
     a = a | b;
     return a;
 }
 
-inline DepthAccessType operator&(DepthAccessType a, DepthAccessType b) {
+inline DepthAccessType operator&(DepthAccessType a, DepthAccessType b)
+{
     return static_cast<DepthAccessType>(static_cast<int>(a) & static_cast<int>(b));
 }
 
-inline bool operator!(DepthAccessType a) {
+inline bool operator!(DepthAccessType a)
+{
     return static_cast<int>(a) == 0;
 }
 
-enum class ImageChannelType {
+enum class ImageChannelType
+{
     Float4,
     Float2,
     Float,
@@ -57,7 +119,8 @@ enum class ImageChannelType {
     UInt
 };
 
-inline ImageChannelType GetImageChannelType(VkFormat format, VkImageAspectFlags aspect) {
+inline ImageChannelType GetImageChannelType(VkFormat format, VkImageAspectFlags aspect)
+{
     if (aspect & VK_IMAGE_ASPECT_DEPTH_BIT) {
         // Depth-Stencil, mip chain will be depth aspect. Stencil mips are not supported in this engine
         return ImageChannelType::Float;
@@ -148,6 +211,8 @@ struct PhysicalResource
     Core::InlineString<> debugName{};
     Core::InlineString<1024> usageChain{};
 
+    ResourceCategory category{ResourceCategory::Untagged};
+
     ResourceDimensions dimensions;
     PipelineEvent event;
     bool bIsImported = false;
@@ -209,6 +274,8 @@ struct TextureResource
     uint32_t physicalIndex = UINT32_MAX;
     bool bCanUseAliasedTexture = true;
 
+    ResourceCategory category{ResourceCategory::Untagged};
+
     std::optional<VkClearValue> clear{std::nullopt};
     bool bIsViewportScaled = false;
 
@@ -240,6 +307,8 @@ struct BufferResource
     bool bCanUseAliasedBuffer = true;
     bool bIsViewportScaled = false;
 
+    ResourceCategory category{ResourceCategory::Untagged};
+
     BufferInfo bufferInfo = {};
     VkBufferUsageFlags accumulatedUsage = 0;
 
@@ -249,7 +318,8 @@ struct BufferResource
     [[nodiscard]] bool HasPhysical() const { return physicalIndex != UINT32_MAX; }
 };
 
-struct UploadAllocation {
+struct UploadAllocation
+{
     void* ptr;
     VkDeviceAddress address;
     size_t offset;

@@ -131,7 +131,7 @@ public: // Resource registration
     void CarryBufferToNextFrame(StringID bufferId, StringID newBufferId, VkBufferUsageFlags additionalUsage);
 
 public: // Pass setup
-    RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages);
+    RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages, ResourceCategory category);
 
 public: // Resource queries
     bool HasTexture(StringID textureId);
@@ -169,6 +169,9 @@ public: // Resource queries
 
     PipelineEvent GetBufferState(StringID bufferId);
 
+public: // VRAM reporting
+    VRAMReport GenerateVramReport() const;
+
 public: // Compile and execute
     /**
      * Accumulates VkImageUsageFlags / VkBufferUsageFlags across all passes for physical resource creation
@@ -188,7 +191,7 @@ public: // Compile and execute
 
     void PopulateAutoClearTextures();
 
-    void AssignPhysicalResources(int64_t currentFrame);
+    void AssignPhysicalResources(uint64_t currentFrame);
 
     /**
      * Precomputes per-wave and per-pass barriers into flat arrays; call after Compile
@@ -199,7 +202,7 @@ public: // Compile and execute
      * Allocates/aliases physical resources and writes descriptors; call after CalculateLifetimes
      * @param currentFrame
      */
-    void Compile(int64_t currentFrame);
+    void Compile(uint64_t currentFrame);
 
     void Execute(VkCommandBuffer cmd);
 

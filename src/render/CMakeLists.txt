@@ -74,6 +74,22 @@ add_library(render STATIC
         systems/render_screen_capture.h
         renderer.cpp
         renderer.h
+        passes/geometry_passes.cpp
+        passes/geometry_passes.h
+        passes/lighting_passes.cpp
+        passes/lighting_passes.h
+        passes/denoising_passes.cpp
+        passes/denoising_passes.h
+        passes/ambient_occlusion_passes.cpp
+        passes/ambient_occlusion_passes.h
+        passes/shadow_passes.cpp
+        passes/shadow_passes.h
+        passes/scene_passes.cpp
+        passes/scene_passes.h
+        passes/anti_aliasing_passes.cpp
+        passes/anti_aliasing_passes.h
+        passes/ui_passes.cpp
+        passes/ui_passes.h
         post-processing/post_processing.cpp
         post-processing/post_processing.h
         renderer_types.h

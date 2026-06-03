@@ -417,7 +417,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     // Readback that will be copied into the FIF host memory at the end of the frame (to be read on frame N+3)
     renderGraph->CreateBuffer(SID("readback_buffer"), sizeof(ReadbackStruct), false);
-    RenderPass& clearReadbackBuffer = renderGraph->AddPass(SID("Clear Readback Buffer"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    RenderPass& clearReadbackBuffer = renderGraph->AddPass(SID("Clear Readback Buffer"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::ResourceCategory::Untagged);
     clearReadbackBuffer.WriteTransferBuffer(SID("readback_buffer"));
     clearReadbackBuffer.Execute([&](VkCommandBuffer cmd) {
         vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle(SID("readback_buffer")), 0, VK_WHOLE_SIZE, 0);
@@ -601,7 +601,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             bool bDebugBuffersReady = renderGraph->HasBuffer(SCENE_DATA_BUFFER);
             if (bDebugBuffersReady && renderGraph->HasTexture(debugTargetName)) {
-                auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+                auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Debug);
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.ReadSampledImage(targets.depthStencil);
                 debugVisPass.WriteStorageImage(finalOutput);
@@ -693,7 +693,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                swapchain->usages,
                                VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED, true);
 
-    auto& blitPass = renderGraph->AddPass(SID("Blit To Swapchain"), VK_PIPELINE_STAGE_2_BLIT_BIT);
+    auto& blitPass = renderGraph->AddPass(SID("Blit To Swapchain"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::ResourceCategory::Untagged);
     blitPass.ReadBlitImage(finalOutput);
     blitPass.WriteBlitImage(SID("swapchain_image"));
     blitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
@@ -728,7 +728,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     });
 
     if (frameBuffer.bDrawImgui) {
-        auto& imguiEditorPass = renderGraph->AddPass(SID("Imgui Draw"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+        auto& imguiEditorPass = renderGraph->AddPass(SID("Imgui Draw"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::ResourceCategory::UI);
         imguiEditorPass.WriteColorAttachment(SID("swapchain_image"));
         imguiEditorPass.Execute([&, frameIndex](VkCommandBuffer _cmd) {
             // Try to end before imgui draws so they're not included in statistics
@@ -749,7 +749,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         screenCapture->PrepareScreenshotResources(renderExtent[0], renderExtent[1]);
         renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-        auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT);
+        auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::ResourceCategory::Untagged);
         screenshotBlitPass.ReadBlitImage(finalOutput);
         screenshotBlitPass.WriteBlitImage(SID("screenshot_intermediate"));
         screenshotBlitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
@@ -774,7 +774,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             vkCmdBlitImage2(_cmd, &blitInfo);
         });
 
-        auto& screenshotCopyPass = renderGraph->AddPass(SID("Screenshot Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        auto& screenshotCopyPass = renderGraph->AddPass(SID("Screenshot Copy"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
         screenshotCopyPass.ReadCopyImage(SID("screenshot_intermediate"));
         screenshotCopyPass.Execute([&](VkCommandBuffer _cmd) {
             VkBufferImageCopy2 copyRegion{};
@@ -805,7 +805,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 #if WILL_EDITOR
     if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < renderExtent[0] &&
         frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < renderExtent[1]) {
-        RenderPass& copyStableId = renderGraph->AddPass(SID("Copy Stable ID"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        RenderPass& copyStableId = renderGraph->AddPass(SID("Copy Stable ID"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
         copyStableId.ReadCopyImage(SID("stable_id"));
         copyStableId.WriteTransferBuffer(SID("readback_buffer"));
         copyStableId.Execute([&, mouseX = frameBuffer.currentMousePosition[0], mouseY = frameBuffer.currentMousePosition[1]](VkCommandBuffer cmd) {
@@ -832,7 +832,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     }
 #endif
 
-    RenderPass& readbackMeshletCount = renderGraph->AddPass(SID("[Critical] Readback Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    RenderPass& readbackMeshletCount = renderGraph->AddPass(SID("[Critical] Readback Copy"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
     readbackMeshletCount.ReadTransferBuffer(SID("readback_buffer"));
     readbackMeshletCount.Execute([&](VkCommandBuffer cmd) {
         VkBufferCopy copy;
@@ -857,6 +857,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
         renderGraph->Compile(frameNumber);
+        if (bVRAMReportShouldWrite.load(std::memory_order_relaxed)) {
+            bVRAMReportShouldWrite.store(false, std::memory_order_relaxed);
+            vramReport = renderGraph->GenerateVramReport();
+            bVRAMReportShouldRead.store(true, std::memory_order_release);
+        }
     } {
         ZoneScopedN("RenderGraphExecute");
         renderGraph->Execute(cmd);
@@ -956,7 +961,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Shade Dispatch Parameters",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Debug);
             pass.ReadTransferBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1001,7 +1006,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Light Dispatch Parameters",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Debug);
             pass.ReadTransferBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1046,7 +1051,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Instance Meshlet Offsets",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("instance_meshlet_offsets"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Instance Meshlet Offsets"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Instance Meshlet Offsets"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Debug);
             pass.ReadTransferBuffer(SID("instance_meshlet_offsets"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1085,7 +1090,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Meshlet Dispatch Args",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("meshlet_count_dispatch_args"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Meshlet Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Meshlet Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Debug);
             pass.ReadTransferBuffer(SID("meshlet_count_dispatch_args"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1103,7 +1108,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Intermediate Meshlets",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("intermediate_meshlets"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Intermediate Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Intermediate Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Debug);
             pass.ReadTransferBuffer(SID("intermediate_meshlets"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1145,7 +1150,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Visible Meshlets",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("visible_meshlets"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Visible Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Visible Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Debug);
             pass.ReadTransferBuffer(SID("visible_meshlets"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1182,7 +1187,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Compacted Dispatch Args",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("compacted_meshlet_dispatch_args"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Debug);
             pass.ReadTransferBuffer(SID("compacted_meshlet_dispatch_args"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1290,7 +1295,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
     memcpy(lightDataUploadAllocation.ptr, &lightData, sizeof(LightData));
 
-    auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
     uploadUniformsPass.WriteTransferBuffer(SCENE_DATA_BUFFER);
     uploadUniformsPass.WriteTransferBuffer(SID("shadow_data"));
     uploadUniformsPass.WriteTransferBuffer(LIGHT_DATA_BUFFER);
@@ -1376,7 +1381,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     if (totalInstanceCount > 0) {
         renderGraph->CreateBuffer(GEOMETRY_INSTANCE_BUFFER, totalInstanceCount * sizeof(Instance), false);
 
-        RenderPass& uploadPass = renderGraph->AddPass(SID("Upload Instances"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        RenderPass& uploadPass = renderGraph->AddPass(SID("Upload Instances"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
         uploadPass.WriteTransferBuffer(GEOMETRY_INSTANCE_BUFFER);
         uploadPass.Execute([&,srcOffset = instanceUpload.offset,totalSize = totalInstanceCount * sizeof(Instance)](VkCommandBuffer cmd) {
             VkBufferCopy2 copy{
@@ -1402,7 +1407,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.Size() * sizeof(Model));
         memcpy(modelUpload.ptr, viewFamily.modelMatrices.Data(), viewFamily.modelMatrices.Size() * sizeof(Model));
 
-        RenderPass& uploadModelMatricesPass = renderGraph->AddPass(SID("Upload Model Matrices"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        RenderPass& uploadModelMatricesPass = renderGraph->AddPass(SID("Upload Model Matrices"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
         uploadModelMatricesPass.WriteTransferBuffer(SID("model_buffer"));
         uploadModelMatricesPass.Execute([&,
                 modelOffset = modelUpload.offset,
@@ -1438,7 +1443,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             dst[i] = viewFamily.materials[i].props;
         }
 
-        RenderPass& uploadMaterialsPass = renderGraph->AddPass(SID("Upload Materials"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        RenderPass& uploadMaterialsPass = renderGraph->AddPass(SID("Upload Materials"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
         uploadMaterialsPass.WriteTransferBuffer(SID("material_buffer"));
         uploadMaterialsPass.Execute([&,
                 materialOffset = materialUpload.offset,
@@ -1477,7 +1482,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             };
         }
 
-        RenderPass& uploadShadeDispatchPass = renderGraph->AddPass(SID("Upload Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        RenderPass& uploadShadeDispatchPass = renderGraph->AddPass(SID("Upload Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
         uploadShadeDispatchPass.WriteTransferBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
         uploadShadeDispatchPass.Execute([&,
                 shadeDispatchOffset = shadeDispatchUpload.offset,
@@ -1515,7 +1520,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             };
         }
 
-        RenderPass& uploadLightDispatchPass = renderGraph->AddPass(SID("Upload Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        RenderPass& uploadLightDispatchPass = renderGraph->AddPass(SID("Upload Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
         uploadLightDispatchPass.WriteTransferBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
         uploadLightDispatchPass.Execute([&,
                 lightDispatchOffset = lightDispatchUpload.offset,
@@ -1566,7 +1571,7 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
         }
     }
 
-    RenderPass& uploadGlyphPass = renderGraph->AddPass(SID("Upload Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    RenderPass& uploadGlyphPass = renderGraph->AddPass(SID("Upload Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Scene);
     uploadGlyphPass.WriteTransferBuffer(TEXT_GLYPH_QUAD_BUFFER);
     uploadGlyphPass.Execute([&,
             srcOffset = glyphUpload.offset,
@@ -1602,7 +1607,7 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
         }
     }
 
-    RenderPass& uploadInstPass = renderGraph->AddPass(SID("Upload Text Instances"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    RenderPass& uploadInstPass = renderGraph->AddPass(SID("Upload Text Instances"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Scene);
     uploadInstPass.WriteTransferBuffer(TEXT_INSTANCE_BUFFER);
     uploadInstPass.Execute([&,
             srcOffset = instUpload.offset,
@@ -1627,7 +1632,7 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
     UploadAllocation matUpload = renderGraph->AllocateTransient(viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
     memcpy(matUpload.ptr, viewFamily.textMaterials.Data(), viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
 
-    RenderPass& uploadMatPass = renderGraph->AddPass(SID("Upload Text Materials"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    RenderPass& uploadMatPass = renderGraph->AddPass(SID("Upload Text Materials"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Scene);
     uploadMatPass.WriteTransferBuffer(TEXT_MATERIAL_BUFFER);
     uploadMatPass.Execute([&,
             srcOffset = matUpload.offset,
@@ -1679,7 +1684,7 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) cons
         };
     }
 
-    RenderPass& uploadPass = renderGraph->AddPass(SID("Upload Sprites"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    RenderPass& uploadPass = renderGraph->AddPass(SID("Upload Sprites"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Scene);
     uploadPass.WriteTransferBuffer(SPRITE_BUFFER);
     uploadPass.Execute([&, srcOffset = spriteUpload.offset, size = uploadSize](VkCommandBuffer cmd) {
         const VkBufferCopy2 region{
@@ -1706,7 +1711,7 @@ void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const Re
         const uint32_t quadCount = viewFamily.uiGlyphQuads.Size();
         UploadAllocation upload = renderGraph->AllocateTransient(quadCount * sizeof(UIGlyphQuad));
         memcpy(upload.ptr, viewFamily.uiGlyphQuads.Data(), quadCount * sizeof(UIGlyphQuad));
-        RenderPass& uploadPass = renderGraph->AddPass(SID("Upload UI Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        RenderPass& uploadPass = renderGraph->AddPass(SID("Upload UI Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::UI);
         uploadPass.WriteTransferBuffer(UI_GLYPH_QUAD_BUFFER);
         uploadPass.Execute([&, srcOffset = upload.offset, totalSize = quadCount * sizeof(UIGlyphQuad)](VkCommandBuffer cmd) {
             VkBufferCopy2 copy{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = srcOffset, .dstOffset = 0, .size = totalSize};
@@ -1771,7 +1776,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 
             InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryShadowPass(graph, mainConfig, pipelineManager, sceneIndex, cascadeLevel, false);
 
-            RenderPass& shadowPass = graph.AddPass(shadowPassId, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+            RenderPass& shadowPass = graph.AddPass(shadowPassId, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT, Render::ResourceCategory::Shadow);
             shadowPass.ReadWriteDepthAttachment(shadowMapId);
             shadowPass.ReadBuffer(SCENE_DATA_BUFFER);
             shadowPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
@@ -1851,7 +1856,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
             InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryShadowPass(graph, customConfig, pipelineManager, sceneIndex, cascadeLevel, false);
 
             auto customDrawPassName = "Shadow Cascade Pass " + customDraw.first + std::to_string(cascadeLevel);
-            RenderPass& customShadowPass = graph.AddPass(customDrawPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+            RenderPass& customShadowPass = graph.AddPass(customDrawPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT, Render::ResourceCategory::Shadow);
             customShadowPass.ReadWriteDepthAttachment(shadowMapName);
             customShadowPass.ReadBuffer("scene_data");
             customShadowPass.ReadBuffer("model_buffer");
@@ -1914,7 +1919,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets,
                                         const MainRenderTargets& portalTargets) const
 {
-    RenderPass& portalCompositePass = graph.AddPass(SID("Portal Composite"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    RenderPass& portalCompositePass = graph.AddPass(SID("Portal Composite"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::ResourceCategory::Scene);
     portalCompositePass.ReadSampledImage(portalTargets.outputColor);
     portalCompositePass.ReadSampledImage(portalTargets.gbufferTwo);
     portalCompositePass.ReadSampledImage(portalTargets.depthStencil);
@@ -2101,7 +2106,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 
     const uint32_t totalLineSegments = segmentOffset;
 
-    RenderPass& uploadDebugPass = graph.AddPass(SID("Upload Debug Geometry"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    RenderPass& uploadDebugPass = graph.AddPass(SID("Upload Debug Geometry"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Debug);
     uploadDebugPass.WriteTransferBuffer(SID("debug_segment_buffer"));
 
     VkBuffer srcBuffer = graph.GetTransientUploadBuffer();
@@ -2124,7 +2129,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
             vkCmdCopyBuffer2(cmd, &copyInfo);
         });
 
-    RenderPass& debugDrawPass = graph.AddPass(SID("Debug Draw"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+    RenderPass& debugDrawPass = graph.AddPass(SID("Debug Draw"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Debug);
     debugDrawPass.WriteColorAttachment(targetImage);
     bool bHasDepth = graph.HasTexture(depthTarget);
     if (bHasDepth) {

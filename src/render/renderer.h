@@ -4,162 +4,23 @@
 
 #ifndef WILL_ENGINE_RENDERER_H
 #define WILL_ENGINE_RENDERER_H
-#include "renderer_types.h"
-#include "render-graph/render_graph.h"
-#include "types/render_types.h"
-#include "post-processing/post_processing.h"
+
+#include "render/passes/geometry_passes.h"
+#include "render/passes/lighting_passes.h"
+#include "render/passes/denoising_passes.h"
+#include "render/passes/ambient_occlusion_passes.h"
+#include "render/passes/shadow_passes.h"
+#include "render/passes/scene_passes.h"
+#include "render/passes/anti_aliasing_passes.h"
+#include "render/passes/ui_passes.h"
+
+#include "render/renderer_types.h"
+#include "render/render-graph/render_graph.h"
+#include "render/types/render_types.h"
 
 namespace Render
 {
 class PipelineManager;
-
-
-void SetupGeometryPass(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       const Core::ViewFamily& viewFamily,
-                       const RenderFamilyProperties& renderFamilyProperties,
-                       Core::Array<uint32_t, 2> renderExtent,
-                       const VisibilityBufferTargets& targets,
-                       uint32_t sceneIndex);
-
-
-void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
-                                              PipelineManager* pipelineManager,
-                                              const Core::ViewFamily& viewFamily,
-                                              Core::Array<uint32_t, 2> renderExtent,
-                                              const VisibilityBufferBarycentricDerivativeTargets& targets,
-                                              uint32_t sceneIndex);
-
-void SetupVisibilityBucketingPass(RenderGraph& graph,
-                                  PipelineManager* pipelineManager,
-                                  const Core::ViewFamily& viewFamily,
-                                  Core::Array<uint32_t, 2> renderExtent,
-                                  const VisibilityBufferBarycentricDerivativeTargets& targets,
-                                  uint32_t sceneIndex);
-
-
-void SetupVisibilityShadingPass(RenderGraph& graph,
-                                PipelineManager* pipelineManager,
-                                const Core::ViewFamily& viewFamily,
-                                Core::Array<uint32_t, 2> renderExtent,
-                                const VisibilityShadingTargets& targets,
-                                uint32_t sceneIndex,
-                                Core::Arena& arena);
-
-void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
-                                       PipelineManager* pipelineManager,
-                                       const Core::ViewFamily& viewFamily,
-                                       Core::Array<uint32_t, 2> renderExtent,
-                                       const VisibilityShadingTargets& targets,
-                                       uint32_t sceneIndex,
-                                       Core::Arena& arena);
-
-void SetupLightingBucketingDebugPass(RenderGraph& graph,
-                                     PipelineManager* pipelineManager,
-                                     const Core::ViewFamily& viewFamily,
-                                     Core::Array<uint32_t, 2> renderExtent,
-                                     const VisibilityShadingTargets& targets,
-                                     uint32_t sceneIndex);
-
-void SetupReSTIRPasses(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       const Core::ViewFamily& viewFamily,
-                       Core::Array<uint32_t, 2> renderExtent,
-                       const DeferredResolveTargets& targets,
-                       uint32_t sceneIndex,
-                       Core::Arena& arena,
-                       uint64_t frameNumber,
-                       const Core::ReSTIRParams& restirParams);
-
-void SetupVisibilityLightingResolvePass(RenderGraph& graph,
-                                        PipelineManager* pipelineManager,
-                                        const Core::ViewFamily& viewFamily,
-                                        Core::Array<uint32_t, 2> renderExtent,
-                                        const DeferredResolveTargets& targets,
-                                        uint32_t sceneIndex,
-                                        Core::Arena& arena,
-                                        uint64_t frameNumber,
-                                        bool bDemodulateAlbedo = false);
-
-void SetupATrousWaveletDenoiser(RenderGraph& graph,
-                                PipelineManager* pipelineManager,
-                                Core::Array<uint32_t, 2> renderExtent,
-                                const DeferredResolveTargets& targets,
-                                const Core::ReSTIRParams::ATrousParams& params);
-
-void SetupASVGFDenoiser(RenderGraph& graph,
-                        PipelineManager* pipelineManager,
-                        Core::Array<uint32_t, 2> renderExtent,
-                        const DeferredResolveTargets& targets,
-                        const Core::ReSTIRParams::SVGFParams& params);
-
-
-void SetupGroundTruthLightingPass(RenderGraph& graph,
-                                  PipelineManager* pipelineManager,
-                                  const Core::ViewFamily& viewFamily,
-                                  Core::Array<uint32_t, 2> renderExtent,
-                                  const DeferredResolveTargets& targets,
-                                  uint32_t sceneIndex,
-                                  bool bReset,
-                                  uint32_t accumulationCount,
-                                  uint64_t frameNumber);
-
-void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
-                                      PipelineManager* pipelineManager,
-                                      const Core::ViewFamily& viewFamily,
-                                      Core::Array<uint32_t, 2> renderExtent,
-                                      const MainRenderTargets& targets,
-                                      uint64_t frameNumber,
-                                      uint32_t sceneIndex);
-
-
-void SetupShadowsResolve(RenderGraph& graph,
-                         PipelineManager* pipelineManager,
-                         const Core::ViewFamily& viewFamily,
-                         Core::Array<uint32_t, 2> renderExtent,
-                         const MainRenderTargets& targets,
-                         uint32_t sceneIndex);
-
-void SetupSkyboxRendering(RenderGraph& graph,
-                          PipelineManager* pipelineManager,
-                          const Core::ViewFamily& viewFamily,
-                          Core::Array<uint32_t, 2> renderExtent,
-                          const MainRenderTargets& targets,
-                          uint32_t sceneIndex);
-
-/**
- * Prepares the render graph pass for text rendering in a forward-shading blending pass.
- * Note: Run before TAA. Rationale is text is almost never "free-floating" so the surface right behind the text will emit consistent motion vectors.
- * @param graph
- * @param pipelineManager
- * @param viewFamily
- * @param renderExtent
- * @param targets
- */
-void SetupTextForwardPass(RenderGraph& graph,
-                          PipelineManager* pipelineManager,
-                          const Core::ViewFamily& viewFamily,
-                          Core::Array<uint32_t, 2> renderExtent,
-                          const MainRenderTargets& targets);
-
-StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph,
-                                                PipelineManager* pipelineManager,
-                                                const Core::ViewFamily& viewFamily,
-                                                Core::Array<uint32_t, 2> renderExtent,
-                                                const MainRenderTargets& ppTargets);
-
-StringID SetupTemporalAntiAliasing(RenderGraph& graph,
-                                   PipelineManager* pipelineManager,
-                                   const Core::ViewFamily& viewFamily,
-                                   Core::Array<uint32_t, 2> renderExtent,
-                                   const MainRenderTargets& ppTargets,
-                                   StringID pipelineSID);
-
-StringID SetupSMAA_T2X(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       const Core::ViewFamily& viewFamily,
-                       Core::Array<uint32_t, 2> renderExtent,
-                       const MainRenderTargets& ppTargets);
 
 StringID SetupPostProcessing(RenderGraph& graph,
                              PipelineManager* pipelineManager,
@@ -168,25 +29,6 @@ StringID SetupPostProcessing(RenderGraph& graph,
                              const MainRenderTargets& targets,
                              float deltaTime,
                              uint64_t frameNumber);
-
-void SetupSelectionOutlinePass(RenderGraph& graph,
-                               PipelineManager* pipelineManager,
-                               Core::Array<uint32_t, 2> renderExtent,
-                               const MainRenderTargets& targets,
-                               uint64_t selectedStableId);
-
-
-void SetupSpritesPass(RenderGraph& graph,
-                      PipelineManager* pipelineManager,
-                      const Core::ViewFamily& viewFamily,
-                      Core::Array<uint32_t, 2> renderExtent,
-                      const MainRenderTargets& targets);
-
-void SetupUIRender(RenderGraph& graph,
-                   PipelineManager* pipelineManager,
-                   const Core::ViewFamily& viewFamily,
-                   Core::Array<uint32_t, 2> renderExtent,
-                   StringID targetImage);
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H
