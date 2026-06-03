@@ -1185,7 +1185,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
             depInfo.imageMemoryBarrierCount = range.preClearImageCount;
             depInfo.pImageMemoryBarriers = compiledImageBarriers.Data() + range.preClearImageStart;
-            vkCmdPipelineBarrier2(cmd, &depInfo);
+            allocFns.cmdPipelineBarrier2(cmd, &depInfo);
 
             for (uint32_t pi = waveStart; pi < waveEnd; pi++) {
                 RenderPass* pass = sortedPasses[pi];
@@ -1194,10 +1194,10 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     auto& phys = GetPhysical(texIndex);
                     VkImageSubresourceRange subRange = VkHelpers::SubresourceRange(phys.aspect);
                     if (phys.aspect & VK_IMAGE_ASPECT_DEPTH_BIT) {
-                        vkCmdClearDepthStencilImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().depthStencil, 1, &subRange);
+                        allocFns.cmdClearDepthStencilImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().depthStencil, 1, &subRange);
                     }
                     else {
-                        vkCmdClearColorImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().color, 1, &subRange);
+                        allocFns.cmdClearColorImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().color, 1, &subRange);
                     }
                 }
             }
@@ -1214,7 +1214,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             depInfo.pImageMemoryBarriers = compiledImageBarriers.Data() + range.imageStart;
             depInfo.bufferMemoryBarrierCount = range.bufferCount;
             depInfo.pBufferMemoryBarriers = compiledBufferBarriers.Data() + range.bufferStart;
-            vkCmdPipelineBarrier2(cmd, &depInfo);
+            allocFns.cmdPipelineBarrier2(cmd, &depInfo);
         }
 
         // Execute all passes in this wave
@@ -1230,11 +1230,11 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 VkDebugUtilsLabelEXT label = {};
                 label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
                 label.pLabelName = pass->renderPassId.ToString();
-                vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
+                allocFns.cmdBeginDebugUtilsLabel(cmd, &label);
 #endif
                 pass->executeFunc(cmd);
 #if ENABLE_VULKAN_VALIDATION
-                vkCmdEndDebugUtilsLabelEXT(cmd);
+                allocFns.cmdEndDebugUtilsLabel(cmd);
 #endif
             }
         }
@@ -1266,7 +1266,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
             depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(finalBarriers.Size());
             depInfo.pImageMemoryBarriers = finalBarriers.Data();
-            vkCmdPipelineBarrier2(cmd, &depInfo);
+            allocFns.cmdPipelineBarrier2(cmd, &depInfo);
         }
     }
 }
@@ -1292,7 +1292,7 @@ void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, StringID textureId)
     VkDependencyInfo depInfo = {VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
     depInfo.imageMemoryBarrierCount = 1;
     depInfo.pImageMemoryBarriers = &presentBarrier;
-    vkCmdPipelineBarrier2(cmd, &depInfo);
+    allocFns.cmdPipelineBarrier2(cmd, &depInfo);
 }
 
 void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused)
@@ -2207,6 +2207,31 @@ void RenderGraphAllocFns::DefaultSetDebugName(const VulkanContext* context, VkOb
     nameInfo.pObjectName = name;
     vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
 #endif
+}
+
+void RenderGraphAllocFns::DefaultCmdPipelineBarrier2(VkCommandBuffer cmd, const VkDependencyInfo* dependencyInfo)
+{
+    vkCmdPipelineBarrier2(cmd, dependencyInfo);
+}
+
+void RenderGraphAllocFns::DefaultCmdClearColorImage(VkCommandBuffer cmd, VkImage image, VkImageLayout layout, const VkClearColorValue* color, uint32_t rangeCount, const VkImageSubresourceRange* ranges)
+{
+    vkCmdClearColorImage(cmd, image, layout, color, rangeCount, ranges);
+}
+
+void RenderGraphAllocFns::DefaultCmdClearDepthStencilImage(VkCommandBuffer cmd, VkImage image, VkImageLayout layout, const VkClearDepthStencilValue* depthStencil, uint32_t rangeCount, const VkImageSubresourceRange* ranges)
+{
+    vkCmdClearDepthStencilImage(cmd, image, layout, depthStencil, rangeCount, ranges);
+}
+
+void RenderGraphAllocFns::DefaultCmdBeginDebugUtilsLabel(VkCommandBuffer cmd, const VkDebugUtilsLabelEXT* label)
+{
+    vkCmdBeginDebugUtilsLabelEXT(cmd, label);
+}
+
+void RenderGraphAllocFns::DefaultCmdEndDebugUtilsLabel(VkCommandBuffer cmd)
+{
+    vkCmdEndDebugUtilsLabelEXT(cmd);
 }
 
 void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)

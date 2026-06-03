@@ -37,6 +37,11 @@ struct RenderGraphAllocFns
     static void DefaultDestroyBuffer(const VulkanContext*, VkBuffer, VmaAllocation);
     static VkDeviceAddress DefaultGetBufferDeviceAddress(const VulkanContext*, VkBuffer);
     static void DefaultSetDebugName(const VulkanContext*, VkObjectType, uint64_t handle, const char* name);
+    static void DefaultCmdPipelineBarrier2(VkCommandBuffer, const VkDependencyInfo*);
+    static void DefaultCmdClearColorImage(VkCommandBuffer, VkImage, VkImageLayout, const VkClearColorValue*, uint32_t, const VkImageSubresourceRange*);
+    static void DefaultCmdClearDepthStencilImage(VkCommandBuffer, VkImage, VkImageLayout, const VkClearDepthStencilValue*, uint32_t, const VkImageSubresourceRange*);
+    static void DefaultCmdBeginDebugUtilsLabel(VkCommandBuffer, const VkDebugUtilsLabelEXT*);
+    static void DefaultCmdEndDebugUtilsLabel(VkCommandBuffer);
 
     Core::InlineFunction<ImageAlloc(const VulkanContext*, const VkImageCreateInfo&), 64> createImage{DefaultCreateImage};
     Core::InlineFunction<VkImageView(const VulkanContext*, const VkImageViewCreateInfo&), 64> createImageView{DefaultCreateImageView};
@@ -46,6 +51,11 @@ struct RenderGraphAllocFns
     Core::InlineFunction<void(const VulkanContext*, VkBuffer, VmaAllocation), 64> destroyBuffer{DefaultDestroyBuffer};
     Core::InlineFunction<VkDeviceAddress(const VulkanContext*, VkBuffer), 64> getBufferDeviceAddress{DefaultGetBufferDeviceAddress};
     Core::InlineFunction<void(const VulkanContext*, VkObjectType, uint64_t, const char*), 64> setDebugName{DefaultSetDebugName};
+    Core::InlineFunction<void(VkCommandBuffer, const VkDependencyInfo*), 64> cmdPipelineBarrier2{DefaultCmdPipelineBarrier2};
+    Core::InlineFunction<void(VkCommandBuffer, VkImage, VkImageLayout, const VkClearColorValue*, uint32_t, const VkImageSubresourceRange*), 64> cmdClearColorImage{DefaultCmdClearColorImage};
+    Core::InlineFunction<void(VkCommandBuffer, VkImage, VkImageLayout, const VkClearDepthStencilValue*, uint32_t, const VkImageSubresourceRange*), 64> cmdClearDepthStencilImage{DefaultCmdClearDepthStencilImage};
+    Core::InlineFunction<void(VkCommandBuffer, const VkDebugUtilsLabelEXT*), 64> cmdBeginDebugUtilsLabel{DefaultCmdBeginDebugUtilsLabel};
+    Core::InlineFunction<void(VkCommandBuffer), 64> cmdEndDebugUtilsLabel{DefaultCmdEndDebugUtilsLabel};
     // Optional: when set, replaces the entire NeedsDescriptorWrite block for a physical resource. Tests set this to a no-op.
     Core::InlineFunction<void(PhysicalResource&), 64> writeDescriptors;
 };

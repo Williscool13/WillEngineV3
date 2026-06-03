@@ -5,7 +5,7 @@
 //  It asserts the deterministic CPU products: the scheduled DAG, wave layering, accumulated usage, lifetimes, physical-resource aliasing, and (the real payload) the flat barrier arrays produced by PrecomputeBarriers.
 //  A single Execute test confirms passes fire and descriptor indices resolve inside the executeFunc lambda.
 //
-// Everything runs CPU-only, the RenderGraphAllocFns seam stubs all GPU allocation. named Stub_vkCmd* functions replace volk's global command-buffer pointers so Execute() does notdispatch into a real driver.
+// Everything runs CPU-only: the RenderGraphAllocFns seam stubs all GPU allocation and the command-buffer recording calls, so Execute() replays its precomputed barriers without dispatching into a real driver.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -338,27 +338,13 @@ static Render::RenderGraphAllocFns MakeStubAllocFns()
         phys.stencilOnlyDescriptorHandle = {descCounter++, 1};
     };
     fns.setDebugName = [](const Render::VulkanContext*, VkObjectType, uint64_t, const char*) {};
+    // Command-buffer seam: no-op so Execute() can replay the precomputed barriers/clears without a real device.
+    fns.cmdPipelineBarrier2 = [](VkCommandBuffer, const VkDependencyInfo*) {};
+    fns.cmdClearColorImage = [](VkCommandBuffer, VkImage, VkImageLayout, const VkClearColorValue*, uint32_t, const VkImageSubresourceRange*) {};
+    fns.cmdClearDepthStencilImage = [](VkCommandBuffer, VkImage, VkImageLayout, const VkClearDepthStencilValue*, uint32_t, const VkImageSubresourceRange*) {};
+    fns.cmdBeginDebugUtilsLabel = [](VkCommandBuffer, const VkDebugUtilsLabelEXT*) {};
+    fns.cmdEndDebugUtilsLabel = [](VkCommandBuffer) {};
     return fns;
-}
-
-// Command-buffer seam: named no-op stubs that replace volk's global function pointers, so
-// Execute() can record without a real device. Mirrors the MakeStubAllocFns factory shape.
-static VKAPI_ATTR void VKAPI_CALL Stub_vkCmdPipelineBarrier2(VkCommandBuffer, const VkDependencyInfo*) {}
-static VKAPI_ATTR void VKAPI_CALL Stub_vkCmdClearColorImage(VkCommandBuffer, VkImage, VkImageLayout, const VkClearColorValue*, uint32_t, const VkImageSubresourceRange*) {}
-static VKAPI_ATTR void VKAPI_CALL Stub_vkCmdClearDepthStencilImage(VkCommandBuffer, VkImage, VkImageLayout, const VkClearDepthStencilValue*, uint32_t, const VkImageSubresourceRange*) {}
-static VKAPI_ATTR void VKAPI_CALL Stub_vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer, const VkDebugUtilsLabelEXT*) {}
-static VKAPI_ATTR void VKAPI_CALL Stub_vkCmdEndDebugUtilsLabelEXT(VkCommandBuffer) {}
-
-static void InstallVkCmdStubs()
-{
-    static bool installed = false;
-    if (installed) { return; }
-    installed = true;
-    vkCmdPipelineBarrier2 = Stub_vkCmdPipelineBarrier2;
-    vkCmdClearColorImage = Stub_vkCmdClearColorImage;
-    vkCmdClearDepthStencilImage = Stub_vkCmdClearDepthStencilImage;
-    vkCmdBeginDebugUtilsLabelEXT = Stub_vkCmdBeginDebugUtilsLabelEXT;
-    vkCmdEndDebugUtilsLabelEXT = Stub_vkCmdEndDebugUtilsLabelEXT;
 }
 
 // ---- Fixture ------------------------------------------------------------------------------
@@ -409,7 +395,6 @@ struct RdgFixture : AllocBase
         : rdg(&fakeContextHolder.ctx, nullptr, alloc, arena, MakeStubAllocFns()),
           inspector(rdg)
     {
-        InstallVkCmdStubs();
         rdg.Reset(0, 0, 100);
     }
 
