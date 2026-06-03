@@ -558,14 +558,28 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
 
 VulkanContext::~VulkanContext()
 {
+#if PROFILER_ENABLED
     TracyVkDestroy(tracyContext);
+#endif
 
-    vmaDestroyAllocator(allocator);
-    vkDestroySurfaceKHR(instance, surface, nullptr);
-    vkDestroyDevice(device, nullptr);
+    if (allocator) {
+        vmaDestroyAllocator(allocator);
+    }
+
+    if (instance && surface) {
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+    }
+
+    if (device) {
+        vkDestroyDevice(device, nullptr);
+    }
+
     if (debugMessenger != VK_NULL_HANDLE) {
         vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
-    vkDestroyInstance(instance, nullptr);
+
+    if (instance) {
+        vkDestroyInstance(instance, nullptr);
+    }
 }
 } // Renderer

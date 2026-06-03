@@ -757,6 +757,8 @@ void RenderGraph::PrecomputeBarriers()
     compiledBufferBarriers.Clear();
     compiledWaveRanges.Clear();
 
+    if (physicalResources.IsEmpty()) { return; }
+
     struct WaveLocalState
     {
         VkPipelineStageFlags2 stages{0};

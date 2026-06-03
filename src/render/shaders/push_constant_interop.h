@@ -21,6 +21,7 @@ import lights_interop;
 import text_interop;
 import ui_interop;
 import restir_interop;
+import relax_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -31,6 +32,7 @@ import restir_interop;
 #include "text_interop.h"
 #include "ui_interop.h"
 #include "restir_interop.h"
+#include "relax_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
@@ -1065,6 +1067,130 @@ SHADER_PUBLIC struct SVGFAtrousWaveletPushConstant
     SHADER_PUBLIC float sigmaLuminance;
     SHADER_PUBLIC float sigmaNormal;
     SHADER_PUBLIC float sigmaDepth;
+};
+
+// =====================================================================
+// RELAX DiffuseSpecular denoiser push constants
+// This software contains source code provided by NVIDIA Corporation.
+// =====================================================================
+
+SHADER_PUBLIC struct RelaxClassifyTilesPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t tilesOutIndex;
+    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t _pad1;
+};
+
+SHADER_PUBLIC struct RelaxPrepassPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t specInputIndex;
+    SHADER_PUBLIC uint32_t diffInputIndex;
+    SHADER_PUBLIC uint32_t specOutIndex;
+    SHADER_PUBLIC uint32_t diffOutIndex;
+    SHADER_PUBLIC uint32_t _pad0;
+};
+
+SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
+    // Inputs
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t mvIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t prevNormalRoughnessIndex;
+    SHADER_PUBLIC uint32_t prevViewZIndex;
+    SHADER_PUBLIC uint32_t prevHistoryLengthIndex;
+    SHADER_PUBLIC uint32_t specInputIndex;
+    SHADER_PUBLIC uint32_t diffInputIndex;
+    SHADER_PUBLIC uint32_t historySpecFastIndex;
+    SHADER_PUBLIC uint32_t historyDiffFastIndex;
+    SHADER_PUBLIC uint32_t historySpecIndex;
+    SHADER_PUBLIC uint32_t historyDiffIndex;
+    SHADER_PUBLIC uint32_t prevSpecHitDistIndex;
+    // Outputs
+    SHADER_PUBLIC uint32_t outHistoryLengthIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t outSpecFastIndex;
+    SHADER_PUBLIC uint32_t outDiffFastIndex;
+    SHADER_PUBLIC uint32_t outSpecHitDistIndex;
+    SHADER_PUBLIC uint32_t outSpecReprojConfidenceIndex;
+    SHADER_PUBLIC uint32_t _pad0;
+};
+
+SHADER_PUBLIC struct RelaxHistoryFixPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t historyLengthIndex;
+    SHADER_PUBLIC uint32_t specIndex;
+    SHADER_PUBLIC uint32_t diffIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+};
+
+SHADER_PUBLIC struct RelaxHistoryClampingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t historyLengthIndex;
+    SHADER_PUBLIC uint32_t specFastIndex;
+    SHADER_PUBLIC uint32_t diffFastIndex;
+    SHADER_PUBLIC uint32_t specNoisyIndex;
+    SHADER_PUBLIC uint32_t diffNoisyIndex;
+    SHADER_PUBLIC uint32_t specIndex;
+    SHADER_PUBLIC uint32_t diffIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t outSpecFastIndex;
+    SHADER_PUBLIC uint32_t outDiffFastIndex;
+    SHADER_PUBLIC uint32_t outHistoryLengthIndex;
+    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t _pad1;
+};
+
+SHADER_PUBLIC struct RelaxAtrousPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t historyLengthIndex;
+    SHADER_PUBLIC uint32_t specVarIndex;
+    SHADER_PUBLIC uint32_t diffVarIndex;
+    SHADER_PUBLIC uint32_t specReprojConfidenceIndex;
+    SHADER_PUBLIC uint32_t specIndex;
+    SHADER_PUBLIC uint32_t diffIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t outSpecVarIndex;
+    SHADER_PUBLIC uint32_t outDiffVarIndex;
+    SHADER_PUBLIC uint32_t gStepSize;
+    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t _pad1;
+};
+
+SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t specIndex;
+    SHADER_PUBLIC uint32_t diffIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t _pad0;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

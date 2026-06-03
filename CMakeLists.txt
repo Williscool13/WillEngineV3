@@ -348,6 +348,10 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/restir_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/include/restir_interop.slang
 )
+preprocess_shader_interop(
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/relax_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/include/relax_interop.slang
+)
 
 
 get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
@@ -371,6 +375,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/bindless_declarations.sl
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/procedural_texture_declarations.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/restir_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sobol_common.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/relax_utils.slang")
 
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
@@ -466,6 +471,13 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_variance_estimate.slang compute SVGFVarianceEstimateMain svgf_variance_estimate
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_atrous_wavelet.slang compute SVGFAtrousWaveletMain svgf_atrous_wavelet
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_remodulate.slang compute SVGFRemodulateMain svgf_remodulate
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_classify_tiles.slang compute RelaxClassifyTilesMain relax_classify_tiles
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_prepass.slang compute RelaxPrepassMain relax_prepass
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_temporal_accumulation.slang compute RelaxTemporalAccumulationMain relax_temporal_accumulation
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_history_fix.slang compute RelaxHistoryFixMain relax_history_fix
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_history_clamping.slang compute RelaxHistoryClampingMain relax_history_clamping
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_atrous.slang compute RelaxAtrousMain relax_atrous
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_antifirefly.slang compute RelaxAntiFireflyMain relax_antifirefly
         ${CMAKE_SOURCE_DIR}/shaders/post-process/tonemapping.slang compute ComputeSDRTonemap tonemap_sdr
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeBuildHistogramExposure exposure_build_histogram
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeAverageExposure exposure_calculate_average
