@@ -9,8 +9,18 @@
 
 namespace Render
 {
-RenderPass::RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages)
-    : graph(renderGraph), renderPassId(std::move(passId)), stages(stages)
+RenderPass::RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages, Core::Arena* arena)
+    : graph(renderGraph), renderPassId(std::move(passId)), stages(stages),
+      inEdges(arena, 4), outEdges(arena, 4),
+      colorAttachments(arena, 4),
+      storageImageReads(arena, 4), storageImageWrites(arena, 4),
+      sampledImageReads(arena, 4), imageReadWrite(arena, 4),
+      clearImageWrites(arena, 2), blitImageReads(arena, 2), blitImageWrites(arena, 2),
+      copyImageReads(arena, 2), copyImageWrites(arena, 2),
+      bufferReads(arena, 4), bufferWrites(arena, 4), bufferReadWrite(arena, 4),
+      bufferTransferReads(arena, 2), bufferTransferWrites(arena, 2),
+      bufferIndexRead(arena, 2), bufferIndirectReads(arena, 2), bufferIndirectCountReads(arena, 2),
+      autoClearTextures(arena, 2)
 {}
 
 RenderPass& RenderPass::WriteStorageImage(const StringID textureId, const TextureInfo texInfo)

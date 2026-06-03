@@ -5,8 +5,8 @@
 #ifndef WILL_ENGINE_RENDER_PASS_H
 #define WILL_ENGINE_RENDER_PASS_H
 #include "render_graph.h"
+#include "core/containers/arena_vector.h"
 #include "core/containers/inline_function.h"
-#include "core/containers/inline_vector.h"
 
 namespace Render
 {
@@ -15,7 +15,7 @@ struct TextureResource;
 class RenderPass
 {
 public:
-    RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages);
+    RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages, Core::Arena* arena);
 
     // Write
     RenderPass& WriteStorageImage(StringID textureId, TextureInfo texInfo = {});
@@ -88,38 +88,38 @@ public: // DAG compile-time fields
     uint32_t passIndex{UINT_MAX};
     uint32_t waveIndex{0};
     uint32_t inDegree{0};
-    Core::InlineVector<uint32_t, 64> inEdges{};
-    Core::InlineVector<uint32_t, 64> outEdges{};
+    Core::ArenaVector<uint32_t> inEdges;
+    Core::ArenaVector<uint32_t> outEdges;
 
 private:
     friend class RenderGraph;
     friend class RenderGraphInspector;
     RenderGraph& graph;
 
-    Core::InlineVector<uint32_t, 8> colorAttachments{};
+    Core::ArenaVector<uint32_t> colorAttachments;
     uint32_t depthStencilAttachment{UINT_MAX};
     DepthAccessType depthAccessType{0};
 
-    Core::InlineVector<uint32_t, 32> storageImageReads;
-    Core::InlineVector<uint32_t, 32> storageImageWrites;
-    Core::InlineVector<uint32_t, 32> sampledImageReads;
-    Core::InlineVector<uint32_t, 32> imageReadWrite;
-    Core::InlineVector<uint32_t, 16> clearImageWrites;
-    Core::InlineVector<uint32_t, 16> blitImageReads;
-    Core::InlineVector<uint32_t, 16> blitImageWrites;
-    Core::InlineVector<uint32_t, 16> copyImageReads;
-    Core::InlineVector<uint32_t, 16> copyImageWrites;
+    Core::ArenaVector<uint32_t> storageImageReads;
+    Core::ArenaVector<uint32_t> storageImageWrites;
+    Core::ArenaVector<uint32_t> sampledImageReads;
+    Core::ArenaVector<uint32_t> imageReadWrite;
+    Core::ArenaVector<uint32_t> clearImageWrites;
+    Core::ArenaVector<uint32_t> blitImageReads;
+    Core::ArenaVector<uint32_t> blitImageWrites;
+    Core::ArenaVector<uint32_t> copyImageReads;
+    Core::ArenaVector<uint32_t> copyImageWrites;
 
-    Core::InlineVector<uint32_t, 32> bufferReads;
-    Core::InlineVector<uint32_t, 32> bufferWrites;
-    Core::InlineVector<uint32_t, 32> bufferReadWrite;
-    Core::InlineVector<uint32_t, 32> bufferTransferReads;
-    Core::InlineVector<uint32_t, 32> bufferTransferWrites;
-    Core::InlineVector<uint32_t, 16> bufferIndexRead;
-    Core::InlineVector<uint32_t, 16> bufferIndirectReads;
-    Core::InlineVector<uint32_t, 16> bufferIndirectCountReads;
+    Core::ArenaVector<uint32_t> bufferReads;
+    Core::ArenaVector<uint32_t> bufferWrites;
+    Core::ArenaVector<uint32_t> bufferReadWrite;
+    Core::ArenaVector<uint32_t> bufferTransferReads;
+    Core::ArenaVector<uint32_t> bufferTransferWrites;
+    Core::ArenaVector<uint32_t> bufferIndexRead;
+    Core::ArenaVector<uint32_t> bufferIndirectReads;
+    Core::ArenaVector<uint32_t> bufferIndirectCountReads;
 
-    Core::InlineVector<uint32_t, 8> autoClearTextures{};
+    Core::ArenaVector<uint32_t> autoClearTextures;
 
     Core::InlineFunction<void(VkCommandBuffer), 128> executeFunc;
 };

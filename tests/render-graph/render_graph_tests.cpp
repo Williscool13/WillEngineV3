@@ -424,7 +424,7 @@ using namespace Render;
 // Section 1: End-to-end mini-frame
 // ================================================================================
 
-TEST_CASE_METHOD(RdgFixture, "RDG: full mini-frame compiles to correct schedule, usage, aliasing and barriers", "[rdg][e2e]")
+TEST_CASE_METHOD(RdgFixture, "RDG: mini-frame schedule, usage, aliasing and barriers", "[rdg][e2e]")
 {
     VkClearValue depthClear{};
     depthClear.depthStencil = {1.0f, 0};
@@ -618,6 +618,75 @@ TEST_CASE_METHOD(RdgFixture, "RDG: buffer RAW, WAW and WAR edges", "[rdg][schedu
     CHECK(inspector.HasEdge(SID("p0"), SID("p1")));
     CHECK(inspector.HasEdge(SID("p1"), SID("p2")));
     CHECK(inspector.HasEdge(SID("p0"), SID("p2")));
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: cross-epoch RAWs on same texture both produce correct edges", "[rdg][schedule]")
+{
+    rdg.CreateTexture(SID("tex"), TexInfo());
+    rdg.CreateTexture(SID("other"), TexInfo(640, 480));
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("other"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex")).ReadStorageImage(SID("other"));
+    rdg.AddPass(SID("pE"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    Compile();
+    CHECK(inspector.HasEdge(SID("pA"), SID("pB")));
+    CHECK(inspector.HasEdge(SID("pB"), SID("pD")));
+    CHECK(inspector.HasEdge(SID("pC"), SID("pD")));
+    CHECK(inspector.HasEdge(SID("pD"), SID("pE")));
+    CHECK(inspector.HasEdge(SID("pA"), SID("pE")));
+    CHECK(inspector.PassWaveIndex(SID("pD")) > inspector.PassWaveIndex(SID("pB")));
+    CHECK(inspector.PassWaveIndex(SID("pD")) > inspector.PassWaveIndex(SID("pC")));
+    CHECK(inspector.PassWaveIndex(SID("pE")) > inspector.PassWaveIndex(SID("pD")));
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: parallel texture readers both produce WAR edges to next write", "[rdg][schedule]")
+{
+    rdg.CreateTexture(SID("tex"), TexInfo());
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadSampledImage(SID("tex"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    Compile();
+    CHECK(inspector.HasEdge(SID("pA"), SID("pB")));
+    CHECK(inspector.HasEdge(SID("pA"), SID("pC")));
+    CHECK(inspector.HasEdge(SID("pB"), SID("pD")));
+    CHECK(inspector.HasEdge(SID("pC"), SID("pD")));
+    CHECK(inspector.HasEdge(SID("pA"), SID("pD")));
+    CHECK_FALSE(inspector.HasEdge(SID("pB"), SID("pC")));
+    CHECK(inspector.PassWaveIndex(SID("pB")) == inspector.PassWaveIndex(SID("pC")));
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: parallel readers both edge to reader in new layout", "[rdg][schedule]")
+{
+    rdg.CreateTexture(SID("tex"), TexInfo());
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteStorageImage(SID("tex"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadStorageImage(SID("tex"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT).ReadSampledImage(SID("tex"));
+    Compile();
+    CHECK(inspector.HasEdge(SID("pB"), SID("pD")));
+    CHECK(inspector.HasEdge(SID("pC"), SID("pD")));
+    CHECK_FALSE(inspector.HasEdge(SID("pB"), SID("pC")));
+    CHECK(inspector.PassWaveIndex(SID("pB")) == inspector.PassWaveIndex(SID("pC")));
+    CHECK(inspector.PassWaveIndex(SID("pD")) > inspector.PassWaveIndex(SID("pB")));
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: parallel buffer readers both produce WAR edges to next write", "[rdg][schedule]")
+{
+    rdg.CreateBuffer(SID("buf"), 1024);
+    rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
+    rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("buf"));
+    rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).ReadBuffer(SID("buf"));
+    rdg.AddPass(SID("pD"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
+    Compile();
+    CHECK(inspector.HasEdge(SID("pA"), SID("pB")));
+    CHECK(inspector.HasEdge(SID("pA"), SID("pC")));
+    CHECK(inspector.HasEdge(SID("pB"), SID("pD")));
+    CHECK(inspector.HasEdge(SID("pC"), SID("pD")));
+    CHECK(inspector.HasEdge(SID("pA"), SID("pD")));
+    CHECK_FALSE(inspector.HasEdge(SID("pB"), SID("pC")));
+    CHECK(inspector.PassWaveIndex(SID("pB")) == inspector.PassWaveIndex(SID("pC")));
 }
 
 TEST_CASE_METHOD(RdgFixture, "RDG: two producers feeding a merger put the merger one wave later", "[rdg][schedule]")
@@ -1375,4 +1444,28 @@ TEST_CASE_METHOD(RdgFixture, "RDG: Execute runs passes and descriptor indices re
     CHECK(inspector.PhysicalSampledDescriptorValid(physIdx));
     CHECK(resolvedIndex != Core::INVALID_HANDLE_INDEX);
     CHECK(resolvedIndex == inspector.PhysicalSampledDescriptorIndex(physIdx));
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: Execute resolves buffer device address inside the lambda", "[rdg][execute]")
+{
+    rdg.CreateBuffer(SID("buf"), 1024);
+    rdg.AddPass(SID("write"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT).WriteBuffer(SID("buf"));
+
+    bool ran = false;
+    VkDeviceAddress resolvedAddress = 0;
+    rdg.AddPass(SID("read"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .ReadBuffer(SID("buf"))
+            .Execute([&](VkCommandBuffer) {
+                ran = true;
+                resolvedAddress = rdg.GetBufferAddress(SID("buf"));
+            });
+
+    Compile();
+    rdg.Execute(reinterpret_cast<VkCommandBuffer>(uintptr_t{1}));
+
+    CHECK(ran);
+    CHECK(resolvedAddress != 0);
+    const uint32_t physIdx = inspector.BufferPhysicalIndex(SID("buf"));
+    CHECK(inspector.PhysicalAddressRetrieved(physIdx));
+    CHECK(resolvedAddress == inspector.PhysicalBufferAddress(physIdx));
 }

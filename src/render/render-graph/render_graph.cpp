@@ -89,7 +89,7 @@ RenderGraph::~RenderGraph()
 
 RenderPass& RenderGraph::AddPass(StringID passId, VkPipelineStageFlags2 stages)
 {
-    auto* pass = new(arena->AllocRaw(sizeof(RenderPass), alignof(RenderPass))) RenderPass(*this, passId, stages);
+    auto* pass = new(arena->AllocRaw(sizeof(RenderPass), alignof(RenderPass))) RenderPass(*this, passId, stages, arena);
     passes.PushBack(pass);
     return *pass;
 }
@@ -196,17 +196,23 @@ void RenderGraph::BuildDependencyEdges()
 {
     struct TextureEpoch
     {
-        uint32_t transitionPassIdx = UINT32_MAX; // last accessor before this layout epoch began
-        uint32_t latestPassIdx = UINT32_MAX; // most recent reader in the current epoch
-        VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
         uint32_t lastWriter = UINT32_MAX;
+        VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        Core::ArenaVector<uint32_t> readers;  // active readers in the current layout epoch
+        Core::ArenaVector<uint32_t> causes;   // passes that established this epoch; new same-epoch readers get a RAW edge from each
+    };
+
+    struct BufferEpoch
+    {
+        uint32_t lastWriter = UINT32_MAX;
+        Core::ArenaVector<uint32_t> readers;
     };
 
     auto texEpochs = Core::ArenaArray<TextureEpoch>(arena, RDG_MAX_TEXTURES);
-    for (auto& t : texEpochs) { t = TextureEpoch{}; }
+    for (auto& t : texEpochs) { t.readers = Core::ArenaVector<uint32_t>(arena); t.causes = Core::ArenaVector<uint32_t>(arena); }
 
-    auto lastBufferWriter = Core::ArenaArray<uint32_t>(arena, RDG_MAX_BUFFERS);
-    for (auto& v : lastBufferWriter) { v = UINT32_MAX; }
+    auto bufEpochs = Core::ArenaArray<BufferEpoch>(arena, RDG_MAX_BUFFERS);
+    for (auto& b : bufEpochs) { b.readers = Core::ArenaVector<uint32_t>(arena); }
 
     auto addEdge = [&](uint32_t from, uint32_t to) {
         passes[from]->outEdges.PushBack(to);
@@ -222,24 +228,35 @@ void RenderGraph::BuildDependencyEdges()
                 auto& t = texEpochs[resIdx];
 
                 if (isWrite) {
-                    if (t.latestPassIdx != UINT32_MAX) { addEdge(t.latestPassIdx, passIdx); } // WAR
-                    if (t.lastWriter != UINT32_MAX) { addEdge(t.lastWriter, passIdx); } // WAW
-                    t = {};
+                    // WAR: every active reader must finish before this write.
+                    for (uint32_t rdr : t.readers) { addEdge(rdr, passIdx); }
+                    // WAW: the previous writer must finish before this write.
+                    if (t.lastWriter != UINT32_MAX) { addEdge(t.lastWriter, passIdx); }
+                    t.readers.Clear();
+                    t.causes.Clear();
                     t.lastWriter = passIdx;
+                    t.layout = VK_IMAGE_LAYOUT_UNDEFINED;
                 }
-                else if (t.latestPassIdx != UINT32_MAX && t.layout == targetLayout) {
-                    // Same epoch: readers wait on whoever caused the transition into this layout.
-                    if (t.transitionPassIdx != UINT32_MAX) {
-                        addEdge(t.transitionPassIdx, passIdx);
-                    }
-                    t.latestPassIdx = passIdx;
+                else if (!t.readers.IsEmpty() && t.layout == targetLayout) {
+                    // Same epoch: RAW from whoever established this layout.
+                    for (uint32_t cause : t.causes) { addEdge(cause, passIdx); }
+                    t.readers.PushBack(passIdx);
                 }
                 else {
-                    // New epoch: wait on latest reader, or last writer if no readers yet
-                    const uint32_t cause = (t.latestPassIdx != UINT32_MAX) ? t.latestPassIdx : t.lastWriter;
-                    if (cause != UINT32_MAX) { addEdge(cause, passIdx); }
-                    t.transitionPassIdx = cause;
-                    t.latestPassIdx = passIdx;
+                    // New epoch (layout change, or first read after a write).
+                    // Wait for all active readers of the old layout, or the last writer if no readers.
+                    if (!t.readers.IsEmpty()) {
+                        for (uint32_t rdr : t.readers) { addEdge(rdr, passIdx); }
+                        t.causes.Clear();
+                        for (uint32_t rdr : t.readers) { t.causes.PushBack(rdr); }
+                    }
+                    else if (t.lastWriter != UINT32_MAX) {
+                        addEdge(t.lastWriter, passIdx);
+                        t.causes.Clear();
+                        t.causes.PushBack(t.lastWriter);
+                    }
+                    t.readers.Clear();
+                    t.readers.PushBack(passIdx);
                     t.layout = targetLayout;
                 }
             }
@@ -247,8 +264,20 @@ void RenderGraph::BuildDependencyEdges()
 
         auto trackBuffer = [&](Core::Span<uint32_t> indices, bool isWrite) {
             for (uint32_t resIdx : indices) {
-                if (lastBufferWriter[resIdx] != UINT32_MAX) { addEdge(lastBufferWriter[resIdx], passIdx); }
-                if (isWrite) { lastBufferWriter[resIdx] = passIdx; }
+                auto& b = bufEpochs[resIdx];
+                if (isWrite) {
+                    // WAR: every active reader must finish before this write.
+                    for (uint32_t rdr : b.readers) { addEdge(rdr, passIdx); }
+                    // WAW: the previous writer must finish before this write.
+                    if (b.lastWriter != UINT32_MAX) { addEdge(b.lastWriter, passIdx); }
+                    b.readers.Clear();
+                    b.lastWriter = passIdx;
+                }
+                else {
+                    // RAW: must wait for the last writer.
+                    if (b.lastWriter != UINT32_MAX) { addEdge(b.lastWriter, passIdx); }
+                    b.readers.PushBack(passIdx);
+                }
             }
         };
 
