@@ -9,6 +9,9 @@ import shader_constants;
 [shader("fragment")]
 float4 FragmentSkybox(uniform EnvironmentSkyboxPushConstant pc, FullscreenPassVertexOutput input) : SV_Target0
 {
+    if (pc.cubemapIndex == -1) {
+        return float4(0.1, 0.2, 0.0, 1.0);
+    }
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
 
     float2 uv = input.uv;

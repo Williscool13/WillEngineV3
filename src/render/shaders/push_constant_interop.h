@@ -1121,6 +1121,7 @@ SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
     SHADER_PUBLIC uint32_t outDiffFastIndex;
     SHADER_PUBLIC uint32_t outSpecHitDistIndex;
     SHADER_PUBLIC uint32_t outSpecReprojConfidenceIndex;
+    SHADER_PUBLIC uint32_t outPrevNRIndex;
 };
 
 SHADER_PUBLIC struct RelaxHistoryFixPushConstant

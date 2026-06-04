@@ -468,7 +468,12 @@ void WillEngine::EditorImgui()
         }
         else {
             ImGui::Text("Shaders: >60s since reload");
-        } {
+        }
+
+        const WindowContext& wc = engineContext->windowContext;
+        ImGui::Text("Viewport: %u x %u", wc.viewportWidth, wc.viewportHeight);
+        //
+        {
             static bool bMemoryWasOpen = false;
             const bool bMemoryOpen = ImGui::CollapsingHeader("Memory");
             if (bMemoryOpen && !bMemoryWasOpen) {

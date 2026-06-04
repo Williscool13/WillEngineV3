@@ -713,6 +713,23 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (ImGui::Button("Portal Deferred Resolve")) setDebugTarget("portal_deferred_resolve", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
 
+        if (ImGui::CollapsingHeader("RELAX Denoiser")) {
+            if (ImGui::Button("Spec Illum"))           setDebugTarget("relax_spec_illum",            DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Diff Illum"))           setDebugTarget("relax_diff_illum",            DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Spec Fast"))            setDebugTarget("relax_spec_fast",             DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Diff Fast"))            setDebugTarget("relax_diff_fast",             DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("History Length"))       setDebugTarget("relax_history_length",        DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Spec Hit Dist"))        setDebugTarget("relax_spec_hit_dist",         DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Reproj Confidence"))    setDebugTarget("relax_spec_reproj_confidence",DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Prev NR"))              setDebugTarget("relax_prev_nr",               DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Tiles"))                setDebugTarget("relax_tiles",                 DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("ATrous Spec 0"))        setDebugTarget("relax_atrous_spec_0",         DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("ATrous Spec 1"))        setDebugTarget("relax_atrous_spec_1",         DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+
         if (ImGui::CollapsingHeader("Post-Processing")) {
             if (ImGui::Button("Bloom Chain")) setDebugTarget("bloom_chain", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Sharpening Output")) setDebugTarget("sharpening_output", DebugTransformationType::None, Core::DebugViewAspect::None);
@@ -1696,7 +1713,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Spacing();
         ImGui::SeparatorText("Denoiser"); {
             Core::ReSTIRParams& restir = state->debug.restir;
-            const char* denoiserModes[] = {"None", "A-Trous Wavelet", "A-SVGF"};
+            const char* denoiserModes[] = {"None", "A-Trous Wavelet", "A-SVGF", "RELAX"};
             int currentDenoiser = static_cast<int>(restir.denoiserMode);
             if (ImGui::Combo("Mode##denoiser", &currentDenoiser, denoiserModes, IM_ARRAYSIZE(denoiserModes))) {
                 restir.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(currentDenoiser);
@@ -1705,6 +1722,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
             const bool bATrous = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous;
             const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
+            const bool bRELAX = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
 
             if (bATrous) {
                 ImGui::SeparatorText("A-Trous");
@@ -1727,6 +1745,23 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 if (ImGui::SliderFloat("Sigma Depth##svgf", &restir.svgf.sigmaDepth, 0.0001f, 1.0f)) { bPPConfigChanged = true; }
                 if (ImGui::Button("Reset A-SVGF")) {
                     restir.svgf = Core::ReSTIRParams::SVGFParams{};
+                    bPPConfigChanged = true;
+                }
+            }
+            if (bRELAX) {
+                Core::ReSTIRParams::RELAXParams& relax = restir.relax;
+                ImGui::SeparatorText("RELAX");
+                if (ImGui::SliderInt("ATrous Iterations##relax", &relax.atrousIterations, 1, 5)) { bPPConfigChanged = true; }
+                if (ImGui::Checkbox("Prepass##relax", &relax.enablePrepass)) { bPPConfigChanged = true; }
+                ImGui::SameLine();
+                if (ImGui::Checkbox("Anti-Firefly##relax", &relax.enableAntiFirefly)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Denoising Range##relax", &relax.denoisingRange, 10.f, 5000.f)) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Disocclusion Threshold##relax", &relax.disocclusionThreshold, 0.001f, 0.05f, "%.4f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Spec Max Accum Frames##relax", &relax.specMaxAccumFrames, 1.f, 64.f, "%.0f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Diff Max Accum Frames##relax", &relax.diffMaxAccumFrames, 1.f, 64.f, "%.0f")) { bPPConfigChanged = true; }
+
+                if (ImGui::Button("Reset RELAX")) {
+                    relax = Core::ReSTIRParams::RELAXParams{};
                     bPPConfigChanged = true;
                 }
             }

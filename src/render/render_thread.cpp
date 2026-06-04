@@ -470,6 +470,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     StringID finalOutput = shadingOutputTarget;
 
+    SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
+
     if (renderFamilyProperties.bCanRender) {
         ZoneScopedN("SetupRenderGraph");
 
@@ -524,15 +526,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber, bSVGF);
                 if (bSVGF) {
                     SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.svgf);
-                } else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous) {
+                }
+                else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous) {
                     SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.atrous);
+                }
+                else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
+                    SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, restir.relax, frameNumber);
                 }
             }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
-        }
-
-        if (viewFamily.skyboxIndex != -1) {
-            SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
         }
 
         // fix portals. again.
@@ -851,9 +853,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     // For Hi-Z, ReSTIR-DI, SVGF
     renderGraph->CarryTextureToNextFrame(targets.depthStencil, SID("depth_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    renderGraph->CarryTextureToNextFrame(targets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-
-    {
+    renderGraph->CarryTextureToNextFrame(targets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT); {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
         renderGraph->Compile(frameNumber);

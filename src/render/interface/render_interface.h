@@ -571,7 +571,7 @@ struct ReSTIRParams
     uint32_t spatialMCap{500};
     uint32_t temporalMCap{20u * 33u};
 
-    enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2 };
+    enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
     DenoiserMode denoiserMode{DenoiserMode::ASVGF};
 
     struct ATrousParams
@@ -593,6 +593,20 @@ struct ReSTIRParams
         int32_t atrousIterations{4};
     };
     SVGFParams svgf{};
+
+    struct RELAXParams
+    {
+        float denoisingRange{1000.f};
+        float disocclusionThreshold{0.005f};
+        float specMaxAccumFrames{32.f};
+        float specMaxFastAccumFrames{4.f};
+        float diffMaxAccumFrames{32.f};
+        float diffMaxFastAccumFrames{4.f};
+        int32_t atrousIterations{3};
+        bool enablePrepass{true};
+        bool enableAntiFirefly{true};
+    };
+    RELAXParams relax{};
 };
 
 struct FrameBuffer

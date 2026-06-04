@@ -484,6 +484,21 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("svgf_remodulate"), src / "svgf_remodulate_compute.spv",
                             sizeof(SVGFRemodulatePushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("relax_classify_tiles"), src / "relax_classify_tiles_compute.spv",
+                            sizeof(RelaxClassifyTilesPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("relax_prepass"), src / "relax_prepass_compute.spv",
+                            sizeof(RelaxPrepassPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("relax_temporal_accumulation"), src / "relax_temporal_accumulation_compute.spv",
+                            sizeof(RelaxTemporalAccumulationPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("relax_history_fix"), src / "relax_history_fix_compute.spv",
+                            sizeof(RelaxHistoryFixPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("relax_history_clamping"), src / "relax_history_clamping_compute.spv",
+                            sizeof(RelaxHistoryClampingPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("relax_atrous"), src / "relax_atrous_compute.spv",
+                            sizeof(RelaxAtrousPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("relax_antifirefly"), src / "relax_antifirefly_compute.spv",
+                            sizeof(RelaxAntiFireflyPushConstant), PipelineCategory::Critical);
+
 
     RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure_build_histogram_compute.spv",
                             sizeof(HistogramBuildPushConstant), PipelineCategory::Critical);
@@ -664,7 +679,7 @@ void PipelineManager::RegisterPipelines()
         builder.AddShaderStage(src / "environment_map_skybox_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-        builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_EQUAL);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
         VkFormat colorFormats[1] = {
             COLOR_ATTACHMENT_FORMAT,
