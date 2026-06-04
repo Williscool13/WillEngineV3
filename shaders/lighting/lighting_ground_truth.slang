@@ -14,7 +14,7 @@ import restir_common;
 import bindless_declarations;
 
 [numthreads(16, 16, 1)]
-void ComputeMain(uniform LightingResolvePushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixel = dtid.xy;
     if (any(pixel >= pc.renderExtent)) {
         return;
@@ -23,13 +23,13 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 dtid : SV_Dispatc
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     if (depth <= 0.0) {
-        rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(0.0, 0.0, 0.0, 1.0);
+        rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(0.0, 0.0, 0.0, 1.0);
         return;
     }
 
     LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, ~0u, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, pc.shadowsIndex);
     if (!li.valid) {
-        rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(0.0, 0.0, 0.0, 1.0);
+        rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(0.0, 0.0, 0.0, 1.0);
         return;
     }
 
@@ -105,5 +105,5 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 dtid : SV_Dispatc
     }
 
     pc.accumulationBuffer[pixelIdx] = accum;
-    rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(accum.xyz, 1.0);
+    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(accum.xyz, 1.0);
 }

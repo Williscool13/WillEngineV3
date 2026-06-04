@@ -8,7 +8,7 @@ import visibility_lighting_common;
 import bindless_declarations;
 
 [numthreads(16, 16, 1)]
-void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
     uint2 pixel = threadID.xy + uint2(lightParams.minX, lightParams.minY);
     if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {
@@ -45,5 +45,5 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 ambient = li.albedo.xyz * 0.15 * gtao;
 
     float3 finalColor = directLight + ambient + li.emissiveRGB;
-    rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(finalColor, 1.0);
+    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor, 1.0);
 }

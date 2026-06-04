@@ -30,8 +30,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         const RenderTargets& targets,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
-                                        uint64_t frameNumber,
-                                        bool bDemodulateAlbedo);
+                                        uint64_t frameNumber);
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,

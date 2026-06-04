@@ -493,7 +493,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             else {
                 SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir);
                 const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
-                SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bSVGF);
+                SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber);
                 if (bSVGF) {
                     SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.svgf);
                 }
@@ -1715,86 +1715,6 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                             },
                             CLEAR_COLOR_FULL, false);
 
-        // Main Draw
-        if (!viewFamily.instances.IsEmpty()) {
-            /*InstancedGeometryPassConfig mainConfig{
-                .prefix = Core::InlineString("main_shadow"),
-                .instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.Size()),
-                .instanceBufferOffset = 0,
-                .visibleMeshletUpperBound = renderFamilyProperties.visibleMeshletUpperBound,
-
-                // Buffer sizes from RenderFamilyProperties
-                .instanceMeshletOffsetsBufferSize = renderFamilyProperties.instanceMeshletOffsetsBufferSize,
-                .level1SumsBufferSize = renderFamilyProperties.level1SumsBufferSize,
-                .level1BlockSumsBufferSize = renderFamilyProperties.level1BlockSumsBufferSize,
-                .level2SumsBufferSize = renderFamilyProperties.level2SumsBufferSize,
-                .level2BlockSumsBufferSize = renderFamilyProperties.level2BlockSumsBufferSize,
-                .scannedLevel2BlockSumsBufferSize = renderFamilyProperties.scannedLevel2BlockSumsBufferSize,
-                .intermediateMeshletBufferSize = renderFamilyProperties.intermediateMeshletBufferSize,
-                .meshletLevel1SumsBufferSize = renderFamilyProperties.meshletLevel1SumsBufferSize,
-                .meshletLevel1BlockSumsBufferSize = renderFamilyProperties.meshletLevel1BlockSumsBufferSize,
-                .meshletLevel2SumsBufferSize = renderFamilyProperties.meshletLevel2SumsBufferSize,
-                .meshletLevel2BlockSumsBufferSize = renderFamilyProperties.meshletLevel2BlockSumsBufferSize,
-                .meshletScannedLevel2BlockSumsBufferSize = renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize,
-                .visibleMeshletsBufferSize = renderFamilyProperties.visibleMeshletsBufferSize,
-
-                .lodBias = LOD_BIAS,
-            };
-
-            InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryShadowPass(graph, mainConfig, pipelineManager, sceneIndex, cascadeLevel, false);
-
-            RenderPass& shadowPass = graph.AddPass(shadowPassId, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT, Render::ResourceCategory::Shadow);
-            shadowPass.ReadWriteDepthAttachment(shadowMapId);
-            shadowPass.ReadBuffer(SCENE_DATA_BUFFER);
-            shadowPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-            shadowPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-            shadowPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-            shadowPass.ReadBuffer(mainOutputs.visibleMeshlets);
-            shadowPass.ReadIndirectBuffer(mainOutputs.compactedDispatchArgs);
-            shadowPass.Execute([&, mainOutputs, sceneIndex, cascadeLevel, cascadeWidth, cascadeHeight, linearBias, slopedBias, shadowMapId](VkCommandBuffer cmd) {
-                VkViewport viewport = VkHelpers::GenerateViewport(cascadeWidth, cascadeHeight);
-                vkCmdSetViewport(cmd, 0, 1, &viewport);
-                VkRect2D scissor = VkHelpers::GenerateScissor(cascadeWidth, cascadeHeight);
-                vkCmdSetScissor(cmd, 0, 1, &scissor);
-                constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
-                const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(shadowMapId), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({cascadeWidth, cascadeHeight},
-                                                                            nullptr, 0, &depthAttachment);
-                vkCmdBeginRendering(cmd, &renderInfo);
-
-                ShadowMeshShadingPushConstant pushConstants{
-                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                    .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
-                    .positionBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-                    .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-                    .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                    .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                    .visibleMeshlets = graph.GetBufferAddress(mainOutputs.visibleMeshlets),
-                    .compactedDispatchBuffer = graph.GetBufferAddress(mainOutputs.compactedDispatchArgs),
-                    .sceneDataIndex = sceneIndex,
-                    .cascadeIndex = static_cast<uint32_t>(cascadeLevel)
-                };
-
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shadow_cascade_instanced"));
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
-                vkCmdSetDepthBias(cmd, -linearBias, 0.0f, -slopedBias);
-                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT,
-                                   0, sizeof(BaseMeshShadingPushConstant), &pushConstants);
-
-                vkCmdDrawMeshTasksIndirectEXT(
-                    cmd,
-                    graph.GetBufferHandle(mainOutputs.compactedDispatchArgs),
-                    offsetof(InstancingCompactedMeshletDispatchIndirect, x),
-                    1,
-                    sizeof(InstancingCompactedMeshletDispatchIndirect));
-
-                vkCmdEndRendering(cmd);
-            });*/
-        }
 
         // Custom draws need to also specify what shadow pipeline to use.
         /*for (const auto& customDraw : viewFamily.customShaderDraws) {

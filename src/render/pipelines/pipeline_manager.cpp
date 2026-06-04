@@ -418,19 +418,19 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr_compute.spv",
-                            sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
+                            sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_pbr"_sid);
     RegisterComputePipeline("default_pbr_restir"_sid, src / "lighting_pbr_restir_compute.spv",
-                            sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
+                            sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_pbr_restir"_sid);
     RegisterComputePipeline("default_toon"_sid, src / "lighting_toon_compute.spv",
-                            sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
+                            sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_toon"_sid);
     RegisterComputePipeline("default_unlit"_sid, src / "lighting_unlit_compute.spv",
-                            sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
+                            sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_unlit"_sid);
     RegisterComputePipeline(SID("lighting_ground_truth"), src / "lighting_ground_truth_compute.spv",
-                            sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
+                            sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
 
 
     RegisterComputePipeline(SID("instancing_instance_lod_shadows"), src / "instancing_instance_lod_shadows_compute.spv",
@@ -652,26 +652,6 @@ void PipelineManager::RegisterPipelines()
         );
         builder.Clear();
     }
-
-    // Cubemap Visualizer
-    {
-        builder.AddShaderStage(src / "cubemap_visualizer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage(src / "cubemap_visualizer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
-        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
-        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
-        builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
-
-        RegisterGraphicsPipeline(
-            SID("cubemap_visualize"),
-            builder,
-            sizeof(BaseMeshShadingPushConstant),
-            VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::Critical
-        );
-        builder.Clear();
-    }
-
 
     // Skybox Rendering
     {

@@ -14,7 +14,7 @@ import restir_common;
 import bindless_declarations;
 
 [numthreads(16, 16, 1)]
-void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
     uint2 pixel = threadID.xy + uint2(lightParams.minX, lightParams.minY);
     if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {
@@ -43,7 +43,9 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
     float nDotV = max(dot(N, V), 0.0);
 
-    float3 directLight = float3(0.0);
+    float3 diffuseRadiance = float3(0.0);
+    float3 specularRadiance = float3(0.0);
+    float hitDistance = 0.0;
 
     bool bAnyLight = pc.reservoirBuffer != 0;
     if (bAnyLight)
@@ -75,18 +77,24 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
 
                 float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
                 float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                float3 f = (diffuseAl + specularAl) * s.cosShade * geomTerm * al.intensity * alColor * s.attenuation;
+                float3 commonTerm = s.cosShade * geomTerm * al.intensity * alColor * s.attenuation * r.W;
 
-                directLight = f * r.W;
+                diffuseRadiance = diffuseAl * commonTerm;
+                specularRadiance = specularAl * commonTerm;
+                hitDistance = s.dist;
             }
         }
     }
 
-    if (pc.bDemodulateAlbedo != 0) {
-        float3 irradiance = directLight / max(li.albedo.rgb, float3(0.01, 0.01, 0.01));
-        rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(irradiance, 1.0);
-    } else {
-        float3 finalColor = directLight + li.emissiveRGB;
-        rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(finalColor, 1.0);
-    }
+    // Diffuse is demodulated by albedo; specular by the preintegrated env-BRDF reflectance.
+    // Emissive is intentionally excluded here and re-added during the remodulate/composite.
+    // Hit distance is packed into alpha for the RELAX specular reprojection path.
+    float3 diffuseOut = diffuseRadiance / max(li.albedo.rgb, float3(0.01, 0.01, 0.01));
+
+    float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
+    float3 specReflectance = F0 * envBRDF.x + envBRDF.y;
+    float3 specularOut = specularRadiance / max(specReflectance, float3(0.01, 0.01, 0.01));
+
+    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(diffuseOut, hitDistance);
+    rdgStorageFloat4[pc.secondaryOutputImageIndex][pixel] = float4(specularOut, hitDistance);
 }

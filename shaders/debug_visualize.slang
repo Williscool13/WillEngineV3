@@ -225,7 +225,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             float3 viewPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
             float3 V = normalize(-viewPos);
             float ndotv = max(dot(N, V), 0.0);
-            srcPixel.xyz = ndotv < 0.0 ? float3(-ndotv, 0, 0) : float3(0, ndotv, 0);
+            srcPixel.xyz = ndotv <= 0.0 ? float3(1.0, 0, 0) : float3(0, ndotv, 0);
             break;
         }
     }

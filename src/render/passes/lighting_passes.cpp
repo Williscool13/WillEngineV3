@@ -222,8 +222,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         const RenderTargets& targets,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
-                                        uint64_t frameNumber,
-                                        bool bDemodulateAlbedo)
+                                        uint64_t frameNumber)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -254,11 +253,12 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     if (targets.shadows != StringID{}) {
         lightingResolve.ReadSampledImage(targets.shadows);
     }
-    lightingResolve.WriteStorageImage(targets.colorOutput);
-    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, bDemodulateAlbedo,
+    lightingResolve.WriteStorageImage(targets.intermediateOne);
+    lightingResolve.WriteStorageImage(targets.intermediateTwo);
+    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthStencil, shadows = targets.shadows,
-            output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex,
+            primaryOut = targets.intermediateOne, secondaryOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
             buckets, lightingCount](VkCommandBuffer cmd) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -271,7 +271,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                 if (!pipelineEntry) { continue; }
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
-                LightingResolvePushConstant pc{
+                VisibilityLightingPushConstant pc{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                     .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
                     .lightData = graph.GetBufferAddress(SID("light_data")),
@@ -284,11 +284,11 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
                     .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
                     .skyboxIndex = skyboxIndex,
-                    .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
+                    .primaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(primaryOut),
+                    .secondaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(secondaryOut),
                     .sceneDataIndex = sceneIndex,
                     .lightingIndex = entry.bucketIndex,
                     .frameIndex = static_cast<uint32_t>(frameNumber),
-                    .bDemodulateAlbedo = bDemodulateAlbedo ? 1u : 0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
@@ -346,7 +346,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
             if (!pipelineEntry) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
-            LightingResolvePushConstant pc{
+            VisibilityLightingPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(SID("light_data")),
@@ -360,7 +360,8 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                 .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0u,
                 .skyboxIndex = skyboxIndex,
-                .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
+                .primaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
+                .secondaryOutputImageIndex = ~0x0u,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
