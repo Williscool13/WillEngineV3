@@ -12,7 +12,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::ViewFamily& viewFamily,
                              Core::Array<uint32_t, 2> renderExtent,
-                             const MainRenderTargets& targets,
+                             const RenderTargets& targets,
                              float deltaTime,
                              uint64_t frameNumber)
 {
@@ -27,7 +27,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
         .pipelines = pipelineManager,
     };
 
-    StringID current = ctx.targets.outputColor;
+    StringID current = ctx.targets.colorOutput;
     current = PPExposure(ctx, current);
     current = PPBloom(ctx, current);
     current = PPSharpening(ctx, current);

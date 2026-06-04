@@ -9,7 +9,6 @@
 #include "render/pipelines/pipeline_manager.h"
 #include "render/render-graph/render_pass.h"
 #include "render/vulkan/vk_helpers.h"
-#include "render/vulkan/vk_config.h"
 
 namespace Render
 {
@@ -17,16 +16,16 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
                           Core::Array<uint32_t, 2> renderExtent,
-                          const MainRenderTargets& targets,
+                          const RenderTargets& targets,
                           uint32_t sceneIndex)
 {
     RenderPass& skyboxPass = graph.AddPass(
-        SID("Skybox"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::ResourceCategory::Scene);
+        SID("Skybox"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, ResourceCategory::Scene);
     skyboxPass.ReadBuffer(SCENE_DATA_BUFFER);
-    skyboxPass.WriteColorAttachment(targets.outputColor);
+    skyboxPass.WriteColorAttachment(targets.colorOutput);
     skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
     skyboxPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            outputColor = targets.outputColor, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD](VkCommandBuffer cmd) {
+            outputColor = targets.colorOutput, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD](VkCommandBuffer cmd) {
             VkViewport viewport = VkHelpers::GenerateViewport(width, height);
             vkCmdSetViewport(cmd, 0, 1, &viewport);
             VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -60,7 +59,7 @@ void SetupTextForwardPass(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
                           Core::Array<uint32_t, 2> renderExtent,
-                          const MainRenderTargets& targets)
+                          const RenderTargets& targets)
 {
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
     if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER)) { return; }
@@ -76,9 +75,9 @@ void SetupTextForwardPass(RenderGraph& graph,
     textPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     //textPass.ReadDepthAttachment(targets.depthStencil);
     textPass.ReadWriteDepthAttachment(targets.depthStencil);
-    textPass.WriteColorAttachment(targets.outputColor);
+    textPass.WriteColorAttachment(targets.colorOutput);
     textPass.WriteColorAttachment(targets.stableId);
-    textPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineEntry, colorOutput = targets.outputColor, depthOutput = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd) {
+    textPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineEntry, colorOutput = targets.colorOutput, depthOutput = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -125,7 +124,7 @@ void SetupTextForwardPass(RenderGraph& graph,
     });
 }
 
-void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets)
+void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets)
 {
     if (viewFamily.spriteBatches.IsEmpty()) {
         return;
@@ -135,9 +134,9 @@ void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, cons
     spritesPass.ReadBuffer(SCENE_DATA_BUFFER);
     spritesPass.ReadBuffer(SPRITE_BUFFER);
     spritesPass.ReadWriteDepthAttachment(targets.depthStencil);
-    spritesPass.WriteColorAttachment(targets.outputColor);
+    spritesPass.WriteColorAttachment(targets.colorOutput);
     spritesPass.WriteColorAttachment(targets.stableId);
-    spritesPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineManager, outputColor = targets.outputColor, depthTarget = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd) {
+    spritesPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineManager, outputColor = targets.colorOutput, depthTarget = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);

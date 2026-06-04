@@ -17,12 +17,12 @@ namespace Render
 void SetupATrousWaveletDenoiser(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 Core::Array<uint32_t, 2> renderExtent,
-                                const DeferredResolveTargets& targets,
+                                const RenderTargets& targets,
                                 const Core::ReSTIRParams::ATrousParams& params)
 {
     const StringID gbufferOne = targets.gbufferOne;
     const StringID depthStencil = targets.depthStencil;
-    const StringID lightingOutput = targets.output;
+    const StringID lightingOutput = targets.colorOutput;
 
     constexpr int32_t ATROUS_PASS_COUNT = 4;
     const int32_t ATROUS_ITERATIONS = params.iterations;
@@ -84,7 +84,7 @@ void SetupATrousWaveletDenoiser(RenderGraph& graph,
 void SetupASVGFDenoiser(RenderGraph& graph,
                         PipelineManager* pipelineManager,
                         Core::Array<uint32_t, 2> renderExtent,
-                        const DeferredResolveTargets& targets,
+                        const RenderTargets& targets,
                         const Core::ReSTIRParams::SVGFParams& params)
 {
     const uint32_t width = renderExtent[0];
@@ -96,7 +96,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
     const StringID gbufferOne = targets.gbufferOne;
     const StringID gbufferTwo = targets.gbufferTwo;
     const StringID depth = targets.depthStencil;
-    const StringID lightingOutput = targets.output;
+    const StringID lightingOutput = targets.colorOutput;
 
     const TextureInfo colorHistInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1};
     const TextureInfo histLenInfo{VK_FORMAT_R16_SFLOAT, width, height, 1};
@@ -427,7 +427,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         PipelineManager* pipelineManager,
                         const Core::ViewFamily& viewFamily,
                         Core::Array<uint32_t, 2> renderExtent,
-                        const DeferredResolveTargets& targets,
+                        const RenderTargets& targets,
                         const Core::ReSTIRParams::RELAXParams& params,
                         uint64_t frameNumber)
 {
@@ -438,7 +438,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     const StringID gbufferOne = targets.gbufferOne;
     const StringID depth = targets.depthStencil;
-    const StringID noisyInput = targets.output;
+    const StringID noisyInput = targets.colorOutput;
 
     // ----------------------------------------------------------------
     // Build RelaxDiffuseSpecularConstants
@@ -584,36 +584,12 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     if (viewFamily.debugResourceName == "relax_tiles") { return; }
 
-    graph.CreateTexture(SID("relax_spec_illum"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_diff_illum"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_spec_fast"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_diff_fast"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_history_length"), histLenInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_spec_hit_dist"), hitDistInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_spec_reproj_confidence"), reprConfInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_prev_nr"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_spec_prepass"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_diff_prepass"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_spec_0"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_spec_1"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_diff_0"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_diff_1"), colorInfo, {std::nullopt}, true);
 
-    // Carry ping-pong history textures to next frame
-    graph.CarryTextureToNextFrame(SID("relax_spec_illum"), SID("relax_spec_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("relax_diff_illum"), SID("relax_diff_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("relax_spec_fast"), SID("relax_spec_fast_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("relax_diff_fast"), SID("relax_diff_fast_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("relax_history_length"), SID("relax_history_length_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("relax_spec_hit_dist"), SID("relax_spec_hit_dist_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("relax_prev_nr"), SID("relax_prev_nr_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-
-
-
-    // ----------------------------------------------------------------
     // Pass 2: Prepass (optional spatial prefilter)
-    // ----------------------------------------------------------------
     if (params.enablePrepass) {
+        graph.CreateTexture(SID("relax_spec_prepass"), colorInfo, {std::nullopt}, true);
+        graph.CreateTexture(SID("relax_diff_prepass"), colorInfo, {std::nullopt}, true);
+
         auto& pass = graph.AddPass(SID("[RELAX] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
@@ -641,6 +617,30 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     }
 
     if (viewFamily.debugResourceName == "relax_spec_prepass") { return; }
+
+
+    graph.CreateTexture(SID("relax_spec_illum"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_diff_illum"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_spec_fast"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_diff_fast"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_history_length"), histLenInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_spec_hit_dist"), hitDistInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_spec_reproj_confidence"), reprConfInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_prev_nr"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_atrous_spec_0"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_atrous_spec_1"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_atrous_diff_0"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_atrous_diff_1"), colorInfo, {std::nullopt}, true);
+
+    // Carry ping-pong history textures to next frame
+    graph.CarryTextureToNextFrame(SID("relax_spec_illum"), SID("relax_spec_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("relax_diff_illum"), SID("relax_diff_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("relax_spec_fast"), SID("relax_spec_fast_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("relax_diff_fast"), SID("relax_diff_fast_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("relax_history_length"), SID("relax_history_length_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("relax_spec_hit_dist"), SID("relax_spec_hit_dist_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("relax_prev_nr"), SID("relax_prev_nr_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+
 
     // ----------------------------------------------------------------
     // Pass 3: Temporal Accumulation

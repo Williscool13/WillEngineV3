@@ -17,7 +17,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
                        Core::Array<uint32_t, 2> renderExtent,
-                       const DeferredResolveTargets& targets,
+                       const RenderTargets& targets,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
                        uint64_t frameNumber,
@@ -219,7 +219,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
                                         Core::Array<uint32_t, 2> renderExtent,
-                                        const DeferredResolveTargets& targets,
+                                        const RenderTargets& targets,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
@@ -254,11 +254,11 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     if (targets.shadows != StringID{}) {
         lightingResolve.ReadSampledImage(targets.shadows);
     }
-    lightingResolve.WriteStorageImage(targets.output);
+    lightingResolve.WriteStorageImage(targets.colorOutput);
     lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, bDemodulateAlbedo,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthStencil, shadows = targets.shadows,
-            output = targets.output, skyboxIndex = viewFamily.skyboxIndex,
+            output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex,
             buckets, lightingCount](VkCommandBuffer cmd) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -301,7 +301,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
-                                  const DeferredResolveTargets& targets,
+                                  const RenderTargets& targets,
                                   uint32_t sceneIndex,
                                   bool bReset,
                                   uint32_t accumulationCount,
@@ -336,12 +336,12 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
     if (targets.shadows != StringID{}) {
         pass.ReadSampledImage(targets.shadows);
     }
-    pass.WriteStorageImage(targets.output);
+    pass.WriteStorageImage(targets.colorOutput);
     pass.Execute([&, pipelineManager, sceneIndex, frameNumber, accumulationCount,
             visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthStencil, shadows = targets.shadows,
-            output = targets.output, skyboxIndex = viewFamily.skyboxIndex, renderExtent](VkCommandBuffer cmd) {
+            output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, renderExtent](VkCommandBuffer cmd) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("lighting_ground_truth"));
             if (!pipelineEntry) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

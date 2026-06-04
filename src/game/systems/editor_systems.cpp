@@ -714,20 +714,26 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
 
         if (ImGui::CollapsingHeader("RELAX Denoiser")) {
-            if (ImGui::Button("Spec Illum"))           setDebugTarget("relax_spec_illum",            DebugTransformationType::None, Core::DebugViewAspect::None);
+            // Tiles
+            if (ImGui::Button("Tiles")) setDebugTarget("relax_tiles", DebugTransformationType::None, Core::DebugViewAspect::None);
+            // Prepass
+            if (ImGui::Button("Spec Prepass")) setDebugTarget("relax_spec_prepass", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();
-            if (ImGui::Button("Diff Illum"))           setDebugTarget("relax_diff_illum",            DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Spec Fast"))            setDebugTarget("relax_spec_fast",             DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Diff Prepass")) setDebugTarget("relax_diff_prepass", DebugTransformationType::None, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Spec Illum")) setDebugTarget("relax_spec_illum", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();
-            if (ImGui::Button("Diff Fast"))            setDebugTarget("relax_diff_fast",             DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("History Length"))       setDebugTarget("relax_history_length",        DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Spec Hit Dist"))        setDebugTarget("relax_spec_hit_dist",         DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Reproj Confidence"))    setDebugTarget("relax_spec_reproj_confidence",DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Prev NR"))              setDebugTarget("relax_prev_nr",               DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Tiles"))                setDebugTarget("relax_tiles",                 DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("ATrous Spec 0"))        setDebugTarget("relax_atrous_spec_0",         DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Diff Illum")) setDebugTarget("relax_diff_illum", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Spec Fast")) setDebugTarget("relax_spec_fast", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();
-            if (ImGui::Button("ATrous Spec 1"))        setDebugTarget("relax_atrous_spec_1",         DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Diff Fast")) setDebugTarget("relax_diff_fast", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("History Length")) setDebugTarget("relax_history_length", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Spec Hit Dist")) setDebugTarget("relax_spec_hit_dist", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Reproj Confidence")) setDebugTarget("relax_spec_reproj_confidence", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Prev NR")) setDebugTarget("relax_prev_nr", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("ATrous Spec 0")) setDebugTarget("relax_atrous_spec_0", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("ATrous Spec 1")) setDebugTarget("relax_atrous_spec_1", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("Post-Processing")) {

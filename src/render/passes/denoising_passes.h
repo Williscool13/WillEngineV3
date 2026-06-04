@@ -18,20 +18,20 @@ class PipelineManager;
 void SetupATrousWaveletDenoiser(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 Core::Array<uint32_t, 2> renderExtent,
-                                const DeferredResolveTargets& targets,
+                                const RenderTargets& targets,
                                 const Core::ReSTIRParams::ATrousParams& params);
 
 void SetupASVGFDenoiser(RenderGraph& graph,
                         PipelineManager* pipelineManager,
                         Core::Array<uint32_t, 2> renderExtent,
-                        const DeferredResolveTargets& targets,
+                        const RenderTargets& targets,
                         const Core::ReSTIRParams::SVGFParams& params);
 
 void SetupRELAXDenoiser(RenderGraph& graph,
                         PipelineManager* pipelineManager,
                         const Core::ViewFamily& viewFamily,
                         Core::Array<uint32_t, 2> renderExtent,
-                        const DeferredResolveTargets& targets,
+                        const RenderTargets& targets,
                         const Core::ReSTIRParams::RELAXParams& params,
                         uint64_t frameNumber);
 } // Render

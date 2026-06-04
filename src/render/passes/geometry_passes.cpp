@@ -18,7 +18,7 @@ void SetupGeometryPass(RenderGraph& graph,
                        const Core::ViewFamily& viewFamily,
                        const RenderFamilyProperties& renderFamilyProperties,
                        Core::Array<uint32_t, 2> renderExtent,
-                       const VisibilityBufferTargets& targets,
+                       const RenderTargets& targets,
                        uint32_t sceneIndex)
 {
     if (viewFamily.instances.IsEmpty()) {
@@ -440,7 +440,7 @@ void SetupGeometryPass(RenderGraph& graph,
 
     RenderPass& instancedMeshShading = graph.AddPass(
         SID("Instanced Mesh Shading"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-        VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::ResourceCategory::Geometry);
+                                       VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::ResourceCategory::Geometry);
     instancedMeshShading.WriteColorAttachment(targets.visibility);
     instancedMeshShading.WriteColorAttachment(targets.gbufferOne);
     instancedMeshShading.WriteColorAttachment(targets.stableId);
@@ -502,7 +502,7 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               PipelineManager* pipelineManager,
                                               const Core::ViewFamily& viewFamily,
                                               Core::Array<uint32_t, 2> renderExtent,
-                                              const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                              const RenderTargets& targets,
                                               uint32_t sceneIndex)
 {
     RenderPass& visBarDer = graph.AddPass(SID("Visibility Barycentric Derivative"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
@@ -549,7 +549,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
-                                  const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                  const RenderTargets& targets,
                                   uint32_t sceneIndex)
 {
     if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
@@ -628,7 +628,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 const Core::ViewFamily& viewFamily,
                                 Core::Array<uint32_t, 2> renderExtent,
-                                const VisibilityShadingTargets& targets,
+                                const RenderTargets& targets,
                                 uint32_t sceneIndex,
                                 Core::Arena& arena)
 {
@@ -713,8 +713,13 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
         });
 }
 
-void SetupVisibilityBucketingDebugPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
-                                       const VisibilityShadingTargets& targets, uint32_t sceneIndex, Core::Arena& arena)
+void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
+                                       PipelineManager* pipelineManager,
+                                       const Core::ViewFamily& viewFamily,
+                                       Core::Array<uint32_t, 2> renderExtent,
+                                       const RenderTargets& targets,
+                                       uint32_t sceneIndex,
+                                       Core::Arena& arena)
 {
     RenderPass& bucketVisualizePass = graph.AddPass(SID("Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
     bucketVisualizePass.ReadSampledImage(targets.visibility);
@@ -768,8 +773,12 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph, PipelineManager* pipe
         });
 }
 
-void SetupLightingBucketingDebugPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
-                                     const VisibilityShadingTargets& targets, uint32_t sceneIndex)
+void SetupLightingBucketingDebugPass(RenderGraph& graph,
+                                     PipelineManager* pipelineManager,
+                                     const Core::ViewFamily& viewFamily,
+                                     Core::Array<uint32_t, 2> renderExtent,
+                                     const RenderTargets& targets,
+                                     uint32_t sceneIndex)
 {
     RenderPass& lightBucketVisualizePass = graph.AddPass(SID("Light Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
     lightBucketVisualizePass.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);

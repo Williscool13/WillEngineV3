@@ -23,7 +23,7 @@ void SetupUIRender(RenderGraph& graph,
 void SetupSelectionOutlinePass(RenderGraph& graph,
                                PipelineManager* pipelineManager,
                                Core::Array<uint32_t, 2> renderExtent,
-                               const MainRenderTargets& targets,
+                               const RenderTargets& targets,
                                uint64_t selectedStableId);
 } // Render
 

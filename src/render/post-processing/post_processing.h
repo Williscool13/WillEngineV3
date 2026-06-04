@@ -26,7 +26,7 @@ struct PostProcessContext
 {
     RenderGraph& graph;
     const Core::PostProcessConfiguration& config;
-    const MainRenderTargets& targets;
+    const RenderTargets& targets;
     const Core::ViewFamily& view;
     Core::Array<uint32_t, 2> extent;
     float deltaTime;

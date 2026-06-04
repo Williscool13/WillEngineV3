@@ -18,19 +18,19 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph,
                                                 PipelineManager* pipelineManager,
                                                 const Core::ViewFamily& viewFamily,
                                                 Core::Array<uint32_t, 2> renderExtent,
-                                                const MainRenderTargets& ppTargets);
+                                                const RenderTargets& targets);
 
 StringID SetupSMAA_T2X(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
                        Core::Array<uint32_t, 2> renderExtent,
-                       const MainRenderTargets& ppTargets);
+                       const RenderTargets& targets);
 
 StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    PipelineManager* pipelineManager,
                                    const Core::ViewFamily& viewFamily,
                                    Core::Array<uint32_t, 2> renderExtent,
-                                   const MainRenderTargets& ppTargets,
+                                   const RenderTargets& targets,
                                    StringID pipelineSID);
 } // Render
 

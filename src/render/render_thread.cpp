@@ -424,53 +424,32 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     });
 
 
-    VisibilityBufferTargets targets{
-        .visibility = SID("visibility_target"),
-        .stableId = SID("stable_id"),
-        .gbufferOne = SID("gbuffer_one"),
-        .depthStencil = SID("depth_target"),
+    RenderTargets targets{
+        .visibility = "visibility_target"_sid,
+        .barycentric = "visibility_barycentric"_sid,
+        .derivatives = "visibility_derivatives"_sid,
+        .gbufferOne = "gbuffer_one"_sid,
+        .gbufferTwo = "gbuffer_two"_sid,
+        .shadows = "shadows_resolve_target"_sid,
+        .intermediateOne = "intermediate_one"_sid,
+        .intermediateTwo = "intermediate_two"_sid,
+        .colorOutput = "shading_output"_sid,
+        .depthStencil = "depth_target"_sid,
+        .stableId = "stable_id"_sid,
     };
 
-    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_VISIBILITY_EMPTY, true);
+    renderGraph->CreateTexture(targets.barycentric, TextureInfo{VISIBILITY_BARYCENTRIC_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.derivatives, TextureInfo{VISIBILITY_DERIVATIVES_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.intermediateOne, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.intermediateTwo, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.colorOutput, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_DEPTH_FAR, true);
+    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-    VisibilityBufferBarycentricDerivativeTargets visBarDerTargets{
-        .visibility = targets.visibility,
-        .barycentric = SID("visibility_barycentric"),
-        .derivatives = SID("visibility_derivatives"),
-    };
-
-    renderGraph->CreateTexture(visBarDerTargets.barycentric, TextureInfo{VISIBILITY_BARYCENTRIC_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(visBarDerTargets.derivatives, TextureInfo{VISIBILITY_DERIVATIVES_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-
-    VisibilityShadingTargets visShadingTargets{
-        .visibility = targets.visibility,
-        .barycentric = visBarDerTargets.barycentric,
-        .derivatives = visBarDerTargets.derivatives,
-        .gbufferOne = targets.gbufferOne,
-        .gbufferTwo = SID("gbuffer_two"),
-    };
-
-    renderGraph->CreateTexture(visShadingTargets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-
-    StringID shadingOutputTarget = SID("shading_output");
-    renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, VkClearValue{0.0f, 0.1f, 0.2f, 1.0f}, true);
-
-
-    MainRenderTargets mainTargets{
-        .gbufferOne = visShadingTargets.gbufferOne,
-        .gbufferTwo = visShadingTargets.gbufferTwo,
-        .depthStencil = targets.depthStencil,
-        .outputColor = shadingOutputTarget,
-        .stableId = targets.stableId,
-    };
-
-
-    StringID finalOutput = shadingOutputTarget;
-
-    SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
+    SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
     if (renderFamilyProperties.bCanRender) {
         ZoneScopedN("SetupRenderGraph");
@@ -483,55 +462,46 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, renderFamilyProperties, renderExtent, targets, 0);
 
-            SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
+            SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
-            SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
+            SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
-            SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, renderArena.Get());
+            SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get());
 
             if (frameBuffer.bEnableShadeDispatchBucketingVisualization) {
-                SetupVisibilityBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, renderArena.Get());
+                SetupVisibilityBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get());
             }
 
             if (frameBuffer.bEnableLightingBucketingVisualization) {
-                SetupLightingBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0);
+                SetupLightingBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
             }
 
 
             if (viewFamily.gtaoConfig.bEnabled) {
-                SetupGroundTruthAmbientOcclusion(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, frameNumber, 0);
+                SetupGroundTruthAmbientOcclusion(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, frameNumber, 0);
             }
 
             // Outputs "shadows_resolve_target"
-            SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
-
-            DeferredResolveTargets deferredResolveTargets{
-                .visibility = targets.visibility,
-                .gbufferOne = visShadingTargets.gbufferOne,
-                .gbufferTwo = visShadingTargets.gbufferTwo,
-                .depthStencil = targets.depthStencil,
-                .shadows = SID("shadows_resolve_target"),
-                .output = shadingOutputTarget,
-            };
+            SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
             const Core::ReSTIRParams& restir = frameBuffer.restir;
             if (restir.bGroundTruthMode) {
                 if (restir.bResetGroundTruth) { groundTruthAccumCount = 0; }
-                SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, restir.bResetGroundTruth, groundTruthAccumCount, frameNumber);
+                SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, restir.bResetGroundTruth, groundTruthAccumCount, frameNumber);
                 groundTruthAccumCount += 4;
             }
             else {
-                SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber, restir);
+                SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir);
                 const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
-                SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber, bSVGF);
+                SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bSVGF);
                 if (bSVGF) {
-                    SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.svgf);
+                    SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.svgf);
                 }
                 else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous) {
-                    SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, restir.atrous);
+                    SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.atrous);
                 }
                 else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                    SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, restir.relax, frameNumber);
+                    SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, restir.relax, frameNumber);
                 }
             }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
@@ -562,37 +532,34 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
         }*/
 
-        SetupTextForwardPass(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
-        SetupSpritesPass(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+        SetupTextForwardPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
+        SetupSpritesPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
 
         if (frameBuffer.selectedStableId != 0) {
-            SetupSelectionOutlinePass(*renderGraph, pipelineManager, renderExtent, mainTargets, frameBuffer.selectedStableId);
+            SetupSelectionOutlinePass(*renderGraph, pipelineManager, renderExtent, targets, frameBuffer.selectedStableId);
         }
 
-        finalOutput = shadingOutputTarget;
         switch (viewFamily.aaMode) {
             case Core::AntiAliasingMode::SMAA:
-                finalOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+                targets.colorOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
                 break;
             case Core::AntiAliasingMode::TAA:
-                finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, SID("temporal_antialiasing"));
+                targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, SID("temporal_antialiasing"));
                 break;
             case Core::AntiAliasingMode::NaiveTAA:
-                finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, SID("naive_temporal_antialiasing"));
+                targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, SID("naive_temporal_antialiasing"));
                 break;
             case Core::AntiAliasingMode::SMAAT2X:
-                finalOutput = SetupSMAA_T2X(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+                targets.colorOutput = SetupSMAA_T2X(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
                 break;
             default: break;
         }
 
+        targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
 
-        mainTargets.outputColor = finalOutput;
-        finalOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
+        SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, targets.colorOutput, frameResourceLimits);
 
-        SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, finalOutput, frameResourceLimits);
-
-        SetupUIRender(*renderGraph, pipelineManager, viewFamily, renderExtent, finalOutput);
+        SetupUIRender(*renderGraph, pipelineManager, viewFamily, renderExtent, targets.colorOutput);
 
 
 #if WILL_EDITOR
@@ -606,8 +573,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Debug);
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.ReadSampledImage(targets.depthStencil);
-                debugVisPass.WriteStorageImage(finalOutput);
-                debugVisPass.Execute([&, debugTargetName, finalOutput](VkCommandBuffer _cmd) {
+                debugVisPass.WriteStorageImage(targets.colorOutput);
+                debugVisPass.Execute([&, debugTargetName, colorOutput = targets.colorOutput](VkCommandBuffer _cmd) {
                     const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
                     VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
 
@@ -652,7 +619,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         textureIndexInArray = renderGraph->GetStencilOnlyStorageImageViewDescriptorIndex(debugTargetName);
                     }
 
-                    uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(finalOutput);
+                    uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(colorOutput);
 
                     DebugVisualizePushConstant pc{
                         .sceneData = renderGraph->TryGetBufferAddress(SCENE_DATA_BUFFER),
@@ -696,10 +663,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED, true);
 
     auto& blitPass = renderGraph->AddPass(SID("Blit To Swapchain"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::ResourceCategory::Untagged);
-    blitPass.ReadBlitImage(finalOutput);
+    blitPass.ReadBlitImage(targets.colorOutput);
     blitPass.WriteBlitImage(SID("swapchain_image"));
-    blitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
-        VkImage drawImage = renderGraph->GetImageHandle(finalOutput);
+    blitPass.Execute([&, colorOutput = targets.colorOutput](VkCommandBuffer _cmd) {
+        VkImage drawImage = renderGraph->GetImageHandle(colorOutput);
 
         Core::Array<uint32_t, 2> scaledExtent = renderExtents->GetScaledExtent();
         Core::Array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
@@ -752,9 +719,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
         auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::ResourceCategory::Untagged);
-        screenshotBlitPass.ReadBlitImage(finalOutput);
+        screenshotBlitPass.ReadBlitImage(targets.colorOutput);
         screenshotBlitPass.WriteBlitImage(SID("screenshot_intermediate"));
-        screenshotBlitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
+        screenshotBlitPass.Execute([&, colorOutput = targets.colorOutput](VkCommandBuffer _cmd) {
             VkImageBlit2 blitRegion{};
             blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
             blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -766,7 +733,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             VkBlitImageInfo2 blitInfo{};
             blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-            blitInfo.srcImage = renderGraph->GetImageHandle(finalOutput);
+            blitInfo.srcImage = renderGraph->GetImageHandle(colorOutput);
             blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             blitInfo.dstImage = renderGraph->GetImageHandle(SID("screenshot_intermediate"));
             blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -1916,8 +1883,8 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
     }
 }
 
-void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets,
-                                        const MainRenderTargets& portalTargets) const
+/*void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets,
+                                        const RenderTargets& portal) const
 {
     RenderPass& portalCompositePass = graph.AddPass(SID("Portal Composite"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::ResourceCategory::Scene);
     portalCompositePass.ReadSampledImage(portalTargets.outputColor);
@@ -1957,7 +1924,7 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
 
         vkCmdEndRendering(cmd);
     });
-}
+}*/
 
 void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage,
                                     FrameResourceLimits& limits) const

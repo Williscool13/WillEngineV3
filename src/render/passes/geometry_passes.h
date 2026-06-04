@@ -18,28 +18,28 @@ void SetupGeometryPass(RenderGraph& graph,
                        const Core::ViewFamily& viewFamily,
                        const RenderFamilyProperties& renderFamilyProperties,
                        Core::Array<uint32_t, 2> renderExtent,
-                       const VisibilityBufferTargets& targets,
+                       const RenderTargets& targets,
                        uint32_t sceneIndex);
 
 void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               PipelineManager* pipelineManager,
                                               const Core::ViewFamily& viewFamily,
                                               Core::Array<uint32_t, 2> renderExtent,
-                                              const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                              const RenderTargets& targets,
                                               uint32_t sceneIndex);
 
 void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
-                                  const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                  const RenderTargets& targets,
                                   uint32_t sceneIndex);
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 const Core::ViewFamily& viewFamily,
                                 Core::Array<uint32_t, 2> renderExtent,
-                                const VisibilityShadingTargets& targets,
+                                const RenderTargets& targets,
                                 uint32_t sceneIndex,
                                 Core::Arena& arena);
 
@@ -47,7 +47,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
                                        PipelineManager* pipelineManager,
                                        const Core::ViewFamily& viewFamily,
                                        Core::Array<uint32_t, 2> renderExtent,
-                                       const VisibilityShadingTargets& targets,
+                                       const RenderTargets& targets,
                                        uint32_t sceneIndex,
                                        Core::Arena& arena);
 
@@ -55,7 +55,7 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                      PipelineManager* pipelineManager,
                                      const Core::ViewFamily& viewFamily,
                                      Core::Array<uint32_t, 2> renderExtent,
-                                     const VisibilityShadingTargets& targets,
+                                     const RenderTargets& targets,
                                      uint32_t sceneIndex);
 } // Render
 

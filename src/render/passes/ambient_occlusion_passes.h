@@ -17,7 +17,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
                                       PipelineManager* pipelineManager,
                                       const Core::ViewFamily& viewFamily,
                                       Core::Array<uint32_t, 2> renderExtent,
-                                      const MainRenderTargets& targets,
+                                      const RenderTargets& targets,
                                       uint64_t frameNumber,
                                       uint32_t sceneIndex);
 } // Render

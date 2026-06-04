@@ -18,43 +18,23 @@ struct RendererStatistics
     uint64_t meshInvocations{};
 };
 
-struct VisibilityBufferTargets
+struct RenderTargets
 {
     StringID visibility;
-    StringID stableId;
-    StringID gbufferOne; // color attachment: R=0, G=packed motion vectors, B=0, A=0
-    StringID depthStencil;
-};
-struct VisibilityBufferBarycentricDerivativeTargets
-{
-    StringID visibility; // in
-    StringID barycentric; // out
-    StringID derivatives; // out
-};
-struct VisibilityShadingTargets
-{
-    StringID visibility; // in
-    StringID barycentric; // in
-    StringID derivatives; // in
-    StringID gbufferOne; // read-write: R=normal oct16, G=motion vectors (preserve), B=pbr
-    StringID gbufferTwo; // out: R=albedo RGB8, G=emissive RGBE
-};
+    StringID barycentric;
+    StringID derivatives;
 
-struct DeferredResolveTargets
-{
-    StringID visibility; // in
-    StringID gbufferOne; // in: R=normal oct16, G=velocity, B=pbr
-    StringID gbufferTwo; // in: R=albedo, G=emissive
-    StringID depthStencil; // in
-    StringID shadows; // in (optional, leave default-constructed if unavailable)
-    StringID output; // out
-};
-struct MainRenderTargets
-{
-    StringID gbufferOne; // for GTAO + shadow resolve (R=normal oct16) and deferred resolve
-    StringID gbufferTwo; // R=albedo, G=emissive
+    // GBuffer
+    StringID gbufferOne;
+    StringID gbufferTwo;
+    StringID shadows;
+
+    // Any purpose textures for use between gbuffer and color output. Same format as color output.
+    StringID intermediateOne;
+    StringID intermediateTwo;
+
+    StringID colorOutput;
     StringID depthStencil;
-    StringID outputColor;
     StringID stableId;
 };
 

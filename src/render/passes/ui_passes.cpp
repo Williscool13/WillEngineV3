@@ -163,12 +163,12 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
     });
 }
 
-void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets, uint64_t selectedStableId)
+void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint64_t selectedStableId)
 {
-    RenderPass& outlinePass = graph.AddPass(SID("Selection Outline"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::UI);
+    RenderPass& outlinePass = graph.AddPass(SID("Selection Outline"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::UI);
     outlinePass.ReadStorageImage(targets.stableId);
-    outlinePass.WriteStorageImage(targets.outputColor);
-    outlinePass.Execute([&, pipelineManager, renderExtent, selectedStableId, stableId = targets.stableId, outputColor = targets.outputColor](VkCommandBuffer cmd) {
+    outlinePass.WriteStorageImage(targets.colorOutput);
+    outlinePass.Execute([&, pipelineManager, renderExtent, selectedStableId, stableId = targets.stableId, outputColor = targets.colorOutput](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("selection_outline"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 

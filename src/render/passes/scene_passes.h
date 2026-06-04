@@ -17,7 +17,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
                           Core::Array<uint32_t, 2> renderExtent,
-                          const MainRenderTargets& targets,
+                          const RenderTargets& targets,
                           uint32_t sceneIndex);
 
 /**
@@ -33,13 +33,13 @@ void SetupTextForwardPass(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
                           Core::Array<uint32_t, 2> renderExtent,
-                          const MainRenderTargets& targets);
+                          const RenderTargets& targets);
 
 void SetupSpritesPass(RenderGraph& graph,
                       PipelineManager* pipelineManager,
                       const Core::ViewFamily& viewFamily,
                       Core::Array<uint32_t, 2> renderExtent,
-                      const MainRenderTargets& targets);
+                      const RenderTargets& targets);
 } // Render
 
 #endif //WILL_ENGINE_SCENE_PASSES_H

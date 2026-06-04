@@ -17,7 +17,7 @@ void SetupShadowsResolve(RenderGraph& graph,
                          PipelineManager* pipelineManager,
                          const Core::ViewFamily& viewFamily,
                          Core::Array<uint32_t, 2> renderExtent,
-                         const MainRenderTargets& targets,
+                         const RenderTargets& targets,
                          uint32_t sceneIndex);
 } // Render
 
