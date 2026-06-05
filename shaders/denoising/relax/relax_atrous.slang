@@ -142,6 +142,4 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
 
     rdgStorageFloat4[pc.outSpecIndex][pixelPos] = outSpec;
     rdgStorageFloat4[pc.outDiffIndex][pixelPos] = outDiff;
-    rdgStorageFloat4[pc.outSpecVarIndex][pixelPos] = outSpec.aaaa;
-    rdgStorageFloat4[pc.outDiffVarIndex][pixelPos] = outDiff.aaaa;
 }

@@ -142,7 +142,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         float3 historyYCoCg = SampleHistoryCatmullRom(historyUv);
         historyYCoCg = VarianceClipping(historyYCoCg, uv);
 
-        float alpha = lerp(0.01, 0.9, velocityDisocclusion);
+        float alpha = lerp(0.1, 0.9, velocityDisocclusion);
         float lumaCurrent = currentYCoCg.r;
         float lumaHistory = historyYCoCg.r;
         float lumaDiff = abs(lumaCurrent - lumaHistory) / max(lumaCurrent, 0.2);

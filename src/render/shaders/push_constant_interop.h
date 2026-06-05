@@ -1154,11 +1154,7 @@ SHADER_PUBLIC struct RelaxAtrousPushConstant
     SHADER_PUBLIC uint32_t diffIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
-    SHADER_PUBLIC uint32_t outSpecVarIndex;
-    SHADER_PUBLIC uint32_t outDiffVarIndex;
     SHADER_PUBLIC uint32_t gStepSize;
-    SHADER_PUBLIC uint32_t _pad0;
-    SHADER_PUBLIC uint32_t _pad1;
 };
 
 SHADER_PUBLIC struct RelaxAntiFireflyPushConstant

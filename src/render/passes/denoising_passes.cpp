@@ -438,6 +438,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     const StringID gbufferOne = targets.gbufferOne;
     const StringID depth = targets.depthStencil;
+    const StringID specInput = targets.intermediateTwo;
+    const StringID diffInput = targets.intermediateOne;
     const StringID noisyInput = targets.colorOutput;
 
     // ----------------------------------------------------------------
@@ -481,7 +483,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gPrevFrustumRight = glm::vec4(prevRight * tanHalfFovX, 0.0f);
     rc.gPrevFrustumUp = glm::vec4(prevUp * tanHalfFovY, 0.0f);
     rc.gCameraDelta = glm::vec4(camPos - prevCamPos, 0.0f);
-    rc.gMvScale = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f); // screen-space UV delta, xy only
+    rc.gMvScale = glm::vec4(0.5f, 0.5f, 0.0f, 0.0f); // NDC (prev-curr) -> UV delta: *0.5, matches SVGF/ReSTIR reproject
 
     rc.gJitter = glm::vec2(0.0f);
     rc.gResolutionScale = glm::vec2(1.0f);
@@ -509,6 +511,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gDepthThreshold = 0.003f;
     rc.gRoughnessFraction = 0.15f;
     rc.gSpecVarianceBoost = 1.0f;
+    rc.gDiffBlurRadius = 30.0f;
+    rc.gSpecBlurRadius = 50.0f;
     rc.gLobeAngleFraction = 0.15f;
     rc.gSpecLobeAngleSlack = 0.15f;
     rc.gHistoryFixEdgeStoppingNormalPower = 8.0f;
@@ -595,17 +599,18 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(noisyInput);
+        pass.ReadSampledImage(specInput);
+        pass.ReadSampledImage(diffInput);
         pass.WriteStorageImage(SID("relax_spec_prepass"));
         pass.WriteStorageImage(SID("relax_diff_prepass"));
-        pass.Execute([&graph, pipelineManager, depth, gbufferOne, noisyInput, width, height](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, depth, gbufferOne, specInput, diffInput, width, height](VkCommandBuffer cmd) {
             RelaxPrepassPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
                 .viewZIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .specInputIndex = graph.GetSampledImageViewDescriptorIndex(noisyInput),
-                .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(noisyInput),
+                .specInputIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
+                .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
                 .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_prepass")),
                 .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_prepass")),
             };
@@ -627,10 +632,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     graph.CreateTexture(SID("relax_spec_hit_dist"), hitDistInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("relax_spec_reproj_confidence"), reprConfInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("relax_prev_nr"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_spec_0"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_spec_1"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_diff_0"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_diff_1"), colorInfo, {std::nullopt}, true);
 
     // Carry ping-pong history textures to next frame
     graph.CarryTextureToNextFrame(SID("relax_spec_illum"), SID("relax_spec_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -642,12 +643,10 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     graph.CarryTextureToNextFrame(SID("relax_prev_nr"), SID("relax_prev_nr_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
 
-    // ----------------------------------------------------------------
     // Pass 3: Temporal Accumulation
-    // ----------------------------------------------------------------
     {
-        const StringID specIn = params.enablePrepass ? SID("relax_spec_prepass") : noisyInput;
-        const StringID diffIn = params.enablePrepass ? SID("relax_diff_prepass") : noisyInput;
+        const StringID specIn = params.enablePrepass ? SID("relax_spec_prepass") : specInput;
+        const StringID diffIn = params.enablePrepass ? SID("relax_diff_prepass") : diffInput;
 
         auto& pass = graph.AddPass(SID("[RELAX] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
         pass.ReadBuffer(SID("relax_constants"));
@@ -717,9 +716,13 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     if (viewFamily.debugResourceName == "relax_spec_illum") { return; }
 
-    // ----------------------------------------------------------------
+
+    graph.CreateTexture(SID("relax_atrous_spec_0"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_atrous_spec_1"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_atrous_diff_0"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_atrous_diff_1"), colorInfo, {std::nullopt}, true);
+
     // Pass 4: History Fix
-    // ----------------------------------------------------------------
     {
         auto& pass = graph.AddPass(SID("[RELAX] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
         pass.ReadBuffer(SID("relax_constants"));
@@ -756,6 +759,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     // Pass 5: History Clamping
     // ----------------------------------------------------------------
     {
+        const StringID specNoisy = params.enablePrepass ? SID("relax_spec_prepass") : specInput;
+        const StringID diffNoisy = params.enablePrepass ? SID("relax_diff_prepass") : diffInput;
+
         auto& pass = graph.AddPass(SID("[RELAX] History Clamping"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
@@ -763,13 +769,13 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadWriteImage(SID("relax_history_length"));
         pass.ReadWriteImage(SID("relax_spec_fast"));
         pass.ReadWriteImage(SID("relax_diff_fast"));
-        pass.ReadSampledImage(SID("relax_atrous_spec_0")); // noisy (post history fix)
+        pass.ReadSampledImage(SID("relax_atrous_spec_0")); // history-fixed normal history
         pass.ReadSampledImage(SID("relax_atrous_diff_0"));
-        pass.ReadSampledImage(SID("relax_spec_illum"));
-        pass.ReadSampledImage(SID("relax_diff_illum"));
+        pass.ReadSampledImage(specNoisy); // noisy preblur reference
+        pass.ReadSampledImage(diffNoisy);
         pass.WriteStorageImage(SID("relax_atrous_spec_1"));
         pass.WriteStorageImage(SID("relax_atrous_diff_1"));
-        pass.Execute([&graph, pipelineManager, depth, width, height](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, depth, specNoisy, diffNoisy, width, height](VkCommandBuffer cmd) {
             RelaxHistoryClampingPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -777,10 +783,10 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_history_length")),
                 .specFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_spec_fast")),
                 .diffFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_fast")),
-                .specNoisyIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_atrous_spec_0")),
-                .diffNoisyIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_atrous_diff_0")),
-                .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_spec_illum")),
-                .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_illum")),
+                .specNoisyIndex = graph.GetSampledImageViewDescriptorIndex(specNoisy),
+                .diffNoisyIndex = graph.GetSampledImageViewDescriptorIndex(diffNoisy),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_atrous_spec_0")),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_atrous_diff_0")),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_spec_1")),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_diff_1")),
                 .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_fast")),
@@ -796,26 +802,57 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     if (viewFamily.debugResourceName == "relax_atrous_spec_1") { return; }
 
-    // ----------------------------------------------------------------
-    // Pass 6: A-Trous (N iterations, ping-pong between atrous_0/1)
-    // ----------------------------------------------------------------
-    // After history clamping: spec/diff in relax_atrous_spec/diff_1
-    // Atrous iter 0: read _1, write _0
-    // Atrous iter 1: read _0, write _1
-    // ...last iter writes to targets.output (spec) and noisyInput (diff absorbed)
-    {
-        const StringID atrousSpec[2] = {SID("relax_atrous_spec_0"), SID("relax_atrous_spec_1")};
-        const StringID atrousDiff[2] = {SID("relax_atrous_diff_0"), SID("relax_atrous_diff_1")};
-        const int32_t iters = glm::max(1, params.atrousIterations);
+    // Pass 6: Anti-Firefly
+    // History clamping wrote the clamped normal history into _1.
+    const StringID atrousSpec[2] = {SID("relax_atrous_spec_0"), SID("relax_atrous_spec_1")};
+    const StringID atrousDiff[2] = {SID("relax_atrous_diff_0"), SID("relax_atrous_diff_1")};
+    int32_t readIdx = 1;
 
-        // After history clamping, data is in _1
-        int32_t readIdx = 1;
+    if (params.enableAntiFirefly) {
+        const StringID ffSpecIn = atrousSpec[readIdx];
+        const StringID ffDiffIn = atrousDiff[readIdx];
+        const StringID ffSpecOut = atrousSpec[1 - readIdx];
+        const StringID ffDiffOut = atrousDiff[1 - readIdx];
+
+        auto& pass = graph.AddPass(SID("[RELAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+        pass.ReadBuffer(SID("relax_constants"));
+        pass.ReadSampledImage(SID("relax_tiles"));
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(ffSpecIn);
+        pass.ReadSampledImage(ffDiffIn);
+        pass.WriteStorageImage(ffSpecOut);
+        pass.WriteStorageImage(ffDiffOut);
+
+        pass.Execute([&graph, pipelineManager, gbufferOne, depth, ffSpecIn, ffDiffIn, ffSpecOut, ffDiffOut, width, height](VkCommandBuffer cmd) {
+            RelaxAntiFireflyPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("relax_constants")),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .viewZIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex(ffSpecIn),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex(ffDiffIn),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(ffSpecOut),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(ffDiffOut),
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_antifirefly"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
+        readIdx = 1 - readIdx;
+    }
+
+    // Pass 7: A-Trous (N iterations, ping-pong between atrous_0/1).
+    // Last iteration writes into intermediates so remodulate can composite them.
+    {
+        const int32_t iters = glm::max(1, params.atrousIterations);
 
         for (int32_t i = 0; i < iters; i++) {
             const int32_t writeIdx = 1 - readIdx;
-            const bool isLast = (i == iters - 1) && !params.enableAntiFirefly;
-            const StringID specOut = isLast ? noisyInput : atrousSpec[writeIdx];
-            const StringID diffOut = atrousDiff[writeIdx]; // diff goes to intermediate always
+            const bool isLast = (i == iters - 1);
+            const StringID specOut = isLast ? specInput : atrousSpec[writeIdx];
+            const StringID diffOut = isLast ? diffInput : atrousDiff[writeIdx];
             const uint32_t stepSize = 1u << static_cast<uint32_t>(i);
 
             char passName[32];
@@ -849,8 +886,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
                         .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specOut),
                         .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
-                        .outSpecVarIndex = graph.GetStorageImageViewDescriptorIndex(specOut),
-                        .outDiffVarIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
                         .gStepSize = stepSize,
                     };
                     const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_atrous"));
@@ -861,42 +896,40 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
             readIdx = writeIdx;
         }
+    }
 
-        if (viewFamily.debugResourceName == "relax_atrous_spec_0" || viewFamily.debugResourceName == "relax_atrous_spec_1") { return; }
+    // Pass 8: Remodulate denoised diff/spec into final color
+    //   final = diffuse * albedo + specular * specReflectance + emissive
+    {
+        const StringID gbufferTwo = targets.gbufferTwo;
 
-        // ----------------------------------------------------------------
-        // Pass 7: Anti-Firefly (optional) — reads last atrous output, writes to targets.output
-        // ----------------------------------------------------------------
-        if (params.enableAntiFirefly) {
-            const StringID ffSpecIn = atrousSpec[readIdx];
-            const StringID ffDiffIn = atrousDiff[readIdx];
+        auto& pass = graph.AddPass(SID("[RELAX] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+        pass.ReadBuffer(SCENE_DATA_BUFFER);
+        pass.ReadSampledImage(diffInput);
+        pass.ReadSampledImage(specInput);
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(gbufferTwo);
+        pass.ReadSampledImage(depth);
+        pass.WriteStorageImage(noisyInput);
 
-            auto& pass = graph.AddPass(SID("[RELAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
-            pass.ReadBuffer(SID("relax_constants"));
-            pass.ReadSampledImage(SID("relax_tiles"));
-            pass.ReadSampledImage(gbufferOne);
-            pass.ReadSampledImage(depth);
-            pass.ReadSampledImage(ffSpecIn);
-            pass.ReadSampledImage(ffDiffIn);
-            pass.WriteStorageImage(noisyInput); // final output back into targets.output
-
-            pass.Execute([&graph, pipelineManager, gbufferOne, depth, ffSpecIn, ffDiffIn, noisyInput, width, height](VkCommandBuffer cmd) {
-                RelaxAntiFireflyPushConstant pc{
-                    .constants = graph.GetBufferAddress(SID("relax_constants")),
-                    .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
-                    .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                    .viewZIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
-                    .specIndex = graph.GetSampledImageViewDescriptorIndex(ffSpecIn),
-                    .diffIndex = graph.GetSampledImageViewDescriptorIndex(ffDiffIn),
-                    .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(noisyInput),
-                    .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(noisyInput),
-                };
-                const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_antifirefly"));
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
-                vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
-            });
-        }
+        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height](VkCommandBuffer cmd) {
+            ReSTIRRemodulatePushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .sceneDataIndex = 0,
+                .diffuseIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
+                .specularIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(noisyInput),
+                .width = width,
+                .height = height,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
     }
 }
 } // Render

@@ -28,9 +28,15 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
     float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, pixelPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
 
-    if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange) ||
-        historyLength > rc.gHistoryFixFrameNum || rc.gHistoryFixFrameNum == 1.0)
+    if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
         return;
+
+    if (historyLength > rc.gHistoryFixFrameNum || rc.gHistoryFixFrameNum == 1.0)
+    {
+        rdgStorageFloat4[pc.outSpecIndex][pixelPos] = rdgTexturesFloat4[pc.specIndex].Load(int3(pixelPos, 0));
+        rdgStorageFloat4[pc.outDiffIndex][pixelPos] = rdgTexturesFloat4[pc.diffIndex].Load(int3(pixelPos, 0));
+        return;
+    }
 
     float4 centerNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(pixelPos, 0)), viewToWorld);
     float3 centerNormal = centerNR.rgb;

@@ -47,8 +47,8 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_CONST int MAX_POINT_LIGHTS = 128;
-SHADER_CONST int MAX_AREA_LIGHTS = 128;
+SHADER_CONST int MAX_POINT_LIGHTS = 256;
+SHADER_CONST int MAX_AREA_LIGHTS = 256;
 
 /** Directional light: direction (xyz) + intensity (w), color packed as RGBA8 unorm. */
 SHADER_PUBLIC struct DirectionalLightData
