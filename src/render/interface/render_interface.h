@@ -481,6 +481,68 @@ struct ViewFamilyWatermarks
     size_t spriteBatches{16};
 };
 
+enum class LightingMode : uint8_t
+{
+    Default = 0,
+    ReSTIR,
+    GroundTruthReSTIR,
+};
+
+enum class ReSTIRDebugStop : uint8_t
+{
+    Spatial2 = 0,
+    Spatial1,
+    Temporal,
+    Generate,
+};
+
+struct ReSTIRParams
+{
+    ReSTIRDebugStop debugStop{ReSTIRDebugStop::Spatial2};
+    uint32_t spatialRadius{30};
+    uint32_t spatialNeighbors{5};
+    uint32_t spatialMCap{500};
+    uint32_t temporalMCap{20u * 33u};
+
+    // todo: Disabled atrous and asvgf. Readd as needed
+    enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
+    DenoiserMode denoiserMode{DenoiserMode::ASVGF};
+
+    struct ATrousParams
+    {
+        int32_t iterations{4};
+        float sigmaLuminance{2.0f};
+        float sigmaNormal{128.0f};
+        float sigmaDepth{0.01f};
+    };
+    ATrousParams atrous{};
+
+    struct SVGFParams
+    {
+        float alphaMin{0.1f};
+        float gradientThreshold{0.0f};
+        float sigmaLuminance{4.0f};
+        float sigmaNormal{64.0f};
+        float sigmaDepth{0.05f};
+        int32_t atrousIterations{4};
+    };
+    SVGFParams svgf{};
+
+    struct RELAXParams
+    {
+        float denoisingRange{1000.f};
+        float disocclusionThreshold{0.005f};
+        float specMaxAccumFrames{32.f};
+        float specMaxFastAccumFrames{4.f};
+        float diffMaxAccumFrames{32.f};
+        float diffMaxFastAccumFrames{4.f};
+        int32_t atrousIterations{3};
+        bool enablePrepass{true};
+        bool enableAntiFirefly{true};
+    };
+    RELAXParams relax{};
+};
+
 struct ViewFamily
 {
     ViewFamily() = default;
@@ -543,6 +605,9 @@ struct ViewFamily
     ArenaVector<UIDrawCommand> uiDrawList{};
     ArenaVector<UIGlyphQuad> uiGlyphQuads{};
 
+    // Lighting
+    LightingMode lightingMode{LightingMode::Default};
+    bool bResetGroundTruth{false};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
 
@@ -552,62 +617,6 @@ struct ViewFamily
     ArenaVector<SpriteBatch> spriteBatches{};
 };
 
-enum class ReSTIRDebugStop : uint8_t
-{
-    Spatial2 = 0,
-    Spatial1,
-    Temporal,
-    Generate,
-};
-
-struct ReSTIRParams
-{
-    bool bGroundTruthMode{false};
-    bool bResetGroundTruth{false};
-
-    ReSTIRDebugStop debugStop{ReSTIRDebugStop::Spatial2};
-    uint32_t spatialRadius{30};
-    uint32_t spatialNeighbors{5};
-    uint32_t spatialMCap{500};
-    uint32_t temporalMCap{20u * 33u};
-
-    enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
-    DenoiserMode denoiserMode{DenoiserMode::ASVGF};
-
-    struct ATrousParams
-    {
-        int32_t iterations{4};
-        float sigmaLuminance{2.0f};
-        float sigmaNormal{128.0f};
-        float sigmaDepth{0.01f};
-    };
-    ATrousParams atrous{};
-
-    struct SVGFParams
-    {
-        float alphaMin{0.1f};
-        float gradientThreshold{0.0f};
-        float sigmaLuminance{4.0f};
-        float sigmaNormal{64.0f};
-        float sigmaDepth{0.05f};
-        int32_t atrousIterations{4};
-    };
-    SVGFParams svgf{};
-
-    struct RELAXParams
-    {
-        float denoisingRange{1000.f};
-        float disocclusionThreshold{0.005f};
-        float specMaxAccumFrames{32.f};
-        float specMaxFastAccumFrames{4.f};
-        float diffMaxAccumFrames{32.f};
-        float diffMaxFastAccumFrames{4.f};
-        int32_t atrousIterations{3};
-        bool enablePrepass{true};
-        bool enableAntiFirefly{true};
-    };
-    RELAXParams relax{};
-};
 
 struct FrameBuffer
 {

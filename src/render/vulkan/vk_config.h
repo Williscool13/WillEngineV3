@@ -37,7 +37,7 @@ inline constexpr VkFormat VISIBILITY_DERIVATIVES_FORMAT = VK_FORMAT_R16G16B16A16
 // R: Normal oct16 RG16 packed into R32
 // G: Motion vectors XY R16G16 | 16-bit spare
 // B: Roughness 15-bit | Metalness 1-bit
-// A: spare
+// A: bit 0 = geometry marker (shading passes write 1; cleared 0 = sky/no geometry) | 31-bit spare
 inline constexpr VkFormat GBUFFER_TARGET_ONE = VK_FORMAT_R32G32B32A32_UINT;
 
 // R: Albedo RGB8 | 8-bit spare

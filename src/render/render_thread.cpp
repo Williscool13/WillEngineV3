@@ -485,23 +485,34 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
             const Core::ReSTIRParams& restir = frameBuffer.restir;
-            if (restir.bGroundTruthMode) {
-                if (restir.bResetGroundTruth) { groundTruthAccumCount = 0; }
-                SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, restir.bResetGroundTruth, groundTruthAccumCount, frameNumber);
-                groundTruthAccumCount += 4;
-            }
-            else {
-                SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir);
-                const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
-                SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber);
-                if (bSVGF) {
-                    SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.svgf);
+            switch (viewFamily.lightingMode) {
+                case Core::LightingMode::Default:
+                {
+                    SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber);
+                    break;
                 }
-                else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous) {
-                    SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.atrous);
+                case Core::LightingMode::ReSTIR:
+                {
+                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir);
+                    const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
+                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber);
+
+                    //SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.svgf);
+                    //SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.atrous);
+                    if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
+                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, restir.relax, frameNumber);
+                    }
+                    else {
+                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+                    }
+                    break;
                 }
-                else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                    SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, restir.relax, frameNumber);
+                case Core::LightingMode::GroundTruthReSTIR:
+                {
+                    if (viewFamily.bResetGroundTruth) { groundTruthAccumCount = 0; }
+                    SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, groundTruthAccumCount, frameNumber);
+                    groundTruthAccumCount += 4;
+                    break;
                 }
             }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);

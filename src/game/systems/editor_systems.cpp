@@ -524,8 +524,75 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
 
         ImGui::Separator();
+
         ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
         ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
+        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Grond-Truth ReSTIR"};
+        Core::LightingMode prevLightingMode = state->lighting.lightingMode;
+        int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
+        if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, 3)) {
+            state->lighting.lightingMode = static_cast<Core::LightingMode>(lightingModeIndex);
+            bProjectConfigChanged = true;
+
+            if (prevLightingMode != Core::LightingMode::GroundTruthReSTIR && state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR) {
+                state->lighting.bResetGroundTruth = true;
+            }
+        }
+
+        ImGui::Separator();
+
+        auto bIsGroundTruth = state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR;
+        ImGui::BeginDisabled(bIsGroundTruth);
+        // Shading Pipeline Overrides
+        {
+            Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
+            const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
+            Core::Arena& arena = ctx->editorArena.Get();
+
+            int currentShader = pipelineCount; // "None"
+            for (int32_t i = 0; i < pipelineCount; ++i) {
+                if (state->debug.shadingShaderOverride == shadingPipelines[i]) {
+                    currentShader = i;
+                    break;
+                }
+            }
+
+            Core::ArenaArray<Core::InlineString<> > labels(&arena, pipelineCount + 1);
+            labels[0] = Core::InlineString("None");
+            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString(shadingPipelines[i].ToString()); }
+            const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
+            int selected = comboIndex;
+            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
+            if (ImGui::Combo("Shading Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
+                state->debug.shadingShaderOverride = selected == 0 ? StringID{} : shadingPipelines[selected - 1];
+            }
+        }
+        // Lighting Pipeline Overrides
+        {
+            Core::Span<const StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelines();
+            const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
+            Core::Arena& arena = ctx->editorArena.Get();
+
+            int currentShader = pipelineCount; // "None"
+            for (int32_t i = 0; i < pipelineCount; ++i) {
+                if (state->debug.lightingShaderOverride == lightingPipelines[i]) {
+                    currentShader = i;
+                    break;
+                }
+            }
+
+            Core::ArenaArray<Core::InlineString<> > labels(&arena, pipelineCount + 1);
+            labels[0] = Core::InlineString("None");
+            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString(lightingPipelines[i].ToString()); }
+            const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
+            int selected = comboIndex;
+            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
+            if (ImGui::Combo("Lighting Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
+                state->debug.lightingShaderOverride = selected == 0 ? StringID{} : lightingPipelines[selected - 1];
+            }
+        }
+        ImGui::EndDisabled();
+        ImGui::Separator();
 
         ImGui::Text("Current Debug View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());
         ImGui::SameLine();
@@ -538,7 +605,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Separator();
         if (ImGui::CollapsingHeader("ReSTIR DI Settings")) {
             Core::ReSTIRParams& restir = state->debug.restir;
-            if (ImGui::Checkbox("Ground Truth Mode", &restir.bGroundTruthMode)) { bProjectConfigChanged = true; }
             ImGui::Separator();
             int spatialRadius = static_cast<int>(restir.spatialRadius);
             if (ImGui::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
@@ -568,54 +634,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 bProjectConfigChanged = true;
             }
         }
-
-        ImGui::Separator();
-        ImGui::BeginDisabled(state->debug.restir.bGroundTruthMode); {
-            Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
-            const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
-            Core::Arena& arena = ctx->editorArena.Get();
-
-            int currentShader = pipelineCount; // "None"
-            for (int32_t i = 0; i < pipelineCount; ++i) {
-                if (state->debug.shadingShaderOverride == shadingPipelines[i]) {
-                    currentShader = i;
-                    break;
-                }
-            }
-
-            Core::ArenaArray<Core::InlineString<64> > labels(&arena, pipelineCount + 1);
-            labels[0] = Core::InlineString<64>("None");
-            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString<64>(shadingPipelines[i].ToString()); }
-            const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
-            int selected = comboIndex;
-            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64> >*>(data))[idx].c_str(); };
-            if (ImGui::Combo("Shading Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
-                state->debug.shadingShaderOverride = selected == 0 ? StringID{} : shadingPipelines[selected - 1];
-            }
-        } {
-            Core::Span<const StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelines();
-            const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
-            Core::Arena& arena = ctx->editorArena.Get();
-
-            int currentShader = pipelineCount; // "None"
-            for (int32_t i = 0; i < pipelineCount; ++i) {
-                if (state->debug.lightingShaderOverride == lightingPipelines[i]) {
-                    currentShader = i;
-                    break;
-                }
-            }
-
-            Core::ArenaArray<Core::InlineString<64> > labels(&arena, pipelineCount + 1);
-            labels[0] = Core::InlineString<64>("None");
-            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString<64>(lightingPipelines[i].ToString()); }
-            const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
-            int selected = comboIndex;
-            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64> >*>(data))[idx].c_str(); };
-            if (ImGui::Combo("Lighting Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
-                state->debug.lightingShaderOverride = selected == 0 ? StringID{} : lightingPipelines[selected - 1];
-            }
-        }
-        ImGui::EndDisabled();
 
         ImGui::BeginDisabled(true);
         ImGui::Checkbox("Enable Portals", &state->debug.bEnablePortal);
@@ -762,6 +780,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         if (bProjectConfigChanged && state->projectConfig.bAutoSave) {
             state->projectConfig.restir = state->debug.restir;
+            state->projectConfig.lightingMode = state->lighting.lightingMode;
             Engine::WriteProjectConfig(state->projectConfig);
         }
     }
@@ -2164,14 +2183,14 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                             const bool isUnknown = currentShader < 0;
                             const int32_t optionCount = isUnknown ? pipelineCount + 1 : pipelineCount;
-                            Core::ArenaArray<Core::InlineString<64> > labels(&arena, optionCount);
-                            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString<64>(shadingPipelines[i].ToString()); }
+                            Core::ArenaArray<Core::InlineString<> > labels(&arena, optionCount);
+                            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString(shadingPipelines[i].ToString()); }
                             if (isUnknown) {
-                                labels[pipelineCount] = Core::InlineString<64>("(unknown) ");
+                                labels[pipelineCount] = Core::InlineString("(unknown) ");
                                 labels[pipelineCount].Append(editMat.fragmentShader.ToString());
                                 currentShader = pipelineCount;
                             }
-                            auto shadingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64> >*>(data))[idx].c_str(); };
+                            auto shadingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
                             if (ImGui::Combo("Fragment Shader", &currentShader, shadingGetter, &labels, static_cast<int32_t>(labels.Size()))) {
                                 if (currentShader < pipelineCount) {
                                     editMat.fragmentShader = shadingPipelines[currentShader];
@@ -2193,14 +2212,14 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                             const bool isUnknown = currentShader < 0;
                             const int32_t optionCount = isUnknown ? pipelineCount + 1 : pipelineCount;
-                            Core::ArenaArray<Core::InlineString<64> > labels(&arena, optionCount);
-                            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString<64>(lightingPipelines[i].ToString()); }
+                            Core::ArenaArray<Core::InlineString<> > labels(&arena, optionCount);
+                            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString(lightingPipelines[i].ToString()); }
                             if (isUnknown) {
-                                labels[pipelineCount] = Core::InlineString<64>("(unknown) ");
+                                labels[pipelineCount] = Core::InlineString("(unknown) ");
                                 labels[pipelineCount].Append(editMat.lightingShader.ToString());
                                 currentShader = pipelineCount;
                             }
-                            auto lightingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64> >*>(data))[idx].c_str(); };
+                            auto lightingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
                             if (ImGui::Combo("Lighting Shader", &currentShader, lightingGetter, &labels, static_cast<int32_t>(labels.Size()))) {
                                 if (currentShader < pipelineCount) {
                                     editMat.lightingShader = lightingPipelines[currentShader];

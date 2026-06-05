@@ -40,6 +40,10 @@ ProjectConfig ReadProjectConfig()
         config.bAutoSave = j["bAutoSave"].get<bool>();
     }
 
+    if (j.contains("lightingMode") && j["lightingMode"].is_number_integer()) {
+        config.lightingMode = static_cast<Core::LightingMode>(j["lightingMode"].get<uint32_t>());
+    }
+
     if (j.contains("restir") && j["restir"].is_object()) {
         const auto& r = j["restir"];
         auto getBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
@@ -47,7 +51,6 @@ ProjectConfig ReadProjectConfig()
         auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
 
         Core::ReSTIRParams& p = config.restir;
-        p.bGroundTruthMode = getBool("bGroundTruthMode", p.bGroundTruthMode);
         p.debugStop = static_cast<Core::ReSTIRDebugStop>(getInt("debugStop", static_cast<int32_t>(p.debugStop)));
         p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
         p.spatialNeighbors = getUint("spatialNeighbors", p.spatialNeighbors);
@@ -174,10 +177,10 @@ bool WriteProjectConfig(const ProjectConfig& config)
     nlohmann::json j;
     j["defaultScene"] = std::string_view(config.defaultScene.c_str(), config.defaultScene.Size());
     j["bAutoSave"] = config.bAutoSave;
+    j["lightingMode"] = config.lightingMode;
 
     const Core::ReSTIRParams& p = config.restir;
     j["restir"] = {
-        {"bGroundTruthMode", p.bGroundTruthMode},
         {"debugStop", static_cast<int32_t>(p.debugStop)},
         {"spatialRadius", p.spatialRadius},
         {"spatialNeighbors", p.spatialNeighbors},

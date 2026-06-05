@@ -483,6 +483,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(SVGFAtrousWaveletPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("svgf_remodulate"), src / "svgf_remodulate_compute.spv",
                             sizeof(SVGFRemodulatePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate_compute.spv",
+                            sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("relax_classify_tiles"), src / "relax_classify_tiles_compute.spv",
                             sizeof(RelaxClassifyTilesPushConstant), PipelineCategory::Critical);

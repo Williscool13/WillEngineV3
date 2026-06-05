@@ -471,6 +471,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_variance_estimate.slang compute SVGFVarianceEstimateMain svgf_variance_estimate
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_atrous_wavelet.slang compute SVGFAtrousWaveletMain svgf_atrous_wavelet
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf_remodulate.slang compute SVGFRemodulateMain svgf_remodulate
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir_remodulate.slang compute ReSTIRRemodulateMain restir_remodulate
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_classify_tiles.slang compute RelaxClassifyTilesMain relax_classify_tiles
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_prepass.slang compute RelaxPrepassMain relax_prepass
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_temporal_accumulation.slang compute RelaxTemporalAccumulationMain relax_temporal_accumulation

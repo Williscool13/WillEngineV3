@@ -80,7 +80,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadingPush
         PackNormalOct16(shadingNormal),
         PackMotionVectors(shadingInputs.velocity),
         PackPBR(roughness, metallic),
-        0u
+        1u
     );
     rdgStorageUInt4[pc.gbufferOneIndex][pixel] = gbufferOne;
     rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGB8(albedo), PackEmissiveRGBE(emissiveColor));

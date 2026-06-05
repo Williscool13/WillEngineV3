@@ -43,7 +43,4 @@ void RelaxClassifyTilesMain(uniform RelaxClassifyTilesPushConstant pc,
     if (threadIndex == 0) {
         rdgStorageFloat[pc.tilesOutIndex][gid] = s_isSky > 255 ? 1.0 : 0.0;
     }
-    //float z = rdgTexturesFloat[pc.viewZIndex].Load(int3(pixelPos, 0)).r;
-    //float screenDepth = ScreenToViewSpaceDepth(z, rc.depthLinearizeMult, rc.depthLinearizeAdd);
-    //rdgStorageFloat[pc.tilesOutIndex][gid] = screenDepth / 100.0f;
 }

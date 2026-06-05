@@ -141,6 +141,9 @@ struct PhysicsState
 
 struct LightingState
 {
+    Core::LightingMode lightingMode{Core::LightingMode::Default};
+    bool bResetGroundTruth{false};
+
     Core::DirectionalLight directionalLight{};
     Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
     Core::ShadowConfiguration shadowConfig;

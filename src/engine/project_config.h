@@ -14,6 +14,7 @@ struct ProjectConfig
 {
     Core::InlineString<256> defaultScene{};
     bool bAutoSave{false};
+    Core::LightingMode lightingMode{false};
 
     Core::ReSTIRParams restir{};
 
