@@ -32,7 +32,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         const Core::ViewFamily& viewFamily,
                         Core::Array<uint32_t, 2> renderExtent,
                         const RenderTargets& targets,
-                        const Core::ReSTIRParams::RELAXParams& params,
+                        const Core::RELAXParams& params,
                         uint64_t frameNumber);
 } // Render
 

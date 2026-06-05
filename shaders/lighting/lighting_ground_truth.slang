@@ -93,6 +93,8 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 dtid : SV_Disp
 
                 float geomTerm = ls.cosLight / max(ls.dist * ls.dist, 0.0001);
                 float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
+                //float3 f = (specular) * ls.cosShade * geomTerm * al.intensity * alColor * ls.attenuation;
+                // float3 f = (diffuse) * ls.cosShade * geomTerm * al.intensity * alColor * ls.attenuation;
                 float3 f = (diffuse + specular) * ls.cosShade * geomTerm * al.intensity * alColor * ls.attenuation;
 
                 directLight = f * float(areaLightCount) * vs.area;

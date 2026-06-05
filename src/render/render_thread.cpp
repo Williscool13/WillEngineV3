@@ -485,6 +485,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
             const Core::ReSTIRParams& restir = frameBuffer.restir;
+            const Core::RELAXParams& relax = frameBuffer.relax;
             switch (viewFamily.lightingMode) {
                 case Core::LightingMode::Default:
                 {
@@ -500,7 +501,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     //SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.svgf);
                     //SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.atrous);
                     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, restir.relax, frameNumber);
+                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber);
                     }
                     else {
                         SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
@@ -542,6 +543,32 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
         }*/
+
+        // Copy depth before any UI/editor passes write to it, so depth_history is clean scene depth
+        {
+            renderGraph->CreateTexture(SID("depth_clean"), TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+            auto& copyPass = renderGraph->AddPass(SID("Depth Clean Copy"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
+            copyPass.ReadCopyImage(targets.depthStencil);
+            copyPass.WriteCopyImage(SID("depth_clean"));
+            copyPass.Execute([&graph = *renderGraph, depth = targets.depthStencil, w = renderExtent[0], h = renderExtent[1]](VkCommandBuffer cmd) {
+                VkImageCopy2 region{};
+                region.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
+                region.srcSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
+                region.dstSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
+                region.extent = {w, h, 1};
+
+                VkCopyImageInfo2 copyInfo{};
+                copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
+                copyInfo.srcImage = graph.GetImageHandle(depth);
+                copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                copyInfo.dstImage = graph.GetImageHandle(SID("depth_clean"));
+                copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                copyInfo.regionCount = 1;
+                copyInfo.pRegions = &region;
+
+                vkCmdCopyImage2(cmd, &copyInfo);
+            });
+        }
 
         SetupTextForwardPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
         SetupSpritesPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
@@ -830,7 +857,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     });
 
     // For Hi-Z, ReSTIR-DI, SVGF
-    renderGraph->CarryTextureToNextFrame(targets.depthStencil, SID("depth_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    renderGraph->CarryTextureToNextFrame(SID("depth_clean"), SID("depth_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
     renderGraph->CarryTextureToNextFrame(targets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT); {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);

@@ -17,6 +17,7 @@ struct ProjectConfig
     Core::LightingMode lightingMode{false};
 
     Core::ReSTIRParams restir{};
+    Core::RELAXParams relax{};
 
     Core::AntiAliasingMode aaMode{Core::AntiAliasingMode::TAA};
     Core::GTAOConfiguration gtaoConfig{};

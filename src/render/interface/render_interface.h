@@ -496,6 +496,56 @@ enum class ReSTIRDebugStop : uint8_t
     Generate,
 };
 
+struct RELAXParams
+{
+    // General
+    float denoisingRange{1000.f};
+    float disocclusionThreshold{0.005f};
+    float depthThreshold{0.003f};
+    float framerateScale{1.f};
+
+    // Accumulation
+    float specMaxAccumFrames{32.f};
+    float specMaxFastAccumFrames{4.f};
+    float diffMaxAccumFrames{32.f};
+    float diffMaxFastAccumFrames{4.f};
+    float historyAccelerationAmount{1.f};
+
+    // Prepass
+    float diffBlurRadius{30.f};
+    float specBlurRadius{50.f};
+    float minHitDistanceWeight{0.f};
+
+    // A-Trous / edge stopping
+    int32_t atrousIterations{3};
+    float lobeAngleFraction{0.15f};
+    float roughnessFraction{0.15f};
+    float specLobeAngleSlack{0.15f};
+    float specPhiLuminance{2.f};
+    float diffPhiLuminance{2.f};
+    float diffMaxLuminanceRelativeDifference{3.f};
+    float specMaxLuminanceRelativeDifference{3.f};
+    float luminanceEdgeStoppingRelaxation{0.5f};
+    float normalEdgeStoppingRelaxation{0.3f};
+    float roughnessEdgeStoppingRelaxation{0.3f};
+    float specVarianceBoost{1.f};
+    bool roughnessEdgeStoppingEnabled{true};
+
+    // History fix
+    float historyFixEdgeStoppingNormalPower{8.f};
+    float historyFixFrameNum{4.f};
+    float historyFixBasePixelStride{14.f};
+
+    // History clamp / reset
+    float fastHistoryClampingSigmaScale{2.f};
+    float historyResetTemporalSigmaScale{5.f};
+    float historyResetSpatialSigmaScale{1.f};
+    float historyResetAmount{0.5f};
+
+    bool enablePrepass{true};
+    bool enableAntiFirefly{true};
+};
+
 struct ReSTIRParams
 {
     ReSTIRDebugStop debugStop{ReSTIRDebugStop::Spatial2};
@@ -527,20 +577,6 @@ struct ReSTIRParams
         int32_t atrousIterations{4};
     };
     SVGFParams svgf{};
-
-    struct RELAXParams
-    {
-        float denoisingRange{1000.f};
-        float disocclusionThreshold{0.005f};
-        float specMaxAccumFrames{32.f};
-        float specMaxFastAccumFrames{4.f};
-        float diffMaxAccumFrames{32.f};
-        float diffMaxFastAccumFrames{4.f};
-        int32_t atrousIterations{3};
-        bool enablePrepass{true};
-        bool enableAntiFirefly{true};
-    };
-    RELAXParams relax{};
 };
 
 struct ViewFamily
@@ -661,6 +697,7 @@ struct FrameBuffer
     bool bEnableLightingBucketingVisualization = false;
     bool bLogRDG = false;
     ReSTIRParams restir{};
+    RELAXParams relax{};
 
     bool bTakeScreenshot{false};
 };

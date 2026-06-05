@@ -59,24 +59,67 @@ ProjectConfig ReadProjectConfig()
         p.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(getInt("denoiserMode", static_cast<int32_t>(p.denoiserMode)));
         if (r.contains("atrous") && r["atrous"].is_object()) {
             const auto& o = r["atrous"];
-            auto oInt   = [&](const char* k, int32_t def) { return o.contains(k) && o[k].is_number() ? o[k].get<int32_t>() : def; };
-            auto oFloat = [&](const char* k, float   def) { return o.contains(k) && o[k].is_number() ? o[k].get<float>()   : def; };
-            p.atrous.iterations     = oInt  ("iterations",     p.atrous.iterations);
+            auto oInt = [&](const char* k, int32_t def) { return o.contains(k) && o[k].is_number() ? o[k].get<int32_t>() : def; };
+            auto oFloat = [&](const char* k, float def) { return o.contains(k) && o[k].is_number() ? o[k].get<float>() : def; };
+            p.atrous.iterations = oInt("iterations", p.atrous.iterations);
             p.atrous.sigmaLuminance = oFloat("sigmaLuminance", p.atrous.sigmaLuminance);
-            p.atrous.sigmaNormal    = oFloat("sigmaNormal",    p.atrous.sigmaNormal);
-            p.atrous.sigmaDepth     = oFloat("sigmaDepth",     p.atrous.sigmaDepth);
+            p.atrous.sigmaNormal = oFloat("sigmaNormal", p.atrous.sigmaNormal);
+            p.atrous.sigmaDepth = oFloat("sigmaDepth", p.atrous.sigmaDepth);
         }
         if (r.contains("svgf") && r["svgf"].is_object()) {
             const auto& o = r["svgf"];
-            auto oInt   = [&](const char* k, int32_t def) { return o.contains(k) && o[k].is_number() ? o[k].get<int32_t>() : def; };
-            auto oFloat = [&](const char* k, float   def) { return o.contains(k) && o[k].is_number() ? o[k].get<float>()   : def; };
-            p.svgf.alphaMin          = oFloat("alphaMin",          p.svgf.alphaMin);
+            auto oInt = [&](const char* k, int32_t def) { return o.contains(k) && o[k].is_number() ? o[k].get<int32_t>() : def; };
+            auto oFloat = [&](const char* k, float def) { return o.contains(k) && o[k].is_number() ? o[k].get<float>() : def; };
+            p.svgf.alphaMin = oFloat("alphaMin", p.svgf.alphaMin);
             p.svgf.gradientThreshold = oFloat("gradientThreshold", p.svgf.gradientThreshold);
-            p.svgf.sigmaLuminance    = oFloat("sigmaLuminance",    p.svgf.sigmaLuminance);
-            p.svgf.sigmaNormal       = oFloat("sigmaNormal",       p.svgf.sigmaNormal);
-            p.svgf.sigmaDepth        = oFloat("sigmaDepth",        p.svgf.sigmaDepth);
-            p.svgf.atrousIterations  = oInt  ("atrousIterations",  p.svgf.atrousIterations);
+            p.svgf.sigmaLuminance = oFloat("sigmaLuminance", p.svgf.sigmaLuminance);
+            p.svgf.sigmaNormal = oFloat("sigmaNormal", p.svgf.sigmaNormal);
+            p.svgf.sigmaDepth = oFloat("sigmaDepth", p.svgf.sigmaDepth);
+            p.svgf.atrousIterations = oInt("atrousIterations", p.svgf.atrousIterations);
         }
+    }
+
+    if (j.contains("relax") && j["relax"].is_object()) {
+        const auto& r = j["relax"];
+        auto getBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
+        auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
+        auto getFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
+
+        Core::RELAXParams& p = config.relax;
+        p.denoisingRange = getFloat("denoisingRange", p.denoisingRange);
+        p.disocclusionThreshold = getFloat("disocclusionThreshold", p.disocclusionThreshold);
+        p.depthThreshold = getFloat("depthThreshold", p.depthThreshold);
+        p.framerateScale = getFloat("framerateScale", p.framerateScale);
+        p.specMaxAccumFrames = getFloat("specMaxAccumFrames", p.specMaxAccumFrames);
+        p.specMaxFastAccumFrames = getFloat("specMaxFastAccumFrames", p.specMaxFastAccumFrames);
+        p.diffMaxAccumFrames = getFloat("diffMaxAccumFrames", p.diffMaxAccumFrames);
+        p.diffMaxFastAccumFrames = getFloat("diffMaxFastAccumFrames", p.diffMaxFastAccumFrames);
+        p.historyAccelerationAmount = getFloat("historyAccelerationAmount", p.historyAccelerationAmount);
+        p.diffBlurRadius = getFloat("diffBlurRadius", p.diffBlurRadius);
+        p.specBlurRadius = getFloat("specBlurRadius", p.specBlurRadius);
+        p.minHitDistanceWeight = getFloat("minHitDistanceWeight", p.minHitDistanceWeight);
+        p.atrousIterations = getInt("atrousIterations", p.atrousIterations);
+        p.lobeAngleFraction = getFloat("lobeAngleFraction", p.lobeAngleFraction);
+        p.roughnessFraction = getFloat("roughnessFraction", p.roughnessFraction);
+        p.specLobeAngleSlack = getFloat("specLobeAngleSlack", p.specLobeAngleSlack);
+        p.specPhiLuminance = getFloat("specPhiLuminance", p.specPhiLuminance);
+        p.diffPhiLuminance = getFloat("diffPhiLuminance", p.diffPhiLuminance);
+        p.diffMaxLuminanceRelativeDifference = getFloat("diffMaxLuminanceRelativeDifference", p.diffMaxLuminanceRelativeDifference);
+        p.specMaxLuminanceRelativeDifference = getFloat("specMaxLuminanceRelativeDifference", p.specMaxLuminanceRelativeDifference);
+        p.luminanceEdgeStoppingRelaxation = getFloat("luminanceEdgeStoppingRelaxation", p.luminanceEdgeStoppingRelaxation);
+        p.normalEdgeStoppingRelaxation = getFloat("normalEdgeStoppingRelaxation", p.normalEdgeStoppingRelaxation);
+        p.roughnessEdgeStoppingRelaxation = getFloat("roughnessEdgeStoppingRelaxation", p.roughnessEdgeStoppingRelaxation);
+        p.specVarianceBoost = getFloat("specVarianceBoost", p.specVarianceBoost);
+        p.roughnessEdgeStoppingEnabled = getBool("roughnessEdgeStoppingEnabled", p.roughnessEdgeStoppingEnabled);
+        p.historyFixEdgeStoppingNormalPower = getFloat("historyFixEdgeStoppingNormalPower", p.historyFixEdgeStoppingNormalPower);
+        p.historyFixFrameNum = getFloat("historyFixFrameNum", p.historyFixFrameNum);
+        p.historyFixBasePixelStride = getFloat("historyFixBasePixelStride", p.historyFixBasePixelStride);
+        p.fastHistoryClampingSigmaScale = getFloat("fastHistoryClampingSigmaScale", p.fastHistoryClampingSigmaScale);
+        p.historyResetTemporalSigmaScale = getFloat("historyResetTemporalSigmaScale", p.historyResetTemporalSigmaScale);
+        p.historyResetSpatialSigmaScale = getFloat("historyResetSpatialSigmaScale", p.historyResetSpatialSigmaScale);
+        p.historyResetAmount = getFloat("historyResetAmount", p.historyResetAmount);
+        p.enablePrepass = getBool("enablePrepass", p.enablePrepass);
+        p.enableAntiFirefly = getBool("enableAntiFirefly", p.enableAntiFirefly);
     }
 
     if (j.contains("postProcess") && j["postProcess"].is_object()) {
@@ -188,7 +231,45 @@ bool WriteProjectConfig(const ProjectConfig& config)
         {"temporalMCap", p.temporalMCap},
         {"denoiserMode", static_cast<int32_t>(p.denoiserMode)},
         {"atrous", nlohmann::json{{"iterations", p.atrous.iterations}, {"sigmaLuminance", p.atrous.sigmaLuminance}, {"sigmaNormal", p.atrous.sigmaNormal}, {"sigmaDepth", p.atrous.sigmaDepth}}},
-        {"svgf",   nlohmann::json{{"alphaMin", p.svgf.alphaMin}, {"gradientThreshold", p.svgf.gradientThreshold}, {"sigmaLuminance", p.svgf.sigmaLuminance}, {"sigmaNormal", p.svgf.sigmaNormal}, {"sigmaDepth", p.svgf.sigmaDepth}, {"atrousIterations", p.svgf.atrousIterations}}},
+        {"svgf", nlohmann::json{{"alphaMin", p.svgf.alphaMin}, {"gradientThreshold", p.svgf.gradientThreshold}, {"sigmaLuminance", p.svgf.sigmaLuminance}, {"sigmaNormal", p.svgf.sigmaNormal}, {"sigmaDepth", p.svgf.sigmaDepth}, {"atrousIterations", p.svgf.atrousIterations}}},
+    };
+
+    const Core::RELAXParams& rx = config.relax;
+    j["relax"] = {
+        {"denoisingRange", rx.denoisingRange},
+        {"disocclusionThreshold", rx.disocclusionThreshold},
+        {"depthThreshold", rx.depthThreshold},
+        {"framerateScale", rx.framerateScale},
+        {"specMaxAccumFrames", rx.specMaxAccumFrames},
+        {"specMaxFastAccumFrames", rx.specMaxFastAccumFrames},
+        {"diffMaxAccumFrames", rx.diffMaxAccumFrames},
+        {"diffMaxFastAccumFrames", rx.diffMaxFastAccumFrames},
+        {"historyAccelerationAmount", rx.historyAccelerationAmount},
+        {"diffBlurRadius", rx.diffBlurRadius},
+        {"specBlurRadius", rx.specBlurRadius},
+        {"minHitDistanceWeight", rx.minHitDistanceWeight},
+        {"atrousIterations", rx.atrousIterations},
+        {"lobeAngleFraction", rx.lobeAngleFraction},
+        {"roughnessFraction", rx.roughnessFraction},
+        {"specLobeAngleSlack", rx.specLobeAngleSlack},
+        {"specPhiLuminance", rx.specPhiLuminance},
+        {"diffPhiLuminance", rx.diffPhiLuminance},
+        {"diffMaxLuminanceRelativeDifference", rx.diffMaxLuminanceRelativeDifference},
+        {"specMaxLuminanceRelativeDifference", rx.specMaxLuminanceRelativeDifference},
+        {"luminanceEdgeStoppingRelaxation", rx.luminanceEdgeStoppingRelaxation},
+        {"normalEdgeStoppingRelaxation", rx.normalEdgeStoppingRelaxation},
+        {"roughnessEdgeStoppingRelaxation", rx.roughnessEdgeStoppingRelaxation},
+        {"specVarianceBoost", rx.specVarianceBoost},
+        {"roughnessEdgeStoppingEnabled", rx.roughnessEdgeStoppingEnabled},
+        {"historyFixEdgeStoppingNormalPower", rx.historyFixEdgeStoppingNormalPower},
+        {"historyFixFrameNum", rx.historyFixFrameNum},
+        {"historyFixBasePixelStride", rx.historyFixBasePixelStride},
+        {"fastHistoryClampingSigmaScale", rx.fastHistoryClampingSigmaScale},
+        {"historyResetTemporalSigmaScale", rx.historyResetTemporalSigmaScale},
+        {"historyResetSpatialSigmaScale", rx.historyResetSpatialSigmaScale},
+        {"historyResetAmount", rx.historyResetAmount},
+        {"enablePrepass", rx.enablePrepass},
+        {"enableAntiFirefly", rx.enableAntiFirefly},
     };
 
     const Core::GTAOConfiguration& gtao = config.gtaoConfig;

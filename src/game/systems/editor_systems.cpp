@@ -512,6 +512,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::BeginDisabled(bAutoSave);
         if (ImGui::Button("Save Config")) {
             state->projectConfig.restir = state->debug.restir;
+            state->projectConfig.relax = state->debug.relax;
             Engine::WriteProjectConfig(state->projectConfig);
         }
         ImGui::EndDisabled();
@@ -788,6 +789,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         if (bProjectConfigChanged && state->projectConfig.bAutoSave) {
             state->projectConfig.restir = state->debug.restir;
+            state->projectConfig.relax = state->debug.relax;
             state->projectConfig.lightingMode = state->lighting.lightingMode;
             Engine::WriteProjectConfig(state->projectConfig);
         }
@@ -1691,6 +1693,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->projectConfig.smaaConfig = state->lighting.smaaConfig;
             state->projectConfig.postProcess = state->lighting.postProcess;
             state->projectConfig.restir = state->debug.restir;
+            state->projectConfig.relax = state->debug.relax;
             Engine::WriteProjectConfig(state->projectConfig);
         }
         ImGui::EndDisabled();
@@ -1794,19 +1797,109 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 }
             }
             if (bRELAX) {
-                Core::ReSTIRParams::RELAXParams& relax = restir.relax;
+                Core::RELAXParams& relax = state->debug.relax;
                 ImGui::SeparatorText("RELAX");
-                if (ImGui::SliderInt("ATrous Iterations##relax", &relax.atrousIterations, 1, 5)) { bPPConfigChanged = true; }
+
+                const float relaxInputW = 70.0f;
+                const float relaxSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
+                const float relaxResetW = ImGui::CalcTextSize("R").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                static const Core::RELAXParams relaxDefaults{};
+                auto relaxTip = [&](const char* tip) {
+                    if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::SetTooltip("%s", tip);
+                    }
+                };
+                auto relaxF = [&](const char* label, float* v, float def, float min, float max, const char* fmt = "%.4f", const char* tip = nullptr) {
+                    ImGui::PushID(label);
+                    float sliderW = ImGui::CalcItemWidth() - relaxInputW - relaxResetW - relaxSpacing * 2.0f;
+                    if (sliderW < 60.0f) { sliderW = 60.0f; }
+                    ImGui::SetNextItemWidth(sliderW);
+                    if (ImGui::SliderFloat("##s", v, min, max, "")) { bPPConfigChanged = true; }
+                    relaxTip(tip);
+                    ImGui::SameLine(0.0f, relaxSpacing);
+                    ImGui::SetNextItemWidth(relaxInputW);
+                    if (ImGui::InputFloat("##i", v, 0.0f, 0.0f, fmt)) { bPPConfigChanged = true; }
+                    ImGui::SameLine(0.0f, relaxSpacing);
+                    if (ImGui::Button("R")) { *v = def; bPPConfigChanged = true; }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reset to %g", def); }
+                    ImGui::SameLine(0.0f, relaxSpacing);
+                    ImGui::TextUnformatted(label);
+                    relaxTip(tip);
+                    ImGui::PopID();
+                };
+                auto relaxI = [&](const char* label, int* v, int def, int min, int max, const char* tip = nullptr) {
+                    ImGui::PushID(label);
+                    float sliderW = ImGui::CalcItemWidth() - relaxInputW - relaxResetW - relaxSpacing * 2.0f;
+                    if (sliderW < 60.0f) { sliderW = 60.0f; }
+                    ImGui::SetNextItemWidth(sliderW);
+                    if (ImGui::SliderInt("##s", v, min, max, "")) { bPPConfigChanged = true; }
+                    relaxTip(tip);
+                    ImGui::SameLine(0.0f, relaxSpacing);
+                    ImGui::SetNextItemWidth(relaxInputW);
+                    if (ImGui::InputInt("##i", v, 0, 0)) { bPPConfigChanged = true; }
+                    ImGui::SameLine(0.0f, relaxSpacing);
+                    if (ImGui::Button("R")) { *v = def; bPPConfigChanged = true; }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reset to %d", def); }
+                    ImGui::SameLine(0.0f, relaxSpacing);
+                    ImGui::TextUnformatted(label);
+                    relaxTip(tip);
+                    ImGui::PopID();
+                };
+
                 if (ImGui::Checkbox("Prepass##relax", &relax.enablePrepass)) { bPPConfigChanged = true; }
+                relaxTip("Spatial pre-blur before temporal accumulation, lowering the input noise fed into history. Default on.");
                 ImGui::SameLine();
                 if (ImGui::Checkbox("Anti-Firefly##relax", &relax.enableAntiFirefly)) { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Denoising Range##relax", &relax.denoisingRange, 10.f, 5000.f)) { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Disocclusion Threshold##relax", &relax.disocclusionThreshold, 0.001f, 0.05f, "%.4f")) { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Spec Max Accum Frames##relax", &relax.specMaxAccumFrames, 1.f, 64.f, "%.0f")) { bPPConfigChanged = true; }
-                if (ImGui::SliderFloat("Diff Max Accum Frames##relax", &relax.diffMaxAccumFrames, 1.f, 64.f, "%.0f")) { bPPConfigChanged = true; }
+                relaxTip("Suppresses isolated bright outlier pixels (fireflies) before accumulation. Default on.");
+                if (ImGui::Checkbox("Roughness Edge Stopping##relax", &relax.roughnessEdgeStoppingEnabled)) { bPPConfigChanged = true; }
+                relaxTip("Roughness-aware specular edge stopping (roughness + oriented-normal weights). Off uses a simpler normal-only weight. Default on.");
 
+                ImGui::SeparatorText("General");
+                relaxF("Denoising Range", &relax.denoisingRange, relaxDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through untouched. Default 1000; set to roughly cover your scene depth.");
+                relaxF("Disocclusion Threshold", &relax.disocclusionThreshold, relaxDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Higher accepts more (less ghosting rejection); lower resets more on edges/motion. Default 0.005; common ~0.01.");
+                relaxF("Depth Threshold", &relax.depthThreshold, relaxDefaults.depthThreshold, 0.0f, 0.05f, "%.4f", "Plane-distance tolerance for spatial edge stopping, as a fraction of depth. Lower preserves geometry edges; higher blurs across them. Default 0.003.");
+                relaxF("Framerate Scale", &relax.framerateScale, relaxDefaults.framerateScale, 0.1f, 4.f, "%.2f", "Scales accumulation/anti-lag speed for framerate (roughly currentFPS/60). 1.0 is tuned for 60 FPS; raise at higher FPS so history doesn't over-accumulate. Default 1.0.");
+
+                ImGui::SeparatorText("Accumulation");
+                relaxF("Spec Max Accum Frames", &relax.specMaxAccumFrames, relaxDefaults.specMaxAccumFrames, 0.f, 64.f, "%.0f", "Max specular history length (stable). Higher = cleaner but laggier reflections. Default 32; common 30-60.");
+                relaxF("Spec Max Fast Accum Frames", &relax.specMaxFastAccumFrames, relaxDefaults.specMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' specular history used to clamp the slow one (anti-lag). Must be below Spec Max Accum to enable clamping. Default 4; common 4-6.");
+                relaxF("Diff Max Accum Frames", &relax.diffMaxAccumFrames, relaxDefaults.diffMaxAccumFrames, 0.f, 64.f, "%.0f", "Max diffuse history length (stable). Higher = cleaner but slower to react to lighting changes (more lag). Default 32; common 30-60.");
+                relaxF("Diff Max Fast Accum Frames", &relax.diffMaxFastAccumFrames, relaxDefaults.diffMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' diffuse history used to clamp the slow one (anti-lag). Lower = snappier response. Must be below Diff Max Accum. Default 4; common 4-6.");
+                relaxF("History Acceleration Amount", &relax.historyAccelerationAmount, relaxDefaults.historyAccelerationAmount, 0.f, 1.f, "%.2f", "Strength of anti-lag acceleration pushing the slow history toward the fast one on changes. 0 = off, 1 = max. Default 1.0.");
+
+                ImGui::SeparatorText("Prepass");
+                relaxF("Diff Blur Radius", &relax.diffBlurRadius, relaxDefaults.diffBlurRadius, 0.f, 100.f, "%.1f", "Radius (px) of the diffuse pre-blur applied before accumulation. Larger knocks down more input noise but loses detail. 0 disables. Default 30.");
+                relaxF("Spec Blur Radius", &relax.specBlurRadius, relaxDefaults.specBlurRadius, 0.f, 100.f, "%.1f", "Radius (px) of the specular pre-blur before accumulation. 0 disables. Default 50.");
+                relaxF("Min Hit Distance Weight", &relax.minHitDistanceWeight, relaxDefaults.minHitDistanceWeight, 0.f, 1.f, "%.2f", "Minimum weight for ray hit-distance when reconstructing specular in the prepass. 0 ignores hitT. Default 0; NRD commonly ~0.1-0.2.");
+
+                ImGui::SeparatorText("A-Trous / Edge Stopping");
+                relaxI("ATrous Iterations", &relax.atrousIterations, relaxDefaults.atrousIterations, 1, 5, "Number of A-trous wavelet (spatial) passes. More = wider, smoother denoising but blurrier and costlier. Default 3; common 4-5.");
+                relaxF("Lobe Angle Fraction", &relax.lobeAngleFraction, relaxDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance, as a fraction of the BRDF lobe angle. Lower preserves sharper normal detail; higher blurs across normals. Default 0.15.");
+                relaxF("Roughness Fraction", &relax.roughnessFraction, relaxDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Higher blends across differing roughness; lower keeps roughness boundaries crisp. Default 0.15.");
+                relaxF("Spec Lobe Angle Slack", &relax.specLobeAngleSlack, relaxDefaults.specLobeAngleSlack, 0.f, 1.f, "%.3f", "Extra angular slack added to the specular lobe for edge stopping, loosening normal/view rejection. Default 0.15.");
+                relaxF("Spec Phi Luminance", &relax.specPhiLuminance, relaxDefaults.specPhiLuminance, 0.f, 10.f, "%.2f", "Specular luminance edge-stopping sensitivity (sigma scale). Higher = more blur (ignores luminance diffs); lower preserves highlights. Default 2.0; common 1-2.");
+                relaxF("Diff Phi Luminance", &relax.diffPhiLuminance, relaxDefaults.diffPhiLuminance, 0.f, 10.f, "%.2f", "Diffuse luminance edge-stopping sensitivity (sigma scale). Higher = more blur; lower keeps luminance edges. Default 2.0; common 1-2.");
+                relaxF("Diff Max Lum Rel Diff", &relax.diffMaxLuminanceRelativeDifference, relaxDefaults.diffMaxLuminanceRelativeDifference, 0.f, 10.f, "%.2f", "Caps how strongly a luminance difference can reject a diffuse sample (in sigmas). Lower = firmer edge stopping. Default 3.");
+                relaxF("Spec Max Lum Rel Diff", &relax.specMaxLuminanceRelativeDifference, relaxDefaults.specMaxLuminanceRelativeDifference, 0.f, 10.f, "%.2f", "Caps how strongly a luminance difference can reject a specular sample (in sigmas). Default 3.");
+                relaxF("Luminance Edge Stop Relax", &relax.luminanceEdgeStoppingRelaxation, relaxDefaults.luminanceEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "On early A-trous passes, relaxes specular luminance edge stopping where reprojection confidence is low (helps fresh/disoccluded pixels). 0-1. Default 0.5.");
+                relaxF("Normal Edge Stop Relax", &relax.normalEdgeStoppingRelaxation, relaxDefaults.normalEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "Relaxes specular normal edge stopping based on reprojection confidence, cutting noise on low-confidence pixels. 0-1. Default 0.3.");
+                relaxF("Roughness Edge Stop Relax", &relax.roughnessEdgeStoppingRelaxation, relaxDefaults.roughnessEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "Relaxes the view vector used in specular weighting, loosening rejection on curved/rough surfaces. Default 0.3.");
+                relaxF("Spec Variance Boost", &relax.specVarianceBoost, relaxDefaults.specVarianceBoost, 0.f, 8.f, "%.2f", "Boosts specular variance while history is short so fresh pixels filter more aggressively. 1 = no boost. Default 1.0.");
+
+                ImGui::SeparatorText("History Fix");
+                relaxF("Hist Fix Edge Stop Normal Pow", &relax.historyFixEdgeStoppingNormalPower, relaxDefaults.historyFixEdgeStoppingNormalPower, 0.f, 32.f, "%.1f", "Normal-match strictness for the history-fix fill that bootstraps fresh pixels. Higher = stricter normal matching. Default 8.");
+                relaxF("Hist Fix Frame Num", &relax.historyFixFrameNum, relaxDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill (bootstrap) instead of relying on accumulation. 0 disables. Default 4.");
+                relaxF("Hist Fix Base Pixel Stride", &relax.historyFixBasePixelStride, relaxDefaults.historyFixBasePixelStride, 0.f, 32.f, "%.1f", "Base sample spacing (px) for the history-fix fill; shrinks as history grows. Larger = wider initial fill. Default 14.");
+
+                ImGui::SeparatorText("History Clamp / Reset");
+                relaxF("Fast History Clamp Sigma", &relax.fastHistoryClampingSigmaScale, relaxDefaults.fastHistoryClampingSigmaScale, 0.f, 8.f, "%.2f", "Width (in sigmas) of the fast-history color box that clamps the slow history (anti-lag/anti-ghosting). Lower = tighter clamp, less lag but more noise. Default 2.0; common 1-2.");
+                relaxF("History Reset Temporal Sigma", &relax.historyResetTemporalSigmaScale, relaxDefaults.historyResetTemporalSigmaScale, 0.f, 10.f, "%.2f", "Temporal noise sigma scale in history-reset detection; larger tolerates more temporal noise before resetting. Default 5.");
+                relaxF("History Reset Spatial Sigma", &relax.historyResetSpatialSigmaScale, relaxDefaults.historyResetSpatialSigmaScale, 0.f, 10.f, "%.2f", "Spatial noise sigma scale in history-reset detection; larger tolerates more spatial noise before resetting. Default 1.");
+                relaxF("History Reset Amount", &relax.historyResetAmount, relaxDefaults.historyResetAmount, 0.f, 1.f, "%.2f", "How hard to snap history to the current noisy signal on big lighting changes. 0 = off (rely on clamping); 1 = aggressive. Default 0.5.");
+
+                ImGui::Spacing();
                 if (ImGui::Button("Reset RELAX")) {
-                    relax = Core::ReSTIRParams::RELAXParams{};
+                    relax = Core::RELAXParams{};
                     bPPConfigChanged = true;
                 }
             }
@@ -1961,6 +2054,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->projectConfig.smaaConfig = state->lighting.smaaConfig;
             state->projectConfig.postProcess = state->lighting.postProcess;
             state->projectConfig.restir = state->debug.restir;
+            state->projectConfig.relax = state->debug.relax;
             Engine::WriteProjectConfig(state->projectConfig);
         }
     }

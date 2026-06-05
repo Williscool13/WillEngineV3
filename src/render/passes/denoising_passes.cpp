@@ -428,7 +428,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         const Core::ViewFamily& viewFamily,
                         Core::Array<uint32_t, 2> renderExtent,
                         const RenderTargets& targets,
-                        const Core::ReSTIRParams::RELAXParams& params,
+                        const Core::RELAXParams& params,
                         uint64_t frameNumber)
 {
     const uint32_t width = renderExtent[0];
@@ -508,33 +508,33 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gDisocclusionThreshold = params.disocclusionThreshold;
     rc.gDisocclusionThresholdAlternate = params.disocclusionThreshold * 2.0f;
     rc.gDenoisingRange = params.denoisingRange;
-    rc.gDepthThreshold = 0.003f;
-    rc.gRoughnessFraction = 0.15f;
-    rc.gSpecVarianceBoost = 1.0f;
-    rc.gDiffBlurRadius = 30.0f;
-    rc.gSpecBlurRadius = 50.0f;
-    rc.gLobeAngleFraction = 0.15f;
-    rc.gSpecLobeAngleSlack = 0.15f;
-    rc.gHistoryFixEdgeStoppingNormalPower = 8.0f;
-    rc.gHistoryFixFrameNum = 4.0f;
-    rc.gHistoryFixBasePixelStride = 14.0f;
-    rc.gFastHistoryClampingSigmaScale = 2.0f;
-    rc.gHistoryAccelerationAmount = 1.0f;
-    rc.gHistoryResetTemporalSigmaScale = 5.0f;
-    rc.gHistoryResetSpatialSigmaScale = 1.0f;
-    rc.gHistoryResetAmount = 0.5f;
-    rc.gSpecPhiLuminance = 2.0f;
-    rc.gDiffPhiLuminance = 2.0f;
-    rc.gDiffMaxLuminanceRelativeDifference = 3.0f;
-    rc.gSpecMaxLuminanceRelativeDifference = 3.0f;
-    rc.gLuminanceEdgeStoppingRelaxation = 0.5f;
-    rc.gNormalEdgeStoppingRelaxation = 0.3f;
-    rc.gRoughnessEdgeStoppingRelaxation = 0.3f;
+    rc.gDepthThreshold = params.depthThreshold;
+    rc.gRoughnessFraction = params.roughnessFraction;
+    rc.gSpecVarianceBoost = params.specVarianceBoost;
+    rc.gDiffBlurRadius = params.diffBlurRadius;
+    rc.gSpecBlurRadius = params.specBlurRadius;
+    rc.gLobeAngleFraction = params.lobeAngleFraction;
+    rc.gSpecLobeAngleSlack = params.specLobeAngleSlack;
+    rc.gHistoryFixEdgeStoppingNormalPower = params.historyFixEdgeStoppingNormalPower;
+    rc.gHistoryFixFrameNum = params.historyFixFrameNum;
+    rc.gHistoryFixBasePixelStride = params.historyFixBasePixelStride;
+    rc.gFastHistoryClampingSigmaScale = params.fastHistoryClampingSigmaScale;
+    rc.gHistoryAccelerationAmount = params.historyAccelerationAmount;
+    rc.gHistoryResetTemporalSigmaScale = params.historyResetTemporalSigmaScale;
+    rc.gHistoryResetSpatialSigmaScale = params.historyResetSpatialSigmaScale;
+    rc.gHistoryResetAmount = params.historyResetAmount;
+    rc.gSpecPhiLuminance = params.specPhiLuminance;
+    rc.gDiffPhiLuminance = params.diffPhiLuminance;
+    rc.gDiffMaxLuminanceRelativeDifference = params.diffMaxLuminanceRelativeDifference;
+    rc.gSpecMaxLuminanceRelativeDifference = params.specMaxLuminanceRelativeDifference;
+    rc.gLuminanceEdgeStoppingRelaxation = params.luminanceEdgeStoppingRelaxation;
+    rc.gNormalEdgeStoppingRelaxation = params.normalEdgeStoppingRelaxation;
+    rc.gRoughnessEdgeStoppingRelaxation = params.roughnessEdgeStoppingRelaxation;
     rc.gOrthoMode = 0.0f;
-    rc.gUnproject = tanHalfFovY;
-    rc.gFramerateScale = 1.0f;
-    rc.gMinHitDistanceWeight = 0.0f;
-    rc.gRoughnessEdgeStoppingEnabled = 1u;
+    rc.gUnproject = tanHalfFovY * 2.0f / static_cast<float>(height);
+    rc.gFramerateScale = params.framerateScale;
+    rc.gMinHitDistanceWeight = params.minHitDistanceWeight;
+    rc.gRoughnessEdgeStoppingEnabled = params.roughnessEdgeStoppingEnabled ? 1u : 0u;
     rc.gFrameIndex = static_cast<uint32_t>(frameNumber);
     rc.gResetHistory = bFirstFrame ? 1u : 0u;
 
