@@ -57,6 +57,7 @@ ProjectConfig ReadProjectConfig()
         p.spatialMCap = getUint("spatialMCap", p.spatialMCap);
         p.temporalMCap = getUint("temporalMCap", p.temporalMCap);
         p.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(getInt("denoiserMode", static_cast<int32_t>(p.denoiserMode)));
+        p.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(getInt("remodulateOutput", static_cast<int32_t>(p.remodulateOutput)));
         if (r.contains("atrous") && r["atrous"].is_object()) {
             const auto& o = r["atrous"];
             auto oInt = [&](const char* k, int32_t def) { return o.contains(k) && o[k].is_number() ? o[k].get<int32_t>() : def; };
@@ -169,6 +170,7 @@ ProjectConfig ReadProjectConfig()
         pp.bloomSoftThreshold = getFloat("bloomSoftThreshold", pp.bloomSoftThreshold);
         pp.bloomRadius = getFloat("bloomRadius", pp.bloomRadius);
         pp.bloomIntensity = getFloat("bloomIntensity", pp.bloomIntensity);
+        pp.bloomClamp = getFloat("bloomClamp", pp.bloomClamp);
         pp.tonemapOperator = getInt("tonemapOperator", pp.tonemapOperator);
         pp.uchimuraParams.P = getFloat("uchimuraP", pp.uchimuraParams.P);
         pp.uchimuraParams.a = getFloat("uchimuraA", pp.uchimuraParams.a);
@@ -230,6 +232,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
         {"spatialMCap", p.spatialMCap},
         {"temporalMCap", p.temporalMCap},
         {"denoiserMode", static_cast<int32_t>(p.denoiserMode)},
+        {"remodulateOutput", static_cast<int32_t>(p.remodulateOutput)},
         {"atrous", nlohmann::json{{"iterations", p.atrous.iterations}, {"sigmaLuminance", p.atrous.sigmaLuminance}, {"sigmaNormal", p.atrous.sigmaNormal}, {"sigmaDepth", p.atrous.sigmaDepth}}},
         {"svgf", nlohmann::json{{"alphaMin", p.svgf.alphaMin}, {"gradientThreshold", p.svgf.gradientThreshold}, {"sigmaLuminance", p.svgf.sigmaLuminance}, {"sigmaNormal", p.svgf.sigmaNormal}, {"sigmaDepth", p.svgf.sigmaDepth}, {"atrousIterations", p.svgf.atrousIterations}}},
     };
@@ -309,6 +312,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
         {"bloomSoftThreshold", pp.bloomSoftThreshold},
         {"bloomRadius", pp.bloomRadius},
         {"bloomIntensity", pp.bloomIntensity},
+        {"bloomClamp", pp.bloomClamp},
         {"tonemapOperator", pp.tonemapOperator},
         {"uchimuraP", pp.uchimuraParams.P},
         {"uchimuraA", pp.uchimuraParams.a},

@@ -500,11 +500,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                     //SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.svgf);
                     //SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.atrous);
+                    const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
                     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber);
+                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode);
                     }
                     else {
-                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode);
                     }
                     break;
                 }

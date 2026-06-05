@@ -235,6 +235,8 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float3 prevWorldPos = currentWorldPos;
     float2 prevUVSMB = pixelUv + mv.xy;
 
+    // TODO: Hack this is being set to something wrong if called after this if branch. Figure it out for next submission
+    float3 Vprev = (rc.gOrthoMode == 0) ? -normalize(prevWorldPos - rc.gCameraDelta.xyz) : -normalize(rc.gPrevFrustumForward.xyz);
     if (rc.gMvScale.w == 0.0)
     {
         if (rc.gMvScale.z == 0.0)
@@ -310,7 +312,8 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     historyLength = min(historyLength, maxAccumulatedFrameNum);
 
     // Footprint quality adjustment
-    float3 Vprev = (rc.gOrthoMode == 0) ? -normalize(prevWorldPos - rc.gCameraDelta.xyz) : -normalize(rc.gPrevFrustumForward.xyz);
+    // TODO: Hack this is being set to something wrong if called here. Figure it out for next submission
+    //float3 Vprev = (rc.gOrthoMode == 0) ? -normalize(prevWorldPos - rc.gCameraDelta.xyz) : -normalize(rc.gPrevFrustumForward.xyz);
     float NoVprev = abs(dot(currentNormal, Vprev));
     float sizeQuality = (NoVprev + 1e-3) / (NoV + 1e-3);
     sizeQuality *= sizeQuality; sizeQuality *= sizeQuality;
@@ -470,18 +473,27 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     virtualHistoryAmount *= (rc.gOrthoMode == 0) ? rw * 0.9 + 0.1 : 1.0;
 
     // Virtual history confidence - hit distance
+    // Thin lens equation: I = O / (2 * curvature * O + 1) (matches NRD ApplyThinLensEquation).
     float SMC = RelaxGetSpecMagicCurve(currentRoughnessModified);
     float hitDistC = lerp(specularIllumination.a, prevReflectionHitTSMB, SMC);
-    float hitDist1 = hitDistC / (2.0 * curvature * (-hitDistC) - 1.0 + 1e-9);
-    float hitDist2 = prevReflectionHitTVMB / (2.0 * curvature * (-prevReflectionHitTVMB) - 1.0 + 1e-9);
+    float hitDist1 = hitDistC / (2.0 * curvature * hitDistC + 1.0);
+    float hitDist2 = prevReflectionHitTVMB / (2.0 * curvature * prevReflectionHitTVMB + 1.0);
     float maxDistHD = max(hitDist1, hitDist2);
     float dHitT = abs(hitDist1 - hitDist2);
-    float hitDistConfidence = 1.0 - saturate((lerp(20.0, 0.0, SMC)) * dHitT / (currentLinearZ + maxDistHD));
+    float hitDistConfidence = 1.0 - saturate(lerp(20.0, 0.0, SMC) * dHitT / (currentLinearZ + maxDistHD));
     hitDistConfidence = lerp(hitDistConfidence, 1.0, SMC);
 
+    float hitDistForTrackingPrev = prevSpecResponsiveVMB.a;
+    float3 prevVirtualWorldPos = RelaxGetXvirtual(hitDistForTrackingPrev, curvature, currentWorldPos, prevWorldPos, currentNormal, V, currentRoughness);
+    float2 prevUVVMBTest = MLGetScreenUv(rc.gWorldToClipPrev, prevVirtualWorldPos);
+    float lobeTanHalfAngle = max(RelaxGetSpecLobeTanHalfAngle(currentRoughness, 0.6), 0.5 * rc.gRectSizeInv.x);
+    float unproj1 = min(hitDist, hitDistForTrackingPrev) / RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, 1.0, max(length(virtualWorldPos), length(prevVirtualWorldPos)));
+    float lobeRadiusInPixels = lobeTanHalfAngle * unproj1;
+    float deltaParallaxInPixels = length((prevUVVMBTest - prevUVVMB) * float2(rc.gRectSize));
+    hitDistConfidence *= MLSmoothStep(lobeRadiusInPixels + 0.25, 0.0, deltaParallaxInPixels);
+
     // Surface motion confidence
-    float specSMBConfidence = (SMBReprojectionFound > 0 ? 1.0 : 0.0)
-        * RelaxGetEncodingAwareNormalWeight(V, Vprev, lobeHalfAngle * NoV / rc.gFramerateScale, 0.0, 0.0);
+    float specSMBConfidence = (SMBReprojectionFound > 0 ? 1.0 : 0.0) * RelaxGetEncodingAwareNormalWeight(V, Vprev, lobeHalfAngle * NoV / rc.gFramerateScale, 0.0, 0.0);
 
     float specHistoryFrames = min(rc.gSpecMaxAccumulatedFrameNum, historyLength);
     float specHistoryResponsiveFrames = min(rc.gSpecMaxFastAccumulatedFrameNum, historyLength);

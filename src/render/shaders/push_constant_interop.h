@@ -506,6 +506,7 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t width;
     SHADER_PUBLIC uint32_t height;
+    SHADER_PUBLIC uint32_t outputMode;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
@@ -661,6 +662,7 @@ SHADER_PUBLIC struct BloomThresholdPushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float threshold;
     SHADER_PUBLIC float softThreshold;
+    SHADER_PUBLIC float clampValue;
 };
 
 SHADER_PUBLIC struct BloomDownsamplePushConstant

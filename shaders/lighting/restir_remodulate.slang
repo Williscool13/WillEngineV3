@@ -52,8 +52,13 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
     float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb;
     float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb;
 
-    //float3 finalColor = diffuse * albedo + emissive;
-    //float3 finalColor = specular * specReflectance + emissive;
-    float3 finalColor = diffuse * albedo + specular * specReflectance + emissive;
+    float3 finalColor;
+    if (pc.outputMode == 1u) {
+        finalColor = diffuse * albedo + emissive;
+    } else if (pc.outputMode == 2u) {
+        finalColor = specular * specReflectance + emissive;
+    } else {
+        finalColor = diffuse * albedo + specular * specReflectance + emissive;
+    }
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(finalColor, 1.0);
 }

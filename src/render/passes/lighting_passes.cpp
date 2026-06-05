@@ -383,7 +383,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                const Core::ViewFamily& viewFamily,
                                Core::Array<uint32_t, 2> renderExtent,
                                const RenderTargets& targets,
-                               uint32_t sceneIndex)
+                               uint32_t sceneIndex,
+                               uint32_t outputMode)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
@@ -396,7 +397,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(targets.depthStencil);
     pass.WriteStorageImage(targets.colorOutput);
-    pass.Execute([&graph, pipelineManager, sceneIndex, width, height,
+    pass.Execute([&graph, pipelineManager, sceneIndex, outputMode, width, height,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthStencil, output = targets.colorOutput](VkCommandBuffer cmd) {
@@ -411,6 +412,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
                 .width = width,
                 .height = height,
+                .outputMode = outputMode,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

@@ -32,6 +32,7 @@ void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : S
     }
 
     float3 color = rdgTexturesFloat4[pc.inputColorIndex].Load(int3(pixelCoord, 0)).rgb;
+    color = min(color, float3(pc.clampValue, pc.clampValue, pc.clampValue));
     float3 thresholded = ApplyThreshold(color, pc.threshold, pc.softThreshold);
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(thresholded, 1.0);
 }

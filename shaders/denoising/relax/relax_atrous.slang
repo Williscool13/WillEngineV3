@@ -58,8 +58,9 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
     float centerSpecLum = MLLuminance(centerSpec.rgb);
     float centerDiffLum = MLLuminance(centerDiff.rgb);
 
-    float centerSpecVar = rdgTexturesFloat4[pc.specVarIndex].Load(int3(pixelPos, 0)).a;
-    float centerDiffVar = rdgTexturesFloat4[pc.diffVarIndex].Load(int3(pixelPos, 0)).a;
+    bool isFirstAtrousPass = (stepSize == 1);
+    float centerSpecVar = isFirstAtrousPass ? max(0.0, centerSpec.a - centerSpecLum * centerSpecLum) : centerSpec.a;
+    float centerDiffVar = isFirstAtrousPass ? max(0.0, centerDiff.a - centerDiffLum * centerDiffLum) : centerDiff.a;
     float specPhiLumInv = 1.0 / max(1e-4, rc.gSpecPhiLuminance * sqrt(centerSpecVar));
     float diffPhiLumInv = 1.0 / max(1e-4, rc.gDiffPhiLuminance * sqrt(centerDiffVar));
 
@@ -79,8 +80,8 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
 
     float sumWSpec = kernelWeights[0] * kernelWeights[0];
     float sumWDiff = sumWSpec;
-    float4 sumSpec = centerSpec * float4(sumWSpec.xxx, sumWSpec * sumWSpec);
-    float4 sumDiff = centerDiff * float4(sumWDiff.xxx, sumWDiff * sumWDiff);
+    float4 sumSpec = float4(centerSpec.rgb, centerSpecVar) * float4(sumWSpec.xxx, sumWSpec * sumWSpec);
+    float4 sumDiff = float4(centerDiff.rgb, centerDiffVar) * float4(sumWDiff.xxx, sumWDiff * sumWDiff);
 
     [unroll]
     for (int j = -1; j <= 1; j++)
@@ -116,10 +117,11 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             {
                 float4 sampleSpec = rdgTexturesFloat4[pc.specIndex].Load(int3(p, 0));
                 float sampleSpecLum = MLLuminance(sampleSpec.rgb);
+                float sampleSpecVar = isFirstAtrousPass ? max(0.0, sampleSpec.a - sampleSpecLum * sampleSpecLum) : sampleSpec.a;
                 float specLumW = min(rc.gSpecMaxLuminanceRelativeDifference, abs(centerSpecLum - sampleSpecLum) * specPhiLumInv) * specularLuminanceWeightRelaxation;
                 wSpec *= exp(-specLumW);
                 sumWSpec += wSpec;
-                sumSpec += float4(wSpec.xxx, wSpec * wSpec) * sampleSpec;
+                sumSpec += float4(wSpec.xxx, wSpec * wSpec) * float4(sampleSpec.rgb, sampleSpecVar);
             }
 
             // Diffuse weight
@@ -129,10 +131,11 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             {
                 float4 sampleDiff = rdgTexturesFloat4[pc.diffIndex].Load(int3(p, 0));
                 float sampleDiffLum = MLLuminance(sampleDiff.rgb);
+                float sampleDiffVar = isFirstAtrousPass ? max(0.0, sampleDiff.a - sampleDiffLum * sampleDiffLum) : sampleDiff.a;
                 float diffLumW = min(rc.gDiffMaxLuminanceRelativeDifference, abs(centerDiffLum - sampleDiffLum) * diffPhiLumInv);
                 wDiff *= exp(-diffLumW);
                 sumWDiff += wDiff;
-                sumDiff += float4(wDiff.xxx, wDiff * wDiff) * sampleDiff;
+                sumDiff += float4(wDiff.xxx, wDiff * wDiff) * float4(sampleDiff.rgb, sampleDiffVar);
             }
         }
     }

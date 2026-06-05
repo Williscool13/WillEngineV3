@@ -33,7 +33,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         Core::Array<uint32_t, 2> renderExtent,
                         const RenderTargets& targets,
                         const Core::RELAXParams& params,
-                        uint64_t frameNumber);
+                        uint64_t frameNumber,
+                        uint32_t remodulateOutputMode);
 } // Render
 
 #endif //WILL_ENGINE_DENOISING_PASSES_H

@@ -769,10 +769,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (ImGui::Button("Prev NR")) setDebugTarget("relax_prev_nr", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("ATrous Spec 0")) setDebugTarget("relax_atrous_spec_0", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();
-            if (ImGui::Button("ATrous Spec 1")) setDebugTarget("relax_atrous_spec_1", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Spec History")) setDebugTarget("relax_spec_hist", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("ATrous Diff 0")) setDebugTarget("relax_atrous_diff_0", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();
-            if (ImGui::Button("ATrous Diff 1")) setDebugTarget("relax_atrous_diff_1", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Diff History")) setDebugTarget("relax_diff_hist", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("Post-Processing")) {
@@ -1768,6 +1768,13 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 bPPConfigChanged = true;
             }
 
+            const char* remodulateOutputModes[] = {"Both", "Diffuse Only", "Specular Only"};
+            int currentRemodulateOutput = static_cast<int>(restir.remodulateOutput);
+            if (ImGui::Combo("Remodulate Output##restir", &currentRemodulateOutput, remodulateOutputModes, IM_ARRAYSIZE(remodulateOutputModes))) {
+                restir.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(currentRemodulateOutput);
+                bPPConfigChanged = true;
+            }
+
             const bool bATrous = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous;
             const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
             const bool bRELAX = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
@@ -1960,11 +1967,13 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         if (ImGui::SliderFloat("Threshold", &state->lighting.postProcess.bloomThreshold, 0.0f, 2.0f, "%.2f")) { bPPConfigChanged = true; }
         if (ImGui::SliderFloat("Soft Threshold", &state->lighting.postProcess.bloomSoftThreshold, 0.0f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
         if (ImGui::SliderFloat("Radius", &state->lighting.postProcess.bloomRadius, 0.5f, 2.0f, "%.2f")) { bPPConfigChanged = true; }
+        if (ImGui::SliderFloat("Clamp", &state->lighting.postProcess.bloomClamp, 0.1f, 100.0f, "%.1f")) { bPPConfigChanged = true; }
         if (ImGui::Button("Reset Bloom")) {
             state->lighting.postProcess.bloomIntensity = defaultPP.bloomIntensity;
             state->lighting.postProcess.bloomThreshold = defaultPP.bloomThreshold;
             state->lighting.postProcess.bloomSoftThreshold = defaultPP.bloomSoftThreshold;
             state->lighting.postProcess.bloomRadius = defaultPP.bloomRadius;
+            state->lighting.postProcess.bloomClamp = defaultPP.bloomClamp;
             bPPConfigChanged = true;
         }
 

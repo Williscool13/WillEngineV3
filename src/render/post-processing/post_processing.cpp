@@ -102,6 +102,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
     float bloomThreshold = ctx.config.bloomThreshold;
     float bloomSoftThreshold = ctx.config.bloomSoftThreshold;
     float bloomRadius = ctx.config.bloomRadius;
+    float bloomClamp = ctx.config.bloomClamp;
 
     const uint32_t numDownsamples = (width >= 3840) ? 6 : 5;
     const uint32_t numMips = numDownsamples + 1;
@@ -110,13 +111,14 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
     RenderPass& thresholdPass = graph.AddPass(SID("[Bloom] Threshold"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
     thresholdPass.ReadSampledImage(input);
     thresholdPass.ReadWriteImage(SID("bloom_chain"));
-    thresholdPass.Execute([&graph, width, height, input, pipelines, bloomThreshold, bloomSoftThreshold](VkCommandBuffer cmd) {
+    thresholdPass.Execute([&graph, width, height, input, pipelines, bloomThreshold, bloomSoftThreshold, bloomClamp](VkCommandBuffer cmd) {
         BloomThresholdPushConstant pc{
             .outputExtent = {width, height},
             .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("bloom_chain"), 0),
             .threshold = bloomThreshold,
             .softThreshold = bloomSoftThreshold,
+            .clampValue = bloomClamp,
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("bloom_threshold"));

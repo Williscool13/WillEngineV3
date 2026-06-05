@@ -429,7 +429,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         Core::Array<uint32_t, 2> renderExtent,
                         const RenderTargets& targets,
                         const Core::RELAXParams& params,
-                        uint64_t frameNumber)
+                        uint64_t frameNumber,
+                        uint32_t remodulateOutputMode)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
@@ -469,8 +470,10 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     const bool bFirstFrame = !graph.HasTexture(SID("relax_spec_illum_history"));
 
     RelaxDiffuseSpecularConstants rc{};
+
     rc.gWorldToClip = proj * view;
     rc.gWorldToClipPrev = prevProj * prevView;
+
     rc.gWorldToViewPrev = prevView;
     rc.gWorldPrevToWorld = glm::mat4(1.0f);
     rc.gViewToWorld = invView;
@@ -628,14 +631,16 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     graph.CreateTexture(SID("relax_diff_illum"), colorInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("relax_spec_fast"), colorInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("relax_diff_fast"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_spec_hist"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("relax_diff_hist"), colorInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("relax_history_length"), histLenInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("relax_spec_hit_dist"), hitDistInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("relax_spec_reproj_confidence"), reprConfInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("relax_prev_nr"), colorInfo, {std::nullopt}, true);
 
-    // Carry ping-pong history textures to next frame
-    graph.CarryTextureToNextFrame(SID("relax_spec_illum"), SID("relax_spec_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("relax_diff_illum"), SID("relax_diff_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    // Carry ping-pong history textures to next frame.
+    graph.CarryTextureToNextFrame(SID("relax_spec_hist"), SID("relax_spec_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("relax_diff_hist"), SID("relax_diff_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CarryTextureToNextFrame(SID("relax_spec_fast"), SID("relax_spec_fast_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CarryTextureToNextFrame(SID("relax_diff_fast"), SID("relax_diff_fast_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CarryTextureToNextFrame(SID("relax_history_length"), SID("relax_history_length_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -773,8 +778,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("relax_atrous_diff_0"));
         pass.ReadSampledImage(specNoisy); // noisy preblur reference
         pass.ReadSampledImage(diffNoisy);
-        pass.WriteStorageImage(SID("relax_atrous_spec_1"));
-        pass.WriteStorageImage(SID("relax_atrous_diff_1"));
+        pass.WriteStorageImage(SID("relax_spec_hist"));
+        pass.WriteStorageImage(SID("relax_diff_hist"));
         pass.Execute([&graph, pipelineManager, depth, specNoisy, diffNoisy, width, height](VkCommandBuffer cmd) {
             RelaxHistoryClampingPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
@@ -787,8 +792,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .diffNoisyIndex = graph.GetSampledImageViewDescriptorIndex(diffNoisy),
                 .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_atrous_spec_0")),
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_atrous_diff_0")),
-                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_spec_1")),
-                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_diff_1")),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_hist")),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_hist")),
                 .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_fast")),
                 .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_fast")),
                 .outHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_history_length")),
@@ -800,59 +805,50 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         });
     }
 
-    if (viewFamily.debugResourceName == "relax_atrous_spec_1") { return; }
-
-    // Pass 6: Anti-Firefly
-    // History clamping wrote the clamped normal history into _1.
-    const StringID atrousSpec[2] = {SID("relax_atrous_spec_0"), SID("relax_atrous_spec_1")};
-    const StringID atrousDiff[2] = {SID("relax_atrous_diff_0"), SID("relax_atrous_diff_1")};
-    int32_t readIdx = 1;
-
+    // Pass 6: Anti-Firefly. RCRS filter applied in-place to the clamped slow history, so the firefly-suppressed result is what gets carried as next frame's history (matches NRD's Copy + Anti-Firefly writing back into SPEC/DIFF_ILLUM_PREV).
     if (params.enableAntiFirefly) {
-        const StringID ffSpecIn = atrousSpec[readIdx];
-        const StringID ffDiffIn = atrousDiff[readIdx];
-        const StringID ffSpecOut = atrousSpec[1 - readIdx];
-        const StringID ffDiffOut = atrousDiff[1 - readIdx];
-
         auto& pass = graph.AddPass(SID("[RELAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depth);
-        pass.ReadSampledImage(ffSpecIn);
-        pass.ReadSampledImage(ffDiffIn);
-        pass.WriteStorageImage(ffSpecOut);
-        pass.WriteStorageImage(ffDiffOut);
+        pass.ReadWriteImage(SID("relax_spec_hist"));
+        pass.ReadWriteImage(SID("relax_diff_hist"));
 
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, ffSpecIn, ffDiffIn, ffSpecOut, ffDiffOut, width, height](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd) {
             RelaxAntiFireflyPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .viewZIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
-                .specIndex = graph.GetSampledImageViewDescriptorIndex(ffSpecIn),
-                .diffIndex = graph.GetSampledImageViewDescriptorIndex(ffDiffIn),
-                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(ffSpecOut),
-                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(ffDiffOut),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_spec_hist")),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_hist")),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_hist")),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_hist")),
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_antifirefly"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
         });
-        readIdx = 1 - readIdx;
     }
 
-    // Pass 7: A-Trous (N iterations, ping-pong between atrous_0/1).
-    // Last iteration writes into intermediates so remodulate can composite them.
+    if (viewFamily.debugResourceName == "relax_spec_hist") { return; }
+
+    // Pass 7: A-Trous (N iterations). Iteration 0 reads the carried slow history (relax_*_hist).
+    // Later iterations ping-pong the atrous scratch buffers. The hist textures are never written by the A-Trous chain, so they survive end-of-frame to be carried as next frame's slow history.
+    // Last iteration writes into the intermediates so remodulate can composite them.
     {
         const int32_t iters = glm::max(1, params.atrousIterations);
+        const StringID scratchSpec[2] = {SID("relax_atrous_spec_0"), SID("relax_atrous_spec_1")};
+        const StringID scratchDiff[2] = {SID("relax_atrous_diff_0"), SID("relax_atrous_diff_1")};
 
         for (int32_t i = 0; i < iters; i++) {
-            const int32_t writeIdx = 1 - readIdx;
             const bool isLast = (i == iters - 1);
-            const StringID specOut = isLast ? specInput : atrousSpec[writeIdx];
-            const StringID diffOut = isLast ? diffInput : atrousDiff[writeIdx];
+            const StringID specIn = (i == 0) ? SID("relax_spec_hist") : scratchSpec[(i - 1) & 1];
+            const StringID diffIn = (i == 0) ? SID("relax_diff_hist") : scratchDiff[(i - 1) & 1];
+            const StringID specOut = isLast ? specInput : scratchSpec[i & 1];
+            const StringID diffOut = isLast ? diffInput : scratchDiff[i & 1];
             const uint32_t stepSize = 1u << static_cast<uint32_t>(i);
 
             char passName[32];
@@ -865,14 +861,13 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(depth);
             pass.ReadSampledImage(SID("relax_history_length"));
             pass.ReadSampledImage(SID("relax_spec_reproj_confidence"));
-            pass.ReadSampledImage(atrousSpec[readIdx]);
-            pass.ReadSampledImage(atrousDiff[readIdx]);
+            pass.ReadSampledImage(specIn);
+            pass.ReadSampledImage(diffIn);
             pass.WriteStorageImage(specOut);
             pass.WriteStorageImage(diffOut);
 
             pass.Execute([&graph, pipelineManager, gbufferOne, depth,
-                    specIn = atrousSpec[readIdx], diffIn = atrousDiff[readIdx],
-                    specOut, diffOut, stepSize, width, height](VkCommandBuffer cmd) {
+                    specIn, diffIn, specOut, diffOut, stepSize, width, height](VkCommandBuffer cmd) {
                     RelaxAtrousPushConstant pc{
                         .constants = graph.GetBufferAddress(SID("relax_constants")),
                         .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -893,8 +888,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                     vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
                 });
-
-            readIdx = writeIdx;
         }
     }
 
@@ -912,7 +905,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(noisyInput);
 
-        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode](VkCommandBuffer cmd) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -924,6 +917,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(noisyInput),
                 .width = width,
                 .height = height,
+                .outputMode = remodulateOutputMode,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

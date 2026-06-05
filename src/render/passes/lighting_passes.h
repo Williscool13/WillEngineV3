@@ -46,7 +46,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                const Core::ViewFamily& viewFamily,
                                Core::Array<uint32_t, 2> renderExtent,
                                const RenderTargets& targets,
-                               uint32_t sceneIndex);
+                               uint32_t sceneIndex,
+                               uint32_t outputMode);
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,

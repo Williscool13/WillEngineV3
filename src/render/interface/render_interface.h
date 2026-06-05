@@ -133,6 +133,7 @@ struct PostProcessConfiguration
     float bloomSoftThreshold{0.5f};
     float bloomRadius{1.0f};
     float bloomIntensity{0.04f};
+    float bloomClamp{10.0f};
 
     int32_t tonemapOperator{10};
 
@@ -557,6 +558,9 @@ struct ReSTIRParams
     // todo: Disabled atrous and asvgf. Readd as needed
     enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
     DenoiserMode denoiserMode{DenoiserMode::ASVGF};
+
+    enum class RemodulateOutput : uint32_t { Both = 0, DiffuseOnly = 1, SpecularOnly = 2 };
+    RemodulateOutput remodulateOutput{RemodulateOutput::Both};
 
     struct ATrousParams
     {
