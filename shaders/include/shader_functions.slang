@@ -280,6 +280,17 @@ float2 UnpackMotionVectors(uint p)
     return float2(f16tof32(p & 0xFFFF), f16tof32(p >> 16));
 }
 
+// World-space z delta packed as float16 into bits 16-31 of gbuffer_one.w
+uint PackWorldZDelta(float delta)
+{
+    return f32tof16(delta) << 16;
+}
+
+float UnpackWorldZDelta(uint p)
+{
+    return f16tof32(p >> 16);
+}
+
 // Octahedral encoding: maps a unit float3 normal to float2 in [-1,1]^2.
 float2 OctEncode(float3 n)
 {

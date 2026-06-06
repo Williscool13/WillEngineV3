@@ -228,11 +228,12 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float3 V = -normalize(currentViewVec);
     float NoV = abs(dot(currentNormal, V));
 
-    // Motion vectors from GBuffer1 (.g = R16G16 packed)
+    // Motion vectors from GBuffer1 (.g = R16G16 XY, .w bits 16-31 = world-space Z delta float16)
     float2 pixelUv = (float2(pixelPos) + 0.5) * rc.gRectSizeInv;
     uint4 gt1 = rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(pixelPos, 0));
     float2 mvXY = UnpackMotionVectors(gt1.g) * rc.gMvScale.xy;
-    float3 mv = float3(mvXY, 0.0);
+    float mvZ = UnpackWorldZDelta(gt1.w);
+    float3 mv = float3(mvXY, mvZ);
     float3 prevWorldPos = currentWorldPos;
     float2 prevUVSMB = pixelUv + mv.xy;
 

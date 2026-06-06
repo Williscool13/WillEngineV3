@@ -218,6 +218,11 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = abs(vsPos) / 100.0;
             break;
         }
+        case 27: { // GBufferWorldZDelta, float16 in gbuffer_one.w bits 16-31; abs * 10 for visibility
+            float delta = UnpackWorldZDelta(asuint(srcPixel.w));
+            srcPixel = float4(abs(delta) * 10.0, delta > 0.0 ? abs(delta) * 10.0 : 0.0, delta < 0.0 ? abs(delta) * 10.0 : 0.0, 1.0);
+            break;
+        }
         case 26: { // NDotV
             float3 N = normalize(UnpackNormalOct16(asuint(srcPixel.x)));
             float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;

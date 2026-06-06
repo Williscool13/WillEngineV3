@@ -503,7 +503,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gPrevFrustumRight = glm::vec4(prevRight * tanHalfFovX, 0.0f);
     rc.gPrevFrustumUp = glm::vec4(prevUp * tanHalfFovY, 0.0f);
     rc.gCameraDelta = glm::vec4(prevCamPos - camPos, 0.0f);
-    rc.gMvScale = glm::vec4(0.5f, 0.5f, 0.0f, 0.0f); // NDC (prev-curr) -> UV delta: *0.5, matches SVGF/ReSTIR reproject
+    rc.gMvScale = glm::vec4(0.5f, 0.5f, 1.0f, 0.0f); // xy: NDC->UV scale; z=1 = use gbuffer world-Z delta directly; w=0 = 2D path
 
     rc.gJitter = glm::vec2(0.0f);
     rc.gResolutionScale = glm::vec2(1.0f);
@@ -606,7 +606,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         });
     }
 
-    if (viewFamily.debugResourceName == "relax_tiles") { return; }
 
 
     // Pass 2: Prepass (optional spatial prefilter)
@@ -641,7 +640,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         });
     }
 
-    if (viewFamily.debugResourceName == "relax_spec_prepass") { return; }
 
 
     graph.CreateTexture(SID("relax_spec_illum"), colorInfo, {std::nullopt}, true);
@@ -736,7 +734,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         });
     }
 
-    if (viewFamily.debugResourceName == "relax_spec_illum") { return; }
 
 
     graph.CreateTexture(SID("relax_atrous_spec_0"), colorInfo, {std::nullopt}, true);
@@ -775,7 +772,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         });
     }
 
-    if (viewFamily.debugResourceName == "relax_atrous_spec_0") { return; }
 
     // ----------------------------------------------------------------
     // Pass 5: History Clamping
@@ -850,7 +846,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         });
     }
 
-    if (viewFamily.debugResourceName == "relax_spec_hist") { return; }
 
     // Pass 7: A-Trous (N iterations). Iteration 0 reads the carried slow history (relax_*_hist).
     // Later iterations ping-pong the atrous scratch buffers. The hist textures are never written by the A-Trous chain, so they survive end-of-frame to be carried as next frame's slow history.

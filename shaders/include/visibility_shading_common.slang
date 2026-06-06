@@ -16,6 +16,7 @@ public struct ShadingInputs
     public float2 uvDdx;
     public float2 uvDdy;
     public float2 velocity;
+    public float worldZDelta;
     public float4x4 mv;
 }
 
@@ -101,6 +102,10 @@ public ReconstructedShadingData ReconstructShadingInputs(
     float2 currNDC = currClip.xy / currClip.w;
     float2 prevNDC = prevClip.xy / prevClip.w;
     result.shadingInputs.velocity = (prevNDC - currNDC) - sceneData->jitter + sceneData->prevJitter;
+
+    float3 currWorldPos = mul(result.model.modelMatrix, float4(result.shadingInputs.objPos, 1.0)).xyz;
+    float3 prevWorldPos = mul(result.model.prevModelMatrix, float4(result.shadingInputs.objPos, 1.0)).xyz;
+    result.shadingInputs.worldZDelta = prevWorldPos.z - currWorldPos.z;
 
     result.valid = true;
     return result;
