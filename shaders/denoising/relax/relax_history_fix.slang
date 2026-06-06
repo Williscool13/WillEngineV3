@@ -1,6 +1,7 @@
 /*
  * RELAX: HistoryFix pass. Sparse cross-bilateral filter to fill disocclusions.
- * This software contains source code provided by NVIDIA Corporation.
+ * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+ * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */
 
 import push_constant_interop;
@@ -9,7 +10,7 @@ import constants_interop;
 import relax_interop;
 import relax_utils;
 
-float getDiffuseNormalWeight(float3 centerNormal, float3 pointNormal, float power)
+float GetDiffuseNormalWeight(float3 centerNormal, float3 pointNormal, float power)
 {
     return pow(max(0.01, dot(centerNormal, pointNormal)), max(power, 0.01));
 }
@@ -78,7 +79,7 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
             geometryW = RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange) ? geometryW : 0.0;
 
             // Diffuse weight
-            float diffW = geometryW * getDiffuseNormalWeight(centerNormal, sampleNormal, rc.gHistoryFixEdgeStoppingNormalPower);
+            float diffW = geometryW * GetDiffuseNormalWeight(centerNormal, sampleNormal, rc.gHistoryFixEdgeStoppingNormalPower);
             if (diffW > 1e-4)
             {
                 diffSum += rdgTexturesFloat4[pc.diffIndex].Load(int3(samplePosInt, 0)) * diffW;

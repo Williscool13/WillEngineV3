@@ -1055,7 +1055,8 @@ SHADER_PUBLIC struct SVGFAtrousWaveletPushConstant
 
 // =====================================================================
 // RELAX DiffuseSpecular denoiser push constants
-// This software contains source code provided by NVIDIA Corporation.
+// Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+// https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
 // =====================================================================
 
 SHADER_PUBLIC struct RelaxClassifyTilesPushConstant
@@ -1083,7 +1084,6 @@ SHADER_PUBLIC struct RelaxPrepassPushConstant
 SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
-    // Inputs
     SHADER_PUBLIC uint32_t tilesIndex;
     SHADER_PUBLIC uint32_t normalRoughnessIndex;
     SHADER_PUBLIC uint32_t viewZIndex;
@@ -1097,7 +1097,6 @@ SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
     SHADER_PUBLIC uint32_t historySpecIndex;
     SHADER_PUBLIC uint32_t historyDiffIndex;
     SHADER_PUBLIC uint32_t prevSpecHitDistIndex;
-    // Outputs
     SHADER_PUBLIC uint32_t outHistoryLengthIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
@@ -1156,7 +1155,7 @@ SHADER_PUBLIC struct RelaxAtrousPushConstant
     SHADER_PUBLIC uint32_t diffIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
-    SHADER_PUBLIC uint32_t gStepSize;
+    SHADER_PUBLIC uint32_t stepSize;
 };
 
 SHADER_PUBLIC struct RelaxAntiFireflyPushConstant

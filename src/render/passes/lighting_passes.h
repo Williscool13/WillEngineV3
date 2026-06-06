@@ -13,16 +13,6 @@ namespace Render
 {
 class PipelineManager;
 
-void SetupReSTIRPasses(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       const Core::ViewFamily& viewFamily,
-                       Core::Array<uint32_t, 2> renderExtent,
-                       const RenderTargets& targets,
-                       uint32_t sceneIndex,
-                       Core::Arena& arena,
-                       uint64_t frameNumber,
-                       const Core::ReSTIRParams& restirParams);
-
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
@@ -31,23 +21,6 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
                                         uint64_t frameNumber);
-
-void SetupReSTIRLightingResolvePass(RenderGraph& graph,
-                                    PipelineManager* pipelineManager,
-                                    const Core::ViewFamily& viewFamily,
-                                    Core::Array<uint32_t, 2> renderExtent,
-                                    const RenderTargets& targets,
-                                    uint32_t sceneIndex,
-                                    Core::Arena& arena,
-                                    uint64_t frameNumber);
-
-void SetupReSTIRRemodulatePass(RenderGraph& graph,
-                               PipelineManager* pipelineManager,
-                               const Core::ViewFamily& viewFamily,
-                               Core::Array<uint32_t, 2> renderExtent,
-                               const RenderTargets& targets,
-                               uint32_t sceneIndex,
-                               uint32_t outputMode);
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,

@@ -589,7 +589,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     {
         graph.CreateTexture(SID("relax_tiles"), tilesInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[RELAX] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+        auto& pass = graph.AddPass(SID("[RELAX] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(SID("relax_tiles"));
@@ -614,7 +614,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         graph.CreateTexture(SID("relax_spec_prepass"), colorInfo, {std::nullopt}, true);
         graph.CreateTexture(SID("relax_diff_prepass"), colorInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[RELAX] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+        auto& pass = graph.AddPass(SID("[RELAX] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(depth);
@@ -670,7 +670,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const StringID specIn = params.enablePrepass ? SID("relax_spec_prepass") : specInput;
         const StringID diffIn = params.enablePrepass ? SID("relax_diff_prepass") : diffInput;
 
-        auto& pass = graph.AddPass(SID("[RELAX] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+        auto& pass = graph.AddPass(SID("[RELAX] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -746,7 +746,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     // Pass 4: History Fix
     {
-        auto& pass = graph.AddPass(SID("[RELAX] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+        auto& pass = graph.AddPass(SID("[RELAX] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -784,7 +784,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const StringID specNoisy = params.enablePrepass ? SID("relax_spec_prepass") : specInput;
         const StringID diffNoisy = params.enablePrepass ? SID("relax_diff_prepass") : diffInput;
 
-        auto& pass = graph.AddPass(SID("[RELAX] History Clamping"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+        auto& pass = graph.AddPass(SID("[RELAX] History Clamping"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(depth);
@@ -824,7 +824,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     // Pass 6: Anti-Firefly. RCRS filter applied in-place to the clamped slow history, so the firefly-suppressed result is what gets carried as next frame's history (matches NRD's Copy + Anti-Firefly writing back into SPEC/DIFF_ILLUM_PREV).
     if (params.enableAntiFirefly) {
-        auto& pass = graph.AddPass(SID("[RELAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+        auto& pass = graph.AddPass(SID("[RELAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -871,7 +871,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             char passName[32];
             snprintf(passName, sizeof(passName), "[RELAX] ATrous %d", i);
 
-            auto& pass = graph.AddPass(SID(passName), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+            auto& pass = graph.AddPass(SID(passName), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
             pass.ReadBuffer(SID("relax_constants"));
             pass.ReadSampledImage(SID("relax_tiles"));
             pass.ReadSampledImage(gbufferOne);
@@ -898,7 +898,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
                         .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specOut),
                         .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
-                        .gStepSize = stepSize,
+                        .stepSize = stepSize,
                     };
                     const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_atrous"));
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -913,7 +913,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     {
         const StringID gbufferTwo = targets.gbufferTwo;
 
-        auto& pass = graph.AddPass(SID("[RELAX] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Denoising);
+        auto& pass = graph.AddPass(SID("[RELAX] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);

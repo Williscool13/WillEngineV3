@@ -1,6 +1,7 @@
 /*
  * RELAX: TemporalAccumulation pass. Surface-motion + virtual-motion reprojection.
- * This software contains source code provided by NVIDIA Corporation.
+ * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+ * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */
 
 import push_constant_interop;
@@ -27,14 +28,14 @@ void TAPreload(uint2 sharedPos, int2 globalPos, uint normalRoughnessIndex, uint 
     sharedNormalSpecHitT[sharedPos.y][sharedPos.x] = normalSpecHitT;
 }
 
-float isReprojectionTapValid(float3 currentWorldPos, float3 previousWorldPos, float3 currentNormal, float disocclusionThreshold)
+float IsReprojectionTapValid(float3 currentWorldPos, float3 previousWorldPos, float3 currentNormal, float disocclusionThreshold)
 {
     float d = abs(dot(previousWorldPos - currentWorldPos, currentNormal));
     return d > disocclusionThreshold ? 0.0 : 1.0;
 }
 
 /** Surface-motion reprojection. Returns 0 = not found, 1 = bilinear, 2 = bicubic. */
-float loadSurfaceMotionBasedPrevData(
+float LoadSurfaceMotionBasedPrevData(
     RelaxDiffuseSpecularConstants* rc,
     float3 prevWorldPos, float2 prevUVSMB, float currentLinearZ, float3 currentNormal,
     float currentReflectionHitT, float NoV, float smbParallaxInPixelsMax,
@@ -121,7 +122,7 @@ float loadSurfaceMotionBasedPrevData(
 }
 
 /** Virtual-motion reprojection for specular. Returns 1 = found, 0 = not found. */
-float loadVirtualMotionBasedPrevData(
+float LoadVirtualMotionBasedPrevData(
     RelaxDiffuseSpecularConstants* rc,
     float3 currentWorldPos, float3 currentNormal, float currentLinearZ,
     float3 virtualWorldPos, bool surfaceBicubicValid, float2 prevUVSMB, float disocclusionThreshold,
@@ -152,10 +153,10 @@ float loadVirtualMotionBasedPrevData(
     float3 tap01 = RelaxGetPreviousWorldPosFromPixelPos(bilinearOrigin + int2(0,1), prevVZs.z, rc.gRectSizePrev, rc.gPrevFrustumForward, rc.gPrevFrustumRight, rc.gPrevFrustumUp, rc.gOrthoMode);
     float3 tap11 = RelaxGetPreviousWorldPosFromPixelPos(bilinearOrigin + int2(1,1), prevVZs.w, rc.gRectSizePrev, rc.gPrevFrustumForward, rc.gPrevFrustumRight, rc.gPrevFrustumUp, rc.gOrthoMode);
     float4 bilinearTapsValid = float4(
-        isReprojectionTapValid(currWorldPosNoDelta, tap00, currentNormal, vmbDisocclusionThreshold.x),
-        isReprojectionTapValid(currWorldPosNoDelta, tap10, currentNormal, vmbDisocclusionThreshold.y),
-        isReprojectionTapValid(currWorldPosNoDelta, tap01, currentNormal, vmbDisocclusionThreshold.z),
-        isReprojectionTapValid(currWorldPosNoDelta, tap11, currentNormal, vmbDisocclusionThreshold.w));
+        IsReprojectionTapValid(currWorldPosNoDelta, tap00, currentNormal, vmbDisocclusionThreshold.x),
+        IsReprojectionTapValid(currWorldPosNoDelta, tap10, currentNormal, vmbDisocclusionThreshold.y),
+        IsReprojectionTapValid(currWorldPosNoDelta, tap01, currentNormal, vmbDisocclusionThreshold.z),
+        IsReprojectionTapValid(currWorldPosNoDelta, tap11, currentNormal, vmbDisocclusionThreshold.w));
 
     prevSpecIllum = 0; prevSpecResponsiveIllum = 0;
     prevNormal = currentNormal; prevRoughness = 0;
@@ -295,7 +296,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float prevReflectionHitTSMB;
     float historyLength;
 
-    float SMBReprojectionFound = loadSurfaceMotionBasedPrevData(
+    float SMBReprojectionFound = LoadSurfaceMotionBasedPrevData(
         rc, prevWorldPos, prevUVSMB, currentLinearZ, normalize(currentNormalAveraged),
         specularIllumination.a, NoV, smbParallaxInPixelsMax, disocclusionThreshold,
         footprintQuality, historyLength,
@@ -416,7 +417,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float prevRoughnessVMB, prevReflectionHitTVMB;
     float2 prevUVVMB;
 
-    float VMBReprojectionFound = loadVirtualMotionBasedPrevData(
+    float VMBReprojectionFound = LoadVirtualMotionBasedPrevData(
         rc, currentWorldPos, currentNormal, currentLinearZ,
         virtualWorldPos, SMBReprojectionFound == 2.0, prevUVSMB, disocclusionThreshold,
         prevSpecIllumVMB, prevSpecResponsiveVMB,

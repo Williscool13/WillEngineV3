@@ -37,9 +37,10 @@ enum class ResourceCategory : uint64_t
     UI = 1ull << 7,
     PostProcessing = 1ull << 8,
     Debug = 1ull << 9,
+    ReSTIR = 1ull << 10,
 };
 
-inline constexpr uint32_t RESOURCE_CATEGORY_BIT_COUNT = 10;
+inline constexpr uint32_t RESOURCE_CATEGORY_BIT_COUNT = 11;
 inline constexpr const char* RESOURCE_CATEGORY_NAMES[RESOURCE_CATEGORY_BIT_COUNT] = {
     "Geometry",
     "Lighting",
@@ -51,6 +52,7 @@ inline constexpr const char* RESOURCE_CATEGORY_NAMES[RESOURCE_CATEGORY_BIT_COUNT
     "UI",
     "PostProcessing",
     "Debug",
+    "ReSTIR",
 };
 
 inline ResourceCategory operator|(ResourceCategory a, ResourceCategory b)

@@ -1,6 +1,7 @@
 /*
  * RELAX denoiser constants struct.
- * This software contains source code provided by NVIDIA Corporation.
+ * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+ * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */
 
 #ifndef WILL_ENGINE_RELAX_INTEROP_H

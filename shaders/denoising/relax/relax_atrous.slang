@@ -1,6 +1,7 @@
 /*
  * RELAX: A-Trous wavelet filter. 3x3 with configurable step size.
- * This software contains source code provided by NVIDIA Corporation.
+ * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+ * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */
 
 import push_constant_interop;
@@ -15,7 +16,7 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
 {
     RelaxDiffuseSpecularConstants* rc = pc.constants;
     float3x3 viewToWorld = (float3x3)rc.gViewToWorld;
-    int stepSize = int(pc.gStepSize);
+    int stepSize = int(pc.stepSize);
 
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)

@@ -78,6 +78,8 @@ add_library(render STATIC
         passes/geometry_passes.h
         passes/lighting_passes.cpp
         passes/lighting_passes.h
+        passes/restir_passes.cpp
+        passes/restir_passes.h
         passes/denoising_passes.cpp
         passes/denoising_passes.h
         passes/ambient_occlusion_passes.cpp

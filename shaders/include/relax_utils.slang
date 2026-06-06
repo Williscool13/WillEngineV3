@@ -1,7 +1,8 @@
 /*
  * RELAX denoiser utility functions.
  * This software contains source code provided by NVIDIA Corporation.
- * Adapted from NRD (https://github.com/NVIDIAGameWorks/RayTracingDenoiser).
+ * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+ * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */
 
 module relax_utils;
