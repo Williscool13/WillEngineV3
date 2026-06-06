@@ -235,8 +235,6 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float3 prevWorldPos = currentWorldPos;
     float2 prevUVSMB = pixelUv + mv.xy;
 
-    // TODO: Hack this is being set to something wrong if called after this if branch. Figure it out for next submission
-    float3 Vprev = (rc.gOrthoMode == 0) ? -normalize(prevWorldPos - rc.gCameraDelta.xyz) : -normalize(rc.gPrevFrustumForward.xyz);
     if (rc.gMvScale.w == 0.0)
     {
         if (rc.gMvScale.z == 0.0)
@@ -312,8 +310,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     historyLength = min(historyLength, maxAccumulatedFrameNum);
 
     // Footprint quality adjustment
-    // TODO: Hack this is being set to something wrong if called here. Figure it out for next submission
-    //float3 Vprev = (rc.gOrthoMode == 0) ? -normalize(prevWorldPos - rc.gCameraDelta.xyz) : -normalize(rc.gPrevFrustumForward.xyz);
+    float3 Vprev = (rc.gOrthoMode == 0) ? -normalize(prevWorldPos - rc.gCameraDelta.xyz) : -normalize(rc.gPrevFrustumForward.xyz);
     float NoVprev = abs(dot(currentNormal, Vprev));
     float sizeQuality = (NoVprev + 1e-3) / (NoV + 1e-3);
     sizeQuality *= sizeQuality; sizeQuality *= sizeQuality;

@@ -443,9 +443,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     const StringID diffInput = targets.intermediateOne;
     const StringID noisyInput = targets.colorOutput;
 
-    // ----------------------------------------------------------------
     // Build RelaxDiffuseSpecularConstants
-    // ----------------------------------------------------------------
     const glm::mat4& view = viewFamily.mainView.currentViewData.view;
     const glm::mat4& proj = viewFamily.mainView.currentViewData.proj;
     const glm::mat4& prevView = viewFamily.mainView.previousViewData.view;
@@ -455,6 +453,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     const glm::mat4 invPrevView = glm::inverse(prevView);
     const float tanHalfFovX = 1.0f / glm::abs(proj[0][0]);
     const float tanHalfFovY = 1.0f / glm::abs(proj[1][1]);
+
+    // Camera-relative world space (NRD convention): rotation-only current view, prev view carries only the frame-to-frame delta in its translation.
+    const glm::mat4 rotView = glm::mat4(glm::mat3(view));
 
     // World-space frustum vectors for position reconstruction
     const glm::vec3 right = glm::vec3(invView[0]);
@@ -466,17 +467,33 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     const glm::vec3 camPos = glm::vec3(invView[3]);
     const glm::vec3 prevCamPos = glm::vec3(invPrevView[3]);
+    const glm::vec3 translationDelta = prevCamPos - camPos;
+
+    // gWorldToViewPrev: camera-relative prev view->world (true view->world rotation + prev camera offset), then inverted.
+    glm::mat4 viewToWorldPrev = glm::mat4(glm::mat3(invPrevView));
+    viewToWorldPrev[3] = glm::vec4(translationDelta, 1.0f);
+    const glm::mat4 worldToViewPrev = glm::inverse(viewToWorldPrev);
+
+    // gViewToWorld: rotation-only view->world (camera at origin), used to rotate view-space gbuffer normals to world.
+    glm::mat4 viewToWorld = glm::mat4(glm::mat3(invView));
+    viewToWorld[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
     const bool bFirstFrame = !graph.HasTexture(SID("relax_spec_illum_history"));
 
     RelaxDiffuseSpecularConstants rc{};
 
-    rc.gWorldToClip = proj * view;
-    rc.gWorldToClipPrev = prevProj * prevView;
+    rc.gWorldToClip = proj * rotView;
+    rc.gWorldToClipPrev = prevProj * worldToViewPrev;
 
-    rc.gWorldToViewPrev = prevView;
+    // gWorldToViewPrev must emit positive viewZ (NRD convention) to match the positive linearized depths it is compared against; negate the z-output row of the camera-relative world->prevView matrix.
+    glm::mat4 worldToViewPrevPosZ = worldToViewPrev;
+    worldToViewPrevPosZ[0][2] = -worldToViewPrevPosZ[0][2];
+    worldToViewPrevPosZ[1][2] = -worldToViewPrevPosZ[1][2];
+    worldToViewPrevPosZ[2][2] = -worldToViewPrevPosZ[2][2];
+    worldToViewPrevPosZ[3][2] = -worldToViewPrevPosZ[3][2];
+    rc.gWorldToViewPrev = worldToViewPrevPosZ;
     rc.gWorldPrevToWorld = glm::mat4(1.0f);
-    rc.gViewToWorld = invView;
+    rc.gViewToWorld = viewToWorld;
 
     rc.gRotatorPre = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f); // identity rotator
     rc.gFrustumForward = glm::vec4(forward, 0.0f);
@@ -485,7 +502,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gPrevFrustumForward = glm::vec4(prevForward, 0.0f);
     rc.gPrevFrustumRight = glm::vec4(prevRight * tanHalfFovX, 0.0f);
     rc.gPrevFrustumUp = glm::vec4(prevUp * tanHalfFovY, 0.0f);
-    rc.gCameraDelta = glm::vec4(camPos - prevCamPos, 0.0f);
+    rc.gCameraDelta = glm::vec4(prevCamPos - camPos, 0.0f);
     rc.gMvScale = glm::vec4(0.5f, 0.5f, 0.0f, 0.0f); // NDC (prev-curr) -> UV delta: *0.5, matches SVGF/ReSTIR reproject
 
     rc.gJitter = glm::vec2(0.0f);

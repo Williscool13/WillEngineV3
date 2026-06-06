@@ -31,7 +31,7 @@ float3 VarianceClipping(float3 historyColor, float2 uv) {
     float3 variance = squaredSum - mean * mean;
     float3 stddev = sqrt(max(variance, float3(0.0)));
 
-    float3 gamma = float3(1.5, 1.25, 1.25);
+    float3 gamma = float3(0.75, 1.0, 1.0);
     float3 minc = mean - gamma * stddev;
     float3 maxc = mean + gamma * stddev;
 
