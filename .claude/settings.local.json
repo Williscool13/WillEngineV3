@@ -6,7 +6,9 @@
       "Bash(xargs grep:*)",
       "Bash(grep -E \"\\\\.h$|\\\\.cpp$\")",
       "PowerShell(head *)",
-      "Bash(grep -E \"\\\\.\\(cpp|h\\)$\")"
+      "Bash(grep -E \"\\\\.\\(cpp|h\\)$\")",
+      "Bash(Get-ChildItem -Path \"D:\\\\source\\\\repos\\\\WillEngineV3\" -Directory)",
+      "Bash(Select-Object Name)"
     ],
     "deny": [],
     "ask": []

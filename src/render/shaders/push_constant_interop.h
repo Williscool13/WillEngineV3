@@ -1171,4 +1171,11 @@ SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
     SHADER_PUBLIC uint32_t _pad0;
 };
 
+SHADER_PUBLIC struct DepthCopyPushConstant
+{
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint2 extents;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

@@ -459,6 +459,9 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("smaa_temporal_resolve"), src / "smaa_temporal_resolve_compute.spv",
                             sizeof(SmaaTemporalResolvePushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("depth_copy"), src / "depth_copy_compute.spv",
+                            sizeof(DepthCopyPushConstant), PipelineCategory::Critical);
+
     RegisterComputePipeline(SID("gtao_depth_prepass"), src / "gtao_depth_prepass_compute.spv",
                             sizeof(GTAODepthPrepassPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gtao_main"), src / "gtao_main_compute.spv",
@@ -684,7 +687,7 @@ void PipelineManager::RegisterPipelines()
         builder.AddShaderStage(src / "sprites_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
         VkPipelineColorBlendAttachmentState colorBlend{
             .blendEnable = VK_FALSE,

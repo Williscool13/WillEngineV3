@@ -35,6 +35,7 @@ struct RenderTargets
 
     StringID colorOutput;
     StringID depthStencil;
+    StringID depthCopy;
     StringID stableId;
 };
 

@@ -26,10 +26,10 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     RenderPass& edgePass = graph.AddPass(SID("SMAA Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
     edgePass.ReadBuffer(SID("scene_data"));
     edgePass.ReadSampledImage(targets.colorOutput);
-    edgePass.ReadSampledImage(targets.depthStencil);
+    edgePass.ReadSampledImage(targets.depthCopy);
     edgePass.WriteStorageImage(SID("smaa_edges"));
     edgePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
-            outputColor = targets.colorOutput, depthStencil = targets.depthStencil,
+            outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
             smaaConfig](VkCommandBuffer cmd) {
             SmaaEdgeDetectionPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
@@ -126,10 +126,10 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     RenderPass& edgePass = graph.AddPass(SID("SMAA T2X Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
     edgePass.ReadBuffer(SID("scene_data"));
     edgePass.ReadSampledImage(targets.colorOutput);
-    edgePass.ReadSampledImage(targets.depthStencil);
+    edgePass.ReadSampledImage(targets.depthCopy);
     edgePass.WriteStorageImage(SID("smaa_edges"));
     edgePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
-            outputColor = targets.colorOutput, depthStencil = targets.depthStencil,
+            outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
             smaaConfig](VkCommandBuffer cmd) {
             SmaaEdgeDetectionPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
@@ -284,18 +284,18 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     RenderPass& taaPass = graph.AddPass(SID("TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
     taaPass.ReadBuffer(SID("scene_data"));
     taaPass.ReadSampledImage(targets.colorOutput);
-    taaPass.ReadSampledImage(targets.depthStencil);
+    taaPass.ReadSampledImage(targets.depthCopy);
     taaPass.ReadSampledImage(SID("taa_history"));
     taaPass.ReadSampledImage(targets.gbufferOne);
     taaPass.ReadSampledImage(SID("gbuffer_one_history"));
     taaPass.WriteStorageImage(SID("taa_current"));
     taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
-            outputColor = targets.colorOutput, depthStencil = targets.depthStencil,
+            outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
             gbufferOne = targets.gbufferOne, pipelineSID](VkCommandBuffer cmd) {
             TemporalAntialiasingPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
-                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
                 .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("taa_history")),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferOneHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")),

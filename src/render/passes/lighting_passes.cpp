@@ -47,14 +47,14 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightingResolve.ReadSampledImage(targets.gbufferOne);
     lightingResolve.ReadSampledImage(targets.gbufferTwo);
-    lightingResolve.ReadSampledImage(targets.depthStencil);
+    lightingResolve.ReadSampledImage(targets.depthCopy);
     if (targets.shadows != StringID{}) {
         lightingResolve.ReadSampledImage(targets.shadows);
     }
     lightingResolve.WriteStorageImage(targets.colorOutput);
     lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            depth = targets.depthStencil, shadows = targets.shadows,
+            depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex,
             buckets, lightingCount](VkCommandBuffer cmd) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
@@ -78,7 +78,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                    .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                    .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                     .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
                     .skyboxIndex = skyboxIndex,
                     .primaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
@@ -129,7 +129,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
     pass.ReadSampledImage(targets.visibility);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
-    pass.ReadSampledImage(targets.depthStencil);
+    pass.ReadSampledImage(targets.depthCopy);
     if (targets.shadows != StringID{}) {
         pass.ReadSampledImage(targets.shadows);
     }
@@ -137,7 +137,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
     pass.Execute([&, pipelineManager, sceneIndex, frameNumber, accumulationCount,
             visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            depth = targets.depthStencil, shadows = targets.shadows,
+            depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, renderExtent](VkCommandBuffer cmd) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("lighting_ground_truth"));
             if (!pipelineEntry) { return; }
@@ -154,7 +154,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0u,
                 .skyboxIndex = skyboxIndex,
                 .primaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),

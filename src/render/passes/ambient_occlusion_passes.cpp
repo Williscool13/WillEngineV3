@@ -32,16 +32,16 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
 
     RenderPass& depthPrepass = graph.AddPass(SID("GTAO Depth Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AmbientOcclusion);
     depthPrepass.ReadBuffer(SID("scene_data"));
-    depthPrepass.ReadSampledImage(targets.depthStencil);
+    depthPrepass.ReadSampledImage(targets.depthCopy);
     depthPrepass.WriteStorageImage(SID("gtao_depth"));
     depthPrepass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            depthStencil = targets.depthStencil,
+            depthStencil = targets.depthCopy,
             effectRadius = gtaoConfig.effectRadius,
             effectFalloffRange = gtaoConfig.effectFalloffRange,
             radiusMultiplier = gtaoConfig.radiusMultiplier](VkCommandBuffer cmd) {
             GTAODepthPrepassPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")) + sizeof(SceneData) * sceneIndex,
-                .inputDepth = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
+                .inputDepth = graph.GetSampledImageViewDescriptorIndex(depthStencil),
                 .outputDepth0 = graph.GetStorageImageViewDescriptorIndex(SID("gtao_depth"), 0),
                 .outputDepth1 = graph.GetStorageImageViewDescriptorIndex(SID("gtao_depth"), 1),
                 .outputDepth2 = graph.GetStorageImageViewDescriptorIndex(SID("gtao_depth"), 2),

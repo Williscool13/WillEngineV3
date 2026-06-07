@@ -23,7 +23,7 @@ void SetupShadowsResolve(RenderGraph& graph,
     graph.CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
     shadowsResolvePass.ReadSampledImage(targets.gbufferOne);
-    shadowsResolvePass.ReadSampledImage(targets.depthStencil);
+    shadowsResolvePass.ReadSampledImage(targets.depthCopy);
 
     bool bHasGTAO = graph.HasTexture(SID("gtao_filtered"));
     if (bHasGTAO) {
@@ -44,7 +44,7 @@ void SetupShadowsResolve(RenderGraph& graph,
     shadowsResolvePass.WriteStorageImage(SID("shadows_resolve_target"));
     shadowsResolvePass.Execute([&, pipelineManager, bHasShadows, bHasGTAO,
             width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            depthStencil = targets.depthStencil, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd) {
+            depthStencil = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shadows_resolve"));
 
             glm::ivec4 csmIndices{-1, -1, -1, -1};
@@ -64,7 +64,7 @@ void SetupShadowsResolve(RenderGraph& graph,
                 .gtaoFilteredIndex = gtaoIndex,
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("shadows_resolve_target")),
                 .csmIndices = csmIndices,
-                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             };
 

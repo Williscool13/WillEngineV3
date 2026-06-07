@@ -287,7 +287,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     const uint32_t height = ctx.extent[1];
     PipelineManager* pipelines = ctx.pipelines;
     StringID velocity = ctx.targets.gbufferTwo;
-    StringID depthStencil = ctx.targets.depthStencil;
+    StringID depthStencil = ctx.targets.depthCopy;
     float velocityScale = ctx.config.motionBlurVelocityScale;
     float depthScale = ctx.config.motionBlurDepthScale;
 
@@ -347,7 +347,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
             .srcBufferSize = {width, height},
             .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
-            .depthBufferIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
+            .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
             .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("motion_blur_tiled_neighbor_max")),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_output")),
             .velocityScale = velocityScale,

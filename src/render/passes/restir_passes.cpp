@@ -35,9 +35,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
     genPass.ReadSampledImage(targets.visibility);
     genPass.ReadSampledImage(targets.gbufferOne);
     genPass.ReadSampledImage(targets.gbufferTwo);
-    genPass.ReadSampledImage(targets.depthStencil);
+    genPass.ReadSampledImage(targets.depthCopy);
     genPass.WriteBuffer(SID("restir_reservoir_buffer"));
-    genPass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
+    genPass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_generate"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -49,7 +49,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .renderExtent = {renderExtent[0], renderExtent[1]},
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
@@ -83,11 +83,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
         temporalPass.ReadSampledImage(targets.visibility);
         temporalPass.ReadSampledImage(targets.gbufferOne);
         temporalPass.ReadSampledImage(targets.gbufferTwo);
-        temporalPass.ReadSampledImage(targets.depthStencil);
+        temporalPass.ReadSampledImage(targets.depthCopy);
         temporalPass.ReadSampledImage(SID("gbuffer_one_history"));
         temporalPass.ReadSampledImage(SID("depth_history"));
         temporalPass.WriteBuffer(SID("restir_reservoir_temporal"));
-        temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
+        temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -101,9 +101,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .prevGbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")),
-                .prevDepthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(SID("depth_history")),
+                .prevDepthIndex = graph.GetSampledImageViewDescriptorIndex(SID("depth_history")),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
@@ -134,9 +134,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
     spatial1Pass.ReadSampledImage(targets.visibility);
     spatial1Pass.ReadSampledImage(targets.gbufferOne);
     spatial1Pass.ReadSampledImage(targets.gbufferTwo);
-    spatial1Pass.ReadSampledImage(targets.depthStencil);
+    spatial1Pass.ReadSampledImage(targets.depthCopy);
     spatial1Pass.WriteBuffer(SID("restir_reservoir_spatial"));
-    spatial1Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
+    spatial1Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -149,7 +149,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .renderExtent = {renderExtent[0], renderExtent[1]},
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
@@ -182,9 +182,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
     spatial2Pass.ReadSampledImage(targets.visibility);
     spatial2Pass.ReadSampledImage(targets.gbufferOne);
     spatial2Pass.ReadSampledImage(targets.gbufferTwo);
-    spatial2Pass.ReadSampledImage(targets.depthStencil);
+    spatial2Pass.ReadSampledImage(targets.depthCopy);
     spatial2Pass.WriteBuffer(SID("restir_reservoir_spatial2"));
-    spatial2Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
+    spatial2Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -197,7 +197,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .renderExtent = {renderExtent[0], renderExtent[1]},
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
@@ -249,7 +249,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightingResolve.ReadSampledImage(targets.gbufferOne);
     lightingResolve.ReadSampledImage(targets.gbufferTwo);
-    lightingResolve.ReadSampledImage(targets.depthStencil);
+    lightingResolve.ReadSampledImage(targets.depthCopy);
     if (targets.shadows != StringID{}) {
         lightingResolve.ReadSampledImage(targets.shadows);
     }
@@ -257,7 +257,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     lightingResolve.WriteStorageImage(targets.intermediateTwo);
     lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            depth = targets.depthStencil, shadows = targets.shadows,
+            depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
             buckets, lightingCount](VkCommandBuffer cmd) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
@@ -281,7 +281,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                    .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                    .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                     .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
                     .skyboxIndex = skyboxIndex,
                     .primaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(diffuseOut),
@@ -314,12 +314,12 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     pass.ReadSampledImage(targets.intermediateTwo);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
-    pass.ReadSampledImage(targets.depthStencil);
+    pass.ReadSampledImage(targets.depthCopy);
     pass.WriteStorageImage(targets.colorOutput);
     pass.Execute([&graph, pipelineManager, sceneIndex, outputMode, width, height,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            depth = targets.depthStencil, output = targets.colorOutput](VkCommandBuffer cmd) {
+            depth = targets.depthCopy, output = targets.colorOutput](VkCommandBuffer cmd) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = sceneIndex,
@@ -327,7 +327,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .specularIndex = graph.GetSampledImageViewDescriptorIndex(specular),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
                 .width = width,
                 .height = height,
