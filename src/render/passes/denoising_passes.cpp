@@ -585,7 +585,30 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     const TextureInfo hitDistInfo{VK_FORMAT_R16_SFLOAT, width, height, 1};
     const TextureInfo reprConfInfo{VK_FORMAT_R8_UNORM, width, height, 1};
     const TextureInfo tilesInfo{VK_FORMAT_R8_UNORM, tilesW, tilesH, 1};
+    const TextureInfo viewZInfo{VK_FORMAT_R32_SFLOAT, width, height, 1};
 
+    // Pass 0: Generate half-res linearized viewZ (necessary cause of GatherRed)
+    {
+        graph.CreateTexture(SID("relax_viewz"), viewZInfo, {std::nullopt}, true);
+        graph.CarryTextureToNextFrame(SID("relax_viewz"), SID("relax_viewz_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+
+        auto& pass = graph.AddPass(SID("[RELAX] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SID("relax_constants"));
+        pass.ReadSampledImage(depth);
+        pass.WriteStorageImage(SID("relax_viewz"));
+        pass.Execute([&graph, pipelineManager, depth, width, height, pixelScale](VkCommandBuffer cmd) {
+            RelaxGenerateViewZPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("relax_constants")),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_viewz")),
+                .pixelScale = pixelScale,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_generate_viewz"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
+    }
 
     // Pass 1: Classify Tiles
     {
@@ -608,7 +631,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             vkCmdDispatch(cmd, tilesW, tilesH, 1);
         });
     }
-
 
 
     // Pass 2: Prepass (optional spatial prefilter)
@@ -643,7 +665,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
         });
     }
-
 
 
     graph.CreateTexture(SID("relax_spec_illum"), colorInfo, {std::nullopt}, true);
@@ -686,7 +707,12 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         if (graph.HasTexture(SID("relax_history_length_history"))) { pass.ReadSampledImage(SID("relax_history_length_history")); }
         if (graph.HasTexture(SID("relax_spec_hit_dist_history"))) { pass.ReadSampledImage(SID("relax_spec_hit_dist_history")); }
         if (graph.HasTexture(SID("relax_prev_nr_history"))) { pass.ReadSampledImage(SID("relax_prev_nr_history")); }
-        if (graph.HasTexture(SID("depth_history"))) { pass.ReadSampledImage(SID("depth_history")); }
+        if (graph.HasTexture(SID("relax_viewz_history"))) {
+            pass.ReadSampledImage(SID("relax_viewz_history"));
+        }
+        else {
+            pass.ReadSampledImage(SID("relax_viewz"));
+        }
         pass.WriteStorageImage(SID("relax_spec_illum"));
         pass.WriteStorageImage(SID("relax_diff_illum"));
         pass.WriteStorageImage(SID("relax_spec_fast"));
@@ -705,7 +731,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             const StringID fallbackHistLen = graph.HasTexture(SID("relax_history_length_history")) ? SID("relax_history_length_history") : SID("relax_history_length");
             const StringID fallbackSpecHitD = graph.HasTexture(SID("relax_spec_hit_dist_history")) ? SID("relax_spec_hit_dist_history") : SID("relax_spec_hit_dist");
             const StringID fallbackPrevNR = graph.HasTexture(SID("relax_prev_nr_history")) ? SID("relax_prev_nr_history") : SID("relax_prev_nr");
-            const StringID fallbackDepth = graph.HasTexture(SID("depth_history")) ? SID("depth_history") : depth;
+            const StringID fallbackViewZ = graph.HasTexture(SID("relax_viewz_history")) ? SID("relax_viewz_history") : SID("relax_viewz");
 
             RelaxTemporalAccumulationPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
@@ -713,7 +739,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .prevNormalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(fallbackPrevNR),
-                .prevViewZIndex = graph.GetSampledImageViewDescriptorIndex(fallbackDepth),
+                .prevViewZIndex = graph.GetSampledImageViewDescriptorIndex(fallbackViewZ),
                 .prevHistoryLengthIndex = graph.GetSampledImageViewDescriptorIndex(fallbackHistLen),
                 .specInputIndex = graph.GetSampledImageViewDescriptorIndex(specIn),
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
@@ -738,7 +764,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 15) / 16, 1);
         });
     }
-
 
 
     graph.CreateTexture(SID("relax_atrous_spec_0"), colorInfo, {std::nullopt}, true);

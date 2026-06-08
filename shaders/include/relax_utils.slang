@@ -61,7 +61,7 @@ public float4 MLCombineRotators(float4 r1, float4 r2) { return float4(r1.xyxy) *
 public float2 MLGetScreenUv(float4x4 worldToClip, float3 X)
 {
     float4 clip = mul(worldToClip, float4(X, 1.0));
-    return (float2(clip.xy) / clip.w) * float2(0.5, 0.5) + 0.5;
+    return (float2(clip.xy) / clip.w) * float2(0.5, -0.5) + 0.5;
 }
 
 public float3x3 MLGetBasis(float3 N)
@@ -522,4 +522,10 @@ public float4 RelaxGatherViewZ(uint texIdx, float2 uv, float depthLinearizeMult,
         ScreenToViewSpaceDepth(raw.z, depthLinearizeMult, depthLinearizeAdd),
         ScreenToViewSpaceDepth(raw.w, depthLinearizeMult, depthLinearizeAdd)
     );
+}
+
+/** Gather from a texture that already stores linearized viewZ (no conversion needed). */
+public float4 RelaxGatherLinearViewZ(uint texIdx, float2 uv)
+{
+    return rdgTexturesFloat[texIdx].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);
 }

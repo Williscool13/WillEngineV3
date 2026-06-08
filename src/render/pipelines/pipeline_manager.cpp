@@ -489,6 +489,8 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate_compute.spv",
                             sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("relax_generate_viewz"), src / "relax_generate_viewz_compute.spv",
+                            sizeof(RelaxGenerateViewZPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("relax_classify_tiles"), src / "relax_classify_tiles_compute.spv",
                             sizeof(RelaxClassifyTilesPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("relax_prepass"), src / "relax_prepass_compute.spv",

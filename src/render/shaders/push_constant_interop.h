@@ -1067,13 +1067,20 @@ SHADER_PUBLIC struct SVGFAtrousWaveletPushConstant
 // https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
 // =====================================================================
 
+SHADER_PUBLIC struct RelaxGenerateViewZPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t outViewZIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+};
+
 SHADER_PUBLIC struct RelaxClassifyTilesPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
     SHADER_PUBLIC uint32_t viewZIndex;
     SHADER_PUBLIC uint32_t tilesOutIndex;
     SHADER_PUBLIC uint32_t pixelScale;
-    SHADER_PUBLIC uint32_t _pad0;
 };
 
 SHADER_PUBLIC struct RelaxPrepassPushConstant
@@ -1148,7 +1155,6 @@ SHADER_PUBLIC struct RelaxHistoryClampingPushConstant
     SHADER_PUBLIC uint32_t outDiffFastIndex;
     SHADER_PUBLIC uint32_t outHistoryLengthIndex;
     SHADER_PUBLIC uint32_t pixelScale;
-    SHADER_PUBLIC uint32_t _pad0;
 };
 
 SHADER_PUBLIC struct RelaxAtrousPushConstant

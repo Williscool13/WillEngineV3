@@ -56,10 +56,10 @@ float LoadSurfaceMotionBasedPrevData(
     float2 go01 = (float2(bilinearOrigin) + float2(0, 2)) * rc.gResourceSizeInvPrev;
     float2 go11 = (float2(bilinearOrigin) + float2(2, 2)) * rc.gResourceSizeInvPrev;
 
-    float4 prevVZ00 = RelaxGatherViewZ(prevViewZIndex, go00, rc.depthLinearizeMult, rc.depthLinearizeAdd).wzxy;
-    float4 prevVZ10 = RelaxGatherViewZ(prevViewZIndex, go10, rc.depthLinearizeMult, rc.depthLinearizeAdd).wzxy;
-    float4 prevVZ01 = RelaxGatherViewZ(prevViewZIndex, go01, rc.depthLinearizeMult, rc.depthLinearizeAdd).wzxy;
-    float4 prevVZ11 = RelaxGatherViewZ(prevViewZIndex, go11, rc.depthLinearizeMult, rc.depthLinearizeAdd).wzxy;
+    float4 prevVZ00 = RelaxGatherLinearViewZ(prevViewZIndex, go00).wzxy;
+    float4 prevVZ10 = RelaxGatherLinearViewZ(prevViewZIndex, go10).wzxy;
+    float4 prevVZ01 = RelaxGatherLinearViewZ(prevViewZIndex, go01).wzxy;
+    float4 prevVZ11 = RelaxGatherLinearViewZ(prevViewZIndex, go11).wzxy;
 
     // Disocclusion threshold
     float pixelSize = RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, 1.0, currentLinearZ);
@@ -133,7 +133,7 @@ float LoadVirtualMotionBasedPrevData(
 {
     float4 prevVirtualClip = mul(rc.gWorldToClipPrev, float4(virtualWorldPos, 1.0));
     prevVirtualClip.xy /= prevVirtualClip.w;
-    prevUVVMB = prevVirtualClip.xy * float2(0.5, 0.5) + 0.5;
+    prevUVVMB = prevVirtualClip.xy * float2(0.5, -0.5) + 0.5;
 
     float2 prevVirtualPixelPosFloat = prevUVVMB * rc.gRectSizePrev;
     int2 bilinearOrigin = int2(floor(prevVirtualPixelPosFloat - 0.5));
@@ -147,7 +147,7 @@ float LoadVirtualMotionBasedPrevData(
     vmbDisocclusionThreshold *= RelaxIsInScreenBilinear(float2(bilinearOrigin), rc.gRectSizePrev);
     vmbDisocclusionThreshold -= NRD_EPS;
 
-    float4 prevVZs = RelaxGatherViewZ(prevViewZIndex, gatherOrigin, rc.depthLinearizeMult, rc.depthLinearizeAdd).wzxy;
+    float4 prevVZs = RelaxGatherLinearViewZ(prevViewZIndex, gatherOrigin).wzxy;
     float3 tap00 = RelaxGetPreviousWorldPosFromPixelPos(bilinearOrigin + int2(0,0), prevVZs.x, rc.gRectSizePrev, rc.gPrevFrustumForward, rc.gPrevFrustumRight, rc.gPrevFrustumUp, rc.gOrthoMode);
     float3 tap10 = RelaxGetPreviousWorldPosFromPixelPos(bilinearOrigin + int2(1,0), prevVZs.y, rc.gRectSizePrev, rc.gPrevFrustumForward, rc.gPrevFrustumRight, rc.gPrevFrustumUp, rc.gOrthoMode);
     float3 tap01 = RelaxGetPreviousWorldPosFromPixelPos(bilinearOrigin + int2(0,1), prevVZs.z, rc.gRectSizePrev, rc.gPrevFrustumForward, rc.gPrevFrustumRight, rc.gPrevFrustumUp, rc.gOrthoMode);
