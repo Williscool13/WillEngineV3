@@ -514,6 +514,7 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t width;
     SHADER_PUBLIC uint32_t height;
     SHADER_PUBLIC uint32_t outputMode;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant

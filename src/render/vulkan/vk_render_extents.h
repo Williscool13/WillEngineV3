@@ -36,13 +36,13 @@ struct RenderExtents
         viewportOffset[1] = offsetY;
         viewportExtents[0] = width;
         viewportExtents[1] = height;
-        recomputeScaled();
+        RecomputeScaled();
     }
 
     void UpdateScale(float newScale)
     {
         renderScale = newScale;
-        recomputeScaled();
+        RecomputeScaled();
     }
 
     // Swapchain size
@@ -67,7 +67,7 @@ struct RenderExtents
     }
 
 private:
-    void recomputeScaled()
+    void RecomputeScaled()
     {
         scaledViewportExtent[0] = static_cast<uint32_t>(std::lround(static_cast<float>(viewportExtents[0]) * renderScale));
         scaledViewportExtent[1] = static_cast<uint32_t>(std::lround(static_cast<float>(viewportExtents[1]) * renderScale));

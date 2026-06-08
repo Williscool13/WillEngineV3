@@ -9,7 +9,11 @@
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
 
-namespace Core { struct ViewFamily; struct Arena; }
+namespace Core
+{
+struct ViewFamily;
+struct Arena;
+}
 
 namespace Render
 {
@@ -41,7 +45,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                Core::Array<uint32_t, 2> renderExtent,
                                const RenderTargets& targets,
                                uint32_t sceneIndex,
-                               uint32_t outputMode);
+                               uint32_t outputMode,
+                               uint32_t pixelScale);
 } // Render
 
 #endif //WILL_ENGINE_RESTIR_PASSES_H

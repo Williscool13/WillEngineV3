@@ -928,7 +928,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
         const uint32_t fullWidth = fullRenderExtent[0];
         const uint32_t fullHeight = fullRenderExtent[1];
-        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode, pixelScale](VkCommandBuffer cmd) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -941,6 +941,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .width = fullWidth,
                 .height = fullHeight,
                 .outputMode = remodulateOutputMode,
+                .pixelScale = pixelScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

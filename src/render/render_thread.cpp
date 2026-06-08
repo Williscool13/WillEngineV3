@@ -527,7 +527,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
                         SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, renderExtent, targets, relax, frameNumber, remodulateOutputMode, restirPixelScale);
                     } else {
-                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode);
+                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, restirPixelScale);
                     }
                     break;
                 }
