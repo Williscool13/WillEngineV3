@@ -435,8 +435,8 @@ void WillEngine::EditorImgui()
     if (centralNode) {
         auto newOffsetX = static_cast<uint32_t>(centralNode->Pos.x);
         auto newOffsetY = static_cast<uint32_t>(centralNode->Pos.y);
-        auto newWidth = static_cast<uint32_t>(centralNode->Size.x);
-        auto newHeight = static_cast<uint32_t>(centralNode->Size.y);
+        auto newWidth = std::max(2u, static_cast<uint32_t>(centralNode->Size.x) & ~1u);
+        auto newHeight = std::max(2u, static_cast<uint32_t>(centralNode->Size.y) & ~1u);
 
         WindowContext& wc = engineContext->windowContext;
         if (newOffsetX != wc.viewportOffsetX || newOffsetY != wc.viewportOffsetY ||
@@ -1281,8 +1281,8 @@ void WillEngine::Run()
 #ifndef WILL_EDITOR
                     // Viewport always equal window outside of editor
                     bRequireViewportRecreate = true;
-                    engineContext->windowContext.viewportWidth = w;
-                    engineContext->windowContext.viewportHeight = h;
+                    engineContext->windowContext.viewportWidth = std::max(2u, w & ~1u);
+                    engineContext->windowContext.viewportHeight = std::max(2u, h & ~1u);
                     engineContext->windowContext.viewportOffsetX = 0;
                     engineContext->windowContext.viewportOffsetY = 0;
 #endif

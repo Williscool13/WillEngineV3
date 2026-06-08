@@ -77,7 +77,7 @@ public:
     template<typename F>
     RenderPass& Execute(F&& func)
     {
-        executeFunc = Core::InlineFunction<void(VkCommandBuffer), 128>(std::forward<F>(func));
+        executeFunc = Core::InlineFunction<void(VkCommandBuffer), 256>(std::forward<F>(func));
         return *this;
     }
 
@@ -122,7 +122,7 @@ private:
 
     Core::ArenaVector<uint32_t> autoClearTextures;
 
-    Core::InlineFunction<void(VkCommandBuffer), 128> executeFunc;
+    Core::InlineFunction<void(VkCommandBuffer), 256> executeFunc;
 };
 } // Render
 

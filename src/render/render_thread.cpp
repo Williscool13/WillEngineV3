@@ -444,8 +444,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     renderGraph->CreateTexture(targets.derivatives, TextureInfo{VISIBILITY_DERIVATIVES_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.intermediateOne, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.intermediateTwo, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    const Core::ReSTIRParams& restirEarly = frameBuffer.restir;
+    const Core::Array<uint32_t, 2> restirExtent = restirEarly.bHalfRes ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
+    renderGraph->CreateTexture(targets.intermediateOne, TextureInfo{COLOR_ATTACHMENT_FORMAT, restirExtent[0], restirExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.intermediateTwo, TextureInfo{COLOR_ATTACHMENT_FORMAT, restirExtent[0], restirExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.colorOutput, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_DEPTH_FAR, true);
     renderGraph->CreateTexture(targets.depthCopy, TextureInfo{VK_FORMAT_R32_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
@@ -466,7 +468,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
-            SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+            const bool bHalfResLighting = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.restir.bHalfRes;
+            SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, bHalfResLighting);
 
             SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get());
 
@@ -487,16 +490,16 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 copyPass.WriteStorageImage(targets.depthCopy);
                 copyPass.Execute([&graph = *renderGraph, depth = targets.depthStencil, depthCopy = targets.depthCopy,
                         w = renderExtent[0], h = renderExtent[1], &pipelineManager = pipelineManager](VkCommandBuffer cmd) {
-                    const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("depth_copy"));
-                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-                    DepthCopyPushConstant pc{
-                        .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
-                        .outputIndex = graph.GetStorageImageViewDescriptorIndex(depthCopy),
-                        .extents = {w, h},
-                    };
-                    vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                    vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
-                });
+                        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("depth_copy"));
+                        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+                        DepthCopyPushConstant pc{
+                            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                            .outputIndex = graph.GetStorageImageViewDescriptorIndex(depthCopy),
+                            .extents = {w, h},
+                        };
+                        vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                        vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
+                    });
             }
 
             if (viewFamily.gtaoConfig.bEnabled) {
@@ -516,19 +519,14 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 }
                 case Core::LightingMode::ReSTIR:
                 {
-                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir);
-                    const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
-                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber);
-
-                    //SetupASVGFDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.svgf);
-                    //SetupATrousWaveletDenoiser(*renderGraph, pipelineManager, renderExtent, targets, restir.atrous);
+                    const uint32_t restirPixelScale = restir.bHalfRes ? 2u : 1u;
+                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restir);
+                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restirPixelScale);
                     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
-                    if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode);
-                    }
-                    else {
-                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode);
-                    }
+
+                    // disabled temporarily as pipeline is evaluated
+                    //SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, relax, frameNumber, remodulateOutputMode);
+                    SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode);
                     break;
                 }
                 case Core::LightingMode::GroundTruthReSTIR:
@@ -609,7 +607,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.ReadSampledImage(targets.depthCopy);
                 debugVisPass.WriteStorageImage(targets.colorOutput);
-                debugVisPass.Execute([&, debugTargetName, colorOutput = targets.colorOutput](VkCommandBuffer _cmd) {
+                const uint32_t debugReservoirPixelScale = frameBuffer.restir.bHalfRes ? 2u : 1u;
+                debugVisPass.Execute([&, debugTargetName, colorOutput = targets.colorOutput, debugReservoirPixelScale](VkCommandBuffer _cmd) {
                     const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
                     VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
 
@@ -680,6 +679,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .valueTransformationType = static_cast<uint32_t>(viewFamily.debugTransformationType),
                         .outputImageIndex = outputIndexIndex,
                         .depthTextureIndex = renderGraph->GetSampledImageViewDescriptorIndex(targets.depthCopy),
+                        .reservoirPixelScale = debugReservoirPixelScale,
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -1881,8 +1881,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
     });
 }*/
 
-void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage,
-                                    FrameResourceLimits& limits) const
+void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const
 {
 #ifndef PACKAGED_BUILD
     // Worst-case segment counts for buffer allocation

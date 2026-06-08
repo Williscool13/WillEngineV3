@@ -293,8 +293,24 @@ void ComputeLightDispatchBucketingResolve(uint3 dtid : SV_DispatchThreadID, unif
         return;
     }
 
-    uint32_t width = dispatchParams.maxX - dispatchParams.minX;
-    uint32_t height = dispatchParams.maxY - dispatchParams.minY;
+    uint32_t minX = dispatchParams.minX;
+    uint32_t minY = dispatchParams.minY;
+    uint32_t maxX = dispatchParams.maxX;
+    uint32_t maxY = dispatchParams.maxY;
+
+    if (pc.bHalfRes != 0) {
+        minX = minX / 2;
+        minY = minY / 2;
+        maxX = (maxX + 1) / 2;
+        maxY = (maxY + 1) / 2;
+        pc.lightDispatchBuffer[lightingIndex].minX = minX;
+        pc.lightDispatchBuffer[lightingIndex].minY = minY;
+        pc.lightDispatchBuffer[lightingIndex].maxX = maxX;
+        pc.lightDispatchBuffer[lightingIndex].maxY = maxY;
+    }
+
+    uint32_t width = maxX - minX;
+    uint32_t height = maxY - minY;
 
     pc.lightDispatchBuffer[lightingIndex].xDispatch = (width + 15) / 16;
     pc.lightDispatchBuffer[lightingIndex].yDispatch = (height + 15) / 16;

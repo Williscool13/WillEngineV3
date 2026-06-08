@@ -85,6 +85,7 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint valueTransformationType;
     SHADER_PUBLIC uint outputImageIndex;
     SHADER_PUBLIC uint depthTextureIndex;
+    SHADER_PUBLIC uint32_t reservoirPixelScale;
 };
 
 SHADER_PUBLIC struct InstanceLODPushConstant
@@ -331,6 +332,7 @@ SHADER_PUBLIC struct LightingBucketingResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in/out
     SHADER_PUBLIC uint32_t lightingCount;
+    SHADER_PUBLIC uint32_t bHalfRes;
 };
 
 SHADER_PUBLIC struct BucketDispatchCountPushConstant
@@ -419,6 +421,7 @@ SHADER_PUBLIC struct ReSTIRDIGeneratePushConstant
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
@@ -439,6 +442,7 @@ SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t mCap;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -458,6 +462,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t spatialRadius;
     SHADER_PUBLIC uint32_t spatialNeighbors;
     SHADER_PUBLIC uint32_t mCap;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct VisibilityLightingPushConstant
@@ -482,6 +487,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t accumulationCount;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct SVGFRemodulatePushConstant

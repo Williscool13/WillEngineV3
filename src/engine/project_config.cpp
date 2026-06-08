@@ -51,6 +51,7 @@ ProjectConfig ReadProjectConfig()
         auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
 
         Core::ReSTIRParams& p = config.restir;
+        p.bHalfRes = getBool("bHalfRes", p.bHalfRes);
         p.debugStop = static_cast<Core::ReSTIRDebugStop>(getInt("debugStop", static_cast<int32_t>(p.debugStop)));
         p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
         p.spatialNeighbors = getUint("spatialNeighbors", p.spatialNeighbors);
@@ -226,6 +227,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
 
     const Core::ReSTIRParams& p = config.restir;
     j["restir"] = {
+        {"bHalfRes", p.bHalfRes},
         {"debugStop", static_cast<int32_t>(p.debugStop)},
         {"spatialRadius", p.spatialRadius},
         {"spatialNeighbors", p.spatialNeighbors},

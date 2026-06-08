@@ -28,10 +28,11 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float4x4 view = scene.view;
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
-    float viewSpaceDepth = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    uint2 fullPixel = pixel * pc.pixelScale;
+    float viewSpaceDepth = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
 
-    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
+    LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
         pc.outputBuffer[centerIdx] = center;
         return;
@@ -83,15 +84,17 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             continue;
         }
 
+        uint2 neighborFullPixel = uint2(neighborPixel) * pc.pixelScale;
+
         // Geometry rejection: depth (abs guards a negative-Z convention).
-        float neighborRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(neighborPixel, 0)).r;
+        float neighborRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(neighborFullPixel, 0)).r;
         float neighborViewDepth = ScreenToViewSpaceDepth(neighborRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
         if (abs(neighborViewDepth - viewSpaceDepth) > 0.1 * abs(viewSpaceDepth)) {
             continue;
         }
 
         // Geometry rejection: normal.
-        float3 neighborN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(neighborPixel, 0)).r));
+        float3 neighborN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(neighborFullPixel, 0)).r));
         if (dot(N, neighborN) < 0.906) {
             continue;
         }
@@ -102,12 +105,12 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         }
 
         // Neighbor surface is required to evaluate targets in the neighbor's own domain.
-        LightingInputs nli = ReconstructLightingInputs(uint2(neighborPixel), pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
+        LightingInputs nli = ReconstructLightingInputs(neighborFullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
         if (!nli.valid) {
             continue;
         }
 
-        float2 neighborUV = (float2(neighborPixel) + 0.5) / float2(pc.renderExtent);
+        float2 neighborUV = (float2(neighborPixel) + 0.5f) / float2(pc.renderExtent);
         float3 neighborViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, neighborUV, neighborViewDepth);
         float3 neighborV = normalize(-neighborViewPosition);
         float neighborRoughness = max(nli.roughness, 0.045);

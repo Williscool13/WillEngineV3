@@ -8,7 +8,9 @@
       "PowerShell(head *)",
       "Bash(grep -E \"\\\\.\\(cpp|h\\)$\")",
       "Bash(Get-ChildItem -Path \"D:\\\\source\\\\repos\\\\WillEngineV3\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(grep -E \"\\\\.\\(h|cpp\\)$\")",
+      "Bash(grep -E \"StringID|;\\\\s*$\")"
     ],
     "deny": [],
     "ask": []

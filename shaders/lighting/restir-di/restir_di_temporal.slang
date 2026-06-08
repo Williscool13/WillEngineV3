@@ -27,10 +27,11 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float4x4 view = scene.view;
-    float2 uv = (float2(pixel) + 0.5) / float2(scene.mainRenderTargetSize);
+    float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
+    uint2 fullPixel = pixel * pc.pixelScale;
 
     // Velocity reproject.
-    uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
+    uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
     float2 velocityNDC = UnpackMotionVectors(g1.g);
     float2 historyUV = uv + velocityNDC * 0.5;
     bool validHistory = all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
@@ -38,25 +39,26 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;
     }
-    uint2 historyPixel = uint2(historyUV * float2(scene.mainRenderTargetSize));
+    uint2 historyPixel = uint2(historyUV * float2(pc.renderExtent));
     historyPixel = clamp(historyPixel, uint2(0, 0), pc.renderExtent - uint2(1, 1));
+    uint2 historyFullPixel = historyPixel * pc.pixelScale;
 
     // Normal disocclusion rejection.
     float3 currentN = normalize(UnpackNormalOct16(g1.r));
-    float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyPixel, 0)).r));
+    float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));
     if (dot(currentN, historyN) < 0.906) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;
     }
 
     // Depth disocclusion rejection.
-    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
+    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
         return;
     }
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-    float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyPixel, 0)).r;
+    float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyFullPixel, 0)).r;
     float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     if (abs(historyViewDepth - viewSpaceDepth) > 0.1 * viewSpaceDepth) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
@@ -72,7 +74,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     }
 
     // Reconstruct full material at the current pixel for consistent p_hat evaluation.
-    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
+    LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;

@@ -21,18 +21,20 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
         return;
     }
 
-    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
+    uint2 fullPixel = pixel * pc.pixelScale;
+
+    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {
         return;
     }
 
-    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, pc.lightingIndex, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, pc.shadowsIndex);
+    LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, pc.lightingIndex, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, pc.shadowsIndex);
     if (!li.valid) {
         return;
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    float2 uv = (float2(pixel) + 0.5) / float2(scene.mainRenderTargetSize);
+    float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
 
@@ -50,7 +52,7 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
     bool bAnyLight = pc.reservoirBuffer != 0;
     if (bAnyLight)
     {
-        uint pixelIdx = pixel.y * uint(scene.mainRenderTargetSize.x) + pixel.x;
+        uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
         Reservoir r = pc.reservoirBuffer[pixelIdx];
 
         if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->areaLightCount))

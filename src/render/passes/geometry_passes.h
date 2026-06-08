@@ -33,7 +33,8 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
                                   const RenderTargets& targets,
-                                  uint32_t sceneIndex);
+                                  uint32_t sceneIndex,
+                                  bool bHalfResLighting);
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,

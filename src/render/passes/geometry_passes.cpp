@@ -550,7 +550,8 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
                                   const RenderTargets& targets,
-                                  uint32_t sceneIndex)
+                                  uint32_t sceneIndex,
+                                  bool bHalfResLighting)
 {
     if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
@@ -591,10 +592,11 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
 
     RenderPass& lightResolvePass = graph.AddPass(SID("Light Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
     lightResolvePass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-    lightResolvePass.Execute([&, pipelineManager, lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd) {
+    lightResolvePass.Execute([&, pipelineManager, bHalfResLighting, lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd) {
         LightingBucketingResolvePushConstant pc{
             .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
             .lightingCount = lightingCount,
+            .bHalfRes = bHalfResLighting ? 1u : 0u,
         };
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_lighting_bucketing_resolve"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

@@ -24,6 +24,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        const Core::ReSTIRParams& restirParams)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    const uint32_t pixelScale = restirParams.bHalfRes ? 2u : 1u;
 
     // Generate
     graph.CreateBuffer(SID("restir_reservoir_buffer"), pixelCount * sizeof(Reservoir), true);
@@ -37,7 +38,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     genPass.ReadSampledImage(targets.gbufferTwo);
     genPass.ReadSampledImage(targets.depthCopy);
     genPass.WriteBuffer(SID("restir_reservoir_buffer"));
-    genPass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+    genPass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, pixelScale, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_generate"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -53,6 +54,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .renderExtent = {renderExtent[0], renderExtent[1]},
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
+            .pixelScale = pixelScale,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -87,7 +89,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         temporalPass.ReadSampledImage(SID("gbuffer_one_history"));
         temporalPass.ReadSampledImage(SID("depth_history"));
         temporalPass.WriteBuffer(SID("restir_reservoir_temporal"));
-        temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+        temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -108,6 +110,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .mCap = restirParams.temporalMCap,
+                .pixelScale = pixelScale,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -136,7 +139,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     spatial1Pass.ReadSampledImage(targets.gbufferTwo);
     spatial1Pass.ReadSampledImage(targets.depthCopy);
     spatial1Pass.WriteBuffer(SID("restir_reservoir_spatial"));
-    spatial1Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+    spatial1Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -156,6 +159,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .spatialRadius = restirParams.spatialRadius,
             .spatialNeighbors = restirParams.spatialNeighbors,
             .mCap = restirParams.spatialMCap,
+            .pixelScale = pixelScale,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -184,7 +188,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     spatial2Pass.ReadSampledImage(targets.gbufferTwo);
     spatial2Pass.ReadSampledImage(targets.depthCopy);
     spatial2Pass.WriteBuffer(SID("restir_reservoir_spatial2"));
-    spatial2Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+    spatial2Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -204,6 +208,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .spatialRadius = restirParams.spatialRadius,
             .spatialNeighbors = restirParams.spatialNeighbors,
             .mCap = restirParams.spatialMCap,
+            .pixelScale = pixelScale,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -222,7 +227,8 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     const RenderTargets& targets,
                                     uint32_t sceneIndex,
                                     Core::Arena& arena,
-                                    uint64_t frameNumber)
+                                    uint64_t frameNumber,
+                                    uint32_t pixelScale)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -255,7 +261,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     }
     lightingResolve.WriteStorageImage(targets.intermediateOne);
     lightingResolve.WriteStorageImage(targets.intermediateTwo);
-    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber,
+    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, pixelScale,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
@@ -288,7 +294,9 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .secondaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(specularOut),
                     .sceneDataIndex = sceneIndex,
                     .lightingIndex = entry.bucketIndex,
+                    .renderExtent = {renderExtent[0], renderExtent[1]},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
+                    .pixelScale = pixelScale,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

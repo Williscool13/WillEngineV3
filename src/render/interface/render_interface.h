@@ -549,6 +549,7 @@ struct RELAXParams
 
 struct ReSTIRParams
 {
+    bool bHalfRes{false};
     ReSTIRDebugStop debugStop{ReSTIRDebugStop::Spatial2};
     uint32_t spatialRadius{30};
     uint32_t spatialNeighbors{5};

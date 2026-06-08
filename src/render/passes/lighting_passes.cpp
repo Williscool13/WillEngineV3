@@ -52,7 +52,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadSampledImage(targets.shadows);
     }
     lightingResolve.WriteStorageImage(targets.colorOutput);
-    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber,
+    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex,
@@ -85,7 +85,9 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .secondaryOutputImageIndex = ~0x0u,
                     .sceneDataIndex = sceneIndex,
                     .lightingIndex = entry.bucketIndex,
+                    .renderExtent = {renderExtent[0], renderExtent[1]},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
+                    .pixelScale = 1,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
@@ -163,6 +165,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .accumulationCount = accumulationCount,
+                .pixelScale = 1,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

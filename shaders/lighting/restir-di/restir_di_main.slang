@@ -20,20 +20,22 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
         return;
     }
 
-    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
+    SceneData scene = pc.sceneData[pc.sceneDataIndex];
+    uint2 fullPixel = pixel * pc.pixelScale;
+
+    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {
         pc.reservoirBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
         return;
     }
 
-    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
+    LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
         pc.reservoirBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
         return;
     }
 
-    SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    float2 uv = (float2(pixel) + 0.5) / float2(scene.mainRenderTargetSize);
+    float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
 

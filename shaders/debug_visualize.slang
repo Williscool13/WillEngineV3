@@ -20,13 +20,13 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     float4 srcPixel = float4(1.0f, 0.0f, 0.0f, 1.0f);
     switch (pc.textureArrayIndex) {
         case 0: // Sampled float4
-            srcPixel.xyzw = rdgTexturesFloat4[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgba;
+            srcPixel.xyzw = rdgTexturesFloat4[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).rgba;
             break;
         case 1: // Sampled float2
-            srcPixel.xy = rdgTexturesFloat2[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rg;
+            srcPixel.xy = rdgTexturesFloat2[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).rg;
             break;
         case 2: // Sampled float
-            float c = rdgTexturesFloat[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
+            float c = rdgTexturesFloat[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).r;
             srcPixel.xyz = float3(c);
             break;
         case 3: // Sampled uint4
@@ -38,7 +38,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xy = asfloat(b);
             break;
         case 5: // Sampled uint
-            srcPixel.x = float(rdgTexturesUInt[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r);
+            srcPixel.x = float(rdgTexturesUInt[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).r);
             break;
     }
 
@@ -134,7 +134,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         }
         case 17: { // ReservoirLightIdx - hash-color the selected light index from the reservoir buffer
-            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            uint pixelIdx = (uint(threadID.y) / pc.reservoirPixelScale) * (uint(pc.dstExtent.x) / pc.reservoirPixelScale) + (uint(threadID.x) / pc.reservoirPixelScale);
             Reservoir r = pc.reservoirBuffer[pixelIdx];
             if (r.lightIdx == ~0u) {
                 srcPixel.xyz = float3(0.0, 0.0, 0.0);
@@ -145,7 +145,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         }
         case 18: { // ReservoirTemporalLightIdx - hash-color the selected light index from the temporal reservoir buffer
-            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            uint pixelIdx = (uint(threadID.y) / pc.reservoirPixelScale) * (uint(pc.dstExtent.x) / pc.reservoirPixelScale) + (uint(threadID.x) / pc.reservoirPixelScale);
             Reservoir r = pc.reservoirTemporalBuffer[pixelIdx];
             if (r.lightIdx == ~0u) {
                 srcPixel.xyz = float3(0.0, 0.0, 0.0);
@@ -156,7 +156,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         }
         case 19: { // ReservoirTemporalW - visualize W with range coloring: red [0,100), blue [100,500), green [500,inf)
-            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            uint pixelIdx = (uint(threadID.y) / pc.reservoirPixelScale) * (uint(pc.dstExtent.x) / pc.reservoirPixelScale) + (uint(threadID.x) / pc.reservoirPixelScale);
             Reservoir r = pc.reservoirTemporalBuffer[pixelIdx];
             if (r.lightIdx == ~0u) { srcPixel.xyz = float3(0.0, 0.0, 0.0); }
             else if (r.W < 100.0) { float t = r.W / 100.0; srcPixel.xyz = float3(t, 0.0, 0.0); }
@@ -165,7 +165,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         }
         case 20: { // ReservoirGenerateW - visualize W with range coloring: red [0,100), blue [100,500), green [500,inf)
-            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            uint pixelIdx = (uint(threadID.y) / pc.reservoirPixelScale) * (uint(pc.dstExtent.x) / pc.reservoirPixelScale) + (uint(threadID.x) / pc.reservoirPixelScale);
             Reservoir r = pc.reservoirBuffer[pixelIdx];
             if (r.lightIdx == ~0u) { srcPixel.xyz = float3(0.0, 0.0, 0.0); }
             else if (r.W < 100.0) { float t = r.W / 100.0; srcPixel.xyz = float3(t, 0.0, 0.0); }
@@ -174,7 +174,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         }
         case 21: { // ReservoirSpatialLightIdx - hash-color the selected light index from the spatial reservoir buffer
-            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            uint pixelIdx = (uint(threadID.y) / pc.reservoirPixelScale) * (uint(pc.dstExtent.x) / pc.reservoirPixelScale) + (uint(threadID.x) / pc.reservoirPixelScale);
             Reservoir r = pc.reservoirSpatialBuffer[pixelIdx];
             if (r.lightIdx == ~0u) {
                 srcPixel.xyz = float3(0.0, 0.0, 0.0);
@@ -185,7 +185,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         }
         case 22: { // ReservoirSpatialW - visualize W with range coloring: red [0,100), blue [100,500), green [500,inf)
-            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            uint pixelIdx = (uint(threadID.y) / pc.reservoirPixelScale) * (uint(pc.dstExtent.x) / pc.reservoirPixelScale) + (uint(threadID.x) / pc.reservoirPixelScale);
             Reservoir r = pc.reservoirSpatialBuffer[pixelIdx];
             if (r.lightIdx == ~0u) { srcPixel.xyz = float3(0.0, 0.0, 0.0); }
             else if (r.W < 100.0) { float t = r.W / 100.0; srcPixel.xyz = float3(t, 0.0, 0.0); }
@@ -194,7 +194,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         }
         case 23: { // ReservoirHistoryLightIdx - hash-color the selected light index from the history reservoir buffer
-            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            uint pixelIdx = (uint(threadID.y) / pc.reservoirPixelScale) * (uint(pc.dstExtent.x) / pc.reservoirPixelScale) + (uint(threadID.x) / pc.reservoirPixelScale);
             Reservoir r = pc.reservoirHistoryBuffer[pixelIdx];
             if (r.lightIdx == ~0u) {
                 srcPixel.xyz = float3(0.0, 0.0, 0.0);
@@ -205,7 +205,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         }
         case 24: { // ReservoirHistoryW - visualize W with range coloring: red [0,100), blue [100,500), green [500,inf)
-            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            uint pixelIdx = (uint(threadID.y) / pc.reservoirPixelScale) * (uint(pc.dstExtent.x) / pc.reservoirPixelScale) + (uint(threadID.x) / pc.reservoirPixelScale);
             Reservoir r = pc.reservoirHistoryBuffer[pixelIdx];
             if (r.lightIdx == ~0u) { srcPixel.xyz = float3(0.0, 0.0, 0.0); }
             else if (r.W < 100.0) { float t = r.W / 100.0; srcPixel.xyz = float3(t, 0.0, 0.0); }

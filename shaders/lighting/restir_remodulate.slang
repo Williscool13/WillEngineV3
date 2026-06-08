@@ -49,8 +49,9 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
     float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
     float3 specReflectance = F0 * envBRDF.x + envBRDF.y;
 
-    float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb;
-    float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb;
+    float2 lightingUV = (float2(pixel) + 0.5) / float2(pc.width, pc.height);
+    float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], lightingUV, 0).rgb;
+    float3 specular = rdgTexturesFloat4[pc.specularIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], lightingUV, 0).rgb;
 
     float3 finalColor;
     if (pc.outputMode == 1u) {
