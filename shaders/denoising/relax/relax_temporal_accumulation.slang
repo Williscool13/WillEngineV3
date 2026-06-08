@@ -521,6 +521,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float3 accSpecVMBResponsive = lerp(prevSpecResponsiveVMB.rgb, specularIllumination.xyz, specVMBResponsiveAlpha);
 
     // Fallback
+    virtualHistoryAmount *= specSMBConfidence;
     virtualHistoryAmount *= saturate(specVMBConfidence / (specSMBConfidence + NRD_EPS));
 
     float accReflectionHitT = lerp(accSpecSMB.a, accSpecVMB.a, virtualHistoryAmount);
