@@ -26,7 +26,8 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
         return;
 
-    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, pixelPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+    int2 fullPixel = pixelPos * pc.pixelScale;
+    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
 
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
@@ -39,7 +40,7 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
         return;
     }
 
-    float4 centerNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(pixelPos, 0)), viewToWorld);
+    float4 centerNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(fullPixel, 0)), viewToWorld);
     float3 centerNormal = centerNR.rgb;
     float centerRoughness = centerNR.a;
     float3 centerWorldPos = RelaxGetCurrentWorldPosFromPixelPos(pixelPos, centerViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
@@ -70,9 +71,10 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
             float2 uv = (float2(samplePosInt) + 0.5) * rc.gRectSizeInv;
             uv = RelaxMirrorUv(uv);
             samplePosInt = int2(uv * float2(rc.gRectSize));
+            int2 sampleFullPos = samplePosInt * pc.pixelScale;
 
-            float3 sampleNormal = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(samplePosInt, 0)), viewToWorld).rgb;
-            float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, samplePosInt, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+            float3 sampleNormal = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(sampleFullPos, 0)), viewToWorld).rgb;
+            float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(samplePosInt, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
             float geometryW = RelaxGetPlaneDistanceWeightAtrous(centerWorldPos, centerNormal, sampleWorldPos, depthThreshold);

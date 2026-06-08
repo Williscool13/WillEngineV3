@@ -22,13 +22,14 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
         return;
 
-    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, pixelPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+    int2 fullPixel = pixelPos * pc.pixelScale;
+    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
         return;
 
     float2 pixelUv = (float2(pixelPos) + 0.5) * rc.gRectSizeInv;
 
-    float4 centerNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(pixelPos, 0)), viewToWorld);
+    float4 centerNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(fullPixel, 0)), viewToWorld);
     float3 centerNormal = centerNR.rgb;
     float centerRoughness = centerNR.a;
     float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
@@ -96,10 +97,11 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             bool isInside = all(p >= int2(0, 0)) && all(p < rc.gRectSize);
             float kernel = kernelWeights[abs(i)] * kernelWeights[abs(j)];
 
-            float4 sampleNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(p, 0)), viewToWorld);
+            int2 pFull = p * pc.pixelScale;
+            float4 sampleNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(pFull, 0)), viewToWorld);
             float3 sampleNormal = sampleNR.rgb;
             float sampleRoughness = sampleNR.a;
-            float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, p, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+            float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, pFull, rc.depthLinearizeMult, rc.depthLinearizeAdd);
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(p, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
             float geometryW = RelaxGetPlaneDistanceWeightAtrous(centerWorldPos, centerNormal, sampleWorldPos, depthThreshold);

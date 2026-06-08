@@ -31,6 +31,16 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform LightingBucketVisuali
     float b = 2.0 - abs(hue * 6.0 - 4.0);
     float4 color = float4(saturate(float3(r, g, b)), 1.0);
 
-    rdgStorageUInt4[pc.gbufferOneIndex][pixel] = uint4(PackNormalOct16(float3(0, 0, 1)), 0u, PackPBR(0.5, 0.0), 1u);
-    rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGB8(color), PackEmissiveRGBE(float3(0.0)));
+    uint packedNormal = PackNormalOct16(float3(0, 0, 1));
+    uint packedPBR = PackPBR(0.5, 0.0);
+    uint packedAlbedo = PackAlbedoRGB8(color);
+    uint packedEmissive = PackEmissiveRGBE(float3(0.0));
+
+    for (uint dy = 0; dy < pc.pixelScale; dy++) {
+        for (uint dx = 0; dx < pc.pixelScale; dx++) {
+            uint2 fullPixel = pixel * pc.pixelScale + uint2(dx, dy);
+            rdgStorageUInt4[pc.gbufferOneIndex][fullPixel] = uint4(packedNormal, 0u, packedPBR, 1u);
+            rdgStorageUInt2[pc.gbufferTwoIndex][fullPixel] = uint2(packedAlbedo, packedEmissive);
+        }
+    }
 }

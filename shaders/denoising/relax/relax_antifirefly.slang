@@ -54,7 +54,8 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
         return;
 
-    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, pixelPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+    int2 fullPixel = pixelPos * pc.pixelScale;
+    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
         return;
 

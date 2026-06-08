@@ -348,6 +348,7 @@ SHADER_PUBLIC struct LightingBucketVisualizePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in
     SHADER_PUBLIC uint32_t lightingIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
     // Out
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
@@ -1070,8 +1071,8 @@ SHADER_PUBLIC struct RelaxClassifyTilesPushConstant
     SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
     SHADER_PUBLIC uint32_t viewZIndex;
     SHADER_PUBLIC uint32_t tilesOutIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t _pad0;
-    SHADER_PUBLIC uint32_t _pad1;
 };
 
 SHADER_PUBLIC struct RelaxPrepassPushConstant
@@ -1084,7 +1085,7 @@ SHADER_PUBLIC struct RelaxPrepassPushConstant
     SHADER_PUBLIC uint32_t diffInputIndex;
     SHADER_PUBLIC uint32_t specOutIndex;
     SHADER_PUBLIC uint32_t diffOutIndex;
-    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
@@ -1111,6 +1112,7 @@ SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
     SHADER_PUBLIC uint32_t outSpecHitDistIndex;
     SHADER_PUBLIC uint32_t outSpecReprojConfidenceIndex;
     SHADER_PUBLIC uint32_t outPrevNRIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct RelaxHistoryFixPushConstant
@@ -1124,6 +1126,7 @@ SHADER_PUBLIC struct RelaxHistoryFixPushConstant
     SHADER_PUBLIC uint32_t diffIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct RelaxHistoryClampingPushConstant
@@ -1143,8 +1146,8 @@ SHADER_PUBLIC struct RelaxHistoryClampingPushConstant
     SHADER_PUBLIC uint32_t outSpecFastIndex;
     SHADER_PUBLIC uint32_t outDiffFastIndex;
     SHADER_PUBLIC uint32_t outHistoryLengthIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t _pad0;
-    SHADER_PUBLIC uint32_t _pad1;
 };
 
 SHADER_PUBLIC struct RelaxAtrousPushConstant
@@ -1162,6 +1165,7 @@ SHADER_PUBLIC struct RelaxAtrousPushConstant
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
     SHADER_PUBLIC uint32_t stepSize;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
@@ -1174,7 +1178,7 @@ SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
     SHADER_PUBLIC uint32_t diffIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
-    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 SHADER_PUBLIC struct DepthCopyPushConstant

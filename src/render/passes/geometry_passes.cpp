@@ -780,13 +780,14 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                      const Core::ViewFamily& viewFamily,
                                      Core::Array<uint32_t, 2> renderExtent,
                                      const RenderTargets& targets,
-                                     uint32_t sceneIndex)
+                                     uint32_t sceneIndex,
+                                     uint32_t pixelScale)
 {
     RenderPass& lightBucketVisualizePass = graph.AddPass(SID("Light Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
     lightBucketVisualizePass.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferOne);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferTwo);
-    lightBucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
+    lightBucketVisualizePass.Execute([&, pipelineManager, sceneIndex, pixelScale,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("lighting_bucket_visualize"));
@@ -797,6 +798,7 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                 LightingBucketVisualizePushConstant pc{
                     .lightDispatchBuffer = lightDispatchAddress,
                     .lightingIndex = i,
+                    .pixelScale = pixelScale,
                     .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
                 };

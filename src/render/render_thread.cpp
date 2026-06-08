@@ -478,7 +478,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
 
             if (frameBuffer.bEnableLightingBucketingVisualization) {
-                SetupLightingBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+                SetupLightingBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, bHalfResLighting ? 2u : 1u);
             }
 
 
@@ -524,9 +524,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restirPixelScale);
                     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
-                    // disabled temporarily as pipeline is evaluated
-                    //SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, relax, frameNumber, remodulateOutputMode);
-                    SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode);
+                    if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
+                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, renderExtent, targets, relax, frameNumber, remodulateOutputMode, restirPixelScale);
+                    } else {
+                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode);
+                    }
                     break;
                 }
                 case Core::LightingMode::GroundTruthReSTIR:

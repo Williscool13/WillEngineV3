@@ -23,10 +23,10 @@ groupshared float4 s_DiffResponsiveYCoCg[HC_BUFFER_Y][HC_BUFFER_X];
 groupshared float4 s_DiffNoisy_IsValid[HC_BUFFER_Y][HC_BUFFER_X];
 
 void HCPreload(uint2 sharedPos, int2 globalPos, RelaxDiffuseSpecularConstants* rc,
-    uint viewZIndex, uint specFastIndex, uint diffFastIndex, uint specNoisyIndex, uint diffNoisyIndex)
+    uint viewZIndex, uint specFastIndex, uint diffFastIndex, uint specNoisyIndex, uint diffNoisyIndex, uint pixelScale)
 {
     globalPos = clamp(globalPos, int2(0, 0), rc.gRectSize - 1);
-    float viewZ = rdgTexturesFloat[viewZIndex].Load(int3(globalPos, 0)).r;
+    float viewZ = rdgTexturesFloat[viewZIndex].Load(int3(globalPos * pixelScale, 0)).r;
     viewZ = ScreenToViewSpaceDepth(viewZ, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float isValid = float(RelaxIsInDenoisingRange(viewZ, rc.gDenoisingRange));
 
@@ -57,7 +57,7 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
             uint virtualIndex = threadIndex + stage * HC_GROUP_X * HC_GROUP_Y;
             uint2 newId = uint2(virtualIndex % HC_BUFFER_X, virtualIndex / HC_BUFFER_X);
             if (stage == 0 || virtualIndex < HC_BUFFER_X * HC_BUFFER_Y)
-                HCPreload(newId, groupBase + int2(newId), rc, pc.viewZIndex, pc.specFastIndex, pc.diffFastIndex, pc.specNoisyIndex, pc.diffNoisyIndex);
+                HCPreload(newId, groupBase + int2(newId), rc, pc.viewZIndex, pc.specFastIndex, pc.diffFastIndex, pc.specNoisyIndex, pc.diffNoisyIndex, pc.pixelScale);
         }
     }
     GroupMemoryBarrierWithGroupSync();

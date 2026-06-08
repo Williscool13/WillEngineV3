@@ -427,10 +427,12 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         PipelineManager* pipelineManager,
                         const Core::ViewFamily& viewFamily,
                         Core::Array<uint32_t, 2> renderExtent,
+                        Core::Array<uint32_t, 2> fullRenderExtent,
                         const RenderTargets& targets,
                         const Core::RELAXParams& params,
                         uint64_t frameNumber,
-                        uint32_t remodulateOutputMode)
+                        uint32_t remodulateOutputMode,
+                        uint32_t pixelScale)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
@@ -593,11 +595,12 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(SID("relax_tiles"));
-        pass.Execute([&graph, pipelineManager, depth, tilesW, tilesH](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, depth, tilesW, tilesH, pixelScale](VkCommandBuffer cmd) {
             RelaxClassifyTilesPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .tilesOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_tiles")),
+                .pixelScale = pixelScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_classify_tiles"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -622,7 +625,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(diffInput);
         pass.WriteStorageImage(SID("relax_spec_prepass"));
         pass.WriteStorageImage(SID("relax_diff_prepass"));
-        pass.Execute([&graph, pipelineManager, depth, gbufferOne, specInput, diffInput, width, height](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, depth, gbufferOne, specInput, diffInput, width, height, pixelScale](VkCommandBuffer cmd) {
             RelaxPrepassPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -632,6 +635,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
                 .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_prepass")),
                 .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_prepass")),
+                .pixelScale = pixelScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_prepass"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -692,7 +696,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(SID("relax_spec_reproj_confidence"));
         pass.WriteStorageImage(SID("relax_prev_nr"));
 
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, specIn, diffIn, width, height](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, gbufferOne, depth, specIn, diffIn, width, height, pixelScale](VkCommandBuffer cmd) {
             const bool hasHistory = graph.HasTexture(SID("relax_spec_illum_history"));
             const StringID fallbackSpec = hasHistory ? SID("relax_spec_illum_history") : specIn;
             const StringID fallbackDiff = hasHistory ? SID("relax_diff_illum_history") : diffIn;
@@ -726,6 +730,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outSpecHitDistIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_hit_dist")),
                 .outSpecReprojConfidenceIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_reproj_confidence")),
                 .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_prev_nr")),
+                .pixelScale = pixelScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_temporal_accumulation"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -753,7 +758,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("relax_diff_illum"));
         pass.WriteStorageImage(SID("relax_atrous_spec_0"));
         pass.WriteStorageImage(SID("relax_atrous_diff_0"));
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd) {
             RelaxHistoryFixPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -764,6 +769,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_illum")),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_spec_0")),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_diff_0")),
+                .pixelScale = pixelScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_history_fix"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -793,7 +799,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(diffNoisy);
         pass.WriteStorageImage(SID("relax_spec_hist"));
         pass.WriteStorageImage(SID("relax_diff_hist"));
-        pass.Execute([&graph, pipelineManager, depth, specNoisy, diffNoisy, width, height](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, depth, specNoisy, diffNoisy, width, height, pixelScale](VkCommandBuffer cmd) {
             RelaxHistoryClampingPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -810,6 +816,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_fast")),
                 .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_fast")),
                 .outHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_history_length")),
+                .pixelScale = pixelScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_history_clamping"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -828,7 +835,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadWriteImage(SID("relax_spec_hist"));
         pass.ReadWriteImage(SID("relax_diff_hist"));
 
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd) {
             RelaxAntiFireflyPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -838,6 +845,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_hist")),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_hist")),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_hist")),
+                .pixelScale = pixelScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_antifirefly"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -879,7 +887,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.WriteStorageImage(diffOut);
 
             pass.Execute([&graph, pipelineManager, gbufferOne, depth,
-                    specIn, diffIn, specOut, diffOut, stepSize, width, height](VkCommandBuffer cmd) {
+                    specIn, diffIn, specOut, diffOut, stepSize, width, height, pixelScale](VkCommandBuffer cmd) {
                     RelaxAtrousPushConstant pc{
                         .constants = graph.GetBufferAddress(SID("relax_constants")),
                         .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -894,6 +902,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specOut),
                         .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
                         .stepSize = stepSize,
+                        .pixelScale = pixelScale,
                     };
                     const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_atrous"));
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -917,7 +926,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(noisyInput);
 
-        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode](VkCommandBuffer cmd) {
+        const uint32_t fullWidth = fullRenderExtent[0];
+        const uint32_t fullHeight = fullRenderExtent[1];
+        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode](VkCommandBuffer cmd) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -927,14 +938,14 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(noisyInput),
-                .width = width,
-                .height = height,
+                .width = fullWidth,
+                .height = fullHeight,
                 .outputMode = remodulateOutputMode,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+            vkCmdDispatch(cmd, (fullWidth + 7) / 8, (fullHeight + 7) / 8, 1);
         });
     }
 }
