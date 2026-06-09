@@ -103,7 +103,7 @@ struct StaticModelData
     Core::HeapArray<Material> materials{};
 
     OffsetAllocator::Allocation vertexPositionAllocation{};
-    // todo index allocation for RT and shadow passes
+    OffsetAllocator::Allocation indexAllocation{};
     OffsetAllocator::Allocation meshletVertexAllocation{};
     OffsetAllocator::Allocation meshletTriangleAllocation{};
     OffsetAllocator::Allocation meshletAllocation{};

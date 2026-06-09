@@ -2290,7 +2290,7 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
         OffsetAllocator::Allocation* allocation;
     };
 
-    Core::InlineVector<BufferAlloc, 5> allocated;
+    Core::InlineVector<BufferAlloc, 6> allocated;
 
     auto rollback = [&]() {
         for (auto& prev : allocated) {
@@ -2341,6 +2341,13 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
     if (!tryAlloc(resourceManager->primitiveBufferAllocatorMutex, resourceManager->primitiveBufferAllocator,
                   outputModel->modelData.primitiveAllocation, rawData.primitives.Size() * sizeof(Primitive),
                   "mega primitive buffer")) {
+        rollback();
+        return false;
+    }
+
+    if (!tryAlloc(resourceManager->indexBufferAllocatorMutex, resourceManager->indexBufferAllocator,
+                  outputModel->modelData.indexAllocation, rawData.indices.Size() * sizeof(uint32_t),
+                  "mega index buffer")) {
         rollback();
         return false;
     }
@@ -2489,7 +2496,11 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::In
                  sizeof(Primitive), 0, sizeof(Primitive),
                  resourceManager->primitiveBuffer.handle, outputModel->modelData.primitiveAllocation.offset);
 
-    VkBufferMemoryBarrier2 releaseBarriers[6];
+    uploadBuffer(rawData.indices.Data(), rawData.indices.Size(),
+                 sizeof(uint32_t), 0, sizeof(uint32_t),
+                 resourceManager->megaIndexBuffer.handle, outputModel->modelData.indexAllocation.offset);
+
+    VkBufferMemoryBarrier2 releaseBarriers[7];
     uint32_t barrierCount = 0;
 
     auto createBufferBarrier = [&](VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size) {
@@ -2524,6 +2535,8 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::In
                                                           outputModel->modelData.meshletAllocation.offset, rawData.meshlets.Size() * sizeof(Meshlet));
     releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->primitiveBuffer.handle,
                                                           outputModel->modelData.primitiveAllocation.offset, rawData.primitives.Size() * sizeof(Primitive));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaIndexBuffer.handle,
+                                                          outputModel->modelData.indexAllocation.offset, rawData.indices.Size() * sizeof(uint32_t));
 
     VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
     depInfo.bufferMemoryBarrierCount = barrierCount;

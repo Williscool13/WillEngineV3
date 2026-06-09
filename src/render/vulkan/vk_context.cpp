@@ -172,14 +172,19 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT};
     VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
     VkPhysicalDeviceMaintenance9FeaturesKHR maintenance9Features{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_FEATURES_KHR};
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
+    VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
 
     // --- Physical Device Selection ---
     {
-        Core::InlineVector<const char*, 8> requiredDeviceExtensions;
+        Core::InlineVector<const char*, 12> requiredDeviceExtensions;
         requiredDeviceExtensions.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         requiredDeviceExtensions.PushBack(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
         requiredDeviceExtensions.PushBack(VK_EXT_MESH_SHADER_EXTENSION_NAME);
         requiredDeviceExtensions.PushBack(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+        requiredDeviceExtensions.PushBack(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+        requiredDeviceExtensions.PushBack(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        requiredDeviceExtensions.PushBack(VK_KHR_RAY_QUERY_EXTENSION_NAME);
 #if PROFILER_ENABLED
         requiredDeviceExtensions.PushBack(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
 #endif
@@ -243,6 +248,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
             VkPhysicalDeviceDescriptorBufferFeaturesEXT qDesc{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT};
             VkPhysicalDeviceMeshShaderFeaturesEXT qMesh{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT};
             VkPhysicalDeviceExtendedDynamicState3FeaturesEXT qExtDynState3{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+            VkPhysicalDeviceAccelerationStructureFeaturesKHR qAccel{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
+            VkPhysicalDeviceRayQueryFeaturesKHR qRayQuery{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
 
             query.pNext = &q13;
             q13.pNext = &q12;
@@ -250,6 +257,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
             q11.pNext = &qDesc;
             qDesc.pNext = &qMesh;
             qMesh.pNext = &qExtDynState3;
+            qExtDynState3.pNext = &qAccel;
+            qAccel.pNext = &qRayQuery;
 
             vkGetPhysicalDeviceFeatures2(pd, &query);
 
@@ -287,7 +296,9 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                     qDesc.descriptorBuffer &&
                     qMesh.taskShader &&
                     qMesh.meshShader &&
-                    qExtDynState3.extendedDynamicState3PolygonMode;
+                    qExtDynState3.extendedDynamicState3PolygonMode &&
+                    qAccel.accelerationStructure &&
+                    qRayQuery.rayQuery;
 
             if (!hasFeatures) {
                 continue;
@@ -411,6 +422,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
             meshShaderFeatures.meshShaderQueries = VK_TRUE;
         }
         extendedDynamicState3Features.extendedDynamicState3PolygonMode = VK_TRUE;
+        accelerationStructureFeatures.accelerationStructure = VK_TRUE;
+        rayQueryFeatures.rayQuery = VK_TRUE;
         if (bMaintenance9Enabled) {
             maintenance9Features.maintenance9 = VK_TRUE;
         }
@@ -420,13 +433,18 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         features11.pNext = &descriptorBufferFeatures;
         descriptorBufferFeatures.pNext = &meshShaderFeatures;
         meshShaderFeatures.pNext = &extendedDynamicState3Features;
-        extendedDynamicState3Features.pNext = bMaintenance9Enabled ? static_cast<void*>(&maintenance9Features) : nullptr;
+        extendedDynamicState3Features.pNext = &accelerationStructureFeatures;
+        accelerationStructureFeatures.pNext = &rayQueryFeatures;
+        rayQueryFeatures.pNext = bMaintenance9Enabled ? static_cast<void*>(&maintenance9Features) : nullptr;
 
-        Core::InlineVector<const char*, 8> deviceExts;
+        Core::InlineVector<const char*, 12> deviceExts;
         deviceExts.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         deviceExts.PushBack(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
         deviceExts.PushBack(VK_EXT_MESH_SHADER_EXTENSION_NAME);
         deviceExts.PushBack(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+        deviceExts.PushBack(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+        deviceExts.PushBack(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        deviceExts.PushBack(VK_KHR_RAY_QUERY_EXTENSION_NAME);
 #if PROFILER_ENABLED
         deviceExts.PushBack(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
 #endif
