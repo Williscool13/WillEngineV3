@@ -21,10 +21,6 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     Reservoir center = pc.inputBuffer[centerIdx];
     bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->areaLightCount);
 
-    //
-    // pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
-    // return;
-
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float4x4 view = scene.view;
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
@@ -34,6 +30,8 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
+        center.W = min(center.W, 20.0);
+        center.M = min(center.M, pc.mCap);
         pc.outputBuffer[centerIdx] = center;
         return;
     }
@@ -68,7 +66,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     // Center-domain target of whichever sample currently wins; finalise divides by this.
     float p_hat_winner = 0.0;
-    // Canonical's MIS share summed across the k pairs.
+    // Canonical's MIS share summed across the k pairs. The shared 1/k is applied via the finalise divisor (neighborCount), uniformly across canonical and neighbor stream weights.
     float centerMisAccum = 0.0;
     uint neighborCount = 0;
     combined.M = validCenter ? center.M : 0u;
@@ -121,6 +119,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         float3 neighborLightColor = UnpackUnorm4x8(alNeighbor.packedColor).rgb;
         float3 yStarNeighbor = DecodeSamplePos(neighbor, vsNeighbor);
 
+        // Capped neighbor confidence for the MIS denominators (prevents stale history from suppressing the canonical). This is the MIS-weight M only; combined.M accumulates real M.
         float Mi = validCenter ? min(float(neighbor.M), 20.0 * float(center.M)) : float(neighbor.M);
 
         // Neighbor sample evaluated at the neighbor (own domain) and at the center.
@@ -150,12 +149,14 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             combined.sampleOffsetPacked = neighbor.sampleOffsetPacked;
             p_hat_winner = p_hat_neighbor_atCenter;
         }
-        combined.M += uint(Mi);
+        combined.M += neighbor.M;
         neighborCount++;
     }
 
-    // No usable neighbor: nothing to combine.
+    // No usable neighbor: passthrough with clamp/cap applied.
     if (neighborCount == 0u) {
+        center.W = min(center.W, 20.0);
+        center.M = min(center.M, pc.mCap);
         pc.outputBuffer[centerIdx] = center;
         return;
     }
@@ -170,14 +171,14 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         }
     }
 
-    // M_total here is the pair count k (the shared 1/k), distinct from combined.M.
+    // M_total here is the pair count k (the shared 1/k). The per-pair MIS weights partition unity, so the only normalization left is the uniform 1/k across all k streamed weights.
     if (combined.lightIdx != ~0u && p_hat_winner > 0.0) {
         ReservoirFinalise(combined, accum, p_hat_winner, float(neighborCount));
     } else {
         combined.W = 0.0;
     }
-    const float W_CLAMP = 20.0;
-    combined.W = min(combined.W, W_CLAMP);
+
+    combined.W = min(combined.W, 20.0);
     combined.M = min(combined.M, pc.mCap);
 
     pc.outputBuffer[centerIdx] = combined;

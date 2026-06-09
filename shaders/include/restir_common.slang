@@ -65,6 +65,14 @@ public AreaLightSample EvalAreaLightSample(AreaLightVS vs, float3 samplePos, flo
     s.L = toSample / s.dist;
     s.cosShade = max(dot(N, s.L), 0.0);
     s.cosLight = max(dot(-vs.normal, s.L), 0.0);
+
+    // inv squared falloff
+    //float distSq = s.dist * s.dist;
+    //float rangeInvSq = 1.0 / max(range * range, 1e-8);
+    //float falloff = saturate(1.0 - distSq * rangeInvSq);
+    //s.attenuation = (1.0 / (distSq + 1.0)) * falloff * falloff;
+
+    // artist authored distance falloff
     float a = 1.0 - smoothstep(0.0, range, s.dist);
     s.attenuation = a * a;
     return s;
