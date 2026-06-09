@@ -11,6 +11,7 @@
 #include "core/containers/inline_function.h"
 #include "core/containers/vector.h"
 #include "core/memory/tlsf_allocator.h"
+#include "render/vulkan/vk_resources.h"
 
 namespace Core
 {
@@ -39,7 +40,8 @@ public:
 
     void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager,
                     Core::MemoryManager* _memoryManager,
-                    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestDispatchCallback,
+                    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestTransferDispatchCallback,
+                    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestGraphicsDispatchCallback,
                     Core::InlineFunction<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback);
 
     void Launch(ModelSlotHandle _modelSlotHandle, UploadStagingSlotHandle _uploadStagingSlotHandle, UploadStaging* _uploadStaging, Engine::StaticModel* _outputModel);
@@ -48,11 +50,12 @@ public:
 
     bool LoadModelFromDisk();
 
-    bool AllocateGPUResources() const;
+    bool AllocateGPUResources();
 
     void PrepareUploadData();
 
     void UploadGeometry(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
+    void BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
 
     ModelSlotHandle modelSlotHandle{};
     UploadStagingSlotHandle uploadStagingSlotHandle{};
@@ -80,9 +83,12 @@ private:
     Render::ResourceManager* resourceManager{nullptr};
 
     UnpackedStaticModel rawData{};
+    BLASTransients blasTransients{};
 
-    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestTransferDispatchCallback;
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestGraphicsDispatchCallback;
     Core::InlineFunction<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
+
 };
 } // AssetLoad
 

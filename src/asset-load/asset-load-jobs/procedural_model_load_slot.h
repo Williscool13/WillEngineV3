@@ -10,6 +10,7 @@
 #include "asset-load/asset_load_types.h"
 
 #include "core/containers/inline_function.h"
+#include "render/vulkan/vk_resources.h"
 #include "core/containers/span.h"
 #include "core/containers/vector.h"
 #include "core/memory/tlsf_allocator.h"
@@ -42,7 +43,8 @@ public:
 
     void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager,
                     Core::MemoryManager* _memoryManager,
-                    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestDispatchCallback,
+                    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestTransferDispatchCallback,
+                    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestGraphicsDispatchCallback,
                     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback);
 
     void Launch(ProceduralModelSlotHandle _slotHandle, UploadStagingSlotHandle _uploadStagingSlotHandle, UploadStaging* _uploadStaging, Engine::StaticModel* _outputModel);
@@ -56,6 +58,7 @@ public:
     void PrepareUploadData();
 
     void UploadGeometry(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
+    void BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
 
     ProceduralModelSlotHandle slotHandle{};
     UploadStagingSlotHandle uploadStagingSlotHandle{};
@@ -84,8 +87,11 @@ private:
 
     UnpackedStaticModel rawData{};
 
-    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestTransferDispatchCallback;
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestGraphicsDispatchCallback;
     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
+
+    VkDeviceSize _blasScratchSize{};
 
     bool FinalizeGeometry(Core::Span<const Engine::FullVertex> vertices, Core::Span<const uint32_t> indices);
 

@@ -54,6 +54,13 @@ private:
     Core::LinearAllocator stagingAllocator{1};
 };
 
+struct BLASTransients
+{
+    VkDeviceSize blasScratchSize{};
+    Core::HeapArray<VkAccelerationStructureGeometryKHR> geoms{};
+    Core::HeapArray<uint32_t> primCounts{};
+};
+
 struct UnpackedStaticModel
 {
     Core::HeapArray<Engine::Vertex> vertices{};

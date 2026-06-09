@@ -7,6 +7,7 @@
 
 #include <variant>
 
+#include <volk.h>
 #include "engine/spline/spline.h"
 
 #include "offsetAllocator.hpp"
@@ -40,7 +41,14 @@ struct MeshInformation
 {
     Core::InlineString<> name;
     // todo parameterize this 128 primitive per mesh limit. Perhaps even increase it.
-    Core::InlineVector<PrimitiveProperty,128> primitiveProperties;
+    Core::InlineVector<PrimitiveProperty, 128> primitiveProperties;
+
+    // Raytracing
+    uint64_t blasHandle{0};
+    OffsetAllocator::Allocation blasAllocation{};
+    size_t accelerationStructureSize{0};
+    size_t updateScratchSize{};
+    size_t buildScratchSize{};
 };
 
 struct Node
@@ -139,12 +147,12 @@ struct FullVertex
  */
 struct Vertex
 {
-    uint32_t pos0;        // unorm16: bits[15:0]=X, bits[31:16]=Y
-    uint32_t pos1;        // unorm16: bits[15:0]=Z, bits[31:16]=unused
-    uint32_t normalOct;   // snorm8: bits[7:0]=X, bits[15:8]=Y
-    uint32_t tangentOct;  // snorm8: bits[7:0]=X, bits[15:8]=Y; bit[16]=sign(0=neg,1=pos)
-    uint32_t texcoord;    // float16: bits[15:0]=U, bits[31:16]=V
-    uint32_t color;       // unorm8: bits[7:0]=R, bits[15:8]=G, bits[23:16]=B, bits[31:24]=A
+    uint32_t pos0; // unorm16: bits[15:0]=X, bits[31:16]=Y
+    uint32_t pos1; // unorm16: bits[15:0]=Z, bits[31:16]=unused
+    uint32_t normalOct; // snorm8: bits[7:0]=X, bits[15:8]=Y
+    uint32_t tangentOct; // snorm8: bits[7:0]=X, bits[15:8]=Y; bit[16]=sign(0=neg,1=pos)
+    uint32_t texcoord; // float16: bits[15:0]=U, bits[31:16]=V
+    uint32_t color; // unorm8: bits[7:0]=R, bits[15:8]=G, bits[23:16]=B, bits[31:24]=A
 };
 
 struct StaircaseParams

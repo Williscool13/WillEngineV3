@@ -36,14 +36,16 @@ void ProceduralModelLoadSlot::Initialize(
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
     Core::MemoryManager* _memoryManager,
-    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> transferDispatchCallback,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     resourceManager = _resourceManager;
     memoryManager = _memoryManager;
-    _requestDispatchCallback = std::move(dispatchCallback);
+    _requestTransferDispatchCallback = std::move(transferDispatchCallback);
+    _requestGraphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 }
 
@@ -109,7 +111,7 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
 
         VK_CHECK(vkEndCommandBuffer(cmd));
         std::binary_semaphore done(0);
-        loadSlot->_requestDispatchCallback(cmd, fence, &done);
+        loadSlot->_requestTransferDispatchCallback(cmd, fence, &done);
         done.acquire();
 
         if (reset) {
@@ -128,11 +130,48 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
 
     VK_CHECK(vkEndCommandBuffer(cmd));
     std::binary_semaphore done(0);
-    loadSlot->_requestDispatchCallback(cmd, fence, &done);
+    loadSlot->_requestTransferDispatchCallback(cmd, fence, &done);
     done.acquire();
 
     vkDestroyFence(loadSlot->context->device, fence, nullptr);
     vkDestroyCommandPool(loadSlot->context->device, commandPool, nullptr);
+
+    // Build BLAS on graphics queue (requires transfer ownership acquire first)
+    /*{
+        VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(loadSlot->context->graphicsQueueFamily);
+        VkCommandPool graphicsCommandPool;
+        VK_CHECK(vkCreateCommandPool(loadSlot->context->device, &graphicsPoolInfo, nullptr, &graphicsCommandPool));
+
+        VkCommandBufferAllocateInfo graphicsCmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, graphicsCommandPool);
+        VkCommandBuffer graphicsCmd;
+        VK_CHECK(vkAllocateCommandBuffers(loadSlot->context->device, &graphicsCmdInfo, &graphicsCmd));
+
+        VkFenceCreateInfo graphicsFenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        VkFence graphicsFence;
+        VK_CHECK(vkCreateFence(loadSlot->context->device, &graphicsFenceInfo, nullptr, &graphicsFence));
+
+        VkCommandBufferBeginInfo graphicsBeginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &graphicsBeginInfo));
+
+        auto graphicsSubmitAndWait = [&](bool reset) {
+            ZoneScopedN("GraphicsSubmitAndWait");
+            VK_CHECK(vkEndCommandBuffer(graphicsCmd));
+            std::binary_semaphore done(0);
+            loadSlot->_requestGraphicsDispatchCallback(graphicsCmd, graphicsFence, &done);
+            done.acquire();
+            if (reset) {
+                VK_CHECK(vkResetFences(loadSlot->context->device, 1, &graphicsFence));
+                VK_CHECK(vkResetCommandBuffer(graphicsCmd, 0));
+                VkCommandBufferBeginInfo restartInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+                VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &restartInfo));
+            }
+        };
+
+        loadSlot->BuildBLAS(graphicsCmd, graphicsSubmitAndWait);
+
+        vkDestroyFence(loadSlot->context->device, graphicsFence, nullptr);
+        vkDestroyCommandPool(loadSlot->context->device, graphicsCommandPool, nullptr);
+    }*/
 
     loadSlot->_notifyCallback(true, loadSlot->slotHandle, loadSlot->uploadStagingSlotHandle);
 }
@@ -2545,6 +2584,149 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::In
 
     for (uint32_t i = 0; i < barrierCount; ++i) {
         outputModel->bufferAcquireOps.PushBack(Render::VkHelpers::FromVkBarrier(releaseBarriers[i]));
+    }
+}
+
+void ProceduralModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
+{
+    ZoneScopedN("BuildBLAS");
+
+    const uint32_t primitiveCount = static_cast<uint32_t>(rawData.primitives.Size());
+    const VkDeviceAddress vertexBase = resourceManager->megaVertexPositionBuffer.address + outputModel->modelData.vertexPositionAllocation.offset;
+    const VkDeviceAddress indexBase = resourceManager->megaIndexBuffer.address + outputModel->modelData.indexAllocation.offset;
+
+    if (!context->bMaintenance9Enabled) {
+        Core::InlineVector<VkBufferMemoryBarrier2, 8> acquireBarriers;
+        for (const auto& op : outputModel->bufferAcquireOps) {
+            acquireBarriers.PushBack(Render::VkHelpers::ToVkBarrier(op));
+        }
+        if (!acquireBarriers.IsEmpty()) {
+            VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+            depInfo.bufferMemoryBarrierCount = acquireBarriers.Size();
+            depInfo.pBufferMemoryBarriers = acquireBarriers.Data();
+            vkCmdPipelineBarrier2(cmd, &depInfo);
+        }
+    }
+    outputModel->bufferAcquireOps.Clear();
+
+    Core::LinearAllocator& stagingAllocator = uploadStaging->GetStagingAllocator();
+    Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
+    stagingAllocator.Reset();
+
+    const size_t transformBytes = primitiveCount * sizeof(VkTransformMatrixKHR);
+    assert(transformBytes <= stagingAllocator.GetCapacity() && "Staging buffer too small for BLAS transform data");
+    stagingAllocator.Allocate(transformBytes);
+
+    auto* transforms = reinterpret_cast<VkTransformMatrixKHR*>(static_cast<char*>(stagingBuffer.allocationInfo.pMappedData));
+    for (uint32_t i = 0; i < primitiveCount; ++i) {
+        const Primitive& prim = rawData.primitives[i];
+        const Vec3 extents = prim.boundingBoxMax - prim.boundingBoxMin;
+        const Vec3 mn = prim.boundingBoxMin;
+
+        transforms[i].matrix[0][0] = extents.x;
+        transforms[i].matrix[0][1] = 0.f;
+        transforms[i].matrix[0][2] = 0.f;
+        transforms[i].matrix[0][3] = mn.x;
+        transforms[i].matrix[1][0] = 0.f;
+        transforms[i].matrix[1][1] = extents.y;
+        transforms[i].matrix[1][2] = 0.f;
+        transforms[i].matrix[1][3] = mn.y;
+        transforms[i].matrix[2][0] = 0.f;
+        transforms[i].matrix[2][1] = 0.f;
+        transforms[i].matrix[2][2] = extents.z;
+        transforms[i].matrix[2][3] = mn.z;
+    }
+
+    // REMINDER: 128 is arbitrary primitive cap per mesh. If parameterizing this needs to be updated
+    Core::HeapArray<VkAccelerationStructureGeometryKHR> geoms(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 128);
+    Core::HeapArray<VkAccelerationStructureBuildRangeInfoKHR> rangeInfos(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 128);
+    Core::HeapArray<uint32_t> primCounts(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 128);
+
+    const uint32_t scratchAlignment = Render::VulkanContext::deviceInfo.accelerationStructureProps.minAccelerationStructureScratchOffsetAlignment;
+    Render::AllocatedBuffer blasScratch{};
+
+    for (int j = 0; j < outputModel->modelData.meshes.Size(); ++j) {
+        Engine::MeshInformation& mesh = outputModel->modelData.meshes[j];
+        const uint32_t meshPrimitiveCount = static_cast<uint32_t>(mesh.primitiveProperties.Size());
+
+        for (uint32_t i = 0; i < meshPrimitiveCount; ++i) {
+            const auto& props = mesh.primitiveProperties[i];
+            uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(Primitive);
+            uint32_t realPrimitiveIndex = props.index - primitiveOffsetCount;
+            const Primitive& prim = rawData.primitives[realPrimitiveIndex];
+
+            const uint32_t indexStart = prim.indexOffset;
+            const uint32_t indexEnd = (realPrimitiveIndex + 1 < primitiveCount) ? rawData.primitives[realPrimitiveIndex + 1].indexOffset : static_cast<uint32_t>(rawData.indices.Size());
+            const uint32_t triCount = (indexEnd - indexStart) / 3;
+
+            auto& geom = geoms[i];
+            geom = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+            geom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+            geom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+            auto& tri = geom.geometry.triangles;
+            tri.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+            tri.vertexFormat = VK_FORMAT_R16G16B16A16_UNORM;
+            tri.vertexData.deviceAddress = vertexBase;
+            tri.vertexStride = sizeof(VertexPosition);
+            tri.maxVertex = static_cast<uint32_t>(rawData.vertices.Size()) - 1;
+            tri.indexType = VK_INDEX_TYPE_UINT32;
+            tri.indexData.deviceAddress = indexBase + indexStart * sizeof(uint32_t);
+            tri.transformData.deviceAddress = stagingBuffer.address + realPrimitiveIndex * sizeof(VkTransformMatrixKHR);
+            rangeInfos[i] = {.primitiveCount = triCount, .primitiveOffset = 0, .firstVertex = 0, .transformOffset = 0};
+            primCounts[i] = triCount;
+        }
+
+        VkAccelerationStructureBuildGeometryInfoKHR buildInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+        buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+        buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+        buildInfo.geometryCount = meshPrimitiveCount;
+        buildInfo.pGeometries = geoms.Data();
+
+        VkAccelerationStructureBuildSizesInfoKHR sizeInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+        vkGetAccelerationStructureBuildSizesKHR(context->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, primCounts.Data(), &sizeInfo);
+
+        mesh.accelerationStructureSize = sizeInfo.accelerationStructureSize;
+        mesh.updateScratchSize = sizeInfo.updateScratchSize;
+        mesh.buildScratchSize = sizeInfo.buildScratchSize;
+        const VkDeviceSize alignedASSize = (sizeInfo.accelerationStructureSize + 255ull) & ~255ull;
+        {
+            std::lock_guard lock(resourceManager->blasBufferAllocatorMutex);
+            mesh.blasAllocation = resourceManager->blasBufferAllocator.allocate(alignedASSize);
+        }
+        if (mesh.blasAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+            SPDLOG_ERROR("[ProceduralModelLoadSlot] No space in mega BLAS buffer for mesh {} of {}", j, outputModel->name.c_str());
+            return;
+        }
+
+        VkAccelerationStructureCreateInfoKHR createInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+        createInfo.buffer = resourceManager->megaBLASBuffer.handle;
+        createInfo.offset = mesh.blasAllocation.offset;
+        createInfo.size = sizeInfo.accelerationStructureSize;
+        createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+        VkAccelerationStructureKHR blas{};
+        VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, nullptr, &blas));
+        mesh.blasHandle = reinterpret_cast<uint64_t>(blas);
+
+        const VkDeviceSize scratchSize = (sizeInfo.buildScratchSize + scratchAlignment - 1ull) & ~(scratchAlignment - 1ull);
+        if (blasScratch.size < scratchSize) {
+            blasScratch = {};
+            VkBufferCreateInfo scratchBufInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+            scratchBufInfo.size = scratchSize;
+            scratchBufInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+            VmaAllocationCreateInfo scratchAllocInfo{};
+            scratchAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+            blasScratch = Render::AllocatedBuffer::CreateAllocatedBuffer(context, scratchBufInfo, scratchAllocInfo);
+        }
+
+        buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+        buildInfo.dstAccelerationStructure = reinterpret_cast<VkAccelerationStructureKHR>(mesh.blasHandle);
+        buildInfo.scratchData.deviceAddress = blasScratch.address;
+
+        const VkAccelerationStructureBuildRangeInfoKHR* pRangeInfos = rangeInfos.Data();
+        vkCmdBuildAccelerationStructuresKHR(cmd, 1, &buildInfo, &pRangeInfos);
+
+        const bool reset = j != static_cast<int>(outputModel->modelData.meshes.Size()) - 1;
+        submitAndWait(reset);
     }
 }
 } // AssetLoad

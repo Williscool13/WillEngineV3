@@ -33,10 +33,6 @@ ResourceManager::ResourceManager(VulkanContext* context)
     VmaAllocationCreateInfo vmaAllocInfo = {};
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
-
-    bufferInfo.size = MEGA_VERTEX_POSITION_BUFFER_SIZE;
-    megaVertexPositionBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
-    megaVertexPositionBuffer.SetDebugName("Mega Vertex Position Buffer");
     bufferInfo.size = MEGA_VERTEX_ATTRIBUTE_BUFFER_SIZE;
     megaVertexAttributeBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     megaVertexAttributeBuffer.SetDebugName("Mega Vertex Attribute Buffer");
@@ -52,11 +48,23 @@ ResourceManager::ResourceManager(VulkanContext* context)
     bufferInfo.size = MEGA_PRIMITIVE_BUFFER_SIZE;
     primitiveBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     primitiveBuffer.SetDebugName("Mega Primitive Buffer");
+
+    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
+    bufferInfo.size = MEGA_VERTEX_POSITION_BUFFER_SIZE;
+    megaVertexPositionBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
+    megaVertexPositionBuffer.SetDebugName("Mega Vertex Position Buffer");
+
     bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
     bufferInfo.size = MEGA_INDEX_BUFFER_SIZE;
     megaIndexBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     megaIndexBuffer.SetDebugName("Mega Index Buffer");
-    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
+
+    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
+    bufferInfo.size = MEGA_BLAS_BUFFER_SIZE;
+    megaBLASBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
+    megaBLASBuffer.SetDebugName("Mega BLAS Buffer");
+
+
 
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);
     bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<

@@ -45,6 +45,8 @@ struct ResourceManager
     OffsetAllocator::Allocator primitiveBufferAllocator{MEGA_PRIMITIVE_BUFFER_SIZE};
     std::mutex indexBufferAllocatorMutex;
     OffsetAllocator::Allocator indexBufferAllocator{MEGA_INDEX_BUFFER_SIZE};
+    std::mutex blasBufferAllocatorMutex;
+    OffsetAllocator::Allocator blasBufferAllocator{MEGA_BLAS_BUFFER_SIZE};
 
     // Managed by Asset Load, bound in the Render Threads. Synchronized by engine.
     AllocatedBuffer megaVertexPositionBuffer;
@@ -54,6 +56,7 @@ struct ResourceManager
     AllocatedBuffer megaMeshletBuffer;
     AllocatedBuffer primitiveBuffer;
     AllocatedBuffer megaIndexBuffer;
+    AllocatedBuffer megaBLASBuffer;
     BindlessResourcesSamplerImages bindlessSamplerTextureDescriptorBuffer{};
 
     // 1x1 black texture

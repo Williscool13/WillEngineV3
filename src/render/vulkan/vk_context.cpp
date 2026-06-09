@@ -532,6 +532,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     deviceInfo.properties.pNext = &deviceInfo.descriptorBufferProps;
     deviceInfo.descriptorBufferProps.pNext = &deviceInfo.meshShaderProps;
     deviceInfo.meshShaderProps.pNext = &deviceInfo.subgroupProps;
+    deviceInfo.subgroupProps.pNext = &deviceInfo.accelerationStructureProps;
     vkGetPhysicalDeviceProperties2(physicalDevice, &deviceInfo.properties);
 
 #if PROFILER_ENABLED

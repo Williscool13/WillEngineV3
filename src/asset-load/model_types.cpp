@@ -10,6 +10,19 @@ namespace Engine
 {
 void StaticModelData::Reset(Render::ResourceManager* resourceManager)
 {
+    for (auto& mesh : meshes) {
+        if (mesh.blasHandle != 0) {
+            vkDestroyAccelerationStructureKHR(resourceManager->context->device, reinterpret_cast<VkAccelerationStructureKHR>(mesh.blasHandle), nullptr);
+            mesh.blasHandle = 0;
+        }
+
+        if (mesh.blasAllocation.offset != OffsetAllocator::Allocation::NO_SPACE) {
+            std::lock_guard lock(resourceManager->blasBufferAllocatorMutex);
+            resourceManager->blasBufferAllocator.free(mesh.blasAllocation);
+        }
+        mesh.blasAllocation = {};
+    }
+
     meshes.Reset();
     nodes.Reset();
     materials.Reset();

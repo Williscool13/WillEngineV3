@@ -62,6 +62,9 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueTransferDispatch(cmd, fence, completionSignal);
             },
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                QueueGraphicsDispatch(cmd, fence, completionSignal);
+            },
             [this](bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnModelLoadComplete(success, modelSlotHandle, uploadStagingSlotHandle);
             }
@@ -76,6 +79,9 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueTransferDispatch(cmd, fence, completionSignal);
+            },
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                QueueGraphicsDispatch(cmd, fence, completionSignal);
             },
             [this](bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnProceduralModelLoadComplete(success, slotHandle, uploadStagingSlotHandle);
