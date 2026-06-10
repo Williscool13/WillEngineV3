@@ -19,7 +19,6 @@ class PipelineManager;
 
 /**
  * Uploads per-frame TLAS instance data and builds the TLAS.
- * Must be called after geometry passes so all BLAS device addresses are valid.
  */
 void SetupTLASBuild(RenderGraph& graph,
                     VulkanContext* context,

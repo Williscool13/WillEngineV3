@@ -249,13 +249,7 @@ struct PrimitiveInstanceData
     Engine::MaterialID materialID{};
     uint32_t modelIndex{};
     uint64_t stableId{};
-};
-
-struct MeshBLASInstance
-{
     uint64_t blasDeviceAddress{};
-    uint32_t modelIndex{};
-    uint32_t primitiveInstanceIndex{};
 };
 
 struct CustomShaderDraw
@@ -473,7 +467,6 @@ struct UIDrawCommand
 struct ViewFamilyWatermarks
 {
     size_t primitiveInstances{128};
-    size_t blasInstances{128};
     size_t worldGlyphQuads{256};
     size_t textInstances{32};
     size_t modelMatrices{256};
@@ -615,7 +608,6 @@ struct ViewFamily
     ArenaFixedVector<PortalView> portalViews{};
 
     ArenaVector<PrimitiveInstanceData> primitiveInstances{};
-    ArenaVector<MeshBLASInstance> blasInstances{};
     ArenaVector<Model> modelMatrices{};
     /** Indexes into the materials vector */
     ArenaMap<Engine::MaterialID, uint32_t> activeMaterials{};

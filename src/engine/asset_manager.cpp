@@ -393,7 +393,10 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
 void AssetManager::EvictModel(ModelID modelId)
 {
     StaticModelHandle* handle = modelIdToHandle.Find(modelId);
-    assert(handle);
+    if (!handle) {
+        // Model is not currently loaded
+        return;
+    }
     StaticModel& model = models[handle->index];
     assert(model.refCount == 0 && "EvictModel called while model still has active references");
     modelIdToHandle.Remove(modelId);

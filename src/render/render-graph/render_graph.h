@@ -215,11 +215,26 @@ public: // Compile and execute
     void PrepareSwapchain(VkCommandBuffer cmd, StringID textureId);
 
 public: // Persistent Per-FIF Buffers
+    /**
+     * Should be called during render_thread init.
+     * @param name
+     * @param usage
+     * @param onDestroyUserData
+     */
     void RegisterPersistentBuffer(StringID name, VkBufferUsageFlags usage, Core::InlineFunction<void(uint64_t), 32> onDestroyUserData = {});
-    /** @return true if the buffer was reallocated (caller must rebuild any AS handle stored in userData) */
+    /**
+     *
+     * @param name
+     * @param requiredSize
+     * @return true if the buffer was reallocated (caller must rebuild any AS handle stored in userData)
+     */
     bool EnsurePersistentBufferCapacity(StringID name, VkDeviceSize requiredSize);
     PersistentBuffer& GetPersistentBuffer(StringID name);
-    /** Imports the current frame's slot into the pass system so passes can declare reads/writes against it. */
+
+    /**
+     * Imports the current frame's slot into the pass system so passes can declare reads/writes against it.
+     * @param name
+     */
     void ImportPersistentBuffer(StringID name);
 
 public: // Transient Uploader

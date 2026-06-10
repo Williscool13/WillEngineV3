@@ -28,6 +28,8 @@ struct AllocatedBuffer
 
     static AllocatedBuffer CreateAllocatedBuffer(const VulkanContext* context, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& vmaAllocInfo);
 
+    static AllocatedBuffer CreateAllocatedBufferAligned(const VulkanContext* context, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& vmaAllocInfo, VkDeviceSize minAlignment);
+
     static AllocatedBuffer CreateAllocatedStagingBuffer(const VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages = 0);
 
     static AllocatedBuffer CreateAllocatedReceivingBuffer(const VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages = 0);

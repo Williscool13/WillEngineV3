@@ -701,20 +701,16 @@ void StaticModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunct
         transforms[i].matrix[2][3] = mn.z;
     }
 
-    // REMINDER: 128 is arbitrary primitive cap per mesh. If parameterizing this needs to be updated
-    Core::HeapArray<VkAccelerationStructureGeometryKHR> geoms(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 128);
-    Core::HeapArray<VkAccelerationStructureBuildRangeInfoKHR> rangeInfos(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 128);
-    Core::HeapArray<uint32_t> primCounts(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 128);
-
     const uint32_t scratchAlignment = Render::VulkanContext::deviceInfo.accelerationStructureProps.minAccelerationStructureScratchOffsetAlignment;
     Render::AllocatedBuffer blasScratch{};
 
-    for (int j = 0; j < outputModel->modelData.meshes.Size(); ++j) {
+    const int32_t meshCount = static_cast<int>(outputModel->modelData.meshes.Size());
+    for (int32_t j = 0; j < meshCount; ++j) {
         Engine::MeshInformation& mesh = outputModel->modelData.meshes[j];
-        const uint32_t meshPrimitiveCount = static_cast<uint32_t>(mesh.primitiveProperties.Size());
+        const int32_t meshPrimitiveCount = static_cast<int32_t>(mesh.primitiveProperties.Size());
 
-        for (uint32_t i = 0; i < meshPrimitiveCount; ++i) {
-            const auto& props = mesh.primitiveProperties[i];
+        for (int32_t i = 0; i < meshPrimitiveCount; ++i) {
+            Engine::PrimitiveProperty& props = mesh.primitiveProperties[i];
             uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(Primitive);
             uint32_t realPrimitiveIndex = props.index - primitiveOffsetCount;
             const Primitive& prim = rawData.primitives[realPrimitiveIndex];
@@ -723,8 +719,7 @@ void StaticModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunct
             const uint32_t indexEnd = (realPrimitiveIndex + 1 < primitiveCount) ? rawData.primitives[realPrimitiveIndex + 1].indexOffset : static_cast<uint32_t>(rawData.indices.Size());
             const uint32_t triCount = (indexEnd - indexStart) / 3;
 
-            auto& geom = geoms[i];
-            geom = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+            VkAccelerationStructureGeometryKHR geom{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
             geom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
             geom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
             auto& tri = geom.geometry.triangles;
@@ -736,65 +731,63 @@ void StaticModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunct
             tri.indexType = VK_INDEX_TYPE_UINT32;
             tri.indexData.deviceAddress = indexBase + indexStart * sizeof(uint32_t);
             tri.transformData.deviceAddress = stagingBuffer.address + realPrimitiveIndex * sizeof(VkTransformMatrixKHR);
-            rangeInfos[i] = {.primitiveCount = triCount, .primitiveOffset = 0, .firstVertex = 0, .transformOffset = 0};
-            primCounts[i] = triCount;
+
+            VkAccelerationStructureBuildRangeInfoKHR rangeInfo{.primitiveCount = triCount};
+            uint32_t primCount = triCount;
+
+            VkAccelerationStructureBuildGeometryInfoKHR buildInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+            buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+            buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            buildInfo.geometryCount = 1;
+            buildInfo.pGeometries = &geom;
+
+            VkAccelerationStructureBuildSizesInfoKHR sizeInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+            vkGetAccelerationStructureBuildSizesKHR(context->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primCount, &sizeInfo);
+
+            const VkDeviceSize alignedASSize = (sizeInfo.accelerationStructureSize + 255ull) & ~255ull;
+            {
+                std::lock_guard lock(resourceManager->blasBufferAllocatorMutex);
+                props.blasAllocation = resourceManager->blasBufferAllocator.allocate(alignedASSize);
+            }
+            if (props.blasAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+                SPDLOG_ERROR("[StaticModelLoadSlot] No space in mega BLAS buffer for primitive {} of mesh {} of {}", i, j, outputModel->name.c_str());
+                return;
+            }
+
+            VkAccelerationStructureCreateInfoKHR createInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+            createInfo.buffer = resourceManager->megaBLASBuffer.handle;
+            createInfo.offset = props.blasAllocation.offset;
+            createInfo.size = sizeInfo.accelerationStructureSize;
+            createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+            VkAccelerationStructureKHR blas{};
+            VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, nullptr, &blas));
+            props.blasHandle = reinterpret_cast<uint64_t>(blas);
+
+            VkAccelerationStructureDeviceAddressInfoKHR addrInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+            addrInfo.accelerationStructure = blas;
+            props.blasDeviceAddress = vkGetAccelerationStructureDeviceAddressKHR(context->device, &addrInfo);
+
+            const VkDeviceSize scratchSize = (sizeInfo.buildScratchSize + scratchAlignment - 1ull) & ~(scratchAlignment - 1ull);
+            if (blasScratch.size < scratchSize) {
+                blasScratch = {};
+                VkBufferCreateInfo scratchBufInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+                scratchBufInfo.size = scratchSize;
+                scratchBufInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+                VmaAllocationCreateInfo scratchAllocInfo{};
+                scratchAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+                blasScratch = Render::AllocatedBuffer::CreateAllocatedBufferAligned(context, scratchBufInfo, scratchAllocInfo, scratchAlignment);
+            }
+
+            buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+            buildInfo.dstAccelerationStructure = blas;
+            buildInfo.scratchData.deviceAddress = blasScratch.address;
+
+            const VkAccelerationStructureBuildRangeInfoKHR* pRangePtr = &rangeInfo;
+            vkCmdBuildAccelerationStructuresKHR(cmd, 1, &buildInfo, &pRangePtr);
+
+            const bool isLast = (j == meshCount - 1) && (i == meshPrimitiveCount - 1);
+            submitAndWait(!isLast);
         }
-
-        VkAccelerationStructureBuildGeometryInfoKHR buildInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
-        buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-        buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-        buildInfo.geometryCount = meshPrimitiveCount;
-        buildInfo.pGeometries = geoms.Data();
-
-        VkAccelerationStructureBuildSizesInfoKHR sizeInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-        vkGetAccelerationStructureBuildSizesKHR(context->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, primCounts.Data(), &sizeInfo);
-
-        mesh.accelerationStructureSize = sizeInfo.accelerationStructureSize;
-        mesh.updateScratchSize = sizeInfo.updateScratchSize;
-        mesh.buildScratchSize = sizeInfo.buildScratchSize;
-        const VkDeviceSize alignedASSize = (sizeInfo.accelerationStructureSize + 255ull) & ~255ull;
-        {
-            std::lock_guard lock(resourceManager->blasBufferAllocatorMutex);
-            mesh.blasAllocation = resourceManager->blasBufferAllocator.allocate(alignedASSize);
-        }
-        if (mesh.blasAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-            SPDLOG_ERROR("[StaticModelLoadSlot] No space in mega BLAS buffer for mesh {} of {}", j, outputModel->name.c_str());
-            return;
-        }
-
-        VkAccelerationStructureCreateInfoKHR createInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
-        createInfo.buffer = resourceManager->megaBLASBuffer.handle;
-        createInfo.offset = mesh.blasAllocation.offset;
-        createInfo.size = sizeInfo.accelerationStructureSize;
-        createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-        VkAccelerationStructureKHR blas{};
-        VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, nullptr, &blas));
-        mesh.blasHandle = reinterpret_cast<uint64_t>(blas);
-
-        VkAccelerationStructureDeviceAddressInfoKHR addrInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
-        addrInfo.accelerationStructure = blas;
-        mesh.blasDeviceAddress = vkGetAccelerationStructureDeviceAddressKHR(context->device, &addrInfo);
-
-        const VkDeviceSize scratchSize = (sizeInfo.buildScratchSize + scratchAlignment - 1ull) & ~(scratchAlignment - 1ull);
-        if (blasScratch.size < scratchSize) {
-            blasScratch = {};
-            VkBufferCreateInfo scratchBufInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-            scratchBufInfo.size = scratchSize;
-            scratchBufInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-            VmaAllocationCreateInfo scratchAllocInfo{};
-            scratchAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-            blasScratch = Render::AllocatedBuffer::CreateAllocatedBuffer(context, scratchBufInfo, scratchAllocInfo);
-        }
-
-        buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-        buildInfo.dstAccelerationStructure = reinterpret_cast<VkAccelerationStructureKHR>(mesh.blasHandle);
-        buildInfo.scratchData.deviceAddress = blasScratch.address;
-
-        const VkAccelerationStructureBuildRangeInfoKHR* pRangeInfos = rangeInfos.Data();
-        vkCmdBuildAccelerationStructuresKHR(cmd, 1, &buildInfo, &pRangeInfos);
-
-        const bool reset = j != static_cast<int>(outputModel->modelData.meshes.Size()) - 1;
-        submitAndWait(reset);
     }
 }
 } // AssetLoad

@@ -35,6 +35,11 @@ struct PrimitiveProperty
 {
     uint32_t index;
     int32_t materialIndex;
+
+    // Raytracing
+    uint64_t blasHandle{0};
+    uint64_t blasDeviceAddress{0};
+    OffsetAllocator::Allocation blasAllocation{};
 };
 
 struct MeshInformation
@@ -42,14 +47,6 @@ struct MeshInformation
     Core::InlineString<> name;
     // todo parameterize this 128 primitive per mesh limit. Perhaps even increase it.
     Core::InlineVector<PrimitiveProperty, 128> primitiveProperties;
-
-    // Raytracing
-    uint64_t blasHandle{0};
-    uint64_t blasDeviceAddress{0};
-    OffsetAllocator::Allocation blasAllocation{};
-    size_t accelerationStructureSize{0};
-    size_t updateScratchSize{};
-    size_t buildScratchSize{};
 };
 
 struct Node

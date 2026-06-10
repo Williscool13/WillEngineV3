@@ -12,6 +12,7 @@
 #include "engine/asset_manager.h"
 #include "engine/material_manager.h"
 #include "engine/engine_api.h"
+#include "engine/logging/engine_assert.h"
 #include "engine/logging/engine_log.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
@@ -439,27 +440,20 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
 
+            Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
+            ENGINE_ASSERT(Game, model, "Loaded entity references a model that is not in the asset manager");
+            const Engine::MeshInformation& mesh = model->modelData.meshes[renderable.meshIndex];
+
             const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
             for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
-                auto& prim = runtime.primitives[i];
+                const auto& prim = runtime.primitives[i];
                 frameBuffer->mainViewFamily.primitiveInstances.PushBack({
                     .primitiveIndex = prim.primitiveIndex,
                     .materialID = prim.materialID,
                     .modelIndex = modelIndex,
                     .stableId = stableId,
+                    .blasDeviceAddress = mesh.primitiveProperties[i].blasDeviceAddress,
                 });
-            }
-
-            if (Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle)) {
-                for (size_t i = 0; i < model->modelData.meshes.Size(); ++i) {
-                    const auto& mesh = model->modelData.meshes[i];
-                    if (mesh.blasDeviceAddress == 0) { continue; }
-                    frameBuffer->mainViewFamily.blasInstances.PushBack({
-                        .blasDeviceAddress = mesh.blasDeviceAddress,
-                        .modelIndex = modelIndex,
-                        .primitiveInstanceIndex = primitiveInstanceBase,
-                    });
-                }
             }
         }
     }
@@ -538,24 +532,20 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
 
-            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
-            frameBuffer->mainViewFamily.primitiveInstances.PushBack({
-                .primitiveIndex = runtime.primitives[0].primitiveIndex,
-                .materialID = runtime.primitives[0].materialID,
-                .modelIndex = modelIndex,
-                .stableId = stableId,
-            });
+            Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
+            ENGINE_ASSERT(Game, model, "Loaded entity references a model that is not in the asset manager");
+            const Engine::MeshInformation& mesh = model->modelData.meshes[0];
 
-            if (Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle)) {
-                for (size_t i = 0; i < model->modelData.meshes.Size(); ++i) {
-                    const auto& mesh = model->modelData.meshes[i];
-                    if (mesh.blasDeviceAddress == 0) { continue; }
-                    frameBuffer->mainViewFamily.blasInstances.PushBack({
-                        .blasDeviceAddress = mesh.blasDeviceAddress,
-                        .modelIndex = modelIndex,
-                        .primitiveInstanceIndex = primitiveInstanceBase,
-                    });
-                }
+            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
+            for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+                const auto& prim = runtime.primitives[i];
+                frameBuffer->mainViewFamily.primitiveInstances.PushBack({
+                    .primitiveIndex = prim.primitiveIndex,
+                    .materialID = prim.materialID,
+                    .modelIndex = modelIndex,
+                    .stableId = stableId,
+                    .blasDeviceAddress = mesh.primitiveProperties[i].blasDeviceAddress,
+                });
             }
         }
     }
@@ -576,24 +566,20 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
 
-            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
-            frameBuffer->mainViewFamily.primitiveInstances.PushBack({
-                .primitiveIndex = runtime.primitives[0].primitiveIndex,
-                .materialID = runtime.primitives[0].materialID,
-                .modelIndex = modelIndex,
-                .stableId = stableId,
-            });
+            Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
+            ENGINE_ASSERT(Game, model, "Loaded entity references a model that is not in the asset manager");
+            const Engine::MeshInformation& mesh = model->modelData.meshes[0];
 
-            if (Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle)) {
-                for (size_t i = 0; i < model->modelData.meshes.Size(); ++i) {
-                    const auto& mesh = model->modelData.meshes[i];
-                    if (mesh.blasDeviceAddress == 0) { continue; }
-                    frameBuffer->mainViewFamily.blasInstances.PushBack({
-                        .blasDeviceAddress = mesh.blasDeviceAddress,
-                        .modelIndex = modelIndex,
-                        .primitiveInstanceIndex = primitiveInstanceBase,
-                    });
-                }
+            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
+            for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+                const auto& prim = runtime.primitives[i];
+                frameBuffer->mainViewFamily.primitiveInstances.PushBack({
+                    .primitiveIndex = prim.primitiveIndex,
+                    .materialID = prim.materialID,
+                    .modelIndex = modelIndex,
+                    .stableId = stableId,
+                    .blasDeviceAddress = mesh.primitiveProperties[i].blasDeviceAddress,
+                });
             }
         }
     }

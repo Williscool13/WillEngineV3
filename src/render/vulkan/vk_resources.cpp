@@ -394,6 +394,18 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedBuffer(const VulkanContext* cont
     return buffer;
 }
 
+AllocatedBuffer AllocatedBuffer::CreateAllocatedBufferAligned(const VulkanContext* context, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& vmaAllocInfo, VkDeviceSize minAlignment)
+{
+    AllocatedBuffer buffer;
+    buffer.context = context;
+    VK_CHECK(vmaCreateBufferWithAlignment(context->allocator, &bufferInfo, &vmaAllocInfo, minAlignment, &buffer.handle, &buffer.allocation, &buffer.allocationInfo));
+    buffer.size = bufferInfo.size;
+    if (bufferInfo.usage & VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT) {
+        buffer.address = VkHelpers::GetDeviceAddress(context->device, buffer.handle);
+    }
+    return buffer;
+}
+
 AllocatedBuffer AllocatedBuffer::CreateAllocatedStagingBuffer(const VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages)
 {
     const VkBufferCreateInfo bufferInfo{

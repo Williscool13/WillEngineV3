@@ -79,16 +79,15 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 
     renderArena = Core::ManagedArena(memoryManager.ArenaPool(), 1ull * 1024 * 1024, Core::AllocTag::Render);
     renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, renderArena.Get());
-    renderGraph->RegisterPersistentBuffer(RT_TLAS_BUFFER,
-        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        [device = context->device](uint64_t userData) {
-            vkDestroyAccelerationStructureKHR(device, reinterpret_cast<VkAccelerationStructureKHR>(userData), nullptr);
-        });
     screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler, memoryManager.AssetsScratch());
     pipelineStatsQuery.Init(context);
 #if WILL_EDITOR
     RegisterDebugReadbacks();
 #endif
+
+    renderGraph->RegisterPersistentBuffer(RT_TLAS_BUFFER, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, [device = context->device](uint64_t userData) {
+        vkDestroyAccelerationStructureKHR(device, reinterpret_cast<VkAccelerationStructureKHR>(userData), nullptr);
+    });
 }
 
 RenderThread::~RenderThread()
@@ -529,7 +528,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
                         SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, renderExtent, targets, relax, frameNumber, remodulateOutputMode, restirPixelScale);
-                    } else {
+                    }
+                    else {
                         SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, restirPixelScale);
                     }
                     break;

@@ -23,7 +23,10 @@ void SetupTLASBuild(RenderGraph& graph,
                     const Core::ViewFamily& viewFamily,
                     Core::Array<uint32_t, 2> renderExtent)
 {
-    const size_t instanceCount = viewFamily.blasInstances.Size();
+    size_t instanceCount = 0;
+    for (const auto& p : viewFamily.primitiveInstances) {
+        if (p.blasDeviceAddress != 0) { ++instanceCount; }
+    }
     if (instanceCount == 0) { return; }
 
     // Query required TLAS size
@@ -67,8 +70,10 @@ void SetupTLASBuild(RenderGraph& graph,
     UploadAllocation instanceUpload = graph.AllocateTransient(instanceDataSize);
     auto* instanceData = static_cast<VkAccelerationStructureInstanceKHR*>(instanceUpload.ptr);
 
-    for (size_t i = 0; i < instanceCount; ++i) {
-        const Core::MeshBLASInstance& src = viewFamily.blasInstances[i];
+    size_t instanceSlot = 0;
+    for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
+        const Core::PrimitiveInstanceData& src = viewFamily.primitiveInstances[i];
+        if (src.blasDeviceAddress == 0) { continue; }
         const Model& model = viewFamily.modelMatrices[src.modelIndex];
 
         // VkTransformMatrixKHR is row-major 3x4; glm mat4 is column-major, so transpose
@@ -76,9 +81,9 @@ void SetupTLASBuild(RenderGraph& graph,
         VkTransformMatrixKHR transform{};
         memcpy(&transform, &m, sizeof(VkTransformMatrixKHR));
 
-        VkAccelerationStructureInstanceKHR& inst = instanceData[i];
+        VkAccelerationStructureInstanceKHR& inst = instanceData[instanceSlot++];
         inst.transform = transform;
-        inst.instanceCustomIndex = src.primitiveInstanceIndex;
+        inst.instanceCustomIndex = static_cast<uint32_t>(i);
         inst.mask = 0xFF;
         inst.instanceShaderBindingTableRecordOffset = 0;
         inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
