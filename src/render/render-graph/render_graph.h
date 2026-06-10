@@ -9,6 +9,7 @@
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/array.h"
 #include "core/containers/inline_function.h"
+#include "core/containers/inline_vector.h"
 #include "core/containers/vector.h"
 #include "core/memory/arena.h"
 #include "core/memory/handle_allocator.h"
@@ -213,6 +214,14 @@ public: // Compile and execute
      */
     void PrepareSwapchain(VkCommandBuffer cmd, StringID textureId);
 
+public: // Persistent Per-FIF Buffers
+    void RegisterPersistentBuffer(StringID name, VkBufferUsageFlags usage, Core::InlineFunction<void(uint64_t), 32> onDestroyUserData = {});
+    /** @return true if the buffer was reallocated (caller must rebuild any AS handle stored in userData) */
+    bool EnsurePersistentBufferCapacity(StringID name, VkDeviceSize requiredSize);
+    PersistentBuffer& GetPersistentBuffer(StringID name);
+    /** Imports the current frame's slot into the pass system so passes can declare reads/writes against it. */
+    void ImportPersistentBuffer(StringID name);
+
 public: // Transient Uploader
     UploadAllocation AllocateTransient(size_t size);
 
@@ -282,6 +291,7 @@ private:
     uint32_t currentFrameIndex{0};
     Core::Array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
     Core::Array<TransientReadback, Core::FRAME_BUFFER_COUNT> meshletCountReadbacks{};
+    Core::InlineVector<PersistentBufferSlots, 8> persistentBuffers{};
 
     bool bRemoveSwapchainPhysicals{false};
     bool bDestroyViewportAssociated{false};

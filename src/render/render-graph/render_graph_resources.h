@@ -11,11 +11,13 @@
 #include <vulkan/vk_enum_string_helper.h>
 
 #include "core/containers/array.h"
+#include "core/containers/inline_function.h"
 #include "core/containers/inline_string.h"
 #include "core/memory/handle.h"
 #include "core/containers/inline_vector.h"
 #include "core/memory/linear_allocator.h"
 #include "render/render_config.h"
+#include "render/interface/render_interface.h"
 #include "render/vulkan/vk_resources.h"
 #include "spdlog/spdlog.h"
 
@@ -363,6 +365,25 @@ struct BufferFrameCarryover
     VkBuffer buffer{};
     BufferInfo bufferInfo{};
     VkBufferUsageFlags accumulatedUsage{};
+};
+
+struct PersistentBuffer
+{
+    VkBuffer buffer{VK_NULL_HANDLE};
+    VmaAllocation allocation{VK_NULL_HANDLE};
+    VkDeviceAddress address{0};
+    VkDeviceSize capacity{0};
+    uint64_t userData{0};
+    PipelineEvent lastState{};
+};
+
+struct PersistentBufferSlots
+{
+    StringID name{};
+    VkBufferUsageFlags usage{};
+    Core::Array<PersistentBuffer, Core::FRAME_BUFFER_COUNT> slots{};
+    /** Called on each slot when the buffer is reallocated or destroyed. Use to clean up userData (e.g. VkAccelerationStructureKHR). */
+    Core::InlineFunction<void(uint64_t userData), 32> onDestroyUserData{};
 };
 } // Render
 

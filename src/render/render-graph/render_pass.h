@@ -73,6 +73,12 @@ public:
 
     RenderPass& ReadIndirectCountBuffer(StringID bufferId);
 
+    RenderPass& WriteTLASBuffer(StringID bufferId);
+
+    RenderPass& ReadTLASBuffer(StringID bufferId);
+
+    RenderPass& WriteScratchBuffer(StringID bufferId);
+
 
     template<typename F>
     RenderPass& Execute(F&& func)
@@ -119,6 +125,9 @@ private:
     Core::ArenaVector<uint32_t> bufferIndexRead;
     Core::ArenaVector<uint32_t> bufferIndirectReads;
     Core::ArenaVector<uint32_t> bufferIndirectCountReads;
+    Core::ArenaVector<uint32_t> bufferTLASWrites;
+    Core::ArenaVector<uint32_t> bufferTLASReads;
+    Core::ArenaVector<uint32_t> bufferScratchWrites;
 
     Core::ArenaVector<uint32_t> autoClearTextures;
 

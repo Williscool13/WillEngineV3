@@ -1469,3 +1469,86 @@ TEST_CASE_METHOD(RdgFixture, "RDG: Execute resolves buffer device address inside
     CHECK(inspector.PhysicalAddressRetrieved(physIdx));
     CHECK(resolvedAddress == inspector.PhysicalBufferAddress(physIdx));
 }
+
+// ================================================================================
+// Section 10: Raytracing buffer declarations (WriteTLASBuffer / ReadTLASBuffer / WriteScratchBuffer)
+// ================================================================================
+
+TEST_CASE_METHOD(RdgFixture, "RDG: TLAS and scratch buffer declarations accumulate correct usage flags", "[rdg][usage][raytracing]")
+{
+    rdg.CreateBuffer(SID("instanceBuf"), 4096);
+    rdg.CreateBuffer(SID("tlasBuf"), 65536);
+    rdg.CreateBuffer(SID("scratchBuf"), 65536);
+
+    rdg.AddPass(SID("uploadInstances"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged)
+            .WriteTransferBuffer(SID("instanceBuf"));
+    rdg.AddPass(SID("buildTLAS"), VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, Render::ResourceCategory::Untagged)
+            .ReadTransferBuffer(SID("instanceBuf"))
+            .WriteTLASBuffer(SID("tlasBuf"))
+            .WriteScratchBuffer(SID("scratchBuf"));
+    rdg.AddPass(SID("rtShade"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged)
+            .ReadTLASBuffer(SID("tlasBuf"));
+
+    rdg.AccumulateUsage();
+
+    // Instance buffer: transfer destination from upload, transfer source for build read
+    CHECK((inspector.BufferAccumulatedUsage(SID("instanceBuf")) & VK_BUFFER_USAGE_TRANSFER_DST_BIT) != 0);
+    CHECK((inspector.BufferAccumulatedUsage(SID("instanceBuf")) & VK_BUFFER_USAGE_TRANSFER_SRC_BIT) != 0);
+
+    // TLAS buffer: must have AS storage and device address
+    const VkBufferUsageFlags tlasUsage = inspector.BufferAccumulatedUsage(SID("tlasBuf"));
+    CHECK((tlasUsage & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) != 0);
+    CHECK((tlasUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0);
+
+    // Scratch buffer: must have storage and device address
+    const VkBufferUsageFlags scratchUsage = inspector.BufferAccumulatedUsage(SID("scratchBuf"));
+    CHECK((scratchUsage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) != 0);
+    CHECK((scratchUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0);
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: TLAS build pass emits correct barriers and dependency edges", "[rdg][barrier][raytracing]")
+{
+    rdg.CreateBuffer(SID("instanceBuf"), 4096);
+    rdg.CreateBuffer(SID("tlasBuf"), 65536);
+    rdg.CreateBuffer(SID("scratchBuf"), 65536);
+
+    rdg.AddPass(SID("uploadInstances"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged)
+            .WriteTransferBuffer(SID("instanceBuf"));
+    rdg.AddPass(SID("buildTLAS"), VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, Render::ResourceCategory::Untagged)
+            .ReadTransferBuffer(SID("instanceBuf"))
+            .WriteTLASBuffer(SID("tlasBuf"))
+            .WriteScratchBuffer(SID("scratchBuf"));
+    rdg.AddPass(SID("rtShade"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged)
+            .ReadTLASBuffer(SID("tlasBuf"));
+
+    Compile();
+
+    // Scheduling: upload -> build -> shade must be sequential waves
+    CHECK(inspector.PassWaveIndex(SID("uploadInstances")) < inspector.PassWaveIndex(SID("buildTLAS")));
+    CHECK(inspector.PassWaveIndex(SID("buildTLAS")) < inspector.PassWaveIndex(SID("rtShade")));
+
+    // Dependency edges
+    CHECK(inspector.HasEdge(SID("uploadInstances"), SID("buildTLAS")));
+    CHECK(inspector.HasEdge(SID("buildTLAS"), SID("rtShade")));
+    CHECK_FALSE(inspector.HasEdge(SID("uploadInstances"), SID("rtShade")));
+
+    // buildTLAS wave: TLAS buffer barrier must use AS_BUILD stage and AS_WRITE access
+    const uint32_t buildWave = inspector.PassWaveIndex(SID("buildTLAS"));
+    const VkBufferMemoryBarrier2* tlasBarrier = inspector.FindBufferBarrier(buildWave, SID("tlasBuf"));
+    REQUIRE(tlasBarrier != nullptr);
+    CHECK((tlasBarrier->dstStageMask & VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR) != 0);
+    CHECK((tlasBarrier->dstAccessMask & VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR) != 0);
+
+    // scratch buffer barrier: same stage/access as TLAS write
+    const VkBufferMemoryBarrier2* scratchBarrier = inspector.FindBufferBarrier(buildWave, SID("scratchBuf"));
+    REQUIRE(scratchBarrier != nullptr);
+    CHECK((scratchBarrier->dstStageMask & VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR) != 0);
+    CHECK((scratchBarrier->dstAccessMask & VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR) != 0);
+
+    // rtShade wave: TLAS read barrier must use AS_READ access
+    const uint32_t shadeWave = inspector.PassWaveIndex(SID("rtShade"));
+    const VkBufferMemoryBarrier2* tlasReadBarrier = inspector.FindBufferBarrier(shadeWave, SID("tlasBuf"));
+    REQUIRE(tlasReadBarrier != nullptr);
+    CHECK((tlasReadBarrier->dstAccessMask & VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR) != 0);
+    CHECK((tlasReadBarrier->srcStageMask & VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR) != 0);
+}

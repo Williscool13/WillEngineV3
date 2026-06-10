@@ -86,6 +86,14 @@ RenderGraph::~RenderGraph()
             allocFns.destroyBuffer(context, readback.buffer, readback.bufferAllocation);
         }
     }
+    for (auto& entry : persistentBuffers) {
+        for (auto& slot : entry.slots) {
+            if (slot.buffer != VK_NULL_HANDLE) {
+                if (slot.userData != 0 && entry.onDestroyUserData) { entry.onDestroyUserData(slot.userData); }
+                allocFns.destroyBuffer(context, slot.buffer, slot.allocation);
+            }
+        }
+    }
 }
 
 RenderPass& RenderGraph::AddPass(StringID passId, VkPipelineStageFlags2 stages, ResourceCategory category)
@@ -183,6 +191,18 @@ void RenderGraph::AccumulateUsage()
 
         for (const uint32_t bufIndex : pass->bufferIndirectCountReads) {
             buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferTLASWrites) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferTLASReads) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferScratchWrites) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
         }
     }
 
@@ -310,6 +330,9 @@ void RenderGraph::BuildDependencyEdges()
         trackBuffer(pass->bufferReadWrite, true);
         trackBuffer(pass->bufferWrites, true);
         trackBuffer(pass->bufferTransferWrites, true);
+        trackBuffer(pass->bufferTLASWrites, true);
+        trackBuffer(pass->bufferScratchWrites, true);
+        trackBuffer(pass->bufferTLASReads, false);
     }
 }
 
@@ -1075,6 +1098,45 @@ void RenderGraph::PrecomputeBarriers()
                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT);
             }
+
+            for (const uint32_t bufIndex : pass->bufferTLASWrites) {
+                auto& buf = buffers[bufIndex];
+                auto& phys = physicalResources[buf.physicalIndex];
+                if (phys.bDisableBarriers) { continue; }
+                addBufferBarrier({
+                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                    phys.event.stages, phys.event.access,
+                    VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                });
+                LogBufferBarrier(buf.bufferId, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
+            }
+
+            for (const uint32_t bufIndex : pass->bufferTLASReads) {
+                auto& buf = buffers[bufIndex];
+                auto& phys = physicalResources[buf.physicalIndex];
+                if (phys.bDisableBarriers) { continue; }
+                addBufferBarrier({
+                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                    phys.event.stages, phys.event.access,
+                    pass->stages, VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                });
+                LogBufferBarrier(buf.bufferId, VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR);
+            }
+
+            for (const uint32_t bufIndex : pass->bufferScratchWrites) {
+                auto& buf = buffers[bufIndex];
+                auto& phys = physicalResources[buf.physicalIndex];
+                if (phys.bDisableBarriers) { continue; }
+                addBufferBarrier({
+                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                    phys.event.stages, phys.event.access,
+                    VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                });
+                LogBufferBarrier(buf.bufferId, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
+            }
         }
 
         compiledWaveRanges.PushBack({
@@ -1163,6 +1225,9 @@ void RenderGraph::PrecomputeBarriers()
                 stampRead(buffers[b].physicalIndex, pass->stages | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT);
             }
             for (const uint32_t b : pass->bufferIndirectCountReads) { stampRead(buffers[b].physicalIndex, VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT); }
+            for (const uint32_t b : pass->bufferTLASWrites) { waveState[buffers[b].physicalIndex] = {VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, true}; }
+            for (const uint32_t b : pass->bufferScratchWrites) { waveState[buffers[b].physicalIndex] = {VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, true}; }
+            for (const uint32_t b : pass->bufferTLASReads) { stampRead(buffers[b].physicalIndex, pass->stages, VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR); }
         }
 
         // Flush wave-local state into phys.event
@@ -1378,6 +1443,13 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
                 carryover.buffer = phys.buffer;
                 carryover.bufferInfo = buf->bufferInfo;
                 carryover.accumulatedUsage = buf->accumulatedUsage;
+            }
+        }
+        for (auto& entry : persistentBuffers) {
+            PersistentBuffer& slot = entry.slots[currentFrameIndex];
+            if (slot.buffer == VK_NULL_HANDLE) { continue; }
+            if (const BufferResource* buf = GetBuffer(entry.name)) {
+                slot.lastState = GetBufferState(entry.name);
             }
         }
     }
@@ -2015,6 +2087,77 @@ void RenderGraph::RecreateTransientArena(uint32_t frameIndex, size_t newSize)
     arena.mappedData = newAlloc.mappedData;
     arena.allocator = newAllocator;
     arena.size = newSize;
+}
+
+void RenderGraph::RegisterPersistentBuffer(StringID name, VkBufferUsageFlags usage, Core::InlineFunction<void(uint64_t), 32> onDestroyUserData)
+{
+    for (const auto& entry : persistentBuffers) {
+        if (entry.name == name) { return; }
+    }
+    PersistentBufferSlots& entry = persistentBuffers.EmplaceBack();
+    entry.name = name;
+    entry.usage = usage;
+    entry.onDestroyUserData = std::move(onDestroyUserData);
+}
+
+bool RenderGraph::EnsurePersistentBufferCapacity(StringID name, VkDeviceSize requiredSize)
+{
+    for (auto& entry : persistentBuffers) {
+        if (entry.name != name) { continue; }
+
+        PersistentBuffer& slot = entry.slots[currentFrameIndex];
+        if (requiredSize <= slot.capacity) { return false; }
+
+        if (slot.buffer != VK_NULL_HANDLE) {
+            if (slot.userData != 0 && entry.onDestroyUserData) { entry.onDestroyUserData(slot.userData); }
+            allocFns.destroyBuffer(context, slot.buffer, slot.allocation);
+            slot = {};
+        }
+
+        VkBufferCreateInfo bufferInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        bufferInfo.size = requiredSize;
+        bufferInfo.usage = entry.usage;
+        VmaAllocationCreateInfo vmaInfo{};
+        vmaInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+
+        auto _alloc = allocFns.createBuffer(context, bufferInfo, vmaInfo);
+        slot.buffer = _alloc.buffer;
+        slot.allocation = _alloc.allocation;
+        slot.capacity = requiredSize;
+
+        VkBufferDeviceAddressInfo addrInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = slot.buffer};
+        slot.address = vkGetBufferDeviceAddress(context->device, &addrInfo);
+        slot.userData = 0;
+        return true;
+    }
+    ENGINE_ASSERT(Renderer, false, "EnsurePersistentBufferCapacity: buffer '{}' not registered", name.ToString());
+    return false;
+}
+
+PersistentBuffer& RenderGraph::GetPersistentBuffer(StringID name)
+{
+    for (auto& entry : persistentBuffers) {
+        if (entry.name == name) { return entry.slots[currentFrameIndex]; }
+    }
+    ENGINE_ASSERT(Renderer, false, "GetPersistentBuffer: buffer '{}' not registered", name.ToString());
+    static PersistentBuffer dummy{};
+    return dummy;
+}
+
+void RenderGraph::ImportPersistentBuffer(StringID name)
+{
+    for (const auto& entry : persistentBuffers) {
+        if (entry.name != name) { continue; }
+        const PersistentBuffer& slot = entry.slots[currentFrameIndex];
+        if (slot.buffer == VK_NULL_HANDLE) {
+            LOG_WARN(Renderer, "ImportPersistentBuffer: Attempted to import a persistent buffer that does not exist.");
+            return;
+        }
+        const BufferInfo info{.size = slot.capacity, .usage = entry.usage};
+        ImportBuffer(name, slot.buffer, slot.address, info, slot.lastState);
+        return;
+    }
+    ENGINE_ASSERT(Renderer, false, "ImportPersistentBuffer: buffer '{}' not registered", name.ToString());
 }
 
 void RenderGraph::ExportGraphviz()

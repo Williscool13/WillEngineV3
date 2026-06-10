@@ -20,6 +20,7 @@ RenderPass::RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStag
       bufferReads(arena, 4), bufferWrites(arena, 4), bufferReadWrite(arena, 4),
       bufferTransferReads(arena, 2), bufferTransferWrites(arena, 2),
       bufferIndexRead(arena, 2), bufferIndirectReads(arena, 2), bufferIndirectCountReads(arena, 2),
+      bufferTLASWrites(arena, 2), bufferTLASReads(arena, 2), bufferScratchWrites(arena, 2),
       autoClearTextures(arena, 2)
 {}
 
@@ -269,6 +270,28 @@ RenderPass& RenderPass::ReadIndirectCountBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     bufferIndirectCountReads.PushBack(resource->index);
+    return *this;
+}
+
+RenderPass& RenderPass::WriteTLASBuffer(const StringID bufferId)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    bufferTLASWrites.PushBack(resource->index);
+    return *this;
+}
+
+RenderPass& RenderPass::ReadTLASBuffer(const StringID bufferId)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    ENGINE_ASSERT(Renderer, resource->bufferInfo.size > 0, "Buffer not defined - import or create buffer first");
+    bufferTLASReads.PushBack(resource->index);
+    return *this;
+}
+
+RenderPass& RenderPass::WriteScratchBuffer(const StringID bufferId)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    bufferScratchWrites.PushBack(resource->index);
     return *this;
 }
 

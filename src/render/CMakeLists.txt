@@ -100,6 +100,7 @@ add_library(render STATIC
         vulkan/vk_pipeline_stats.cpp
         vulkan/vk_pipeline_stats.h
         descriptors/procedural_texture_generate_resources.cpp
+        passes/raytracing_passes.cpp
 )
 
 target_include_directories(render PRIVATE

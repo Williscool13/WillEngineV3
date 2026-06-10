@@ -56,6 +56,10 @@ inline const StringID TEXT_MATERIAL_BUFFER = SID("text_material_buffer");
 inline const StringID SHADING_DISPATCH_BUCKETING_BUFFER = SID("shading_bucketing_buffer");
 inline const StringID LIGHTING_DISPATCH_BUCKETING_BUFFER = SID("lighting_bucketing_buffer");
 
+inline const StringID RT_TLAS_INSTANCE_BUFFER = SID("rt_tlas_instance_buffer");
+inline const StringID RT_TLAS_BUFFER = SID("rt_tlas_buffer");
+inline const StringID RT_TLAS_SCRATCH_BUFFER = SID("rt_tlas_scratch_buffer");
+
 inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
 inline constexpr int32_t RDG_MAX_PASSES = 256;
 inline constexpr int32_t RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE = 1 * 1024 * 1024; // 1MB base (doubles as needed)
