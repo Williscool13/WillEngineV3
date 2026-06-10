@@ -7,6 +7,7 @@
 
 #include "offsetAllocator.hpp"
 #include "descriptors/vk_bindless_transient_rdg_resources.h"
+#include "descriptors/vk_bindless_rdg_rt_resources.h"
 #include "render/render_config.h"
 #include "vulkan/vk_resources.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
@@ -93,6 +94,8 @@ struct ResourceManager
         RDG_MAX_MULTISAMPLED_IMAGE,
         RDG_MAX_MULTISAMPLED_UINT_IMAGE
     > bindlessRDGTransientDescriptorBuffer{};
+
+    BindlessRDGRTResourcesDescriptorBuffer<4> bindlessRDGRTDescriptorBuffer{};
 
 #if WILL_EDITOR
     Editor::DebugReadbackBuffer debugReadback;

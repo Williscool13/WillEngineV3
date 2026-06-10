@@ -189,6 +189,7 @@ struct ResourceDimensions
     // Buffer fields
     VkDeviceSize bufferSize = 0;
     VkBufferUsageFlags bufferUsage = 0;
+    VkDeviceSize bufferMinAlignment = 0;
 
     // Shared
     StringID resourceId;
@@ -200,6 +201,7 @@ struct ResourceDimensions
     {
         return bufferSize == other.bufferSize &&
                bufferUsage == other.bufferUsage &&
+               bufferMinAlignment == other.bufferMinAlignment &&
                format == other.format &&
                width == other.width &&
                height == other.height &&
@@ -315,6 +317,7 @@ struct BufferResource
 
     BufferInfo bufferInfo = {};
     VkBufferUsageFlags accumulatedUsage = 0;
+    VkDeviceSize minAlignment = 0;
 
     uint32_t firstPass = UINT32_MAX;
     uint32_t lastPass = 0;
@@ -374,6 +377,7 @@ struct PersistentBuffer
     VkDeviceAddress address{0};
     VkDeviceSize capacity{0};
     uint64_t userData{0};
+    uint64_t userData2{0};
     PipelineEvent lastState{};
 };
 

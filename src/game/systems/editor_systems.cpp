@@ -528,10 +528,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
         ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
-        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Grond-Truth ReSTIR"};
+        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Ground-Truth ReSTIR", "Path Tracing"};
         Core::LightingMode prevLightingMode = state->lighting.lightingMode;
         int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
-        if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, 3)) {
+        if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, 4)) {
             state->lighting.lightingMode = static_cast<Core::LightingMode>(lightingModeIndex);
             bProjectConfigChanged = true;
 

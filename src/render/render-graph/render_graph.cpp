@@ -204,6 +204,10 @@ void RenderGraph::AccumulateUsage()
         for (const uint32_t bufIndex : pass->bufferScratchWrites) {
             buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
         }
+
+        for (const uint32_t bufIndex : pass->bufferASInputReads) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        }
     }
 
     for (auto& tex : textures) {
@@ -219,8 +223,8 @@ void RenderGraph::BuildDependencyEdges()
     {
         uint32_t lastWriter = UINT32_MAX;
         VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        Core::ArenaVector<uint32_t> readers;  // active readers in the current layout epoch
-        Core::ArenaVector<uint32_t> causes;   // passes that established this epoch; new same-epoch readers get a RAW edge from each
+        Core::ArenaVector<uint32_t> readers; // active readers in the current layout epoch
+        Core::ArenaVector<uint32_t> causes; // passes that established this epoch; new same-epoch readers get a RAW edge from each
     };
 
     struct BufferEpoch
@@ -230,7 +234,10 @@ void RenderGraph::BuildDependencyEdges()
     };
 
     auto texEpochs = Core::ArenaArray<TextureEpoch>(arena, RDG_MAX_TEXTURES);
-    for (auto& t : texEpochs) { t.readers = Core::ArenaVector<uint32_t>(arena); t.causes = Core::ArenaVector<uint32_t>(arena); }
+    for (auto& t : texEpochs) {
+        t.readers = Core::ArenaVector<uint32_t>(arena);
+        t.causes = Core::ArenaVector<uint32_t>(arena);
+    }
 
     auto bufEpochs = Core::ArenaArray<BufferEpoch>(arena, RDG_MAX_BUFFERS);
     for (auto& b : bufEpochs) { b.readers = Core::ArenaVector<uint32_t>(arena); }
@@ -333,6 +340,7 @@ void RenderGraph::BuildDependencyEdges()
         trackBuffer(pass->bufferTLASWrites, true);
         trackBuffer(pass->bufferScratchWrites, true);
         trackBuffer(pass->bufferTLASReads, false);
+        trackBuffer(pass->bufferASInputReads, false);
     }
 }
 
@@ -447,6 +455,10 @@ void RenderGraph::CalculateLifetimes()
         for (const uint32_t bufIndex : pass->bufferIndexRead) { UpdateBufferLifetime(buffers[bufIndex]); }
         for (const uint32_t bufIndex : pass->bufferIndirectReads) { UpdateBufferLifetime(buffers[bufIndex]); }
         for (const uint32_t bufIndex : pass->bufferIndirectCountReads) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferASInputReads) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferTLASWrites) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferScratchWrites) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferTLASReads) { UpdateBufferLifetime(buffers[bufIndex]); }
     }
 }
 
@@ -577,6 +589,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
             desiredDim.type = ResourceDimensions::Type::Buffer;
             desiredDim.bufferSize = buf.bufferInfo.size;
             desiredDim.bufferUsage = buf.accumulatedUsage;
+            desiredDim.bufferMinAlignment = buf.minAlignment;
             desiredDim.resourceId = buf.bufferId;
 
             bool foundAlias = false;
@@ -588,6 +601,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
                 if (!phys.dimensions.IsBuffer()) { continue; }
 
                 if (phys.dimensions.bufferSize != desiredDim.bufferSize) { continue; }
+                if (phys.dimensions.bufferMinAlignment != desiredDim.bufferMinAlignment) { continue; }
 
                 // Cross-frame resources can't alias at all.
                 if (!buf.bCanUseAliasedBuffer && !phys.logicalResourceIndices.IsEmpty()) {
@@ -1137,6 +1151,19 @@ void RenderGraph::PrecomputeBarriers()
                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
             }
+
+            for (const uint32_t bufIndex : pass->bufferASInputReads) {
+                auto& buf = buffers[bufIndex];
+                auto& phys = physicalResources[buf.physicalIndex];
+                if (phys.bDisableBarriers) { continue; }
+                addBufferBarrier({
+                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                    phys.event.stages, phys.event.access,
+                    VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT,
+                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                });
+                LogBufferBarrier(buf.bufferId, VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR);
+            }
         }
 
         compiledWaveRanges.PushBack({
@@ -1221,13 +1248,12 @@ void RenderGraph::PrecomputeBarriers()
             for (const uint32_t b : pass->bufferReads) { stampRead(buffers[b].physicalIndex, pass->stages, VK_ACCESS_2_SHADER_READ_BIT); }
             for (const uint32_t b : pass->bufferTransferReads) { stampRead(buffers[b].physicalIndex, pass->stages, VK_ACCESS_2_TRANSFER_READ_BIT); }
             for (const uint32_t b : pass->bufferIndexRead) { stampRead(buffers[b].physicalIndex, VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT, VK_ACCESS_2_INDEX_READ_BIT); }
-            for (const uint32_t b : pass->bufferIndirectReads) {
-                stampRead(buffers[b].physicalIndex, pass->stages | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT);
-            }
+            for (const uint32_t b : pass->bufferIndirectReads) { stampRead(buffers[b].physicalIndex, pass->stages | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT); }
             for (const uint32_t b : pass->bufferIndirectCountReads) { stampRead(buffers[b].physicalIndex, VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT); }
             for (const uint32_t b : pass->bufferTLASWrites) { waveState[buffers[b].physicalIndex] = {VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, true}; }
             for (const uint32_t b : pass->bufferScratchWrites) { waveState[buffers[b].physicalIndex] = {VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, true}; }
             for (const uint32_t b : pass->bufferTLASReads) { stampRead(buffers[b].physicalIndex, pass->stages, VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR); }
+            for (const uint32_t b : pass->bufferASInputReads) { stampRead(buffers[b].physicalIndex, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT); }
         }
 
         // Flush wave-local state into phys.event
@@ -1627,6 +1653,21 @@ void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsVie
     }
 
     buf->bufferInfo.size = size;
+    buf->bCanUseAliasedBuffer = bCanAlias;
+    buf->bIsViewportScaled = bIsViewportScaled;
+}
+
+void RenderGraph::CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDeviceSize minAlignment, bool bIsViewportScaled, bool bCanAlias)
+{
+    BufferResource* buf = GetOrCreateBuffer(bufferId);
+
+    if (buf->bufferInfo.size != 0) {
+        ENGINE_ASSERT(Renderer, buf->bufferInfo.size == size, "Buffer size mismatch");
+        ENGINE_ASSERT(Renderer, buf->minAlignment == minAlignment, "Buffer alignment mismatch");
+    }
+
+    buf->bufferInfo.size = size;
+    buf->minAlignment = minAlignment;
     buf->bCanUseAliasedBuffer = bCanAlias;
     buf->bIsViewportScaled = bIsViewportScaled;
 }
@@ -2160,6 +2201,22 @@ void RenderGraph::ImportPersistentBuffer(StringID name)
     ENGINE_ASSERT(Renderer, false, "ImportPersistentBuffer: buffer '{}' not registered", name.ToString());
 }
 
+void RenderGraph::WriteAccelerationStructureDescriptor(StringID name, VkAccelerationStructureKHR handle)
+{
+    PersistentBuffer& buf = GetPersistentBuffer(name);
+    buf.userData = reinterpret_cast<uint64_t>(handle);
+    VkAccelerationStructureDeviceAddressInfoKHR addrInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+    addrInfo.accelerationStructure = handle;
+    const VkDeviceAddress address = vkGetAccelerationStructureDeviceAddressKHR(context->device, &addrInfo);
+    resourceManager->bindlessRDGRTDescriptorBuffer.WriteAccelerationStructureDescriptor(currentFrameIndex, address);
+    buf.userData2 = currentFrameIndex;
+}
+
+uint32_t RenderGraph::GetAccelerationStructureDescriptorIndex(StringID name)
+{
+    return static_cast<uint32_t>(GetPersistentBuffer(name).userData2);
+}
+
 void RenderGraph::ExportGraphviz()
 {
     auto StageColor = [](VkPipelineStageFlags2 stages) -> const char* {
@@ -2362,6 +2419,15 @@ RenderGraphAllocFns::BufferAlloc RenderGraphAllocFns::DefaultCreateBuffer(const 
     VmaAllocation alloc = VK_NULL_HANDLE;
     VmaAllocationInfo allocInfo;
     VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &buffer, &alloc, &allocInfo));
+    return {buffer, alloc, allocInfo.pMappedData};
+}
+
+RenderGraphAllocFns::BufferAlloc RenderGraphAllocFns::DefaultCreateBufferAligned(const VulkanContext* context, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& vmaAllocInfo, VkDeviceSize minAlignment)
+{
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VmaAllocation alloc = VK_NULL_HANDLE;
+    VmaAllocationInfo allocInfo;
+    VK_CHECK(vmaCreateBufferWithAlignment(context->allocator, &bufferInfo, &vmaAllocInfo, minAlignment, &buffer, &alloc, &allocInfo));
     return {buffer, alloc, allocInfo.pMappedData};
 }
 
@@ -2597,7 +2663,10 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
 
     VmaAllocationCreateInfo vmaAllocInfo = {};
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    auto bufAlloc = allocFns.createBuffer(context, bufferInfo, vmaAllocInfo);
+
+    const auto bufAlloc = dim.bufferMinAlignment > 0
+                              ? allocFns.createBufferAligned(context, bufferInfo, vmaAllocInfo, dim.bufferMinAlignment)
+                              : allocFns.createBuffer(context, bufferInfo, vmaAllocInfo);
     resource.buffer = bufAlloc.buffer;
     resource.bufferAllocation = bufAlloc.allocation;
 
@@ -2643,7 +2712,8 @@ VRAMReport RenderGraph::GenerateVramReport() const
             VmaAllocationInfo info{};
             vmaGetAllocationInfo(context->allocator, phys.imageAllocation, &info);
             size = info.size;
-        } else if (phys.dimensions.IsBuffer() && phys.bufferAllocation != VK_NULL_HANDLE) {
+        }
+        else if (phys.dimensions.IsBuffer() && phys.bufferAllocation != VK_NULL_HANDLE) {
             VmaAllocationInfo info{};
             vmaGetAllocationInfo(context->allocator, phys.bufferAllocation, &info);
             size = info.size;
@@ -2662,7 +2732,8 @@ VRAMReport RenderGraph::GenerateVramReport() const
                     break;
                 }
             }
-        } else if (popCount > 1) {
+        }
+        else if (popCount > 1) {
             report.physicalSharedPoolBytes += size;
             report.sharedPoolCategories |= phys.category;
         }

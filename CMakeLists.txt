@@ -380,6 +380,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/relax_utils.slang")
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
         ${CMAKE_SOURCE_DIR}/shaders/depth_copy.slang compute ComputeMain depth_copy
+        ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_shadow_test.slang compute ComputeMain rt_shadow_test
 
         # Instancing (Either 1->2->scan->1->2 or 1->scan->2)
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeInstanceLOD instancing_instance_lod

@@ -1198,11 +1198,11 @@ SHADER_PUBLIC struct DepthCopyPushConstant
 SHADER_PUBLIC struct RTShadowTestPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC uint64_t tlasAddress;
+    SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint2 renderExtent;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

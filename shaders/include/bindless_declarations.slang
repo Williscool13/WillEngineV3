@@ -1,6 +1,5 @@
 module bindless_declarations;
 
-
 // Descriptor buffer for model textures
 [[vk::binding(0, 0)]] public SamplerState assetSamplers[];
 [[vk::binding(1, 0)]] public Texture2D assetTextures[];
@@ -21,3 +20,6 @@ module bindless_declarations;
 [[vk::binding(11, 1)]] public Texture2D<uint4>   rdgTexturesUInt4[];
 [[vk::binding(12, 1)]] public Texture2D<uint2>   rdgTexturesUInt2[];
 [[vk::binding(13, 1)]] public Texture2D<uint>    rdgTexturesUInt[];
+
+// Descriptor buffer for RDG raytracing resources
+[[vk::binding(0, 2)]] public RaytracingAccelerationStructure rdgAccelerationStructures[];

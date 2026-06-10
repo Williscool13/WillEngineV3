@@ -79,6 +79,8 @@ public:
 
     RenderPass& WriteScratchBuffer(StringID bufferId);
 
+    RenderPass& ReadASInputBuffer(StringID bufferId);
+
 
     template<typename F>
     RenderPass& Execute(F&& func)
@@ -128,6 +130,7 @@ private:
     Core::ArenaVector<uint32_t> bufferTLASWrites;
     Core::ArenaVector<uint32_t> bufferTLASReads;
     Core::ArenaVector<uint32_t> bufferScratchWrites;
+    Core::ArenaVector<uint32_t> bufferASInputReads;
 
     Core::ArenaVector<uint32_t> autoClearTextures;
 

@@ -60,7 +60,7 @@ void SetupTLASBuild(RenderGraph& graph,
         createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
         VkAccelerationStructureKHR handle{};
         VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, nullptr, &handle));
-        tlas.userData = reinterpret_cast<uint64_t>(handle);
+        graph.WriteAccelerationStructureDescriptor(RT_TLAS_BUFFER, handle);
     }
 
     graph.ImportPersistentBuffer(RT_TLAS_BUFFER);
@@ -111,10 +111,11 @@ void SetupTLASBuild(RenderGraph& graph,
         vkCmdCopyBuffer2(cmd, &copyInfo);
     });
 
-    graph.CreateBuffer(RT_TLAS_SCRATCH_BUFFER, scratchSize, false);
+    const VkDeviceSize scratchAlignment = VulkanContext::deviceInfo.accelerationStructureProps.minAccelerationStructureScratchOffsetAlignment;
+    graph.CreateBufferAligned(RT_TLAS_SCRATCH_BUFFER, scratchSize, scratchAlignment, false);
 
     RenderPass& buildPass = graph.AddPass(SID("RT Build TLAS"), VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, ResourceCategory::Untagged);
-    buildPass.ReadTransferBuffer(RT_TLAS_INSTANCE_BUFFER);
+    buildPass.ReadASInputBuffer(RT_TLAS_INSTANCE_BUFFER);
     buildPass.WriteTLASBuffer(RT_TLAS_BUFFER);
     buildPass.WriteScratchBuffer(RT_TLAS_SCRATCH_BUFFER);
     buildPass.Execute([&graph, primitiveCount, tlasHandle = tlas.userData](VkCommandBuffer cmd) {
@@ -145,6 +146,7 @@ void SetupRTShadowTest(RenderGraph& graph,
                        const Core::ViewFamily& viewFamily,
                        Core::Array<uint32_t, 2> renderExtent,
                        const RenderTargets& targets,
+                       StringID outputTarget,
                        uint32_t sceneIndex)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
@@ -153,24 +155,20 @@ void SetupRTShadowTest(RenderGraph& graph,
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);
-    pass.WriteStorageImage(targets.intermediateOne);
-    pass.Execute([&graph, pipelineManager, sceneIndex, renderExtent,
-                  depth = targets.depthCopy, output = targets.intermediateOne, device = context->device](VkCommandBuffer cmd) {
+    pass.WriteStorageImage(outputTarget);
+    const uint32_t tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER);
+    pass.Execute([&graph, pipelineManager, sceneIndex, renderExtent, tlasIndex,
+                  depth = targets.depthCopy, output = outputTarget](VkCommandBuffer cmd) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_shadow_test"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
-        const PersistentBuffer& tlas = graph.GetPersistentBuffer(RT_TLAS_BUFFER);
-        VkAccelerationStructureDeviceAddressInfoKHR addrInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
-        addrInfo.accelerationStructure = reinterpret_cast<VkAccelerationStructureKHR>(tlas.userData);
-        const uint64_t tlasAddress = vkGetAccelerationStructureDeviceAddressKHR(device, &addrInfo);
-
         RTShadowTestPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .tlasAddress = tlasAddress,
+            .tlasIndex = tlasIndex,
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-            .renderExtent = {renderExtent[0], renderExtent[1]},
             .sceneDataIndex = sceneIndex,
+            .renderExtent = {renderExtent[0], renderExtent[1]},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

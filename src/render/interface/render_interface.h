@@ -491,6 +491,7 @@ enum class LightingMode : uint8_t
     Default = 0,
     ReSTIR,
     GroundTruthReSTIR,
+    PathTracing,
 };
 
 enum class ReSTIRDebugStop : uint8_t

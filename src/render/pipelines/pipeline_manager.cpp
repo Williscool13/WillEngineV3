@@ -22,7 +22,7 @@
 namespace Render
 {
 PipelineManager::PipelineManager(VulkanContext* context, ResourceManager* resourceManager, Core::TlsfAllocator& renderAlloc, Core::TlsfAllocator& assetScratchAlloc,
-                                 const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts)
+                                 const Core::Array<VkDescriptorSetLayout, 3>& globalLayouts)
     : context(context),
       resourceManager(resourceManager),
       renderAlloc(&renderAlloc),
@@ -347,9 +347,10 @@ void PipelineManager::LogRegistrationSummary()
 
 void PipelineManager::RegisterPipelines()
 {
-    Core::Array<VkDescriptorSetLayout, 2> layouts{
+    Core::Array<VkDescriptorSetLayout, 3> layouts{
         resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
-        resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
+        resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle,
+        resourceManager->bindlessRDGRTDescriptorBuffer.descriptorSetLayout.handle
     };
 
     VkPipelineLayoutCreateInfo layoutInfo{};
@@ -461,6 +462,8 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline(SID("depth_copy"), src / "depth_copy_compute.spv",
                             sizeof(DepthCopyPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test_compute.spv",
+                            sizeof(RTShadowTestPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("gtao_depth_prepass"), src / "gtao_depth_prepass_compute.spv",
                             sizeof(GTAODepthPrepassPushConstant), PipelineCategory::Critical);

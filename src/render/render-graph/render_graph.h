@@ -35,6 +35,7 @@ struct RenderGraphAllocFns
     static void DefaultDestroyImage(const VulkanContext*, VkImage, VmaAllocation);
     static void DefaultDestroyImageView(const VulkanContext*, VkImageView);
     static BufferAlloc DefaultCreateBuffer(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&);
+    static BufferAlloc DefaultCreateBufferAligned(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&, VkDeviceSize minAlignment);
     static void DefaultDestroyBuffer(const VulkanContext*, VkBuffer, VmaAllocation);
     static VkDeviceAddress DefaultGetBufferDeviceAddress(const VulkanContext*, VkBuffer);
     static void DefaultSetDebugName(const VulkanContext*, VkObjectType, uint64_t handle, const char* name);
@@ -49,6 +50,7 @@ struct RenderGraphAllocFns
     Core::InlineFunction<void(const VulkanContext*, VkImage, VmaAllocation), 64> destroyImage{DefaultDestroyImage};
     Core::InlineFunction<void(const VulkanContext*, VkImageView), 64> destroyImageView{DefaultDestroyImageView};
     Core::InlineFunction<BufferAlloc(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&), 64> createBuffer{DefaultCreateBuffer};
+    Core::InlineFunction<BufferAlloc(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&, VkDeviceSize), 64> createBufferAligned{DefaultCreateBufferAligned};
     Core::InlineFunction<void(const VulkanContext*, VkBuffer, VmaAllocation), 64> destroyBuffer{DefaultDestroyBuffer};
     Core::InlineFunction<VkDeviceAddress(const VulkanContext*, VkBuffer), 64> getBufferDeviceAddress{DefaultGetBufferDeviceAddress};
     Core::InlineFunction<void(const VulkanContext*, VkObjectType, uint64_t, const char*), 64> setDebugName{DefaultSetDebugName};
@@ -105,6 +107,7 @@ public: // Resource registration
     void AliasBuffer(StringID aliasId, StringID existingId);
 
     void CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled = false, bool bCanAlias = true);
+    void CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDeviceSize minAlignment, bool bIsViewportScaled = false, bool bCanAlias = true);
 
     void ImportTexture(StringID textureId, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
                        VkImageLayout finalLayout, bool bIsSwapchain = false);
@@ -236,6 +239,17 @@ public: // Persistent Per-FIF Buffers
      * @param name
      */
     void ImportPersistentBuffer(StringID name);
+
+    /**
+     * Stores the AS handle in userData, writes the descriptor into the RDG RT bindless set at the current frame's slot, and stores that slot in userData2.
+     * Only call when the AS handle has just been created or recreated.
+     * @param name the persistent buffer to associate the handle with
+     * @param handle the newly created VkAccelerationStructureKHR
+     */
+    void WriteAccelerationStructureDescriptor(StringID name, VkAccelerationStructureKHR handle);
+
+    /** @return the descriptor slot index written by WriteAccelerationStructureDescriptor, stored in userData2. */
+    uint32_t GetAccelerationStructureDescriptorIndex(StringID name);
 
 public: // Transient Uploader
     UploadAllocation AllocateTransient(size_t size);

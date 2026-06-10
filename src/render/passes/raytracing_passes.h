@@ -35,6 +35,7 @@ void SetupRTShadowTest(RenderGraph& graph,
                        const Core::ViewFamily& viewFamily,
                        Core::Array<uint32_t, 2> renderExtent,
                        const RenderTargets& targets,
+                       StringID outputTarget,
                        uint32_t sceneIndex);
 
 } // Render

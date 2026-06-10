@@ -62,9 +62,10 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
     swapchain = new(memoryManager.RenderAllocRaw(sizeof(Swapchain))) Swapchain(context, width, height);
     renderExtents = new(memoryManager.RenderAllocRaw(sizeof(RenderExtents))) RenderExtents(width, height, 1.0f);
     resourceManager = new(memoryManager.RenderAllocRaw(sizeof(ResourceManager))) ResourceManager(context);
-    Core::Array<VkDescriptorSetLayout, 2> layouts{
+    Core::Array<VkDescriptorSetLayout, 3> layouts{
         resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
-        resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
+        resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle,
+        resourceManager->bindlessRDGRTDescriptorBuffer.descriptorSetLayout.handle
     };
     pipelineManager = new(memoryManager.RenderAllocRaw(sizeof(PipelineManager))) PipelineManager(context, resourceManager, renderAlloc, assetScratchAlloc, layouts);
     imgui = new(memoryManager.RenderAllocRaw(sizeof(ImguiWrapper))) ImguiWrapper(context, window, Core::FRAME_BUFFER_COUNT, swapchain->format, pipelineManager->GetPipelineCache());
@@ -366,11 +367,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     //
     {
         ZoneScopedN("BindDescriptorBuffers");
-        Core::Array<VkDescriptorBufferBindingInfoEXT, 2> bindings{
-            resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()
+        Core::Array<VkDescriptorBufferBindingInfoEXT, 3> bindings{
+            resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(),
+            resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo(),
+            resourceManager->bindlessRDGRTDescriptorBuffer.GetBindingInfo()
         };
-        Core::Array<uint32_t, 2> indices{0u, 1u};
-        Core::Array<VkDeviceSize, 2> offsets{0, 0};
+        Core::Array<uint32_t, 3> indices{0u, 1u, 2u};
+        Core::Array<VkDeviceSize, 3> offsets{0, 0, 0};
         vkCmdBindDescriptorBuffersEXT(cmd, bindings.Size(), bindings.Data());
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineManager->GetGlobalPipelineLayout(), 0, bindings.Size(), indices.Data(), offsets.Data());
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager->GetGlobalPipelineLayout(), 0, bindings.Size(), indices.Data(), offsets.Data());
@@ -484,6 +487,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
 
 
+            SetupTLASBuild(*renderGraph, context, viewFamily, renderExtent);
+
             // Copy depth to R32_SFLOAT for all downstream compute passes.
             // TODO: Build Hi-Z mip chain here for next-frame use.
             {
@@ -539,6 +544,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     if (viewFamily.bResetGroundTruth) { groundTruthAccumCount = 0; }
                     SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, groundTruthAccumCount, frameNumber);
                     groundTruthAccumCount += 4;
+                    break;
+                }
+                case Core::LightingMode::PathTracing:
+                {
+                    SetupRTShadowTest(*renderGraph, context, pipelineManager, viewFamily, renderExtent, targets, targets.colorOutput, 0);
                     break;
                 }
             }

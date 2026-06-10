@@ -41,7 +41,7 @@ public:
                              ResourceManager* resourceManager,
                              Core::TlsfAllocator& renderAlloc,
                              Core::TlsfAllocator& assetScratchAlloc,
-                             const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts);
+                             const Core::Array<VkDescriptorSetLayout, 3>& globalLayouts);
 
     ~PipelineManager();
 
@@ -119,7 +119,7 @@ private:
     PipelineLayout globalPipelineLayout;
 
     uint32_t currentFrame;
-    Core::Array<VkDescriptorSetLayout, 2> globalDescriptorSetLayouts;
+    Core::Array<VkDescriptorSetLayout, 3> globalDescriptorSetLayouts;
     VkPipelineCache pipelineCache{VK_NULL_HANDLE};
 
     std::atomic<bool> bReloadRequested{false};
