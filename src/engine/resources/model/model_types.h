@@ -45,6 +45,7 @@ struct MeshInformation
 
     // Raytracing
     uint64_t blasHandle{0};
+    uint64_t blasDeviceAddress{0};
     OffsetAllocator::Allocation blasAllocation{};
     size_t accelerationStructureSize{0};
     size_t updateScratchSize{};

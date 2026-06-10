@@ -214,8 +214,8 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.viewFamily = &viewFamily;
     renderFamilyProperties.bCanRender = _pipelineManager->IsCategoryReady(PipelineCategory::Critical);
 
-    if (!viewFamily.instances.IsEmpty()) {
-        std::ranges::sort(viewFamily.instances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
+    if (!viewFamily.primitiveInstances.IsEmpty()) {
+        std::ranges::sort(viewFamily.primitiveInstances, [](const Core::PrimitiveInstanceData& a, const Core::PrimitiveInstanceData& b) {
             return a.primitiveIndex < b.primitiveIndex;
         });
     }
@@ -225,7 +225,7 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     _limits.highestMaterialCount = std::max(_limits.highestMaterialCount, NextPowerOfTwo(viewFamily.materials.Size()));
     _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(viewFamily.lightingBuckets.Size()));
 
-    uint32_t totalInstanceCountThisFrame = viewFamily.instances.Size();
+    uint32_t totalInstanceCountThisFrame = viewFamily.primitiveInstances.Size();
     _limits.highestInstanceCount = std::max(_limits.highestInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
     _limits.highestGlyphQuadCount = std::max(_limits.highestGlyphQuadCount, NextPowerOfTwo(viewFamily.worldGlyphQuads.Size()));

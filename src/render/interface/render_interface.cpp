@@ -12,7 +12,8 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
 
     modelMatrices = ArenaVector<Model>(&arena, wm.modelMatrices);
 
-    instances = ArenaVector<InstanceData>(&arena, wm.instances);
+    primitiveInstances = ArenaVector<PrimitiveInstanceData>(&arena, wm.primitiveInstances);
+    blasInstances = ArenaVector<MeshBLASInstance>(&arena, wm.blasInstances);
     worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, wm.worldGlyphQuads);
     textInstances = ArenaVector<TextInstanceDataFull>(&arena, wm.textInstances);
 
@@ -48,7 +49,8 @@ void FrameBuffer::Initialize(ArenaSuballocator& pool, AllocTag tag)
 void FrameBuffer::Reinitialize()
 {
     const ViewFamily& vf = mainViewFamily;
-    viewFamilyWatermarks.instances = std::max(viewFamilyWatermarks.instances, vf.instances.Size());
+    viewFamilyWatermarks.primitiveInstances = std::max(viewFamilyWatermarks.primitiveInstances, vf.primitiveInstances.Size());
+    viewFamilyWatermarks.blasInstances = std::max(viewFamilyWatermarks.blasInstances, vf.blasInstances.Size());
     viewFamilyWatermarks.worldGlyphQuads = std::max(viewFamilyWatermarks.worldGlyphQuads, vf.worldGlyphQuads.Size());
     viewFamilyWatermarks.textInstances = std::max(viewFamilyWatermarks.textInstances, vf.textInstances.Size());
     viewFamilyWatermarks.modelMatrices = std::max(viewFamilyWatermarks.modelMatrices, vf.modelMatrices.Size());

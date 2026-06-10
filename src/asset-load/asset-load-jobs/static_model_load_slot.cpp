@@ -771,6 +771,10 @@ void StaticModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunct
         VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, nullptr, &blas));
         mesh.blasHandle = reinterpret_cast<uint64_t>(blas);
 
+        VkAccelerationStructureDeviceAddressInfoKHR addrInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+        addrInfo.accelerationStructure = blas;
+        mesh.blasDeviceAddress = vkGetAccelerationStructureDeviceAddressKHR(context->device, &addrInfo);
+
         const VkDeviceSize scratchSize = (sizeInfo.buildScratchSize + scratchAlignment - 1ull) & ~(scratchAlignment - 1ull);
         if (blasScratch.size < scratchSize) {
             blasScratch = {};

@@ -240,12 +240,22 @@ struct GTAOConfiguration
     float denoiseBlurBeta{1.2f};
 };
 
-struct InstanceData
+/**
+ * 1 Unit of rendering for the renderer. Represents 1 primitive for a mesh (multiple primitives can share the same model matrix, hence the modelIndex)
+ */
+struct PrimitiveInstanceData
 {
     uint32_t primitiveIndex{};
     Engine::MaterialID materialID{};
     uint32_t modelIndex{};
     uint64_t stableId{};
+};
+
+struct MeshBLASInstance
+{
+    uint64_t blasDeviceAddress{};
+    uint32_t modelIndex{};
+    uint32_t primitiveInstanceIndex{};
 };
 
 struct CustomShaderDraw
@@ -257,7 +267,7 @@ struct CustomShaderDraw
     /**
      * Allocated when added to custom draw map in ViewFamily
      */
-    Vector<InstanceData> instances;
+    Vector<PrimitiveInstanceData> primitiveInstances;
 
     int32_t stencilValue{-1}; // if >=0 will be set with dynamic state
 
@@ -462,7 +472,8 @@ struct UIDrawCommand
 
 struct ViewFamilyWatermarks
 {
-    size_t instances{128};
+    size_t primitiveInstances{128};
+    size_t blasInstances{128};
     size_t worldGlyphQuads{256};
     size_t textInstances{32};
     size_t modelMatrices{256};
@@ -603,7 +614,8 @@ struct ViewFamily
     RenderView mainView{};
     ArenaFixedVector<PortalView> portalViews{};
 
-    ArenaVector<InstanceData> instances{};
+    ArenaVector<PrimitiveInstanceData> primitiveInstances{};
+    ArenaVector<MeshBLASInstance> blasInstances{};
     ArenaVector<Model> modelMatrices{};
     /** Indexes into the materials vector */
     ArenaMap<Engine::MaterialID, uint32_t> activeMaterials{};

@@ -21,7 +21,7 @@ void SetupGeometryPass(RenderGraph& graph,
                        const RenderTargets& targets,
                        uint32_t sceneIndex)
 {
-    if (viewFamily.instances.IsEmpty()) {
+    if (viewFamily.primitiveInstances.IsEmpty()) {
         return;
     }
 
@@ -40,7 +40,7 @@ void SetupGeometryPass(RenderGraph& graph,
     const StringID visibleMeshlets = SID("visible_meshlets");
     const StringID meshletCountDispatchArgs = SID("meshlet_count_dispatch_args");
     const StringID compactedMeshletDispatchArgs = SID("compacted_meshlet_dispatch_args");
-    auto instanceCount = static_cast<uint32_t>(viewFamily.instances.Size());
+    auto instanceCount = static_cast<uint32_t>(viewFamily.primitiveInstances.Size());
     auto lodBias = static_cast<int32_t>(LOD_BIAS);
     auto highestMeshletCount = renderFamilyProperties.visibleMeshletUpperBound;
 

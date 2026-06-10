@@ -439,14 +439,27 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
 
+            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
             for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
                 auto& prim = runtime.primitives[i];
-                frameBuffer->mainViewFamily.instances.PushBack({
+                frameBuffer->mainViewFamily.primitiveInstances.PushBack({
                     .primitiveIndex = prim.primitiveIndex,
                     .materialID = prim.materialID,
                     .modelIndex = modelIndex,
                     .stableId = stableId,
                 });
+            }
+
+            if (Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle)) {
+                for (size_t i = 0; i < model->modelData.meshes.Size(); ++i) {
+                    const auto& mesh = model->modelData.meshes[i];
+                    if (mesh.blasDeviceAddress == 0) { continue; }
+                    frameBuffer->mainViewFamily.blasInstances.PushBack({
+                        .blasDeviceAddress = mesh.blasDeviceAddress,
+                        .modelIndex = modelIndex,
+                        .primitiveInstanceIndex = primitiveInstanceBase,
+                    });
+                }
             }
         }
     }
@@ -524,12 +537,26 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 stableId = stable->id.id;
             }
-            frameBuffer->mainViewFamily.instances.PushBack({
+
+            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
+            frameBuffer->mainViewFamily.primitiveInstances.PushBack({
                 .primitiveIndex = runtime.primitives[0].primitiveIndex,
                 .materialID = runtime.primitives[0].materialID,
                 .modelIndex = modelIndex,
                 .stableId = stableId,
             });
+
+            if (Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle)) {
+                for (size_t i = 0; i < model->modelData.meshes.Size(); ++i) {
+                    const auto& mesh = model->modelData.meshes[i];
+                    if (mesh.blasDeviceAddress == 0) { continue; }
+                    frameBuffer->mainViewFamily.blasInstances.PushBack({
+                        .blasDeviceAddress = mesh.blasDeviceAddress,
+                        .modelIndex = modelIndex,
+                        .primitiveInstanceIndex = primitiveInstanceBase,
+                    });
+                }
+            }
         }
     }
 
@@ -549,19 +576,32 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
 
-            frameBuffer->mainViewFamily.instances.PushBack({
+            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
+            frameBuffer->mainViewFamily.primitiveInstances.PushBack({
                 .primitiveIndex = runtime.primitives[0].primitiveIndex,
                 .materialID = runtime.primitives[0].materialID,
                 .modelIndex = modelIndex,
                 .stableId = stableId,
             });
+
+            if (Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle)) {
+                for (size_t i = 0; i < model->modelData.meshes.Size(); ++i) {
+                    const auto& mesh = model->modelData.meshes[i];
+                    if (mesh.blasDeviceAddress == 0) { continue; }
+                    frameBuffer->mainViewFamily.blasInstances.PushBack({
+                        .blasDeviceAddress = mesh.blasDeviceAddress,
+                        .modelIndex = modelIndex,
+                        .primitiveInstanceIndex = primitiveInstanceBase,
+                    });
+                }
+            }
         }
     }
 
     // Material remap
     {
         ZoneScopedN("Material Recording");
-        for (auto& instance : frameBuffer->mainViewFamily.instances) {
+        for (auto& instance : frameBuffer->mainViewFamily.primitiveInstances) {
             auto [val, inserted] = frameBuffer->mainViewFamily.activeMaterials.TryEmplace(instance.materialID);
             if (inserted) {
                 val = frameBuffer->mainViewFamily.materials.Size();
