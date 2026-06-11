@@ -35,7 +35,7 @@ static void VKAPI_PTR VkFree(void* pUserData, void* pMemory)
     static_cast<Core::MemoryManager*>(pUserData)->RenderFree(pMemory);
 }
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
 static void VKAPI_PTR VmaDeviceAllocate(VmaAllocator, uint32_t, VkDeviceMemory, VkDeviceSize size, void* pUserData)
 {
     static_cast<Core::MemoryManager*>(pUserData)->TrackDeviceAlloc(size);
@@ -66,7 +66,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
         LOG_ERROR(Engine, "[Vulkan] {}", pCallbackData->pMessage);
     }
 
-#ifdef _DEBUG
+#ifdef WDEBUG
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         __debugbreak();
     }
@@ -520,7 +520,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     allocatorInfo.pVulkanFunctions = &vulkanFunctions;
     // todo: idk about this
     // allocatorInfo.pAllocationCallbacks = &allocationCallbacks;
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     VmaDeviceMemoryCallbacks deviceMemoryCallbacks{};
     deviceMemoryCallbacks.pfnAllocate = VmaDeviceAllocate;
     deviceMemoryCallbacks.pfnFree = VmaDeviceFree;

@@ -70,7 +70,7 @@ Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& 
         ImGui::DragFloat3("Spawn Rotation", &component.spawnRotation.x, 0.5f);
     }
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     {
         glm::vec3 basePos{0.0f};
         if (auto* transform = registry.try_get<TransformComponent>(entity)) {

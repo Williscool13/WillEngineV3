@@ -188,7 +188,7 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state)
 void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     using PhysicsDebugMode = Engine::PhysicsDebugMode;
     if (state->editor.physicsDebugMode == PhysicsDebugMode::Off) { return; }
 

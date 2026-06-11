@@ -12,7 +12,7 @@
 #include "containers/inline_string.h"
 #include "hash/fnv_1_a.h"
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
 void DBG_InternString(uint64_t hash, const char* str);
 const char* DBG_ResolveStringId(uint64_t hash);
 
@@ -21,7 +21,7 @@ const char* DBG_ResolveStringId(uint64_t hash);
 extern void (*gInternStringFn)(uint64_t, const char*);
 extern const char* (*gResolveStringIdFn)(uint64_t);
 
-#endif // !PACKAGED_BUILD
+#endif // WDEBUG
 
 struct StringID
 {
@@ -30,7 +30,7 @@ struct StringID
     constexpr StringID() = default;
     constexpr explicit StringID(uint64_t hash) : id(hash) {}
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     StringID(const char* str, size_t len);
 #else
     constexpr StringID(const char* str, size_t len)
@@ -58,7 +58,7 @@ inline const StringID StringID::Invalid{};
  */
 #define SID(str) StringID(str, sizeof(str) - 1)
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
 inline StringID operator""_sid(const char* str, size_t len) {
     return StringID(str, len);
 }

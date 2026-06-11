@@ -8,7 +8,7 @@
 #include "engine_log.h"
 #include "engine_logger.h"
 
-#ifdef NDEBUG
+#ifndef WDEBUG
     #define ENGINE_ASSERT(category, cond, fmt, ...) ((void)0)
 #else
     #define ENGINE_ASSERT(category, cond, fmt, ...) \

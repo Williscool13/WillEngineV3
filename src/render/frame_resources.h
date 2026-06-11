@@ -21,7 +21,7 @@ struct FrameResourceLimits
     size_t highestTextInstanceCount{32};
     size_t highestTextMaterialCount{32};
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     size_t highestDebugSegmentCount{128};
 #endif
 };

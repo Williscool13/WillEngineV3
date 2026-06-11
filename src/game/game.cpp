@@ -343,7 +343,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::GatherLightDebugDraws(ctx, state, frameBuffer);
 #endif
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     Game::DebugRender(ctx, state, frameBuffer);
     Game::DebugRenderPhysics(ctx, state, frameBuffer);
 #endif

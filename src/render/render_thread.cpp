@@ -1898,7 +1898,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 
 void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const
 {
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     // Worst-case segment counts for buffer allocation
     size_t totalSegments = 0;
     totalSegments += viewFamily.debugLines.Size(); // 1 segment per line

@@ -58,7 +58,7 @@ void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* sta
 
 
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
 void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 #endif
 } // Game::System

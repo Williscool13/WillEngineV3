@@ -1353,14 +1353,14 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             if (pass->executeFunc) {
                 ZoneScopedN("Execute");
                 ZoneText(pass->renderPassId.ToString(), strlen(pass->renderPassId.ToString()));
-#if ENABLE_VULKAN_VALIDATION
+#ifdef WDEBUG
                 VkDebugUtilsLabelEXT label = {};
                 label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
                 label.pLabelName = pass->renderPassId.ToString();
                 allocFns.cmdBeginDebugUtilsLabel(cmd, &label);
 #endif
                 pass->executeFunc(cmd);
-#if ENABLE_VULKAN_VALIDATION
+#ifdef WDEBUG
                 allocFns.cmdEndDebugUtilsLabel(cmd);
 #endif
             }
@@ -2744,7 +2744,7 @@ VRAMReport RenderGraph::GenerateVramReport() const
 
 void RenderGraph::AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool bCanAlias, bool debugLogging)
 {
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     if (!debugLogging) return;
 
     const char* name = resourceId.ToString();

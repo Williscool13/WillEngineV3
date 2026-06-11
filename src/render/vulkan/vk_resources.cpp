@@ -79,7 +79,7 @@ void AllocatedBuffer::Release()
 
 void AllocatedBuffer::SetDebugName(const char* name)
 {
-#ifdef _DEBUG
+#ifdef WDEBUG
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
@@ -156,7 +156,7 @@ AllocatedImage& AllocatedImage::operator=(AllocatedImage&& other) noexcept
 
 void AllocatedImage::SetDebugName(const char* name)
 {
-#ifdef _DEBUG
+#ifdef WDEBUG
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
@@ -201,7 +201,7 @@ ImageView& ImageView::operator=(ImageView&& other) noexcept
 
 void ImageView::SetDebugName(const char* name)
 {
-#ifdef _DEBUG
+#ifdef WDEBUG
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
@@ -244,7 +244,7 @@ Sampler& Sampler::operator=(Sampler&& other) noexcept
 
 void Sampler::SetDebugName(const char* name)
 {
-#ifdef _DEBUG
+#ifdef WDEBUG
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_SAMPLER;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
@@ -287,7 +287,7 @@ DescriptorSetLayout& DescriptorSetLayout::operator=(DescriptorSetLayout&& other)
 
 void DescriptorSetLayout::SetDebugName(const char* name)
 {
-#ifdef _DEBUG
+#ifdef WDEBUG
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
@@ -330,7 +330,7 @@ PipelineLayout& PipelineLayout::operator=(PipelineLayout&& other) noexcept
 
 void PipelineLayout::SetDebugName(const char* name)
 {
-#ifdef _DEBUG
+#ifdef WDEBUG
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_PIPELINE_LAYOUT;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
@@ -373,7 +373,7 @@ Pipeline& Pipeline::operator=(Pipeline&& other) noexcept
 
 void Pipeline::SetDebugName(const char* name)
 {
-#ifdef _DEBUG
+#ifdef WDEBUG
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_PIPELINE;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);

@@ -315,7 +315,7 @@ struct DebugArrow
     float width{0.03f};
 };
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
 #define DEBUG_ADD_LINE(container, ...) container.PushBack(__VA_ARGS__)
 #define DEBUG_ADD_BOX(container, ...) container.PushBack(__VA_ARGS__)
 #define DEBUG_ADD_SPHERE(container, ...) container.PushBack(__VA_ARGS__)

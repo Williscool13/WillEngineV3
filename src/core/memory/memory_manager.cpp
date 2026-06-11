@@ -133,7 +133,7 @@ MemoryManager::Stats MemoryManager::GetStats()
         tlsfPhysicsAligned.GetStats(),
         tlsfRender.GetStats(),
     };
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     s.deviceMemory.allocationCount = deviceAllocCount.load(std::memory_order_relaxed);
     s.deviceMemory.totalBytes      = deviceAllocBytes.load(std::memory_order_relaxed);
 #endif
@@ -142,7 +142,7 @@ MemoryManager::Stats MemoryManager::GetStats()
 
 void MemoryManager::TrackDeviceAlloc(uint64_t size)
 {
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     deviceAllocCount.fetch_add(1, std::memory_order_relaxed);
     deviceAllocBytes.fetch_add(size, std::memory_order_relaxed);
 #endif
@@ -150,7 +150,7 @@ void MemoryManager::TrackDeviceAlloc(uint64_t size)
 
 void MemoryManager::TrackDeviceFree(uint64_t size)
 {
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
     deviceAllocCount.fetch_sub(1, std::memory_order_relaxed);
     deviceAllocBytes.fetch_sub(size, std::memory_order_relaxed);
 #endif

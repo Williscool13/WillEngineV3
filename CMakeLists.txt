@@ -12,6 +12,11 @@ option(WILL_ENGINE_BUILD_TESTS "Build test suite" OFF)
 option(WILL_ENGINE_ENABLE_PROFILER "Enables tracy profiler" OFF)
 option(WILL_ENGINE_ENABLE_LOGGING "Enables logging" ON)
 option(WILL_ENGINE_ENABLE_VULKAN_VALIDATION "Enables Vulkan validation error" OFF)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    option(WILL_ENGINE_DEBUG "Enable WDEBUG developer code paths" ON)
+else()
+    option(WILL_ENGINE_DEBUG "Enable WDEBUG developer code paths" OFF)
+endif()
 
 # Configuration ==============================
 if (NOT WILL_ENGINE_ENABLE_LOGGING)
@@ -48,11 +53,15 @@ if (WILL_ENGINE_PACKAGED_BUILD)
     add_compile_definitions(PACKAGED_BUILD)
 else ()
     add_compile_definitions(ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets")
-    add_compile_definitions(JPH_DEBUG_RENDERER)
 endif ()
 
 if (WILL_ENGINE_ENABLE_PROFILER)
     add_compile_definitions(PROFILER_ENABLED)
+endif ()
+
+if (WILL_ENGINE_DEBUG)
+    add_compile_definitions(WDEBUG)
+    add_compile_definitions(JPH_DEBUG_RENDERER)
 endif ()
 # Build =======================================
 if (NOT WILL_ENGINE_BUILD_EDITOR AND WILL_ENGINE_NO_CONSOLE AND WIN32)

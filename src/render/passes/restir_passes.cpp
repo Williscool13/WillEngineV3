@@ -230,15 +230,15 @@ void SetupReSTIRPasses(RenderGraph& graph,
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 
+    graph.CarryBufferToNextFrame(SID("restir_reservoir_temporal"), SID("restir_reservoir_history"), 0);
+
     if (restirParams.debugStop == Core::ReSTIRDebugStop::Spatial1 || !restirParams.bSpatial2) {
-        graph.CarryBufferToNextFrame(SID("restir_reservoir_spatial"), SID("restir_reservoir_history"), 0);
         graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_spatial"));
         return;
     }
 
     // Spatial Reuse 2
     graph.CreateBuffer(SID("restir_reservoir_spatial2"), pixelCount * sizeof(Reservoir), true);
-    graph.CarryBufferToNextFrame(SID("restir_reservoir_spatial2"), SID("restir_reservoir_history"), 0);
 
     RenderPass& spatial2Pass = graph.AddPass(SID("ReSTIR DI Spatial 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     spatial2Pass.ReadBuffer(SCENE_DATA_BUFFER);

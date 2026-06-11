@@ -7,7 +7,7 @@
 #include <cstring>
 #include "memory/linear_allocator.h"
 
-#ifndef PACKAGED_BUILD
+#ifdef WDEBUG
 
 void (*gInternStringFn)(uint64_t, const char*) = nullptr;
 const char* (*gResolveStringIdFn)(uint64_t) = nullptr;
@@ -60,11 +60,11 @@ const char* StringID::ToString() const
     return DBG_ResolveStringId(id);
 }
 
-#else // PACKAGED_BUILD
+#else // NDEBUG
 
 const char* StringID::ToString() const
 {
     return "<release>";
 }
 
-#endif // PACKAGED_BUILD
+#endif // NDEBUG
