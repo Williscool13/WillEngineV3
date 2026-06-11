@@ -4,6 +4,7 @@
 
 #include "render/passes/restir_passes.h"
 
+#include "render/render_config.h"
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -29,6 +30,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
     // Generate
     graph.CreateBuffer(SID("restir_reservoir_buffer"), pixelCount * sizeof(Reservoir), true);
 
+    const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
+    const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
+
     RenderPass& genPass = graph.AddPass(SID("ReSTIR DI Generate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     genPass.ReadBuffer(SCENE_DATA_BUFFER);
     genPass.ReadBuffer(SID("light_data"));
@@ -37,8 +41,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
     genPass.ReadSampledImage(targets.gbufferOne);
     genPass.ReadSampledImage(targets.gbufferTwo);
     genPass.ReadSampledImage(targets.depthCopy);
+    if (bHasTLAS) { genPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
     genPass.WriteBuffer(SID("restir_reservoir_buffer"));
-    genPass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, pixelScale, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+    genPass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, pixelScale, tlasIndex, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_generate"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -55,6 +60,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .pixelScale = pixelScale,
+            .tlasIndex = tlasIndex,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -88,8 +94,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
         temporalPass.ReadSampledImage(targets.depthCopy);
         temporalPass.ReadSampledImage(SID("gbuffer_one_history"));
         temporalPass.ReadSampledImage(SID("depth_history"));
+        if (bHasTLAS) { temporalPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         temporalPass.WriteBuffer(SID("restir_reservoir_temporal"));
-        temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+        temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -111,6 +118,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .mCap = restirParams.temporalMCap,
                 .pixelScale = pixelScale,
+                .tlasIndex = tlasIndex,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -138,8 +146,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
     spatial1Pass.ReadSampledImage(targets.gbufferOne);
     spatial1Pass.ReadSampledImage(targets.gbufferTwo);
     spatial1Pass.ReadSampledImage(targets.depthCopy);
+    if (bHasTLAS) { spatial1Pass.ReadTLASBuffer(RT_TLAS_BUFFER); }
     spatial1Pass.WriteBuffer(SID("restir_reservoir_spatial"));
-    spatial1Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+    spatial1Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -160,6 +169,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .spatialNeighbors = restirParams.spatialNeighbors,
             .mCap = restirParams.spatialMCap,
             .pixelScale = pixelScale,
+            .tlasIndex = tlasIndex,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -187,8 +197,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
     spatial2Pass.ReadSampledImage(targets.gbufferOne);
     spatial2Pass.ReadSampledImage(targets.gbufferTwo);
     spatial2Pass.ReadSampledImage(targets.depthCopy);
+    if (bHasTLAS) { spatial2Pass.ReadTLASBuffer(RT_TLAS_BUFFER); }
     spatial2Pass.WriteBuffer(SID("restir_reservoir_spatial2"));
-    spatial2Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+    spatial2Pass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -209,6 +220,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .spatialNeighbors = restirParams.spatialNeighbors,
             .mCap = restirParams.spatialMCap,
             .pixelScale = pixelScale,
+            .tlasIndex = tlasIndex,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

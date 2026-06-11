@@ -226,6 +226,34 @@ public float EvalPHat(AreaLightSample s, float3 V, float3 N, float3 albedo, floa
 }
 
 /**
+ * EvalPHat with a shadow ray visibility test. Returns 0 if the sample is occluded.
+ * worldShadingPos and worldN must be in world space; worldyStar is the light sample in world space.
+ * The caller is responsible for fetching the AS handle from the bindless array.
+ *
+ * @param tlas Top-level acceleration structure.
+ * @param worldShadingPos Shading point in world space.
+ * @param worldN Shading normal in world space (used for ray origin bias).
+ * @param worldyStar Light sample position in world space.
+ */
+[ForceInline]
+public float EvalPHatVisibility(AreaLightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity,
+                                 RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar)
+{
+    float3 toLight = worldyStar - worldShadingPos;
+    float lightDist = length(toLight);
+    RayDesc shadowRay;
+    shadowRay.Origin = worldShadingPos + worldN * 0.001;
+    shadowRay.Direction = toLight / lightDist;
+    shadowRay.TMin = 0.1;
+    shadowRay.TMax = lightDist - 0.01;
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    q.TraceRayInline(tlas, 0, 0xFF, shadowRay);
+    q.Proceed();
+    if (q.CommittedStatus() != COMMITTED_NOTHING) { return 0.0; }
+    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, lightColor, lightIntensity);
+}
+
+/**
  * Evaluates the GGX solid-angle PDF for a given light direction L.
  * Matches the distribution sampled by ImportanceSampleGGX.
  *

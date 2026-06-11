@@ -423,6 +423,28 @@ SHADER_PUBLIC struct ReSTIRDIGeneratePushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t tlasIndex;
+};
+
+SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
+    SHADER_PUBLIC uint32_t visibilityBufferIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t prevGbufferOneIndex;
+    SHADER_PUBLIC uint32_t prevDepthIndex;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t mCap;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t tlasIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
@@ -444,6 +466,7 @@ SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t mCap;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t tlasIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -464,6 +487,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t spatialNeighbors;
     SHADER_PUBLIC uint32_t mCap;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t tlasIndex;
 };
 
 SHADER_PUBLIC struct VisibilityLightingPushConstant

@@ -64,8 +64,6 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
-    // Center-domain target of whichever sample currently wins; finalise divides by this.
-    float p_hat_winner = 0.0;
     // Canonical's MIS share summed across the k pairs. The shared 1/k is applied via the finalise divisor (neighborCount), uniformly across canonical and neighbor stream weights.
     float centerMisAccum = 0.0;
     uint neighborCount = 0;
@@ -147,7 +145,6 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         if (ReservoirAddSample(accum, combined, w_neighbor, HashStep(h))) {
             combined.lightIdx = neighbor.lightIdx;
             combined.sampleOffsetPacked = neighbor.sampleOffsetPacked;
-            p_hat_winner = p_hat_neighbor_atCenter;
         }
         combined.M += neighbor.M;
         neighborCount++;
@@ -167,13 +164,23 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         if (ReservoirAddSample(accum, combined, w_center, HashStep(h))) {
             combined.lightIdx = center.lightIdx;
             combined.sampleOffsetPacked = center.sampleOffsetPacked;
-            p_hat_winner = p_hat_center_atCenter;
         }
     }
 
     // M_total here is the pair count k (the shared 1/k). The per-pair MIS weights partition unity, so the only normalization left is the uniform 1/k across all k streamed weights.
-    if (combined.lightIdx != ~0u && p_hat_winner > 0.0) {
-        ReservoirFinalise(combined, accum, p_hat_winner, float(neighborCount));
+    if (combined.lightIdx != ~0u) {
+        AreaLightData alFinal = pc.lightData->areaLights[combined.lightIdx];
+        AreaLightVS vsFinal = TransformAreaLight(alFinal, view);
+        float3 yStarFinal = DecodeSamplePos(combined, vsFinal);
+        AreaLightSample sFinal = EvalAreaLightSample(vsFinal, yStarFinal, viewPosition, N, alFinal.range);
+        float3 finalLightColor = UnpackUnorm4x8(alFinal.packedColor).rgb;
+        float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+        float3 worldN = normalize(mul(float3x3(scene.invView), N));
+        float3 worldyStarFinal = mul(scene.invView, float4(yStarFinal, 1.0)).xyz;
+        RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+        float p_hat_final = EvalPHatVisibility(sFinal, V, N, li.albedo.xyz, F0, li.metallic, roughness, finalLightColor, alFinal.intensity,
+                                               tlas, worldPos, worldN, worldyStarFinal);
+        ReservoirFinalise(combined, accum, p_hat_final, float(neighborCount));
     } else {
         combined.W = 0.0;
     }

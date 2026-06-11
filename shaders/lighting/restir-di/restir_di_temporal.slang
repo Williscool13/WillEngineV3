@@ -130,14 +130,19 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     combined.M = current.M + clampedHistoryM;
 
-    // Finalise: re-evaluate p_hat at the winner.
+    // Finalise: re-evaluate p_hat at the winner with visibility.
     if (combined.lightIdx != ~0u) {
         AreaLightData alWinner = pc.lightData->areaLights[combined.lightIdx];
         AreaLightVS vsWinner = TransformAreaLight(alWinner, view);
         float3 yStar = DecodeSamplePos(combined, vsWinner);
         AreaLightSample sWinner = EvalAreaLightSample(vsWinner, yStar, viewPosition, N, alWinner.range);
         float3 winnerLightColor = UnpackUnorm4x8(alWinner.packedColor).rgb;
-        float p_hat_winner = EvalPHat(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, alWinner.intensity);
+        float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+        float3 worldN = normalize(mul(float3x3(scene.invView), N));
+        float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+        RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+        float p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, alWinner.intensity,
+                                                 tlas, worldPos, worldN, worldyStar);
         ReservoirFinalise(combined, accum, p_hat_winner, float(combined.M));
     }
 
