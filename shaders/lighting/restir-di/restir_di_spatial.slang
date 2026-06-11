@@ -61,7 +61,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
-    uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
+    uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u) ^ 0xF7B3D1u;
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
     // Canonical's MIS share summed across the k pairs. The shared 1/k is applied via the finalise divisor (neighborCount), uniformly across canonical and neighbor stream weights.
@@ -76,7 +76,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         float r = sqrt(HashStep(h)) * spatialRadius;
         int2 neighborPixel = int2(pixel) + int2(round(cos(angle) * r), round(sin(angle) * r));
 
-        if (any(neighborPixel < int2(0, 0)) || any(neighborPixel >= int2(pc.renderExtent))) {
+        if (any(neighborPixel < int2(0, 0)) || any(neighborPixel >= int2(pc.renderExtent)) || all(neighborPixel == int2(pixel))) {
             continue;
         }
 

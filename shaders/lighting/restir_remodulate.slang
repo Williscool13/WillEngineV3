@@ -11,6 +11,7 @@ import push_constant_interop;
 import constants_interop;
 import bindless_declarations;
 import shader_functions;
+import pbr_functions;
 
 static const float BILATERAL_DEPTH_SIGMA = 0.01;
 static const float BILATERAL_NORMAL_POWER = 32.0;
@@ -104,13 +105,24 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
         specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(nearest, 0)).rgb;
     }
 
+    float3 ibl = float3(0.0);
+    if (pc.skyboxIndex >= 0) {
+        float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
+        float3 kD_ibl = (1.0 - F_ibl) * (1.0 - metallic);
+        float3 worldN = normalize(mul(float3x3(scene.invView), N));
+        float3 irradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN);
+        float3 reflectionDiffuse = irradiance * albedo;
+        float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl);
+        ibl = (kD_ibl * reflectionDiffuse + reflectionSpecular) * pc.iblIntensity;
+    }
+
     float3 finalColor;
     if (pc.outputMode == 1u) {
-        finalColor = diffuse * albedo + emissive;
+        finalColor = diffuse * albedo + ibl + emissive;
     } else if (pc.outputMode == 2u) {
-        finalColor = specular * specReflectance + emissive;
+        finalColor = specular * specReflectance + ibl + emissive;
     } else {
-        finalColor = diffuse * albedo + specular * specReflectance + emissive;
+        finalColor = diffuse * albedo + specular * specReflectance + ibl + emissive;
     }
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(finalColor, 1.0);
 }

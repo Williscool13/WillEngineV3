@@ -50,8 +50,8 @@ void DotHandle(int32_t handleId, Vec3 worldPos, Vec3 dragPlaneNormal,
     ImVec2 screen;
     if (!WorldToScreen(worldPos, view, proj, viewport, screen)) { return; }
 
-    const bool anotherHoldsExclusive = state->editor.bExclusiveGizmoActivePrev && (state->editor.activeDotHandleId != handleId);
-    if (anotherHoldsExclusive) { return; }
+    const bool anotherDotActive = state->editor.activeDotHandleId >= 0 && state->editor.activeDotHandleId != handleId;
+    if (anotherDotActive) { return; }
 
     ImVec2 mouse = ImGui::GetIO().MousePos;
     float dx = mouse.x - screen.x;

@@ -496,8 +496,7 @@ enum class LightingMode : uint8_t
 
 enum class ReSTIRDebugStop : uint8_t
 {
-    Spatial2 = 0,
-    Spatial1,
+    Spatial1 = 0,
     Temporal,
     Generate,
 };
@@ -554,8 +553,13 @@ struct RELAXParams
 
 struct ReSTIRParams
 {
+    enum class Mode : uint8_t { MainTemporal = 0, CombinedTemporal = 1 };
+
     bool bHalfRes{false};
-    ReSTIRDebugStop debugStop{ReSTIRDebugStop::Spatial2};
+    bool bSpatial2{false};
+    float iblIntensity{1.0f};
+    Mode mode{Mode::CombinedTemporal};
+    ReSTIRDebugStop debugStop{ReSTIRDebugStop::Spatial1};
     uint32_t spatialRadius{30};
     uint32_t spatialNeighbors{5};
     uint32_t spatialMCap{500};

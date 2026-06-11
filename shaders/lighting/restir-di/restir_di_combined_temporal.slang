@@ -132,9 +132,8 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, bestVS);
             }
         }
+        r_gen.M = uint(M);
     }
-
-    r_gen.M = uint(M);
 
     // -------------------------------------------------------------------------
     // Phase 2: temporal combination — stream generated winner + history winner
@@ -143,7 +142,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
     float2 velocityNDC = UnpackMotionVectors(g1.g);
     float2 historyUV = uv + velocityNDC * 0.5;
-    bool validHistory = all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
+    bool validHistory = pc.historyBuffer != nullptr && all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
 
     uint clampedHistoryM = 0u;
     Reservoir history = ReservoirEmpty();
@@ -158,7 +157,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             // Depth disocclusion
             float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyFullPixel, 0)).r;
             float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-            if (abs(historyViewDepth - viewSpaceDepth) <= 0.1 * viewSpaceDepth) {
+            if (abs(historyViewDepth - viewSpaceDepth) <= 0.1 * abs(viewSpaceDepth)) {
                 Reservoir candidate = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
                 if (candidate.lightIdx != ~0u && candidate.lightIdx < uint(pc.lightData->areaLightCount)) {
                     history = candidate;
@@ -169,15 +168,35 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     bool validHistoryReservoir = history.lightIdx != ~0u;
 
+    if (r_gen.lightIdx != ~0u) {
+        AreaLightData alGen = pc.lightData->areaLights[r_gen.lightIdx];
+        AreaLightVS vsGen = TransformAreaLight(alGen, view);
+        float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
+        AreaLightSample sGen = EvalAreaLightSample(vsGen, yStarGen, viewPosition, N, alGen.range);
+        float3 genLightColor = UnpackUnorm4x8(alGen.packedColor).rgb;
+        float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+        float3 worldN = normalize(mul(float3x3(scene.invView), N));
+        float3 worldyStarGen = mul(scene.invView, float4(yStarGen, 1.0)).xyz;
+        RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+        float p_hat_gen_vis = EvalPHatVisibility(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, alGen.intensity,
+                                                  tlas, worldPos, worldN, worldyStarGen);
+        ReservoirFinalise(r_gen, accum_gen, p_hat_gen_vis, 1.0);
+    }
+
     ReservoirAccum accum_combined = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
 
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
 
-    // Stream generated winner: w = wSum_gen * M_gen  (p_hat cancels from W_gen = wSum/p_hat)
     if (r_gen.lightIdx != ~0u) {
-        float w_gen = accum_gen.wSum * float(r_gen.M);
+        AreaLightData alGen = pc.lightData->areaLights[r_gen.lightIdx];
+        AreaLightVS vsGen = TransformAreaLight(alGen, view);
+        float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
+        AreaLightSample sGen = EvalAreaLightSample(vsGen, yStarGen, viewPosition, N, alGen.range);
+        float3 genLightColor = UnpackUnorm4x8(alGen.packedColor).rgb;
+        float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, alGen.intensity);
+        float w_gen = p_hat_gen * r_gen.W * float(r_gen.M);
         if (ReservoirAddSample(accum_combined, combined, w_gen, uSelect0)) {
             combined.lightIdx = r_gen.lightIdx;
             combined.sampleOffsetPacked = r_gen.sampleOffsetPacked;

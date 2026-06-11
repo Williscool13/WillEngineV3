@@ -90,9 +90,9 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
             RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
             RayDesc shadowRay;
-            shadowRay.Origin = worldPos + N * 0.001;
+            shadowRay.Origin = worldPos + N * 0.05;
             shadowRay.Direction = L;
-            shadowRay.TMin = 0.0;
+            shadowRay.TMin = 0.001;
             shadowRay.TMax = lightDist - 0.01;
 
             RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;

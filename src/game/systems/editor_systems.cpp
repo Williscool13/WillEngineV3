@@ -632,9 +632,23 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 bProjectConfigChanged = true;
             }
             ImGui::Separator();
-            const char* stopLabels[] = {"After Spatial 2", "After Spatial 1", "After Temporal", "After Generate"};
+            if (ImGui::SliderFloat("IBL Intensity##restir", &restir.iblIntensity, 0.0f, 2.0f)) {
+                bProjectConfigChanged = true;
+            }
+            ImGui::Separator();
+            const char* modeLabels[] = {"Main + Temporal + 1x Spatial", "Combined + 1x Spatial"};
+            int modeIdx = static_cast<int>(restir.mode);
+            if (ImGui::Combo("ReSTIR Mode", &modeIdx, modeLabels, 2)) {
+                restir.mode = static_cast<Core::ReSTIRParams::Mode>(modeIdx);
+                bProjectConfigChanged = true;
+            }
+            if (ImGui::Checkbox("Spatial 2", &restir.bSpatial2)) {
+                bProjectConfigChanged = true;
+            }
+            ImGui::Separator();
+            const char* stopLabels[] = {"After Spatial 1", "After Temporal", "After Generate"};
             int stopIdx = static_cast<int>(restir.debugStop);
-            if (ImGui::Combo("ReSTIR Stop", &stopIdx, stopLabels, 4)) {
+            if (ImGui::Combo("Debug Stop", &stopIdx, stopLabels, 3)) {
                 restir.debugStop = static_cast<Core::ReSTIRDebugStop>(stopIdx);
                 bProjectConfigChanged = true;
             }
