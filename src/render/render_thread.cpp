@@ -541,9 +541,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 }
                 case Core::LightingMode::GroundTruthReSTIR:
                 {
-                    if (viewFamily.bResetGroundTruth) { groundTruthAccumCount = 0; }
-                    SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, groundTruthAccumCount, frameNumber);
-                    groundTruthAccumCount += 4;
+                    if (viewFamily.bResetGroundTruth) { rtGroundTruthDIAccumCount = 0; }
+                    SetupRTGroundTruthDI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthDIAccumCount, frameNumber);
+                    rtGroundTruthDIAccumCount += 1;
                     break;
                 }
                 case Core::LightingMode::PathTracing:

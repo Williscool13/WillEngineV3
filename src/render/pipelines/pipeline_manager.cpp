@@ -417,6 +417,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReSTIRDITemporalPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_spatial"), src / "restir_di_spatial_compute.spv",
                             sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate_compute.spv",
+                            sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr_compute.spv",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
@@ -433,6 +435,11 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("lighting_ground_truth"), src / "lighting_ground_truth_compute.spv",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
 
+
+    RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test_compute.spv",
+                            sizeof(RTShadowTestPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("rt_ground_truth_di"), src / "rt_ground_truth_di_compute.spv",
+                            sizeof(RTGroundTruthDIPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("instancing_instance_lod_shadows"), src / "instancing_instance_lod_shadows_compute.spv",
                             sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Legacy);
@@ -462,8 +469,6 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline(SID("depth_copy"), src / "depth_copy_compute.spv",
                             sizeof(DepthCopyPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test_compute.spv",
-                            sizeof(RTShadowTestPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("gtao_depth_prepass"), src / "gtao_depth_prepass_compute.spv",
                             sizeof(GTAODepthPrepassPushConstant), PipelineCategory::Critical);
@@ -489,8 +494,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(SVGFAtrousWaveletPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("svgf_remodulate"), src / "svgf_remodulate_compute.spv",
                             sizeof(SVGFRemodulatePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate_compute.spv",
-                            sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("relax_generate_viewz"), src / "relax_generate_viewz_compute.spv",
                             sizeof(RelaxGenerateViewZPushConstant), PipelineCategory::Critical);

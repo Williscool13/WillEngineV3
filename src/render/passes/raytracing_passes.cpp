@@ -178,4 +178,74 @@ void SetupRTShadowTest(RenderGraph& graph,
     });
 }
 
+void SetupRTGroundTruthDI(RenderGraph& graph,
+                           PipelineManager* pipelineManager,
+                           const Core::ViewFamily& viewFamily,
+                           Core::Array<uint32_t, 2> renderExtent,
+                           const RenderTargets& targets,
+                           uint32_t sceneIndex,
+                           bool bReset,
+                           uint32_t accumulationCount,
+                           uint64_t frameNumber)
+{
+    if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
+
+    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
+
+    if (!graph.HasBuffer(SID("rt_gt_di_accum"))) {
+        graph.CreateBuffer(SID("rt_gt_di_accum"), bufferSize, false);
+        bReset = true;
+    }
+
+    if (bReset) {
+        RenderPass& clearPass = graph.AddPass(SID("RT GT DI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Lighting);
+        clearPass.WriteTransferBuffer(SID("rt_gt_di_accum"));
+        clearPass.Execute([&](VkCommandBuffer cmd) {
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("rt_gt_di_accum")), 0, VK_WHOLE_SIZE, 0);
+        });
+    }
+
+    const uint32_t tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER);
+
+    RenderPass& pass = graph.AddPass(SID("RT Ground Truth DI"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    pass.ReadTLASBuffer(RT_TLAS_BUFFER);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(SID("light_data"));
+    pass.ReadWriteBuffer(SID("rt_gt_di_accum"));
+    pass.ReadSampledImage(targets.depthCopy);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.gbufferTwo);
+    pass.WriteStorageImage(targets.colorOutput);
+    pass.Execute([&graph, pipelineManager, sceneIndex, tlasIndex, accumulationCount, frameNumber, renderExtent,
+                  depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
+                  gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd) {
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_di"));
+        if (!pipeline) { return; }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+
+        RTGroundTruthDIPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .lightData = graph.GetBufferAddress(SID("light_data")),
+            .accumulationBuffer = graph.GetBufferAddress(SID("rt_gt_di_accum")),
+            .tlasIndex = tlasIndex,
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
+            .sceneDataIndex = sceneIndex,
+            .frameIndex = static_cast<uint32_t>(frameNumber),
+            .accumulationCount = accumulationCount,
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+        };
+        vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        const uint32_t groupsX = (renderExtent[0] + 7) / 8;
+        const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+        vkCmdDispatch(cmd, groupsX, groupsY, 1);
+    });
+
+    graph.CarryBufferToNextFrame(SID("rt_gt_di_accum"), SID("rt_gt_di_accum"), 0);
+}
+
 } // Render

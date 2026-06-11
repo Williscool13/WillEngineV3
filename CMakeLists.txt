@@ -380,7 +380,6 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/relax_utils.slang")
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
         ${CMAKE_SOURCE_DIR}/shaders/depth_copy.slang compute ComputeMain depth_copy
-        ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_shadow_test.slang compute ComputeMain rt_shadow_test
 
         # Instancing (Either 1->2->scan->1->2 or 1->scan->2)
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeInstanceLOD instancing_instance_lod
@@ -417,6 +416,9 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_ground_truth.slang compute ComputeMain lighting_ground_truth
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_toon.slang compute ComputeMain lighting_toon
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeMain lighting_unlit
+
+        ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_shadow_test.slang compute ComputeMain rt_shadow_test
+        ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_ground_truth_di.slang compute ComputeMain rt_ground_truth_di
 
         # ReSTIR
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_main.slang compute ComputeMain restir_di_main

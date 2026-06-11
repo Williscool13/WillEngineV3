@@ -1205,4 +1205,20 @@ SHADER_PUBLIC struct RTShadowTestPushConstant
     SHADER_PUBLIC uint2 renderExtent;
 };
 
+SHADER_PUBLIC struct RTGroundTruthDIPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(float4) accumulationBuffer;
+    SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t accumulationCount;
+    SHADER_PUBLIC uint2 renderExtent;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H
