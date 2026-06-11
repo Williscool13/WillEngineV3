@@ -718,7 +718,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             ImGui::SameLine();
             if (ImGui::Button("Motion Vectors")) setDebugTarget("gbuffer_one", DebugTransformationType::GBufferMotionVectors, Core::DebugViewAspect::None);
             ImGui::SameLine();
-            if (ImGui::Button("World Z Delta")) setDebugTarget("gbuffer_one", DebugTransformationType::GBufferWorldZDelta, Core::DebugViewAspect::None);
+            if (ImGui::Button("View Z Delta")) setDebugTarget("gbuffer_one", DebugTransformationType::GBufferViewZDelta, Core::DebugViewAspect::None);
 
             if (ImGui::Button("Intermediate One (Diffuse)")) setDebugTarget("intermediate_one", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();

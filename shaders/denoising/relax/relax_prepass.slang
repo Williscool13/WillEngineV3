@@ -53,6 +53,13 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
     float specWSum = 1.0;
     float diffWSum = 1.0;
 
+    // Spec hitT is not averaged; a stochastic min is taken instead (NRD), since blurred hitT degrades virtual-motion tracking
+    float centerHitT = specSum.a;
+    float minHitT = centerHitT == 0.0 ? NRD_INF : centerHitT;
+    float3 centerV = -normalize(centerWorldPos);
+    float NoV = abs(dot(centerNormal, centerV));
+    uint rngState = MLHashCombine(MLSequenceHash(uint(pixelPos.x) + uint(pixelPos.y) * 65536u), rc.gFrameIndex);
+
     // BlurRadius adjusted for roughness
     float specBlurRadius = rc.gSpecBlurRadius * centerRoughness;
     float diffBlurRadius = rc.gDiffBlurRadius;
@@ -83,17 +90,22 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
                 float3 sampleV = -normalize(sampleWorldPos);
 
                 float geomW = RelaxGetPlaneDistanceWeightAtrous(centerWorldPos, centerNormal, sampleWorldPos, 0.005 * frustumSize);
-                float normalW = RelaxGetSpecularNormalWeightATrous(specNormalWeightParams, centerNormal, sampleNormal, -normalize(centerWorldPos), sampleV);
+                float normalW = RelaxGetSpecularNormalWeightATrous(specNormalWeightParams, centerNormal, sampleNormal, centerV, sampleV);
                 float w = geomW * normalW;
                 if (w > 1e-4)
                 {
                     float4 sample = rdgTexturesFloat4[pc.specInputIndex].Load(int3(specPos, 0));
-                    // Weight hit distance by min proximity
+                    rngState = MLSequenceHash(rngState);
+                    if (float(rngState >> 8) * (1.0 / 16777216.0) < w * NoV)
+                    {
+                        minHitT = min(minHitT, sample.a == 0.0 ? NRD_INF : sample.a);
+                    }
+                    // Weight hit distance by min proximity to the center
                     float hitDistW = 1.0;
-                    if (rc.gMinHitDistanceWeight > 0 && specSum.a > 0 && sample.a > 0)
-                        hitDistW = saturate(min(specSum.a, sample.a) / max(specSum.a, sample.a));
+                    if (rc.gMinHitDistanceWeight > 0 && centerHitT > 0 && sample.a > 0)
+                        hitDistW = saturate(min(centerHitT, sample.a) / max(centerHitT, sample.a));
                     w *= hitDistW;
-                    specSum += sample * w;
+                    specSum.rgb += sample.rgb * w;
                     specWSum += w;
                 }
             }
@@ -123,6 +135,8 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
         }
     }
 
-    rdgStorageFloat4[pc.specOutIndex][pixelPos] = specSum / specWSum;
+    specSum.rgb /= specWSum;
+    specSum.a = minHitT == NRD_INF ? 0.0 : minHitT;
+    rdgStorageFloat4[pc.specOutIndex][pixelPos] = specSum;
     rdgStorageFloat4[pc.diffOutIndex][pixelPos] = diffSum / diffWSum;
 }

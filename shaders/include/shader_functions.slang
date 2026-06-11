@@ -280,13 +280,13 @@ float2 UnpackMotionVectors(uint p)
     return float2(f16tof32(p & 0xFFFF), f16tof32(p >> 16));
 }
 
-// World-space z delta packed as float16 into bits 16-31 of gbuffer_one.w
-uint PackWorldZDelta(float delta)
+// View-depth delta (viewZprev - viewZ) packed as float16 into bits 16-31 of gbuffer_one.w
+uint PackViewZDelta(float delta)
 {
     return f32tof16(delta) << 16;
 }
 
-float UnpackWorldZDelta(uint p)
+float UnpackViewZDelta(uint p)
 {
     return f16tof32(p >> 16);
 }

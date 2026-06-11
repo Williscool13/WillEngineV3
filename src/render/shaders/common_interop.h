@@ -71,7 +71,7 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     ReservoirHistoryW = 24,
     ViewSpacePosition = 25,
     NdotV = 26,
-    GBufferWorldZDelta = 27,
+    GBufferViewZDelta = 27,
 };
 
 SHADER_PUBLIC struct Frustum

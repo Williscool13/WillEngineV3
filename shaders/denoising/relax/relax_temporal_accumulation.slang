@@ -19,8 +19,9 @@ static const int TA_BUFFER_Y = TA_GROUP_Y + TA_BORDER * 2;
 
 groupshared float4 sharedNormalSpecHitT[TA_BUFFER_Y][TA_BUFFER_X];
 
-void TAPreload(uint2 sharedPos, int2 globalPos, uint normalRoughnessIndex, uint specInputIndex, float3x3 viewToWorld, uint pixelScale)
+void TAPreload(uint2 sharedPos, int2 globalPos, int2 rectSize, uint normalRoughnessIndex, uint specInputIndex, float3x3 viewToWorld, uint pixelScale)
 {
+    globalPos = clamp(globalPos, int2(0, 0), rectSize - 1);
     uint4 gt1 = rdgTexturesUInt4[normalRoughnessIndex].Load(int3(globalPos * pixelScale, 0));
     float4 normalSpecHitT = float4(RelaxUnpackNormalAndRoughness(gt1, viewToWorld).xyz, 0);
     float4 specIllum = rdgTexturesFloat4[specInputIndex].Load(int3(globalPos, 0));
@@ -44,7 +45,7 @@ float LoadSurfaceMotionBasedPrevData(
     out float4 prevSpecIllum, out float3 prevSpecResponsiveIllum, out float prevReflectionHitT,
     out float4 prevDiffIllum, out float3 prevDiffResponsiveIllum,
     uint historySpecIndex, uint historyDiffIndex, uint historySpecFastIndex, uint historyDiffFastIndex,
-    uint prevViewZIndex, uint prevHistoryLengthIndex, uint prevSpecHitDistIndex)
+    uint prevViewZIndex, uint prevHistoryLengthIndex, uint prevSpecHitDistIndex, uint prevNormalRoughnessIndex)
 {
     float2 prevPixelPosFloat = prevUVSMB * rc.gRectSizePrev;
     int2 bilinearOrigin = int2(floor(prevPixelPosFloat - 0.5));
@@ -83,6 +84,15 @@ float LoadSurfaceMotionBasedPrevData(
 
     float bicubicFootprintValid = dot(tv0 + tv1 + tv2 + tv3, 1.0) > 11.5 ? 1.0 : 0.0;
     float4 bilinearTapsValid = float4(tv0.z, tv1.y, tv2.y, tv3.x);
+
+    // Reject backfacing history: bilinear-averaged prev normal facing away means the footprint reprojected onto the wrong side of the surface
+    float2 prevNrUv = (float2(bilinearOrigin) + 1.0) * rc.gResourceSizeInvPrev;
+    float3 prevNormalFlat = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], prevNrUv, 0)).xyz;
+    if (dot(currentNormal, prevNormalFlat) < 0.0)
+    {
+        bilinearTapsValid = 0;
+        bicubicFootprintValid = 0;
+    }
 
     MLBilinear bilinear;
     bilinear.origin = float2(bilinearOrigin);
@@ -133,7 +143,7 @@ float LoadVirtualMotionBasedPrevData(
 {
     float4 prevVirtualClip = mul(rc.gWorldToClipPrev, float4(virtualWorldPos, 1.0));
     prevVirtualClip.xy /= prevVirtualClip.w;
-    prevUVVMB = prevVirtualClip.xy * float2(0.5, -0.5) + 0.5;
+    prevUVVMB = prevVirtualClip.xy * float2(0.5, 0.5) + 0.5;
 
     float2 prevVirtualPixelPosFloat = prevUVVMB * rc.gRectSizePrev;
     int2 bilinearOrigin = int2(floor(prevVirtualPixelPosFloat - 0.5));
@@ -205,7 +215,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
             uint virtualIndex = threadIndex + stage * TA_GROUP_X * TA_GROUP_Y;
             uint2 newId = uint2(virtualIndex % TA_BUFFER_X, virtualIndex / TA_BUFFER_X);
             if (stage == 0 || virtualIndex < TA_BUFFER_X * TA_BUFFER_Y)
-                TAPreload(newId, groupBase + int2(newId), pc.normalRoughnessIndex, pc.specInputIndex, viewToWorld, pc.pixelScale);
+                TAPreload(newId, groupBase + int2(newId), rc.gRectSize, pc.normalRoughnessIndex, pc.specInputIndex, viewToWorld, pc.pixelScale);
         }
     }
     GroupMemoryBarrierWithGroupSync();
@@ -229,11 +239,11 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float3 V = -normalize(currentViewVec);
     float NoV = abs(dot(currentNormal, V));
 
-    // Motion vectors from GBuffer1 (.g = R16G16 XY, .w bits 16-31 = world-space Z delta float16)
+    // Motion vectors from GBuffer1 (.g = R16G16 XY, .w bits 16-31 = view-depth delta float16, NRD mv.z semantics)
     float2 pixelUv = (float2(pixelPos) + 0.5) * rc.gRectSizeInv;
     uint4 gt1 = rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(fullPixel, 0));
     float2 mvXY = UnpackMotionVectors(gt1.g) * rc.gMvScale.xy;
-    float mvZ = UnpackWorldZDelta(gt1.w);
+    float mvZ = UnpackViewZDelta(gt1.w);
     float3 mv = float3(mvXY, mvZ);
     float3 prevWorldPos = currentWorldPos;
     float2 prevUVSMB = pixelUv + mv.xy;
@@ -305,12 +315,9 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
         prevSpecIllumSMB, prevSpecResponsiveSMB, prevReflectionHitTSMB,
         prevDiffIllumSMB, prevDiffResponsiveSMB,
         pc.historySpecIndex, pc.historyDiffIndex, pc.historySpecFastIndex, pc.historyDiffFastIndex,
-        pc.prevViewZIndex, pc.prevHistoryLengthIndex, pc.prevSpecHitDistIndex);
+        pc.prevViewZIndex, pc.prevHistoryLengthIndex, pc.prevSpecHitDistIndex, pc.prevNormalRoughnessIndex);
 
     historyLength = min(historyLength + 1.0, RELAX_MAX_ACCUM_FRAME_NUM);
-    if (rc.gResetHistory != 0) historyLength = 1.0;
-    float maxAccumulatedFrameNum = 1.0 + max(rc.gDiffMaxAccumulatedFrameNum, rc.gSpecMaxAccumulatedFrameNum);
-    historyLength = min(historyLength, maxAccumulatedFrameNum);
 
     // Footprint quality adjustment
     float3 Vprev = (rc.gOrthoMode == 0) ? -normalize(prevWorldPos - rc.gCameraDelta.xyz) : -normalize(rc.gPrevFrustumForward.xyz);
@@ -324,6 +331,10 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
         historyLength *= sqrt(footprintQuality);
         historyLength = max(historyLength, 1.0);
     }
+
+    if (rc.gResetHistory != 0) historyLength = 1.0;
+    float maxAccumulatedFrameNum = 1.0 + max(rc.gDiffMaxAccumulatedFrameNum, rc.gSpecMaxAccumulatedFrameNum);
+    historyLength = min(historyLength, maxAccumulatedFrameNum);
 
     // Diffuse accumulation
     float diffMaxAccumFrameNum = rc.gDiffMaxAccumulatedFrameNum;
@@ -512,7 +523,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     // VMB accumulation
     float specVMBAlpha = max(1.0 - specVMBConfidence, 1.0 / (1.0 + specHistoryFrames));
     float specVMBResponsiveAlpha = max(1.0 - specVMBConfidence * hitDistConfidence, 1.0 / (1.0 + specHistoryResponsiveFrames));
-    float specVMBHitTAlpha = max(specVMBResponsiveAlpha, 1.0 / (1.0 + specHistoryFrames));
+    float specVMBHitTAlpha = max(1.0 - specVMBConfidence * hitDistConfidence, 1.0 / (1.0 + specHistoryFrames));
 
     float4 accSpecVMB;
     accSpecVMB.rgb = lerp(prevSpecIllumVMB.rgb, specularIllumination.rgb, specVMBAlpha);
@@ -521,7 +532,6 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float3 accSpecVMBResponsive = lerp(prevSpecResponsiveVMB.rgb, specularIllumination.xyz, specVMBResponsiveAlpha);
 
     // Fallback
-    virtualHistoryAmount *= specSMBConfidence;
     virtualHistoryAmount *= saturate(specVMBConfidence / (specSMBConfidence + NRD_EPS));
 
     float accReflectionHitT = lerp(accSpecSMB.a, accSpecVMB.a, virtualHistoryAmount);

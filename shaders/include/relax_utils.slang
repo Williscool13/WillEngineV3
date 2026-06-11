@@ -61,7 +61,7 @@ public float4 MLCombineRotators(float4 r1, float4 r2) { return float4(r1.xyxy) *
 public float2 MLGetScreenUv(float4x4 worldToClip, float3 X)
 {
     float4 clip = mul(worldToClip, float4(X, 1.0));
-    return (float2(clip.xy) / clip.w) * float2(0.5, -0.5) + 0.5;
+    return (float2(clip.xy) / clip.w) * float2(0.5, 0.5) + 0.5;
 }
 
 public float3x3 MLGetBasis(float3 N)
@@ -331,26 +331,26 @@ public float3 RelaxGetCurrentWorldPosFromPixelPos(int2 pixelPos, float viewZ, fl
 {
     float2 clipXY = ((float2)pixelPos + 0.5) * rectSizeInv * 2.0 - 1.0;
     if (orthoMode == 0)
-        return viewZ * (frustumForward.xyz + frustumRight.xyz * clipXY.x - frustumUp.xyz * clipXY.y);
+        return viewZ * (frustumForward.xyz + frustumRight.xyz * clipXY.x + frustumUp.xyz * clipXY.y);
     else
-        return viewZ * frustumForward.xyz + frustumRight.xyz * clipXY.x - frustumUp.xyz * clipXY.y;
+        return viewZ * frustumForward.xyz + frustumRight.xyz * clipXY.x + frustumUp.xyz * clipXY.y;
 }
 
 public float3 RelaxGetCurrentWorldPosFromClipXY(float2 clipXY, float viewZ, float4 frustumForward, float4 frustumRight, float4 frustumUp, float orthoMode)
 {
     if (orthoMode == 0)
-        return viewZ * (frustumForward.xyz + frustumRight.xyz * clipXY.x - frustumUp.xyz * clipXY.y);
+        return viewZ * (frustumForward.xyz + frustumRight.xyz * clipXY.x + frustumUp.xyz * clipXY.y);
     else
-        return viewZ * frustumForward.xyz + frustumRight.xyz * clipXY.x - frustumUp.xyz * clipXY.y;
+        return viewZ * frustumForward.xyz + frustumRight.xyz * clipXY.x + frustumUp.xyz * clipXY.y;
 }
 
 public float3 RelaxGetPreviousWorldPosFromPixelPos(int2 pixelPos, float viewZ, float2 rectSizePrev, float4 prevFrustumForward, float4 prevFrustumRight, float4 prevFrustumUp, float orthoMode)
 {
     float2 clipXY = ((float2)pixelPos + 0.5) * (1.0 / rectSizePrev) * 2.0 - 1.0;
     if (orthoMode == 0)
-        return viewZ * (prevFrustumForward.xyz + prevFrustumRight.xyz * clipXY.x - prevFrustumUp.xyz * clipXY.y);
+        return viewZ * (prevFrustumForward.xyz + prevFrustumRight.xyz * clipXY.x + prevFrustumUp.xyz * clipXY.y);
     else
-        return viewZ * prevFrustumForward.xyz + prevFrustumRight.xyz * clipXY.x - prevFrustumUp.xyz * clipXY.y;
+        return viewZ * prevFrustumForward.xyz + prevFrustumRight.xyz * clipXY.x + prevFrustumUp.xyz * clipXY.y;
 }
 
 public float RelaxGetPlaneDistanceWeight(float3 centerWorldPos, float3 centerNormal, float centerViewZ, float3 sampleWorldPos, float threshold)
@@ -416,7 +416,7 @@ public float4 RelaxBilinearWeightedFloat4(float4 s00, float4 s10, float4 s01, fl
 
 public float RelaxGetBilateralWeight(float z, float zc)
 {
-    return MLSmoothStep(0.03, 0.0, abs(z - zc) / max(z, zc));
+    return MLLinearStep(0.03, 0.0, abs(z - zc) / max(z, zc));
 }
 
 public float4 RelaxIsInScreenBilinear(float2 footprintOrigin, float2 rectSize)
