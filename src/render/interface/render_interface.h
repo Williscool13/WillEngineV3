@@ -523,6 +523,7 @@ struct RELAXParams
 
     // A-Trous / edge stopping
     int32_t atrousIterations{3};
+    float spatialVarianceEstimationHistoryThreshold{3.f};
     float lobeAngleFraction{0.15f};
     float roughnessFraction{0.15f};
     float specLobeAngleSlack{0.15f};

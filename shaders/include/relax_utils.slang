@@ -23,6 +23,7 @@ public static const float RELAX_MAX_ACCUM_FRAME_NUM = 255.0;
 public static const float RELAX_ANTILAG_ACCELERATION_AMOUNT_SCALE = 10.0;
 public static const float NRD_CATROM_SHARPNESS = 0.5;
 public static const float NRD_ROUGHNESS_SENSITIVITY = 0.01;
+public static const float NRD_EXP_WEIGHT_DEFAULT_SCALE = 3.0;
 public static const float NRD_CURVATURE_HIGH_PARALLAX_DISOCCLUSION_THRESHOLD = 0.04;
 public static const float NRD_MAX_ALLOWED_VIRTUAL_MOTION_ACCELERATION = 5.0;
 
@@ -462,6 +463,36 @@ public float2 RelaxGetRelaxedRoughnessWeightParams(float m, float fraction = 1.0
 public float RelaxComputeWeight(float x, float px, float py)
 {
     return MLSmoothStep(1.0, 0.0, abs(x * px + py));
+}
+
+/** NRD ExpApprox: cheap exp() approximation for non-positive arguments. */
+public float MLExpApprox(float x)
+{
+    return 1.0 / (x * x - x + 1.0);
+}
+
+/** Exponential weight variant of RelaxComputeWeight, for noisy data (NRD ComputeExponentialWeight). */
+public float RelaxComputeExponentialWeight(float x, float px, float py)
+{
+    return MLExpApprox(-NRD_EXP_WEIGHT_DEFAULT_SCALE * abs(x * px + py));
+}
+
+public float RelaxGetHitDistFactor(float hitDist, float frustumSize)
+{
+    return saturate(hitDist / frustumSize);
+}
+
+public float2 RelaxGetHitDistanceWeightParams(float hitDist, float nonLinearAccumSpeed)
+{
+    float a = 1.0 / nonLinearAccumSpeed;
+    float b = hitDist * a;
+    return float2(a, -b);
+}
+
+/** @param r kernel sample radius normalized to 1 */
+public float RelaxGetGaussianWeight(float r)
+{
+    return exp(-0.66 * r * r);
 }
 
 public float2 RelaxGetGeometryWeightParams(float planeDistSensitivity, float frustumSize, float3 Xv, float3 Nv)

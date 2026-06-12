@@ -540,6 +540,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gSpecLobeAngleSlack = params.specLobeAngleSlack;
     rc.gHistoryFixEdgeStoppingNormalPower = params.historyFixEdgeStoppingNormalPower;
     rc.gHistoryFixFrameNum = params.historyFixFrameNum;
+    rc.gHistoryThreshold = params.spatialVarianceEstimationHistoryThreshold;
     rc.gHistoryFixBasePixelStride = params.historyFixBasePixelStride;
     rc.gFastHistoryClampingSigmaScale = params.fastHistoryClampingSigmaScale;
     rc.gHistoryAccelerationAmount = params.historyAccelerationAmount;
