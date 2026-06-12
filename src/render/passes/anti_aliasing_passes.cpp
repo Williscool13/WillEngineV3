@@ -251,7 +251,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    if (!graph.HasTexture(SID("taa_history")) || !graph.HasTexture(SID("gbuffer_one_history"))) {
+    if (!graph.HasTexture(SID("taa_history")) || !graph.HasTexture(SID("gbuffer_one_history")) || !graph.HasTexture(SID("depth_history"))) {
         RenderPass& taaPass = graph.AddPass(SID("TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::AntiAliasing);
         taaPass.ReadCopyImage(targets.colorOutput);
         taaPass.WriteCopyImage(SID("taa_current"));
@@ -284,10 +284,13 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     // taa_current doubles as next frame's history, so downstream passes get their own copy written by the same dispatch
     graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
+    const Core::TAAConfiguration& taaConfig = viewFamily.taaConfig;
+
     RenderPass& taaPass = graph.AddPass(SID("TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
     taaPass.ReadBuffer(SID("scene_data"));
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.depthCopy);
+    taaPass.ReadSampledImage(SID("depth_history"));
     taaPass.ReadSampledImage(SID("taa_history"));
     taaPass.ReadSampledImage(targets.gbufferOne);
     taaPass.ReadSampledImage(SID("gbuffer_one_history"));
@@ -295,16 +298,24 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     taaPass.WriteStorageImage(SID("taa_output"));
     taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
-            gbufferOne = targets.gbufferOne, pipelineSID](VkCommandBuffer cmd) {
+            gbufferOne = targets.gbufferOne, pipelineSID, taaConfig](VkCommandBuffer cmd) {
             TemporalAntialiasingPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
+                .depthHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("depth_history")),
                 .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("taa_history")),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferOneHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")),
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_current")),
                 .outputCopyIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_output")),
+                .baseBlendAlpha = taaConfig.baseBlendAlpha,
+                .disocclusionThreshold = taaConfig.disocclusionThreshold,
+                .varianceGammaLuma = taaConfig.varianceGammaLuma,
+                .varianceGammaChroma = taaConfig.varianceGammaChroma,
+                .karisStrength = taaConfig.karisStrength,
+                .invalidHistoryBlend = taaConfig.invalidHistoryBlend,
+                .lumaBoostCap = taaConfig.lumaBoostCap,
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(pipelineSID);

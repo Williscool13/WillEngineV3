@@ -165,6 +165,19 @@ ProjectConfig ReadProjectConfig()
             smaa.maxSearchStepsDiag = sInt("maxSearchStepsDiag", smaa.maxSearchStepsDiag);
         }
 
+        Core::TAAConfiguration& taa = config.taaConfig;
+        if (r.contains("taa") && r["taa"].is_object()) {
+            const auto& t = r["taa"];
+            auto tFloat = [&](const char* k, float def) { return t.contains(k) && t[k].is_number() ? t[k].get<float>() : def; };
+            taa.baseBlendAlpha = tFloat("baseBlendAlpha", taa.baseBlendAlpha);
+            taa.disocclusionThreshold = tFloat("disocclusionThreshold", taa.disocclusionThreshold);
+            taa.varianceGammaLuma = tFloat("varianceGammaLuma", taa.varianceGammaLuma);
+            taa.varianceGammaChroma = tFloat("varianceGammaChroma", taa.varianceGammaChroma);
+            taa.karisStrength = tFloat("karisStrength", taa.karisStrength);
+            taa.invalidHistoryBlend = tFloat("invalidHistoryBlend", taa.invalidHistoryBlend);
+            taa.lumaBoostCap = tFloat("lumaBoostCap", taa.lumaBoostCap);
+        }
+
         Core::PostProcessConfiguration& pp = config.postProcess;
         pp.bExposureEnabled = getBool("bExposureEnabled", pp.bExposureEnabled);
         pp.exposureTargetLuminance = getFloat("exposureTargetLuminance", pp.exposureTargetLuminance);
@@ -285,6 +298,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
 
     const Core::GTAOConfiguration& gtao = config.gtaoConfig;
     const Core::SMAAConfiguration& smaa = config.smaaConfig;
+    const Core::TAAConfiguration& taa = config.taaConfig;
     const Core::PostProcessConfiguration& pp = config.postProcess;
     j["postProcess"] = {
         {"aaMode", static_cast<int32_t>(config.aaMode)},
@@ -310,6 +324,17 @@ bool WriteProjectConfig(const ProjectConfig& config)
                 {"localContrastAdaptation", smaa.localContrastAdaptation},
                 {"maxSearchSteps", smaa.maxSearchSteps},
                 {"maxSearchStepsDiag", smaa.maxSearchStepsDiag},
+            }
+        },
+        {
+            "taa", {
+                {"baseBlendAlpha", taa.baseBlendAlpha},
+                {"disocclusionThreshold", taa.disocclusionThreshold},
+                {"varianceGammaLuma", taa.varianceGammaLuma},
+                {"varianceGammaChroma", taa.varianceGammaChroma},
+                {"karisStrength", taa.karisStrength},
+                {"invalidHistoryBlend", taa.invalidHistoryBlend},
+                {"lumaBoostCap", taa.lumaBoostCap},
             }
         },
         {"bExposureEnabled", pp.bExposureEnabled},

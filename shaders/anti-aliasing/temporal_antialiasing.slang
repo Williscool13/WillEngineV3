@@ -12,9 +12,20 @@ static const int TILE_DIM = 16;
 static const int APRON_DIM = TILE_DIM + 2;
 static const int APRON_TEXEL_COUNT = APRON_DIM * APRON_DIM;
 
+static const float VIEWZ_CLAMP = 1e6;
+
 groupshared float3 gsColorYCoCg[APRON_DIM][APRON_DIM];
 groupshared uint gsPackedVelocity[APRON_DIM][APRON_DIM];
 groupshared float gsDepth[APRON_DIM][APRON_DIM];
+
+// Karis-style weighting: blending happens in luma-compressed space so a single HDR firefly cannot dominate the average. Strength 0 is an exact identity (disabled)
+float3 KarisTonemap(float3 ycocg) {
+    return ycocg / (1.0 + pc.karisStrength * max(ycocg.x, 0.0));
+}
+
+float3 KarisInverse(float3 ycocg) {
+    return ycocg / max(1.0 - pc.karisStrength * max(ycocg.x, 0.0), 1e-4);
+}
 
 // Clips history toward the box center instead of clamping per component; clamping moves colors to box corners and shifts hue
 float3 ClipToNeighborhood(float3 history, float3 minc, float3 maxc) {
@@ -66,6 +77,18 @@ float3 SampleHistoryCatmullRom(float2 uv) {
     return RGBToYCoCg(color / totalWeight);
 }
 
+// Compares the surface's expected previous view depth (current viewZ + gbuffer viewZDelta) against the actual previous depth buffer at the reprojected location.
+float ComputeDepthDisocclusion(float2 historyUv, float expectedPrevViewZ) {
+    int2 historyCoord = int2(historyUv * float2(pc.sceneData.mainRenderTargetSize));
+    float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(historyCoord, 0)).r;
+    float prevViewZ = min(ScreenToViewSpaceDepth(prevRawDepth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd), VIEWZ_CLAMP);
+
+    float tolerance = max(pc.disocclusionThreshold * abs(expectedPrevViewZ), 1e-6);
+    return saturate(abs(prevViewZ - expectedPrevViewZ) / tolerance - 1.0);
+}
+
+
+/*
 float ComputeVelocityDisocclusion(float2 uv, float2 currentVelocityUV) {
     float2 historyUv = uv + currentVelocityUV;
 
@@ -83,6 +106,7 @@ float ComputeVelocityDisocclusion(float2 uv, float2 currentVelocityUV) {
 
     return disocclusion;
 }
+*/
 
 [numthreads(TILE_DIM, TILE_DIM, 1)]
 void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID, uint groupIndex : SV_GroupIndex) {
@@ -92,7 +116,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_
     for (int i = int(groupIndex); i < APRON_TEXEL_COUNT; i += TILE_DIM * TILE_DIM) {
         int2 apronCoord = int2(i % APRON_DIM, i / APRON_DIM);
         int2 loadCoord = clamp(groupOrigin + apronCoord, int2(0), renderSize - 1);
-        gsColorYCoCg[apronCoord.y][apronCoord.x] = RGBToYCoCg(rdgTexturesFloat4[pc.colorResolvedIndex].Load(int3(loadCoord, 0)).rgb);
+        gsColorYCoCg[apronCoord.y][apronCoord.x] = KarisTonemap(RGBToYCoCg(rdgTexturesFloat4[pc.colorResolvedIndex].Load(int3(loadCoord, 0)).rgb));
         gsPackedVelocity[apronCoord.y][apronCoord.x] = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(loadCoord, 0)).g;
         gsDepth[apronCoord.y][apronCoord.x] = rdgTexturesFloat[pc.depthIndex].Load(int3(loadCoord, 0)).r;
     }
@@ -135,7 +159,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_
     float3 variance = max(squaredMean - mean * mean, float3(0.0));
     float3 stddev = sqrt(variance);
 
-    float3 gamma = float3(0.75, 1.0, 1.0);
+    float3 gamma = float3(pc.varianceGammaLuma, pc.varianceGammaChroma, pc.varianceGammaChroma);
     float3 minc = max(mean - gamma * stddev, minColor);
     float3 maxc = min(mean + gamma * stddev, maxColor);
 
@@ -149,22 +173,25 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_
 
     if (!validHistory) {
         // No usable history: pull toward the neighborhood mean as cheap spatial anti-aliasing instead of outputting raw jittered color
-        resultYCoCg = lerp(currentYCoCg, mean, 0.5);
+        resultYCoCg = lerp(currentYCoCg, mean, pc.invalidHistoryBlend);
     } else {
-        float velocityDisocclusion = ComputeVelocityDisocclusion(uv, velocity);
-        float3 historyYCoCg = SampleHistoryCatmullRom(historyUv);
+        float viewZ = min(ScreenToViewSpaceDepth(gsDepth[local.y][local.x], pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd), VIEWZ_CLAMP);
+        float viewZDelta = UnpackViewZDelta(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(texelCoord, 0)).w);
+        float disocclusion = ComputeDepthDisocclusion(historyUv, viewZ + viewZDelta);
+
+        float3 historyYCoCg = KarisTonemap(SampleHistoryCatmullRom(historyUv));
         historyYCoCg = ClipToNeighborhood(historyYCoCg, minc, maxc);
 
-        float alpha = lerp(0.0625, 1.0, velocityDisocclusion);
+        float alpha = lerp(pc.baseBlendAlpha, 1.0, disocclusion);
         float lumaDiff = saturate(abs(currentYCoCg.x - historyYCoCg.x) / max(currentYCoCg.x, 0.2));
-        // Luma mismatch may only increase responsiveness; without the max an already-high alpha would be pulled back down toward 0.5
-        float boostedAlpha = max(alpha, min(alpha * 2.0, 0.5));
+        // Luma mismatch may only increase responsiveness; without the max an already-high alpha would be pulled back down toward the cap
+        float boostedAlpha = max(alpha, min(alpha * 2.0, pc.lumaBoostCap));
         alpha = lerp(alpha, boostedAlpha, lumaDiff);
 
         resultYCoCg = lerp(historyYCoCg, currentYCoCg, alpha);
     }
 
-    float4 result = float4(YCoCgToRGB(resultYCoCg), 1.0);
+    float4 result = float4(YCoCgToRGB(KarisInverse(resultYCoCg)), 1.0);
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = result;
     rdgStorageFloat4[pc.outputCopyIndex][threadID.xy] = result;
 }

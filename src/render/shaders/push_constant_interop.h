@@ -563,11 +563,19 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint32_t colorResolvedIndex;
     SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t depthHistoryIndex;
     SHADER_PUBLIC uint32_t colorHistoryIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
     SHADER_PUBLIC uint32_t outputCopyIndex;
+    SHADER_PUBLIC float baseBlendAlpha;
+    SHADER_PUBLIC float disocclusionThreshold;
+    SHADER_PUBLIC float varianceGammaLuma;
+    SHADER_PUBLIC float varianceGammaChroma;
+    SHADER_PUBLIC float karisStrength;
+    SHADER_PUBLIC float invalidHistoryBlend;
+    SHADER_PUBLIC float lumaBoostCap;
 };
 
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant

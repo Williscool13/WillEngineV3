@@ -56,17 +56,20 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             {
                 int2 p = clamp(pixelPos + int2(cx, cy), int2(0, 0), rc.gRectSize - int2(1, 1));
                 float3 sampleNormal = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(p * pc.pixelScale, 0)), viewToWorld).rgb;
+                float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, p * pc.pixelScale, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+                float depthW = RelaxGetBilateralWeight(abs(sampleViewZ), abs(centerViewZ));
                 float normalW = RelaxComputeWeight(MLAcosApproxPositive(dot(centerNormal, sampleNormal)), normalWeightParam, 0.0);
+                float w = depthW * normalW;
 
                 float4 sampleSpec = rdgTexturesFloat4[pc.specIndex].Load(int3(p, 0));
                 float4 sampleDiff = rdgTexturesFloat4[pc.diffIndex].Load(int3(p, 0));
-                sumW += normalW;
-                sumSpecRgb += sampleSpec.rgb * normalW;
-                specM1 += MLLuminance(sampleSpec.rgb) * normalW;
-                specM2 += sampleSpec.a * normalW;
-                sumDiffRgb += sampleDiff.rgb * normalW;
-                diffM1 += MLLuminance(sampleDiff.rgb) * normalW;
-                diffM2 += sampleDiff.a * normalW;
+                sumW += w;
+                sumSpecRgb += sampleSpec.rgb * w;
+                specM1 += MLLuminance(sampleSpec.rgb) * w;
+                specM2 += sampleSpec.a * w;
+                sumDiffRgb += sampleDiff.rgb * w;
+                diffM1 += MLLuminance(sampleDiff.rgb) * w;
+                diffM2 += sampleDiff.a * w;
             }
         }
 

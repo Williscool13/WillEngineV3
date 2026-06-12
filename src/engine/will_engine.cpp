@@ -264,6 +264,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineState->lighting.aaMode = engineState->projectConfig.aaMode;
         engineState->lighting.gtaoConfig = engineState->projectConfig.gtaoConfig;
         engineState->lighting.smaaConfig = engineState->projectConfig.smaaConfig;
+        engineState->lighting.taaConfig = engineState->projectConfig.taaConfig;
         engineState->lighting.postProcess = engineState->projectConfig.postProcess;
 
 #if LOGGING_ENABLED

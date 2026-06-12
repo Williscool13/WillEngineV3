@@ -1711,6 +1711,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->projectConfig.aaMode = state->lighting.aaMode;
             state->projectConfig.gtaoConfig = state->lighting.gtaoConfig;
             state->projectConfig.smaaConfig = state->lighting.smaaConfig;
+            state->projectConfig.taaConfig = state->lighting.taaConfig;
             state->projectConfig.postProcess = state->lighting.postProcess;
             state->projectConfig.restir = state->debug.restir;
             state->projectConfig.relax = state->debug.relax;
@@ -1773,6 +1774,22 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 if (ImGui::SliderInt("Max Search Steps Diag##smaa", &smaa.maxSearchStepsDiag, 1, 20)) { bPPConfigChanged = true; }
                 if (ImGui::Button("Reset SMAA")) {
                     smaa = defaultSMAA;
+                    bPPConfigChanged = true;
+                }
+            }
+            const bool bTAAMode = state->lighting.aaMode == Core::AntiAliasingMode::TAA || state->lighting.aaMode == Core::AntiAliasingMode::NaiveTAA;
+            if (bTAAMode) {
+                Core::TAAConfiguration& taa = state->lighting.taaConfig;
+                constexpr Core::TAAConfiguration defaultTAA{};
+                if (ImGui::SliderFloat("Base Blend Alpha##taa", &taa.baseBlendAlpha, 0.01f, 0.5f, "%.4f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Disocclusion Threshold##taa", &taa.disocclusionThreshold, 0.001f, 0.2f, "%.3f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Variance Gamma Luma##taa", &taa.varianceGammaLuma, 0.25f, 2.5f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Variance Gamma Chroma##taa", &taa.varianceGammaChroma, 0.25f, 2.5f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Firefly Suppression##taa", &taa.karisStrength, 0.0f, 4.0f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Invalid History Blend##taa", &taa.invalidHistoryBlend, 0.0f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::SliderFloat("Luma Boost Cap##taa", &taa.lumaBoostCap, 0.0f, 1.0f, "%.2f")) { bPPConfigChanged = true; }
+                if (ImGui::Button("Reset TAA")) {
+                    taa = defaultTAA;
                     bPPConfigChanged = true;
                 }
             }
@@ -2081,6 +2098,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->projectConfig.aaMode = state->lighting.aaMode;
             state->projectConfig.gtaoConfig = state->lighting.gtaoConfig;
             state->projectConfig.smaaConfig = state->lighting.smaaConfig;
+            state->projectConfig.taaConfig = state->lighting.taaConfig;
             state->projectConfig.postProcess = state->lighting.postProcess;
             state->projectConfig.restir = state->debug.restir;
             state->projectConfig.relax = state->debug.relax;
@@ -2702,6 +2720,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     frameBuffer->mainViewFamily.aaMode = state->lighting.aaMode;
     frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
     frameBuffer->mainViewFamily.smaaConfig = state->lighting.smaaConfig;
+    frameBuffer->mainViewFamily.taaConfig = state->lighting.taaConfig;
     frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
     frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
     frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;

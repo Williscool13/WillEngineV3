@@ -22,6 +22,7 @@ struct ProjectConfig
     Core::AntiAliasingMode aaMode{Core::AntiAliasingMode::TAA};
     Core::GTAOConfiguration gtaoConfig{};
     Core::SMAAConfiguration smaaConfig{};
+    Core::TAAConfiguration taaConfig{};
     Core::PostProcessConfiguration postProcess{};
 };
 
