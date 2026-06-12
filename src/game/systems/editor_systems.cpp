@@ -610,6 +610,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (ImGui::Checkbox("Half Res", &restir.bHalfRes)) {
                 bProjectConfigChanged = true;
             }
+            if (ImGui::Checkbox("Dual Reservoir (K=2)", &restir.bDualReservoir)) {
+                bProjectConfigChanged = true;
+            }
             ImGui::Separator();
             int spatialRadius = static_cast<int>(restir.spatialRadius);
             if (ImGui::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {

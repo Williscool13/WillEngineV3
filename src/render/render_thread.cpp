@@ -528,7 +528,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 {
                     const uint32_t restirPixelScale = restir.bHalfRes ? 2u : 1u;
                     SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restir);
-                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restirPixelScale);
+                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restirPixelScale, restir.bDualReservoir ? 2u : 1u);
                     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {

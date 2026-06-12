@@ -433,6 +433,7 @@ SHADER_PUBLIC struct ReSTIRDIGeneratePushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t reservoirCount;
 };
 
 SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
@@ -455,6 +456,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t mCap;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t reservoirCount;
 };
 
 SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
@@ -478,6 +480,7 @@ SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
     SHADER_PUBLIC uint32_t mCap;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t reservoirCount;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -501,6 +504,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC uint32_t passIndex;
+    SHADER_PUBLIC uint32_t reservoirCount;
 };
 
 SHADER_PUBLIC struct VisibilityLightingPushConstant
@@ -527,6 +531,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t accumulationCount;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t reservoirCount;
 };
 
 SHADER_PUBLIC struct SVGFRemodulatePushConstant

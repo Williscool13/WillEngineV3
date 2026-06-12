@@ -23,15 +23,22 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex);
 
+    uint pixelCount = pc.renderExtent.x * pc.renderExtent.y;
+    uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
+
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {
-        pc.reservoirBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
+        for (uint k = 0; k < pc.reservoirCount; k++) {
+            pc.reservoirBuffer[k * pixelCount + pixelIdx] = ReservoirEmpty();
+        }
         return;
     }
 
     LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
-        pc.reservoirBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
+        for (uint k = 0; k < pc.reservoirCount; k++) {
+            pc.reservoirBuffer[k * pixelCount + pixelIdx] = ReservoirEmpty();
+        }
         return;
     }
 
@@ -44,17 +51,20 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
-    // M_i: number of candidates per strategy
-    const int M_light = 16;
+    // M_i: number of candidates per strategy. The light candidate budget is split across the K reservoirs;
+    // K independent one-light estimates averaged at resolve beat the same candidates in one reservoir.
+    const int M_light = 16 / int(pc.reservoirCount);
     const int M_brdf = 1;
     const int M = M_light + M_brdf;
 
     int lightCount = pc.lightData->areaLightCount;
 
+    for (uint k = 0; k < pc.reservoirCount; k++) {
+
     Reservoir r = ReservoirEmpty();
 
     if (lightCount > 0) {
-        uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
+        uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u) ^ (k * 0x68BC21EBu);
         h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
         ReservoirAccum accum = ReservoirAccumEmpty();
 
@@ -163,5 +173,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
         }
     }
 
-    pc.reservoirBuffer[pixel.y * pc.renderExtent.x + pixel.x] = r;
+    pc.reservoirBuffer[k * pixelCount + pixelIdx] = r;
+
+    } // reservoir layer loop
 }

@@ -52,39 +52,58 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
     bool bAnyLight = pc.reservoirBuffer != 0;
     if (bAnyLight)
     {
+        uint pixelCount = pc.renderExtent.x * pc.renderExtent.y;
         uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
-        Reservoir r = pc.reservoirBuffer[pixelIdx];
+        float bestSpecLum = -1.0;
 
-        if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->areaLightCount))
+        // Average the K independent reservoir estimates; halves the chroma variance of the one-light-per-reservoir estimator when K=2.
+        for (uint k = 0; k < pc.reservoirCount; k++)
         {
-            AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[r.lightIdx]);
-            float3 yStar = DecodeSamplePos(r, vs);
-            AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, vs.range);
+            Reservoir r = pc.reservoirBuffer[k * pixelCount + pixelIdx];
 
-            if (s.cosShade > 0.0 && s.cosLight > 0.0 && s.attenuation > 0.0)
+            if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->areaLightCount))
             {
-                float3 Lal = normalize(yStar - viewPosition);
-                float3 Hal = normalize(V + Lal);
+                AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[r.lightIdx]);
+                float3 yStar = DecodeSamplePos(r, vs);
+                AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, vs.range);
 
-                float NDFal = D_GGX(N, Hal, roughness);
-                float Gal = G_SMITH_HEIGHT_CORRELATED(N, V, Lal, roughness);
-                float3 Fal = F_SCHLICK(V, Hal, F0);
-                float3 specularAl = (NDFal * Gal * Fal) / max(4.0 * nDotV * max(dot(N, Lal), 0.0), 0.001);
+                if (s.cosShade > 0.0 && s.cosLight > 0.0 && s.attenuation > 0.0)
+                {
+                    float3 Lal = normalize(yStar - viewPosition);
+                    float3 Hal = normalize(V + Lal);
 
-                float3 kSal = Fal;
-                float3 kDal = (1.0 - kSal) * (1.0 - li.metallic);
-                float orenNayarAl = Diffuse_OrenNayar(s.cosShade, nDotV, Lal, V, roughness);
-                float3 diffuseAl = kDal * li.albedo.xyz * orenNayarAl;
+                    float NDFal = D_GGX(N, Hal, roughness);
+                    float Gal = G_SMITH_HEIGHT_CORRELATED(N, V, Lal, roughness);
+                    float3 Fal = F_SCHLICK(V, Hal, F0);
+                    float3 specularAl = (NDFal * Gal * Fal) / max(4.0 * nDotV * max(dot(N, Lal), 0.0), 0.001);
 
-                float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                float3 alColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                float3 commonTerm = s.cosShade * geomTerm * vs.intensity * alColor * s.attenuation * r.W;
+                    float3 kSal = Fal;
+                    float3 kDal = (1.0 - kSal) * (1.0 - li.metallic);
+                    float orenNayarAl = Diffuse_OrenNayar(s.cosShade, nDotV, Lal, V, roughness);
+                    float3 diffuseAl = kDal * li.albedo.xyz * orenNayarAl;
 
-                diffuseRadiance = diffuseAl * commonTerm;
-                specularRadiance = specularAl * commonTerm;
-                hitDistance = s.dist;
+                    float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
+                    float3 alColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                    float3 commonTerm = s.cosShade * geomTerm * vs.intensity * alColor * s.attenuation * r.W;
+
+                    diffuseRadiance += diffuseAl * commonTerm;
+                    float3 specContribution = specularAl * commonTerm;
+                    specularRadiance += specContribution;
+
+                    // Representative hit distance for RELAX specular reprojection: the brightest specular contributor.
+                    float specLum = dot(specContribution, float3(0.2126, 0.7152, 0.0722));
+                    if (specLum > bestSpecLum)
+                    {
+                        bestSpecLum = specLum;
+                        hitDistance = s.dist;
+                    }
+                }
             }
         }
+
+        float invK = 1.0 / float(pc.reservoirCount);
+        diffuseRadiance *= invK;
+        specularRadiance *= invK;
     }
 
     // Diffuse is demodulated by albedo; specular by the preintegrated env-BRDF reflectance.

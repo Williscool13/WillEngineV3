@@ -583,6 +583,8 @@ struct ReSTIRParams
     uint32_t spatialNeighbors{5};
     uint32_t spatialMCap{500};
     uint32_t temporalMCap{20u * 17u};
+    // K=2: two independent reservoirs per pixel, averaged at resolve. Halves chroma variance for multi-colored light mixing at the cost of a second visibility ray per reuse pass.
+    bool bDualReservoir{false};
 
     // todo: Disabled atrous and asvgf. Readd as needed
     enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
