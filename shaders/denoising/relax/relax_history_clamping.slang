@@ -26,7 +26,7 @@ void HCPreload(uint2 sharedPos, int2 globalPos, RelaxDiffuseSpecularConstants* r
     uint viewZIndex, uint specFastIndex, uint diffFastIndex, uint specNoisyIndex, uint diffNoisyIndex, uint pixelScale)
 {
     globalPos = clamp(globalPos, int2(0, 0), rc.gRectSize - 1);
-    float viewZ = rdgTexturesFloat[viewZIndex].Load(int3(globalPos * pixelScale, 0)).r;
+    float viewZ = rdgTexturesFloat[viewZIndex].Load(int3(RelaxQuadFullPixel(globalPos, pixelScale, rc.gFrameIndex), 0)).r;
     viewZ = ScreenToViewSpaceDepth(viewZ, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float isValid = float(RelaxIsInDenoisingRange(viewZ, rc.gDenoisingRange));
 

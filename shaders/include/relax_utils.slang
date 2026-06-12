@@ -360,6 +360,19 @@ public float RelaxGetPlaneDistanceWeight(float3 centerWorldPos, float3 centerNor
     return d / centerViewZ > threshold ? 0.0 : 1.0;
 }
 
+/**
+ * Maps a half-res pixel to its representative full-res gbuffer pixel.
+ * Must match QuadFullPixel in restir_common.slang exactly: the denoiser's geometry association has to be the same
+ * 2x2 quad corner the ReSTIR passes lit that frame, otherwise edge texels carry radiance from a different surface
+ * than the gbuffer says and the edge-stopping weights cannot reject it.
+ */
+public int2 RelaxQuadFullPixel(int2 pixel, uint pixelScale, uint frameIndex)
+{
+    if (pixelScale == 1u) { return pixel; }
+    uint sel = (uint(pixel.x) + uint(pixel.y) * 2u + frameIndex) & 3u;
+    return pixel * int(pixelScale) + int2(int(sel & 1u), int(sel >> 1u));
+}
+
 public float RelaxGetPlaneDistanceWeightAtrous(float3 centerWorldPos, float3 centerNormal, float3 sampleWorldPos, float threshold)
 {
     return abs(dot(sampleWorldPos - centerWorldPos, centerNormal)) < threshold ? 1.0 : 0.0;

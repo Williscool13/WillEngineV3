@@ -176,13 +176,18 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
 
-    // Finalise the generated reservoir without a visibility ray and stream it; the temporal-winner finalize below carries the only shadow ray in this pass.
+    // Finalise the generated reservoir with a visibility ray, then stream it.
     if (r_gen.lightIdx != ~0u) {
         AreaLightVS vsGen = UnpackAreaLightVS(pc.lightVS[r_gen.lightIdx]);
         float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
         AreaLightSample sGen = EvalAreaLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
         float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
-        float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
+        float3 worldPosGen = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+        float3 worldNGen = normalize(mul(float3x3(scene.invView), N));
+        float3 worldyStarGen = mul(scene.invView, float4(yStarGen, 1.0)).xyz;
+        RaytracingAccelerationStructure tlasGen = rdgAccelerationStructures[pc.tlasIndex];
+        float p_hat_gen = EvalPHatVisibility(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity,
+                                              tlasGen, worldPosGen, worldNGen, worldyStarGen);
         ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
 
         float w_gen = p_hat_gen * r_gen.W * float(r_gen.M);

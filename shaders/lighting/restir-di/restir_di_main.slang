@@ -144,7 +144,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
         }
 
         r.M = uint(M);
-        // Finalise W = wSum / p_hat(y*). No visibility ray here; the temporal and spatial finalizes carry the shadow rays.
+        // Finalise W = wSum / p_hat(y*) with visibility
         if (r.lightIdx != ~0u)
         {
             AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[r.lightIdx]);
@@ -152,7 +152,12 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, vs.range);
 
             float3 winnerLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-            float p_hat_yStar = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vs.intensity);
+            float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+            float3 worldN = normalize(mul(float3x3(scene.invView), N));
+            float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+            RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+            float p_hat_yStar = EvalPHatVisibility(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vs.intensity,
+                                                   tlas, worldPos, worldN, worldyStar);
             // M_total = 1: Talbot MIS already absorbs M into each w_i, so no outer M divisor.
             ReservoirFinalise(r, accum, p_hat_yStar, 1.0);
         }

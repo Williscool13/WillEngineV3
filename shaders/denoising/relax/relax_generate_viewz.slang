@@ -7,6 +7,7 @@
 import push_constant_interop;
 import bindless_declarations;
 import relax_interop;
+import relax_utils;
 import shader_functions;
 
 [shader("compute")]
@@ -19,7 +20,7 @@ void RelaxGenerateViewZMain(uniform RelaxGenerateViewZPushConstant pc, uint3 dti
         return;
     }
 
-    int2 fullPixel = int2(pixelPos) * int(pc.pixelScale);
+    int2 fullPixel = RelaxQuadFullPixel(int2(pixelPos), pc.pixelScale, rc.gFrameIndex);
     float raw = rdgTexturesFloat[pc.viewZIndex].Load(int3(fullPixel, 0)).r;
     float viewZ = ScreenToViewSpaceDepth(raw, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     rdgStorageFloat[pc.outViewZIndex][pixelPos] = viewZ;
