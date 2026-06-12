@@ -31,6 +31,27 @@ void SetupReSTIRPasses(RenderGraph& graph,
     const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
     const bool bCombined = restirParams.mode == Core::ReSTIRParams::Mode::CombinedTemporal;
 
+    // Transform all area lights to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
+    graph.CreateBuffer(SID("restir_lights_vs"), MAX_AREA_LIGHTS * sizeof(AreaLightVSData), true);
+
+    RenderPass& transformPass = graph.AddPass(SID("ReSTIR Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    transformPass.ReadBuffer(SCENE_DATA_BUFFER);
+    transformPass.ReadBuffer(SID("light_data"));
+    transformPass.WriteBuffer(SID("restir_lights_vs"));
+    transformPass.Execute([&, pipelineManager, sceneIndex](VkCommandBuffer cmd) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_transform_lights"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        ReSTIRTransformLightsPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .lightData = graph.GetBufferAddress(SID("light_data")),
+            .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
+            .sceneDataIndex = sceneIndex,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (MAX_AREA_LIGHTS + 63) / 64, 1, 1);
+    });
+
     if (bCombined) {
         // Combined generate+temporal pass
         graph.CreateBuffer(SID("restir_reservoir_temporal"), pixelCount * sizeof(Reservoir), true);
@@ -40,6 +61,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         RenderPass& combinedPass = graph.AddPass(SID("ReSTIR DI Combined Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         combinedPass.ReadBuffer(SCENE_DATA_BUFFER);
         combinedPass.ReadBuffer(SID("light_data"));
+        combinedPass.ReadBuffer(SID("restir_lights_vs"));
         combinedPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         if (bHasHistory) { combinedPass.ReadBuffer(SID("restir_reservoir_history")); }
         combinedPass.ReadSampledImage(targets.visibility);
@@ -57,6 +79,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             ReSTIRDICombinedTemporalPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(SID("light_data")),
+                .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .historyBuffer = bHasHistory ? graph.GetBufferAddress(SID("restir_reservoir_history")) : 0,
                 .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
@@ -87,6 +110,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         RenderPass& genPass = graph.AddPass(SID("ReSTIR DI Generate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         genPass.ReadBuffer(SCENE_DATA_BUFFER);
         genPass.ReadBuffer(SID("light_data"));
+        genPass.ReadBuffer(SID("restir_lights_vs"));
         genPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         genPass.ReadSampledImage(targets.visibility);
         genPass.ReadSampledImage(targets.gbufferOne);
@@ -101,6 +125,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             ReSTIRDIGeneratePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(SID("light_data")),
+                .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .reservoirBuffer = graph.GetBufferAddress(SID("restir_reservoir_buffer")),
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
@@ -136,6 +161,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             RenderPass& temporalPass = graph.AddPass(SID("ReSTIR DI Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
             temporalPass.ReadBuffer(SCENE_DATA_BUFFER);
             temporalPass.ReadBuffer(SID("light_data"));
+            temporalPass.ReadBuffer(SID("restir_lights_vs"));
             temporalPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
             temporalPass.ReadBuffer(SID("restir_reservoir_buffer"));
             temporalPass.ReadBuffer(SID("restir_reservoir_history"));
@@ -154,6 +180,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 ReSTIRDITemporalPushConstant pc{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                     .lightData = graph.GetBufferAddress(SID("light_data")),
+                    .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                     .currentBuffer = graph.GetBufferAddress(SID("restir_reservoir_buffer")),
                     .historyBuffer = graph.GetBufferAddress(SID("restir_reservoir_history")),
@@ -192,6 +219,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     RenderPass& spatial1Pass = graph.AddPass(SID("ReSTIR DI Spatial"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     spatial1Pass.ReadBuffer(SCENE_DATA_BUFFER);
     spatial1Pass.ReadBuffer(SID("light_data"));
+    spatial1Pass.ReadBuffer(SID("restir_lights_vs"));
     spatial1Pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     spatial1Pass.ReadBuffer(SID("restir_reservoir_temporal"));
     spatial1Pass.ReadSampledImage(targets.visibility);
@@ -207,6 +235,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         ReSTIRDISpatialPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(SID("light_data")),
+            .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .inputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
             .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_spatial")),
@@ -243,6 +272,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     RenderPass& spatial2Pass = graph.AddPass(SID("ReSTIR DI Spatial 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     spatial2Pass.ReadBuffer(SCENE_DATA_BUFFER);
     spatial2Pass.ReadBuffer(SID("light_data"));
+    spatial2Pass.ReadBuffer(SID("restir_lights_vs"));
     spatial2Pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     spatial2Pass.ReadBuffer(SID("restir_reservoir_spatial"));
     spatial2Pass.ReadSampledImage(targets.visibility);
@@ -258,6 +288,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         ReSTIRDISpatialPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(SID("light_data")),
+            .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .inputBuffer = graph.GetBufferAddress(SID("restir_reservoir_spatial")),
             .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_spatial2")),
@@ -316,6 +347,9 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     if (graph.HasBuffer(SID("restir_reservoir_final"))) {
         lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
     }
+    if (graph.HasBuffer(SID("restir_lights_vs"))) {
+        lightingResolve.ReadBuffer(SID("restir_lights_vs"));
+    }
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightingResolve.ReadSampledImage(targets.gbufferOne);
     lightingResolve.ReadSampledImage(targets.gbufferTwo);
@@ -345,6 +379,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                     .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
                     .lightData = graph.GetBufferAddress(SID("light_data")),
+                    .lightVS = graph.TryGetBufferAddress(SID("restir_lights_vs")),
                     .lightDispatchBuffer = lightDispatchAddress,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                     .reservoirBuffer = graph.TryGetBufferAddress(SID("restir_reservoir_final")),

@@ -54,7 +54,7 @@ SHADER_CONST int MAX_AREA_LIGHTS = 256;
 SHADER_PUBLIC struct DirectionalLightData
 {
     SHADER_PUBLIC float4 directionIntensity; // xyz world-space direction, w intensity
-    SHADER_PUBLIC uint packedColor;          // RGBA8 unorm
+    SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float _pad0;
     SHADER_PUBLIC float _pad1;
     SHADER_PUBLIC float _pad2;
@@ -64,7 +64,7 @@ SHADER_PUBLIC struct DirectionalLightData
 SHADER_PUBLIC struct PointLightData
 {
     SHADER_PUBLIC float4 positionRange; // xyz world-space position, w range
-    SHADER_PUBLIC uint packedColor;     // RGBA8 unorm
+    SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float intensity;
     SHADER_PUBLIC float _pad0;
     SHADER_PUBLIC float _pad1;
@@ -73,13 +73,26 @@ SHADER_PUBLIC struct PointLightData
 /** Rectangular area light: position, normal, right/up half-extents, color. */
 SHADER_PUBLIC struct AreaLightData
 {
-    SHADER_PUBLIC float4 position;      // xyz world-space center, w unused
-    SHADER_PUBLIC float4 normal;        // xyz world-space normal, w unused
-    SHADER_PUBLIC float4 right;         // xyz right axis, w half-width
-    SHADER_PUBLIC float4 up;            // xyz up axis, w half-height
-    SHADER_PUBLIC uint packedColor;     // RGBA8 unorm
+    SHADER_PUBLIC float4 position; // xyz world-space center, w unused
+    SHADER_PUBLIC float4 normal; // xyz world-space normal, w unused
+    SHADER_PUBLIC float4 right; // xyz right axis, w half-width
+    SHADER_PUBLIC float4 up; // xyz up axis, w half-height
+    SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float intensity;
-    SHADER_PUBLIC float range;          // smoothstep attenuation cutoff distance
+    SHADER_PUBLIC float range; // smoothstep attenuation cutoff distance
+    SHADER_PUBLIC float _pad1;
+};
+
+/** Area light pre-transformed to view space with derived geometry and emission cached. Written once per frame by the ReSTIR transform-lights pass. */
+SHADER_PUBLIC struct AreaLightVSData
+{
+    SHADER_PUBLIC float4 centerHalfWidth; // xyz view-space center, w half-width
+    SHADER_PUBLIC float4 normalHalfHeight; // xyz view-space normal, w half-height
+    SHADER_PUBLIC float4 rightArea; // xyz view-space right axis, w area
+    SHADER_PUBLIC float4 upRange; // xyz view-space up axis, w range
+    SHADER_PUBLIC uint packedColor; // RGBA8 unorm
+    SHADER_PUBLIC float intensity;
+    SHADER_PUBLIC float _pad0;
     SHADER_PUBLIC float _pad1;
 };
 

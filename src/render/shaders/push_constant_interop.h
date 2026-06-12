@@ -409,10 +409,19 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC uint32_t gbufferOneIndex;
 };
 
+SHADER_PUBLIC struct ReSTIRTransformLightsPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(AreaLightVSData) lightVS;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+};
+
 SHADER_PUBLIC struct ReSTIRDIGeneratePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(AreaLightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
@@ -430,6 +439,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(AreaLightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
@@ -451,6 +461,7 @@ SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(AreaLightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) currentBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
@@ -473,6 +484,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(AreaLightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) inputBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
@@ -495,6 +507,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(AreaLightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;

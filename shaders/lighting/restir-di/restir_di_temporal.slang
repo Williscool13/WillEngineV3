@@ -26,7 +26,6 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     bool validCurrent = current.lightIdx != ~0u;
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    float4x4 view = scene.view;
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     uint2 fullPixel = pixel * pc.pixelScale;
 
@@ -104,12 +103,11 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float uSelect1 = HashStep(h);
 
     if (validCurrent) {
-        AreaLightData alCurrent = pc.lightData->areaLights[current.lightIdx];
-        AreaLightVS vsCurrent = TransformAreaLight(alCurrent, view);
+        AreaLightVS vsCurrent = UnpackAreaLightVS(pc.lightVS[current.lightIdx]);
         float3 yStarCurrent = DecodeSamplePos(current, vsCurrent);
-        AreaLightSample sCurrent = EvalAreaLightSample(vsCurrent, yStarCurrent, viewPosition, N, alCurrent.range);
-        float3 currentLightColor = UnpackUnorm4x8(alCurrent.packedColor).rgb;
-        float p_hat_current = EvalPHat(sCurrent, V, N, li.albedo.xyz, F0, li.metallic, roughness, currentLightColor, alCurrent.intensity);
+        AreaLightSample sCurrent = EvalAreaLightSample(vsCurrent, yStarCurrent, viewPosition, N, vsCurrent.range);
+        float3 currentLightColor = UnpackUnorm4x8(vsCurrent.packedColor).rgb;
+        float p_hat_current = EvalPHat(sCurrent, V, N, li.albedo.xyz, F0, li.metallic, roughness, currentLightColor, vsCurrent.intensity);
         float w_current = p_hat_current * current.W * float(current.M);
         if (ReservoirAddSample(accum, combined, w_current, uSelect0)) {
             combined.lightIdx = current.lightIdx;
@@ -121,12 +119,11 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     if (validHistoryReservoir) {
         // Evaluate p_hat for the history reservoir's sample at the current pixel's shading point.
-        AreaLightData alHistory = pc.lightData->areaLights[history.lightIdx];
-        AreaLightVS vsHistory = TransformAreaLight(alHistory, view);
+        AreaLightVS vsHistory = UnpackAreaLightVS(pc.lightVS[history.lightIdx]);
         float3 yStarHistory = DecodeSamplePos(history, vsHistory);
-        AreaLightSample sHistory = EvalAreaLightSample(vsHistory, yStarHistory, viewPosition, N, alHistory.range);
-        float3 historyLightColor = UnpackUnorm4x8(alHistory.packedColor).rgb;
-        float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, alHistory.intensity);
+        AreaLightSample sHistory = EvalAreaLightSample(vsHistory, yStarHistory, viewPosition, N, vsHistory.range);
+        float3 historyLightColor = UnpackUnorm4x8(vsHistory.packedColor).rgb;
+        float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, vsHistory.intensity);
 
         clampedHistoryM = min(history.M, pc.mCap);
         float w_history = p_hat_history * history.W * float(clampedHistoryM);
@@ -140,16 +137,15 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     // Finalise: re-evaluate p_hat at the winner with visibility.
     if (combined.lightIdx != ~0u) {
-        AreaLightData alWinner = pc.lightData->areaLights[combined.lightIdx];
-        AreaLightVS vsWinner = TransformAreaLight(alWinner, view);
+        AreaLightVS vsWinner = UnpackAreaLightVS(pc.lightVS[combined.lightIdx]);
         float3 yStar = DecodeSamplePos(combined, vsWinner);
-        AreaLightSample sWinner = EvalAreaLightSample(vsWinner, yStar, viewPosition, N, alWinner.range);
-        float3 winnerLightColor = UnpackUnorm4x8(alWinner.packedColor).rgb;
+        AreaLightSample sWinner = EvalAreaLightSample(vsWinner, yStar, viewPosition, N, vsWinner.range);
+        float3 winnerLightColor = UnpackUnorm4x8(vsWinner.packedColor).rgb;
         float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
         float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
         RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-        float p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, alWinner.intensity,
+        float p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
                                                  tlas, worldPos, worldN, worldyStar);
         ReservoirFinalise(combined, accum, p_hat_winner, float(combined.M));
     }

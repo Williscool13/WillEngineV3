@@ -430,6 +430,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_ground_truth_di.slang compute ComputeMain rt_ground_truth_di
 
         # ReSTIR
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_transform_lights.slang compute ComputeMain restir_di_transform_lights
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_main.slang compute ComputeMain restir_di_main
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_temporal.slang compute ComputeMain restir_di_temporal
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_spatial.slang compute ComputeMain restir_di_spatial

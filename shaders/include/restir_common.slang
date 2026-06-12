@@ -5,7 +5,7 @@ import lights_interop;
 import restir_interop;
 import pbr_functions;
 
-/** Area light data transformed into view space, with derived geometry cached. */
+/** Area light data transformed into view space, with derived geometry and emission cached. */
 public struct AreaLightVS
 {
     public float3 center;
@@ -15,6 +15,9 @@ public struct AreaLightVS
     public float halfWidth;
     public float halfHeight;
     public float area;
+    public float range;
+    public float intensity;
+    public uint packedColor;
 }
 
 /**
@@ -33,6 +36,41 @@ public AreaLightVS TransformAreaLight(AreaLightData al, float4x4 view)
     vs.halfWidth = al.right.w;
     vs.halfHeight = al.up.w;
     vs.area = 4.0 * vs.halfWidth * vs.halfHeight;
+    vs.range = al.range;
+    vs.intensity = al.intensity;
+    vs.packedColor = al.packedColor;
+    return vs;
+}
+
+/** Packs an AreaLightVS into the GPU buffer layout written by the transform-lights pass. */
+public AreaLightVSData PackAreaLightVS(AreaLightVS vs)
+{
+    AreaLightVSData d;
+    d.centerHalfWidth = float4(vs.center, vs.halfWidth);
+    d.normalHalfHeight = float4(vs.normal, vs.halfHeight);
+    d.rightArea = float4(vs.right, vs.area);
+    d.upRange = float4(vs.up, vs.range);
+    d.packedColor = vs.packedColor;
+    d.intensity = vs.intensity;
+    d._pad0 = 0.0;
+    d._pad1 = 0.0;
+    return d;
+}
+
+/** Loads a pre-transformed view-space area light from the buffer written by the transform-lights pass. */
+public AreaLightVS UnpackAreaLightVS(AreaLightVSData d)
+{
+    AreaLightVS vs;
+    vs.center = d.centerHalfWidth.xyz;
+    vs.halfWidth = d.centerHalfWidth.w;
+    vs.normal = d.normalHalfHeight.xyz;
+    vs.halfHeight = d.normalHalfHeight.w;
+    vs.right = d.rightArea.xyz;
+    vs.area = d.rightArea.w;
+    vs.up = d.upRange.xyz;
+    vs.range = d.upRange.w;
+    vs.packedColor = d.packedColor;
+    vs.intensity = d.intensity;
     return vs;
 }
 
@@ -197,9 +235,10 @@ public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_h
 }
 
 /**
- * Evaluates the full BRDF integrand as a scalar luminance for use as p_hat.
- * Includes the area-light geometry term (cosLight / dist²), attenuation, and light emission.
- * Returns 0 if cosShade, cosLight, or attenuation are non-positive.
+ * Cheap scalar target function for reservoir sampling: Lambert diffuse plus a GGX NDF specular approximation
+ * (Smith G and Fresnel dropped, G / (4 NoV NoL) approximated as 0.25). Includes the area-light geometry term
+ * (cosLight / dist²), attenuation, and light emission. p_hat only steers sampling; any mismatch with the
+ * resolve BRDF costs variance, never bias. Returns 0 if cosShade, cosLight, or attenuation are non-positive.
  *
  * @param s Area light sample (geometry terms, must have cosShade > 0, cosLight > 0, attenuation > 0).
  * @param V View direction (toward camera, view space).
@@ -214,15 +253,23 @@ public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_h
 public float EvalPHat(AreaLightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity)
 {
     if (s.cosShade <= 0.0 || s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
+    const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
     float3 H = normalize(V + s.L);
-    float NDF = D_GGX(N, H, roughness);
-    float G = G_SMITH_HEIGHT_CORRELATED(N, V, s.L, roughness);
-    float3 F = F_SCHLICK(V, H, F0);
-    float3 specular = (NDF * G * F) / max(4.0 * max(dot(N, V), 0.0) * s.cosShade, 0.001);
-    float3 kD = (1.0 - F) * (1.0 - metallic);
+    float D = D_GGX(N, H, roughness);
+    float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
     float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-    float3 brdfCos = (kD * albedo / PI + specular) * s.cosShade * geomTerm * lightIntensity * lightColor * s.attenuation;
-    return dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
+    return brdf * s.cosShade * geomTerm * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
+
+    // Full BRDF target (GGX + Smith + Fresnel), kept for reference:
+    // float3 H = normalize(V + s.L);
+    // float NDF = D_GGX(N, H, roughness);
+    // float G = G_SMITH_HEIGHT_CORRELATED(N, V, s.L, roughness);
+    // float3 F = F_SCHLICK(V, H, F0);
+    // float3 specular = (NDF * G * F) / max(4.0 * max(dot(N, V), 0.0) * s.cosShade, 0.001);
+    // float3 kD = (1.0 - F) * (1.0 - metallic);
+    // float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
+    // float3 brdfCos = (kD * albedo / PI + specular) * s.cosShade * geomTerm * lightIntensity * lightColor * s.attenuation;
+    // return dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
 }
 
 /**

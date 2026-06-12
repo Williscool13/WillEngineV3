@@ -57,10 +57,9 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
 
         if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->areaLightCount))
         {
-            AreaLightData al = pc.lightData->areaLights[r.lightIdx];
-            AreaLightVS vs = TransformAreaLight(al, scene.view);
+            AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[r.lightIdx]);
             float3 yStar = DecodeSamplePos(r, vs);
-            AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, al.range);
+            AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, vs.range);
 
             if (s.cosShade > 0.0 && s.cosLight > 0.0 && s.attenuation > 0.0)
             {
@@ -78,8 +77,8 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
                 float3 diffuseAl = kDal * li.albedo.xyz * orenNayarAl;
 
                 float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                float3 commonTerm = s.cosShade * geomTerm * al.intensity * alColor * s.attenuation * r.W;
+                float3 alColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                float3 commonTerm = s.cosShade * geomTerm * vs.intensity * alColor * s.attenuation * r.W;
 
                 diffuseRadiance = diffuseAl * commonTerm;
                 specularRadiance = specularAl * commonTerm;

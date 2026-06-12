@@ -45,7 +45,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
     // M_i: number of candidates per strategy
-    const int M_light = 32;
+    const int M_light = 16;
     const int M_brdf = 1;
     const int M = M_light + M_brdf;
 
@@ -56,7 +56,6 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     if (lightCount > 0) {
         uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
         h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
-        float4x4 view = scene.view;
         ReservoirAccum accum = ReservoirAccumEmpty();
 
         // Light sampling candidates
@@ -67,13 +66,12 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             float uSelect = HashStep(h);
 
             int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
-            AreaLightData al = pc.lightData->areaLights[lightIdx];
-            AreaLightVS vs = TransformAreaLight(al, view);
+            AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[lightIdx]);
             float3 Xi = SampleAreaLightPos(vs, uU, uV);
-            AreaLightSample s = EvalAreaLightSample(vs, Xi, viewPosition, N, al.range);
+            AreaLightSample s = EvalAreaLightSample(vs, Xi, viewPosition, N, vs.range);
 
-            float3 lightColor = UnpackUnorm4x8(al.packedColor).rgb;
-            float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, al.intensity);
+            float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+            float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
 
 
             // Talbot MIS in area measure. p_hat has cosLight/dist² baked in, so all PDFs must be area-measure.
@@ -112,7 +110,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
                 float bestT = 1e30;
                 for (int j = 0; j < lightCount; j++)
                 {
-                    AreaLightVS vs = TransformAreaLight(pc.lightData->areaLights[j], view);
+                    AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[j]);
                     float t;
                     if (RayIntersectQuad(viewPosition, brdfL, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t) && t < bestT)
                     {
@@ -124,15 +122,14 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
 
                 if (bestLightIdx >= 0)
                 {
-                    AreaLightData al = pc.lightData->areaLights[bestLightIdx];
                     Xi = viewPosition + brdfL * bestT;
-                    AreaLightSample s = EvalAreaLightSample(bestVS, Xi, viewPosition, N, al.range);
+                    AreaLightSample s = EvalAreaLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
                     // Area-measure PDFs. p_brdf_area = p_brdf_sa * cosLight / dist²
                     p_light_area = 1.0 / (float(lightCount) * bestVS.area);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
 
-                    float3 brdfLightColor = UnpackUnorm4x8(al.packedColor).rgb;
-                    p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, al.intensity);
+                    float3 brdfLightColor = UnpackUnorm4x8(bestVS.packedColor).rgb;
+                    p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, bestVS.intensity);
                 }
             }
 
@@ -147,21 +144,15 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
         }
 
         r.M = uint(M);
-        // Finalise W = wSum / p_hat(y*) with visibility
+        // Finalise W = wSum / p_hat(y*). No visibility ray here; the temporal and spatial finalizes carry the shadow rays.
         if (r.lightIdx != ~0u)
         {
-            AreaLightData al = pc.lightData->areaLights[r.lightIdx];
-            AreaLightVS vs = TransformAreaLight(al, view);
+            AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[r.lightIdx]);
             float3 yStar = DecodeSamplePos(r, vs);
-            AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, al.range);
+            AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, vs.range);
 
-            float3 winnerLightColor = UnpackUnorm4x8(al.packedColor).rgb;
-            float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-            float3 worldN = normalize(mul(float3x3(scene.invView), N));
-            float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
-            RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-            float p_hat_yStar = EvalPHatVisibility(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, al.intensity,
-                                                    tlas, worldPos, worldN, worldyStar);
+            float3 winnerLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+            float p_hat_yStar = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vs.intensity);
             // M_total = 1: Talbot MIS already absorbs M into each w_i, so no outer M divisor.
             ReservoirFinalise(r, accum, p_hat_yStar, 1.0);
         }

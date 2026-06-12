@@ -21,7 +21,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    float4x4 view = scene.view;
     uint2 fullPixel = pixel * pc.pixelScale;
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
@@ -50,7 +49,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     // -------------------------------------------------------------------------
     // Phase 1: generate candidates (Talbot MIS, same as restir_di_main)
     // -------------------------------------------------------------------------
-    const int M_light = 32;
+    const int M_light = 16;
     const int M_brdf = 1;
     const int M = M_light + M_brdf;
 
@@ -68,13 +67,12 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             float uSelect = HashStep(h);
 
             int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
-            AreaLightData al = pc.lightData->areaLights[lightIdx];
-            AreaLightVS vs = TransformAreaLight(al, view);
+            AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[lightIdx]);
             float3 Xi = SampleAreaLightPos(vs, uU, uV);
-            AreaLightSample s = EvalAreaLightSample(vs, Xi, viewPosition, N, al.range);
+            AreaLightSample s = EvalAreaLightSample(vs, Xi, viewPosition, N, vs.range);
 
-            float3 lightColor = UnpackUnorm4x8(al.packedColor).rgb;
-            float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, al.intensity);
+            float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+            float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
 
             float p_light_area = 1.0 / (float(lightCount) * vs.area);
             float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
@@ -105,7 +103,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
                 float bestT = 1e30;
                 for (int j = 0; j < lightCount; j++) {
-                    AreaLightVS vs = TransformAreaLight(pc.lightData->areaLights[j], view);
+                    AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[j]);
                     float t;
                     if (RayIntersectQuad(viewPosition, brdfL, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t) && t < bestT) {
                         bestT = t;
@@ -115,13 +113,12 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 }
 
                 if (bestLightIdx >= 0) {
-                    AreaLightData al = pc.lightData->areaLights[bestLightIdx];
                     Xi = viewPosition + brdfL * bestT;
-                    AreaLightSample s = EvalAreaLightSample(bestVS, Xi, viewPosition, N, al.range);
+                    AreaLightSample s = EvalAreaLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
                     p_light_area = 1.0 / (float(lightCount) * bestVS.area);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
-                    float3 brdfLightColor = UnpackUnorm4x8(al.packedColor).rgb;
-                    p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, al.intensity);
+                    float3 brdfLightColor = UnpackUnorm4x8(bestVS.packedColor).rgb;
+                    p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, bestVS.intensity);
                 }
             }
 
@@ -172,34 +169,21 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     bool validHistoryReservoir = history.lightIdx != ~0u;
 
-    if (r_gen.lightIdx != ~0u) {
-        AreaLightData alGen = pc.lightData->areaLights[r_gen.lightIdx];
-        AreaLightVS vsGen = TransformAreaLight(alGen, view);
-        float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
-        AreaLightSample sGen = EvalAreaLightSample(vsGen, yStarGen, viewPosition, N, alGen.range);
-        float3 genLightColor = UnpackUnorm4x8(alGen.packedColor).rgb;
-        float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-        float3 worldN = normalize(mul(float3x3(scene.invView), N));
-        float3 worldyStarGen = mul(scene.invView, float4(yStarGen, 1.0)).xyz;
-        RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-        float p_hat_gen_vis = EvalPHatVisibility(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, alGen.intensity,
-                                                  tlas, worldPos, worldN, worldyStarGen);
-        ReservoirFinalise(r_gen, accum_gen, p_hat_gen_vis, 1.0);
-    }
-
     ReservoirAccum accum_combined = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
 
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
 
+    // Finalise the generated reservoir without a visibility ray and stream it; the temporal-winner finalize below carries the only shadow ray in this pass.
     if (r_gen.lightIdx != ~0u) {
-        AreaLightData alGen = pc.lightData->areaLights[r_gen.lightIdx];
-        AreaLightVS vsGen = TransformAreaLight(alGen, view);
+        AreaLightVS vsGen = UnpackAreaLightVS(pc.lightVS[r_gen.lightIdx]);
         float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
-        AreaLightSample sGen = EvalAreaLightSample(vsGen, yStarGen, viewPosition, N, alGen.range);
-        float3 genLightColor = UnpackUnorm4x8(alGen.packedColor).rgb;
-        float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, alGen.intensity);
+        AreaLightSample sGen = EvalAreaLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
+        float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
+        float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
+        ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
+
         float w_gen = p_hat_gen * r_gen.W * float(r_gen.M);
         if (ReservoirAddSample(accum_combined, combined, w_gen, uSelect0)) {
             combined.lightIdx = r_gen.lightIdx;
@@ -209,12 +193,11 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     // Stream history winner: w = p_hat(y_hist at current shading point) * W_hist * clampedM
     if (validHistoryReservoir) {
-        AreaLightData alHistory = pc.lightData->areaLights[history.lightIdx];
-        AreaLightVS vsHistory = TransformAreaLight(alHistory, view);
+        AreaLightVS vsHistory = UnpackAreaLightVS(pc.lightVS[history.lightIdx]);
         float3 yStarHistory = DecodeSamplePos(history, vsHistory);
-        AreaLightSample sHistory = EvalAreaLightSample(vsHistory, yStarHistory, viewPosition, N, alHistory.range);
-        float3 historyLightColor = UnpackUnorm4x8(alHistory.packedColor).rgb;
-        float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, alHistory.intensity);
+        AreaLightSample sHistory = EvalAreaLightSample(vsHistory, yStarHistory, viewPosition, N, vsHistory.range);
+        float3 historyLightColor = UnpackUnorm4x8(vsHistory.packedColor).rgb;
+        float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, vsHistory.intensity);
 
         clampedHistoryM = min(history.M, pc.mCap);
         float w_history = p_hat_history * history.W * float(clampedHistoryM);
@@ -230,16 +213,15 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     // Phase 3: finalise with visibility
     // -------------------------------------------------------------------------
     if (combined.lightIdx != ~0u) {
-        AreaLightData alWinner = pc.lightData->areaLights[combined.lightIdx];
-        AreaLightVS vsWinner = TransformAreaLight(alWinner, view);
+        AreaLightVS vsWinner = UnpackAreaLightVS(pc.lightVS[combined.lightIdx]);
         float3 yStar = DecodeSamplePos(combined, vsWinner);
-        AreaLightSample sWinner = EvalAreaLightSample(vsWinner, yStar, viewPosition, N, alWinner.range);
-        float3 winnerLightColor = UnpackUnorm4x8(alWinner.packedColor).rgb;
+        AreaLightSample sWinner = EvalAreaLightSample(vsWinner, yStar, viewPosition, N, vsWinner.range);
+        float3 winnerLightColor = UnpackUnorm4x8(vsWinner.packedColor).rgb;
         float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
         float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
         RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-        float p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, alWinner.intensity,
+        float p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
                                                  tlas, worldPos, worldN, worldyStar);
         ReservoirFinalise(combined, accum_combined, p_hat_winner, float(combined.M));
     }
