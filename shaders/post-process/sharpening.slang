@@ -22,25 +22,14 @@ void ComputeSharpening(uniform SharpeningPushConstant pc, uint3 dtid : SV_Dispat
     float3 f = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  0) * texelSize, 0).rgb;
     float3 h = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  1) * texelSize, 0).rgb;
 
-    // Simple unsharp mask, with sharpening attenuated at high luminance so
-    // specular highlights (mirror reflections, etc.) are not treated as edges.
+    // Simple unsharp mask, clamped to the local neighborhood range (CAS-style). The clamp makes undershoot below the
+    // darkest neighbor impossible, so bright HDR highlights cannot ring dark halos no matter their magnitude.
     float3 blurred = (b + d + f + h) * 0.25;
+    float3 sharpened = e + (e - blurred) * pc.sharpness;
 
-    float3 luma = float3(0.2126, 0.7152, 0.0722);
-    float Lb = dot(b, luma);
-    float Ld = dot(d, luma);
-    float Le = dot(e, luma);
-    float Lf = dot(f, luma);
-    float Lh = dot(h, luma);
-    // Attenuate based on neighborhood max so dark pixels adjacent to a bright
-    // highlight don't produce a dark halo ring.
-    float Lmax = max(max(max(Lb, Ld), max(Lf, Lh)), Le);
-    // Full sharpening below 0.5, linearly ramps to zero at 2.0.
-    float lumAttenuation = saturate(1.0 - (Lmax - 0.5) / 1.5);
-    float effectiveSharpness = pc.sharpness * lumAttenuation;
-
-    float3 sharpened = e + (e - blurred) * effectiveSharpness;
-    sharpened = max(float3(0, 0, 0), sharpened);
+    float3 minRGB = min(e, min(min(b, d), min(f, h)));
+    float3 maxRGB = max(e, max(max(b, d), max(f, h)));
+    sharpened = clamp(sharpened, minRGB, maxRGB);
 
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(sharpened, 1.0);
 

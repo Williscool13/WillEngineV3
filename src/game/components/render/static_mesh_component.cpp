@@ -53,8 +53,10 @@ void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, en
 
     if (component.modelId.IsValid() && component.meshIndex != -1) {
         runtime.modelHandle = ctx->assetManager->LoadModel(component.modelId);
-        registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
-        state->bPendingModelResolve |= true;
+        if (runtime.modelHandle.IsValid()) {
+            registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
+            state->bPendingModelResolve |= true;
+        }
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);

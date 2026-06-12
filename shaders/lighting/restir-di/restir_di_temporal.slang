@@ -60,7 +60,16 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyFullPixel, 0)).r;
     float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-    if (abs(historyViewDepth - viewSpaceDepth) > 0.1 * abs(viewSpaceDepth)) {
+    float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
+
+    // Plane-distance disocclusion (NRD style). NoV converts the view-depth delta into a distance from the surface plane, so grazing
+    // surfaces with steep per-pixel depth gradients are not falsely rejected; the threshold is relative to frustum size, not depth.
+    // The expected previous depth comes from the gbuffer view-depth delta, so camera/object motion does not register as disocclusion.
+    float expectedPrevViewDepth = viewSpaceDepth + UnpackViewZDelta(g1.w);
+    float NoV = abs(dot(currentN, normalize(viewPosition)));
+    float frustumSize = abs(scene.ndcToViewMul.y) * abs(viewSpaceDepth);
+    float disocclusionThreshold = saturate(0.01 / lerp(0.05, 1.0, NoV)) * frustumSize;
+    if (abs(historyViewDepth - expectedPrevViewDepth) * NoV > disocclusionThreshold) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;
     }
@@ -80,7 +89,6 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         return;
     }
 
-    float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
     float roughness = max(li.roughness, 0.045);

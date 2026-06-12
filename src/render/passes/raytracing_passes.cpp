@@ -90,7 +90,7 @@ void SetupTLASBuild(RenderGraph& graph,
         inst.accelerationStructureReference = src.blasDeviceAddress;
     }
 
-    graph.CreateBuffer(RT_TLAS_INSTANCE_BUFFER, instanceDataSize, false, false);
+    graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceDataSize, 16, false, false);
 
     RenderPass& uploadPass = graph.AddPass(SID("RT Upload TLAS Instances"), VK_PIPELINE_STAGE_2_COPY_BIT, ResourceCategory::Untagged);
     uploadPass.WriteTransferBuffer(RT_TLAS_INSTANCE_BUFFER);

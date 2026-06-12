@@ -71,6 +71,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     uint spatialNeighbors = pc.spatialNeighbors;
     uint spatialRadius = pc.spatialRadius;
+    float frustumSize = abs(scene.ndcToViewMul.y) * abs(viewSpaceDepth);
     for (uint i = 0; i < spatialNeighbors; i++) {
         float angle = (float(i) + HashStep(h)) * (6.28318530718 / float(spatialNeighbors));
         float r = sqrt(HashStep(h)) * spatialRadius;
@@ -82,10 +83,12 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
         uint2 neighborFullPixel = uint2(neighborPixel) * pc.pixelScale;
 
-        // Geometry rejection: depth (abs guards a negative-Z convention).
+        // Geometry rejection: plane distance (NRD style), so neighbors on the same plane seen at grazing angles are not falsely rejected by their depth delta.
         float neighborRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(neighborFullPixel, 0)).r;
         float neighborViewDepth = ScreenToViewSpaceDepth(neighborRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-        if (abs(neighborViewDepth - viewSpaceDepth) > 0.1 * abs(viewSpaceDepth)) {
+        float2 neighborUV = (float2(neighborPixel) + 0.5f) / float2(pc.renderExtent);
+        float3 neighborViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, neighborUV, neighborViewDepth);
+        if (abs(dot(N, neighborViewPosition - viewPosition)) > 0.01 * frustumSize) {
             continue;
         }
 
@@ -106,8 +109,6 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             continue;
         }
 
-        float2 neighborUV = (float2(neighborPixel) + 0.5f) / float2(pc.renderExtent);
-        float3 neighborViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, neighborUV, neighborViewDepth);
         float3 neighborV = normalize(-neighborViewPosition);
         float neighborRoughness = max(nli.roughness, 0.045);
         float3 neighborF0 = lerp(float3(0.04, 0.04, 0.04), nli.albedo.xyz, nli.metallic);

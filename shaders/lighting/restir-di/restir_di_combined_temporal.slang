@@ -154,10 +154,14 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         // Normal disocclusion
         float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));
         if (dot(N, historyN) >= 0.906) {
-            // Depth disocclusion
+            // Plane-distance disocclusion (NRD style); see restir_di_temporal.slang
             float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyFullPixel, 0)).r;
             float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-            if (abs(historyViewDepth - viewSpaceDepth) <= 0.1 * abs(viewSpaceDepth)) {
+            float expectedPrevViewDepth = viewSpaceDepth + UnpackViewZDelta(g1.w);
+            float NoV = abs(dot(N, normalize(viewPosition)));
+            float frustumSize = abs(scene.ndcToViewMul.y) * abs(viewSpaceDepth);
+            float disocclusionThreshold = saturate(0.01 / lerp(0.05, 1.0, NoV)) * frustumSize;
+            if (abs(historyViewDepth - expectedPrevViewDepth) * NoV <= disocclusionThreshold) {
                 Reservoir candidate = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
                 if (candidate.lightIdx != ~0u && candidate.lightIdx < uint(pc.lightData->areaLightCount)) {
                     history = candidate;
