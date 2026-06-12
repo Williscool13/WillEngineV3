@@ -30,4 +30,5 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(resultRGB, 1.0);
+    rdgStorageFloat4[pc.outputCopyIndex][threadID.xy] = float4(resultRGB, 1.0);
 }

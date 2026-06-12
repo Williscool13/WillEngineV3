@@ -50,9 +50,6 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily);
  */
 RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
 
-float Halton(uint32_t i, uint32_t b);
-
-
 } // Render
 
 #endif //WILL_ENGINE_RENDER_VIEW_HELPERS_H

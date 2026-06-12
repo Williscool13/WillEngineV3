@@ -567,6 +567,7 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
+    SHADER_PUBLIC uint32_t outputCopyIndex;
 };
 
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant

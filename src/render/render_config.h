@@ -107,24 +107,25 @@ struct HaltonSample
     float x, y;
 };
 
-// Pre-computed 16-point Halton sequence (base 2, 3)
+// Halton(2,3) radical inverses for i = 1..16, minus the window means (0.470703125, 0.462962963) so the sequence sums to exactly zero and carries no DC image shift.
+// Units are pixels; one pixel is 2/extent in NDC, so the projection offset is sample * 2 / renderExtent.
 inline constexpr Core::Array<HaltonSample, HALTON_SEQUENCE_COUNT> HALTON_SEQUENCE{
-    HaltonSample(0.5f, 0.5f),
-    {0.25f, 0.66666667f},
-    {0.75f, 0.11111111f},
-    {0.125f, 0.44444445f},
-    {0.625f, 0.7777778f},
-    {0.375f, 0.22222222f},
-    {0.875f, 0.5555556f},
-    {0.0625f, 0.8888889f},
-    {0.5625f, 0.037037037f},
-    {0.3125f, 0.3703704f},
-    {0.8125f, 0.7037037f},
-    {0.1875f, 0.14814815f},
-    {0.6875f, 0.4814815f},
-    {0.4375f, 0.8148148f},
-    {0.9375f, 0.25925925f},
-    {0.03125f, 0.5925926f},
+    HaltonSample{0.02929688f, -0.12962963f},
+    {-0.22070312f, 0.20370370f},
+    {0.27929688f, -0.35185185f},
+    {-0.34570312f, -0.01851852f},
+    {0.15429688f, 0.31481481f},
+    {-0.09570312f, -0.24074074f},
+    {0.40429688f, 0.09259259f},
+    {-0.40820312f, 0.42592593f},
+    {0.09179688f, -0.42592593f},
+    {-0.15820312f, -0.09259259f},
+    {0.34179688f, 0.24074074f},
+    {-0.28320312f, -0.31481481f},
+    {0.21679688f, 0.01851852f},
+    {-0.03320312f, 0.35185185f},
+    {0.46679688f, -0.20370370f},
+    {-0.43945312f, 0.12962963f},
 };
 
 

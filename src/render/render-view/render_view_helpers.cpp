@@ -26,19 +26,18 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
     sceneData.prevView = prevViewMatrix;
 
     if (aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA) {
+        const HaltonSample& currSample = HALTON_SEQUENCE[(frameNumber + 1) % HALTON_SEQUENCE_COUNT];
+        const HaltonSample& prevSample = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
+
         glm::mat4 jitteredProj = projMatrix;
-        float haltonX = 2.0f * Halton((frameNumber + 1) % HALTON_SEQUENCE_COUNT + 1, 2) - 1.0f;
-        float haltonY = 2.0f * Halton((frameNumber + 1) % HALTON_SEQUENCE_COUNT + 1, 3) - 1.0f;
-        float jitterX = haltonX * (1.0f / renderExtent[0]);
-        float jitterY = haltonY * (1.0f / renderExtent[1]);
+        float jitterX = currSample.x * 2.0f / static_cast<float>(renderExtent[0]);
+        float jitterY = currSample.y * 2.0f / static_cast<float>(renderExtent[1]);
         jitteredProj[2][0] += jitterX;
         jitteredProj[2][1] += jitterY;
 
         glm::mat4 jitteredPrevProj = prevProjMatrix;
-        float prevHaltonX = 2.0f * Halton((frameNumber) % HALTON_SEQUENCE_COUNT + 1, 2) - 1.0f;
-        float prevHaltonY = 2.0f * Halton((frameNumber) % HALTON_SEQUENCE_COUNT + 1, 3) - 1.0f;
-        float prevJitterX = prevHaltonX * (1.0f / renderExtent[0]);
-        float prevJitterY = prevHaltonY * (1.0f / renderExtent[1]);
+        float prevJitterX = prevSample.x * 2.0f / static_cast<float>(renderExtent[0]);
+        float prevJitterY = prevSample.y * 2.0f / static_cast<float>(renderExtent[1]);
         jitteredPrevProj[2][0] += prevJitterX;
         jitteredPrevProj[2][1] += prevJitterY;
 
@@ -269,19 +268,5 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.textMaterialBufferSize = _limits.highestTextMaterialCount * sizeof(TextRenderMaterial);
 
     return renderFamilyProperties;
-}
-
-float Halton(uint32_t i, uint32_t b)
-{
-    float f = 1.0f;
-    float r = 0.0f;
-
-    while (i > 0) {
-        f /= static_cast<float>(b);
-        r = r + f * static_cast<float>(i % b);
-        i = static_cast<uint32_t>(floorf(static_cast<float>(i) / static_cast<float>(b)));
-    }
-
-    return r;
 }
 } // Render
