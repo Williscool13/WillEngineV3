@@ -77,14 +77,25 @@ float3 SampleHistoryCatmullRom(float2 uv) {
     return RGBToYCoCg(color / totalWeight);
 }
 
-// Compares the surface's expected previous view depth (current viewZ + gbuffer viewZDelta) against the actual previous depth buffer at the reprojected location.
+// Compares the surface's expected previous view depth (current viewZ + gbuffer viewZDelta) against a 3x3 footprint of the previous depth buffer, keeping the best match.
+// A single point tap hard-rejects subpixel geometry every frame: thin features only rasterize on some jitter phases, so the reprojected texel alternates between
+// feature and background depth even though a neighboring texel almost always holds the matching surface.
 float ComputeDepthDisocclusion(float2 historyUv, float expectedPrevViewZ) {
+    int2 renderMax = int2(pc.sceneData.mainRenderTargetSize) - 1;
     int2 historyCoord = int2(historyUv * float2(pc.sceneData.mainRenderTargetSize));
-    float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(historyCoord, 0)).r;
-    float prevViewZ = min(ScreenToViewSpaceDepth(prevRawDepth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd), VIEWZ_CLAMP);
-
     float tolerance = max(pc.disocclusionThreshold * abs(expectedPrevViewZ), 1e-6);
-    return saturate(abs(prevViewZ - expectedPrevViewZ) / tolerance - 1.0);
+
+    float bestDelta = 1e30;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            int2 tapCoord = clamp(historyCoord + int2(x, y), int2(0), renderMax);
+            float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(tapCoord, 0)).r;
+            float prevViewZ = min(ScreenToViewSpaceDepth(prevRawDepth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd), VIEWZ_CLAMP);
+            bestDelta = min(bestDelta, abs(prevViewZ - expectedPrevViewZ));
+        }
+    }
+
+    return saturate(bestDelta / tolerance - 1.0);
 }
 
 
