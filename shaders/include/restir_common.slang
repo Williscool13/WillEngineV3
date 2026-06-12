@@ -128,6 +128,19 @@ public float3 SampleAreaLightPos(AreaLightVS vs, float uU, float uV)
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
 
+/**
+ * Maps a half-res pixel to its representative full-res gbuffer pixel.
+ * Cycles the 2x2 quad corner per pixel and per frame so the fixed-corner bias becomes noise that temporal accumulation averages out.
+ * Every consumer in the same frame must use this same mapping; history-side taps must pass the previous frame index.
+ * Identity when pixelScale == 1.
+ */
+public uint2 QuadFullPixel(uint2 pixel, uint pixelScale, uint frameIndex)
+{
+    if (pixelScale == 1u) { return pixel; }
+    uint sel = (pixel.x + pixel.y * 2u + frameIndex) & 3u;
+    return pixel * pixelScale + uint2(sel & 1u, sel >> 1u);
+}
+
 /** PCG-style hash step. Advances the state and returns a uniform float in [0, 1). */
 public float HashStep(inout uint h)
 {

@@ -500,6 +500,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t mCap;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t passIndex;
 };
 
 SHADER_PUBLIC struct VisibilityLightingPushConstant
@@ -551,6 +552,7 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t width;
     SHADER_PUBLIC uint32_t height;
     SHADER_PUBLIC uint32_t outputMode;
+    SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;

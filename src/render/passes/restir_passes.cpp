@@ -251,6 +251,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .mCap = restirParams.spatialMCap,
             .pixelScale = pixelScale,
             .tlasIndex = tlasIndex,
+            .passIndex = 0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -304,6 +305,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .mCap = restirParams.spatialMCap,
             .pixelScale = pixelScale,
             .tlasIndex = tlasIndex,
+            .passIndex = 1u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -412,7 +414,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                uint32_t sceneIndex,
                                uint32_t outputMode,
                                uint32_t pixelScale,
-                               float iblIntensity)
+                               float iblIntensity,
+                               uint64_t frameNumber)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
@@ -426,7 +429,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     pass.ReadSampledImage(targets.depthCopy);
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    pass.Execute([&graph, pipelineManager, sceneIndex, outputMode, pixelScale, width, height, skyboxIndex, iblIntensity,
+    pass.Execute([&graph, pipelineManager, sceneIndex, outputMode, pixelScale, width, height, skyboxIndex, iblIntensity, frameNumber,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, output = targets.colorOutput](VkCommandBuffer cmd) {
@@ -442,6 +445,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .width = width,
                 .height = height,
                 .outputMode = outputMode,
+                .frameIndex = static_cast<uint32_t>(frameNumber),
                 .pixelScale = pixelScale,
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,

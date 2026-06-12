@@ -47,7 +47,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                uint32_t sceneIndex,
                                uint32_t outputMode,
                                uint32_t pixelScale,
-                               float iblIntensity);
+                               float iblIntensity,
+                               uint64_t frameNumber);
 } // Render
 
 #endif //WILL_ENGINE_RESTIR_PASSES_H

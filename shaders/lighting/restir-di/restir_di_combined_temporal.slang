@@ -21,7 +21,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    uint2 fullPixel = pixel * pc.pixelScale;
+    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex);
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {
@@ -146,7 +146,8 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     if (validHistory) {
         uint2 historyPixel = clamp(uint2(historyUV * float2(pc.renderExtent)), uint2(0, 0), pc.renderExtent - uint2(1, 1));
-        uint2 historyFullPixel = historyPixel * pc.pixelScale;
+        // History taps use the corner the previous frame's passes sampled
+        uint2 historyFullPixel = QuadFullPixel(historyPixel, pc.pixelScale, pc.frameIndex - 1u);
 
         // Normal disocclusion
         float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));

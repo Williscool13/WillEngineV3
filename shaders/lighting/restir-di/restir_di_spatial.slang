@@ -23,7 +23,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
-    uint2 fullPixel = pixel * pc.pixelScale;
+    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex);
     float viewSpaceDepth = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
 
@@ -58,7 +58,8 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
-    uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u) ^ 0xF7B3D1u;
+    // Salted per pass so chained spatial passes draw different neighbor offsets
+    uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u) ^ (0xF7B3D1u + pc.passIndex * 0x9E3779B9u);
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
     // Canonical's MIS share summed across the k pairs. The shared 1/k is applied via the finalise divisor (neighborCount), uniformly across canonical and neighbor stream weights.
@@ -78,7 +79,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             continue;
         }
 
-        uint2 neighborFullPixel = uint2(neighborPixel) * pc.pixelScale;
+        uint2 neighborFullPixel = QuadFullPixel(uint2(neighborPixel), pc.pixelScale, pc.frameIndex);
 
         // Geometry rejection: plane distance (NRD style), so neighbors on the same plane seen at grazing angles are not falsely rejected by their depth delta.
         float neighborRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(neighborFullPixel, 0)).r;

@@ -535,7 +535,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, renderExtent, targets, relax, frameNumber, remodulateOutputMode, restirPixelScale, restir.iblIntensity);
                     }
                     else {
-                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, restirPixelScale, restir.iblIntensity);
+                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, restirPixelScale, restir.iblIntensity, frameNumber);
                     }
                     break;
                 }

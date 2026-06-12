@@ -21,7 +21,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    uint2 fullPixel = pixel * pc.pixelScale;
+    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex);
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {

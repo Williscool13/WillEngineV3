@@ -973,7 +973,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const uint32_t fullWidth = fullRenderExtent[0];
         const uint32_t fullHeight = fullRenderExtent[1];
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode, pixelScale, skyboxIndex, iblIntensity](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode, pixelScale, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -986,6 +986,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .width = fullWidth,
                 .height = fullHeight,
                 .outputMode = remodulateOutputMode,
+                .frameIndex = static_cast<uint32_t>(frameNumber),
                 .pixelScale = pixelScale,
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,

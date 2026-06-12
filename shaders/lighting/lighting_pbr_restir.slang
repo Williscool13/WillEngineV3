@@ -21,7 +21,7 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
         return;
     }
 
-    uint2 fullPixel = pixel * pc.pixelScale;
+    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex);
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {

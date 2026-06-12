@@ -12,10 +12,11 @@ import constants_interop;
 import bindless_declarations;
 import shader_functions;
 import pbr_functions;
+import restir_common;
 
 static const float BILATERAL_DEPTH_SIGMA = 0.01;
 static const float BILATERAL_NORMAL_POWER = 32.0;
-// todo add weighting by material ID to try to catch vastly different PBR properties
+static const float BILATERAL_MATERIAL_SIGMA = 0.1;
 static const float BILATERAL_SPATIAL_SIGMA = 1.0;
 static const float BILATERAL_MIN_WEIGHT = 1e-6;
 
@@ -57,52 +58,66 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
     float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
     float3 specReflectance = F0 * envBRDF.x + envBRDF.y;
 
-    // --- Bilateral upsampling (3x3) ---
-    // When pixelScale == 1 this degenerates to a Gaussian-weighted 3x3 blur (all taps same surface).
-    uint2 halfExtent = uint2(pc.width, pc.height) / pc.pixelScale;
-
-    float2 hTexel = (float2(pixel) + 0.5) / float(pc.pixelScale) - 0.5;
-    int2 hCenter = int2(round(hTexel));
-
-    float invTwoSigmaSq = 1.0 / (2.0 * BILATERAL_SPATIAL_SIGMA * BILATERAL_SPATIAL_SIGMA);
-
-    float totalW = 0.0;
-    float3 diffSum = float3(0.0);
-    float3 specSum = float3(0.0);
-
-    for (int dy = -1; dy <= 1; dy++) {
-        for (int dx = -1; dx <= 1; dx++) {
-            int2 hPos = clamp(hCenter + int2(dx, dy), int2(0, 0), int2(halfExtent) - 1);
-            int2 fullPos = hPos * int(pc.pixelScale);
-
-            float2 diff2 = float2(hPos) - hTexel;
-            float wSpatial = exp(-dot(diff2, diff2) * invTwoSigmaSq);
-
-            uint4 tapGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPos, 0));
-            float3 tapNormal = normalize(UnpackNormalOct16(tapGt1.r));
-            float tapRaw = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPos, 0)).r;
-            float tapViewZ = ScreenToViewSpaceDepth(tapRaw, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-
-            float depthDiff = abs(tapViewZ - viewSpaceDepth) / (viewSpaceDepth + 1e-6);
-            float wDepth = exp(-depthDiff / BILATERAL_DEPTH_SIGMA);
-            float wNormal = pow(max(0.0, dot(tapNormal, N)), BILATERAL_NORMAL_POWER);
-            float w = wSpatial * wDepth * wNormal;
-
-            diffSum += rdgTexturesFloat4[pc.diffuseIndex].Load(int3(hPos, 0)).rgb * w;
-            specSum += rdgTexturesFloat4[pc.specularIndex].Load(int3(hPos, 0)).rgb * w;
-            totalW += w;
-        }
-    }
-
     float3 diffuse, specular;
-    if (totalW > BILATERAL_MIN_WEIGHT) {
-        diffuse = diffSum / totalW;
-        specular = specSum / totalW;
+    if (pc.pixelScale == 1u) {
+        // Full res: inputs are already per-pixel, no filtering needed.
+        diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb;
+        specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb;
     } else {
-        // All taps rejected; fall back to nearest half-res sample.
-        int2 nearest = clamp(hCenter, int2(0, 0), int2(halfExtent) - 1);
-        diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(nearest, 0)).rgb;
-        specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(nearest, 0)).rgb;
+        // --- Bilateral upsampling (3x3) ---
+        uint2 halfExtent = uint2(pc.width, pc.height) / pc.pixelScale;
+
+        float2 hTexel = (float2(pixel) + 0.5) / float(pc.pixelScale) - 0.5;
+        int2 hCenter = int2(round(hTexel));
+
+        float invTwoSigmaSq = 1.0 / (2.0 * BILATERAL_SPATIAL_SIGMA * BILATERAL_SPATIAL_SIGMA);
+
+        float totalW = 0.0;
+        float3 diffSum = float3(0.0);
+        float3 specSum = float3(0.0);
+
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                int2 hPos = clamp(hCenter + int2(dx, dy), int2(0, 0), int2(halfExtent) - 1);
+                // Compare against the gbuffer pixel this frame's lighting passes actually used for the tap
+                int2 fullPos = int2(QuadFullPixel(uint2(hPos), pc.pixelScale, pc.frameIndex));
+
+                float2 diff2 = float2(hPos) - hTexel;
+                float wSpatial = exp(-dot(diff2, diff2) * invTwoSigmaSq);
+
+                uint4 tapGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPos, 0));
+                float3 tapNormal = normalize(UnpackNormalOct16(tapGt1.r));
+                float tapRaw = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPos, 0)).r;
+                float tapViewZ = ScreenToViewSpaceDepth(tapRaw, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+
+                float depthDiff = abs(tapViewZ - viewSpaceDepth) / (viewSpaceDepth + 1e-6);
+                float wDepth = exp(-depthDiff / BILATERAL_DEPTH_SIGMA);
+                float wNormal = pow(max(0.0, dot(tapNormal, N)), BILATERAL_NORMAL_POWER);
+
+                // Material weight: rejects coplanar taps with very different PBR response (matters most for specular)
+                float tapRoughness;
+                float tapMetallic;
+                UnpackPBR(tapGt1.b, tapRoughness, tapMetallic);
+                tapRoughness = max(tapRoughness, 0.045);
+                float wMaterial = exp(-(abs(tapRoughness - roughness) + abs(tapMetallic - metallic)) / BILATERAL_MATERIAL_SIGMA);
+
+                float w = wSpatial * wDepth * wNormal * wMaterial;
+
+                diffSum += rdgTexturesFloat4[pc.diffuseIndex].Load(int3(hPos, 0)).rgb * w;
+                specSum += rdgTexturesFloat4[pc.specularIndex].Load(int3(hPos, 0)).rgb * w;
+                totalW += w;
+            }
+        }
+
+        if (totalW > BILATERAL_MIN_WEIGHT) {
+            diffuse = diffSum / totalW;
+            specular = specSum / totalW;
+        } else {
+            // All taps rejected; fall back to nearest half-res sample.
+            int2 nearest = clamp(hCenter, int2(0, 0), int2(halfExtent) - 1);
+            diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(nearest, 0)).rgb;
+            specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(nearest, 0)).rgb;
+        }
     }
 
     float3 ibl = float3(0.0);
