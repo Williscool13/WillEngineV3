@@ -54,7 +54,7 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
         return;
 
-    int2 fullPixel = RelaxQuadFullPixel(pixelPos, pc.pixelScale, rc.gFrameIndex);
+    int2 fullPixel = RelaxQuadFullPixel(pixelPos, pc.pixelScale, rc.gFrameIndex, pc.viewZIndex, rc.gRectSizeInv / float(pc.pixelScale), rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
         return;

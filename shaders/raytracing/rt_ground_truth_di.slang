@@ -89,11 +89,16 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
         if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
             RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
+            // Distance/TMax measured from the offset origin so the origin's advance toward the light
+            // (cosShade * offset) does not eat the far-end margin and false-hit the light's own mesh.
+            float3 rayOrigin = worldPos + N * 0.05;
+            float3 toLightShadow = lightSamplePos - rayOrigin;
+            float shadowDist = length(toLightShadow);
             RayDesc shadowRay;
-            shadowRay.Origin = worldPos + N * 0.05;
-            shadowRay.Direction = L;
-            shadowRay.TMin = 0.05;
-            shadowRay.TMax = lightDist - 0.01;
+            shadowRay.Origin = rayOrigin;
+            shadowRay.Direction = toLightShadow / shadowDist;
+            shadowRay.TMin = 0.001;
+            shadowRay.TMax = shadowDist - 0.05;
 
             RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
             q.TraceRayInline(tlas, 0, 0xFF, shadowRay);

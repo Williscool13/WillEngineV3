@@ -21,7 +21,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex);
+    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex, pc.depthIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd);
 
     uint pixelCount = pc.renderExtent.x * pc.renderExtent.y;
     uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;

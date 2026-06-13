@@ -360,17 +360,29 @@ public float RelaxGetPlaneDistanceWeight(float3 centerWorldPos, float3 centerNor
     return d / centerViewZ > threshold ? 0.0 : 1.0;
 }
 
+// Relative view-depth spread across a 2x2 full-res quad above which it is treated as a silhouette. Must match QUAD_UNIFORM_DEPTH_THRESHOLD in restir_common.slang.
+public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
+
 /**
  * Maps a half-res pixel to its representative full-res gbuffer pixel.
  * Must match QuadFullPixel in restir_common.slang exactly: the denoiser's geometry association has to be the same
  * 2x2 quad corner the ReSTIR passes lit that frame, otherwise edge texels carry radiance from a different surface
  * than the gbuffer says and the edge-stopping weights cannot reject it.
+ * Uniform quads cycle the corner per frame; quads straddling a depth discontinuity lock to a temporally-stable,
+ * spatially-dithered corner so RELAX accumulates history at silhouettes instead of resetting every frame.
  */
-public int2 RelaxQuadFullPixel(int2 pixel, uint pixelScale, uint frameIndex)
+public int2 RelaxQuadFullPixel(int2 pixel, uint pixelScale, uint frameIndex, uint depthIndex, float2 invFullExtent, float depthLinearizeMult, float depthLinearizeAdd)
 {
     if (pixelScale == 1u) { return pixel; }
-    uint sel = (uint(pixel.x) + uint(pixel.y) * 2u + frameIndex) & 3u;
-    return pixel * int(pixelScale) + int2(int(sel & 1u), int(sel >> 1u));
+    int2 base = pixel * int(pixelScale);
+    float2 uv = (float2(base) + 1.0) * invFullExtent;
+    float4 z = rdgTexturesFloat[depthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);
+    float4 zl = depthLinearizeMult / (depthLinearizeAdd - z);
+    float zMin = min(min(zl.x, zl.y), min(zl.z, zl.w));
+    float zMax = max(max(zl.x, zl.y), max(zl.z, zl.w));
+    bool quadUniform = (zMax - zMin) <= QUAD_UNIFORM_DEPTH_THRESHOLD * max(zMax, 1e-4);
+    uint sel = quadUniform ? ((uint(pixel.x) + uint(pixel.y) * 2u + frameIndex) & 3u) : ((uint(pixel.x) + uint(pixel.y) * 2u) & 3u);
+    return base + int2(int(sel & 1u), int(sel >> 1u));
 }
 
 public float RelaxGetPlaneDistanceWeightAtrous(float3 centerWorldPos, float3 centerNormal, float3 sampleWorldPos, float threshold)

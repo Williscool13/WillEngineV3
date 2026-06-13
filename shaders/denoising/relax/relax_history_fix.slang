@@ -26,7 +26,7 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
         return;
 
-    int2 fullPixel = RelaxQuadFullPixel(pixelPos, pc.pixelScale, rc.gFrameIndex);
+    int2 fullPixel = RelaxQuadFullPixel(pixelPos, pc.pixelScale, rc.gFrameIndex, pc.viewZIndex, rc.gRectSizeInv / float(pc.pixelScale), rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
 
@@ -71,7 +71,7 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
             float2 uv = (float2(samplePosInt) + 0.5) * rc.gRectSizeInv;
             uv = RelaxMirrorUv(uv);
             samplePosInt = int2(uv * float2(rc.gRectSize));
-            int2 sampleFullPos = RelaxQuadFullPixel(samplePosInt, pc.pixelScale, rc.gFrameIndex);
+            int2 sampleFullPos = RelaxQuadFullPixel(samplePosInt, pc.pixelScale, rc.gFrameIndex, pc.viewZIndex, rc.gRectSizeInv / float(pc.pixelScale), rc.depthLinearizeMult, rc.depthLinearizeAdd);
 
             float3 sampleNormal = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(sampleFullPos, 0)), viewToWorld).rgb;
             float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);

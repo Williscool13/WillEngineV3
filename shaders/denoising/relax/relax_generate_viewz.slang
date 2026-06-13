@@ -20,7 +20,7 @@ void RelaxGenerateViewZMain(uniform RelaxGenerateViewZPushConstant pc, uint3 dti
         return;
     }
 
-    int2 fullPixel = RelaxQuadFullPixel(int2(pixelPos), pc.pixelScale, rc.gFrameIndex);
+    int2 fullPixel = RelaxQuadFullPixel(int2(pixelPos), pc.pixelScale, rc.gFrameIndex, pc.viewZIndex, rc.gRectSizeInv / float(pc.pixelScale), rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float raw = rdgTexturesFloat[pc.viewZIndex].Load(int3(fullPixel, 0)).r;
     float viewZ = ScreenToViewSpaceDepth(raw, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     rdgStorageFloat[pc.outViewZIndex][pixelPos] = viewZ;

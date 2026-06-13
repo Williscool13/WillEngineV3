@@ -22,7 +22,7 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
         return;
 
-    int2 fullPixel = RelaxQuadFullPixel(pixelPos, pc.pixelScale, rc.gFrameIndex);
+    int2 fullPixel = RelaxQuadFullPixel(pixelPos, pc.pixelScale, rc.gFrameIndex, pc.viewZIndex, rc.gRectSizeInv / float(pc.pixelScale), rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
         return;
@@ -55,7 +55,7 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             for (int cx = -2; cx <= 2; cx++)
             {
                 int2 p = clamp(pixelPos + int2(cx, cy), int2(0, 0), rc.gRectSize - int2(1, 1));
-                int2 tapFullPixel = RelaxQuadFullPixel(p, pc.pixelScale, rc.gFrameIndex);
+                int2 tapFullPixel = RelaxQuadFullPixel(p, pc.pixelScale, rc.gFrameIndex, pc.viewZIndex, rc.gRectSizeInv / float(pc.pixelScale), rc.depthLinearizeMult, rc.depthLinearizeAdd);
                 float3 sampleNormal = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(tapFullPixel, 0)), viewToWorld).rgb;
                 float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, tapFullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
                 float depthW = RelaxGetBilateralWeight(abs(sampleViewZ), abs(centerViewZ));
@@ -177,7 +177,7 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             bool isInside = all(p >= int2(0, 0)) && all(p < rc.gRectSize);
             float kernel = kernelWeights[abs(i)] * kernelWeights[abs(j)];
 
-            int2 pFull = RelaxQuadFullPixel(p, pc.pixelScale, rc.gFrameIndex);
+            int2 pFull = RelaxQuadFullPixel(p, pc.pixelScale, rc.gFrameIndex, pc.viewZIndex, rc.gRectSizeInv / float(pc.pixelScale), rc.depthLinearizeMult, rc.depthLinearizeAdd);
             float4 sampleNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(pFull, 0)), viewToWorld);
             float3 sampleNormal = sampleNR.rgb;
             float sampleRoughness = sampleNR.a;

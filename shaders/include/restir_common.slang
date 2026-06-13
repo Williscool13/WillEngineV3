@@ -4,6 +4,11 @@ import shader_constants;
 import lights_interop;
 import restir_interop;
 import pbr_functions;
+import bindless_declarations;
+import constants_interop;
+
+// Relative view-depth spread across a 2x2 full-res quad above which it is treated as a silhouette. Must match QUAD_UNIFORM_DEPTH_THRESHOLD in relax_utils.slang.
+public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
 
 /** Area light data transformed into view space, with derived geometry and emission cached. */
 public struct AreaLightVS
@@ -130,15 +135,24 @@ public float3 SampleAreaLightPos(AreaLightVS vs, float uU, float uV)
 
 /**
  * Maps a half-res pixel to its representative full-res gbuffer pixel.
- * Cycles the 2x2 quad corner per pixel and per frame so the fixed-corner bias becomes noise that temporal accumulation averages out.
- * Every consumer in the same frame must use this same mapping; history-side taps must pass the previous frame index.
+ * Uniform 2x2 quads cycle the corner per pixel and per frame so the fixed-corner bias becomes noise that temporal accumulation averages out.
+ * Quads straddling a depth discontinuity (silhouette) lock to a temporally-stable, spatially-dithered corner so the denoiser sees stable per-texel geometry and accumulates history instead of resetting every frame.
+ * Every consumer in the same frame must use this mapping with the same depth source; history-side taps must pass the previous frame index and previous depth.
+ * Must stay in sync with RelaxQuadFullPixel in relax_utils.slang.
  * Identity when pixelScale == 1.
  */
-public uint2 QuadFullPixel(uint2 pixel, uint pixelScale, uint frameIndex)
+public uint2 QuadFullPixel(uint2 pixel, uint pixelScale, uint frameIndex, uint depthIndex, float2 invFullExtent, float depthLinearizeMult, float depthLinearizeAdd)
 {
     if (pixelScale == 1u) { return pixel; }
-    uint sel = (pixel.x + pixel.y * 2u + frameIndex) & 3u;
-    return pixel * pixelScale + uint2(sel & 1u, sel >> 1u);
+    uint2 base = pixel * pixelScale;
+    float2 uv = (float2(base) + 1.0) * invFullExtent;
+    float4 z = rdgTexturesFloat[depthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);
+    float4 zl = depthLinearizeMult / (depthLinearizeAdd - z);
+    float zMin = min(min(zl.x, zl.y), min(zl.z, zl.w));
+    float zMax = max(max(zl.x, zl.y), max(zl.z, zl.w));
+    bool quadUniform = (zMax - zMin) <= QUAD_UNIFORM_DEPTH_THRESHOLD * max(zMax, 1e-4);
+    uint sel = quadUniform ? ((pixel.x + pixel.y * 2u + frameIndex) & 3u) : ((pixel.x + pixel.y * 2u) & 3u);
+    return base + uint2(sel & 1u, sel >> 1u);
 }
 
 /** PCG-style hash step. Advances the state and returns a uniform float in [0, 1). */
@@ -301,10 +315,14 @@ public float EvalPHat(AreaLightSample s, float3 V, float3 N, float3 albedo, floa
 public float EvalPHatVisibility(AreaLightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity,
                                  RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar)
 {
-    float3 toLight = worldyStar - worldShadingPos;
+    // Distance and TMax must be measured from the offset origin, not the surface point; otherwise the
+    // origin's advance toward the light (cosShade * offset) eats the far-end margin and the ray hits the
+    // light's own mesh when the normal faces it.
+    float3 rayOrigin = worldShadingPos + worldN * 0.05;
+    float3 toLight = worldyStar - rayOrigin;
     float lightDist = length(toLight);
     RayDesc shadowRay;
-    shadowRay.Origin = worldShadingPos + worldN * 0.05;
+    shadowRay.Origin = rayOrigin;
     shadowRay.Direction = toLight / lightDist;
     shadowRay.TMin = 0.001;
     shadowRay.TMax = lightDist - 0.05;

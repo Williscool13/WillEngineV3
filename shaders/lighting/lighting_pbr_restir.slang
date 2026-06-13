@@ -21,7 +21,8 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
         return;
     }
 
-    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex);
+    SceneData scene = pc.sceneData[pc.sceneDataIndex];
+    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex, pc.depthIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd);
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {
@@ -33,7 +34,6 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
         return;
     }
 
-    SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
