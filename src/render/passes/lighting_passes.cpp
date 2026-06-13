@@ -172,4 +172,47 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
 
     graph.CarryBufferToNextFrame(SID("gt_accum"), SID("gt_accum"), 0);
 }
+
+void SetupDirectionalLightingPass(RenderGraph& graph,
+                                  PipelineManager* pipelineManager,
+                                  const Core::ViewFamily& viewFamily,
+                                  Core::Array<uint32_t, 2> renderExtent,
+                                  const RenderTargets& targets,
+                                  uint32_t sceneIndex)
+{
+    if (!graph.HasTexture(SID("rt_sun_shadow"))) { return; }
+
+    RenderPass& pass = graph.AddPass(SID("Directional Lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(LIGHT_DATA_BUFFER);
+    pass.ReadSampledImage(targets.depthCopy);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.gbufferTwo);
+    pass.ReadSampledImage(SID("rt_sun_shadow"));
+    pass.ReadWriteImage(targets.colorOutput);
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent,
+            depth = targets.depthCopy, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
+            output = targets.colorOutput](VkCommandBuffer cmd) {
+            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("directional_light"));
+            if (!pipeline) { return; }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+
+            DirectionalLightPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+                .shadowIndex = graph.GetSampledImageViewDescriptorIndex(SID("rt_sun_shadow")),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
+                .sceneDataIndex = sceneIndex,
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+            };
+            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+            const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+            vkCmdDispatch(cmd, groupsX, groupsY, 1);
+        });
+}
 } // Render

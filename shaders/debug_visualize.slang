@@ -233,6 +233,16 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = ndotv <= 0.0 ? float3(1.0, 0, 0) : float3(0, ndotv, 0);
             break;
         }
+        case 28: { // SunShadowVisibility - rt_sun_shadow.r, grayscale (white lit, black shadowed)
+            srcPixel.xyz = float3(srcPixel.x);
+            break;
+        }
+        case 29: { // SunShadowHitDist - rt_sun_shadow.g closest-occluder distance; black where lit, gray ramp by distance (/20)
+            float lit = srcPixel.x;
+            float t = saturate(srcPixel.y / 20.0);
+            srcPixel.xyz = lit >= 0.5 ? float3(0.0) : float3(t);
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

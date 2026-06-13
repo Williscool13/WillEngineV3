@@ -350,6 +350,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("GTAO AO")) setDebugTarget("gtao_ao", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Edges")) setDebugTarget("gtao_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Filtered")) setDebugTarget("gtao_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::Separator();
+            if (ImGui::Button("Sun Shadow (Visibility)")) setDebugTarget("rt_sun_shadow", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
+            if (ImGui::Button("Sun Shadow (Hit Dist)")) setDebugTarget("rt_sun_shadow", DebugTransformationType::SunShadowHitDist, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("Anti-Aliasing")) {

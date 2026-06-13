@@ -31,6 +31,17 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   bool bReset,
                                   uint32_t accumulationCount,
                                   uint64_t frameNumber);
+
+/**
+ * Adds the analytic directional (sun) light, modulated by the rt_sun_shadow visibility, into the color target.
+ * Runs full-res over the gbuffer; no-ops if the rt_sun_shadow target is absent.
+ */
+void SetupDirectionalLightingPass(RenderGraph& graph,
+                                  PipelineManager* pipelineManager,
+                                  const Core::ViewFamily& viewFamily,
+                                  Core::Array<uint32_t, 2> renderExtent,
+                                  const RenderTargets& targets,
+                                  uint32_t sceneIndex);
 } // Render
 
 #endif //WILL_ENGINE_LIGHTING_PASSES_H

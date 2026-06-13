@@ -547,6 +547,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     break;
                 }
             }
+
+            if (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR) {
+                SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+                SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+            }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
         }
 

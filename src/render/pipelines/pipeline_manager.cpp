@@ -439,11 +439,16 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("lighting_ground_truth"), src / "lighting_ground_truth_compute.spv",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("directional_light"), src / "directional_light_compute.spv",
+                            sizeof(DirectionalLightPushConstant), PipelineCategory::Critical);
+
 
     RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test_compute.spv",
                             sizeof(RTShadowTestPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("rt_ground_truth_di"), src / "rt_ground_truth_di_compute.spv",
                             sizeof(RTGroundTruthDIPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("rt_sun_shadow"), src / "rt_sun_shadow_compute.spv",
+                            sizeof(RTSunShadowPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("shadows_resolve"), src / "shadows_resolve_compute.spv",
                             sizeof(ShadowsResolvePushConstant), PipelineCategory::Critical);

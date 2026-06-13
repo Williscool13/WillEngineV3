@@ -39,7 +39,18 @@ void SetupRTShadowTest(RenderGraph& graph,
                        uint32_t sceneIndex);
 
 /**
- * @brief RT ground truth direct illumination via next-event estimation.
+ * Traces one hard shadow ray per pixel toward the directional (sun) light.
+ * Writes binary visibility (1 lit, 0 occluded) to the rt_sun_shadow target. No-ops if the TLAS is absent.
+ */
+void SetupRTSunShadow(RenderGraph& graph,
+                      PipelineManager* pipelineManager,
+                      const Core::ViewFamily& viewFamily,
+                      Core::Array<uint32_t, 2> renderExtent,
+                      const RenderTargets& targets,
+                      uint32_t sceneIndex);
+
+/**
+ * RT ground truth direct illumination via next-event estimation.
  * Casts one shadow ray per pixel per frame toward a randomly sampled area light, evaluates PBR BRDF if visible, and accumulates into a persistent buffer.
  */
 void SetupRTGroundTruthDI(RenderGraph& graph,

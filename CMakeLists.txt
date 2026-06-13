@@ -420,9 +420,11 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_ground_truth.slang compute ComputeMain lighting_ground_truth
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_toon.slang compute ComputeMain lighting_toon
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeMain lighting_unlit
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/directional_light.slang compute ComputeMain directional_light
 
         ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_shadow_test.slang compute ComputeMain rt_shadow_test
         ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_ground_truth_di.slang compute ComputeMain rt_ground_truth_di
+        ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_sun_shadow.slang compute ComputeMain rt_sun_shadow
 
         # ReSTIR
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_transform_lights.slang compute ComputeMain restir_di_transform_lights
