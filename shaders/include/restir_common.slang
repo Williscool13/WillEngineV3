@@ -272,7 +272,8 @@ public float EvalPHat(AreaLightSample s, float3 V, float3 N, float3 albedo, floa
     float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
     float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
     // Uniform color weight, not luminance: a luminance-weighted target under-samples low-luminance hues (red vs yellow ~4x), which W must compensate with sparse high-energy spikes.
-    return brdf * s.cosShade * geomTerm * lightIntensity * dot(lightColor, float3(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)) * s.attenuation;
+    //return brdf * s.cosShade * geomTerm * lightIntensity * dot(lightColor, float3(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)) * s.attenuation;
+    return brdf * s.cosShade * geomTerm * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
 
     // Full BRDF target (GGX + Smith + Fresnel), kept for reference:
     // float3 H = normalize(V + s.L);

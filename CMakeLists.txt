@@ -435,6 +435,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_temporal.slang compute ComputeMain restir_di_temporal
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_spatial.slang compute ComputeMain restir_di_spatial
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_combined_temporal.slang compute ComputeMain restir_di_combined_temporal
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_remodulate.slang compute ReSTIRRemodulateMain restir_remodulate
 
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
 
@@ -486,7 +487,6 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_variance_estimate.slang compute SVGFVarianceEstimateMain svgf_variance_estimate
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_atrous_wavelet.slang compute SVGFAtrousWaveletMain svgf_atrous_wavelet
         ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_remodulate.slang compute SVGFRemodulateMain svgf_remodulate
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir_remodulate.slang compute ReSTIRRemodulateMain restir_remodulate
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_generate_viewz.slang compute RelaxGenerateViewZMain relax_generate_viewz
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_classify_tiles.slang compute RelaxClassifyTilesMain relax_classify_tiles
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_prepass.slang compute RelaxPrepassMain relax_prepass

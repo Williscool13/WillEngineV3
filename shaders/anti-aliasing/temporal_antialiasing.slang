@@ -14,6 +14,14 @@ static const int APRON_TEXEL_COUNT = APRON_DIM * APRON_DIM;
 
 static const float VIEWZ_CLAMP = 1e6;
 
+bool IsFinite3(float3 c) {
+    return !any(isnan(c)) && !any(isinf(c));
+}
+
+float3 SanitizeColor(float3 c) {
+    return IsFinite3(c) ? c : float3(0.0);
+}
+
 groupshared float3 gsColorYCoCg[APRON_DIM][APRON_DIM];
 groupshared uint gsPackedVelocity[APRON_DIM][APRON_DIM];
 groupshared float gsDepth[APRON_DIM][APRON_DIM];
@@ -127,7 +135,9 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_
     for (int i = int(groupIndex); i < APRON_TEXEL_COUNT; i += TILE_DIM * TILE_DIM) {
         int2 apronCoord = int2(i % APRON_DIM, i / APRON_DIM);
         int2 loadCoord = clamp(groupOrigin + apronCoord, int2(0), renderSize - 1);
-        gsColorYCoCg[apronCoord.y][apronCoord.x] = KarisTonemap(RGBToYCoCg(rdgTexturesFloat4[pc.colorResolvedIndex].Load(int3(loadCoord, 0)).rgb));
+        // Stop NaNs
+        float3 sourceColor = SanitizeColor(rdgTexturesFloat4[pc.colorResolvedIndex].Load(int3(loadCoord, 0)).rgb);
+        gsColorYCoCg[apronCoord.y][apronCoord.x] = KarisTonemap(RGBToYCoCg(sourceColor));
         gsPackedVelocity[apronCoord.y][apronCoord.x] = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(loadCoord, 0)).g;
         gsDepth[apronCoord.y][apronCoord.x] = rdgTexturesFloat[pc.depthIndex].Load(int3(loadCoord, 0)).r;
     }
@@ -182,6 +192,13 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_
     float3 currentYCoCg = gsColorYCoCg[local.y][local.x];
     float3 resultYCoCg;
 
+    float3 historyYCoCg = float3(0.0);
+    if (validHistory) {
+        historyYCoCg = KarisTonemap(SampleHistoryCatmullRom(historyUv));
+        // Stop NaNs
+        validHistory = IsFinite3(historyYCoCg);
+    }
+
     if (!validHistory) {
         // No usable history: pull toward the neighborhood mean as cheap spatial anti-aliasing instead of outputting raw jittered color
         resultYCoCg = lerp(currentYCoCg, mean, pc.invalidHistoryBlend);
@@ -190,7 +207,6 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_
         float viewZDelta = UnpackViewZDelta(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(texelCoord, 0)).w);
         float disocclusion = ComputeDepthDisocclusion(historyUv, viewZ + viewZDelta);
 
-        float3 historyYCoCg = KarisTonemap(SampleHistoryCatmullRom(historyUv));
         historyYCoCg = ClipToNeighborhood(historyYCoCg, minc, maxc);
 
         float alpha = lerp(pc.baseBlendAlpha, 1.0, disocclusion);
