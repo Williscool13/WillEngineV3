@@ -38,7 +38,6 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
 void ResolvePhysicsMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolvePhysicsShapeCreation(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolvePhysicsBodyCreation(Engine::EngineContext* ctx, Engine::EngineState* state);
-void PhysicsOnPlayStop(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, JPH::ObjectLayer layerOverride = JPH::ObjectLayer(0xFFFF));
 JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager);

@@ -607,10 +607,4 @@ void ResolvePhysicsBodyCreation(Engine::EngineContext* ctx, Engine::EngineState*
         state->registry.remove<Component::PendingPhysicsBodyCreationTag>(entity);
     }
 }
-
-void PhysicsOnPlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
-{
-    state->registry.clear<Component::PhysicsBodyComponent>();
-    state->registry.clear<Component::DynamicPhysicsBodyComponent>();
-}
 } // Game

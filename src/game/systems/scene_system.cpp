@@ -599,8 +599,6 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->registry.ctx().erase<PhysicsPlayerController>();
     }
 
-    PhysicsOnPlayStop(ctx, state);
-
     Core::InlineVector<StringID, 8> scenesToUnload;
     for (Engine::RuntimeSceneMetadata scene : state->editor.loadedScenes) {
         scenesToUnload.PushBack(scene.sceneId);

@@ -578,7 +578,6 @@ struct ReSTIRParams
     bool bSpatial2{false};
     float iblIntensity{1.0f};
     Mode mode{Mode::CombinedTemporal};
-    ReSTIRDebugStop debugStop{ReSTIRDebugStop::Spatial1};
     uint32_t spatialRadius{30};
     uint32_t spatialNeighbors{5};
     uint32_t spatialMCap{500};

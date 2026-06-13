@@ -56,7 +56,6 @@ ProjectConfig ReadProjectConfig()
         p.bDualReservoir = getBool("bDualReservoir", p.bDualReservoir);
         p.iblIntensity = r.contains("iblIntensity") && r["iblIntensity"].is_number() ? r["iblIntensity"].get<float>() : p.iblIntensity;
         p.mode = static_cast<Core::ReSTIRParams::Mode>(getInt("mode", static_cast<int32_t>(p.mode)));
-        p.debugStop = static_cast<Core::ReSTIRDebugStop>(getInt("debugStop", static_cast<int32_t>(p.debugStop)));
         p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
         p.spatialNeighbors = getUint("spatialNeighbors", p.spatialNeighbors);
         p.spatialMCap = getUint("spatialMCap", p.spatialMCap);
@@ -249,7 +248,6 @@ bool WriteProjectConfig(const ProjectConfig& config)
         {"bDualReservoir", p.bDualReservoir},
         {"iblIntensity", p.iblIntensity},
         {"mode", static_cast<int32_t>(p.mode)},
-        {"debugStop", static_cast<int32_t>(p.debugStop)},
         {"spatialRadius", p.spatialRadius},
         {"spatialNeighbors", p.spatialNeighbors},
         {"spatialMCap", p.spatialMCap},

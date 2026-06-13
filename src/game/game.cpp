@@ -273,7 +273,9 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     // Dirty carry-over to next frame
     Game::MarkRenderTransformsDirty(ctx, state);
-    Game::MarkPhysicsTransformsDirty(state);
+    if (state->bIsPlaying) {
+        Game::MarkPhysicsTransformsDirty(state);
+    }
 
     // Frame Cleanup
     state->registry.clear<Game::Component::DirtyTransformTag>();

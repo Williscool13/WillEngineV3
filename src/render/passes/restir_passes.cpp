@@ -151,12 +151,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 
-        if (restirParams.debugStop == Core::ReSTIRDebugStop::Generate) {
-            graph.CarryBufferToNextFrame(SID("restir_reservoir_buffer"), SID("restir_reservoir_history"), 0);
-            graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_buffer"));
-            return;
-        }
-
         // Temporal Reuse
         if (!graph.HasBuffer(SID("restir_reservoir_history"))) {
             graph.AliasBuffer(SID("restir_reservoir_temporal"), SID("restir_reservoir_buffer"));
@@ -212,12 +206,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 vkCmdDispatch(cmd, groupsX, groupsY, 1);
             });
         }
-
-        if (restirParams.debugStop == Core::ReSTIRDebugStop::Temporal) {
-            graph.CarryBufferToNextFrame(SID("restir_reservoir_temporal"), SID("restir_reservoir_history"), 0);
-            graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_temporal"));
-            return;
-        }
     }
 
     // Spatial Reuse 1
@@ -269,11 +257,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
     });
 
     graph.CarryBufferToNextFrame(SID("restir_reservoir_temporal"), SID("restir_reservoir_history"), 0);
-
-    if (restirParams.debugStop == Core::ReSTIRDebugStop::Spatial1 || !restirParams.bSpatial2) {
-        graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_spatial"));
-        return;
-    }
 
     // Spatial Reuse 2
     graph.CreateBuffer(SID("restir_reservoir_spatial2"), reservoirBufferSize, true);

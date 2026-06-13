@@ -338,11 +338,6 @@ void DrawLightingWindow(Engine::EngineState* state)
             }
             ImGui::Separator();
             const char* stopLabels[] = {"After Spatial 1", "After Temporal", "After Generate"};
-            int stopIdx = static_cast<int>(restir.debugStop);
-            if (ImGui::Combo("Debug Stop", &stopIdx, stopLabels, 3)) {
-                restir.debugStop = static_cast<Core::ReSTIRDebugStop>(stopIdx);
-                changed = true;
-            }
         }
 
         if (ImGui::CollapsingHeader("Denoiser")) {

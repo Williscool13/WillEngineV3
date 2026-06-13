@@ -1384,7 +1384,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     transform->rotation = deltaRotation * transform->rotation;
 
                     state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
-                    state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+                    if (state->bIsPlaying) {
+                        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+                    }
                 }
             }
             else {
