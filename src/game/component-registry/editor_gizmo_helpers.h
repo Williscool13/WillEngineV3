@@ -12,27 +12,30 @@
 
 namespace Editor
 {
-// --- Centralized editor colors ---
-
 /** Axis-colored dot handles and ImDrawList geometry. */
-constexpr ImU32 ColorAxisX = IM_COL32(220, 60,  60,  255);
-constexpr ImU32 ColorAxisY = IM_COL32(60,  220, 60,  255);
-constexpr ImU32 ColorAxisZ = IM_COL32(60,  100, 220, 255);
+constexpr ImU32 COLOR_AXIS_X = IM_COL32(220, 60, 60, 255);
+constexpr ImU32 COLOR_AXIS_Y = IM_COL32(60, 220, 60, 255);
+constexpr ImU32 COLOR_AXIS_Z = IM_COL32(60, 100, 220, 255);
 
 /** Axis-colored debug geometry (DEBUG_ADD_* macros). */
-constexpr Vec4 DebugAxisX{0.86f, 0.24f, 0.24f, 1.0f};
-constexpr Vec4 DebugAxisY{0.24f, 0.86f, 0.24f, 1.0f};
-constexpr Vec4 DebugAxisZ{0.24f, 0.39f, 0.86f, 1.0f};
+constexpr Vec4 DEBUG_AXIS_X{0.86f, 0.24f, 0.24f, 1.0f};
+constexpr Vec4 DEBUG_AXIS_Y{0.24f, 0.86f, 0.24f, 1.0f};
+constexpr Vec4 DEBUG_AXIS_Z{0.24f, 0.39f, 0.86f, 1.0f};
 
 
 /** Edit-mode toggle button background colors. */
-constexpr ImVec4 ButtonTransparent{0.0f, 0.0f, 0.0f, 0.0f};
-constexpr ImVec4 ButtonEditing{0.15f, 0.65f, 0.15f, 1.0f};
-constexpr ImVec4 ButtonIdle{0.15f, 0.35f, 0.65f, 1.0f};
+constexpr ImVec4 BUTTON_TRANSPAREN{0.0f, 0.0f, 0.0f, 0.0f};
+constexpr ImVec4 BUTTON_EDITING{0.15f, 0.65f, 0.15f, 1.0f};
+constexpr ImVec4 BUTTON_IDLE{0.15f, 0.35f, 0.65f, 1.0f};
 
-// --- Helpers ---
+/** DotHandle fill states and outline. */
+constexpr ImU32 DOT_HANDLE_DEFAULT = IM_COL32(128, 200, 255, 255);
+constexpr ImU32 DOT_HANDLE_HOVERED = IM_COL32(200, 235, 255, 255);
+constexpr ImU32 DOT_HANDLE_ACTIVE = IM_COL32(255, 255, 255, 255);
+constexpr ImU32 DOT_HANDLE_OUTLINE = IM_COL32(255, 255, 255, 160);
 
 bool WorldToScreen(Vec3 worldPos, const Mat4& view, const Mat4& proj, Vec4 viewport, ImVec2& outScreen);
+
 Vec3 ScreenToRay(ImVec2 screenPos, const Mat4& view, const Mat4& proj, Vec4 viewport);
 
 /**
@@ -40,18 +43,19 @@ Vec3 ScreenToRay(ImVec2 screenPos, const Mat4& view, const Mat4& proj, Vec4 view
  * Sets state->editor.bExclusiveGizmoActive when hovered or active to suppress viewport selection.
  * Drag plane normal for a single-axis constraint: normalize(cameraForward - dot(cameraForward, axis) * axis).
  * @param handleId Unique integer per simultaneously-visible handle.
+ * @return true if this handle is hovered or actively dragged this frame (lets callers give it input priority).
  */
 template<typename Fn>
-void DotHandle(int32_t handleId, Vec3 worldPos, Vec3 dragPlaneNormal,
+bool DotHandle(int32_t handleId, Vec3 worldPos, Vec3 dragPlaneNormal,
                const Mat4& view, const Mat4& proj, Vec4 viewport, Vec3 cameraPos,
                Engine::EngineState* state, Fn onMoved,
-               ImU32 color = IM_COL32(128, 200, 255, 255), float screenRadius = 7.0f)
+               ImU32 color = DOT_HANDLE_DEFAULT, float screenRadius = 7.0f)
 {
     ImVec2 screen;
-    if (!WorldToScreen(worldPos, view, proj, viewport, screen)) { return; }
+    if (!WorldToScreen(worldPos, view, proj, viewport, screen)) { return false; }
 
     const bool anotherDotActive = state->editor.activeDotHandleId >= 0 && state->editor.activeDotHandleId != handleId;
-    if (anotherDotActive) { return; }
+    if (anotherDotActive) { return false; }
 
     ImVec2 mouse = ImGui::GetIO().MousePos;
     float dx = mouse.x - screen.x;
@@ -70,13 +74,11 @@ void DotHandle(int32_t handleId, Vec3 worldPos, Vec3 dragPlaneNormal,
 
     if (hovered || active) { state->editor.bExclusiveGizmoActive = true; }
 
-    ImU32 fill = active  ? IM_COL32(255, 255, 255, 255)
-               : hovered ? IM_COL32(200, 235, 255, 255)
-               : color;
+    ImU32 fill = active ? DOT_HANDLE_ACTIVE : hovered ? DOT_HANDLE_HOVERED : color;
 
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
     dl->AddCircleFilled(screen, screenRadius, fill);
-    dl->AddCircle(screen, screenRadius + 1.5f, IM_COL32(255, 255, 255, 160), 0, 1.5f);
+    dl->AddCircle(screen, screenRadius + 1.5f, DOT_HANDLE_OUTLINE, 0, 1.5f);
 
     if (active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
         Vec3 rayDir = ScreenToRay(mouse, view, proj, viewport);
@@ -86,6 +88,8 @@ void DotHandle(int32_t handleId, Vec3 worldPos, Vec3 dragPlaneNormal,
             if (t > 0.0f) { onMoved(cameraPos + t * rayDir); }
         }
     }
+
+    return hovered || active;
 }
 } // Editor
 

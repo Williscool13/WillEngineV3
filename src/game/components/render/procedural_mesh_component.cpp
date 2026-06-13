@@ -525,9 +525,9 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::AlignTextToFramePadding();
                     ImGui::TextUnformatted("Size");
                     ImGui::SameLine(labelColW);
-                    drawSizeField("##bsx", &p.sizeX, Editor::ColorAxisX); ImGui::SameLine(0, innerSpacing);
-                    drawSizeField("##bsy", &p.sizeY, Editor::ColorAxisY); ImGui::SameLine(0, innerSpacing);
-                    drawSizeField("##bsz", &p.sizeZ, Editor::ColorAxisZ);
+                    drawSizeField("##bsx", &p.sizeX, Editor::COLOR_AXIS_X); ImGui::SameLine(0, innerSpacing);
+                    drawSizeField("##bsy", &p.sizeY, Editor::COLOR_AXIS_Y); ImGui::SameLine(0, innerSpacing);
+                    drawSizeField("##bsz", &p.sizeZ, Editor::COLOR_AXIS_Z);
                 }
                 else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
                     ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);

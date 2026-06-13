@@ -218,7 +218,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
             ImGui::SameLine();
 
             const bool isEditing = (editPointIdx == i);
-            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
+            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
             ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !isEditing);
             if (ImGui::SmallButton(isEditing ? "D##edit" : "E##edit")) {
                 editPointIdx = isEditing ? -1 : i;

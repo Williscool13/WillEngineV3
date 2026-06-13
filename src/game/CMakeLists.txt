@@ -29,6 +29,8 @@ set(GAME_SOURCES
         components/physics/physics_body_component.h
         components/physics/physics_body_desc.cpp
         components/physics/physics_body_desc.h
+        components/physics/physics_shape_helpers.cpp
+        components/physics/physics_shape_helpers.h
 
         components/render/static_mesh_component.cpp
         components/render/static_mesh_component.h

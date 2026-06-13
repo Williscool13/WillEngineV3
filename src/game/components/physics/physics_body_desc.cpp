@@ -8,6 +8,7 @@
 #include <json/nlohmann/json.hpp>
 
 #include "physics_components.h"
+#include "physics_shape_helpers.h"
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 
@@ -24,16 +25,43 @@ namespace Game::Component
 void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<PhysicsBodyDesc>(entity);
-
-    if (component.shapes.IsEmpty()) {
-        PhysicsShapeDesc d{};
-        d.type = PhysicsShapeType::Box;
-        d.box.halfExtents = glm::vec3(0.5f);
-        component.shapes.PushBack(d);
-    }
-
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
+
+    // Default shape automatically fits to procedurals (static meshes just get box)
+    if (component.shapes.IsEmpty()) {
+        auto* transform = registry.try_get<TransformComponent>(entity);
+        const glm::vec3 scale = transform ? transform->scale : glm::vec3(1.0f);
+
+        if (auto* sm = registry.try_get<StaticMeshComponent>(entity); sm && sm->modelId.IsValid()) {
+            PhysicsShapeDesc box{};
+            box.type = PhysicsShapeType::Box;
+            box.box.halfExtents = glm::vec3(0.5f);
+            const auto* meta = ctx->assetManager->GetModelMetadata(sm->modelId);
+            if (meta && meta->bounds.aabb.min.x <= meta->bounds.aabb.max.x) {
+                box.box.halfExtents = meta->bounds.aabb.HalfExtents() * scale;
+                box.offset = meta->bounds.aabb.Center() * scale;
+            }
+            component.shapes.PushBack(box);
+        }
+        else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
+            component.shapes.PushBack(MakeProceduralShape(pm->params, scale));
+        }
+        else if (auto* splm = registry.try_get<SplineMeshComponent>(entity); splm && !splm->spline.points.IsEmpty()) {
+            PhysicsShapeDesc s{};
+            s.type = PhysicsShapeType::TriangleMesh;
+            s.bakedScale = scale;
+            FillSplineParams(s.splineParams, *splm);
+            component.shapes.PushBack(s);
+        }
+        else {
+            PhysicsShapeDesc d{};
+            d.type = PhysicsShapeType::Box;
+            d.box.halfExtents = glm::vec3(0.5f);
+            component.shapes.PushBack(d);
+        }
+    }
+
     bool needsResolve = false;
     for (auto& shape : component.shapes) {
         if (shape.type != PhysicsShapeType::ConvexHull && shape.type != PhysicsShapeType::TriangleMesh) { continue; }
@@ -533,7 +561,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
     bool open = ImGui::CollapsingHeader("Physics Body", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
-    ImGui::PushStyleColor(ImGuiCol_Button, Editor::ButtonTransparent);
+    ImGui::PushStyleColor(ImGuiCol_Button, Editor::BUTTON_TRANSPAREN);
     bool remove = ImGui::SmallButton("X");
     ImGui::PopStyleColor();
 
@@ -654,7 +682,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
                     if (bHasAny) {
                         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
-                        ImGui::PushStyleColor(ImGuiCol_Button, Editor::ButtonTransparent);
+                        ImGui::PushStyleColor(ImGuiCol_Button, Editor::BUTTON_TRANSPAREN);
                         const bool bShouldClearMesh = ImGui::SmallButton("X");
                         ImGui::PopStyleColor();
                         if (bShouldClearMesh) {
@@ -726,17 +754,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                                 shape.proceduralParams = pm->params;
                             }
                             else if (auto* splm = registry.try_get<SplineMeshComponent>(entity)) {
-                                shape.splineParams.spline = splm->spline;
-                                shape.splineParams.radius = splm->radius;
-                                shape.splineParams.rollAngle = splm->rollAngle;
-                                shape.splineParams.sides = splm->sides;
-                                shape.splineParams.segmentsPerSpan = splm->segmentsPerSpan;
-                                shape.splineParams.bCaps = splm->bCaps;
-                                shape.splineParams.bDualPath = splm->bDualPath;
-                                shape.splineParams.dualPathSpacing = splm->dualPathSpacing;
-                                shape.splineParams.bCrossPlanks = splm->bCrossPlanks;
-                                shape.splineParams.crossPlankInterval = splm->crossPlankInterval;
-                                shape.splineParams.crossPlankHeight = splm->crossPlankHeight;
+                                FillSplineParams(shape.splineParams, *splm);
                             }
                             break;
                     }
@@ -764,7 +782,62 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 static_cast<float>(ctx->windowContext.viewportOffsetY),
                 static_cast<float>(ctx->windowContext.viewportWidth),
                 static_cast<float>(ctx->windowContext.viewportHeight),
-            }; {
+            };
+
+            constexpr ImU32 colorX = Editor::COLOR_AXIS_X;
+            constexpr ImU32 colorY = Editor::COLOR_AXIS_Y;
+            constexpr ImU32 colorZ = Editor::COLOR_AXIS_Z;
+
+            // Handles run before the offset gizmo so they win overlapping clicks.
+            bool bHandleBusy = false;
+            switch (shape.type) {
+                case PhysicsShapeType::Sphere:
+                {
+                    const Vec3 planeNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
+                    bHandleBusy |= Editor::DotHandle(10000, shapeCenter + entityRight * shape.sphere.radius, planeNormal,
+                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                     [&](Vec3 newPt) { shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
+                                                     colorX);
+                    break;
+                }
+                case PhysicsShapeType::Capsule:
+                {
+                    const Vec3 upPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
+                    const Vec3 rightPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
+                    bHandleBusy |= Editor::DotHandle(10000, shapeCenter + entityUp * shape.capsule.halfHeight, upPlane,
+                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                     [&](Vec3 newPt) { shape.capsule.halfHeight = glm::max(0.001f, glm::dot(newPt - shapeCenter, entityUp)); },
+                                                     colorY);
+                    bHandleBusy |= Editor::DotHandle(10001, shapeCenter + entityRight * shape.capsule.radius, rightPlane,
+                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                     [&](Vec3 newPt) { shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
+                                                     colorX);
+                    break;
+                }
+                case PhysicsShapeType::Box:
+                {
+                    const Vec3 xPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
+                    const Vec3 yPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
+                    const Vec3 zPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityForward) * entityForward);
+                    bHandleBusy |= Editor::DotHandle(10000, shapeCenter + entityRight * shape.box.halfExtents.x, xPlane,
+                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                     [&](Vec3 newPt) { shape.box.halfExtents.x = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityRight))); },
+                                                     colorX);
+                    bHandleBusy |= Editor::DotHandle(10001, shapeCenter + entityUp * shape.box.halfExtents.y, yPlane,
+                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                     [&](Vec3 newPt) { shape.box.halfExtents.y = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityUp))); },
+                                                     colorY);
+                    bHandleBusy |= Editor::DotHandle(10002, shapeCenter + entityForward * shape.box.halfExtents.z, zPlane,
+                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                     [&](Vec3 newPt) { shape.box.halfExtents.z = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityForward))); },
+                                                     colorZ);
+                    break;
+                }
+                default:
+                    break;
+            }
+
+            if (!bHandleBusy && state->editor.activeDotHandleId == -1) {
                 ImGuizmo::SetGizmoSizeClipSpace(0.10f);
                 ImGuizmo::PushID(0);
                 Mat4 mat = glm::translate(Mat4(1.0f), shapeCenter);
@@ -776,59 +849,9 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 ImGuizmo::SetGizmoSizeClipSpace(0.1f);
             }
 
-            constexpr ImU32 colorX = Editor::ColorAxisX;
-            constexpr ImU32 colorY = Editor::ColorAxisY;
-            constexpr ImU32 colorZ = Editor::ColorAxisZ;
-            switch (shape.type) {
-                case PhysicsShapeType::Sphere:
-                {
-                    const Vec3 planeNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
-                    Editor::DotHandle(10000, shapeCenter + entityRight * shape.sphere.radius, planeNormal,
-                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                      [&](Vec3 newPt) { shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
-                                      colorX);
-                    break;
-                }
-                case PhysicsShapeType::Capsule:
-                {
-                    const Vec3 upPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
-                    const Vec3 rightPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
-                    Editor::DotHandle(10000, shapeCenter + entityUp * shape.capsule.halfHeight, upPlane,
-                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                      [&](Vec3 newPt) { shape.capsule.halfHeight = glm::max(0.001f, glm::dot(newPt - shapeCenter, entityUp)); },
-                                      colorY);
-                    Editor::DotHandle(10001, shapeCenter + entityRight * shape.capsule.radius, rightPlane,
-                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                      [&](Vec3 newPt) { shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
-                                      colorX);
-                    break;
-                }
-                case PhysicsShapeType::Box:
-                {
-                    const Vec3 xPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
-                    const Vec3 yPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
-                    const Vec3 zPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityForward) * entityForward);
-                    Editor::DotHandle(10000, shapeCenter + entityRight * shape.box.halfExtents.x, xPlane,
-                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                      [&](Vec3 newPt) { shape.box.halfExtents.x = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityRight))); },
-                                      colorX);
-                    Editor::DotHandle(10001, shapeCenter + entityUp * shape.box.halfExtents.y, yPlane,
-                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                      [&](Vec3 newPt) { shape.box.halfExtents.y = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityUp))); },
-                                      colorY);
-                    Editor::DotHandle(10002, shapeCenter + entityForward * shape.box.halfExtents.z, zPlane,
-                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                      [&](Vec3 newPt) { shape.box.halfExtents.z = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityForward))); },
-                                      colorZ);
-                    break;
-                }
-                default:
-                    break;
-            }
-
-            constexpr Vec4 editColorX = Editor::DebugAxisX;
-            constexpr Vec4 editColorY = Editor::DebugAxisY;
-            constexpr Vec4 editColorZ = Editor::DebugAxisZ;
+            constexpr Vec4 editColorX = Editor::DEBUG_AXIS_X;
+            constexpr Vec4 editColorY = Editor::DEBUG_AXIS_Y;
+            constexpr Vec4 editColorZ = Editor::DEBUG_AXIS_Z;
             switch (shape.type) {
                 case PhysicsShapeType::Sphere:
                     DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, shape.sphere.radius, editColorX});
@@ -866,7 +889,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             auto& shape = component.shapes[0];
             const bool isEditing = (editShapeIdx == 0);
             ImGui::PushID(0);
-            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
+            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
             ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !isEditing);
             if (ImGui::Button(isEditing ? "Done" : "Edit")) {
                 editShapeIdx = isEditing ? -1 : 0;
@@ -893,7 +916,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 const float spacing = ImGui::GetStyle().ItemSpacing.x;
 
                 ImGui::SameLine(avail - xBtnW - spacing - editBtnW);
-                ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
+                ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
                 ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !isEditing);
                 if (ImGui::SmallButton(isEditing ? "Done##edit" : "Edit##edit")) {
                     editShapeIdx = isEditing ? -1 : i;
@@ -902,7 +925,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 ImGui::PopStyleColor();
 
                 ImGui::SameLine(avail - xBtnW);
-                ImGui::PushStyleColor(ImGuiCol_Button, Editor::ButtonTransparent);
+                ImGui::PushStyleColor(ImGuiCol_Button, Editor::BUTTON_TRANSPAREN);
                 if (ImGui::SmallButton("X##shape")) {
                     shapeToRemove = i;
                     if (editShapeIdx == i) { editShapeIdx = -1; }

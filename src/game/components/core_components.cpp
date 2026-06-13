@@ -72,11 +72,11 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
             return changed;
         };
 
-        c |= drawField(idX, v + 0, Editor::ColorAxisX);
+        c |= drawField(idX, v + 0, Editor::COLOR_AXIS_X);
         ImGui::SameLine(0, innerSpacing);
-        c |= drawField(idY, v + 1, Editor::ColorAxisY);
+        c |= drawField(idY, v + 1, Editor::COLOR_AXIS_Y);
         ImGui::SameLine(0, innerSpacing);
-        c |= drawField(idZ, v + 2, Editor::ColorAxisZ);
+        c |= drawField(idZ, v + 2, Editor::COLOR_AXIS_Z);
         return c;
     };
 

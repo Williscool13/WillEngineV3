@@ -422,11 +422,11 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         };
         auto drawXYZ = [&](const char* idX, const char* idY, const char* idZ, float* v, float speed, bool editable) -> bool {
             bool c = false;
-            c |= drawField(idX, v + 0, Editor::ColorAxisX, speed, editable);
+            c |= drawField(idX, v + 0, Editor::COLOR_AXIS_X, speed, editable);
             ImGui::SameLine(0, innerSpacing);
-            c |= drawField(idY, v + 1, Editor::ColorAxisY, speed, editable);
+            c |= drawField(idY, v + 1, Editor::COLOR_AXIS_Y, speed, editable);
             ImGui::SameLine(0, innerSpacing);
-            c |= drawField(idZ, v + 2, Editor::ColorAxisZ, speed, editable);
+            c |= drawField(idZ, v + 2, Editor::COLOR_AXIS_Z, speed, editable);
             return c;
         };
 
@@ -456,7 +456,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             }
         }
 
-        ImGui::PushStyleColor(ImGuiCol_Button, bEditingOffset ? Editor::ButtonEditing : Editor::ButtonIdle);
+        ImGui::PushStyleColor(ImGuiCol_Button, bEditingOffset ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditingOffset);
         if (ImGui::Button(bEditingOffset ? "Done##offsetedit" : "Edit##offsetedit")) {
             bEditingOffset = !bEditingOffset;

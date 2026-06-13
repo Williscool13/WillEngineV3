@@ -61,7 +61,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         ImGui::EndDisabled();
         ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
 
-        ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
+        ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing);
         if (ImGui::Button(bEditing ? "Done##aledit" : "Edit##aledit")) {
             bEditing = !bEditing;
@@ -101,13 +101,13 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
             Editor::DotHandle(20000, center + right * comp.halfWidth * transform->scale.x, widthPlaneNormal,
                               vd.view, vd.proj, viewport, vd.cameraPos, state,
                               [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); },
-                              Editor::ColorAxisX);
+                              Editor::COLOR_AXIS_X);
 
             const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
             Editor::DotHandle(20001, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
                               vd.view, vd.proj, viewport, vd.cameraPos, state,
                               [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); },
-                              Editor::ColorAxisY);
+                              Editor::COLOR_AXIS_Y);
         }
     }
 
