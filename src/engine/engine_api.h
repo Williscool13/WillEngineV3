@@ -216,7 +216,6 @@ struct DebugState
     bool bEnableShadeDispatchBucketingVisualization{false};
     bool bEnableLightingBucketingVisualization{false};
     Core::ReSTIRParams restir{};
-    Core::RELAXParams relax{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
     Core::InlineString<> resourceName{};

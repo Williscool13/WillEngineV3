@@ -306,7 +306,7 @@ public float EvalPHatVisibility(AreaLightSample s, float3 V, float3 N, float3 al
     RayDesc shadowRay;
     shadowRay.Origin = worldShadingPos + worldN * 0.05;
     shadowRay.Direction = toLight / lightDist;
-    shadowRay.TMin = 0.01;
+    shadowRay.TMin = 0.001;
     shadowRay.TMax = lightDist - 0.05;
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     q.TraceRayInline(tlas, 0, 0xFF, shadowRay);

@@ -91,7 +91,7 @@ ProjectConfig ReadProjectConfig()
         auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
         auto getFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
 
-        Core::RELAXParams& p = config.relax;
+        Core::RELAXParams& p = config.restir.relax;
         p.denoisingRange = getFloat("denoisingRange", p.denoisingRange);
         p.disocclusionThreshold = getFloat("disocclusionThreshold", p.disocclusionThreshold);
         p.depthThreshold = getFloat("depthThreshold", p.depthThreshold);
@@ -260,7 +260,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
         {"svgf", nlohmann::json{{"alphaMin", p.svgf.alphaMin}, {"gradientThreshold", p.svgf.gradientThreshold}, {"sigmaLuminance", p.svgf.sigmaLuminance}, {"sigmaNormal", p.svgf.sigmaNormal}, {"sigmaDepth", p.svgf.sigmaDepth}, {"atrousIterations", p.svgf.atrousIterations}}},
     };
 
-    const Core::RELAXParams& rx = config.relax;
+    const Core::RELAXParams& rx = config.restir.relax;
     j["relax"] = {
         {"denoisingRange", rx.denoisingRange},
         {"disocclusionThreshold", rx.disocclusionThreshold},

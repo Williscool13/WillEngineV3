@@ -94,11 +94,11 @@ set(GAME_SOURCES
         systems/common_systems.h
         systems/gameplay_systems.cpp
         systems/gameplay_systems.h
-        systems/component_editor.cpp
-        systems/component_editor.h
         components/render/light_components.cpp
         components/render/light_components.h
         component-registry/editor_gizmo_helpers.cpp
+        settings/graphics_settings.cpp
+        settings/graphics_settings.h
 )
 
 set(GAME_INCLUDE_DIRS

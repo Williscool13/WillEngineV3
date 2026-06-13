@@ -612,6 +612,8 @@ struct ReSTIRParams
         int32_t atrousIterations{4};
     };
     SVGFParams svgf{};
+
+    RELAXParams relax{};
 };
 
 struct ViewFamily
@@ -733,7 +735,6 @@ struct FrameBuffer
     bool bEnableLightingBucketingVisualization = false;
     bool bLogRDG = false;
     ReSTIRParams restir{};
-    RELAXParams relax{};
 
     bool bTakeScreenshot{false};
 };

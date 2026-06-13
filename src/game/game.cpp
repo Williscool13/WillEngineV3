@@ -312,7 +312,6 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bEnableShadeDispatchBucketingVisualization = state->debug.bEnableShadeDispatchBucketingVisualization;
     frameBuffer->bEnableLightingBucketingVisualization = state->debug.bEnableLightingBucketingVisualization;
     frameBuffer->restir = state->debug.restir;
-    frameBuffer->relax = state->debug.relax;
     frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;
     frameBuffer->mainViewFamily.bResetGroundTruth = state->lighting.bResetGroundTruth;
     if (frameBuffer->mainViewFamily.lightingMode == Core::LightingMode::GroundTruthReSTIR) {

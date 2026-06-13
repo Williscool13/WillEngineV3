@@ -367,6 +367,8 @@ SHADER_PUBLIC struct VisibilityShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // in
+    uint32_t pad0;
+    uint32_t pad1;
     SHADER_PUBLIC uint2 extents;
     // In
     SHADER_PUBLIC uint32_t materialIndex;

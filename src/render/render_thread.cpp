@@ -517,7 +517,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
             const Core::ReSTIRParams& restir = frameBuffer.restir;
-            const Core::RELAXParams& relax = frameBuffer.relax;
+            const Core::RELAXParams& relax = restir.relax;
             switch (viewFamily.lightingMode) {
                 case Core::LightingMode::Default:
                 {

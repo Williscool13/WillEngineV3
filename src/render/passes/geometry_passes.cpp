@@ -671,7 +671,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.Execute([&, pipelineManager, sceneIndex,
             visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            sortedMaterials, materialCount](VkCommandBuffer cmd) {
+            sortedMaterials, materialCount, renderExtent](VkCommandBuffer cmd) {
             VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER);
 
             StringID boundShader{};
@@ -701,6 +701,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                     .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                     .shadeDispatchBuffer = shadeDispatchAddress,
+                    .extents = {renderExtent[0], renderExtent[1]},
                     .materialIndex = entry.materialIndex,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
