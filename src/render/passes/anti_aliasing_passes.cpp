@@ -20,7 +20,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     graph.CreateTexture(SID("smaa_blend"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("smaa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-    const Core::SMAAConfiguration& smaaConfig = viewFamily.smaaConfig;
+    const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
     // Pass 1: Edge Detection
     RenderPass& edgePass = graph.AddPass(SID("SMAA Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
@@ -120,7 +120,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     graph.CreateTexture(SID("smaa_t2x_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CarryTextureToNextFrame(SID("smaa_t2x_current"), SID("smaa_t2x_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    const Core::SMAAConfiguration& smaaConfig = viewFamily.smaaConfig;
+    const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
     // Pass 1: Edge Detection
     RenderPass& edgePass = graph.AddPass(SID("SMAA T2X Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
@@ -284,7 +284,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     // taa_current doubles as next frame's history, so downstream passes get their own copy written by the same dispatch
     graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-    const Core::TAAConfiguration& taaConfig = viewFamily.taaConfig;
+    const Core::TAAConfiguration& taaConfig = viewFamily.aaConfig.taa;
 
     RenderPass& taaPass = graph.AddPass(SID("TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
     taaPass.ReadBuffer(SID("scene_data"));

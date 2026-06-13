@@ -102,4 +102,18 @@ bool SliderInt(const char* name, int* v, int vMin, int vMax, const SliderOpts& o
     ImGui::PopID();
     return changed;
 }
+
+bool SaveBar(const char* id, bool* autoSave)
+{
+    bool save = false;
+    ImGui::PushID(id);
+    ImGui::BeginDisabled(*autoSave);
+    if (ImGui::Button("Save Config")) { save = true; }
+    ImGui::EndDisabled();
+    if (*autoSave && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Auto-save is enabled"); }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Auto-save", autoSave)) { save = true; }
+    ImGui::PopID();
+    return save;
+}
 }

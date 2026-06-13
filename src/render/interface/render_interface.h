@@ -242,6 +242,13 @@ struct TAAConfiguration
     float lumaBoostCap{0.5f};
 };
 
+struct AntiAliasingConfiguration
+{
+    AntiAliasingMode mode{AntiAliasingMode::TAA};
+    SMAAConfiguration smaa{};
+    TAAConfiguration taa{};
+};
+
 struct GTAOConfiguration
 {
     bool bEnabled{true};
@@ -582,8 +589,6 @@ struct ReSTIRParams
     uint32_t spatialNeighbors{5};
     uint32_t spatialMCap{500};
     uint32_t temporalMCap{20u * 17u};
-    // K=2: two independent reservoirs per pixel, averaged at resolve. Halves chroma variance for multi-colored light mixing at the cost of a second visibility ray per reuse pass.
-    bool bDualReservoir{false};
 
     // todo: Disabled atrous and asvgf. Readd as needed
     enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
@@ -656,10 +661,8 @@ struct ViewFamily
     InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
     InlineVector<AreaLightData, MAX_AREA_LIGHTS> areaLights{};
 
-    AntiAliasingMode aaMode{AntiAliasingMode::TAA};
     GTAOConfiguration gtaoConfig{};
-    SMAAConfiguration smaaConfig{};
-    TAAConfiguration taaConfig{};
+    AntiAliasingConfiguration aaConfig{};
     PostProcessConfiguration postProcessConfig{};
 
 

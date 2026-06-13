@@ -13,15 +13,14 @@ struct ReSTIRParams;
 struct GTAOConfiguration;
 struct SMAAConfiguration;
 struct TAAConfiguration;
+struct AntiAliasingConfiguration;
 struct PostProcessConfiguration;
 }
 
 namespace Engine::ConfigSerialization
 {
 /**
- * @brief Per-config JSON (de)serialization, shared by the project config and profile files.
- *        FromJson reads field-by-field with the passed-in struct supplying defaults, so missing
- *        keys keep their current value. ToJson(ReSTIRParams) nests its relax/atrous/svgf objects.
+ * Per-config JSON (de)serialization shared by the project config and profile files. FromJson reads field-by-field with the passed-in struct supplying defaults, so missing keys keep their current value; ToJson(ReSTIRParams) nests its relax/atrous/svgf objects.
  */
 nlohmann::json ToJson(const Core::ReSTIRParams& p);
 void FromJson(const nlohmann::json& j, Core::ReSTIRParams& p);
@@ -34,6 +33,9 @@ void FromJson(const nlohmann::json& j, Core::SMAAConfiguration& p);
 
 nlohmann::json ToJson(const Core::TAAConfiguration& p);
 void FromJson(const nlohmann::json& j, Core::TAAConfiguration& p);
+
+nlohmann::json ToJson(const Core::AntiAliasingConfiguration& p);
+void FromJson(const nlohmann::json& j, Core::AntiAliasingConfiguration& p);
 
 nlohmann::json ToJson(const Core::PostProcessConfiguration& p);
 void FromJson(const nlohmann::json& j, Core::PostProcessConfiguration& p);

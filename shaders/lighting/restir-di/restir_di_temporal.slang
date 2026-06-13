@@ -17,7 +17,6 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         return;
     }
 
-    uint pixelCount = pc.renderExtent.x * pc.renderExtent.y;
     uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
@@ -30,9 +29,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float2 historyUV = uv + velocityNDC * 0.5;
     bool validHistory = all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
     if (!validHistory) {
-        for (uint k = 0; k < pc.reservoirCount; k++) {
-            pc.outputBuffer[k * pixelCount + pixelIdx] = pc.currentBuffer[k * pixelCount + pixelIdx];
-        }
+        pc.outputBuffer[pixelIdx] = pc.currentBuffer[pixelIdx];
         return;
     }
     uint2 historyPixel = uint2(historyUV * float2(pc.renderExtent));
@@ -44,18 +41,14 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float3 currentN = normalize(UnpackNormalOct16(g1.r));
     float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));
     if (dot(currentN, historyN) < 0.906) {
-        for (uint k = 0; k < pc.reservoirCount; k++) {
-            pc.outputBuffer[k * pixelCount + pixelIdx] = pc.currentBuffer[k * pixelCount + pixelIdx];
-        }
+        pc.outputBuffer[pixelIdx] = pc.currentBuffer[pixelIdx];
         return;
     }
 
     // Depth disocclusion rejection.
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {
-        for (uint k = 0; k < pc.reservoirCount; k++) {
-            pc.outputBuffer[k * pixelCount + pixelIdx] = ReservoirEmpty();
-        }
+        pc.outputBuffer[pixelIdx] = ReservoirEmpty();
         return;
     }
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
@@ -71,18 +64,14 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float frustumSize = abs(scene.ndcToViewMul.y) * abs(viewSpaceDepth);
     float disocclusionThreshold = saturate(0.01 / lerp(0.05, 1.0, NoV)) * frustumSize;
     if (abs(historyViewDepth - expectedPrevViewDepth) * NoV > disocclusionThreshold) {
-        for (uint k = 0; k < pc.reservoirCount; k++) {
-            pc.outputBuffer[k * pixelCount + pixelIdx] = pc.currentBuffer[k * pixelCount + pixelIdx];
-        }
+        pc.outputBuffer[pixelIdx] = pc.currentBuffer[pixelIdx];
         return;
     }
 
     // Reconstruct full material at the current pixel for consistent p_hat evaluation.
     LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
-        for (uint k = 0; k < pc.reservoirCount; k++) {
-            pc.outputBuffer[k * pixelCount + pixelIdx] = pc.currentBuffer[k * pixelCount + pixelIdx];
-        }
+        pc.outputBuffer[pixelIdx] = pc.currentBuffer[pixelIdx];
         return;
     }
 
@@ -91,23 +80,21 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
-    for (uint k = 0; k < pc.reservoirCount; k++) {
-
-    Reservoir current = pc.currentBuffer[k * pixelCount + pixelIdx];
+    Reservoir current = pc.currentBuffer[pixelIdx];
     bool validCurrent = current.lightIdx != ~0u;
 
-    Reservoir history = pc.historyBuffer[k * pixelCount + historyPixel.y * pc.renderExtent.x + historyPixel.x];
+    Reservoir history = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
     bool validHistoryReservoir = history.lightIdx != ~0u && history.lightIdx < uint(pc.lightData->areaLightCount);
     if (!validCurrent && !validHistoryReservoir) {
-        pc.outputBuffer[k * pixelCount + pixelIdx] = ReservoirEmpty();
-        continue;
+        pc.outputBuffer[pixelIdx] = ReservoirEmpty();
+        return;
     }
 
     // WRS combination: w_j = p_hat(y_j at current shading point) * W_j * M_j
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
 
-    uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u) ^ 0xA3C59Fu ^ (k * 0x68BC21EBu);
+    uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u) ^ 0xA3C59Fu;
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
@@ -160,7 +147,5 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         ReservoirFinalise(combined, accum, p_hat_winner, float(combined.M));
     }
 
-    pc.outputBuffer[k * pixelCount + pixelIdx] = combined;
-
-    } // reservoir layer loop
+    pc.outputBuffer[pixelIdx] = combined;
 }

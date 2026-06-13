@@ -13,15 +13,19 @@ namespace Engine
 struct ProjectConfig
 {
     Core::InlineString<256> defaultScene{};
-    bool bAutoSave{false};
     Core::LightingMode lightingMode{false};
+
+    bool bAutoSaveProjectConfig{false};
+    bool bAutoSaveLighting{false};
+    bool bAutoSavePostProcess{false};
+
+    Core::InlineString<64> activeLightingProfile{};
+    Core::InlineString<64> activePostProcessProfile{};
 
     Core::ReSTIRParams restir{};
 
-    Core::AntiAliasingMode aaMode{Core::AntiAliasingMode::TAA};
     Core::GTAOConfiguration gtaoConfig{};
-    Core::SMAAConfiguration smaaConfig{};
-    Core::TAAConfiguration taaConfig{};
+    Core::AntiAliasingConfiguration aaConfig{};
     Core::PostProcessConfiguration postProcess{};
 };
 

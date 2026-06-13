@@ -507,6 +507,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     DrawDebugViewWindow(ctx, state);
 
+    DrawProjectConfigWindow(state);
+
     DrawLightingWindow(state);
 
     if (ImGui::Begin("Gameplay")) {
@@ -1945,10 +1947,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     frameBuffer->mainViewFamily.shadowConfig = state->lighting.shadowConfig;
     frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
-    frameBuffer->mainViewFamily.aaMode = state->lighting.aaMode;
     frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
-    frameBuffer->mainViewFamily.smaaConfig = state->lighting.smaaConfig;
-    frameBuffer->mainViewFamily.taaConfig = state->lighting.taaConfig;
+    frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
     frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
     frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
     frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;

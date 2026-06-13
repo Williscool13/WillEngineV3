@@ -147,10 +147,8 @@ struct LightingState
     Core::DirectionalLight directionalLight{};
     Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
     Core::ShadowConfiguration shadowConfig;
-    Core::AntiAliasingMode aaMode{Core::AntiAliasingMode::TAA};
     Core::GTAOConfiguration gtaoConfig{};
-    Core::SMAAConfiguration smaaConfig{};
-    Core::TAAConfiguration taaConfig{};
+    Core::AntiAliasingConfiguration aaConfig{};
     Core::PostProcessConfiguration postProcess{};
     CubemapHandle skybox{CubemapHandle::INVALID};
     int32_t skyboxLOD{0};

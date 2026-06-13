@@ -19,31 +19,30 @@ struct PostProcessConfiguration;
 namespace Game
 {
 /**
- * @brief Draws the "Debug View" window: render debug toggles, lighting mode, shader pipeline
- *        overrides, ReSTIR DI settings, hotkey reference, and debug-view target buttons.
+ * Draws the "Debug View" window: render debug toggles, shader pipeline overrides, hotkey reference, and debug-view target buttons.
  */
 void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
- * @brief Draws the "Lighting" window: ReSTIR DI settings, the denoiser (A-Trous / A-SVGF /
- *        RELAX), and ambient occlusion. Groups the stochastic-lighting controls in one place.
+ * Draws the "Project Config" window: lighting mode, anti-aliasing (mode + SMAA), and TAA - the global, non-profile render settings persisted directly in project.wconfig.
+ */
+void DrawProjectConfigWindow(Engine::EngineState* state);
+
+/**
+ * Draws the "Lighting" window: per-tab save + lighting profile picker, ReSTIR DI settings, the denoiser (A-Trous / A-SVGF / RELAX), and ambient occlusion (GTAO).
  */
 void DrawLightingWindow(Engine::EngineState* state);
 
 /**
- * @brief Draws an editor for a single post-process configuration as a set of collapsible
- *        sections (tonemapping, exposure, bloom, ... dither). Operates solely on the passed
- *        config so it can back both the global settings window and future per-volume overrides.
- * @param pp Post-process configuration edited in place.
- * @return True if any value changed this frame.
- * @note When drawing more than one config in the same window, wrap each call in
- *       ImGui::PushID/PopID to keep widget IDs unique.
+ * Draws the collapsible editor for one PostProcessConfiguration (tonemapping, exposure, bloom ... dither).
+ * Operates solely on pp so it backs both the settings window and future per-volume overrides; wrap in ImGui::PushID/PopID when drawing more than one in the same window.
+ * @param pp config edited in place.
+ * @return true if any value changed this frame.
  */
 bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp);
 
 /**
- * @brief Draws the "Post-Processing" window: global render settings (GTAO, anti-aliasing,
- *        denoiser) plus the per-config image effects via DrawPostProcessConfig.
+ * Draws the "Post-Processing" window: per-tab save + post-process profile picker and the per-config image effects via DrawPostProcessConfig.
  */
 void DrawPostProcessingWindow(Engine::EngineState* state);
 }

@@ -37,28 +37,34 @@ ProjectConfig ReadProjectConfig()
         config.defaultScene = Core::InlineString<256>(j["defaultScene"].get<std::string_view>());
     }
 
-    if (j.contains("bAutoSave") && j["bAutoSave"].is_boolean()) {
-        config.bAutoSave = j["bAutoSave"].get<bool>();
+    if (j.contains("bAutoSaveProjectConfig") && j["bAutoSaveProjectConfig"].is_boolean()) {
+        config.bAutoSaveProjectConfig = j["bAutoSaveProjectConfig"].get<bool>();
+    }
+    if (j.contains("bAutoSaveLighting") && j["bAutoSaveLighting"].is_boolean()) {
+        config.bAutoSaveLighting = j["bAutoSaveLighting"].get<bool>();
+    }
+    if (j.contains("bAutoSavePostProcess") && j["bAutoSavePostProcess"].is_boolean()) {
+        config.bAutoSavePostProcess = j["bAutoSavePostProcess"].get<bool>();
+    }
+    if (j.contains("activeLightingProfile") && j["activeLightingProfile"].is_string()) {
+        config.activeLightingProfile = Core::InlineString<64>(j["activeLightingProfile"].get<std::string_view>());
+    }
+    if (j.contains("activePostProcessProfile") && j["activePostProcessProfile"].is_string()) {
+        config.activePostProcessProfile = Core::InlineString<64>(j["activePostProcessProfile"].get<std::string_view>());
     }
 
     if (j.contains("lightingMode") && j["lightingMode"].is_number_integer()) {
         config.lightingMode = static_cast<Core::LightingMode>(j["lightingMode"].get<uint32_t>());
     }
 
-    if (j.contains("aaMode") && j["aaMode"].is_number()) {
-        config.aaMode = static_cast<Core::AntiAliasingMode>(j["aaMode"].get<int32_t>());
-    }
     if (j.contains("restir") && j["restir"].is_object()) {
         ConfigSerialization::FromJson(j["restir"], config.restir);
     }
     if (j.contains("gtao") && j["gtao"].is_object()) {
         ConfigSerialization::FromJson(j["gtao"], config.gtaoConfig);
     }
-    if (j.contains("smaa") && j["smaa"].is_object()) {
-        ConfigSerialization::FromJson(j["smaa"], config.smaaConfig);
-    }
-    if (j.contains("taa") && j["taa"].is_object()) {
-        ConfigSerialization::FromJson(j["taa"], config.taaConfig);
+    if (j.contains("aa") && j["aa"].is_object()) {
+        ConfigSerialization::FromJson(j["aa"], config.aaConfig);
     }
     if (j.contains("postProcess") && j["postProcess"].is_object()) {
         ConfigSerialization::FromJson(j["postProcess"], config.postProcess);
@@ -77,13 +83,15 @@ bool WriteProjectConfig(const ProjectConfig& config)
 
     nlohmann::json j;
     j["defaultScene"] = std::string_view(config.defaultScene.c_str(), config.defaultScene.Size());
-    j["bAutoSave"] = config.bAutoSave;
+    j["bAutoSaveProjectConfig"] = config.bAutoSaveProjectConfig;
+    j["bAutoSaveLighting"] = config.bAutoSaveLighting;
+    j["bAutoSavePostProcess"] = config.bAutoSavePostProcess;
+    j["activeLightingProfile"] = std::string_view(config.activeLightingProfile.c_str(), config.activeLightingProfile.Size());
+    j["activePostProcessProfile"] = std::string_view(config.activePostProcessProfile.c_str(), config.activePostProcessProfile.Size());
     j["lightingMode"] = config.lightingMode;
-    j["aaMode"] = static_cast<int32_t>(config.aaMode);
     j["restir"] = ConfigSerialization::ToJson(config.restir);
     j["gtao"] = ConfigSerialization::ToJson(config.gtaoConfig);
-    j["smaa"] = ConfigSerialization::ToJson(config.smaaConfig);
-    j["taa"] = ConfigSerialization::ToJson(config.taaConfig);
+    j["aa"] = ConfigSerialization::ToJson(config.aaConfig);
     j["postProcess"] = ConfigSerialization::ToJson(config.postProcess);
 
     file << j.dump(2);

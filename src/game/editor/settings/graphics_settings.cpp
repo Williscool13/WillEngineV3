@@ -13,45 +13,196 @@
 #include "core/containers/arena_array.h"
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
+#include "engine/profiles/profile_library.h"
 
 namespace Game
 {
-void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void SaveProjectConfigTab(Engine::EngineState* state)
 {
-    if (ImGui::Begin("Debug View")) {
-        bool bProjectConfigChanged = false;
+    Engine::ProjectConfig& cfg = state->projectConfig;
+    cfg.lightingMode = state->lighting.lightingMode;
+    cfg.aaConfig = state->lighting.aaConfig;
+    Engine::WriteProjectConfig(cfg);
+}
 
-        ImGui::SeparatorText("Project Config");
-        bool& bAutoSave = state->projectConfig.bAutoSave;
-        ImGui::BeginDisabled(bAutoSave);
-        if (ImGui::Button("Save Config")) {
-            state->projectConfig.lightingMode = state->lighting.lightingMode;
-            Engine::WriteProjectConfig(state->projectConfig);
+static void SaveLightingTab(Engine::EngineState* state)
+{
+    Engine::ProjectConfig& cfg = state->projectConfig;
+    if (!cfg.activeLightingProfile.IsEmpty()) {
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->debug.restir, state->lighting.gtaoConfig);
+    }
+    cfg.restir = state->debug.restir;
+    cfg.gtaoConfig = state->lighting.gtaoConfig;
+    Engine::WriteProjectConfig(cfg);
+}
+
+static void SavePostProcessTab(Engine::EngineState* state)
+{
+    Engine::ProjectConfig& cfg = state->projectConfig;
+    if (!cfg.activePostProcessProfile.IsEmpty()) {
+        Engine::Profiles::SavePostProcessProfile(cfg.activePostProcessProfile.c_str(), state->lighting.postProcess);
+    }
+    cfg.postProcess = state->lighting.postProcess;
+    Engine::WriteProjectConfig(cfg);
+}
+
+static void DrawLightingProfiles(Engine::EngineState* state)
+{
+    Engine::ProjectConfig& cfg = state->projectConfig;
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::BeginCombo("Profile##lightingprofile", cfg.activeLightingProfile.IsEmpty() ? "(none)" : cfg.activeLightingProfile.c_str())) {
+        Engine::Profiles::ProfileName names[Engine::Profiles::MAX_PROFILES];
+        const uint32_t count = Engine::Profiles::ListLightingProfiles(names, Engine::Profiles::MAX_PROFILES);
+        for (uint32_t i = 0; i < count; ++i) {
+            if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
+                cfg.activeLightingProfile = names[i];
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->debug.restir, state->lighting.gtaoConfig);
+                cfg.restir = state->debug.restir;
+                cfg.gtaoConfig = state->lighting.gtaoConfig;
+                Engine::WriteProjectConfig(cfg);
+            }
         }
-        ImGui::EndDisabled();
-        if (bAutoSave && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("Auto-save is enabled");
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(cfg.activeLightingProfile.IsEmpty());
+    if (ImGui::Button("Delete##lightingprofile")) {
+        Engine::Profiles::DeleteLightingProfile(cfg.activeLightingProfile.c_str());
+        cfg.activeLightingProfile = Core::InlineString<64>();
+        Engine::WriteProjectConfig(cfg);
+    }
+    ImGui::EndDisabled();
+
+    static char lightingNewName[64] = "";
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
+    ImGui::SameLine();
+    if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->debug.restir, state->lighting.gtaoConfig);
+        cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
+        Engine::WriteProjectConfig(cfg);
+        lightingNewName[0] = '\0';
+    }
+}
+
+static void DrawPostProcessProfiles(Engine::EngineState* state)
+{
+    Engine::ProjectConfig& cfg = state->projectConfig;
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::BeginCombo("Profile##ppprofile", cfg.activePostProcessProfile.IsEmpty() ? "(none)" : cfg.activePostProcessProfile.c_str())) {
+        Engine::Profiles::ProfileName names[Engine::Profiles::MAX_PROFILES];
+        const uint32_t count = Engine::Profiles::ListPostProcessProfiles(names, Engine::Profiles::MAX_PROFILES);
+        for (uint32_t i = 0; i < count; ++i) {
+            if (ImGui::Selectable(names[i].c_str(), cfg.activePostProcessProfile == names[i])) {
+                cfg.activePostProcessProfile = names[i];
+                Engine::Profiles::LoadPostProcessProfile(names[i].c_str(), state->lighting.postProcess);
+                cfg.postProcess = state->lighting.postProcess;
+                Engine::WriteProjectConfig(cfg);
+            }
         }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Auto-save", &bAutoSave)) {
-            Engine::WriteProjectConfig(state->projectConfig);
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(cfg.activePostProcessProfile.IsEmpty());
+    if (ImGui::Button("Delete##ppprofile")) {
+        Engine::Profiles::DeletePostProcessProfile(cfg.activePostProcessProfile.c_str());
+        cfg.activePostProcessProfile = Core::InlineString<64>();
+        Engine::WriteProjectConfig(cfg);
+    }
+    ImGui::EndDisabled();
+
+    static char ppNewName[64] = "";
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::InputText("##ppnewname", ppNewName, sizeof(ppNewName));
+    ImGui::SameLine();
+    if (ImGui::Button("Save As##ppprofile") && ppNewName[0] != '\0') {
+        Engine::Profiles::SavePostProcessProfile(ppNewName, state->lighting.postProcess);
+        cfg.activePostProcessProfile = Core::InlineString<64>(ppNewName);
+        Engine::WriteProjectConfig(cfg);
+        ppNewName[0] = '\0';
+    }
+}
+
+void DrawProjectConfigWindow(Engine::EngineState* state)
+{
+    if (ImGui::Begin("Project Config")) {
+        bool changed = false;
+        if (Widgets::SaveBar("projectconfig", &state->projectConfig.bAutoSaveProjectConfig)) {
+            SaveProjectConfigTab(state);
         }
 
         ImGui::Separator();
 
-        ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
-        ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
         const char* lightingModeLabels[] = {"Default", "ReSTIR", "Ground-Truth ReSTIR", "Path Tracing"};
         Core::LightingMode prevLightingMode = state->lighting.lightingMode;
         int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
         if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, 4)) {
             state->lighting.lightingMode = static_cast<Core::LightingMode>(lightingModeIndex);
-            bProjectConfigChanged = true;
-
+            changed = true;
             if (prevLightingMode != Core::LightingMode::GroundTruthReSTIR && state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR) {
                 state->lighting.bResetGroundTruth = true;
             }
         }
+
+        ImGui::Spacing();
+        const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA"};
+        int currentAA = static_cast<int>(state->lighting.aaConfig.mode);
+        if (ImGui::Combo("Anti-Aliasing", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
+            state->lighting.aaConfig.mode = static_cast<Core::AntiAliasingMode>(currentAA);
+            changed = true;
+        }
+
+        const Core::AntiAliasingMode aaMode = state->lighting.aaConfig.mode;
+        const bool bSMAA = aaMode == Core::AntiAliasingMode::SMAA || aaMode == Core::AntiAliasingMode::SMAAT2X;
+        const bool bTAA = aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA;
+
+        if (bSMAA && ImGui::CollapsingHeader("SMAA")) {
+            Core::SMAAConfiguration& smaa = state->lighting.aaConfig.smaa;
+            constexpr Core::SMAAConfiguration defaultSMAA{};
+            const char* edgeModes[] = {"Luma", "Color", "Depth"};
+            int currentMode = static_cast<int>(smaa.edgeDetectionMode);
+            if (ImGui::Combo("Edge Detection##smaa", &currentMode, edgeModes, IM_ARRAYSIZE(edgeModes))) {
+                smaa.edgeDetectionMode = static_cast<Core::SMAAEdgeDetectionMode>(currentMode);
+                changed = true;
+            }
+            if (Widgets::SliderFloat("Threshold##smaa", &smaa.threshold, 0.01f, 0.5f, {.format = "%.3f"})) { changed = true; }
+            if (Widgets::SliderFloat("Local Contrast Adapt.##smaa", &smaa.localContrastAdaptation, 0.5f, 4.0f, {.format = "%.2f"})) { changed = true; }
+            if (Widgets::SliderInt("Max Search Steps##smaa", &smaa.maxSearchSteps, 1, 112)) { changed = true; }
+            if (Widgets::SliderInt("Max Search Steps Diag##smaa", &smaa.maxSearchStepsDiag, 1, 20)) { changed = true; }
+            if (ImGui::Button("Reset SMAA")) {
+                smaa = defaultSMAA;
+                changed = true;
+            }
+        }
+
+        if (bTAA && ImGui::CollapsingHeader("TAA")) {
+            Core::TAAConfiguration& taa = state->lighting.aaConfig.taa;
+            constexpr Core::TAAConfiguration defaultTAA{};
+            if (Widgets::SliderFloat("Base Blend Alpha##taa", &taa.baseBlendAlpha, 0.01f, 0.5f, {.format = "%.4f"})) { changed = true; }
+            if (Widgets::SliderFloat("Disocclusion Threshold##taa", &taa.disocclusionThreshold, 0.001f, 0.2f, {.format = "%.3f"})) { changed = true; }
+            if (Widgets::SliderFloat("Variance Gamma Luma##taa", &taa.varianceGammaLuma, 0.25f, 2.5f, {.format = "%.2f"})) { changed = true; }
+            if (Widgets::SliderFloat("Variance Gamma Chroma##taa", &taa.varianceGammaChroma, 0.25f, 2.5f, {.format = "%.2f"})) { changed = true; }
+            if (Widgets::SliderFloat("Firefly Suppression##taa", &taa.karisStrength, 0.0f, 4.0f, {.format = "%.2f"})) { changed = true; }
+            if (Widgets::SliderFloat("Invalid History Blend##taa", &taa.invalidHistoryBlend, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
+            if (Widgets::SliderFloat("Luma Boost Cap##taa", &taa.lumaBoostCap, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
+            if (ImGui::Button("Reset TAA")) {
+                taa = defaultTAA;
+                changed = true;
+            }
+        }
+
+        if (changed && state->projectConfig.bAutoSaveProjectConfig) {
+            SaveProjectConfigTab(state);
+        }
+    }
+    ImGui::End();
+}
+
+void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (ImGui::Begin("Debug View")) {
+        ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
+        ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
 
         ImGui::Separator();
 
@@ -262,11 +413,6 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Vignette Aberration Output")) setDebugTarget("vignette_aberration_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Post Process Output")) setDebugTarget("post_process_output", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
-
-        if (bProjectConfigChanged && state->projectConfig.bAutoSave) {
-            state->projectConfig.lightingMode = state->lighting.lightingMode;
-            Engine::WriteProjectConfig(state->projectConfig);
-        }
     }
     ImGui::End();
 }
@@ -276,21 +422,10 @@ void DrawLightingWindow(Engine::EngineState* state)
     if (ImGui::Begin("Lighting")) {
         bool changed = false;
 
-        bool& bAutoSave = state->projectConfig.bAutoSave;
-        ImGui::BeginDisabled(bAutoSave);
-        if (ImGui::Button("Save Config")) {
-            state->projectConfig.restir = state->debug.restir;
-            state->projectConfig.gtaoConfig = state->lighting.gtaoConfig;
-            Engine::WriteProjectConfig(state->projectConfig);
+        if (Widgets::SaveBar("lighting", &state->projectConfig.bAutoSaveLighting)) {
+            SaveLightingTab(state);
         }
-        ImGui::EndDisabled();
-        if (bAutoSave && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("Auto-save is enabled");
-        }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Auto-save##lighting", &bAutoSave)) {
-            Engine::WriteProjectConfig(state->projectConfig);
-        }
+        DrawLightingProfiles(state);
 
         ImGui::Separator();
 
@@ -298,9 +433,6 @@ void DrawLightingWindow(Engine::EngineState* state)
             Core::ReSTIRParams& restir = state->debug.restir;
             ImGui::Separator();
             if (ImGui::Checkbox("Half Res", &restir.bHalfRes)) {
-                changed = true;
-            }
-            if (ImGui::Checkbox("Dual Reservoir (K=2)", &restir.bDualReservoir)) {
                 changed = true;
             }
             ImGui::Separator();
@@ -466,10 +598,8 @@ void DrawLightingWindow(Engine::EngineState* state)
             if (ImGui::Checkbox("Enable GTAO", &state->lighting.gtaoConfig.bEnabled)) { changed = true; }
         }
 
-        if (changed && state->projectConfig.bAutoSave) {
-            state->projectConfig.restir = state->debug.restir;
-            state->projectConfig.gtaoConfig = state->lighting.gtaoConfig;
-            Engine::WriteProjectConfig(state->projectConfig);
+        if (changed && state->projectConfig.bAutoSaveLighting) {
+            SaveLightingTab(state);
         }
     }
     ImGui::End();
@@ -638,23 +768,10 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
     if (ImGui::Begin("Post-Processing")) {
         bool changed = false;
 
-        bool& bAutoSave = state->projectConfig.bAutoSave;
-        ImGui::BeginDisabled(bAutoSave);
-        if (ImGui::Button("Save Config")) {
-            state->projectConfig.aaMode = state->lighting.aaMode;
-            state->projectConfig.smaaConfig = state->lighting.smaaConfig;
-            state->projectConfig.taaConfig = state->lighting.taaConfig;
-            state->projectConfig.postProcess = state->lighting.postProcess;
-            Engine::WriteProjectConfig(state->projectConfig);
+        if (Widgets::SaveBar("pp", &state->projectConfig.bAutoSavePostProcess)) {
+            SavePostProcessTab(state);
         }
-        ImGui::EndDisabled();
-        if (bAutoSave && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("Auto-save is enabled");
-        }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Auto-save##pp", &bAutoSave)) {
-            Engine::WriteProjectConfig(state->projectConfig);
-        }
+        DrawPostProcessProfiles(state);
 
         ImGui::Separator();
         if (ImGui::Button("Reset All to Defaults")) {
@@ -664,7 +781,6 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
         ImGui::SameLine();
         if (ImGui::Button("Disable All Effects")) {
             Core::PostProcessConfiguration& pp = state->lighting.postProcess;
-            state->lighting.aaMode = Core::AntiAliasingMode::None;
             pp.tonemapOperator = -1;
             pp.bExposureEnabled = false;
             pp.bBloomEnabled = false;
@@ -678,60 +794,11 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
         }
 
         ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Anti-Aliasing")) {
-            const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA"};
-            int currentAA = static_cast<int>(state->lighting.aaMode);
-            if (ImGui::Combo("Mode##aa", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
-                state->lighting.aaMode = static_cast<Core::AntiAliasingMode>(currentAA);
-                changed = true;
-            }
-            const bool bSMAA = state->lighting.aaMode == Core::AntiAliasingMode::SMAA || state->lighting.aaMode == Core::AntiAliasingMode::SMAAT2X;
-            if (bSMAA) {
-                Core::SMAAConfiguration& smaa = state->lighting.smaaConfig;
-                constexpr Core::SMAAConfiguration defaultSMAA{};
-                const char* edgeModes[] = {"Luma", "Color", "Depth"};
-                int currentMode = static_cast<int>(smaa.edgeDetectionMode);
-                if (ImGui::Combo("Edge Detection##smaa", &currentMode, edgeModes, IM_ARRAYSIZE(edgeModes))) {
-                    smaa.edgeDetectionMode = static_cast<Core::SMAAEdgeDetectionMode>(currentMode);
-                    changed = true;
-                }
-                if (Widgets::SliderFloat("Threshold##smaa", &smaa.threshold, 0.01f, 0.5f, {.format = "%.3f"})) { changed = true; }
-                if (Widgets::SliderFloat("Local Contrast Adapt.##smaa", &smaa.localContrastAdaptation, 0.5f, 4.0f, {.format = "%.2f"})) { changed = true; }
-                if (Widgets::SliderInt("Max Search Steps##smaa", &smaa.maxSearchSteps, 1, 112)) { changed = true; }
-                if (Widgets::SliderInt("Max Search Steps Diag##smaa", &smaa.maxSearchStepsDiag, 1, 20)) { changed = true; }
-                if (ImGui::Button("Reset SMAA")) {
-                    smaa = defaultSMAA;
-                    changed = true;
-                }
-            }
-            const bool bTAAMode = state->lighting.aaMode == Core::AntiAliasingMode::TAA || state->lighting.aaMode == Core::AntiAliasingMode::NaiveTAA;
-            if (bTAAMode) {
-                Core::TAAConfiguration& taa = state->lighting.taaConfig;
-                constexpr Core::TAAConfiguration defaultTAA{};
-                if (Widgets::SliderFloat("Base Blend Alpha##taa", &taa.baseBlendAlpha, 0.01f, 0.5f, {.format = "%.4f"})) { changed = true; }
-                if (Widgets::SliderFloat("Disocclusion Threshold##taa", &taa.disocclusionThreshold, 0.001f, 0.2f, {.format = "%.3f"})) { changed = true; }
-                if (Widgets::SliderFloat("Variance Gamma Luma##taa", &taa.varianceGammaLuma, 0.25f, 2.5f, {.format = "%.2f"})) { changed = true; }
-                if (Widgets::SliderFloat("Variance Gamma Chroma##taa", &taa.varianceGammaChroma, 0.25f, 2.5f, {.format = "%.2f"})) { changed = true; }
-                if (Widgets::SliderFloat("Firefly Suppression##taa", &taa.karisStrength, 0.0f, 4.0f, {.format = "%.2f"})) { changed = true; }
-                if (Widgets::SliderFloat("Invalid History Blend##taa", &taa.invalidHistoryBlend, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
-                if (Widgets::SliderFloat("Luma Boost Cap##taa", &taa.lumaBoostCap, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
-                if (ImGui::Button("Reset TAA")) {
-                    taa = defaultTAA;
-                    changed = true;
-                }
-            }
-        }
-
-        ImGui::Spacing();
         ImGui::SeparatorText("Image Effects");
         changed |= DrawPostProcessConfig(state->lighting.postProcess);
 
-        if (changed && state->projectConfig.bAutoSave) {
-            state->projectConfig.aaMode = state->lighting.aaMode;
-            state->projectConfig.smaaConfig = state->lighting.smaaConfig;
-            state->projectConfig.taaConfig = state->lighting.taaConfig;
-            state->projectConfig.postProcess = state->lighting.postProcess;
-            Engine::WriteProjectConfig(state->projectConfig);
+        if (changed && state->projectConfig.bAutoSavePostProcess) {
+            SavePostProcessTab(state);
         }
     }
     ImGui::End();

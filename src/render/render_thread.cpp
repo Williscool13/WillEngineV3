@@ -528,7 +528,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 {
                     const uint32_t restirPixelScale = restir.bHalfRes ? 2u : 1u;
                     SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restir);
-                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restirPixelScale, restir.bDualReservoir ? 2u : 1u);
+                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restirPixelScale);
                     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
@@ -587,7 +587,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupSelectionOutlinePass(*renderGraph, pipelineManager, renderExtent, targets, frameBuffer.selectedStableId);
         }
 
-        switch (viewFamily.aaMode) {
+        switch (viewFamily.aaConfig.mode) {
             case Core::AntiAliasingMode::SMAA:
                 targets.colorOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
                 break;
@@ -1227,14 +1227,14 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     renderGraph->CreateBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE, false);
 
     // Scene Data
-    SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.aaMode, renderExtent, frameNumber, renderDeltaTime);
+    SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
     UploadAllocation sceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
     memcpy(sceneDataUploadAllocation.ptr, &sceneData, sizeof(SceneData));
     // Portal Scene Data
     UploadAllocation portalSceneDataUploadAllocation{};
     bool bHasPortal = !viewFamily.portalViews.IsEmpty();
     if (bHasPortal) {
-        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaMode, renderExtent, frameNumber, renderDeltaTime);
+        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
         portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal,
                                               -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
         portalSceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));

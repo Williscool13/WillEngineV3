@@ -51,6 +51,8 @@ add_library(engine STATIC
         serialization/serialization.h
         serialization/config_serialization.cpp
         serialization/config_serialization.h
+        profiles/profile_library.cpp
+        profiles/profile_library.h
         compression/compression.cpp
         compression/compression.h
         spline/spline.cpp

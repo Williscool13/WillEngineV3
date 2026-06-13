@@ -7,28 +7,26 @@
 
 namespace Game::Widgets
 {
-/**
- * Optional styling for the labelled slider widgets.
- */
 struct SliderOpts
 {
-    /** printf format for the value shown in the input field. */
-    const char* format = "%.3f";
-    /** Hover tooltip shown over the slider, input field, and name. Null for none. */
-    const char* tooltip = nullptr;
-    /** When true, draws a reset button (between the input field and the name) that writes resetTo. */
-    bool reset = false;
-    /** Value applied when the reset button is pressed. */
-    double resetTo = 0.0;
+    const char* format = "%.3f"; // printf format for the value shown in the input field
+    const char* tooltip = nullptr; // hover tooltip over the slider, input, and name; null for none
+    bool reset = false; // draw a reset button (before the name) that writes resetTo
+    double resetTo = 0.0; // value applied when the reset button is pressed
 };
 
 /**
- * Slider laid out as [slider (no value text)] [input field] [reset?] [name].
- * The name follows the ImGui label convention: text after "##" is used only for the widget id and is not displayed, so labels can repeat across sections.
- * @return True if the value changed this frame.
+ * Slider laid out as [slider (no value text)] [input field] [reset?] [name]; returns true if the value changed this frame.
+ * The name follows the ImGui label convention so text after "##" is id-only and not shown, letting labels repeat across sections.
  */
 bool SliderFloat(const char* name, float* v, float vMin, float vMax, const SliderOpts& opts = {});
 bool SliderInt(const char* name, int* v, int vMin, int vMax, const SliderOpts& opts = {});
+
+/**
+ * Per-tab "Save Config" button + "Auto-save" checkbox bound to autoSave; returns true when a save should happen now (Save pressed, or auto-save was just toggled on).
+ * The caller still triggers its own save whenever a value changes while autoSave is set.
+ */
+bool SaveBar(const char* id, bool* autoSave);
 }
 
 #endif //WILL_ENGINE_EDITOR_WIDGETS_H

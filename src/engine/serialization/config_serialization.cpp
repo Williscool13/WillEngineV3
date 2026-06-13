@@ -95,7 +95,6 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
     return {
         {"bHalfRes", p.bHalfRes},
         {"bSpatial2", p.bSpatial2},
-        {"bDualReservoir", p.bDualReservoir},
         {"iblIntensity", p.iblIntensity},
         {"mode", static_cast<int32_t>(p.mode)},
         {"spatialRadius", p.spatialRadius},
@@ -118,7 +117,6 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
 
     p.bHalfRes = getBool("bHalfRes", p.bHalfRes);
     p.bSpatial2 = getBool("bSpatial2", p.bSpatial2);
-    p.bDualReservoir = getBool("bDualReservoir", p.bDualReservoir);
     p.iblIntensity = r.contains("iblIntensity") && r["iblIntensity"].is_number() ? r["iblIntensity"].get<float>() : p.iblIntensity;
     p.mode = static_cast<Core::ReSTIRParams::Mode>(getInt("mode", static_cast<int32_t>(p.mode)));
     p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
@@ -231,6 +229,28 @@ void FromJson(const nlohmann::json& t, Core::TAAConfiguration& p)
     p.karisStrength = tFloat("karisStrength", p.karisStrength);
     p.invalidHistoryBlend = tFloat("invalidHistoryBlend", p.invalidHistoryBlend);
     p.lumaBoostCap = tFloat("lumaBoostCap", p.lumaBoostCap);
+}
+
+nlohmann::json ToJson(const Core::AntiAliasingConfiguration& p)
+{
+    return {
+        {"mode", static_cast<int32_t>(p.mode)},
+        {"smaa", ToJson(p.smaa)},
+        {"taa", ToJson(p.taa)},
+    };
+}
+
+void FromJson(const nlohmann::json& j, Core::AntiAliasingConfiguration& p)
+{
+    if (j.contains("mode") && j["mode"].is_number()) {
+        p.mode = static_cast<Core::AntiAliasingMode>(j["mode"].get<int32_t>());
+    }
+    if (j.contains("smaa") && j["smaa"].is_object()) {
+        FromJson(j["smaa"], p.smaa);
+    }
+    if (j.contains("taa") && j["taa"].is_object()) {
+        FromJson(j["taa"], p.taa);
+    }
 }
 
 nlohmann::json ToJson(const Core::PostProcessConfiguration& p)

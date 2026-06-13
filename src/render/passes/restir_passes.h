@@ -37,8 +37,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     uint32_t sceneIndex,
                                     Core::Arena& arena,
                                     uint64_t frameNumber,
-                                    uint32_t pixelScale,
-                                    uint32_t reservoirCount);
+                                    uint32_t pixelScale);
 
 void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                PipelineManager* pipelineManager,
