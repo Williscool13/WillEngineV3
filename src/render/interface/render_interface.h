@@ -80,6 +80,7 @@ struct DirectionalLight
     glm::vec3 direction{0.577f, -0.577f, 0.577f};
     float intensity{2.0f};
     glm::vec3 color{1.0f, 1.0f, 1.0f};
+    float angularRadiusDegrees{1.0f}; // sun-disk half-angle; 0 = hard shadows
 };
 
 struct Sprite

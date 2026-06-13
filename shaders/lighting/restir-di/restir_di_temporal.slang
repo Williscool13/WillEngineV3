@@ -9,6 +9,7 @@ import shader_functions;
 import visibility_lighting_common;
 import bindless_declarations;
 import restir_common;
+import random_common;
 
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {

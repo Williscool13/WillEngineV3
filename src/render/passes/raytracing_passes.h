@@ -47,7 +47,8 @@ void SetupRTSunShadow(RenderGraph& graph,
                       const Core::ViewFamily& viewFamily,
                       Core::Array<uint32_t, 2> renderExtent,
                       const RenderTargets& targets,
-                      uint32_t sceneIndex);
+                      uint32_t sceneIndex,
+                      uint64_t frameNumber);
 
 /**
  * RT ground truth direct illumination via next-event estimation.

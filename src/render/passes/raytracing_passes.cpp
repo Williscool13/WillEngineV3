@@ -183,7 +183,8 @@ void SetupRTSunShadow(RenderGraph& graph,
                       const Core::ViewFamily& viewFamily,
                       Core::Array<uint32_t, 2> renderExtent,
                       const RenderTargets& targets,
-                      uint32_t sceneIndex)
+                      uint32_t sceneIndex,
+                      uint64_t frameNumber)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
 
@@ -198,7 +199,7 @@ void SetupRTSunShadow(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.WriteStorageImage(SID("rt_sun_shadow"));
     const uint32_t tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER);
-    pass.Execute([&graph, pipelineManager, sceneIndex, renderExtent, tlasIndex,
+    pass.Execute([&graph, pipelineManager, sceneIndex, renderExtent, tlasIndex, frameNumber,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_sun_shadow"));
         if (!pipeline) { return; }
@@ -213,6 +214,7 @@ void SetupRTSunShadow(RenderGraph& graph,
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_shadow")),
             .sceneDataIndex = sceneIndex,
+            .frameIndex = static_cast<uint32_t>(frameNumber),
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

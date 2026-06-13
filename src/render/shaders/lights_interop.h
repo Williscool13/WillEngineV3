@@ -55,7 +55,7 @@ SHADER_PUBLIC struct DirectionalLightData
 {
     SHADER_PUBLIC float4 directionIntensity; // xyz world-space direction, w intensity
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
-    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float angularRadius; // radians; sun-disk half-angle for soft shadows (0 = hard)
     SHADER_PUBLIC float _pad1;
     SHADER_PUBLIC float _pad2;
 };

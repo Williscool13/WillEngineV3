@@ -155,13 +155,6 @@ public uint2 QuadFullPixel(uint2 pixel, uint pixelScale, uint frameIndex, uint d
     return base + uint2(sel & 1u, sel >> 1u);
 }
 
-/** PCG-style hash step. Advances the state and returns a uniform float in [0, 1). */
-public float HashStep(inout uint h)
-{
-    h = h ^ (h >> 17u); h *= 0xbf324c81u; h = h ^ (h >> 13u); h *= 0x9c7d2d49u; h = h ^ (h >> 16u);
-    return float(h >> 8) * (1.0f / float(1u << 24));
-}
-
 public Reservoir ReservoirEmpty()
 {
     Reservoir r;

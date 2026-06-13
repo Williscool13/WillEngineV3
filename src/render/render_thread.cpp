@@ -549,7 +549,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
 
             if (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR) {
-                SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+                SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber);
                 SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
             }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
@@ -1245,6 +1245,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         const glm::vec3& dir = viewFamily.directionalLight.direction;
         const glm::vec3& col = viewFamily.directionalLight.color;
         lightData.directionalLight.directionIntensity = {dir, viewFamily.directionalLight.intensity};
+        lightData.directionalLight.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
         lightData.directionalLight.packedColor =
                 (static_cast<uint32_t>(glm::clamp(col.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
                 (static_cast<uint32_t>(glm::clamp(col.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |

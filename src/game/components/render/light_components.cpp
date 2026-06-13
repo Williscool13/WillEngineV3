@@ -160,6 +160,7 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
         auto& comp = registry.get<DirectionalLightComponent>(entity);
         ImGui::ColorEdit3("Color##dl", &comp.color.r);
         ImGui::DragFloat("Intensity##dl", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        ImGui::DragFloat("Angular Radius (deg)##dl", &comp.angularRadiusDegrees, 0.02f, 0.0f, 30.0f);
         ImGui::DragInt("Priority##dl", &comp.priority, 1.0f, -100, 100);
     }
 
@@ -181,6 +182,7 @@ void Component::DirectionalLightComponent::Serialize(const DirectionalLightCompo
     json["color"] = comp.color;
     json["intensity"] = comp.intensity;
     json["priority"] = comp.priority;
+    json["angularRadiusDegrees"] = comp.angularRadiusDegrees;
 }
 
 void Component::DirectionalLightComponent::Deserialize(DirectionalLightComponent& comp, const nlohmann::json& json)
@@ -189,5 +191,6 @@ void Component::DirectionalLightComponent::Deserialize(DirectionalLightComponent
     comp.color = json.contains("color") ? json["color"].get<Vec3>() : Vec3{1.0f, 1.0f, 1.0f};
     comp.intensity = json.value("intensity", 2.0f);
     comp.priority = json.value("priority", 0);
+    comp.angularRadiusDegrees = json.value("angularRadiusDegrees", 1.0f);
 }
 } // Game

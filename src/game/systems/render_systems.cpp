@@ -748,6 +748,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
                 vf.directionalLight.direction = transform.rotation * glm::vec3(0.0f, 0.0f, 1.0f);
                 vf.directionalLight.color = light.color;
                 vf.directionalLight.intensity = light.intensity;
+                vf.directionalLight.angularRadiusDegrees = light.angularRadiusDegrees;
                 found = true;
             }
         }

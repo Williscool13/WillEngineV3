@@ -50,6 +50,7 @@ struct DirectionalLightComponent
     Vec3 color{1.0f, 1.0f, 1.0f};
     float intensity{2.0f};
     int32_t priority{0};
+    float angularRadiusDegrees{1.0f}; // sun-disk half-angle for soft shadows; 0 = hard
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
