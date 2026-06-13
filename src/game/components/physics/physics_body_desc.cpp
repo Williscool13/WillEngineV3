@@ -7,6 +7,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <json/nlohmann/json.hpp>
 
+#include "physics_body_component.h"
 #include "physics_components.h"
 #include "physics_shape_helpers.h"
 #include "game/component-registry/component_editor.h"
@@ -62,28 +63,29 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
         }
     }
 
-    bool needsResolve = false;
+    bool bNeedsModelLoad = false;
     for (auto& shape : component.shapes) {
         if (shape.type != PhysicsShapeType::ConvexHull && shape.type != PhysicsShapeType::TriangleMesh) { continue; }
         if (shape.meshSourceModelId.IsValid()) {
             shape.meshSourceHandle = ctx->assetManager->LoadModel(shape.meshSourceModelId);
-            needsResolve = true;
+            bNeedsModelLoad = true;
         }
         else if (!std::holds_alternative<std::monostate>(shape.proceduralParams)) {
             shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
-            needsResolve = true;
+            bNeedsModelLoad = true;
         }
         else if (!shape.splineParams.spline.points.IsEmpty()) {
             shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
-            needsResolve = true;
+            bNeedsModelLoad = true;
         }
     }
-    if (needsResolve) {
+    if (bNeedsModelLoad) {
         registry.emplace_or_replace<PendingPhysicsMeshTag>(entity);
         state->bPendingModelResolve = true;
     }
 
     registry.emplace_or_replace<PendingPhysicsShapeCreationTag>(entity);
+    registry.emplace_or_replace<PendingPhysicsBodyCreationTag>(entity);
 }
 
 void PhysicsBodyDesc::OnUpdate(entt::registry& registry, entt::entity entity)
@@ -109,6 +111,8 @@ void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
             shape.meshSourceHandle = {};
         }
     }
+    registry.remove<PhysicsBodyComponent>(entity);
+    registry.remove<DynamicPhysicsBodyComponent>(entity);
 }
 }
 
@@ -547,6 +551,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
     auto& component = registry.get<PhysicsBodyDesc>(entity);
     static int editShapeIdx = -1;
     static entt::entity editEntity = entt::null;
+    static bool bGizmoWasDragging = false;
 
     auto state = registry.ctx().get<Engine::EngineState*>();
     auto ctx = registry.ctx().get<Engine::EngineContext*>();
@@ -554,6 +559,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
     if (editEntity != entity) {
         editShapeIdx = -1;
         editEntity = entity;
+        bGizmoWasDragging = false;
     }
 
     const bool hasGizmoClaim = editShapeIdx != -1;
@@ -848,6 +854,13 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 ImGuizmo::PopID();
                 ImGuizmo::SetGizmoSizeClipSpace(0.1f);
             }
+
+            // Rebuild the shape/body once on drag release rather than every frame of the drag.
+            const bool bGizmoDragging = state->editor.activeDotHandleId != -1 || ImGuizmo::IsUsing();
+            if (bGizmoWasDragging && !bGizmoDragging) {
+                registry.patch<PhysicsBodyDesc>(entity);
+            }
+            bGizmoWasDragging = bGizmoDragging;
 
             constexpr Vec4 editColorX = Editor::DEBUG_AXIS_X;
             constexpr Vec4 editColorY = Editor::DEBUG_AXIS_Y;

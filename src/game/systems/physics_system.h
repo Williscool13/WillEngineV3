@@ -33,6 +33,7 @@ void DisconnectPhysicsObservers(entt::registry& registry);
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state);
 void MarkPhysicsTransformsDirty(Engine::EngineState* state);
+void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state);
 void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void ResolvePhysicsMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolvePhysicsShapeCreation(Engine::EngineContext* ctx, Engine::EngineState* state);

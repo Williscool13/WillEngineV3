@@ -687,7 +687,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         // Right-aligned controls: sprite checkbox + light debug combo + physics debug combo
         {
             static constexpr const char* kLightDebugLabels[] = {"None", "Selected", "All"};
-            static constexpr const char* kPhysicsDebugLabels[] = {"Off", "Sensor Only", "Sensor + Tag", "On"};
+            static constexpr const char* kPhysicsDebugLabels[] = {"Off", "Sensor Only", "Sensor + Tag", "On", "Selected"};
             int lightMode = static_cast<int>(state->editor.lightDebugDrawMode);
             int physicsMode = static_cast<int>(state->editor.physicsDebugMode);
             constexpr float checkW = 16.0f;
@@ -709,7 +709,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (ImGui::Combo("##physics_debug", &physicsMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels))) {
                 state->editor.physicsDebugMode = static_cast<Engine::PhysicsDebugMode>(physicsMode);
             }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Physics debug draw: Off / Sensor Only / Sensor + Tag / On (all)"); }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Physics debug draw: Off / Sensor Only / Sensor + Tag / On (all) / Selected"); }
         }
     }
     ImGui::End();

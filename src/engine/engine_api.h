@@ -115,7 +115,7 @@ struct ComponentRegistry
     Core::Map<StringID, size_t> registryMapping{};
 };
 
-enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On };
+enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On, Selected };
 enum class LightDebugDrawMode : uint8_t { None, Selected, All };
 
 struct RuntimeSceneMetadata

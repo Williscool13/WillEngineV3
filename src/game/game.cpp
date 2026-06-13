@@ -244,6 +244,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     else {
 #if WILL_EDITOR
         Game::UpdateEditorCamera(ctx, state);
+        Game::UpdatePhysicsEditor(ctx, state);
 #else
         Game::PlayStart(ctx, state);
 #endif

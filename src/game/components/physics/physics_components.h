@@ -33,6 +33,9 @@ struct PendingPhysicsMeshTag
 struct PendingPhysicsShapeCreationTag
 {};
 
+struct PendingPhysicsBodyCreationTag
+{};
+
 struct SetVelocityTag
 {
     glm::vec3 linearVelocity{0.0f};

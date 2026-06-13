@@ -185,6 +185,20 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state)
     }
 }
 
+void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+    auto view = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::DirtyTransformTag>();
+    for (const auto& [entity, physicsBody, transform] : view.each()) {
+        bodyInterface.SetPositionAndRotation(
+            physicsBody.bodyID,
+            JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
+            JPH::Quat(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w),
+            JPH::EActivation::DontActivate);
+    }
+}
+
 void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
@@ -206,6 +220,13 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
             auto view = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
             for (const auto& [entity, physicsBody, bodyDesc] : view.each()) {
                 if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
+            }
+        }
+        else if (state->editor.physicsDebugMode == PhysicsDebugMode::Selected) {
+            for (entt::entity entity : state->editor.selectedEntities) {
+                if (auto* physicsBody = state->registry.try_get<Component::PhysicsBodyComponent>(entity)) {
+                    filter.AddBody(physicsBody->bodyID);
+                }
             }
         }
         else {
@@ -284,6 +305,13 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
         else if (state->editor.physicsDebugMode == PhysicsDebugMode::SensorOnly) {
             for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::TransformComponent>().each()) {
                 if (bodyDesc.bIsSensor) { drawEntity(bodyDesc, transform); }
+            }
+        }
+        else if (state->editor.physicsDebugMode == PhysicsDebugMode::Selected) {
+            for (entt::entity entity : state->editor.selectedEntities) {
+                const auto* bodyDesc = state->registry.try_get<Component::PhysicsBodyDesc>(entity);
+                const auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
+                if (bodyDesc && transform) { drawEntity(*bodyDesc, *transform); }
             }
         }
         else {
@@ -531,23 +559,34 @@ void ResolvePhysicsShapeCreation(Engine::EngineContext* ctx, Engine::EngineState
 void ResolvePhysicsBodyCreation(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    if (!state->bIsPlaying) return;
 
-    auto view = state->registry.view<Component::PhysicsBodyDesc>(
-        entt::exclude<Component::PhysicsBodyComponent, Component::PendingPhysicsShapeCreationTag>);
+    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsBodyCreationTag>(
+        entt::exclude<Component::PendingPhysicsShapeCreationTag>);
+
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+
+    JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
     for (const auto& [entity, bodyDesc] : view.each()) {
         if (!bodyDesc.shapeRef) {
+            resolved.PushBack(entity);
             continue;
         }
 
         auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
         if (!transform) {
             LOG_WARN(Game, "PhysicsBodyDesc on entity without TransformComponent, skipping");
+            resolved.PushBack(entity);
             continue;
         }
 
-        JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+        // Drop any stale body so a re-tagged desc rebuilds cleanly.
+        state->registry.remove<Component::PhysicsBodyComponent>(entity);
+        state->registry.remove<Component::DynamicPhysicsBodyComponent>(entity);
 
         JPH::Vec3 pos(transform->translation.x, transform->translation.y, transform->translation.z);
         JPH::Quat rot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
@@ -561,6 +600,11 @@ void ResolvePhysicsBodyCreation(Engine::EngineContext* ctx, Engine::EngineState*
                 state->registry.emplace_or_replace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
             }
         }
+        resolved.PushBack(entity);
+    }
+
+    for (const auto entity : resolved) {
+        state->registry.remove<Component::PendingPhysicsBodyCreationTag>(entity);
     }
 }
 
