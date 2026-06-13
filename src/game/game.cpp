@@ -25,7 +25,7 @@
 #include "render/vulkan/vk_context.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
-#include "systems/editor_systems.h"
+#include "editor/editor_systems.h"
 #include "systems/physics_system.h"
 #include "gameplay/player/physics_player_controller.h"
 #include "systems/common_systems.h"

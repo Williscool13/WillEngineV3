@@ -1,0 +1,42 @@
+//
+// Created by William on 2026-06-13.
+//
+
+#ifndef WILL_ENGINE_CONFIG_SERIALIZATION_H
+#define WILL_ENGINE_CONFIG_SERIALIZATION_H
+
+#include <json/nlohmann/json.hpp>
+
+namespace Core
+{
+struct ReSTIRParams;
+struct GTAOConfiguration;
+struct SMAAConfiguration;
+struct TAAConfiguration;
+struct PostProcessConfiguration;
+}
+
+namespace Engine::ConfigSerialization
+{
+/**
+ * @brief Per-config JSON (de)serialization, shared by the project config and profile files.
+ *        FromJson reads field-by-field with the passed-in struct supplying defaults, so missing
+ *        keys keep their current value. ToJson(ReSTIRParams) nests its relax/atrous/svgf objects.
+ */
+nlohmann::json ToJson(const Core::ReSTIRParams& p);
+void FromJson(const nlohmann::json& j, Core::ReSTIRParams& p);
+
+nlohmann::json ToJson(const Core::GTAOConfiguration& p);
+void FromJson(const nlohmann::json& j, Core::GTAOConfiguration& p);
+
+nlohmann::json ToJson(const Core::SMAAConfiguration& p);
+void FromJson(const nlohmann::json& j, Core::SMAAConfiguration& p);
+
+nlohmann::json ToJson(const Core::TAAConfiguration& p);
+void FromJson(const nlohmann::json& j, Core::TAAConfiguration& p);
+
+nlohmann::json ToJson(const Core::PostProcessConfiguration& p);
+void FromJson(const nlohmann::json& j, Core::PostProcessConfiguration& p);
+}
+
+#endif //WILL_ENGINE_CONFIG_SERIALIZATION_H

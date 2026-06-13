@@ -6,6 +6,8 @@
 
 #include "imgui.h"
 
+#include "game/editor/editor_widgets.h"
+
 #include "game/systems/debug_system.h"
 #include "core/string_id.h"
 #include "core/containers/arena_array.h"
@@ -303,27 +305,27 @@ void DrawLightingWindow(Engine::EngineState* state)
             }
             ImGui::Separator();
             int spatialRadius = static_cast<int>(restir.spatialRadius);
-            if (ImGui::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
+            if (Widgets::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
                 restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
                 changed = true;
             }
             int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
-            if (ImGui::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
+            if (Widgets::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
                 restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
                 changed = true;
             }
             int spatialMCap = static_cast<int>(restir.spatialMCap);
-            if (ImGui::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
+            if (Widgets::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
                 restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
                 changed = true;
             }
             int temporalMCap = static_cast<int>(restir.temporalMCap);
-            if (ImGui::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
+            if (Widgets::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
                 restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
                 changed = true;
             }
             ImGui::Separator();
-            if (ImGui::SliderFloat("IBL Intensity##restir", &restir.iblIntensity, 0.0f, 2.0f)) {
+            if (Widgets::SliderFloat("IBL Intensity##restir", &restir.iblIntensity, 0.0f, 2.0f)) {
                 changed = true;
             }
             ImGui::Separator();
@@ -362,10 +364,10 @@ void DrawLightingWindow(Engine::EngineState* state)
 
             if (bATrous) {
                 ImGui::SeparatorText("A-Trous");
-                if (ImGui::SliderInt("Iterations##atrous", &restir.atrous.iterations, 1, 4)) { changed = true; }
-                if (ImGui::SliderFloat("Sigma Luminance##atrous", &restir.atrous.sigmaLuminance, 0.0f, 10.0f)) { changed = true; }
-                if (ImGui::SliderFloat("Sigma Normal##atrous", &restir.atrous.sigmaNormal, 1.0f, 256.0f)) { changed = true; }
-                if (ImGui::SliderFloat("Sigma Depth##atrous", &restir.atrous.sigmaDepth, 0.0001f, 1.0f)) { changed = true; }
+                if (Widgets::SliderInt("Iterations##atrous", &restir.atrous.iterations, 1, 4)) { changed = true; }
+                if (Widgets::SliderFloat("Sigma Luminance##atrous", &restir.atrous.sigmaLuminance, 0.0f, 10.0f)) { changed = true; }
+                if (Widgets::SliderFloat("Sigma Normal##atrous", &restir.atrous.sigmaNormal, 1.0f, 256.0f)) { changed = true; }
+                if (Widgets::SliderFloat("Sigma Depth##atrous", &restir.atrous.sigmaDepth, 0.0001f, 1.0f)) { changed = true; }
                 if (ImGui::Button("Reset A-Trous")) {
                     restir.atrous = Core::ReSTIRParams::ATrousParams{};
                     changed = true;
@@ -373,12 +375,12 @@ void DrawLightingWindow(Engine::EngineState* state)
             }
             if (bSVGF) {
                 ImGui::SeparatorText("A-SVGF");
-                if (ImGui::SliderInt("ATrous Iterations##svgf", &restir.svgf.atrousIterations, 0, 4)) { changed = true; }
-                if (ImGui::SliderFloat("Alpha Min##svgf", &restir.svgf.alphaMin, 0.005f, 1.0f)) { changed = true; }
-                if (ImGui::SliderFloat("Gradient Threshold##svgf", &restir.svgf.gradientThreshold, 0.0f, 0.2f)) { changed = true; }
-                if (ImGui::SliderFloat("Sigma Luminance##svgf", &restir.svgf.sigmaLuminance, 0.1f, 20.0f)) { changed = true; }
-                if (ImGui::SliderFloat("Sigma Normal##svgf", &restir.svgf.sigmaNormal, 1.0f, 256.0f)) { changed = true; }
-                if (ImGui::SliderFloat("Sigma Depth##svgf", &restir.svgf.sigmaDepth, 0.0001f, 1.0f)) { changed = true; }
+                if (Widgets::SliderInt("ATrous Iterations##svgf", &restir.svgf.atrousIterations, 0, 4)) { changed = true; }
+                if (Widgets::SliderFloat("Alpha Min##svgf", &restir.svgf.alphaMin, 0.005f, 1.0f)) { changed = true; }
+                if (Widgets::SliderFloat("Gradient Threshold##svgf", &restir.svgf.gradientThreshold, 0.0f, 0.2f)) { changed = true; }
+                if (Widgets::SliderFloat("Sigma Luminance##svgf", &restir.svgf.sigmaLuminance, 0.1f, 20.0f)) { changed = true; }
+                if (Widgets::SliderFloat("Sigma Normal##svgf", &restir.svgf.sigmaNormal, 1.0f, 256.0f)) { changed = true; }
+                if (Widgets::SliderFloat("Sigma Depth##svgf", &restir.svgf.sigmaDepth, 0.0001f, 1.0f)) { changed = true; }
                 if (ImGui::Button("Reset A-SVGF")) {
                     restir.svgf = Core::ReSTIRParams::SVGFParams{};
                     changed = true;
@@ -388,50 +390,17 @@ void DrawLightingWindow(Engine::EngineState* state)
                 Core::RELAXParams& relax = state->debug.restir.relax;
                 ImGui::SeparatorText("RELAX");
 
-                const float relaxInputW = 70.0f;
-                const float relaxSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
-                const float relaxResetW = ImGui::CalcTextSize("R").x + ImGui::GetStyle().FramePadding.x * 2.0f;
                 static const Core::RELAXParams relaxDefaults{};
                 auto relaxTip = [&](const char* tip) {
                     if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                         ImGui::SetTooltip("%s", tip);
                     }
                 };
-                auto relaxF = [&](const char* label, float* v, float def, float min, float max, const char* fmt = "%.4f", const char* tip = nullptr) {
-                    ImGui::PushID(label);
-                    float sliderW = ImGui::CalcItemWidth() - relaxInputW - relaxResetW - relaxSpacing * 2.0f;
-                    if (sliderW < 60.0f) { sliderW = 60.0f; }
-                    ImGui::SetNextItemWidth(sliderW);
-                    if (ImGui::SliderFloat("##s", v, min, max, "")) { changed = true; }
-                    relaxTip(tip);
-                    ImGui::SameLine(0.0f, relaxSpacing);
-                    ImGui::SetNextItemWidth(relaxInputW);
-                    if (ImGui::InputFloat("##i", v, 0.0f, 0.0f, fmt)) { changed = true; }
-                    ImGui::SameLine(0.0f, relaxSpacing);
-                    if (ImGui::Button("R")) { *v = def; changed = true; }
-                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reset to %g", def); }
-                    ImGui::SameLine(0.0f, relaxSpacing);
-                    ImGui::TextUnformatted(label);
-                    relaxTip(tip);
-                    ImGui::PopID();
+                auto relaxF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.4f", const char* tip = nullptr) {
+                    changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
                 };
-                auto relaxI = [&](const char* label, int* v, int def, int min, int max, const char* tip = nullptr) {
-                    ImGui::PushID(label);
-                    float sliderW = ImGui::CalcItemWidth() - relaxInputW - relaxResetW - relaxSpacing * 2.0f;
-                    if (sliderW < 60.0f) { sliderW = 60.0f; }
-                    ImGui::SetNextItemWidth(sliderW);
-                    if (ImGui::SliderInt("##s", v, min, max, "")) { changed = true; }
-                    relaxTip(tip);
-                    ImGui::SameLine(0.0f, relaxSpacing);
-                    ImGui::SetNextItemWidth(relaxInputW);
-                    if (ImGui::InputInt("##i", v, 0, 0)) { changed = true; }
-                    ImGui::SameLine(0.0f, relaxSpacing);
-                    if (ImGui::Button("R")) { *v = def; changed = true; }
-                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reset to %d", def); }
-                    ImGui::SameLine(0.0f, relaxSpacing);
-                    ImGui::TextUnformatted(label);
-                    relaxTip(tip);
-                    ImGui::PopID();
+                auto relaxI = [&](const char* label, int* v, int def, int mn, int mx, const char* tip = nullptr) {
+                    changed |= Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)});
                 };
 
                 if (ImGui::Checkbox("Prepass##relax", &relax.enablePrepass)) { changed = true; }
@@ -515,10 +484,7 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
         if (ImGui::Checkbox(label, v)) { changed = true; }
     };
     auto slideF = [&](const char* label, float* v, float mn, float mx, const char* fmt = "%.3f") {
-        if (ImGui::SliderFloat(label, v, mn, mx, fmt)) { changed = true; }
-    };
-    auto dragF = [&](const char* label, float* v, float speed, float mn, float mx, const char* fmt = "%.2f") {
-        if (ImGui::DragFloat(label, v, speed, mn, mx, fmt)) { changed = true; }
+        changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt});
     };
 
     if (ImGui::CollapsingHeader("Tonemapping")) {
@@ -585,8 +551,8 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
     }
 
     if (ImGui::CollapsingHeader("Motion Blur")) {
-        dragF("Velocity Scale", &pp.motionBlurVelocityScale, 0.05f, 0.0f, 4.0f);
-        dragF("Depth Scale", &pp.motionBlurDepthScale, 0.1f, 2.0f, 10.0f);
+        slideF("Velocity Scale", &pp.motionBlurVelocityScale, 0.0f, 4.0f, "%.2f");
+        slideF("Depth Scale", &pp.motionBlurDepthScale, 2.0f, 10.0f, "%.2f");
         if (ImGui::Button("Reset Motion Blur")) {
             pp.motionBlurVelocityScale = defaults.motionBlurVelocityScale;
             pp.motionBlurDepthScale = defaults.motionBlurDepthScale;
@@ -729,10 +695,10 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
                     smaa.edgeDetectionMode = static_cast<Core::SMAAEdgeDetectionMode>(currentMode);
                     changed = true;
                 }
-                if (ImGui::SliderFloat("Threshold##smaa", &smaa.threshold, 0.01f, 0.5f, "%.3f")) { changed = true; }
-                if (ImGui::SliderFloat("Local Contrast Adapt.##smaa", &smaa.localContrastAdaptation, 0.5f, 4.0f, "%.2f")) { changed = true; }
-                if (ImGui::SliderInt("Max Search Steps##smaa", &smaa.maxSearchSteps, 1, 112)) { changed = true; }
-                if (ImGui::SliderInt("Max Search Steps Diag##smaa", &smaa.maxSearchStepsDiag, 1, 20)) { changed = true; }
+                if (Widgets::SliderFloat("Threshold##smaa", &smaa.threshold, 0.01f, 0.5f, {.format = "%.3f"})) { changed = true; }
+                if (Widgets::SliderFloat("Local Contrast Adapt.##smaa", &smaa.localContrastAdaptation, 0.5f, 4.0f, {.format = "%.2f"})) { changed = true; }
+                if (Widgets::SliderInt("Max Search Steps##smaa", &smaa.maxSearchSteps, 1, 112)) { changed = true; }
+                if (Widgets::SliderInt("Max Search Steps Diag##smaa", &smaa.maxSearchStepsDiag, 1, 20)) { changed = true; }
                 if (ImGui::Button("Reset SMAA")) {
                     smaa = defaultSMAA;
                     changed = true;
@@ -742,13 +708,13 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
             if (bTAAMode) {
                 Core::TAAConfiguration& taa = state->lighting.taaConfig;
                 constexpr Core::TAAConfiguration defaultTAA{};
-                if (ImGui::SliderFloat("Base Blend Alpha##taa", &taa.baseBlendAlpha, 0.01f, 0.5f, "%.4f")) { changed = true; }
-                if (ImGui::SliderFloat("Disocclusion Threshold##taa", &taa.disocclusionThreshold, 0.001f, 0.2f, "%.3f")) { changed = true; }
-                if (ImGui::SliderFloat("Variance Gamma Luma##taa", &taa.varianceGammaLuma, 0.25f, 2.5f, "%.2f")) { changed = true; }
-                if (ImGui::SliderFloat("Variance Gamma Chroma##taa", &taa.varianceGammaChroma, 0.25f, 2.5f, "%.2f")) { changed = true; }
-                if (ImGui::SliderFloat("Firefly Suppression##taa", &taa.karisStrength, 0.0f, 4.0f, "%.2f")) { changed = true; }
-                if (ImGui::SliderFloat("Invalid History Blend##taa", &taa.invalidHistoryBlend, 0.0f, 1.0f, "%.2f")) { changed = true; }
-                if (ImGui::SliderFloat("Luma Boost Cap##taa", &taa.lumaBoostCap, 0.0f, 1.0f, "%.2f")) { changed = true; }
+                if (Widgets::SliderFloat("Base Blend Alpha##taa", &taa.baseBlendAlpha, 0.01f, 0.5f, {.format = "%.4f"})) { changed = true; }
+                if (Widgets::SliderFloat("Disocclusion Threshold##taa", &taa.disocclusionThreshold, 0.001f, 0.2f, {.format = "%.3f"})) { changed = true; }
+                if (Widgets::SliderFloat("Variance Gamma Luma##taa", &taa.varianceGammaLuma, 0.25f, 2.5f, {.format = "%.2f"})) { changed = true; }
+                if (Widgets::SliderFloat("Variance Gamma Chroma##taa", &taa.varianceGammaChroma, 0.25f, 2.5f, {.format = "%.2f"})) { changed = true; }
+                if (Widgets::SliderFloat("Firefly Suppression##taa", &taa.karisStrength, 0.0f, 4.0f, {.format = "%.2f"})) { changed = true; }
+                if (Widgets::SliderFloat("Invalid History Blend##taa", &taa.invalidHistoryBlend, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
+                if (Widgets::SliderFloat("Luma Boost Cap##taa", &taa.lumaBoostCap, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
                 if (ImGui::Button("Reset TAA")) {
                     taa = defaultTAA;
                     changed = true;

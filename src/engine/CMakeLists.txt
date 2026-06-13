@@ -49,6 +49,8 @@ add_library(engine STATIC
         resources/model/static_model.h
         resources/model/model_format.cpp
         serialization/serialization.h
+        serialization/config_serialization.cpp
+        serialization/config_serialization.h
         compression/compression.cpp
         compression/compression.h
         spline/spline.cpp

@@ -9,11 +9,11 @@
 #include <tracy/Tracy.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "debug_system.h"
-#include "game/settings/graphics_settings.h"
+#include "game/systems/debug_system.h"
+#include "game/editor/settings/graphics_settings.h"
 #include "imgui.h"
 #include "imgui_internal.h"
-#include "scene_system.h"
+#include "game/systems/scene_system.h"
 #include "core/containers/arena_array.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "engine/include/engine_context.h"

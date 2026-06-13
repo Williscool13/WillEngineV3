@@ -10,8 +10,8 @@ set(GAME_SOURCES
         systems/physics_system.h
         systems/render_systems.h
         systems/render_systems.cpp
-        systems/editor_systems.cpp
-        systems/editor_systems.h
+        editor/editor_systems.cpp
+        editor/editor_systems.h
 
         fwd_components.h
 
@@ -97,8 +97,10 @@ set(GAME_SOURCES
         components/render/light_components.cpp
         components/render/light_components.h
         component-registry/editor_gizmo_helpers.cpp
-        settings/graphics_settings.cpp
-        settings/graphics_settings.h
+        editor/settings/graphics_settings.cpp
+        editor/settings/graphics_settings.h
+        editor/editor_widgets.cpp
+        editor/editor_widgets.h
 )
 
 set(GAME_INCLUDE_DIRS
