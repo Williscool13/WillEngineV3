@@ -75,27 +75,6 @@ struct PortalView
     glm::vec3 exitPortalUp;
 };
 
-enum class ShadowQuality
-{
-    Ultra = 0,
-    High,
-    Medium,
-    Low,
-    Custom
-};
-
-
-struct ShadowConfiguration
-{
-    float cascadeNearPlane = 0.1f;
-    float cascadeFarPlane = 100.0f;
-    float splitLambda = 0.5f;
-    float splitOverlap = 1.10f;
-    Render::ShadowCascadePreset cascadePreset = Render::SHADOW_PRESETS[static_cast<uint32_t>(ShadowQuality::Medium)];
-    float shadowIntensity = 0.0f; // lower is darker
-    bool enabled = false;
-};
-
 struct DirectionalLight
 {
     glm::vec3 direction{0.577f, -0.577f, 0.577f};
@@ -656,7 +635,6 @@ struct ViewFamily
     int32_t skyboxIndex{-1};
     int32_t skyboxLOD{0};
 
-    ShadowConfiguration shadowConfig{};
     DirectionalLight directionalLight{};
     InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
     InlineVector<AreaLightData, MAX_AREA_LIGHTS> areaLights{};

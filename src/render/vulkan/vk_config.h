@@ -43,9 +43,6 @@ inline constexpr VkFormat GBUFFER_TARGET_ONE = VK_FORMAT_R32G32B32A32_UINT;
 // R: Albedo RGB8 | 8-bit spare
 // G: Emissive RGBE 9:9:9:5 packed into R32
 inline constexpr VkFormat GBUFFER_TARGET_TWO = VK_FORMAT_R32G32_UINT;
-
-// Shadows
-inline constexpr VkFormat SHADOW_CASCADE_FORMAT = VK_FORMAT_D32_SFLOAT;
 } // Render
 
 #endif //WILL_ENGINE_VK_CONFIG_H

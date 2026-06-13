@@ -16,7 +16,6 @@ import common_interop;
 import model_interop;
 import constants_interop;
 import instancing_interop;
-import shadows_interop;
 import lights_interop;
 import text_interop;
 import ui_interop;
@@ -102,25 +101,6 @@ SHADER_PUBLIC struct InstanceLODPushConstant
     // Read-Only
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC int32_t lodBias;
-};
-
-SHADER_PUBLIC struct InstanceLODShadowsPushConstant
-{
-    // Read-Only
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
-    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
-    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-
-    // Write
-    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
-
-    // Read-Only
-    SHADER_PUBLIC uint32_t instanceCount;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t cascadeIndex;
     SHADER_PUBLIC int32_t lodBias;
 };
 
@@ -210,25 +190,6 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
 
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t instanceCount;
-    SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
-};
-
-SHADER_PUBLIC struct ExpandMeshletsShadowsPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for totalMeshletCount
-    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
-    SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
-
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
-    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
-    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
-
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t cascadeIndex;
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
@@ -380,35 +341,11 @@ SHADER_PUBLIC struct VisibilityShadingPushConstant
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
 };
 
-SHADER_PUBLIC struct ShadowMeshShadingPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
-    SHADER_PUBLIC SHADER_PTR(VertexPosition) positionBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
-    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
-    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
-    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
-    SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
-    SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer; // for "total visible meshlets"
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t cascadeIndex;
-    SHADER_PUBLIC uint32_t customData[38]; // vk1.4 target, custom PC space that can be filled by anything needed
-};
-
 SHADER_PUBLIC struct ShadowsResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
-    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC int32_t gtaoFilteredIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
-    SHADER_PUBLIC int4 csmIndices;
-    SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRTransformLightsPushConstant
@@ -508,7 +445,6 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
 SHADER_PUBLIC struct VisibilityLightingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(AreaLightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer;

@@ -123,8 +123,6 @@ void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamil
     mainViewFamily.mainView.currentViewData = cam.currentViewData;
     mainViewFamily.mainView.previousViewData = cam.previousViewData;
     cam.previousViewData = cam.currentViewData;
-    mainViewFamily.shadowConfig.cascadeNearPlane = mainViewFamily.mainView.currentViewData.nearPlane;
-    mainViewFamily.shadowConfig.cascadeFarPlane = mainViewFamily.mainView.currentViewData.farPlane;
 }
 
 void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily)

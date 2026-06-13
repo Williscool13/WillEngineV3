@@ -1945,7 +1945,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
     ImGui::End();
 
-    frameBuffer->mainViewFamily.shadowConfig = state->lighting.shadowConfig;
     frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
     frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
     frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;

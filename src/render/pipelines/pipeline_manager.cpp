@@ -445,11 +445,6 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("rt_ground_truth_di"), src / "rt_ground_truth_di_compute.spv",
                             sizeof(RTGroundTruthDIPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline(SID("instancing_instance_lod_shadows"), src / "instancing_instance_lod_shadows_compute.spv",
-                            sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Legacy);
-    RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet_shadows"), src / "instancing_expand_instance_to_meshlet_shadows_compute.spv",
-                            sizeof(ExpandMeshletsShadowsPushConstant), PipelineCategory::Legacy);
-
     RegisterComputePipeline(SID("shadows_resolve"), src / "shadows_resolve_compute.spv",
                             sizeof(ShadowsResolvePushConstant), PipelineCategory::Critical);
 
@@ -576,26 +571,6 @@ void PipelineManager::RegisterPipelines()
 #endif
 
     GraphicsPipelineBuilder builder;
-
-    // Shadow cascade pipeline
-    {
-        builder.AddShaderStage(src / "shadow_mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
-        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
-        builder.EnableDepthBias();
-        builder.SetupRenderer(nullptr, 0, SHADOW_CASCADE_FORMAT);
-        builder.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS);
-
-        RegisterGraphicsPipeline(
-            SID("shadow_cascade_instanced"),
-            builder,
-            sizeof(ShadowMeshShadingPushConstant),
-            VK_SHADER_STAGE_MESH_BIT_EXT,
-            PipelineCategory::Critical
-        );
-        builder.Clear();
-    }
 
     constexpr Core::Array<VkFormat, 2> graphicsColorFormats{
         VISIBILITY_BUFFER_FORMAT,

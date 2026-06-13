@@ -328,7 +328,6 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
 
     RenderPass& lightingResolve = graph.AddPass(SID("ReSTIR Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
-    lightingResolve.ReadBuffer(SHADOW_DATA_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
     if (graph.HasBuffer(SID("restir_reservoir_final"))) {
         lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
@@ -363,7 +362,6 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
 
                 VisibilityLightingPushConstant pc{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                    .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
                     .lightData = graph.GetBufferAddress(SID("light_data")),
                     .lightVS = graph.TryGetBufferAddress(SID("restir_lights_vs")),
                     .lightDispatchBuffer = lightDispatchAddress,

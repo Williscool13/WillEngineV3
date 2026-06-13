@@ -330,10 +330,6 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/shaders/include/instancing_interop.slang
 )
 preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/shadows_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/shadows_interop.slang
-)
-preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/lights_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/include/lights_interop.slang
 )
@@ -376,7 +372,6 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/visibility_shading_commo
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/visibility_lighting_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shader_constants.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shader_functions.slang")
-add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shadow_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/ui_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/pbr_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/packing_functions.slang")
@@ -464,7 +459,6 @@ compile_shaders(will-engine
 
 
         # Deprecated
-        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadow_mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentPortalComposite portal_composite
 
 

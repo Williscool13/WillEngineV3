@@ -10,7 +10,6 @@
 #include "core/containers/array.h"
 #include "shaders/lights_interop.h"
 #include "shaders/model_interop.h"
-#include "shaders/shadows_interop.h"
 
 namespace Render
 {
@@ -34,7 +33,6 @@ inline constexpr int32_t RDG_MAX_STORAGE_UINT2 = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT = 64;
 
 inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
-inline const StringID SHADOW_DATA_BUFFER = SID("shadow_data");
 inline const StringID LIGHT_DATA_BUFFER = SID("light_data");
 inline const StringID GEOMETRY_PRIMITIVE_BUFFER = SID("primitive_buffer");
 inline const StringID GEOMETRY_MODEL_BUFFER = SID("model_buffer");
@@ -80,7 +78,6 @@ inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE = sizeof(Primitive) * MEGA_P
 
 inline constexpr int32_t VIEW_COUNT = 4; // Up to 4 views per frame, 0 is main view. 1 is portal. Idk what 2/3 are (maybe remove)
 inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * VIEW_COUNT;
-inline constexpr int32_t SHADOW_DATA_BUFFER_SIZE = sizeof(ShadowData) * SHADOW_CASCADE_COUNT * VIEW_COUNT;
 inline constexpr int32_t LIGHT_DATA_BUFFER_SIZE = sizeof(LightData) * VIEW_COUNT;
 
 inline constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE = 1 << 27; // 64MB indices
@@ -129,93 +126,6 @@ inline constexpr Core::Array<HaltonSample, HALTON_SEQUENCE_COUNT> HALTON_SEQUENC
 };
 
 
-struct CascadeBias
-{
-    float linear;
-    float sloped;
-};
-
-struct PCSSSamples
-{
-    uint32_t blockerSearchSamples;
-    uint32_t pcfSamples;
-};
-
-struct ShadowCascadePreset
-{
-    Core::Array<glm::vec2, SHADOW_CASCADE_COUNT> extents;
-    Core::Array<CascadeBias, SHADOW_CASCADE_COUNT> biases;
-    Core::Array<PCSSSamples, SHADOW_CASCADE_COUNT> pcssSamples;
-    Core::Array<float, SHADOW_CASCADE_COUNT> lightSizes;
-};
-
-inline constexpr Core::Array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
-    {
-        // Ultra
-        {
-            {
-                glm::vec2{4096, 4096}, {2048, 2048}, {1024, 1024}, {1024, 1024}
-            },
-            {
-                CascadeBias{0, 7.0f}, {0, 3.0f}, {0, 2.0f}, {0, 1.5f}
-            },
-            {
-                PCSSSamples{32, 64}, {32, 64}, {16, 32}, {16, 32}
-            },
-            {
-                0.003f, 0.003f, 0.003f, 0.002f
-            }
-        },
-
-        // High
-        {
-            {
-                glm::vec2{2048, 2048}, {2048, 2048}, {1024, 1024}, {512, 512}
-            },
-            {
-                CascadeBias{1.5f, 2.0f}, {1.75f, 2.25f}, {2.25f, 2.75f}, {3.0f, 3.5f}
-            },
-            {
-                PCSSSamples{24, 48}, {24, 48}, {16, 32}, {12, 24}
-            },
-            {
-                0.006f, 0.012f, 0.024f, 0.048f
-            }
-        },
-
-        // Medium
-        {
-            {
-                glm::vec2{2048, 2048}, {1024, 1024}, {512, 512}, {512, 512}
-            },
-            {
-                CascadeBias{2.0f, 2.5f}, {2.5f, 3.0f}, {3.0f, 3.5f}, {4.0f, 4.5f}
-            },
-            {
-                PCSSSamples{16, 32}, {16, 32}, {12, 24}, {8, 16}
-            },
-            {
-                0.008f, 0.016f, 0.032f, 0.064f
-            }
-        },
-
-        // Low
-        {
-            {
-                glm::vec2{1024, 1024}, {1024, 1024}, {512, 512}, {256, 256}
-            },
-            {
-                CascadeBias{2.5f, 3.0f}, {3.0f, 3.5f}, {4.0f, 4.5f}, {5.0f, 5.5f}
-            },
-            {
-                PCSSSamples{12, 24}, {12, 24}, {8, 16}, {8, 16}
-            },
-            {
-                0.01f, 0.02f, 0.04f, 0.08f
-            }
-        }
-    }
-};
 } // Render
 
 #endif //WILL_ENGINE_VK_CONSTANTS_H

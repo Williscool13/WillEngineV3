@@ -145,8 +145,6 @@ struct LightingState
     bool bResetGroundTruth{false};
 
     Core::DirectionalLight directionalLight{};
-    Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
-    Core::ShadowConfiguration shadowConfig;
     Core::GTAOConfiguration gtaoConfig{};
     Core::AntiAliasingConfiguration aaConfig{};
     Core::PostProcessConfiguration postProcess{};

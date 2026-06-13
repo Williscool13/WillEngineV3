@@ -39,7 +39,6 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
 
     RenderPass& lightingResolve = graph.AddPass(SID("Visibility Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
-    lightingResolve.ReadBuffer(SHADOW_DATA_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
     if (graph.HasBuffer(SID("restir_reservoir_final"))) {
         lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
@@ -70,7 +69,6 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
 
                 VisibilityLightingPushConstant pc{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                    .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
                     .lightData = graph.GetBufferAddress(SID("light_data")),
                     .lightDispatchBuffer = lightDispatchAddress,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
@@ -124,7 +122,6 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
 
     RenderPass& pass = graph.AddPass(SID("Ground Truth Lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadBuffer(SHADOW_DATA_BUFFER);
     pass.ReadBuffer(SID("light_data"));
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadWriteBuffer(SID("gt_accum"));
@@ -147,7 +144,6 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
 
             VisibilityLightingPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(SID("light_data")),
                 .lightDispatchBuffer = 0,
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
