@@ -451,6 +451,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(RTSunShadowPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("sigma_shadow_blur"), src / "sigma_shadow_blur_compute.spv",
                             sizeof(SigmaBlurPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("sigma_shadow_temporal"), src / "sigma_shadow_temporal_compute.spv",
+                            sizeof(SigmaTemporalPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("shadows_resolve"), src / "shadows_resolve_compute.spv",
                             sizeof(ShadowsResolvePushConstant), PipelineCategory::Critical);

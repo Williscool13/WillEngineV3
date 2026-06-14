@@ -1248,4 +1248,16 @@ SHADER_PUBLIC struct SigmaBlurPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
 };
 
+SHADER_PUBLIC struct SigmaTemporalPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t shadowIndex;
+    SHADER_PUBLIC uint32_t historyIndex; // ~0u when no history this frame
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

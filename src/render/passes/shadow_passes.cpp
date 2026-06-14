@@ -95,4 +95,50 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 }
+
+void SetupSigmaShadowTemporal(RenderGraph& graph,
+                              PipelineManager* pipelineManager,
+                              const Core::ViewFamily& viewFamily,
+                              Core::Array<uint32_t, 2> renderExtent,
+                              const RenderTargets& targets,
+                              uint32_t sceneIndex)
+{
+    if (!graph.HasTexture(SID("sigma_shadow"))) { return; }
+
+    graph.CreateTexture(SID("sigma_stabilized"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+
+    const bool bHasHistory = graph.HasTexture(SID("sigma_stabilized_prev"));
+
+    RenderPass& pass = graph.AddPass(SID("SIGMA Shadow Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
+    pass.ReadBuffer(SID("scene_data"));
+    pass.ReadSampledImage(SID("sigma_shadow"));
+    pass.ReadSampledImage(targets.depthCopy);
+    pass.ReadSampledImage(targets.gbufferOne);
+    if (bHasHistory) { pass.ReadSampledImage(SID("sigma_stabilized_prev")); }
+    pass.WriteStorageImage(SID("sigma_stabilized"));
+    pass.Execute([&graph, pipelineManager, sceneIndex, renderExtent, bHasHistory,
+            depth = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd) {
+            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("sigma_shadow_temporal"));
+            if (!pipeline) { return; }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+
+            SigmaTemporalPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SID("scene_data")),
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .shadowIndex = graph.GetSampledImageViewDescriptorIndex(SID("sigma_shadow")),
+                .historyIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("sigma_stabilized_prev")) : ~0x0u,
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("sigma_stabilized")),
+                .sceneDataIndex = sceneIndex,
+            };
+            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+            const uint32_t groupsX = (renderExtent[0] + 7) / 8;
+            const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+            vkCmdDispatch(cmd, groupsX, groupsY, 1);
+        });
+
+    graph.CarryTextureToNextFrame(SID("sigma_stabilized"), SID("sigma_stabilized_prev"), VK_IMAGE_USAGE_SAMPLED_BIT);
+}
 } // Render

@@ -182,8 +182,10 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
 {
     if (!graph.HasTexture(SID("rt_sun_shadow"))) { return; }
 
-    // Prefer the denoised shadow when SIGMA has run; fall back to the raw trace otherwise.
-    StringID shadowTex = graph.HasTexture(SID("sigma_shadow")) ? SID("sigma_shadow") : SID("rt_sun_shadow");
+    // Prefer the most-processed shadow available: temporally stabilized > spatially denoised > raw trace.
+    StringID shadowTex = SID("rt_sun_shadow");
+    if (graph.HasTexture(SID("sigma_shadow"))) { shadowTex = SID("sigma_shadow"); }
+    if (graph.HasTexture(SID("sigma_stabilized"))) { shadowTex = SID("sigma_stabilized"); }
 
     RenderPass& pass = graph.AddPass(SID("Directional Lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
     pass.ReadBuffer(SCENE_DATA_BUFFER);

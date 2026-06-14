@@ -31,6 +31,17 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
                              const RenderTargets& targets,
                              uint32_t sceneIndex,
                              uint64_t frameNumber);
+
+/**
+ * @brief SIGMA temporal stabilization: motion-vector reproject + neighborhood-clamp the previous
+ * sigma_shadow result. Writes sigma_stabilized and carries it to next frame. No-ops if sigma_shadow is absent.
+ */
+void SetupSigmaShadowTemporal(RenderGraph& graph,
+                              PipelineManager* pipelineManager,
+                              const Core::ViewFamily& viewFamily,
+                              Core::Array<uint32_t, 2> renderExtent,
+                              const RenderTargets& targets,
+                              uint32_t sceneIndex);
 } // Render
 
 #endif //WILL_ENGINE_SHADOW_PASSES_H
