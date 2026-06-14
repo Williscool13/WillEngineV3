@@ -32,6 +32,9 @@ namespace Game
 {
 void ConnectRenderObservers(entt::registry& registry)
 {
+    registry.on_construct<Component::TransformComponent>().connect<&Component::TransformComponent::OnConstruct>();
+    registry.on_destroy<Component::TransformComponent>().connect<&Component::TransformComponent::OnDestroy>();
+
     registry.on_destroy<Component::MeshRuntime>().connect<&Component::MeshRuntime::OnDestroy>();
 
     registry.on_construct<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnConstruct>();
@@ -45,10 +48,16 @@ void ConnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::TextComponent>().connect<&Component::TextComponent::OnConstruct>();
     registry.on_destroy<Component::TextComponent>().connect<&Component::TextComponent::OnDestroy>();
+
+    registry.on_construct<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnConstruct>();
+    registry.on_destroy<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnDestroy>();
 }
 
 void DisconnectRenderObservers(entt::registry& registry)
 {
+    registry.on_construct<Component::TransformComponent>().disconnect<&Component::TransformComponent::OnConstruct>();
+    registry.on_destroy<Component::TransformComponent>().disconnect<&Component::TransformComponent::OnDestroy>();
+
     registry.on_destroy<Component::MeshRuntime>().disconnect<&Component::MeshRuntime::OnDestroy>();
 
     registry.on_construct<Component::StaticMeshComponent>().disconnect<&Component::StaticMeshComponent::OnConstruct>();
@@ -62,6 +71,9 @@ void DisconnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::TextComponent>().disconnect<&Component::TextComponent::OnConstruct>();
     registry.on_destroy<Component::TextComponent>().disconnect<&Component::TextComponent::OnDestroy>();
+
+    registry.on_construct<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnConstruct>();
+    registry.on_destroy<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnDestroy>();
 }
 
 void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -349,9 +361,9 @@ void ResolveSplineMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
 
 void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto transformDirtyView = state->registry.view<Component::RenderTransformComponent, Component::DirtyTransformTag>();
+    auto transformDirtyView = state->registry.view<Component::TransformComponent, Component::DirtyTransformTag>();
     for (auto entity : transformDirtyView) {
-        state->registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
     }
 }
 
@@ -359,7 +371,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
 {
     ZoneScoped;
 
-    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::DirtyRenderTransformComponent>(
+    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::MultiframeDirtyTransformComponent>(
         entt::exclude<Component::DynamicPhysicsBodyComponent>);
     constexpr size_t TASK_THRESHOLD = 1000;
     size_t dirtyViewCount = dirtyView.size_hint();
@@ -368,7 +380,6 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         for (auto [entity, transform, renderTransform, dirtyRender] : dirtyView.each()) {
             renderTransform.previousMatrix = renderTransform.modelMatrix;
             renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
-            dirtyRender.counter--;
         }
     }
     else {
@@ -386,20 +397,10 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
 
                 renderTransform.previousMatrix = renderTransform.modelMatrix;
                 renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
-
-                auto& dirty = dirtyView.get<Component::DirtyRenderTransformComponent>(entity);
-                dirty.counter--;
             }
         });
         ctx->scheduler->AddTaskSetToPipe(&task);
         ctx->scheduler->WaitforTask(&task);
-    }
-
-    auto cleanupView = state->registry.view<Component::DirtyRenderTransformComponent>();
-    for (const auto& [entity, dirty] : cleanupView.each()) {
-        if (dirty.counter <= 0) {
-            state->registry.remove<Component::DirtyRenderTransformComponent>(entity);
-        }
     }
 
     // Physics always dirty until I find a better way
@@ -411,6 +412,19 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         glm::vec3 interpPos = glm::mix(physics.previousPosition, transform.translation, alpha);
         glm::quat interpRot = glm::slerp(physics.previousRotation, transform.rotation, alpha);
         renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale) * glm::translate(glm::mat4(1.0f), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
+    }
+
+    // Area light emissive quads
+    for (auto [entity, light, transform, areaLightTransform, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::AreaLightTransformComponent, Component::MultiframeDirtyTransformComponent>().each()) {
+        areaLightTransform.previousMatrix = areaLightTransform.modelMatrix;
+        areaLightTransform.modelMatrix = Component::ComputeAreaLightQuadMatrix(transform, light);
+    }
+
+    for (auto [entity, dirty] : state->registry.view<Component::MultiframeDirtyTransformComponent>().each()) {
+        dirty.counter--;
+        if (dirty.counter <= 0) {
+            state->registry.remove<Component::MultiframeDirtyTransformComponent>(entity);
+        }
     }
 }
 
@@ -458,63 +472,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
-    // Gather portal planes
-    {
-        /*ZoneScopedN("PortalRenderables");
-        auto portalView = state->registry.view<Component::PortalPlaneTag, Component::MeshRuntime, Component::RenderTransformComponent>();
-
-        if (portalView.size_hint() > 0) {
-            auto id = SID("portal_rendering");
-            Core::CustomShaderDraw& portalDraw = frameBuffer->mainViewFamily.GetOrCreateCustomShaderDraw(id);
-            portalDraw.prefix = Core::InlineString("portal_render");
-            portalDraw.pipelineId = id;
-            portalDraw.stencilValue = 1;
-
-
-            for (auto [entity, runtime, renderTransform] : portalView.each()) {
-                auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
-                frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
-
-                for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
-                    auto& prim = runtime.primitives[i];
-                    portalDraw.instances.PushBack({
-                        .primitiveIndex = prim.primitiveIndex,
-                        .materialID = prim.materialID,
-                        .modelIndex = modelIndex
-                    });
-                }
-            }
-        }*/
-    }
-
-    // Gather cubemap visualizations
-    {
-        /*ZoneScopedN("CubemapVisualizations");
-        auto cubemapView = state->registry.view<Component::CubemapVisualizeTag, Component::MeshRuntime, Component::RenderTransformComponent>();
-
-        for (auto [entity, runtime, renderTransform] : cubemapView.each()) {
-            auto id = SID("cubemap_visualize");
-            Core::CustomShaderDraw& cubemapVis = frameBuffer->mainViewFamily.GetOrCreateCustomShaderDraw(id);
-            cubemapVis.prefix = Core::InlineString("cubemap_vis");
-            cubemapVis.pipelineId = id;
-            cubemapVis.pushConstantCustomData[0] = 0;
-            cubemapVis.pushConstantCustomData[1] = ASSET_SAMPLER_LINEAR_BINDLESS_INDEX;
-            cubemapVis.pushConstantCustomData[2] = 0;
-
-            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
-            frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
-
-            for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
-                auto& prim = runtime.primitives[i];
-                cubemapVis.instances.PushBack({
-                    .primitiveIndex = prim.primitiveIndex,
-                    .materialID = prim.materialID,
-                    .modelIndex = modelIndex
-                });
-            }
-        }*/
-    }
-
     // Gather procedural meshes
     {
         ZoneScopedN("ProceduralMeshes");
@@ -536,7 +493,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             ENGINE_ASSERT(Game, model, "Loaded entity references a model that is not in the asset manager");
             const Engine::MeshInformation& mesh = model->modelData.meshes[0];
 
-            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
             for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
                 const auto& prim = runtime.primitives[i];
                 frameBuffer->mainViewFamily.primitiveInstances.PushBack({
@@ -570,7 +526,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             ENGINE_ASSERT(Game, model, "Loaded entity references a model that is not in the asset manager");
             const Engine::MeshInformation& mesh = model->modelData.meshes[0];
 
-            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
             for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
                 const auto& prim = runtime.primitives[i];
                 frameBuffer->mainViewFamily.primitiveInstances.PushBack({
@@ -579,6 +534,53 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     .modelIndex = modelIndex,
                     .stableId = stableId,
                     .blasDeviceAddress = mesh.primitiveProperties[i].blasDeviceAddress,
+                });
+            }
+        }
+    }
+
+    // Gather area light emissive quads. Each area light draws a unit quad through the standard meshlet path, using the co-located
+    // transform maintained in AreaLightTransformComponent, so looking into the light shows a bright emissive surface. blasDeviceAddress
+    // stays 0 so the quad rasters but is excluded from the TLAS, keeping the light from self-shadowing its own ReSTIR rays. The
+    // emissive material is synthesized per frame from the light's live color/intensity; its id comes from HashMaterial so it dedups
+    // by content like any other material, and Material Recording below leaves it alone (key already present in activeMaterials).
+    {
+        ZoneScopedN("AreaLightQuads");
+        const Engine::StaticModelHandle quadHandle = state->builtinAssets.GetUnitQuad(ctx->assetManager);
+        Engine::StaticModel* quadModel = ctx->assetManager->GetModel(quadHandle);
+        const Engine::Material* defaultMaterial = materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
+        if (defaultMaterial && quadModel && quadModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded
+            && !quadModel->modelData.meshes.IsEmpty() && !quadModel->modelData.meshes[0].primitiveProperties.IsEmpty()) {
+            const uint32_t quadPrimitiveIndex = quadModel->modelData.meshes[0].primitiveProperties[0].index;
+
+            Engine::Material emissiveMaterial = *defaultMaterial; // only emissiveFactor changes per light; black albedo so only emission shows
+            emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
+
+            for (auto [entity, light, areaLightTransform] : state->registry.view<Component::AreaLightComponent, Component::AreaLightTransformComponent>().each()) {
+                const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+                frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(areaLightTransform.modelMatrix, areaLightTransform.previousMatrix);
+
+                emissiveMaterial.props.emissiveFactor = glm::vec4(light.color, light.intensity);
+                const Engine::MaterialID materialKey = Engine::HashMaterial(emissiveMaterial);
+
+                auto [materialIndex, inserted] = frameBuffer->mainViewFamily.activeMaterials.TryEmplace(materialKey);
+                if (inserted) {
+                    materialIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.materials.Size());
+                    frameBuffer->mainViewFamily.materials.PushBack(Engine::RenderMaterial{emissiveMaterial.props, emissiveMaterial.fragmentShader, emissiveMaterial.lightingShader});
+                }
+
+                uint64_t stableId = 1234567890;
+                if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                    stableId = stable->id.id;
+                }
+
+                frameBuffer->mainViewFamily.primitiveInstances.PushBack({
+                    .primitiveIndex = quadPrimitiveIndex,
+                    .materialID = materialKey,
+                    .modelIndex = modelIndex,
+                    .stableId = stableId,
+                    .blasDeviceAddress = 0,
                 });
             }
         }

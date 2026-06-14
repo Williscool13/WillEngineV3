@@ -13,6 +13,7 @@
 
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
+#include "game/components/render_components.h"
 
 void Game::Component::TransformComponent::Serialize(const TransformComponent& comp, nlohmann::json& json)
 {
@@ -32,6 +33,16 @@ void Game::Component::TransformComponent::Deserialize(TransformComponent& comp, 
 
     const auto& s = json["scale"];
     comp.scale = glm::vec3(s[0].get<float>(), s[1].get<float>(), s[2].get<float>());
+}
+
+void Game::Component::TransformComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+{
+    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+}
+
+void Game::Component::TransformComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    registry.remove<MultiframeDirtyTransformComponent>(entity);
 }
 
 namespace Game

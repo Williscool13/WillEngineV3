@@ -17,6 +17,8 @@ struct ViewFamily;
 
 namespace Game::Component
 {
+struct TransformComponent;
+
 struct PointLightComponent
 {
     Vec3 color{1.0f, 1.0f, 1.0f};
@@ -43,7 +45,19 @@ struct AreaLightComponent
     static void Serialize(const AreaLightComponent& comp, nlohmann::json& json);
 
     static void Deserialize(AreaLightComponent& comp, const nlohmann::json& json);
+
+    static void OnConstruct(entt::registry& registry, entt::entity entity);
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
+
+/**
+ * World-space transform for an area light's emissive quad: unit XZ plane oriented to the light and scaled to its extents.
+ * @param transform
+ * @param light
+ * @return
+ */
+glm::mat4 ComputeAreaLightQuadMatrix(const TransformComponent& transform, const AreaLightComponent& light);
 
 struct DirectionalLightComponent
 {

@@ -64,7 +64,7 @@ void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, en
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<DirtyRenderTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
 }
 
 void StaticMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -81,7 +81,6 @@ void StaticMeshComponent::OnDestroy(entt::registry& registry, entt::entity entit
     registry.remove<MeshRuntime>(entity);
     registry.remove<StaticMeshLoadingTag>(entity);
     registry.remove<RenderTransformComponent>(entity);
-    registry.remove<DirtyRenderTransformComponent>(entity);
 }
 }
 
@@ -208,7 +207,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             component.meshIndex = -1;
             registry.remove<StaticMeshLoadingTag>(entity);
             registry.remove<RenderTransformComponent>(entity);
-            registry.remove<DirtyRenderTransformComponent>(entity);
+            registry.remove<MultiframeDirtyTransformComponent>(entity);
             return {.requestRemoval = remove};
         }
 
@@ -255,7 +254,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 if (runtime) runtime->primitives.Clear();
                 registry.remove<StaticMeshLoadingTag>(entity);
                 registry.remove<RenderTransformComponent>(entity);
-                registry.remove<DirtyRenderTransformComponent>(entity);
+                registry.remove<MultiframeDirtyTransformComponent>(entity);
                 return {.requestRemoval = remove};
             }
         }
@@ -438,7 +437,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
                 rt->renderOffset = component.renderOffset;
-                registry.emplace_or_replace<DirtyRenderTransformComponent>(entity);
+                registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
             }
         }
 
@@ -452,7 +451,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
                 rt->renderRotation = component.renderRotation;
-                registry.emplace_or_replace<DirtyRenderTransformComponent>(entity);
+                registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
             }
         }
 
@@ -499,7 +498,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 if (rt) {
                     rt->renderOffset = component.renderOffset;
                     rt->renderRotation = component.renderRotation;
-                    registry.emplace_or_replace<DirtyRenderTransformComponent>(entity);
+                    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
                 }
             }
             if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }

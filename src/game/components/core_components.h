@@ -28,6 +28,9 @@ struct TransformComponent
     static void Serialize(const TransformComponent& comp, nlohmann::json& json);
     static void Deserialize(TransformComponent& comp, const nlohmann::json& json);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+
+    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 
 inline glm::mat4 GetMatrix(const TransformComponent& transform)

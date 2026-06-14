@@ -30,6 +30,7 @@
 #include "core/input/input_frame.h"
 #include "core/containers/arena_fixed_map.h"
 #include "engine/asset_manager.h"
+#include "engine/builtin_assets.h"
 
 struct ResolvedCollisionEvent
 {
@@ -262,6 +263,8 @@ struct EngineState
     int32_t pendingProceduralWaitCount{0};
     std::chrono::steady_clock::time_point proceduralWaitLastActivity{};
     StaticModelHandle portalPlaneHandle{StaticModelHandle::INVALID};
+
+    BuiltinAssets builtinAssets{};
 
     // Gameplay
     StringID currentSceneId{0};

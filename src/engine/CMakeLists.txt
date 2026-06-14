@@ -7,6 +7,8 @@ add_library(engine STATIC
         asset_manager.h
         asset_manager_config.h
         asset_manager_types.h
+        builtin_assets.cpp
+        builtin_assets.h
         project_config.cpp
         project_config.h
         material_manager.cpp

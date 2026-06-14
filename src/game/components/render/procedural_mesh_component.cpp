@@ -27,7 +27,6 @@ void ProceduralMeshComponent::OnDestroy(entt::registry& registry, entt::entity e
     registry.remove<MeshRuntime>(entity);
     registry.remove<ProceduralMeshLoadingTag>(entity);
     registry.remove<RenderTransformComponent>(entity);
-    registry.remove<DirtyRenderTransformComponent>(entity);
 }
 
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
@@ -57,7 +56,7 @@ void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& 
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
-    registry.emplace_or_replace<DirtyRenderTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
 }
 }
 

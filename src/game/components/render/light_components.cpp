@@ -10,6 +10,7 @@
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/component-registry/json_helpers.h"
 #include "game/components/core_components.h"
+#include "game/components/render_components.h"
 #include "engine/include/engine_context.h"
 
 namespace Game
@@ -166,7 +167,7 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
 
     {
         auto* state = registry.ctx().get<Engine::EngineState*>();
-        auto* transform = registry.try_get<Component::TransformComponent>(entity);
+        auto* transform = registry.try_get<TransformComponent>(entity);
         if (transform && state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::Selected) {
             const glm::vec3 forward = transform->rotation * glm::vec3(0.0f, 0.0f, 1.0f);
             constexpr glm::vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
@@ -192,5 +193,36 @@ void Component::DirectionalLightComponent::Deserialize(DirectionalLightComponent
     comp.intensity = json.value("intensity", 2.0f);
     comp.priority = json.value("priority", 0);
     comp.angularRadiusDegrees = json.value("angularRadiusDegrees", 1.0f);
+}
+
+glm::mat4 Component::ComputeAreaLightQuadMatrix(const TransformComponent& transform, const AreaLightComponent& light)
+{
+    const glm::mat3 rot = glm::mat3_cast(transform.rotation);
+    const glm::vec3 right = rot[0];
+    const glm::vec3 up = rot[1];
+    const glm::vec3 normal = rot[2];
+    const float halfWidth = light.halfWidth * transform.scale.x;
+    const float halfHeight = light.halfHeight * transform.scale.y;
+
+    glm::mat4 m(1.0f);
+    m[0] = glm::vec4(right * (2.0f * halfWidth), 0.0f);
+    m[1] = glm::vec4(normal, 0.0f);
+    m[2] = glm::vec4(up * (-2.0f * halfHeight), 0.0f);
+    m[3] = glm::vec4(transform.translation, 1.0f);
+    return m;
+}
+
+void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+{
+    glm::mat4 m(1.0f);
+    if (auto* transform = registry.try_get<TransformComponent>(entity)) {
+        m = ComputeAreaLightQuadMatrix(*transform, registry.get<AreaLightComponent>(entity));
+    }
+    registry.emplace_or_replace<AreaLightTransformComponent>(entity, m, m);
+}
+
+void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    registry.remove<AreaLightTransformComponent>(entity);
 }
 } // Game

@@ -17,7 +17,7 @@
 
 namespace Game::Component
 {
-struct DirtyRenderTransformComponent
+struct MultiframeDirtyTransformComponent
 {
     // 2 to update Prev next frame.
     int32_t counter{2};
@@ -29,6 +29,13 @@ struct RenderTransformComponent
     glm::mat4 previousMatrix;
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
+};
+
+// Quad transform for an area light's emissive surface. Spawned off AreaLightComponent (lifetime-linked), rolled each frame in RenderPrepareTransforms.
+struct AreaLightTransformComponent
+{
+    glm::mat4 modelMatrix{1.0f};
+    glm::mat4 previousMatrix{1.0f};
 };
 
 struct PrimitiveData
