@@ -449,6 +449,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(RTGroundTruthDIPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("rt_sun_shadow"), src / "rt_sun_shadow_compute.spv",
                             sizeof(RTSunShadowPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("sigma_classify_tiles"), src / "sigma_classify_tiles_compute.spv",
+                            sizeof(SigmaClassifyPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("sigma_shadow_blur"), src / "sigma_shadow_blur_compute.spv",
                             sizeof(SigmaBlurPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("sigma_shadow_temporal"), src / "sigma_shadow_temporal_compute.spv",

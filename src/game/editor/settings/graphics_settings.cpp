@@ -359,6 +359,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Sun Shadow (Hit Dist)")) setDebugTarget("rt_sun_shadow", DebugTransformationType::SunShadowHitDist, Core::DebugViewAspect::None);
             if (ImGui::Button("Sun Shadow (Denoised)")) setDebugTarget("sigma_shadow", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
             if (ImGui::Button("Sun Shadow (Stabilized)")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
+            if (ImGui::Button("Sun Shadow (Tiles)")) setDebugTarget("sigma_tiles", DebugTransformationType::SunShadowTiles, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("Anti-Aliasing")) {

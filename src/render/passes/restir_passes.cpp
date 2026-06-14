@@ -251,6 +251,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
     graph.CarryBufferToNextFrame(SID("restir_reservoir_temporal"), SID("restir_reservoir_history"), 0);
 
+    if (!restirParams.bSpatial2) {
+        graph.AliasBuffer(SID("restir_reservoir_final"), SID("restir_reservoir_spatial"));
+        return;
+    }
+
     // Spatial Reuse 2
     graph.CreateBuffer(SID("restir_reservoir_spatial2"), reservoirBufferSize, true);
 

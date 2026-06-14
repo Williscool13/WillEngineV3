@@ -40,6 +40,26 @@ void ComputeMain(uniform SigmaBlurPushConstant pc, uint3 tid : SV_DispatchThread
     float centerVis = center.r;
     float centerHit = center.g;
 
+    // Tile gate: a 5x5 tile (16px) neighborhood covers the max penumbra reach (SIGMA_MAX_KERNEL_PIXELS).
+    int2 myTile = int2(pixel) / 16;
+    int2 tilesMax = int2((pc.renderExtent + 15u) / 16u) - 1;
+    float windowMin = 1.0;
+    float windowMax = 0.0;
+    [unroll]
+    for (int ty = -2; ty <= 2; ty++)
+    {
+        [unroll]
+        for (int tx = -2; tx <= 2; tx++)
+        {
+            int2 t = clamp(myTile + int2(tx, ty), int2(0), tilesMax);
+            float2 mm = rdgTexturesFloat2[pc.tilesIndex].Load(int3(t, 0)).rg;
+            windowMin = min(windowMin, mm.r);
+            windowMax = max(windowMax, mm.g);
+        }
+    }
+    if (windowMax < 0.5) { rdgStorageFloat2[pc.outputIndex][pixel] = float2(0.0, 0.0); return; }
+    if (windowMin > 0.5) { rdgStorageFloat2[pc.outputIndex][pixel] = float2(1.0, 0.0); return; }
+
     float centerViewZ = RelaxLoadViewZ(pc.depthIndex, int2(pixel), scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 centerN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0)).r));
 

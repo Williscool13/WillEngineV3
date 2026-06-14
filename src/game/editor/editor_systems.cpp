@@ -1945,9 +1945,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
     ImGui::End();
 
-    frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
-    frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
-    frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
     frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
     frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
     frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;

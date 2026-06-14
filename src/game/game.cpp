@@ -327,6 +327,9 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     state->lighting.bResetGroundTruth = false;
     frameBuffer->mainViewFamily.shadingShaderOverride = state->debug.shadingShaderOverride;
     frameBuffer->mainViewFamily.lightingShaderOverride = state->debug.lightingShaderOverride;
+    frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
+    frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
+    frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
     if (state->debug.bEnablePortal) {
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }

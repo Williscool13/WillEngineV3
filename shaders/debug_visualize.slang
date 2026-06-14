@@ -243,6 +243,14 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = lit >= 0.5 ? float3(0.0) : float3(t);
             break;
         }
+        case 30: { // SunShadowTiles - sigma_tiles (minVis, maxVis): red = penumbra (filtered), grey = lit, dark blue = shadowed
+            float mn = srcPixel.x;
+            float mx = srcPixel.y;
+            if (mx < 0.5) { srcPixel.xyz = float3(0.04, 0.04, 0.15); }
+            else if (mn > 0.5) { srcPixel.xyz = float3(0.15, 0.15, 0.15); }
+            else { srcPixel.xyz = float3(1.0, 0.1, 0.1); }
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

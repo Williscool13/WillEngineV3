@@ -64,10 +64,32 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
     // R = denoised visibility, G = penumbra (world units)
     graph.CreateTexture(SID("sigma_shadow"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
+    const uint32_t tilesX = (renderExtent[0] + 15) / 16;
+    const uint32_t tilesY = (renderExtent[1] + 15) / 16;
+    graph.CreateTexture(SID("sigma_tiles"), TextureInfo{VK_FORMAT_R8G8_UNORM, tilesX, tilesY, 1}, {std::nullopt}, true);
+
+    RenderPass& classify = graph.AddPass(SID("SIGMA Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
+    classify.ReadSampledImage(SID("rt_sun_shadow"));
+    classify.WriteStorageImage(SID("sigma_tiles"));
+    classify.Execute([&graph, pipelineManager, renderExtent, tilesX, tilesY](VkCommandBuffer cmd) {
+            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("sigma_classify_tiles"));
+            if (!pipeline) { return; }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+
+            SigmaClassifyPushConstant pc{
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .shadowIndex = graph.GetSampledImageViewDescriptorIndex(SID("rt_sun_shadow")),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("sigma_tiles")),
+            };
+            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, tilesX, tilesY, 1);
+        });
+
     RenderPass& pass = graph.AddPass(SID("SIGMA Shadow Blur"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
     pass.ReadBuffer(SID("scene_data"));
     pass.ReadBuffer(SID("light_data"));
     pass.ReadSampledImage(SID("rt_sun_shadow"));
+    pass.ReadSampledImage(SID("sigma_tiles"));
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.WriteStorageImage(SID("sigma_shadow"));
@@ -87,6 +109,7 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("sigma_shadow")),
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("sigma_tiles")),
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -112,6 +135,7 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
     RenderPass& pass = graph.AddPass(SID("SIGMA Shadow Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
     pass.ReadBuffer(SID("scene_data"));
     pass.ReadSampledImage(SID("sigma_shadow"));
+    pass.ReadSampledImage(SID("sigma_tiles"));
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
     if (bHasHistory) { pass.ReadSampledImage(SID("sigma_stabilized_prev")); }
@@ -131,6 +155,7 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("sigma_stabilized")),
                 .sceneDataIndex = sceneIndex,
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("sigma_tiles")),
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
