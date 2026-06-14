@@ -182,15 +182,18 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
 {
     if (!graph.HasTexture(SID("rt_sun_shadow"))) { return; }
 
+    // Prefer the denoised shadow when SIGMA has run; fall back to the raw trace otherwise.
+    StringID shadowTex = graph.HasTexture(SID("sigma_shadow")) ? SID("sigma_shadow") : SID("rt_sun_shadow");
+
     RenderPass& pass = graph.AddPass(SID("Directional Lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
-    pass.ReadSampledImage(SID("rt_sun_shadow"));
+    pass.ReadSampledImage(shadowTex);
     pass.ReadWriteImage(targets.colorOutput);
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent,
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, shadowTex,
             depth = targets.depthCopy, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             output = targets.colorOutput](VkCommandBuffer cmd) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("directional_light"));
@@ -203,7 +206,7 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                .shadowIndex = graph.GetSampledImageViewDescriptorIndex(SID("rt_sun_shadow")),
+                .shadowIndex = graph.GetSampledImageViewDescriptorIndex(shadowTex),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
                 .sceneDataIndex = sceneIndex,
                 .renderExtent = {renderExtent[0], renderExtent[1]},

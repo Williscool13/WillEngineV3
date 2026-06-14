@@ -26,7 +26,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 /**
  * Draws the "Project Config" window: lighting mode, anti-aliasing (mode + SMAA), and TAA - the global, non-profile render settings persisted directly in project.wconfig.
  */
-void DrawProjectConfigWindow(Engine::EngineState* state);
+void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
  * Draws the "Lighting" window: per-tab save + lighting profile picker, ReSTIR DI settings, the denoiser (A-Trous / A-SVGF / RELAX), and ambient occlusion (GTAO).

@@ -19,6 +19,18 @@ void SetupShadowsResolve(RenderGraph& graph,
                          Core::Array<uint32_t, 2> renderExtent,
                          const RenderTargets& targets,
                          uint32_t sceneIndex);
+
+/**
+ * SIGMA shadow denoiser (penumbra-aware spatial filter) over the rt_sun_shadow signal.
+ * Writes denoised (visibility, penumbra) to sigma_shadow. No-ops if rt_sun_shadow is absent.
+ */
+void SetupSigmaShadowDenoise(RenderGraph& graph,
+                             PipelineManager* pipelineManager,
+                             const Core::ViewFamily& viewFamily,
+                             Core::Array<uint32_t, 2> renderExtent,
+                             const RenderTargets& targets,
+                             uint32_t sceneIndex,
+                             uint64_t frameNumber);
 } // Render
 
 #endif //WILL_ENGINE_SHADOW_PASSES_H

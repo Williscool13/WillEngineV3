@@ -50,4 +50,49 @@ void SetupShadowsResolve(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 }
+
+void SetupSigmaShadowDenoise(RenderGraph& graph,
+                             PipelineManager* pipelineManager,
+                             const Core::ViewFamily& viewFamily,
+                             Core::Array<uint32_t, 2> renderExtent,
+                             const RenderTargets& targets,
+                             uint32_t sceneIndex,
+                             uint64_t frameNumber)
+{
+    if (!graph.HasTexture(SID("rt_sun_shadow"))) { return; }
+
+    // R = denoised visibility, G = penumbra (world units)
+    graph.CreateTexture(SID("sigma_shadow"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+
+    RenderPass& pass = graph.AddPass(SID("SIGMA Shadow Blur"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
+    pass.ReadBuffer(SID("scene_data"));
+    pass.ReadBuffer(SID("light_data"));
+    pass.ReadSampledImage(SID("rt_sun_shadow"));
+    pass.ReadSampledImage(targets.depthCopy);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.WriteStorageImage(SID("sigma_shadow"));
+    pass.Execute([&graph, pipelineManager, sceneIndex, renderExtent, frameNumber,
+            depth = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd) {
+            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("sigma_shadow_blur"));
+            if (!pipeline) { return; }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+
+            SigmaBlurPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SID("scene_data")),
+                .lightData = graph.GetBufferAddress(SID("light_data")),
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .shadowIndex = graph.GetSampledImageViewDescriptorIndex(SID("rt_sun_shadow")),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("sigma_shadow")),
+                .sceneDataIndex = sceneIndex,
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+            };
+            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+            const uint32_t groupsX = (renderExtent[0] + 7) / 8;
+            const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+            vkCmdDispatch(cmd, groupsX, groupsY, 1);
+        });
+}
 } // Render

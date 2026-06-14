@@ -507,7 +507,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     DrawDebugViewWindow(ctx, state);
 
-    DrawProjectConfigWindow(state);
+    DrawProjectConfigWindow(ctx, state);
 
     DrawLightingWindow(state);
 
