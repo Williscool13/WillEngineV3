@@ -403,6 +403,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("History Length")) setDebugTarget("relax_history_length", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Spec Hit Dist")) setDebugTarget("relax_spec_hit_dist", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Reproj Confidence")) setDebugTarget("relax_spec_reproj_confidence", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("History Confidence (ReSTIR)")) setDebugTarget("restir_confidence", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Shadow Vis (ReSTIR)")) setDebugTarget("restir_shadow_vis", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Prev NR")) setDebugTarget("relax_prev_nr", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("ATrous Spec 0")) setDebugTarget("relax_atrous_spec_0", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();
@@ -531,6 +534,11 @@ void DrawLightingWindow(Engine::EngineState* state)
             if (bRELAX) {
                 Core::RELAXParams& relax = state->debug.restir.relax;
                 ImGui::SeparatorText("RELAX");
+
+                if (Widgets::SliderFloat("History Confidence##restir", &state->debug.restir.confidenceStrength, 0.0f, 1.0f,
+                        {.format = "%.2f", .tooltip = "Moving-shadow antilag from ReSTIR: drops RELAX history confidence where the shadow term flipped vs reprojected history (0 disables). Combined-temporal mode only.", .reset = true, .resetTo = 0.75f})) {
+                    changed = true;
+                }
 
                 static const Core::RELAXParams relaxDefaults{};
                 auto relaxTip = [&](const char* tip) {

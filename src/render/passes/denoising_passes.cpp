@@ -717,6 +717,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         else {
             pass.ReadSampledImage(SID("relax_viewz"));
         }
+        if (graph.HasTexture(SID("restir_confidence"))) { pass.ReadSampledImage(SID("restir_confidence")); }
         pass.WriteStorageImage(SID("relax_spec_illum"));
         pass.WriteStorageImage(SID("relax_diff_illum"));
         pass.WriteStorageImage(SID("relax_spec_fast"));
@@ -761,6 +762,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outSpecReprojConfidenceIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_reproj_confidence")),
                 .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_prev_nr")),
                 .pixelScale = pixelScale,
+                .confidenceIndex = graph.HasTexture(SID("restir_confidence")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_confidence")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_temporal_accumulation"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

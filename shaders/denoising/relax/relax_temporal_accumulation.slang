@@ -228,6 +228,13 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     if (!RelaxIsInDenoisingRange(currentLinearZ, rc.gDenoisingRange))
         return;
 
+    // ReSTIR-provided history confidence (IN_DIFF/SPEC_CONFIDENCE equivalent). 1 = full trust; lower scales down the effective max accumulated frames here-and-now, collapsing history where the lighting changed in a way reprojection cannot see (moving-caster shadows on static surfaces).
+    // Single ReSTIR signal drives both lobes.
+    float historyConfidence = 1.0;
+    if (pc.confidenceIndex != ~0u) {
+        historyConfidence = saturate(rdgTexturesFloat[pc.confidenceIndex].Load(int3(pixelPos, 0)).r);
+    }
+
     uint2 sharedMemoryIndex = uint2(threadPos) + TA_BORDER;
 
     float4 currentNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(fullPixel, 0)), viewToWorld);
@@ -337,8 +344,8 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     historyLength = min(historyLength, maxAccumulatedFrameNum);
 
     // Diffuse accumulation
-    float diffMaxAccumFrameNum = rc.gDiffMaxAccumulatedFrameNum;
-    float diffMaxFastAccumFrameNum = rc.gDiffMaxFastAccumulatedFrameNum;
+    float diffMaxAccumFrameNum = rc.gDiffMaxAccumulatedFrameNum * historyConfidence;
+    float diffMaxFastAccumFrameNum = rc.gDiffMaxFastAccumulatedFrameNum * historyConfidence;
     float diffHistoryLength = historyLength;
     float diffAlpha = (SMBReprojectionFound > 0) ? max(1.0 / (diffMaxAccumFrameNum + 1.0), 1.0 / diffHistoryLength) : 1.0;
     float diffAlphaResponsive = (SMBReprojectionFound > 0) ? max(1.0 / (diffMaxFastAccumFrameNum + 1.0), 1.0 / diffHistoryLength) : 1.0;
@@ -507,8 +514,8 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     // Surface motion confidence
     float specSMBConfidence = (SMBReprojectionFound > 0 ? 1.0 : 0.0) * RelaxGetEncodingAwareNormalWeight(V, Vprev, lobeHalfAngle * NoV / rc.gFramerateScale, 0.0, 0.0);
 
-    float specHistoryFrames = min(rc.gSpecMaxAccumulatedFrameNum, historyLength);
-    float specHistoryResponsiveFrames = min(rc.gSpecMaxFastAccumulatedFrameNum, historyLength);
+    float specHistoryFrames = min(rc.gSpecMaxAccumulatedFrameNum * historyConfidence, historyLength);
+    float specHistoryResponsiveFrames = min(rc.gSpecMaxFastAccumulatedFrameNum * historyConfidence, historyLength);
 
     float specSMBAlpha = max(1.0 - specSMBConfidence, 1.0 / (1.0 + specHistoryFrames));
     float specSMBResponsiveAlpha = max(specSMBAlpha, 1.0 / (1.0 + specHistoryResponsiveFrames));

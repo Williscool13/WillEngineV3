@@ -394,6 +394,10 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t mCap;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t prevShadowVisIndex;
+    SHADER_PUBLIC uint32_t shadowVisIndex;
+    SHADER_PUBLIC uint32_t confidenceIndex;
+    SHADER_PUBLIC float confidenceStrength;
 };
 
 SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
@@ -1109,6 +1113,7 @@ SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
     SHADER_PUBLIC uint32_t outSpecReprojConfidenceIndex;
     SHADER_PUBLIC uint32_t outPrevNRIndex;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t confidenceIndex;
 };
 
 SHADER_PUBLIC struct RelaxHistoryFixPushConstant

@@ -570,6 +570,9 @@ struct ReSTIRParams
     uint32_t spatialMCap{500};
     uint32_t temporalMCap{20u * 17u};
 
+    // 0 = di
+    float confidenceStrength{0.75f};
+
     // todo: Disabled atrous and asvgf. Readd as needed
     enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
     DenoiserMode denoiserMode{DenoiserMode::ASVGF};

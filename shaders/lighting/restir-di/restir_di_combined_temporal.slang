@@ -21,6 +21,9 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         return;
     }
 
+    if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][pixel] = 1.0; }
+    if (pc.confidenceIndex != ~0u) { rdgStorageFloat[pc.confidenceIndex][pixel] = 1.0; }
+
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex, pc.depthIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd);
 
@@ -227,6 +230,8 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     // -------------------------------------------------------------------------
     // Phase 3: finalise with visibility
     // -------------------------------------------------------------------------
+    // winnerVisibility: 1 = the displayed sample is lit this frame, 0 = occluded. The visibility ray here is binary (single ray to the sample), so this is a clean shadow term.
+    float winnerVisibility = 1.0;
     if (combined.lightIdx != ~0u) {
         AreaLightVS vsWinner = UnpackAreaLightVS(pc.lightVS[combined.lightIdx]);
         float3 yStar = DecodeSamplePos(combined, vsWinner);
@@ -239,7 +244,19 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         float p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
                                                  tlas, worldPos, worldN, worldyStar);
         ReservoirFinalise(combined, accum_combined, p_hat_winner, float(combined.M));
+        winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
     }
 
     pc.outputBuffer[pixelIdx] = combined;
+
+    // History confidence
+    if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][pixel] = winnerVisibility; }
+    if (pc.confidenceIndex != ~0u) {
+        float confidence = 1.0;
+        if (pc.prevShadowVisIndex != ~0u && bHistoryUsable && validHistoryReservoir) {
+            float prevVis = rdgTexturesFloat[pc.prevShadowVisIndex].Load(int3(historyPixel, 0)).r;
+            confidence = 1.0 - pc.confidenceStrength * abs(winnerVisibility - prevVis);
+        }
+        rdgStorageFloat[pc.confidenceIndex][pixel] = confidence;
+    }
 }
