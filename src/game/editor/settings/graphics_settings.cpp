@@ -146,6 +146,15 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
 
         ImGui::Spacing();
 
+        if (ImGui::Checkbox("Limit FPS", &state->projectConfig.bLimitFps)) { changed = true; }
+        if (state->projectConfig.bLimitFps) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(160.0f);
+            if (Widgets::SliderInt("##fps_cap", &state->projectConfig.frameLimitTarget, 15, 240)) { changed = true; }
+        }
+
+        ImGui::Spacing();
+
         auto bIsGroundTruth = state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR;
         ImGui::BeginDisabled(bIsGroundTruth);
         // Shading Pipeline Overrides

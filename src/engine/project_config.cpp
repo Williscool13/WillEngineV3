@@ -37,6 +37,13 @@ ProjectConfig ReadProjectConfig()
         config.defaultScene = Core::InlineString<256>(j["defaultScene"].get<std::string_view>());
     }
 
+    if (j.contains("bLimitFps") && j["bLimitFps"].is_boolean()) {
+        config.bLimitFps = j["bLimitFps"].get<bool>();
+    }
+    if (j.contains("frameLimitTarget") && j["frameLimitTarget"].is_number_integer()) {
+        config.frameLimitTarget = j["frameLimitTarget"].get<int32_t>();
+    }
+
     if (j.contains("bAutoSaveProjectConfig") && j["bAutoSaveProjectConfig"].is_boolean()) {
         config.bAutoSaveProjectConfig = j["bAutoSaveProjectConfig"].get<bool>();
     }
@@ -83,6 +90,8 @@ bool WriteProjectConfig(const ProjectConfig& config)
 
     nlohmann::json j;
     j["defaultScene"] = std::string_view(config.defaultScene.c_str(), config.defaultScene.Size());
+    j["bLimitFps"] = config.bLimitFps;
+    j["frameLimitTarget"] = config.frameLimitTarget;
     j["bAutoSaveProjectConfig"] = config.bAutoSaveProjectConfig;
     j["bAutoSaveLighting"] = config.bAutoSaveLighting;
     j["bAutoSavePostProcess"] = config.bAutoSavePostProcess;

@@ -1254,8 +1254,23 @@ void WillEngine::Run()
     engineState->lighting.skybox = assetManager->LoadCubemap(assetManager->FindCubemapByName("modern_evening_street_4k"));
 
     SDL_Event e;
+    auto nextFrameTime = std::chrono::steady_clock::now();
     while (true) {
         ZoneScopedN("EngineFrame");
+        if (engineState->projectConfig.bLimitFps && engineState->projectConfig.frameLimitTarget > 0) {
+            const auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(1.0 / static_cast<double>(engineState->projectConfig.frameLimitTarget)));
+            nextFrameTime += interval;
+            const auto now = std::chrono::steady_clock::now();
+            if (now < nextFrameTime) {
+                std::this_thread::sleep_until(nextFrameTime);
+            }
+            else {
+                nextFrameTime = now;
+            }
+        }
+        else {
+            nextFrameTime = std::chrono::steady_clock::now();
+        }
         while (SDL_PollEvent(&e) != 0) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             switch (e.type) {

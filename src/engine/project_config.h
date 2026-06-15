@@ -15,6 +15,9 @@ struct ProjectConfig
     Core::InlineString<256> defaultScene{};
     Core::LightingMode lightingMode{false};
 
+    bool bLimitFps{false};
+    int32_t frameLimitTarget{60};
+
     bool bAutoSaveProjectConfig{false};
     bool bAutoSaveLighting{false};
     bool bAutoSavePostProcess{false};

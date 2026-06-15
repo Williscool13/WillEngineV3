@@ -73,8 +73,9 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     uint spatialNeighbors = pc.spatialNeighbors;
     uint spatialRadius = pc.spatialRadius;
     float frustumSize = abs(scene.ndcToViewMul.y) * abs(viewSpaceDepth);
+    float bnRot = BlueNoiseAngle(pixel, pc.frameIndex + pc.passIndex * 32u);
     for (uint i = 0; i < spatialNeighbors; i++) {
-        float angle = (float(i) + HashStep(h)) * (6.28318530718 / float(spatialNeighbors));
+        float angle = (float(i) + HashStep(h)) * (6.28318530718 / float(spatialNeighbors)) + bnRot;
         float r = sqrt(HashStep(h)) * spatialRadius;
         int2 neighborPixel = int2(pixel) + int2(round(cos(angle) * r), round(sin(angle) * r));
 

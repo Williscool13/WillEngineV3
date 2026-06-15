@@ -47,6 +47,7 @@ private:
     float sphereRadius{0.5f};
 
     float torqueStrength{10.0f};
+    float rollSpeedMultiplier{600.0f};
     float maxAngularSpeed{20.0f};
     float jumpImpulse{5.0f};
 

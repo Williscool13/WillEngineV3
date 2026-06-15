@@ -31,8 +31,8 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
     bool jumpRequested = false;
 
     if (state->bGameCursorCaptured) {
-        lookYaw += glm::radians(-input->mouseXDelta * lookSpeed);
-        lookPitch += glm::radians(-input->mouseYDelta * lookSpeed);
+        lookYaw += glm::radians(-input->mouseXDelta * lookSpeed) * deltaTime;
+        lookPitch += glm::radians(-input->mouseYDelta * lookSpeed) * deltaTime;
         lookPitch = glm::clamp(lookPitch, glm::radians(-89.0f), glm::radians(89.0f));
 
         const glm::quat horizontalRotation = glm::angleAxis(lookYaw, WORLD_UP);
