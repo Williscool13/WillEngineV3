@@ -14,7 +14,6 @@ static nlohmann::json RelaxToJson(const Core::RELAXParams& rx)
         {"denoisingRange", rx.denoisingRange},
         {"disocclusionThreshold", rx.disocclusionThreshold},
         {"depthThreshold", rx.depthThreshold},
-        {"framerateScale", rx.framerateScale},
         {"specMaxAccumFrames", rx.specMaxAccumFrames},
         {"specMaxFastAccumFrames", rx.specMaxFastAccumFrames},
         {"diffMaxAccumFrames", rx.diffMaxAccumFrames},
@@ -57,7 +56,6 @@ static void RelaxFromJson(const nlohmann::json& r, Core::RELAXParams& p)
     p.denoisingRange = getFloat("denoisingRange", p.denoisingRange);
     p.disocclusionThreshold = getFloat("disocclusionThreshold", p.disocclusionThreshold);
     p.depthThreshold = getFloat("depthThreshold", p.depthThreshold);
-    p.framerateScale = getFloat("framerateScale", p.framerateScale);
     p.specMaxAccumFrames = getFloat("specMaxAccumFrames", p.specMaxAccumFrames);
     p.specMaxFastAccumFrames = getFloat("specMaxFastAccumFrames", p.specMaxFastAccumFrames);
     p.diffMaxAccumFrames = getFloat("diffMaxAccumFrames", p.diffMaxAccumFrames);

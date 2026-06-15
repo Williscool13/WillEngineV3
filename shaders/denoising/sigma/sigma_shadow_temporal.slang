@@ -9,8 +9,6 @@ import constants_interop;
 import bindless_declarations;
 import shader_functions;
 
-static const float SIGMA_HISTORY_WEIGHT = 0.8;
-
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void ComputeMain(uniform SigmaTemporalPushConstant pc, uint3 tid : SV_DispatchThreadID)
@@ -31,24 +29,9 @@ void ComputeMain(uniform SigmaTemporalPushConstant pc, uint3 tid : SV_DispatchTh
         return;
     }
 
-    // Tile gate (same 5x5 reach as the blur): uniform lit/shadow regions are noise-free and deterministic,
     int2 myTile = int2(pixel) / 16;
-    int2 tilesMax = int2((pc.renderExtent + 15u) / 16u) - 1;
-    float windowMin = 1.0;
-    float windowMax = 0.0;
-    [unroll]
-    for (int ty = -2; ty <= 2; ty++)
-    {
-        [unroll]
-        for (int tx = -2; tx <= 2; tx++)
-        {
-            int2 t = clamp(myTile + int2(tx, ty), int2(0), tilesMax);
-            float2 mm = rdgTexturesFloat2[pc.tilesIndex].Load(int3(t, 0)).rg;
-            windowMin = min(windowMin, mm.r);
-            windowMax = max(windowMax, mm.g);
-        }
-    }
-    if (windowMax < 0.5 || windowMin > 0.5) {
+    float2 tile = rdgTexturesFloat2[pc.tilesIndex].Load(int3(myTile, 0)).rg;
+    if (tile.g < 0.5 || tile.r > 0.5) {
         rdgStorageFloat2[pc.outputIndex][pixel] = cur;
         return;
     }
@@ -84,7 +67,7 @@ void ComputeMain(uniform SigmaTemporalPushConstant pc, uint3 tid : SV_DispatchTh
     {
         float histVis = rdgTexturesFloat2[pc.historyIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], historyUv, 0).r;
         histVis = clamp(histVis, vmin, vmax);
-        outVis = lerp(curVis, histVis, SIGMA_HISTORY_WEIGHT);
+        outVis = lerp(curVis, histVis, pc.historyWeight);
     }
 
     rdgStorageFloat2[pc.outputIndex][pixel] = float2(outVis, cur.g);

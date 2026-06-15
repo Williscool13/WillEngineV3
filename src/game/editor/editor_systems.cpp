@@ -588,6 +588,17 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         }
         ImGui::End();
+
+        constexpr ImGuiWindowFlags fpsFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                              ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize;
+        const auto vpLeft = static_cast<float>(ctx->windowContext.viewportOffsetX);
+        ImGui::SetNextWindowPos(ImVec2(vpLeft + 8.0f, vpTop + 8.0f), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.5f);
+        if (ImGui::Begin("##fps_overlay", nullptr, fpsFlags)) {
+            const float fps = frameBuffer->timeFrame.renderFps;
+            ImGui::Text("%.0f FPS (%.2f ms)", fps, fps > 0.0f ? 1000.0f / fps : 0.0f);
+        }
+        ImGui::End();
     }
 
     const glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;

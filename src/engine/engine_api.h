@@ -149,6 +149,7 @@ struct LightingState
     Core::GTAOConfiguration gtaoConfig{};
     Core::AntiAliasingConfiguration aaConfig{};
     Core::PostProcessConfiguration postProcess{};
+    Core::SIGMAParams sigmaParams{};
     CubemapHandle skybox{CubemapHandle::INVALID};
     int32_t skyboxLOD{0};
 };

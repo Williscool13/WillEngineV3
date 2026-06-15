@@ -17,6 +17,7 @@ struct TimeFrame
 
     float renderDeltaTime;
     float renderTotalTime;
+    float renderFps;
 };
 } // Core
 

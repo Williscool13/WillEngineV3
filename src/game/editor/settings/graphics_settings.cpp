@@ -565,7 +565,6 @@ void DrawLightingWindow(Engine::EngineState* state)
                 relaxF("Denoising Range", &relax.denoisingRange, relaxDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through untouched. Default 1000; set to roughly cover your scene depth.");
                 relaxF("Disocclusion Threshold", &relax.disocclusionThreshold, relaxDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Higher accepts more (less ghosting rejection); lower resets more on edges/motion. Default 0.005; common ~0.01.");
                 relaxF("Depth Threshold", &relax.depthThreshold, relaxDefaults.depthThreshold, 0.0f, 0.05f, "%.4f", "Plane-distance tolerance for spatial edge stopping, as a fraction of depth. Lower preserves geometry edges; higher blurs across them. Default 0.003.");
-                relaxF("Framerate Scale", &relax.framerateScale, relaxDefaults.framerateScale, 0.1f, 4.f, "%.2f", "Scales accumulation/anti-lag speed for framerate (roughly currentFPS/60). 1.0 is tuned for 60 FPS; raise at higher FPS so history doesn't over-accumulate. Default 1.0.");
 
                 ImGui::SeparatorText("Accumulation");
                 relaxF("Spec Max Accum Frames", &relax.specMaxAccumFrames, relaxDefaults.specMaxAccumFrames, 0.f, 64.f, "%.0f", "Max specular history length (stable). Higher = cleaner but laggier reflections. Default 32; common 30-60.");
@@ -609,6 +608,34 @@ void DrawLightingWindow(Engine::EngineState* state)
                     relax = Core::RELAXParams{};
                     changed = true;
                 }
+            }
+        }
+
+        if (ImGui::CollapsingHeader("SIGMA Shadow Denoiser")) {
+            Core::SIGMAParams& sigma = state->lighting.sigmaParams;
+            static const Core::SIGMAParams sigmaDefaults{};
+
+            auto sigmaTip = [&](const char* tip) {
+                if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("%s", tip); }
+            };
+
+            if (ImGui::Checkbox("Half Res##sigma", &sigma.bHalfRes)) { changed = true; }
+            sigmaTip("Trace + denoise the sun shadow at half resolution, then bilaterally upsample. Cuts the trace/temporal cost; softens contact shadows. Matches half-res ReSTIR.");
+            if (ImGui::Checkbox("Post-Blur##sigma", &sigma.enablePostBlur)) { changed = true; }
+            sigmaTip("Second decorrelated spatial pass after the main blur. The single largest quality lever; cleans residual penumbra noise. Default on.");
+
+            auto sigmaF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+            };
+            sigmaF("History Weight##sigma", &sigma.historyWeight, sigmaDefaults.historyWeight, 0.0f, 0.95f, "%.2f", "Temporal stabilization strength. Higher = steadier but laggier on moving shadows; lower = snappier but shimmerier. Default 0.8.");
+            sigmaF("Max Kernel Pixels##sigma", &sigma.maxKernelPixels, sigmaDefaults.maxKernelPixels, 1.0f, 64.0f, "%.0f", "Cap on the penumbra blur radius (px). Bounds cost on very soft shadows. Default 32.");
+            sigmaF("Blocker Search Pixels##sigma", &sigma.blockerSearchPixels, sigmaDefaults.blockerSearchPixels, 1.0f, 64.0f, "%.0f", "Radius (px) of the PCSS blocker search that estimates penumbra width. Default 32.");
+            sigmaF("Penumbra Scale##sigma", &sigma.penumbraScale, sigmaDefaults.penumbraScale, 0.0f, 4.0f, "%.2f", "Artistic multiplier on the estimated penumbra. >1 softer, <1 sharper. Default 1.0.");
+            sigmaF("Normal Weight Power##sigma", &sigma.normalWeightPower, sigmaDefaults.normalWeightPower, 1.0f, 128.0f, "%.0f", "Edge-stopping tightness on surface normal. Higher preserves creases; lower blurs across them. Default 16.");
+
+            if (ImGui::Button("Reset SIGMA")) {
+                sigma = Core::SIGMAParams{};
+                changed = true;
             }
         }
 

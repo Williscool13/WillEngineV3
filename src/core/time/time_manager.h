@@ -25,6 +25,7 @@ public:
 
 private:
     TimeFrame currentTime{};
+    float smoothedRenderDeltaTime{0.0f};
     std::chrono::time_point<std::chrono::steady_clock> startTime;
     std::chrono::time_point<std::chrono::steady_clock> lastTime;
     std::chrono::steady_clock::time_point lastRenderTime;

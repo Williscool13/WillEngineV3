@@ -45,10 +45,12 @@ void SetupRTShadowTest(RenderGraph& graph,
 void SetupRTSunShadow(RenderGraph& graph,
                       PipelineManager* pipelineManager,
                       const Core::ViewFamily& viewFamily,
-                      Core::Array<uint32_t, 2> renderExtent,
+                      Core::Array<uint32_t, 2> shadowExtent,
+                      Core::Array<uint32_t, 2> fullExtent,
                       const RenderTargets& targets,
                       uint32_t sceneIndex,
-                      uint64_t frameNumber);
+                      uint64_t frameNumber,
+                      uint32_t pixelScale);
 
 /**
  * RT ground truth direct illumination via next-event estimation.

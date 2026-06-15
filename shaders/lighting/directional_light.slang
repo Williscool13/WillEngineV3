@@ -55,7 +55,39 @@ void ComputeMain(uniform DirectionalLightPushConstant pc, uint3 threadID : SV_Di
     float orenNayar = Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
     float3 diffuse = kD * albedo * orenNayar;
 
-    float visibility = rdgTexturesFloat2[pc.shadowIndex].Load(int3(pixel, 0)).r;
+    float visibility;
+    if (pc.pixelScale == 1u) {
+        visibility = rdgTexturesFloat2[pc.shadowIndex].Load(int3(pixel, 0)).r;
+    } else {
+        // Joint bilateral upsample of the half-res shadow, guided by this full-res pixel's depth + normal.
+        float2 hp = uv * float2(pc.shadowExtent) - 0.5;
+        int2 base = int2(floor(hp));
+        float2 f = hp - float2(base);
+        int2 maxCoord = int2(pc.shadowExtent) - 1;
+        float wsum = 0.0;
+        float vsum = 0.0;
+        float bestW = -1.0;
+        float nearest = 1.0;
+        [unroll]
+        for (int j = 0; j < 4; j++) {
+            int2 off = int2(j & 1, j >> 1);
+            int2 tp = clamp(base + off, int2(0), maxCoord);
+            float bw = (off.x == 0 ? 1.0 - f.x : f.x) * (off.y == 0 ? 1.0 - f.y : f.y);
+            float td = rdgTexturesFloat[pc.shadowDepthIndex].Load(int3(tp, 0)).r;
+            if (td <= 0.0) { continue; }
+            float tVis = rdgTexturesFloat2[pc.shadowIndex].Load(int3(tp, 0)).r;
+            float tViewZ = ScreenToViewSpaceDepth(td, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+            float3 tN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.shadowNormalIndex].Load(int3(tp, 0)).r));
+            float rel = abs(tViewZ - viewSpaceDepth) / max(max(tViewZ, viewSpaceDepth), 1e-5);
+            float wz = saturate(1.0 - rel / 0.03);
+            float wn = pow(max(dot(N, tN), 0.0), 16.0);
+            float w = bw * wz * wn + 1e-5;
+            vsum += tVis * w;
+            wsum += w;
+            if (w > bestW) { bestW = w; nearest = tVis; }
+        }
+        visibility = wsum > 1e-4 ? vsum / wsum : nearest;
+    }
 
     float intensity = pc.lightData->directionalLight.directionIntensity.w;
     float3 lightColor = UnpackUnorm4x8(pc.lightData->directionalLight.packedColor).rgb;

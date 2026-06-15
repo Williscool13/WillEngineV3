@@ -177,10 +177,14 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
+                                  Core::Array<uint32_t, 2> shadowExtent,
                                   const RenderTargets& targets,
-                                  uint32_t sceneIndex)
+                                  uint32_t sceneIndex,
+                                  uint32_t pixelScale)
 {
     if (!graph.HasTexture(SID("rt_sun_shadow"))) { return; }
+
+    const bool bHalfRes = pixelScale > 1u;
 
     // Prefer the most-processed shadow available: temporally stabilized > spatially denoised > raw trace.
     StringID shadowTex = SID("rt_sun_shadow");
@@ -194,8 +198,12 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(shadowTex);
+    if (bHalfRes) {
+        pass.ReadSampledImage(SID("rt_sun_depth"));
+        pass.ReadSampledImage(SID("rt_sun_gbuffer"));
+    }
     pass.ReadWriteImage(targets.colorOutput);
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, shadowTex,
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, shadowExtent, pixelScale, bHalfRes, shadowTex,
             depth = targets.depthCopy, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             output = targets.colorOutput](VkCommandBuffer cmd) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("directional_light"));
@@ -212,6 +220,10 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
                 .sceneDataIndex = sceneIndex,
                 .renderExtent = {renderExtent[0], renderExtent[1]},
+                .shadowExtent = {shadowExtent[0], shadowExtent[1]},
+                .pixelScale = pixelScale,
+                .shadowDepthIndex = bHalfRes ? graph.GetSampledImageViewDescriptorIndex(SID("rt_sun_depth")) : ~0x0u,
+                .shadowNormalIndex = bHalfRes ? graph.GetSampledImageViewDescriptorIndex(SID("rt_sun_gbuffer")) : ~0x0u,
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

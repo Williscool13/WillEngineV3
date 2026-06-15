@@ -181,15 +181,23 @@ void SetupRTShadowTest(RenderGraph& graph,
 void SetupRTSunShadow(RenderGraph& graph,
                       PipelineManager* pipelineManager,
                       const Core::ViewFamily& viewFamily,
-                      Core::Array<uint32_t, 2> renderExtent,
+                      Core::Array<uint32_t, 2> shadowExtent,
+                      Core::Array<uint32_t, 2> fullExtent,
                       const RenderTargets& targets,
                       uint32_t sceneIndex,
-                      uint64_t frameNumber)
+                      uint64_t frameNumber,
+                      uint32_t pixelScale)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
 
-    // R = binary visibility (1 lit, 0 occluded), G = closest-occluder distance (penumbra input for SIGMA later)
-    graph.CreateTexture(SID("rt_sun_shadow"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    const bool bHalfRes = pixelScale > 1u;
+
+    // R = binary visibility (1 lit, 0 occluded), G = closest-occluder distance (penumbra input for SIGMA)
+    graph.CreateTexture(SID("rt_sun_shadow"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
+    if (bHalfRes) {
+        graph.CreateTexture(SID("rt_sun_depth"), TextureInfo{VK_FORMAT_R32_SFLOAT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
+        graph.CreateTexture(SID("rt_sun_gbuffer"), TextureInfo{VK_FORMAT_R32G32B32A32_UINT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
+    }
 
     RenderPass& pass = graph.AddPass(SID("RT Sun Shadow"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Shadow);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
@@ -198,8 +206,12 @@ void SetupRTSunShadow(RenderGraph& graph,
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.WriteStorageImage(SID("rt_sun_shadow"));
+    if (bHalfRes) {
+        pass.WriteStorageImage(SID("rt_sun_depth"));
+        pass.WriteStorageImage(SID("rt_sun_gbuffer"));
+    }
     const uint32_t tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER);
-    pass.Execute([&graph, pipelineManager, sceneIndex, renderExtent, tlasIndex, frameNumber,
+    pass.Execute([&graph, pipelineManager, sceneIndex, shadowExtent, fullExtent, pixelScale, bHalfRes, tlasIndex, frameNumber,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_sun_shadow"));
         if (!pipeline) { return; }
@@ -208,18 +220,22 @@ void SetupRTSunShadow(RenderGraph& graph,
         RTSunShadowPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
-            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .renderExtent = {shadowExtent[0], shadowExtent[1]},
             .tlasIndex = tlasIndex,
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_shadow")),
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
+            .fullExtent = {fullExtent[0], fullExtent[1]},
+            .pixelScale = pixelScale,
+            .outputDepthIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_depth")) : ~0x0u,
+            .outputGbufferIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_gbuffer")) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-        const uint32_t groupsX = (renderExtent[0] + 7) / 8;
-        const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+        const uint32_t groupsX = (shadowExtent[0] + 7) / 8;
+        const uint32_t groupsY = (shadowExtent[1] + 7) / 8;
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 }

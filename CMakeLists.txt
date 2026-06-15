@@ -427,6 +427,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_ground_truth_di.slang compute ComputeMain rt_ground_truth_di
         ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_sun_shadow.slang compute ComputeMain rt_sun_shadow
         ${CMAKE_SOURCE_DIR}/shaders/denoising/sigma/sigma_classify_tiles.slang compute ComputeMain sigma_classify_tiles
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/sigma/sigma_smooth_tiles.slang compute ComputeMain sigma_smooth_tiles
         ${CMAKE_SOURCE_DIR}/shaders/denoising/sigma/sigma_shadow_blur.slang compute ComputeMain sigma_shadow_blur
         ${CMAKE_SOURCE_DIR}/shaders/denoising/sigma/sigma_shadow_temporal.slang compute ComputeMain sigma_shadow_temporal
 

@@ -81,6 +81,7 @@ struct DirectionalLight
     float intensity{2.0f};
     glm::vec3 color{1.0f, 1.0f, 1.0f};
     float angularRadiusDegrees{1.0f}; // sun-disk half-angle; 0 = hard shadows
+    bool bEnabled{false};
 };
 
 struct Sprite
@@ -557,6 +558,17 @@ struct RELAXParams
     bool enableAntiFirefly{true};
 };
 
+struct SIGMAParams
+{
+    bool bHalfRes{false};
+    bool enablePostBlur{true};
+    float historyWeight{0.8f};
+    float maxKernelPixels{32.f};
+    float blockerSearchPixels{32.f};
+    float penumbraScale{1.f};
+    float normalWeightPower{16.f};
+};
+
 struct ReSTIRParams
 {
     enum class Mode : uint8_t { MainTemporal = 0, CombinedTemporal = 1 };
@@ -575,9 +587,11 @@ struct ReSTIRParams
 
     // todo: Disabled atrous and asvgf. Readd as needed
     enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
+
     DenoiserMode denoiserMode{DenoiserMode::ASVGF};
 
     enum class RemodulateOutput : uint32_t { Both = 0, DiffuseOnly = 1, SpecularOnly = 2 };
+
     RemodulateOutput remodulateOutput{RemodulateOutput::Both};
 
     struct ATrousParams
@@ -587,6 +601,7 @@ struct ReSTIRParams
         float sigmaNormal{128.0f};
         float sigmaDepth{0.01f};
     };
+
     ATrousParams atrous{};
 
     struct SVGFParams
@@ -598,6 +613,7 @@ struct ReSTIRParams
         float sigmaDepth{0.05f};
         int32_t atrousIterations{4};
     };
+
     SVGFParams svgf{};
 
     RELAXParams relax{};
@@ -646,6 +662,7 @@ struct ViewFamily
     GTAOConfiguration gtaoConfig{};
     AntiAliasingConfiguration aaConfig{};
     PostProcessConfiguration postProcessConfig{};
+    SIGMAParams sigmaParams{};
 
 
     // Debugging
@@ -683,8 +700,11 @@ struct FrameBuffer
     ~FrameBuffer() = default;
 
     FrameBuffer(const FrameBuffer&) = delete;
+
     FrameBuffer& operator=(const FrameBuffer&) = delete;
+
     FrameBuffer(FrameBuffer&&) = delete;
+
     FrameBuffer& operator=(FrameBuffer&&) = delete;
 
     void Initialize(ArenaSuballocator& pool, AllocTag tag = AllocTag::FrameSync0);

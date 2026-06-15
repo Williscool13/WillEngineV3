@@ -40,8 +40,10 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
+                                  Core::Array<uint32_t, 2> shadowExtent,
                                   const RenderTargets& targets,
-                                  uint32_t sceneIndex);
+                                  uint32_t sceneIndex,
+                                  uint32_t pixelScale);
 } // Render
 
 #endif //WILL_ENGINE_LIGHTING_PASSES_H

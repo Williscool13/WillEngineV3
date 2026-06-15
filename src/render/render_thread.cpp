@@ -512,7 +512,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
             const Core::ReSTIRParams& restir = frameBuffer.restir;
-            const Core::RELAXParams& relax = restir.relax;
+            Core::RELAXParams relax = restir.relax;
+            const float renderFps = frameBuffer.timeFrame.renderFps;
+            relax.framerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.1f, 4.0f);
             switch (viewFamily.lightingMode) {
                 case Core::LightingMode::Default:
                 {
@@ -548,11 +550,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 }
             }
 
-            if (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR) {
-                SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber);
-                SetupSigmaShadowDenoise(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber);
-                SetupSigmaShadowTemporal(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
-                SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+            if (viewFamily.directionalLight.bEnabled &&
+                (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)) {
+                const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
+                const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes
+                    ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
+                SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, targets, 0, frameNumber, sunShadowPixelScale);
+                SetupSigmaShadowDenoise(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, targets, 0, frameNumber);
+                SetupSigmaShadowTemporal(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, targets, 0);
+                SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, sunShadowExtent, targets, 0, sunShadowPixelScale);
             }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
         }
@@ -619,7 +625,30 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size());
 
             bool bDebugBuffersReady = renderGraph->HasBuffer(SCENE_DATA_BUFFER);
-            if (bDebugBuffersReady && renderGraph->HasTexture(debugTargetName)) {
+
+            bool bDebugReservoirReady = true;
+            switch (viewFamily.debugTransformationType) {
+                case DebugTransformationType::ReservoirLightIdx:
+                case DebugTransformationType::ReservoirGenerateW:
+                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_buffer"));
+                    break;
+                case DebugTransformationType::ReservoirTemporalLightIdx:
+                case DebugTransformationType::ReservoirTemporalW:
+                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_temporal"));
+                    break;
+                case DebugTransformationType::ReservoirSpatialLightIdx:
+                case DebugTransformationType::ReservoirSpatialW:
+                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_spatial"));
+                    break;
+                case DebugTransformationType::ReservoirHistoryLightIdx:
+                case DebugTransformationType::ReservoirHistoryW:
+                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_history"));
+                    break;
+                default:
+                    break;
+            }
+
+            if (bDebugBuffersReady && bDebugReservoirReady && renderGraph->HasTexture(debugTargetName)) {
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Debug);
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.ReadSampledImage(targets.depthCopy);

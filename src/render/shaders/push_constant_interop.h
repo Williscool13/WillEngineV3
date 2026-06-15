@@ -1227,6 +1227,10 @@ SHADER_PUBLIC struct RTSunShadowPushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint2 fullExtent;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t outputDepthIndex;   // for half res
+    SHADER_PUBLIC uint32_t outputGbufferIndex; // for half res
 };
 
 SHADER_PUBLIC struct DirectionalLightPushConstant
@@ -1240,12 +1244,23 @@ SHADER_PUBLIC struct DirectionalLightPushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint2 shadowExtent;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t shadowDepthIndex;  // for half res
+    SHADER_PUBLIC uint32_t shadowNormalIndex; // for half res
 };
 
 SHADER_PUBLIC struct SigmaClassifyPushConstant
 {
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t shadowIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+};
+
+SHADER_PUBLIC struct SigmaSmoothTilesPushConstant
+{
+    SHADER_PUBLIC uint2 tilesExtent;
+    SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
 };
 
@@ -1261,6 +1276,11 @@ SHADER_PUBLIC struct SigmaBlurPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t passIndex; // 0 = blur (blocker search), 1 = post-blur (reuse stored penumbra)
+    SHADER_PUBLIC float maxKernelPixels;
+    SHADER_PUBLIC float blockerSearchPixels;
+    SHADER_PUBLIC float penumbraScale;
+    SHADER_PUBLIC float normalWeightPower;
 };
 
 SHADER_PUBLIC struct SigmaTemporalPushConstant
@@ -1274,6 +1294,7 @@ SHADER_PUBLIC struct SigmaTemporalPushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC float historyWeight;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H
