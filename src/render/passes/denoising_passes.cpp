@@ -597,11 +597,13 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         auto& pass = graph.AddPass(SID("[RELAX] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(gbufferOne);
         pass.WriteStorageImage(SID("relax_viewz"));
-        pass.Execute([&graph, pipelineManager, depth, width, height, pixelScale](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, depth, gbufferOne, width, height, pixelScale](VkCommandBuffer cmd) {
             RelaxGenerateViewZPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_viewz")),
                 .pixelScale = pixelScale,
             };
@@ -826,6 +828,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(gbufferOne);
         pass.ReadWriteImage(SID("relax_history_length"));
         pass.ReadSampledImage(SID("relax_spec_fast"));
         pass.ReadSampledImage(SID("relax_diff_fast"));
@@ -842,11 +845,12 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(diffNoisy);
         pass.WriteStorageImage(SID("relax_spec_fast_hist"));
         pass.WriteStorageImage(SID("relax_diff_fast_hist"));
-        pass.Execute([&graph, pipelineManager, depth, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height, pixelScale](VkCommandBuffer cmd) {
+        pass.Execute([&graph, pipelineManager, depth, gbufferOne, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height, pixelScale](VkCommandBuffer cmd) {
             RelaxHistoryClampingPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_history_length")),
                 .specFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_spec_fast")),
                 .diffFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_fast")),

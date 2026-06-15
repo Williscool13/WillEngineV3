@@ -22,7 +22,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
-    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex, pc.depthIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex, pc.depthIndex, pc.gbufferOneIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd);
 
     // Velocity reproject.
     uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
@@ -36,7 +36,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     uint2 historyPixel = uint2(historyUV * float2(pc.renderExtent));
     historyPixel = clamp(historyPixel, uint2(0, 0), pc.renderExtent - uint2(1, 1));
     // History taps use the corner the previous frame's passes sampled (previous depth source)
-    uint2 historyFullPixel = QuadFullPixel(historyPixel, pc.pixelScale, pc.frameIndex - 1u, pc.prevDepthIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    uint2 historyFullPixel = QuadFullPixel(historyPixel, pc.pixelScale, pc.frameIndex - 1u, pc.prevDepthIndex, pc.prevGbufferOneIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd);
 
     // Normal disocclusion rejection.
     float3 currentN = normalize(UnpackNormalOct16(g1.r));

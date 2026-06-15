@@ -6,9 +6,13 @@ import restir_interop;
 import pbr_functions;
 import bindless_declarations;
 import constants_interop;
+import shader_functions;
 
 // Relative view-depth spread across a 2x2 full-res quad above which it is treated as a silhouette. Must match QUAD_UNIFORM_DEPTH_THRESHOLD in relax_utils.slang.
 public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
+
+// Minimum dot between a quad corner's normal and corner 0 below which the quad is treated as a normal crease (and the corner locks, like a silhouette). 0.85 ~= 32deg. -1.0 disables (reverts to depth-only). Must match relax_utils.slang.
+public static const float QUAD_UNIFORM_NORMAL_DOT_THRESHOLD = 0.85;
 
 /** Area light data transformed into view space, with derived geometry and emission cached. */
 public struct AreaLightVS
@@ -141,7 +145,7 @@ public float3 SampleAreaLightPos(AreaLightVS vs, float uU, float uV)
  * Must stay in sync with RelaxQuadFullPixel in relax_utils.slang.
  * Identity when pixelScale == 1.
  */
-public uint2 QuadFullPixel(uint2 pixel, uint pixelScale, uint frameIndex, uint depthIndex, float2 invFullExtent, float depthLinearizeMult, float depthLinearizeAdd)
+public uint2 QuadFullPixel(uint2 pixel, uint pixelScale, uint frameIndex, uint depthIndex, uint normalIndex, float2 invFullExtent, float depthLinearizeMult, float depthLinearizeAdd)
 {
     if (pixelScale == 1u) { return pixel; }
     uint2 base = pixel * pixelScale;
@@ -151,6 +155,13 @@ public uint2 QuadFullPixel(uint2 pixel, uint pixelScale, uint frameIndex, uint d
     float zMin = min(min(zl.x, zl.y), min(zl.z, zl.w));
     float zMax = max(max(zl.x, zl.y), max(zl.z, zl.w));
     bool quadUniform = (zMax - zMin) <= QUAD_UNIFORM_DEPTH_THRESHOLD * max(zMax, 1e-4);
+    // A normal crease at near-constant depth is invisible to the depth test but still flips the represented surface when the corner cycles, resetting the denoiser. Lock it too.
+    if (quadUniform) {
+        uint4 nOct = rdgTexturesUInt4[normalIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);
+        float3 n0 = UnpackNormalOct16(nOct.x);
+        float minDot = min(min(dot(n0, UnpackNormalOct16(nOct.y)), dot(n0, UnpackNormalOct16(nOct.z))), dot(n0, UnpackNormalOct16(nOct.w)));
+        quadUniform = minDot >= QUAD_UNIFORM_NORMAL_DOT_THRESHOLD;
+    }
     uint sel = quadUniform ? ((pixel.x + pixel.y * 2u + frameIndex) & 3u) : ((pixel.x + pixel.y * 2u) & 3u);
     return base + uint2(sel & 1u, sel >> 1u);
 }
