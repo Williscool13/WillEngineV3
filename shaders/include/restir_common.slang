@@ -14,62 +14,78 @@ public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
 // Minimum dot between a quad corner's normal and corner 0 below which the quad is treated as a normal crease (and the corner locks, like a silhouette). 0.85 ~= 32deg. -1.0 disables (reverts to depth-only). Must match relax_utils.slang.
 public static const float QUAD_UNIFORM_NORMAL_DOT_THRESHOLD = 0.85;
 
-/** Area light data transformed into view space, with derived geometry and emission cached. */
-public struct AreaLightVS
+/** Light (area or sphere) transformed into view space, with derived geometry and emission cached. For a sphere, halfWidth holds the radius and normal/right/up/halfHeight are unused. */
+public struct LightVS
 {
     public float3 center;
     public float3 normal;
     public float3 right;
     public float3 up;
-    public float halfWidth;
+    public float halfWidth; // radius for spheres
     public float halfHeight;
-    public float area;
+    public float area; // 4*halfWidth*halfHeight (area) or 4*pi*r^2 (sphere)
     public float range;
     public float intensity;
     public uint packedColor;
+    public uint type;
 }
 
 /**
- * Transforms an AreaLightData into view space.
+ * Transforms a LightInfo into view space, branching on light type.
  *
- * @param al World-space area light.
+ * @param al World-space light.
  * @param view View matrix (float4x4).
  */
-public AreaLightVS TransformAreaLight(AreaLightData al, float4x4 view)
+public LightVS TransformLight(LightInfo al, float4x4 view)
 {
-    AreaLightVS vs;
+    LightVS vs;
     vs.center = mul(view, float4(al.position.xyz, 1.0)).xyz;
-    vs.normal = normalize(mul((float3x3)view, al.normal.xyz));
-    vs.right = normalize(mul((float3x3)view, al.right.xyz));
-    vs.up = normalize(mul((float3x3)view, al.up.xyz));
-    vs.halfWidth = al.right.w;
-    vs.halfHeight = al.up.w;
-    vs.area = 4.0 * vs.halfWidth * vs.halfHeight;
     vs.range = al.range;
     vs.intensity = al.intensity;
     vs.packedColor = al.packedColor;
+    vs.type = al.type;
+    if (al.type == LIGHT_TYPE_SPHERE)
+    {
+        float radius = al.right.w;
+        // World axes carried into view space: a stable (camera-independent across frames) basis the sample offset is encoded in, so temporal reuse stays frame-coherent.
+        vs.right = normalize(mul((float3x3)view, float3(1.0, 0.0, 0.0)));
+        vs.up = normalize(mul((float3x3)view, float3(0.0, 1.0, 0.0)));
+        vs.normal = normalize(mul((float3x3)view, float3(0.0, 0.0, 1.0)));
+        vs.halfWidth = radius;
+        vs.halfHeight = radius;
+        vs.area = 4.0 * PI * radius * radius;
+    }
+    else
+    {
+        vs.normal = normalize(mul((float3x3)view, al.normal.xyz));
+        vs.right = normalize(mul((float3x3)view, al.right.xyz));
+        vs.up = normalize(mul((float3x3)view, al.up.xyz));
+        vs.halfWidth = al.right.w;
+        vs.halfHeight = al.up.w;
+        vs.area = 4.0 * vs.halfWidth * vs.halfHeight;
+    }
     return vs;
 }
 
-/** Packs an AreaLightVS into the GPU buffer layout written by the transform-lights pass. */
-public AreaLightVSData PackAreaLightVS(AreaLightVS vs)
+/** Packs a LightVS into the GPU buffer layout written by the transform-lights pass. */
+public LightVSData PackLightVS(LightVS vs)
 {
-    AreaLightVSData d;
+    LightVSData d;
     d.centerHalfWidth = float4(vs.center, vs.halfWidth);
     d.normalHalfHeight = float4(vs.normal, vs.halfHeight);
     d.rightArea = float4(vs.right, vs.area);
     d.upRange = float4(vs.up, vs.range);
     d.packedColor = vs.packedColor;
     d.intensity = vs.intensity;
-    d._pad0 = 0.0;
+    d.type = vs.type;
     d._pad1 = 0.0;
     return d;
 }
 
-/** Loads a pre-transformed view-space area light from the buffer written by the transform-lights pass. */
-public AreaLightVS UnpackAreaLightVS(AreaLightVSData d)
+/** Loads a pre-transformed view-space light from the buffer written by the transform-lights pass. */
+public LightVS UnpackLightVS(LightVSData d)
 {
-    AreaLightVS vs;
+    LightVS vs;
     vs.center = d.centerHalfWidth.xyz;
     vs.halfWidth = d.centerHalfWidth.w;
     vs.normal = d.normalHalfHeight.xyz;
@@ -80,11 +96,12 @@ public AreaLightVS UnpackAreaLightVS(AreaLightVSData d)
     vs.range = d.upRange.w;
     vs.packedColor = d.packedColor;
     vs.intensity = d.intensity;
+    vs.type = d.type;
     return vs;
 }
 
-/** Geometric quantities for a point on an area light as seen from a shading point. */
-public struct AreaLightSample
+/** Geometric quantities for a point on a light as seen from a shading point. */
+public struct LightSample
 {
     public float3 samplePos;
     public float3 L;
@@ -95,23 +112,31 @@ public struct AreaLightSample
 }
 
 /**
- * Evaluates geometry for a specific sample position on an area light.
+ * Evaluates geometry for a specific sample position on a light.
  *
- * @param vs View-space area light.
+ * @param vs View-space light.
  * @param samplePos Point on the light surface (view space).
  * @param shadingPos Shading point (view space).
  * @param N Shading normal.
  * @param range Light range for attenuation falloff.
  */
-public AreaLightSample EvalAreaLightSample(AreaLightVS vs, float3 samplePos, float3 shadingPos, float3 N, float range)
+public LightSample EvalLightSample(LightVS vs, float3 samplePos, float3 shadingPos, float3 N, float range)
 {
-    AreaLightSample s;
+    LightSample s;
     s.samplePos = samplePos;
     float3 toSample = samplePos - shadingPos;
     s.dist = max(length(toSample), 1e-5);
     s.L = toSample / s.dist;
     s.cosShade = max(dot(N, s.L), 0.0);
-    s.cosLight = max(dot(-vs.normal, s.L), 0.0);
+    if (vs.type == LIGHT_TYPE_SPHERE)
+    {
+        float3 outwardNormal = normalize(samplePos - vs.center);
+        s.cosLight = max(dot(outwardNormal, -s.L), 0.0);
+    }
+    else
+    {
+        s.cosLight = max(dot(-vs.normal, s.L), 0.0);
+    }
 
     // inv squared falloff
     //float distSq = s.dist * s.dist;
@@ -125,15 +150,28 @@ public AreaLightSample EvalAreaLightSample(AreaLightVS vs, float3 samplePos, flo
     return s;
 }
 
+/** Uniformly samples a unit direction on the sphere. */
+public float3 UniformSampleSphere(float u1, float u2)
+{
+    float z = 1.0 - 2.0 * u1;
+    float r = sqrt(max(1.0 - z * z, 0.0));
+    float phi = 2.0 * PI * u2;
+    return float3(r * cos(phi), r * sin(phi), z);
+}
+
 /**
  * Returns a random point on the light surface.
  *
- * @param vs View-space area light.
- * @param uU Uniform random in [0, 1) along right axis.
- * @param uV Uniform random in [0, 1) along up axis.
+ * @param vs View-space light.
+ * @param uU Uniform random in [0, 1) along right axis (area) / sphere parameter.
+ * @param uV Uniform random in [0, 1) along up axis (area) / sphere parameter.
  */
-public float3 SampleAreaLightPos(AreaLightVS vs, float uU, float uV)
+public float3 SampleLightPos(LightVS vs, float uU, float uV)
 {
+    if (vs.type == LIGHT_TYPE_SPHERE)
+    {
+        return vs.center + vs.halfWidth * UniformSampleSphere(uU, uV);
+    }
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
 
@@ -190,11 +228,17 @@ public Reservoir ReservoirEmpty()
 }
 
 /**
- * Encodes a view-space sample position as snorm16x2 packed into a uint.
- * Normalizes by half-extents so the stored value is in [-1, 1] along each axis.
+ * Encodes a view-space sample position into a uint. For an area light, stores snorm16x2 offsets
+ * in the right/up basis; for a sphere, stores the oct16-packed outward unit direction from center.
  */
-public uint EncodeSampleOffset(float3 samplePos, AreaLightVS vs)
+public uint EncodeSampleOffset(float3 samplePos, LightVS vs)
 {
+    if (vs.type == LIGHT_TYPE_SPHERE)
+    {
+        float3 dir = normalize(samplePos - vs.center);
+        float3 localDir = float3(dot(dir, vs.right), dot(dir, vs.up), dot(dir, vs.normal));
+        return PackNormalOct16(localDir);
+    }
     float3 delta = samplePos - vs.center;
     float u = clamp(dot(delta, vs.right) / vs.halfWidth, -1.0, 1.0);
     float v = clamp(dot(delta, vs.up) / vs.halfHeight, -1.0, 1.0);
@@ -204,10 +248,16 @@ public uint EncodeSampleOffset(float3 samplePos, AreaLightVS vs)
 }
 
 /**
- * Reconstructs the view-space sample position from a reservoir's packed snorm16x2 offset.
+ * Reconstructs the view-space sample position from a reservoir's packed offset.
  */
-public float3 DecodeSamplePos(Reservoir r, AreaLightVS vs)
+public float3 DecodeSamplePos(Reservoir r, LightVS vs)
 {
+    if (vs.type == LIGHT_TYPE_SPHERE)
+    {
+        float3 localDir = UnpackNormalOct16(r.sampleOffsetPacked);
+        float3 dir = localDir.x * vs.right + localDir.y * vs.up + localDir.z * vs.normal;
+        return vs.center + vs.halfWidth * dir;
+    }
     int ix = int(r.sampleOffsetPacked << 16) >> 16;
     int iy = int(r.sampleOffsetPacked) >> 16;
     float u = max(float(ix) / 32767.0, -1.0);
@@ -284,7 +334,7 @@ public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_h
  * (cosLight / dist²), attenuation, and light emission. p_hat only steers sampling; any mismatch with the
  * resolve BRDF costs variance, never bias. Returns 0 if cosShade, cosLight, or attenuation are non-positive.
  *
- * @param s Area light sample (geometry terms, must have cosShade > 0, cosLight > 0, attenuation > 0).
+ * @param s Light sample (geometry terms, must have cosShade > 0, cosLight > 0, attenuation > 0).
  * @param V View direction (toward camera, view space).
  * @param N Shading normal (view space).
  * @param albedo Diffuse albedo.
@@ -294,7 +344,7 @@ public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_h
  * @param lightColor Decoded linear light color.
  * @param lightIntensity Light intensity scalar.
  */
-public float EvalPHat(AreaLightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity)
+public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity)
 {
     if (s.cosShade <= 0.0 || s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
     const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
@@ -329,7 +379,7 @@ public float EvalPHat(AreaLightSample s, float3 V, float3 N, float3 albedo, floa
  * @param worldyStar Light sample position in world space.
  */
 [ForceInline]
-public float EvalPHatVisibility(AreaLightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity,
+public float EvalPHatVisibility(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity,
                                  RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar)
 {
     // Distance and TMax must be measured from the offset origin, not the surface point; otherwise the
@@ -431,4 +481,31 @@ public bool RayIntersectQuad(float3 rayOrigin, float3 rayDir, float3 center, flo
     float3 hitPos = rayOrigin + t * rayDir;
     float3 local = hitPos - center;
     return abs(dot(local, right)) <= halfWidth && abs(dot(local, up)) <= halfHeight;
+}
+
+/**
+ * Ray vs. light intersection, branching on light type. Sphere returns the nearest positive root.
+ * rayDir must be unit length for the sphere path.
+ *
+ * @param vs View-space light.
+ * @param rayOrigin Ray origin (view space).
+ * @param rayDir Ray direction (unit length).
+ * @param t Output: ray parameter at the surface hit. Negative on miss.
+ * @return True on a hit at t > 0.
+ */
+public bool RayIntersectLight(LightVS vs, float3 rayOrigin, float3 rayDir, out float t)
+{
+    if (vs.type == LIGHT_TYPE_SPHERE)
+    {
+        float3 oc = rayOrigin - vs.center;
+        float b = dot(oc, rayDir);
+        float c = dot(oc, oc) - vs.halfWidth * vs.halfWidth;
+        float disc = b * b - c;
+        if (disc < 0.0) { t = -1.0; return false; }
+        float sq = sqrt(disc);
+        t = -b - sq;
+        if (t <= 0.0) { t = -b + sq; }
+        return t > 0.0;
+    }
+    return RayIntersectQuad(rayOrigin, rayDir, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t);
 }

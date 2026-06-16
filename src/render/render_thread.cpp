@@ -1288,9 +1288,9 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
             lightData.pointLights[i] = viewFamily.pointLights[i];
         }
 
-        lightData.areaLightCount = static_cast<int32_t>(viewFamily.areaLights.Size());
-        for (int32_t i = 0; i < lightData.areaLightCount; i++) {
-            lightData.areaLights[i] = viewFamily.areaLights[i];
+        lightData.lightCount = static_cast<int32_t>(viewFamily.lights.Size());
+        for (int32_t i = 0; i < lightData.lightCount; i++) {
+            lightData.lights[i] = viewFamily.lights[i];
         }
     }
 

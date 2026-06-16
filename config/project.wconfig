@@ -100,12 +100,12 @@
     "bHalfRes": true,
     "bPermutationSampling": true,
     "boilingFilterStrength": 0.20000000298023224,
-    "confidenceStrength": 0.20000000298023224,
+    "confidenceStrength": 0.3958333432674408,
     "denoiserMode": 3,
     "iblIntensity": 0.0,
     "mode": 1,
     "relax": {
-      "atrousIterations": 5,
+      "atrousIterations": 4,
       "denoisingRange": 1000.0,
       "depthThreshold": 0.003000000026077032,
       "diffBlurRadius": 30.0,
@@ -139,9 +139,9 @@
       "specPhiLuminance": 2.0,
       "specVarianceBoost": 1.0
     },
-    "remodulateOutput": 1,
+    "remodulateOutput": 0,
     "spatialMCap": 100,
-    "spatialNeighbors": 3,
+    "spatialNeighbors": 5,
     "spatialPasses": 2,
     "spatialRadius": 30,
     "svgf": {

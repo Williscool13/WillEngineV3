@@ -37,8 +37,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
     const bool bAntilag = bCombined && restirParams.antilagStrength > 0.0f;
     const bool bShadowVis = bConfidence || bAntilag;
 
-    // Transform all area lights to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
-    graph.CreateBuffer(SID("restir_lights_vs"), MAX_AREA_LIGHTS * sizeof(AreaLightVSData), true);
+    // Transform all lights (area + sphere) to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
+    graph.CreateBuffer(SID("restir_lights_vs"), MAX_LIGHTS * sizeof(LightVSData), true);
 
     RenderPass& transformPass = graph.AddPass(SID("ReSTIR Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     transformPass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -55,7 +55,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .sceneDataIndex = sceneIndex,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, (MAX_AREA_LIGHTS + 63) / 64, 1, 1);
+        vkCmdDispatch(cmd, (MAX_LIGHTS + 63) / 64, 1, 1);
     });
 
     if (bCombined) {

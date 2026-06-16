@@ -2,7 +2,7 @@ import common_interop;
 import push_constant_interop;
 import bindless_declarations;
 
-import "include/shader_functions.slang";
+import shader_functions;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]

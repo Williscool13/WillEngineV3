@@ -57,11 +57,11 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
 
         Reservoir r = pc.reservoirBuffer[pixelIdx];
 
-        if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->areaLightCount))
+        if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->lightCount))
         {
-            AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[r.lightIdx]);
+            LightVS vs = UnpackLightVS(pc.lightVS[r.lightIdx]);
             float3 yStar = DecodeSamplePos(r, vs);
-            AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, vs.range);
+            LightSample s = EvalLightSample(vs, yStar, viewPosition, N, vs.range);
 
             if (s.cosShade > 0.0 && s.cosLight > 0.0 && s.attenuation > 0.0)
             {

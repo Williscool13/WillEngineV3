@@ -2,10 +2,11 @@ import common_interop;
 import push_constant_interop;
 import lights_interop;
 import bindless_declarations;
+import shader_constants;
 
-import "include/shader_functions.slang";
-import "include/pbr_functions.slang";
-import "include/packing_functions.slang";
+import shader_functions;
+import pbr_functions;
+import packing_functions;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -46,7 +47,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.xyz, metallic);
     float nDotV = max(dot(N, V), 0.0);
 
-    int areaLightCount = pc.lightData->areaLightCount;
+    int lightCount = pc.lightData->lightCount;
 
     uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
     float4 accum = pc.accumulationBuffer[pixelIdx];
@@ -68,21 +69,36 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
 
     float3 directLight = float3(0.0);
 
-    if (areaLightCount > 0) {
-        int lightIdx = clamp(int(rng0 * float(areaLightCount)), 0, areaLightCount - 1);
-        AreaLightData al = pc.lightData->areaLights[lightIdx];
+    if (lightCount > 0) {
+        int lightIdx = clamp(int(rng0 * float(lightCount)), 0, lightCount - 1);
+        LightInfo al = pc.lightData->lights[lightIdx];
 
-        // Sample a point on the light in world space
-        float3 lightSamplePos = al.position.xyz
-            + al.right.xyz * (xi.x * 2.0 - 1.0) * al.right.w
-            + al.up.xyz    * (xi.y * 2.0 - 1.0) * al.up.w;
+        // Sample a point on the light in world space (branch by type)
+        float3 lightSamplePos;
+        float lightArea;
+        if (al.type == LIGHT_TYPE_SPHERE) {
+            float radius = al.right.w;
+            float z = 1.0 - 2.0 * xi.x;
+            float rr = sqrt(max(1.0 - z * z, 0.0));
+            float phi = 2.0 * PI * xi.y;
+            float3 dir = float3(rr * cos(phi), rr * sin(phi), z);
+            lightSamplePos = al.position.xyz + radius * dir;
+            lightArea = 4.0 * PI * radius * radius;
+        } else {
+            lightSamplePos = al.position.xyz
+                + al.right.xyz * (xi.x * 2.0 - 1.0) * al.right.w
+                + al.up.xyz    * (xi.y * 2.0 - 1.0) * al.up.w;
+            lightArea = 4.0 * al.right.w * al.up.w;
+        }
 
         float3 toLight = lightSamplePos - worldPos;
         float lightDist = max(length(toLight), 1e-5);
         float3 L = toLight / lightDist;
 
         float cosShade = max(dot(N, L), 0.0);
-        float cosLight = max(dot(-al.normal.xyz, L), 0.0);
+        float cosLight = (al.type == LIGHT_TYPE_SPHERE)
+            ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
+            : max(dot(-al.normal.xyz, L), 0.0);
         float atten = 1.0 - smoothstep(0.0, al.range, lightDist);
         atten = atten * atten;
 
@@ -117,10 +133,9 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
                 float orenNayar = Diffuse_OrenNayar(cosShade, nDotV, L, V, roughness);
                 float3 diff = kD * albedo.xyz * orenNayar;
 
-                float lightArea = 4.0 * al.right.w * al.up.w;
                 float geomTerm = cosLight / max(lightDist * lightDist, 0.0001);
                 float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                directLight = (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(areaLightCount) * lightArea;
+                directLight = (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(lightCount) * lightArea;
             }
         }
     }

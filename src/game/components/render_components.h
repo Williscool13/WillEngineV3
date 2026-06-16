@@ -38,6 +38,13 @@ struct AreaLightTransformComponent
     glm::mat4 previousMatrix{1.0f};
 };
 
+// Sphere transform for a sphere light's emissive surface. Spawned off SphereLightComponent (lifetime-linked), rolled each frame in RenderPrepareTransforms.
+struct SphereLightTransformComponent
+{
+    glm::mat4 modelMatrix{1.0f};
+    glm::mat4 previousMatrix{1.0f};
+};
+
 struct PrimitiveData
 {
     uint32_t primitiveIndex;

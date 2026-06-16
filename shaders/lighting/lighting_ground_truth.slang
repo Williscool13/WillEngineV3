@@ -44,7 +44,7 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 dtid : SV_Disp
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
     float nDotV = max(dot(N, V), 0.0);
 
-    int areaLightCount = pc.lightData->areaLightCount;
+    int lightCount = pc.lightData->lightCount;
 
     uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
     float4 accum = pc.accumulationBuffer[pixelIdx];
@@ -60,12 +60,12 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 dtid : SV_Disp
 
         float3 directLight = float3(0.0);
 
-        if (areaLightCount > 0) {
-            int lightIdx = int(rng * float(areaLightCount));
-            lightIdx = clamp(lightIdx, 0, areaLightCount - 1);
+        if (lightCount > 0) {
+            int lightIdx = int(rng * float(lightCount));
+            lightIdx = clamp(lightIdx, 0, lightCount - 1);
 
-            AreaLightData al = pc.lightData->areaLights[lightIdx];
-            AreaLightVS vs = TransformAreaLight(al, scene.view);
+            LightInfo al = pc.lightData->lights[lightIdx];
+            LightVS vs = TransformLight(al, scene.view);
 
             uint seed2 = seed * 2654435761u;
             seed2 = seed2 ^ (seed2 >> 16);
@@ -73,9 +73,9 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 dtid : SV_Disp
                 float(seed2 & 0x00FFFFFFu) / float(0x01000000u),
                 float((seed2 >> 8) & 0x00FFFFFFu) / float(0x01000000u)
             );
-            float3 yStar = vs.center + vs.right * (xi.x * 2.0 - 1.0) * vs.halfWidth + vs.up * (xi.y * 2.0 - 1.0) * vs.halfHeight;
+            float3 yStar = SampleLightPos(vs, xi.x, xi.y);
 
-            AreaLightSample ls = EvalAreaLightSample(vs, yStar, viewPosition, N, al.range);
+            LightSample ls = EvalLightSample(vs, yStar, viewPosition, N, al.range);
 
             if (ls.cosShade > 0.0 && ls.cosLight > 0.0 && ls.attenuation > 0.0) {
                 float3 L = normalize(yStar - viewPosition);
@@ -97,7 +97,7 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 dtid : SV_Disp
                 // float3 f = (diffuse) * ls.cosShade * geomTerm * al.intensity * alColor * ls.attenuation;
                 float3 f = (diffuse + specular) * ls.cosShade * geomTerm * al.intensity * alColor * ls.attenuation;
 
-                directLight = f * float(areaLightCount) * vs.area;
+                directLight = f * float(lightCount) * vs.area;
             }
         }
 

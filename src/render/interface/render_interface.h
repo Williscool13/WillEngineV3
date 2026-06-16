@@ -663,7 +663,7 @@ struct ViewFamily
 
     DirectionalLight directionalLight{};
     InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
-    InlineVector<AreaLightData, MAX_AREA_LIGHTS> areaLights{};
+    InlineVector<LightInfo, MAX_LIGHTS> lights{};
 
     GTAOConfiguration gtaoConfig{};
     AntiAliasingConfiguration aaConfig{};

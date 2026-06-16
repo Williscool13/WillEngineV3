@@ -26,7 +26,7 @@ void ComputeMain(uniform ReSTIRDIBoilingPushConstant pc, uint3 threadID : SV_Dis
     float metric = 0.0;
     bool valid = false;
 
-    if (inBounds && r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->areaLightCount)) {
+    if (inBounds && r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->lightCount)) {
         uint2 fullPixel = QuadFullPixel(pixel, pc.pixelScale, pc.frameIndex, pc.depthIndex, pc.gbufferOneIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd);
         float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
         if (depth > 0.0) {
@@ -40,9 +40,9 @@ void ComputeMain(uniform ReSTIRDIBoilingPushConstant pc, uint3 threadID : SV_Dis
                 float roughness = max(li.roughness, 0.045);
                 float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
-                AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[r.lightIdx]);
+                LightVS vs = UnpackLightVS(pc.lightVS[r.lightIdx]);
                 float3 yStar = DecodeSamplePos(r, vs);
-                AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, vs.range);
+                LightSample s = EvalLightSample(vs, yStar, viewPosition, N, vs.range);
                 float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
                 float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
                 metric = p_hat * r.W;

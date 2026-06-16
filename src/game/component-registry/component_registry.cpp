@@ -42,6 +42,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::TextComponent>(componentRegistry, "TextComponent");
     RegisterComponent<Component::PointLightComponent>(componentRegistry, "PointLightComponent");
     RegisterComponent<Component::AreaLightComponent>(componentRegistry, "AreaLightComponent");
+    RegisterComponent<Component::SphereLightComponent>(componentRegistry, "SphereLightComponent");
     RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, "DirectionalLightComponent");
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, "ProceduralMeshComponent");
     RegisterComponent<Component::SplineMeshComponent>(componentRegistry, "SplineMeshComponent");

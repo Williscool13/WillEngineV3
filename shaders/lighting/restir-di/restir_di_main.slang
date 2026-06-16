@@ -51,7 +51,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     const int M_brdf = 1;
     const int M = M_light + M_brdf;
 
-    int lightCount = pc.lightData->areaLightCount;
+    int lightCount = pc.lightData->lightCount;
 
     Reservoir r = ReservoirEmpty();
 
@@ -68,9 +68,9 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             float uSelect = HashStep(h);
 
             int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
-            AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[lightIdx]);
-            float3 Xi = SampleAreaLightPos(vs, uU, uV);
-            AreaLightSample s = EvalAreaLightSample(vs, Xi, viewPosition, N, vs.range);
+            LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
+            float3 Xi = SampleLightPos(vs, uU, uV);
+            LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
 
             float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
             float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
@@ -105,16 +105,16 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             float3 Xi = float3(0.0, 0.0, 0.0);
             float p_light_area = 0.0;
             float p_brdf_area = 0.0;
-            AreaLightVS bestVS = (AreaLightVS)0;
+            LightVS bestVS = (LightVS)0;
 
             if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0)
             {
                 float bestT = 1e30;
                 for (int j = 0; j < lightCount; j++)
                 {
-                    AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[j]);
+                    LightVS vs = UnpackLightVS(pc.lightVS[j]);
                     float t;
-                    if (RayIntersectQuad(viewPosition, brdfL, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t) && t < bestT)
+                    if (RayIntersectLight(vs, viewPosition, brdfL, t) && t < bestT)
                     {
                         bestT = t;
                         bestLightIdx = j;
@@ -125,7 +125,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
                 if (bestLightIdx >= 0)
                 {
                     Xi = viewPosition + brdfL * bestT;
-                    AreaLightSample s = EvalAreaLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
+                    LightSample s = EvalLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
                     // Area-measure PDFs. p_brdf_area = p_brdf_sa * cosLight / dist²
                     p_light_area = 1.0 / (float(lightCount) * bestVS.area);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
@@ -149,9 +149,9 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
         // Finalise W = wSum / p_hat(y*) with visibility
         if (r.lightIdx != ~0u)
         {
-            AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[r.lightIdx]);
+            LightVS vs = UnpackLightVS(pc.lightVS[r.lightIdx]);
             float3 yStar = DecodeSamplePos(r, vs);
-            AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, vs.range);
+            LightSample s = EvalLightSample(vs, yStar, viewPosition, N, vs.range);
 
             float3 winnerLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
             float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;

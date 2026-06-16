@@ -57,8 +57,12 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         ImGui::ColorEdit3("Color##al", &comp.color.r);
         ImGui::DragFloat("Intensity##al", &comp.intensity, 0.05f, 0.0f, 100.0f);
         ImGui::BeginDisabled(!bEditing);
-        ImGui::DragFloat("Half Width##al", &comp.halfWidth, 0.05f, 0.01f, 100.0f);
-        ImGui::DragFloat("Half Height##al", &comp.halfHeight, 0.05f, 0.01f, 100.0f);
+        bool extentChanged = false;
+        extentChanged |= ImGui::DragFloat("Half Width##al", &comp.halfWidth, 0.05f, 0.01f, 100.0f);
+        extentChanged |= ImGui::DragFloat("Half Height##al", &comp.halfHeight, 0.05f, 0.01f, 100.0f);
+        if (extentChanged) {
+            registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); // recompute the emissive quad matrix; extents don't dirty the transform on their own
+        }
         ImGui::EndDisabled();
         ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
 
@@ -101,13 +105,13 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
             const Vec3 widthPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, right) * right);
             Editor::DotHandle(20000, center + right * comp.halfWidth * transform->scale.x, widthPlaneNormal,
                               vd.view, vd.proj, viewport, vd.cameraPos, state,
-                              [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); },
+                              [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
                               Editor::COLOR_AXIS_X);
 
             const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
             Editor::DotHandle(20001, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
                               vd.view, vd.proj, viewport, vd.cameraPos, state,
-                              [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); },
+                              [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
                               Editor::COLOR_AXIS_Y);
         }
     }
@@ -224,5 +228,79 @@ void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::
 void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     registry.remove<AreaLightTransformComponent>(entity);
+}
+
+Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+{
+    bool open = ImGui::CollapsingHeader("Sphere Light", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X##deletespherelight");
+    ImGui::PopStyleColor();
+
+    if (open) {
+        auto& comp = registry.get<SphereLightComponent>(entity);
+        ImGui::ColorEdit3("Color##sl", &comp.color.r);
+        ImGui::DragFloat("Intensity##sl", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        if (ImGui::DragFloat("Radius##sl", &comp.radius, 0.05f, 0.01f, 100.0f)) {
+            registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); // recompute the emissive mesh matrix; radius doesn't dirty the transform on its own
+        }
+        ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
+    }
+
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* transform = registry.try_get<TransformComponent>(entity);
+    if (transform) {
+        auto& comp = registry.get<SphereLightComponent>(entity);
+        const bool show = state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::Selected || state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::All;
+        if (show) {
+            constexpr Vec4 sphereColor{0.5f, 0.8f, 1.0f, 1.0f};
+            DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform->translation, comp.radius * transform->scale.x, sphereColor, 0.02f});
+        }
+    }
+
+    return {.requestRemoval = remove};
+}
+
+void Component::SphereLightComponent::Serialize(const SphereLightComponent& comp, nlohmann::json& json)
+{
+    json["color"] = comp.color;
+    json["intensity"] = comp.intensity;
+    json["radius"] = comp.radius;
+    json["range"] = comp.range;
+}
+
+void Component::SphereLightComponent::Deserialize(SphereLightComponent& comp, const nlohmann::json& json)
+{
+    if (!json.is_object()) { return; }
+    comp.color = json.contains("color") ? json["color"].get<Vec3>() : Vec3{1.0f, 1.0f, 1.0f};
+    comp.intensity = json.value("intensity", 1.0f);
+    comp.radius = json.value("radius", 0.5f);
+    comp.range = json.value("range", 10.0f);
+}
+
+glm::mat4 Component::ComputeSphereLightMatrix(const TransformComponent& transform, const SphereLightComponent& light)
+{
+    const float scale = 2.0f * light.radius * transform.scale.x; // unit sphere has radius 0.5
+    glm::mat4 m(1.0f);
+    m[0] = glm::vec4(scale, 0.0f, 0.0f, 0.0f);
+    m[1] = glm::vec4(0.0f, scale, 0.0f, 0.0f);
+    m[2] = glm::vec4(0.0f, 0.0f, scale, 0.0f);
+    m[3] = glm::vec4(transform.translation, 1.0f);
+    return m;
+}
+
+void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+{
+    glm::mat4 m(1.0f);
+    if (auto* transform = registry.try_get<TransformComponent>(entity)) {
+        m = ComputeSphereLightMatrix(*transform, registry.get<SphereLightComponent>(entity));
+    }
+    registry.emplace_or_replace<SphereLightTransformComponent>(entity, m, m);
+}
+
+void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    registry.remove<SphereLightTransformComponent>(entity);
 }
 } // Game

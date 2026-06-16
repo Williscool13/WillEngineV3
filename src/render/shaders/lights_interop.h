@@ -47,8 +47,11 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_CONST int MAX_POINT_LIGHTS = 256;
-SHADER_CONST int MAX_AREA_LIGHTS = 256;
+SHADER_PUBLIC SHADER_CONST int MAX_POINT_LIGHTS = 256;
+SHADER_PUBLIC SHADER_CONST int MAX_LIGHTS = 2048;
+
+SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_AREA = 0u;
+SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_SPHERE = 1u;
 
 /** Directional light: direction (xyz) + intensity (w), color packed as RGBA8 unorm. */
 SHADER_PUBLIC struct DirectionalLightData
@@ -70,41 +73,41 @@ SHADER_PUBLIC struct PointLightData
     SHADER_PUBLIC float _pad1;
 };
 
-/** Rectangular area light: position, normal, right/up half-extents, color. */
-SHADER_PUBLIC struct AreaLightData
+/** Unified light source tagged by type. Area: rect via normal + right/up half-extents. Sphere: center + radius (right.w); normal/up unused. */
+SHADER_PUBLIC struct LightInfo
 {
     SHADER_PUBLIC float4 position; // xyz world-space center, w unused
-    SHADER_PUBLIC float4 normal; // xyz world-space normal, w unused
-    SHADER_PUBLIC float4 right; // xyz right axis, w half-width
-    SHADER_PUBLIC float4 up; // xyz up axis, w half-height
+    SHADER_PUBLIC float4 normal; // xyz world-space normal (area only), w unused
+    SHADER_PUBLIC float4 right; // xyz right axis (area), w half-width (area) / radius (sphere)
+    SHADER_PUBLIC float4 up; // xyz up axis (area only), w half-height (area)
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float intensity;
     SHADER_PUBLIC float range; // smoothstep attenuation cutoff distance
-    SHADER_PUBLIC float _pad1;
+    SHADER_PUBLIC uint type; // LIGHT_TYPE_AREA or LIGHT_TYPE_SPHERE
 };
 
-/** Area light pre-transformed to view space with derived geometry and emission cached. Written once per frame by the ReSTIR transform-lights pass. */
-SHADER_PUBLIC struct AreaLightVSData
+/** Light pre-transformed to view space with derived geometry and emission cached. Written once per frame by the ReSTIR transform-lights pass. Sphere: center (xyz) + radius (centerHalfWidth.w), area = 4*pi*r^2 in rightArea.w. */
+SHADER_PUBLIC struct LightVSData
 {
-    SHADER_PUBLIC float4 centerHalfWidth; // xyz view-space center, w half-width
-    SHADER_PUBLIC float4 normalHalfHeight; // xyz view-space normal, w half-height
-    SHADER_PUBLIC float4 rightArea; // xyz view-space right axis, w area
-    SHADER_PUBLIC float4 upRange; // xyz view-space up axis, w range
+    SHADER_PUBLIC float4 centerHalfWidth; // xyz view-space center, w half-width (area) / radius (sphere)
+    SHADER_PUBLIC float4 normalHalfHeight; // xyz view-space normal (area), w half-height (area)
+    SHADER_PUBLIC float4 rightArea; // xyz view-space right axis (area), w area
+    SHADER_PUBLIC float4 upRange; // xyz view-space up axis (area), w range
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float intensity;
-    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC uint type; // LIGHT_TYPE_AREA or LIGHT_TYPE_SPHERE
     SHADER_PUBLIC float _pad1;
 };
 
 SHADER_PUBLIC struct LightData
 {
     SHADER_PUBLIC int pointLightCount;
-    SHADER_PUBLIC int areaLightCount;
+    SHADER_PUBLIC int lightCount;
     float _pad0;
     float _pad1;
     SHADER_PUBLIC DirectionalLightData directionalLight;
     SHADER_PUBLIC PointLightData pointLights[MAX_POINT_LIGHTS];
-    SHADER_PUBLIC AreaLightData areaLights[MAX_AREA_LIGHTS];
+    SHADER_PUBLIC LightInfo lights[MAX_LIGHTS];
 };
 
 

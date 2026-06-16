@@ -50,7 +50,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
-    int lightCount = pc.lightData->areaLightCount;
+    int lightCount = pc.lightData->lightCount;
 
     // History reprojection validity.
     uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
@@ -108,9 +108,9 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             float uSelect = HashStep(h);
 
             int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
-            AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[lightIdx]);
-            float3 Xi = SampleAreaLightPos(vs, uU, uV);
-            AreaLightSample s = EvalAreaLightSample(vs, Xi, viewPosition, N, vs.range);
+            LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
+            float3 Xi = SampleLightPos(vs, uU, uV);
+            LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
 
             float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
             float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
@@ -139,14 +139,14 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             float3 Xi = float3(0.0);
             float p_light_area = 0.0;
             float p_brdf_area = 0.0;
-            AreaLightVS bestVS = (AreaLightVS)0;
+            LightVS bestVS = (LightVS)0;
 
             if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
                 float bestT = 1e30;
                 for (int j = 0; j < lightCount; j++) {
-                    AreaLightVS vs = UnpackAreaLightVS(pc.lightVS[j]);
+                    LightVS vs = UnpackLightVS(pc.lightVS[j]);
                     float t;
-                    if (RayIntersectQuad(viewPosition, brdfL, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t) && t < bestT) {
+                    if (RayIntersectLight(vs, viewPosition, brdfL, t) && t < bestT) {
                         bestT = t;
                         bestLightIdx = j;
                         bestVS = vs;
@@ -155,7 +155,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
                 if (bestLightIdx >= 0) {
                     Xi = viewPosition + brdfL * bestT;
-                    AreaLightSample s = EvalAreaLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
+                    LightSample s = EvalLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
                     p_light_area = 1.0 / (float(lightCount) * bestVS.area);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
                     float3 brdfLightColor = UnpackUnorm4x8(bestVS.packedColor).rgb;
@@ -181,7 +181,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     if (bHistoryUsable) {
         Reservoir candidate = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
-        if (candidate.lightIdx != ~0u && candidate.lightIdx < uint(pc.lightData->areaLightCount)) {
+        if (candidate.lightIdx != ~0u && candidate.lightIdx < uint(pc.lightData->lightCount)) {
             history = candidate;
         }
     }
@@ -196,9 +196,9 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     // Finalise the generated reservoir with a visibility ray, then stream it.
     if (r_gen.lightIdx != ~0u) {
-        AreaLightVS vsGen = UnpackAreaLightVS(pc.lightVS[r_gen.lightIdx]);
+        LightVS vsGen = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
         float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
-        AreaLightSample sGen = EvalAreaLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
+        LightSample sGen = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
         float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
         float3 worldPosGen = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
         float3 worldNGen = normalize(mul(float3x3(scene.invView), N));
@@ -217,9 +217,9 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     // Stream history winner: w = p_hat(y_hist at current shading point) * W_hist * clampedM
     if (validHistoryReservoir) {
-        AreaLightVS vsHistory = UnpackAreaLightVS(pc.lightVS[history.lightIdx]);
+        LightVS vsHistory = UnpackLightVS(pc.lightVS[history.lightIdx]);
         float3 yStarHistory = DecodeSamplePos(history, vsHistory);
-        AreaLightSample sHistory = EvalAreaLightSample(vsHistory, yStarHistory, viewPosition, N, vsHistory.range);
+        LightSample sHistory = EvalLightSample(vsHistory, yStarHistory, viewPosition, N, vsHistory.range);
         float3 historyLightColor = UnpackUnorm4x8(vsHistory.packedColor).rgb;
         float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, vsHistory.intensity);
 
@@ -239,9 +239,9 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     // winnerVisibility: 1 = the displayed sample is lit this frame, 0 = occluded. The visibility ray here is binary (single ray to the sample), so this is a clean shadow term.
     float winnerVisibility = 1.0;
     if (combined.lightIdx != ~0u) {
-        AreaLightVS vsWinner = UnpackAreaLightVS(pc.lightVS[combined.lightIdx]);
+        LightVS vsWinner = UnpackLightVS(pc.lightVS[combined.lightIdx]);
         float3 yStar = DecodeSamplePos(combined, vsWinner);
-        AreaLightSample sWinner = EvalAreaLightSample(vsWinner, yStar, viewPosition, N, vsWinner.range);
+        LightSample sWinner = EvalLightSample(vsWinner, yStar, viewPosition, N, vsWinner.range);
         float3 winnerLightColor = UnpackUnorm4x8(vsWinner.packedColor).rgb;
         float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
         float3 worldN = normalize(mul(float3x3(scene.invView), N));

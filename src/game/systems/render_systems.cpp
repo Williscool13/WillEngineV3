@@ -51,6 +51,9 @@ void ConnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnConstruct>();
     registry.on_destroy<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnDestroy>();
+
+    registry.on_construct<Component::SphereLightComponent>().connect<&Component::SphereLightComponent::OnConstruct>();
+    registry.on_destroy<Component::SphereLightComponent>().connect<&Component::SphereLightComponent::OnDestroy>();
 }
 
 void DisconnectRenderObservers(entt::registry& registry)
@@ -74,6 +77,9 @@ void DisconnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnConstruct>();
     registry.on_destroy<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnDestroy>();
+
+    registry.on_construct<Component::SphereLightComponent>().disconnect<&Component::SphereLightComponent::OnConstruct>();
+    registry.on_destroy<Component::SphereLightComponent>().disconnect<&Component::SphereLightComponent::OnDestroy>();
 }
 
 void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -420,6 +426,12 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         areaLightTransform.modelMatrix = Component::ComputeAreaLightQuadMatrix(transform, light);
     }
 
+    // Sphere light emissive meshes
+    for (auto [entity, light, transform, sphereLightTransform, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::SphereLightTransformComponent, Component::MultiframeDirtyTransformComponent>().each()) {
+        sphereLightTransform.previousMatrix = sphereLightTransform.modelMatrix;
+        sphereLightTransform.modelMatrix = Component::ComputeSphereLightMatrix(transform, light);
+    }
+
     for (auto [entity, dirty] : state->registry.view<Component::MultiframeDirtyTransformComponent>().each()) {
         dirty.counter--;
         if (dirty.counter <= 0) {
@@ -586,6 +598,50 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
+    // Gather sphere light emissive meshes. Mirrors the area-light quad path with a unit sphere; blasDeviceAddress stays 0 so the
+    // sphere rasters but is excluded from the TLAS, keeping the light from self-shadowing its own ReSTIR rays.
+    {
+        ZoneScopedN("SphereLightMeshes");
+        const Engine::StaticModelHandle sphereHandle = state->builtinAssets.GetUnitSphere(ctx->assetManager);
+        Engine::StaticModel* sphereModel = ctx->assetManager->GetModel(sphereHandle);
+        const Engine::Material* defaultMaterial = materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
+        if (defaultMaterial && sphereModel && sphereModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded
+            && !sphereModel->modelData.meshes.IsEmpty() && !sphereModel->modelData.meshes[0].primitiveProperties.IsEmpty()) {
+            const uint32_t spherePrimitiveIndex = sphereModel->modelData.meshes[0].primitiveProperties[0].index;
+
+            Engine::Material emissiveMaterial = *defaultMaterial;
+            emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
+
+            for (auto [entity, light, sphereLightTransform] : state->registry.view<Component::SphereLightComponent, Component::SphereLightTransformComponent>().each()) {
+                const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+                frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(sphereLightTransform.modelMatrix, sphereLightTransform.previousMatrix);
+
+                emissiveMaterial.props.emissiveFactor = glm::vec4(light.color, light.intensity);
+                const Engine::MaterialID materialKey = Engine::HashMaterial(emissiveMaterial);
+
+                auto [materialIndex, inserted] = frameBuffer->mainViewFamily.activeMaterials.TryEmplace(materialKey);
+                if (inserted) {
+                    materialIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.materials.Size());
+                    frameBuffer->mainViewFamily.materials.PushBack(Engine::RenderMaterial{emissiveMaterial.props, emissiveMaterial.fragmentShader, emissiveMaterial.lightingShader});
+                }
+
+                uint64_t stableId = 1234567890;
+                if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                    stableId = stable->id.id;
+                }
+
+                frameBuffer->mainViewFamily.primitiveInstances.PushBack({
+                    .primitiveIndex = spherePrimitiveIndex,
+                    .materialID = materialKey,
+                    .modelIndex = modelIndex,
+                    .stableId = stableId,
+                    .blasDeviceAddress = 0,
+                });
+            }
+        }
+    }
+
     // Material remap
     {
         ZoneScopedN("Material Recording");
@@ -718,13 +774,13 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 
     auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : areaView.each()) {
-        if (vf.areaLights.IsFull()) { break; }
+        if (vf.lights.IsFull()) { break; }
         const glm::mat3 rot = glm::mat3_cast(transform.rotation);
         const glm::vec3 normal = rot[2];
         const glm::vec3 right = rot[0];
         const glm::vec3 up = rot[1];
         const glm::vec3& c = light.color;
-        vf.areaLights.PushBack(AreaLightData{
+        vf.lights.PushBack(LightInfo{
             .position = {transform.translation, 0.0f},
             .normal = {normal, 0.0f},
             .right = {right, light.halfWidth * transform.scale.x},
@@ -736,6 +792,27 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
             (0xFFu << 24),
             .intensity = light.intensity,
             .range = light.range,
+            .type = LIGHT_TYPE_AREA,
+        });
+    }
+
+    auto sphereView = state->registry.view<Component::SphereLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : sphereView.each()) {
+        if (vf.lights.IsFull()) { break; }
+        const glm::vec3& c = light.color;
+        vf.lights.PushBack(LightInfo{
+            .position = {transform.translation, 0.0f},
+            .normal = {0.0f, 0.0f, 0.0f, 0.0f},
+            .right = {0.0f, 0.0f, 0.0f, light.radius * transform.scale.x},
+            .up = {0.0f, 0.0f, 0.0f, 0.0f},
+            .packedColor =
+            (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
+            (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
+            (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+            (0xFFu << 24),
+            .intensity = light.intensity,
+            .range = light.range,
+            .type = LIGHT_TYPE_SPHERE,
         });
     }
 
@@ -801,6 +878,23 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
         });
     }
 
+    auto sphereView = state->registry.view<Component::SphereLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : sphereView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation,
+            .pixelSize = 0.5f,
+            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
+            .stableId = stableId,
+            .textureIndex = SPRITE_POINT_LIGHT_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
+
     auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : dirView.each()) {
         uint64_t stableId = 0;
@@ -834,6 +928,11 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
         DEBUG_ADD_RECT(viewFamily.debugRects, {center, light.halfWidth * transform.scale.x, light.halfHeight * transform.scale.y, right, up, editColor, 0.03f});
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
+    }
+
+    for (auto [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>().each()) {
+        constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
+        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, light.radius * transform.scale.x, editColor, 0.02f});
     }
 
     for (auto [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>().each()) {

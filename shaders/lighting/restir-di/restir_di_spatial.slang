@@ -41,21 +41,21 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
     Reservoir center = pc.inputBuffer[centerIdx];
-    bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->areaLightCount);
+    bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->lightCount);
 
     // Canonical confidence; zero when the center carries no sample so it can't suppress neighbors.
     float Mc = validCenter ? float(center.M) : 0.0;
 
     // Center sample and its target at the center.
-    AreaLightVS vsCenter;
+    LightVS vsCenter;
     float3 yStarCenter = float3(0);
     float3 centerLightColor = float3(0);
     float p_hat_center_atCenter = 0.0;
     if (validCenter) {
-        vsCenter = UnpackAreaLightVS(pc.lightVS[center.lightIdx]);
+        vsCenter = UnpackLightVS(pc.lightVS[center.lightIdx]);
         yStarCenter = DecodeSamplePos(center, vsCenter);
         centerLightColor = UnpackUnorm4x8(vsCenter.packedColor).rgb;
-        AreaLightSample sCenter = EvalAreaLightSample(vsCenter, yStarCenter, viewPosition, N, vsCenter.range);
+        LightSample sCenter = EvalLightSample(vsCenter, yStarCenter, viewPosition, N, vsCenter.range);
         p_hat_center_atCenter = EvalPHat(sCenter, V, N, li.albedo.xyz, F0, li.metallic, roughness, centerLightColor, vsCenter.intensity);
     }
 
@@ -103,7 +103,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         }
 
         Reservoir neighbor = pc.inputBuffer[neighborPixel.y * pc.renderExtent.x + neighborPixel.x];
-        if (neighbor.lightIdx == ~0u || neighbor.lightIdx >= uint(pc.lightData->areaLightCount)) {
+        if (neighbor.lightIdx == ~0u || neighbor.lightIdx >= uint(pc.lightData->lightCount)) {
             continue;
         }
 
@@ -117,7 +117,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         float neighborRoughness = max(nli.roughness, 0.045);
         float3 neighborF0 = lerp(float3(0.04, 0.04, 0.04), nli.albedo.xyz, nli.metallic);
 
-        AreaLightVS vsNeighbor = UnpackAreaLightVS(pc.lightVS[neighbor.lightIdx]);
+        LightVS vsNeighbor = UnpackLightVS(pc.lightVS[neighbor.lightIdx]);
         float3 neighborLightColor = UnpackUnorm4x8(vsNeighbor.packedColor).rgb;
         float3 yStarNeighbor = DecodeSamplePos(neighbor, vsNeighbor);
 
@@ -125,9 +125,9 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         float Mi = validCenter ? min(float(neighbor.M), 20.0 * float(center.M)) : float(neighbor.M);
 
         // Neighbor sample evaluated at the neighbor (own domain) and at the center.
-        AreaLightSample sNeighbor_atNeighbor = EvalAreaLightSample(vsNeighbor, yStarNeighbor, neighborViewPosition, neighborN, vsNeighbor.range);
+        LightSample sNeighbor_atNeighbor = EvalLightSample(vsNeighbor, yStarNeighbor, neighborViewPosition, neighborN, vsNeighbor.range);
         float p_hat_neighbor_atNeighbor = EvalPHat(sNeighbor_atNeighbor, neighborV, neighborN, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, neighborLightColor, vsNeighbor.intensity);
-        AreaLightSample sNeighbor_atCenter = EvalAreaLightSample(vsNeighbor, yStarNeighbor, viewPosition, N, vsNeighbor.range);
+        LightSample sNeighbor_atCenter = EvalLightSample(vsNeighbor, yStarNeighbor, viewPosition, N, vsNeighbor.range);
         float p_hat_neighbor_atCenter = EvalPHat(sNeighbor_atCenter, V, N, li.albedo.xyz, F0, li.metallic, roughness, neighborLightColor, vsNeighbor.intensity);
 
         // Pair (neighbor i, center): balance heuristic for the neighbor's sample.
@@ -136,7 +136,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
         // Same pair, the canonical's share. Center sample evaluated at this neighbor.
         if (validCenter) {
-            AreaLightSample sCenter_atNeighbor = EvalAreaLightSample(vsCenter, yStarCenter, neighborViewPosition, neighborN, vsCenter.range);
+            LightSample sCenter_atNeighbor = EvalLightSample(vsCenter, yStarCenter, neighborViewPosition, neighborN, vsCenter.range);
             float p_hat_center_atNeighbor = EvalPHat(sCenter_atNeighbor, neighborV, neighborN, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, centerLightColor, vsCenter.intensity);
             float denomCenter = Mi * p_hat_center_atNeighbor + Mc * p_hat_center_atCenter;
             if (denomCenter > 0.0) {
@@ -173,9 +173,9 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     // M_total here is the pair count k (the shared 1/k). The per-pair MIS weights partition unity, so the only normalization left is the uniform 1/k across all k streamed weights.
     if (combined.lightIdx != ~0u) {
-        AreaLightVS vsFinal = UnpackAreaLightVS(pc.lightVS[combined.lightIdx]);
+        LightVS vsFinal = UnpackLightVS(pc.lightVS[combined.lightIdx]);
         float3 yStarFinal = DecodeSamplePos(combined, vsFinal);
-        AreaLightSample sFinal = EvalAreaLightSample(vsFinal, yStarFinal, viewPosition, N, vsFinal.range);
+        LightSample sFinal = EvalLightSample(vsFinal, yStarFinal, viewPosition, N, vsFinal.range);
         float3 finalLightColor = UnpackUnorm4x8(vsFinal.packedColor).rgb;
         float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
         float3 worldN = normalize(mul(float3x3(scene.invView), N));

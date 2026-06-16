@@ -59,6 +59,32 @@ struct AreaLightComponent
  */
 glm::mat4 ComputeAreaLightQuadMatrix(const TransformComponent& transform, const AreaLightComponent& light);
 
+struct SphereLightComponent
+{
+    Vec3 color{1.0f, 1.0f, 1.0f};
+    float intensity{1.0f};
+    float radius{0.5f};
+    float range{10.0f};
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+
+    static void Serialize(const SphereLightComponent& comp, nlohmann::json& json);
+
+    static void Deserialize(SphereLightComponent& comp, const nlohmann::json& json);
+
+    static void OnConstruct(entt::registry& registry, entt::entity entity);
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
+};
+
+/**
+ * World-space transform for a sphere light's emissive mesh: unit sphere (r=0.5) scaled to the light's radius.
+ * @param transform
+ * @param light
+ * @return
+ */
+glm::mat4 ComputeSphereLightMatrix(const TransformComponent& transform, const SphereLightComponent& light);
+
 struct DirectionalLightComponent
 {
     Vec3 color{1.0f, 1.0f, 1.0f};
