@@ -234,6 +234,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         Game::DebugApplyGroundForces(ctx, state);
 
         Game::UpdatePathMovers(ctx, state);
+        Game::UpdateRotateInPlace(ctx, state);
         Game::CheckpointUpdate(ctx, state);
         Game::DeathZoneUpdate(ctx, state);
 

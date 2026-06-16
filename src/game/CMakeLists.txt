@@ -50,6 +50,8 @@ set(GAME_SOURCES
         components/gameplay/player_spawn_component.h
         components/gameplay/path_mover_component.cpp
         components/gameplay/path_mover_component.h
+        components/gameplay/rotate_in_place_component.cpp
+        components/gameplay/rotate_in_place_component.h
 
         components/debug_components.cpp
         components/debug_components.h

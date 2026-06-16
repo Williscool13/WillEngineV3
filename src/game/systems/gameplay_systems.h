@@ -14,6 +14,7 @@ struct EngineState;
 namespace Game
 {
 void UpdatePathMovers(Engine::EngineContext* ctx, Engine::EngineState* state);
+void UpdateRotateInPlace(Engine::EngineContext* ctx, Engine::EngineState* state);
 void CheckpointUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 } // Game

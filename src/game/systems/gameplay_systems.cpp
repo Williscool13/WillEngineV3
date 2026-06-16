@@ -13,6 +13,7 @@
 #include "game/components/gameplay/checkpoint_component.h"
 #include "game/components/gameplay/death_zone_component.h"
 #include "game/components/gameplay/path_mover_component.h"
+#include "game/components/gameplay/rotate_in_place_component.h"
 #include "game/components/physics/physics_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
 
@@ -96,6 +97,35 @@ void UpdatePathMovers(Engine::EngineContext* ctx, Engine::EngineState* state)
         const glm::quat anchorRot = transform.rotation * glm::inverse(oldRot);
         transform.translation += anchorRot * (newPos - oldPos);
         transform.rotation = anchorRot * newRot;
+        state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+    }
+}
+
+void UpdateRotateInPlace(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    const float dt = state->timeFrame->deltaTime;
+
+    auto view = state->registry.view<Component::RotateInPlaceComponent, Component::TransformComponent>();
+    for (auto entity : view) {
+        auto& rotator = view.get<Component::RotateInPlaceComponent>(entity);
+        auto& transform = view.get<Component::TransformComponent>(entity);
+
+        const float axisLen = glm::length(rotator.axis);
+        if (axisLen < 1e-5f || rotator.speedDegrees == 0.0f) {
+            continue;
+        }
+
+        const glm::vec3 axis = rotator.axis / axisLen;
+        const glm::quat delta = glm::angleAxis(glm::radians(rotator.speedDegrees * dt), axis);
+
+        if (rotator.bWorldSpace) {
+            transform.rotation = glm::normalize(delta * transform.rotation);
+        }
+        else {
+            transform.rotation = glm::normalize(transform.rotation * delta);
+        }
+
         state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
     }
 }

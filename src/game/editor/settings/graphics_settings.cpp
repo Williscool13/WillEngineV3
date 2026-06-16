@@ -493,7 +493,7 @@ void DrawLightingWindow(Engine::EngineState* state)
                 changed = true;
             }
             ImGui::Separator();
-            const char* modeLabels[] = {"Main + Temporal + 1x Spatial", "Combined + 1x Spatial"};
+            const char* modeLabels[] = {"Main + Temporal", "Combined Temporal"};
             int modeIdx = static_cast<int>(restir.mode);
             if (ImGui::Combo("ReSTIR Mode", &modeIdx, modeLabels, 2)) {
                 restir.mode = static_cast<Core::ReSTIRParams::Mode>(modeIdx);

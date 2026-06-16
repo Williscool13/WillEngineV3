@@ -10,7 +10,8 @@
       "Bash(Get-ChildItem -Path \"D:\\\\source\\\\repos\\\\WillEngineV3\" -Directory)",
       "Bash(Select-Object Name)",
       "Bash(grep -E \"\\\\.\\(h|cpp\\)$\")",
-      "Bash(grep -E \"StringID|;\\\\s*$\")"
+      "Bash(grep -E \"StringID|;\\\\s*$\")",
+      "Read(//d/source/repos/NRD/**)"
     ],
     "deny": [],
     "ask": []

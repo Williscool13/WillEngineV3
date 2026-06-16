@@ -342,6 +342,8 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     if (rc.gResetHistory != 0) historyLength = 1.0;
     float maxAccumulatedFrameNum = 1.0 + max(rc.gDiffMaxAccumulatedFrameNum, rc.gSpecMaxAccumulatedFrameNum);
     historyLength = min(historyLength, maxAccumulatedFrameNum);
+    // Confidence flushes the accumulated frame count itself (not just the per-frame alpha cap), so a shadow flip persists as faster blend + more spatial fill for several frames instead of one.
+    historyLength = max(historyLength * historyConfidence, 1.0);
 
     // Diffuse accumulation
     float diffMaxAccumFrameNum = rc.gDiffMaxAccumulatedFrameNum * historyConfidence;

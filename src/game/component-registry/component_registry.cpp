@@ -19,6 +19,7 @@
 #include "game/components/gameplay/checkpoint_component.h"
 #include "game/components/gameplay/death_zone_component.h"
 #include "game/components/gameplay/path_mover_component.h"
+#include "game/components/gameplay/rotate_in_place_component.h"
 #include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render/light_components.h"
 #include "game/components/render/static_mesh_component.h"
@@ -58,5 +59,6 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::DeathZoneComponent>(componentRegistry, "DeathZoneComponent");
     RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, "PlayerSpawnComponent");
     RegisterComponent<Component::PathMoverComponent>(componentRegistry, "PathMoverComponent");
+    RegisterComponent<Component::RotateInPlaceComponent>(componentRegistry, "RotateInPlaceComponent");
 }
 } // Core
