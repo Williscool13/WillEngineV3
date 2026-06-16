@@ -399,6 +399,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t confidenceIndex;
     SHADER_PUBLIC float confidenceStrength;
     SHADER_PUBLIC uint32_t bPermutationSampling;
+    SHADER_PUBLIC float antilagStrength;
 };
 
 SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
@@ -465,6 +466,9 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC uint32_t passIndex;
+    SHADER_PUBLIC uint32_t bAdaptiveSpatial;
+    SHADER_PUBLIC float adaptiveSpatialBoost;
+    SHADER_PUBLIC uint32_t adaptiveMReference;
 };
 
 SHADER_PUBLIC struct VisibilityLightingPushConstant

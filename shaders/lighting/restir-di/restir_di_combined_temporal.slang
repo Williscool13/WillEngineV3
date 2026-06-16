@@ -253,16 +253,19 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
     }
 
+    float flip = 0.0;
+    if (pc.prevShadowVisIndex != ~0u && bHistoryUsable && validHistoryReservoir) {
+        float prevVis = rdgTexturesFloat[pc.prevShadowVisIndex].Load(int3(historyPixel, 0)).r;
+        flip = abs(winnerVisibility - prevVis);
+    }
+
+    // After finalise: this frame's W is unchanged, only the carried M shrinks so a moving shadow washes out fast.
+    if (pc.antilagStrength > 0.0 && flip > 0.0) {
+        combined.M = max(1u, uint(float(combined.M) * (1.0 - pc.antilagStrength * flip)));
+    }
+
     pc.outputBuffer[pixelIdx] = combined;
 
-    // History confidence
     if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][pixel] = winnerVisibility; }
-    if (pc.confidenceIndex != ~0u) {
-        float confidence = 1.0;
-        if (pc.prevShadowVisIndex != ~0u && bHistoryUsable && validHistoryReservoir) {
-            float prevVis = rdgTexturesFloat[pc.prevShadowVisIndex].Load(int3(historyPixel, 0)).r;
-            confidence = 1.0 - pc.confidenceStrength * abs(winnerVisibility - prevVis);
-        }
-        rdgStorageFloat[pc.confidenceIndex][pixel] = confidence;
-    }
+    if (pc.confidenceIndex != ~0u) { rdgStorageFloat[pc.confidenceIndex][pixel] = 1.0 - pc.confidenceStrength * flip; }
 }

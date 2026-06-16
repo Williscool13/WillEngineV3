@@ -478,6 +478,16 @@ void DrawLightingWindow(Engine::EngineState* state)
                 restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
                 changed = true;
             }
+            if (ImGui::Checkbox("Adaptive Spatial", &restir.bAdaptiveSpatial)) {
+                changed = true;
+            }
+            if (restir.bAdaptiveSpatial && Widgets::SliderFloat("Adaptive Boost##restir", &restir.adaptiveSpatialBoost, 0.0f, 3.0f)) {
+                changed = true;
+            }
+            if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
+                    {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. Combined-temporal mode only; may add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.0f})) {
+                changed = true;
+            }
             ImGui::Separator();
             if (Widgets::SliderFloat("IBL Intensity##restir", &restir.iblIntensity, 0.0f, 2.0f)) {
                 changed = true;
@@ -489,7 +499,9 @@ void DrawLightingWindow(Engine::EngineState* state)
                 restir.mode = static_cast<Core::ReSTIRParams::Mode>(modeIdx);
                 changed = true;
             }
-            if (ImGui::Checkbox("Spatial 2", &restir.bSpatial2)) {
+            int spatialPasses = static_cast<int>(restir.spatialPasses);
+            if (Widgets::SliderInt("Spatial Passes", &spatialPasses, 1, 8)) {
+                restir.spatialPasses = static_cast<uint32_t>(spatialPasses);
                 changed = true;
             }
             ImGui::Separator();

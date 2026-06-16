@@ -70,8 +70,10 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     uint neighborCount = 0;
     combined.M = validCenter ? center.M : 0u;
 
-    uint spatialNeighbors = pc.spatialNeighbors;
-    uint spatialRadius = pc.spatialRadius;
+    float convergence = saturate(Mc / float(max(pc.adaptiveMReference, 1u)));
+    float adaptiveBoost = (pc.bAdaptiveSpatial != 0u) ? (1.0 + pc.adaptiveSpatialBoost * (1.0 - convergence)) : 1.0;
+    uint spatialNeighbors = clamp(uint(round(float(pc.spatialNeighbors) * adaptiveBoost)), 1u, 32u);
+    float spatialRadius = float(pc.spatialRadius) * adaptiveBoost;
     float frustumSize = abs(scene.ndcToViewMul.y) * abs(viewSpaceDepth);
     float bnRot = BlueNoiseAngle(pixel, pc.frameIndex + pc.passIndex * 32u);
     for (uint i = 0; i < spatialNeighbors; i++) {

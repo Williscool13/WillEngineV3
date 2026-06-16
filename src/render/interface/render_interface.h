@@ -574,10 +574,13 @@ struct ReSTIRParams
     enum class Mode : uint8_t { MainTemporal = 0, CombinedTemporal = 1 };
 
     bool bHalfRes{false};
-    bool bSpatial2{false};
+    uint32_t spatialPasses{1};
     bool bPermutationSampling{true};
     bool bBoilingFilter{true};
     float boilingFilterStrength{0.2f};
+    bool bAdaptiveSpatial{true};
+    float adaptiveSpatialBoost{1.0f};
+    float antilagStrength{0.0f};
     float iblIntensity{1.0f};
     Mode mode{Mode::CombinedTemporal};
     uint32_t spatialRadius{30};

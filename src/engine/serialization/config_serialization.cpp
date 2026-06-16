@@ -92,10 +92,13 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
 {
     return {
         {"bHalfRes", p.bHalfRes},
-        {"bSpatial2", p.bSpatial2},
+        {"spatialPasses", p.spatialPasses},
         {"bPermutationSampling", p.bPermutationSampling},
         {"bBoilingFilter", p.bBoilingFilter},
         {"boilingFilterStrength", p.boilingFilterStrength},
+        {"bAdaptiveSpatial", p.bAdaptiveSpatial},
+        {"adaptiveSpatialBoost", p.adaptiveSpatialBoost},
+        {"antilagStrength", p.antilagStrength},
         {"iblIntensity", p.iblIntensity},
         {"mode", static_cast<int32_t>(p.mode)},
         {"spatialRadius", p.spatialRadius},
@@ -118,10 +121,13 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
 
     p.bHalfRes = getBool("bHalfRes", p.bHalfRes);
-    p.bSpatial2 = getBool("bSpatial2", p.bSpatial2);
+    p.spatialPasses = getUint("spatialPasses", getBool("bSpatial2", false) ? 2u : p.spatialPasses);
     p.bPermutationSampling = getBool("bPermutationSampling", p.bPermutationSampling);
     p.bBoilingFilter = getBool("bBoilingFilter", p.bBoilingFilter);
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
+    p.bAdaptiveSpatial = getBool("bAdaptiveSpatial", p.bAdaptiveSpatial);
+    p.adaptiveSpatialBoost = r.contains("adaptiveSpatialBoost") && r["adaptiveSpatialBoost"].is_number() ? r["adaptiveSpatialBoost"].get<float>() : p.adaptiveSpatialBoost;
+    p.antilagStrength = r.contains("antilagStrength") && r["antilagStrength"].is_number() ? r["antilagStrength"].get<float>() : p.antilagStrength;
     p.iblIntensity = r.contains("iblIntensity") && r["iblIntensity"].is_number() ? r["iblIntensity"].get<float>() : p.iblIntensity;
     p.mode = static_cast<Core::ReSTIRParams::Mode>(getInt("mode", static_cast<int32_t>(p.mode)));
     p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
