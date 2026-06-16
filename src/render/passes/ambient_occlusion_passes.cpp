@@ -38,7 +38,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
             depthStencil = targets.depthCopy,
             effectRadius = gtaoConfig.effectRadius,
             effectFalloffRange = gtaoConfig.effectFalloffRange,
-            radiusMultiplier = gtaoConfig.radiusMultiplier](VkCommandBuffer cmd) {
+            radiusMultiplier = gtaoConfig.radiusMultiplier](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             GTAODepthPrepassPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")) + sizeof(SceneData) * sceneIndex,
                 .inputDepth = graph.GetSampledImageViewDescriptorIndex(depthStencil),
@@ -76,7 +76,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
             finalValuePower = gtaoConfig.finalValuePower,
             depthMipSamplingOffset = gtaoConfig.depthMipSamplingOffset,
             sliceCount = gtaoConfig.sliceCount,
-            stepsPerSlice = gtaoConfig.stepsPerSlice](VkCommandBuffer cmd) {
+            stepsPerSlice = gtaoConfig.stepsPerSlice](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             GTAOMainPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sizeof(SceneData) * sceneIndex,
                 .prefilteredDepthIndex = graph.GetSampledImageViewDescriptorIndex(SID("gtao_depth")),
@@ -109,7 +109,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
     denoise1.ReadSampledImage(SID("gtao_ao"));
     denoise1.ReadSampledImage(SID("gtao_edges"));
     denoise1.WriteStorageImage(SID("gtao_temp"));
-    denoise1.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd) {
+    denoise1.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         GTAODenoisePushConstant pc{
             .sceneData = graph.GetBufferAddress(SID("scene_data")) + sizeof(SceneData) * sceneIndex,
             .rawAOIndex = graph.GetSampledImageViewDescriptorIndex(SID("gtao_ao")),
@@ -133,7 +133,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
     denoise2.ReadSampledImage(SID("gtao_edges"));
     denoise2.WriteStorageImage(SID("gtao_filtered"));
     denoise2.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            denoiseBlurBeta = gtaoConfig.denoiseBlurBeta](VkCommandBuffer cmd) {
+            denoiseBlurBeta = gtaoConfig.denoiseBlurBeta](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             GTAODenoisePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")) + sizeof(SceneData) * sceneIndex,
                 .rawAOIndex = graph.GetSampledImageViewDescriptorIndex(SID("gtao_temp")),

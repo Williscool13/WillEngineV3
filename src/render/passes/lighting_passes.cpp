@@ -55,7 +55,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex,
-            buckets, lightingCount](VkCommandBuffer cmd) {
+            buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
             for (uint32_t i = 0; i < lightingCount; ++i) {
@@ -115,7 +115,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
     if (bReset) {
         RenderPass& clearPass = graph.AddPass(SID("GT Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::ResourceCategory::Lighting);
         clearPass.WriteTransferBuffer(SID("gt_accum"));
-        clearPass.Execute([&](VkCommandBuffer cmd) {
+        clearPass.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("gt_accum")), 0, VK_WHOLE_SIZE, 0);
         });
     }
@@ -137,7 +137,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
             visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
-            output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, renderExtent](VkCommandBuffer cmd) {
+            output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, renderExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("lighting_ground_truth"));
             if (!pipelineEntry) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -205,7 +205,7 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
     pass.ReadWriteImage(targets.colorOutput);
     pass.Execute([&, pipelineManager, sceneIndex, renderExtent, shadowExtent, pixelScale, bHalfRes, shadowTex,
             depth = targets.depthCopy, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            output = targets.colorOutput](VkCommandBuffer cmd) {
+            output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("directional_light"));
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

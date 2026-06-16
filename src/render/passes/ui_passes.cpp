@@ -22,7 +22,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
     RenderPass& uiPass = graph.AddPass(SID("UI Render"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::UI);
     if (bHasText) { uiPass.ReadBuffer(UI_GLYPH_QUAD_BUFFER); }
     uiPass.WriteColorAttachment(targetImage);
-    uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager, bHasText](VkCommandBuffer cmd) {
+    uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager, bHasText](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         // Y-flipped viewport: blit to swapchain inverts Y, so pre-invert here to cancel it out
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         viewport.y = static_cast<float>(height);
@@ -168,7 +168,7 @@ void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineMana
     RenderPass& outlinePass = graph.AddPass(SID("Selection Outline"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::UI);
     outlinePass.ReadStorageImage(targets.stableId);
     outlinePass.WriteStorageImage(targets.colorOutput);
-    outlinePass.Execute([&, pipelineManager, renderExtent, selectedStableId, stableId = targets.stableId, outputColor = targets.colorOutput](VkCommandBuffer cmd) {
+    outlinePass.Execute([&, pipelineManager, renderExtent, selectedStableId, stableId = targets.stableId, outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("selection_outline"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 

@@ -38,14 +38,14 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
 
     auto& clearPass = graph.AddPass(SID("[Exposure] Clear Histogram"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::ResourceCategory::PostProcessing);
     clearPass.WriteTransferBuffer(SID("luminance_histogram"));
-    clearPass.Execute([&graph](VkCommandBuffer cmd) {
+    clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("luminance_histogram")), 0, VK_WHOLE_SIZE, 0);
     });
 
     auto& histogramPass = graph.AddPass(SID("[Exposure] Build Histogram"), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
     histogramPass.ReadSampledImage(input);
     histogramPass.ReadWriteBuffer(SID("luminance_histogram"));
-    histogramPass.Execute([&graph, width, height, input, pipelines](VkCommandBuffer cmd) {
+    histogramPass.Execute([width, height, input, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         constexpr float minLogLuminance = -10.0f;
         constexpr float maxLogLuminance = 2.0f;
         constexpr float logLuminanceRange = maxLogLuminance - minLogLuminance;
@@ -70,7 +70,7 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
     auto& exposurePass = graph.AddPass(SID("[Exposure] Calculate Exposure"), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
     exposurePass.ReadBuffer(SID("luminance_histogram"));
     exposurePass.ReadWriteBuffer(SID("luminance_buffer"));
-    exposurePass.Execute([&graph, width, height, pipelines, adaptationRate, deltaTime](VkCommandBuffer cmd) {
+    exposurePass.Execute([width, height, pipelines, adaptationRate, deltaTime](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         constexpr float minLogLuminance = -10.0f;
         constexpr float maxLogLuminance = 2.0f;
         constexpr float logLuminanceRange = maxLogLuminance - minLogLuminance;
@@ -111,7 +111,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
     RenderPass& thresholdPass = graph.AddPass(SID("[Bloom] Threshold"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
     thresholdPass.ReadSampledImage(input);
     thresholdPass.ReadWriteImage(SID("bloom_chain"));
-    thresholdPass.Execute([&graph, width, height, input, pipelines, bloomThreshold, bloomSoftThreshold, bloomClamp](VkCommandBuffer cmd) {
+    thresholdPass.Execute([width, height, input, pipelines, bloomThreshold, bloomSoftThreshold, bloomClamp](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         BloomThresholdPushConstant pc{
             .outputExtent = {width, height},
             .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
@@ -137,7 +137,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
         passName.len = snprintf(passName.buf, 32, "[Bloom] Downsample %u", i);
         RenderPass& downsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
         downsamplePass.ReadWriteImage(SID("bloom_chain"));
-        downsamplePass.Execute([&graph, mipWidth, mipHeight, srcMip = i, dstMip = i + 1, pipelines](VkCommandBuffer cmd) {
+        downsamplePass.Execute([mipWidth, mipHeight, srcMip = i, dstMip = i + 1, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BloomDownsamplePushConstant pc{
                 .outputExtent = {mipWidth, mipHeight},
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("bloom_chain")),
@@ -162,7 +162,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
         passName.len = snprintf(passName.buf, 32, "[Bloom] Upsample %d", i);
         RenderPass& upsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
         upsamplePass.ReadWriteImage(SID("bloom_chain"));
-        upsamplePass.Execute([&graph, mipWidth, mipHeight, dstMip = i, lowerMip = i + 1, pipelines, bloomRadius](VkCommandBuffer cmd) {
+        upsamplePass.Execute([mipWidth, mipHeight, dstMip = i, lowerMip = i + 1, pipelines, bloomRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BloomUpsamplePushConstant pc{
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("bloom_chain")),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("bloom_chain"), dstMip),
@@ -197,7 +197,7 @@ StringID PPSharpening(PostProcessContext& ctx, StringID input)
     sharpeningPass.ReadBuffer(SID("scene_data"));
     sharpeningPass.ReadSampledImage(input);
     sharpeningPass.WriteStorageImage(SID("sharpening_output"));
-    sharpeningPass.Execute([&graph, width, height, input, pipelines, sharpness](VkCommandBuffer cmd) {
+    sharpeningPass.Execute([width, height, input, pipelines, sharpness](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         SharpeningPushConstant pc{
             .outputExtent = {width, height},
             .inputIndex = graph.GetSampledImageViewDescriptorIndex(input),
@@ -253,7 +253,7 @@ StringID PPTonemap(PostProcessContext& ctx, StringID input)
     if (bBloomEnabled) { tonemapPass.ReadSampledImage(SID("bloom_chain")); }
     if (bExposureEnabled) { tonemapPass.ReadBuffer(SID("luminance_buffer")); }
     tonemapPass.WriteStorageImage(SID("tonemap_output"));
-    tonemapPass.Execute([&graph, width, height, input, pipelines, tonemapOperator, targetLuminance, bloomIntensity, tonemapParams, bBloomEnabled, bExposureEnabled](VkCommandBuffer cmd) {
+    tonemapPass.Execute([width, height, input, pipelines, tonemapOperator, targetLuminance, bloomIntensity, tonemapParams, bBloomEnabled, bExposureEnabled](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         TonemapSDRPushConstant pc{
             .tonemapOperator = tonemapOperator,
             .targetLuminance = targetLuminance,
@@ -301,7 +301,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     motionBlurTiledMaxPass.ReadBuffer(SID("scene_data"));
     motionBlurTiledMaxPass.ReadSampledImage(velocity);
     motionBlurTiledMaxPass.WriteStorageImage(SID("motion_blur_tiled_max"));
-    motionBlurTiledMaxPass.Execute([&graph, width, height, blurTiledX, blurTiledY, pipelines, velocity](VkCommandBuffer cmd) {
+    motionBlurTiledMaxPass.Execute([width, height, blurTiledX, blurTiledY, pipelines, velocity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurTileVelocityPushConstant pc{
             .velocityBufferSize = {width, height},
             .tileBufferSize = {blurTiledX, blurTiledY},
@@ -320,7 +320,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     RenderPass& motionBlurNeighborMax = graph.AddPass(SID("[Motion Blur] Neighbor Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
     motionBlurNeighborMax.ReadSampledImage(SID("motion_blur_tiled_max"));
     motionBlurNeighborMax.WriteStorageImage(SID("motion_blur_tiled_neighbor_max"));
-    motionBlurNeighborMax.Execute([&graph, blurTiledX, blurTiledY, pipelines](VkCommandBuffer cmd) {
+    motionBlurNeighborMax.Execute([blurTiledX, blurTiledY, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurNeighborMaxPushConstant pc{
             .tileBufferSize = {blurTiledX, blurTiledY},
             .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("motion_blur_tiled_max")),
@@ -342,7 +342,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     motionBlurReconstructionPass.ReadSampledImage(depthStencil);
     motionBlurReconstructionPass.ReadSampledImage(SID("motion_blur_tiled_neighbor_max"));
     motionBlurReconstructionPass.WriteStorageImage(SID("motion_blur_output"));
-    motionBlurReconstructionPass.Execute([&graph, width, height, input, pipelines, velocity, depthStencil, velocityScale, depthScale](VkCommandBuffer cmd) {
+    motionBlurReconstructionPass.Execute([width, height, input, pipelines, velocity, depthStencil, velocityScale, depthScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurReconstructionPushConstant pc{
             .srcBufferSize = {width, height},
             .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
@@ -383,7 +383,7 @@ StringID PPColorGrading(PostProcessContext& ctx, StringID input)
     colorGradingPass.ReadBuffer(SID("scene_data"));
     colorGradingPass.ReadSampledImage(input);
     colorGradingPass.WriteStorageImage(SID("color_grading_output"));
-    colorGradingPass.Execute([&graph, width, height, input, pipelines, exposure, contrast, saturation, temperature, tint](VkCommandBuffer cmd) {
+    colorGradingPass.Execute([width, height, input, pipelines, exposure, contrast, saturation, temperature, tint](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         ColorGradingPushConstant pc{
             .outputExtent = {width, height},
             .inputIndex = graph.GetSampledImageViewDescriptorIndex(input),
@@ -423,8 +423,8 @@ StringID PPVignetteAberration(PostProcessContext& ctx, StringID input)
     vignetteAberrationPass.ReadBuffer(SID("scene_data"));
     vignetteAberrationPass.ReadSampledImage(input);
     vignetteAberrationPass.WriteStorageImage(SID("vignette_aberration_output"));
-    vignetteAberrationPass.Execute([&graph, width, height, input, pipelines,
-                                    chromaticAberrationStrength, vignetteStrength, vignetteRadius, vignetteSmoothness](VkCommandBuffer cmd) {
+    vignetteAberrationPass.Execute([width, height, input, pipelines,
+                                    chromaticAberrationStrength, vignetteStrength, vignetteRadius, vignetteSmoothness](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VignetteChromaticAberrationPushConstant pc{
             .outputExtent = {width, height},
             .inputIndex = graph.GetSampledImageViewDescriptorIndex(input),
@@ -462,7 +462,7 @@ StringID PPPanini(PostProcessContext& ctx, StringID input)
     paniniPass.ReadBuffer(SID("scene_data"));
     paniniPass.ReadSampledImage(input);
     paniniPass.WriteStorageImage(SID("panini_output"));
-    paniniPass.Execute([&graph, width, height, input, pipelines, fov, aspect, paniniStrength](VkCommandBuffer cmd) {
+    paniniPass.Execute([width, height, input, pipelines, fov, aspect, paniniStrength](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         PaniniProjectionPushConstant pc{
             .outputExtent = {width, height},
             .inputIndex = graph.GetSampledImageViewDescriptorIndex(input),
@@ -499,7 +499,7 @@ StringID PPFilmGrain(PostProcessContext& ctx, StringID input)
     filmGrainPass.ReadBuffer(SID("scene_data"));
     filmGrainPass.ReadSampledImage(input);
     filmGrainPass.WriteStorageImage(SID("post_process_output"));
-    filmGrainPass.Execute([&graph, width, height, input, pipelines, grainStrength, grainSize, frameIndex](VkCommandBuffer cmd) {
+    filmGrainPass.Execute([width, height, input, pipelines, grainStrength, grainSize, frameIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         FilmGrainPushConstant pc{
             .outputExtent = {width, height},
             .inputIndex = graph.GetSampledImageViewDescriptorIndex(input),
@@ -533,7 +533,7 @@ StringID PPDither(PostProcessContext& ctx, StringID input)
     RenderPass& ditherPass = graph.AddPass(SID("[Dither] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
     ditherPass.ReadSampledImage(input);
     ditherPass.WriteStorageImage(SID("dither_output"));
-    ditherPass.Execute([&graph, width, height, input, pipelines, ditherStrength, frameIndex = static_cast<float>(ctx.frameNumber)](VkCommandBuffer cmd) {
+    ditherPass.Execute([width, height, input, pipelines, ditherStrength, frameIndex = static_cast<float>(ctx.frameNumber)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DitherPushConstant pc{
             .outputExtent = {width, height},
             .inputIndex = graph.GetSampledImageViewDescriptorIndex(input),

@@ -25,7 +25,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
     skyboxPass.WriteColorAttachment(targets.colorOutput);
     skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
     skyboxPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            outputColor = targets.colorOutput, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD](VkCommandBuffer cmd) {
+            outputColor = targets.colorOutput, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkViewport viewport = VkHelpers::GenerateViewport(width, height);
             vkCmdSetViewport(cmd, 0, 1, &viewport);
             VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -77,7 +77,7 @@ void SetupTextForwardPass(RenderGraph& graph,
     textPass.ReadWriteDepthAttachment(targets.depthStencil);
     textPass.WriteColorAttachment(targets.colorOutput);
     textPass.WriteColorAttachment(targets.stableId);
-    textPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineEntry, colorOutput = targets.colorOutput, depthOutput = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd) {
+    textPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineEntry, colorOutput = targets.colorOutput, depthOutput = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -136,7 +136,7 @@ void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, cons
     spritesPass.ReadWriteDepthAttachment(targets.depthStencil);
     spritesPass.WriteColorAttachment(targets.colorOutput);
     spritesPass.WriteColorAttachment(targets.stableId);
-    spritesPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineManager, outputColor = targets.colorOutput, depthTarget = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd) {
+    spritesPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineManager, outputColor = targets.colorOutput, depthTarget = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);

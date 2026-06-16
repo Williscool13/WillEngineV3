@@ -1431,7 +1431,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: Execute runs passes and descriptor indices re
     uint32_t resolvedIndex = Core::INVALID_HANDLE_INDEX;
     rdg.AddPass(SID("read"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::Untagged)
             .ReadSampledImage(SID("tex"))
-            .Execute([&](VkCommandBuffer) {
+            .Execute([&](VkCommandBuffer, VulkanContext*, RenderGraph&) {
                 ran = true;
                 resolvedIndex = rdg.GetSampledImageViewDescriptorIndex(SID("tex"));
             });
@@ -1455,7 +1455,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: Execute resolves buffer device address inside
     VkDeviceAddress resolvedAddress = 0;
     rdg.AddPass(SID("read"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged)
             .ReadBuffer(SID("buf"))
-            .Execute([&](VkCommandBuffer) {
+            .Execute([&](VkCommandBuffer, VulkanContext*, RenderGraph&) {
                 ran = true;
                 resolvedAddress = rdg.GetBufferAddress(SID("buf"));
             });

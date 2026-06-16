@@ -77,9 +77,8 @@ void SetupGeometryPass(RenderGraph& graph,
                 [instanceMeshletOffsets,
                     instanceCount,
                     lodBias,
-                    &graph,
                     pipelineManager,
-                    sceneIndex](VkCommandBuffer cmd) {
+                    sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     InstanceLODPushConstant pc{
                         .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                         .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
@@ -109,7 +108,7 @@ void SetupGeometryPass(RenderGraph& graph,
             upsweep1Pass.ReadBuffer(instanceMeshletOffsets);
             upsweep1Pass.WriteBuffer(level1Sums);
             upsweep1Pass.WriteBuffer(level1BlockSums);
-            upsweep1Pass.Execute([instanceMeshletOffsets, level1Sums, level1BlockSums, &graph, pipelineManager, instanceCount, level1BlockCount](VkCommandBuffer cmd) {
+            upsweep1Pass.Execute([instanceMeshletOffsets, level1Sums, level1BlockSums, pipelineManager, instanceCount, level1BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 PrefixSumUpsweep1PushConstant pc{
                     .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
                     .level1Sums = graph.GetBufferAddress(level1Sums),
@@ -131,7 +130,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 upsweep2Pass.ReadBuffer(level1BlockSums);
                 upsweep2Pass.WriteBuffer(level2Sums);
                 upsweep2Pass.WriteBuffer(level2BlockSums);
-                upsweep2Pass.Execute([level1BlockSums, level2Sums, level2BlockSums, &graph, pipelineManager, level1BlockCount, level2BlockCount](VkCommandBuffer cmd) {
+                upsweep2Pass.Execute([level1BlockSums, level2Sums, level2BlockSums, pipelineManager, level1BlockCount, level2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     PrefixSumUpsweep2PushConstant pc{
                         .level1BlockSums = graph.GetBufferAddress(level1BlockSums),
                         .level2Sums = graph.GetBufferAddress(level2Sums),
@@ -149,7 +148,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 RenderPass& scanBlocksPass = graph.AddPass(SID("Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
                 scanBlocksPass.ReadBuffer(level2BlockSums);
                 scanBlocksPass.WriteBuffer(scannedLevel2BlockSums);
-                scanBlocksPass.Execute([level2BlockSums, scannedLevel2BlockSums, &graph, pipelineManager, level2BlockCount](VkCommandBuffer cmd) {
+                scanBlocksPass.Execute([level2BlockSums, scannedLevel2BlockSums, pipelineManager, level2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     PrefixSumScanBlocksPushConstant pc{
                         .level2BlockSums = graph.GetBufferAddress(level2BlockSums),
                         .scannedLevel2BlockSums = graph.GetBufferAddress(scannedLevel2BlockSums),
@@ -165,7 +164,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 RenderPass& downsweep1Pass = graph.AddPass(SID("Prefix Sum Downsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
                 downsweep1Pass.ReadBuffer(scannedLevel2BlockSums);
                 downsweep1Pass.ReadWriteBuffer(level2Sums);
-                downsweep1Pass.Execute([scannedLevel2BlockSums, level2Sums, &graph, pipelineManager, level1BlockCount, level2BlockCount](VkCommandBuffer cmd) {
+                downsweep1Pass.Execute([scannedLevel2BlockSums, level2Sums, pipelineManager, level1BlockCount, level2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     PrefixSumDownsweep1PushConstant pc{
                         .scannedLevel2BlockSums = graph.GetBufferAddress(scannedLevel2BlockSums),
                         .level2Sums = graph.GetBufferAddress(level2Sums),
@@ -182,7 +181,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 RenderPass& scanBlocksPass = graph.AddPass(SID("Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
                 scanBlocksPass.ReadBuffer(level1BlockSums);
                 scanBlocksPass.WriteBuffer(scannedLevel2BlockSums);
-                scanBlocksPass.Execute([level1BlockSums, scannedLevel2BlockSums, &graph, pipelineManager, level1BlockCount](VkCommandBuffer cmd) {
+                scanBlocksPass.Execute([level1BlockSums, scannedLevel2BlockSums, pipelineManager, level1BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     PrefixSumScanBlocksPushConstant pc{
                         .level2BlockSums = graph.GetBufferAddress(level1BlockSums),
                         .scannedLevel2BlockSums = graph.GetBufferAddress(scannedLevel2BlockSums),
@@ -206,7 +205,7 @@ void SetupGeometryPass(RenderGraph& graph,
             }
             downsweep2Pass.WriteBuffer(instanceMeshletOffsets);
             downsweep2Pass.Execute(
-                [level1Sums, level2Sums, scannedLevel2BlockSums, instanceMeshletOffsets, &graph, pipelineManager, level2BlockCount, instanceCount, level1BlockCount](VkCommandBuffer cmd) {
+                [level1Sums, level2Sums, scannedLevel2BlockSums, instanceMeshletOffsets, pipelineManager, level2BlockCount, instanceCount, level1BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     PrefixSumDownsweep2PushConstant pc{
                         .level1Sums = graph.GetBufferAddress(level1Sums),
                         .level2Sums = level2BlockCount > 1 ? graph.GetBufferAddress(level2Sums) : graph.GetBufferAddress(scannedLevel2BlockSums),
@@ -224,7 +223,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 SID("Total Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
             totalMeshletCalculator.ReadBuffer(instanceMeshletOffsets);
             totalMeshletCalculator.WriteBuffer(meshletCountDispatchArgs);
-            totalMeshletCalculator.Execute([instanceMeshletOffsets, meshletCountDispatchArgs, &graph, pipelineManager, instanceCount](VkCommandBuffer cmd) {
+            totalMeshletCalculator.Execute([instanceMeshletOffsets, meshletCountDispatchArgs, pipelineManager, instanceCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 TotalMeshletCountPushConstant pc{
                     .indirectDispatchBuffer = graph.GetBufferAddress(meshletCountDispatchArgs),
                     .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
@@ -248,7 +247,7 @@ void SetupGeometryPass(RenderGraph& graph,
             expandInstancesToMeshlets.ReadIndirectBuffer(meshletCountDispatchArgs);
             expandInstancesToMeshlets.WriteBuffer(intermediateMeshlets);
             expandInstancesToMeshlets.Execute([instanceMeshletOffsets, meshletCountDispatchArgs, intermediateMeshlets,
-                    &graph, pipelineManager, instanceCount, highestMeshletCount, sceneIndex](VkCommandBuffer cmd) {
+                    pipelineManager, instanceCount, highestMeshletCount, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     ExpandMeshletsPushConstant pc{
                         .indirectDispatchBuffer = graph.GetBufferAddress(meshletCountDispatchArgs),
                         .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
@@ -282,8 +281,8 @@ void SetupGeometryPass(RenderGraph& graph,
             meshletUpsweep1Pass.WriteBuffer(meshletLevel1BlockSums);
             meshletUpsweep1Pass.ReadIndirectBuffer(meshletCountDispatchArgs);
             meshletUpsweep1Pass.Execute(
-                [intermediateMeshlets, meshletCountDispatchArgs, meshletLevel1Sums, meshletLevel1BlockSums, &graph, pipelineManager, meshletLevel1BlockCount, highestMeshletCount
-                ](VkCommandBuffer cmd) {
+                [intermediateMeshlets, meshletCountDispatchArgs, meshletLevel1Sums, meshletLevel1BlockSums, pipelineManager, meshletLevel1BlockCount, highestMeshletCount
+                ](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     MeshletVisibilityPrefixSumUpsweep1PushConstant pc{
                         .intermediateMeshlets = graph.GetBufferAddress(intermediateMeshlets),
                         .indirectDispatchBuffer = graph.GetBufferAddress(meshletCountDispatchArgs),
@@ -306,7 +305,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 meshletUpsweep2Pass.WriteBuffer(meshletLevel2Sums);
                 meshletUpsweep2Pass.WriteBuffer(meshletLevel2BlockSums);
                 meshletUpsweep2Pass.Execute(
-                    [meshletLevel1BlockSums, meshletLevel2Sums, meshletLevel2BlockSums, &graph, pipelineManager, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd) {
+                    [meshletLevel1BlockSums, meshletLevel2Sums, meshletLevel2BlockSums, pipelineManager, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                         PrefixSumUpsweep2PushConstant pc{
                             .level1BlockSums = graph.GetBufferAddress(meshletLevel1BlockSums),
                             .level2Sums = graph.GetBufferAddress(meshletLevel2Sums),
@@ -325,7 +324,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     SID("Meshlet Visibility Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
                 meshletScanBlocksPass.ReadBuffer(meshletLevel2BlockSums);
                 meshletScanBlocksPass.WriteBuffer(meshletScannedLevel2BlockSums);
-                meshletScanBlocksPass.Execute([meshletLevel2BlockSums, meshletScannedLevel2BlockSums, &graph, pipelineManager, meshletLevel2BlockCount](VkCommandBuffer cmd) {
+                meshletScanBlocksPass.Execute([meshletLevel2BlockSums, meshletScannedLevel2BlockSums, pipelineManager, meshletLevel2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     PrefixSumScanBlocksPushConstant pc{
                         .level2BlockSums = graph.GetBufferAddress(meshletLevel2BlockSums),
                         .scannedLevel2BlockSums = graph.GetBufferAddress(meshletScannedLevel2BlockSums),
@@ -342,7 +341,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     SID("Meshlet Visibility Prefix Sum Downsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
                 meshletDownsweep1Pass.ReadBuffer(meshletScannedLevel2BlockSums);
                 meshletDownsweep1Pass.ReadWriteBuffer(meshletLevel2Sums);
-                meshletDownsweep1Pass.Execute([meshletScannedLevel2BlockSums, meshletLevel2Sums, &graph, pipelineManager, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd) {
+                meshletDownsweep1Pass.Execute([meshletScannedLevel2BlockSums, meshletLevel2Sums, pipelineManager, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     PrefixSumDownsweep1PushConstant pc{
                         .scannedLevel2BlockSums = graph.GetBufferAddress(meshletScannedLevel2BlockSums),
                         .level2Sums = graph.GetBufferAddress(meshletLevel2Sums),
@@ -360,7 +359,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     SID("Meshlet Visibility Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
                 meshletScanBlocksPass.ReadBuffer(meshletLevel1BlockSums);
                 meshletScanBlocksPass.WriteBuffer(meshletScannedLevel2BlockSums);
-                meshletScanBlocksPass.Execute([meshletLevel1BlockSums, meshletScannedLevel2BlockSums, &graph, pipelineManager, meshletLevel1BlockCount](VkCommandBuffer cmd) {
+                meshletScanBlocksPass.Execute([meshletLevel1BlockSums, meshletScannedLevel2BlockSums, pipelineManager, meshletLevel1BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     PrefixSumScanBlocksPushConstant pc{
                         .level2BlockSums = graph.GetBufferAddress(meshletLevel1BlockSums),
                         .scannedLevel2BlockSums = graph.GetBufferAddress(meshletScannedLevel2BlockSums),
@@ -389,7 +388,7 @@ void SetupGeometryPass(RenderGraph& graph,
             meshletDownsweep2Pass.ReadIndirectBuffer(meshletCountDispatchArgs);
             meshletDownsweep2Pass.Execute([meshletLevel1Sums, meshletLevel2Sums, meshletScannedLevel2BlockSums, intermediateMeshlets,
                     meshletCountDispatchArgs, visibleMeshlets, compactedMeshletDispatchArgs,
-                    &graph, pipelineManager, meshletLevel2BlockCount, highestMeshletCount](VkCommandBuffer cmd) {
+                    pipelineManager, meshletLevel2BlockCount, highestMeshletCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     MeshletVisibilityPrefixSumDownsweep2PushConstant pc{
                         .meshletLevel1Sums = graph.GetBufferAddress(meshletLevel1Sums),
                         .meshletLevel2Sums = meshletLevel2BlockCount > 1 ? graph.GetBufferAddress(meshletLevel2Sums) : graph.GetBufferAddress(meshletScannedLevel2BlockSums),
@@ -409,7 +408,7 @@ void SetupGeometryPass(RenderGraph& graph,
             RenderPass& compactedDispatchCalc = graph.AddPass(
                 SID("Compacted Meshlet Dispatch Calculation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
             compactedDispatchCalc.ReadWriteBuffer(compactedMeshletDispatchArgs);
-            compactedDispatchCalc.Execute([compactedMeshletDispatchArgs, &graph, pipelineManager, highestMeshletCount](VkCommandBuffer cmd) {
+            compactedDispatchCalc.Execute([compactedMeshletDispatchArgs, pipelineManager, highestMeshletCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 CompactedMeshletDispatchPushConstant pc{
                     .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
@@ -425,7 +424,7 @@ void SetupGeometryPass(RenderGraph& graph,
         RenderPass& maxMeshletCount = graph.AddPass(SID("Max Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
         maxMeshletCount.ReadBuffer(meshletCountDispatchArgs);
         maxMeshletCount.ReadWriteBuffer(SID("readback_buffer"));
-        maxMeshletCount.Execute([&, pipelineManager, bufferSrc = meshletCountDispatchArgs](VkCommandBuffer cmd) {
+        maxMeshletCount.Execute([&, pipelineManager, bufferSrc = meshletCountDispatchArgs](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             MaxMeshletCountPushConstant pc{
                 .indirectDispatchBuffer = graph.GetBufferAddress(bufferSrc),
                 .currentHighest = graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, meshletCount),
@@ -453,7 +452,7 @@ void SetupGeometryPass(RenderGraph& graph,
     instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
     instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
             bWireframe = renderFamilyProperties.bWireframe,
-            visibility = targets.visibility, stableId = targets.stableId, depthStencil = targets.depthStencil](VkCommandBuffer cmd) {
+            visibility = targets.visibility, stableId = targets.stableId, depthStencil = targets.depthStencil](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkViewport viewport = VkHelpers::GenerateViewport(width, height);
             vkCmdSetViewport(cmd, 0, 1, &viewport);
             VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -519,7 +518,7 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
     visBarDer.WriteStorageImage(targets.barycentric);
     visBarDer.WriteStorageImage(targets.derivatives);
     visBarDer.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives](VkCommandBuffer cmd) {
+            visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VisibilityBufferResolvePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
                 .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
@@ -562,7 +561,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     boundsPass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
     boundsPass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     boundsPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
-            visibility = targets.visibility](VkCommandBuffer cmd) {
+            visibility = targets.visibility](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ShadeBucketingPushConstant pc{
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
@@ -579,7 +578,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
 
     RenderPass& resolvePass = graph.AddPass(SID("Shade Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
     resolvePass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
-    resolvePass.Execute([&, pipelineManager, materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd) {
+    resolvePass.Execute([&, pipelineManager, materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         ShadeBucketingResolvePushConstant pc{
             .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
             .materialCount = materialCount,
@@ -592,7 +591,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
 
     RenderPass& lightResolvePass = graph.AddPass(SID("Light Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
     lightResolvePass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-    lightResolvePass.Execute([&, pipelineManager, bHalfResLighting, lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd) {
+    lightResolvePass.Execute([&, pipelineManager, bHalfResLighting, lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         LightingBucketingResolvePushConstant pc{
             .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
             .lightingCount = lightingCount,
@@ -611,7 +610,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     dispatchCountPass.ReadWriteBuffer(SID("readback_buffer"));
     dispatchCountPass.Execute([&, pipelineManager,
             materialCount = static_cast<uint32_t>(viewFamily.materials.Size()),
-            lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd) {
+            lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BucketDispatchCountPushConstant pc{
                 .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
                 .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
@@ -671,7 +670,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.Execute([&, pipelineManager, sceneIndex,
             visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            sortedMaterials, materialCount, renderExtent](VkCommandBuffer cmd) {
+            sortedMaterials, materialCount, renderExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER);
 
             StringID boundShader{};
@@ -744,7 +743,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
     bucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
             visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd) {
+            materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shading_bucket_visualize"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -790,7 +789,7 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferTwo);
     lightBucketVisualizePass.Execute([&, pipelineManager, sceneIndex, pixelScale,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd) {
+            lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("lighting_bucket_visualize"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 

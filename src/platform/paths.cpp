@@ -91,8 +91,8 @@ const Core::Path& GetCachePath()
 const Core::Path& GetConfigPath()
 {
     static const Core::Path path = []() {
-#ifdef ASSETS_PATH
-        Core::Path p = Core::Path(ASSETS_PATH) / "config";
+#ifdef CONFIG_PATH
+        auto p = Core::Path(CONFIG_PATH);
 #else
         Core::Path p = GetExecutablePath() / "config";
 #endif

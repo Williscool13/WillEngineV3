@@ -31,7 +31,7 @@ void SetupShadowsResolve(RenderGraph& graph,
     shadowsResolvePass.ReadBuffer(SID("scene_data"));
     shadowsResolvePass.WriteStorageImage(SID("shadows_resolve_target"));
     shadowsResolvePass.Execute([&, pipelineManager, bHasGTAO,
-            width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd) {
+            width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shadows_resolve"));
 
             int32_t gtaoIndex = bHasGTAO ? static_cast<int32_t>(graph.GetSampledImageViewDescriptorIndex(SID("gtao_filtered"))) : -1;
@@ -73,8 +73,8 @@ static void AddSigmaBlurPass(RenderGraph& graph,
     pass.ReadSampledImage(depth);
     pass.ReadSampledImage(gbufferOne);
     pass.WriteStorageImage(outputTex);
-    pass.Execute([&graph, pipelineManager, sigma, sceneIndex, renderExtent, frameNumber, passIndex,
-            inputTex, outputTex, tilesTex, depth, gbufferOne](VkCommandBuffer cmd) {
+    pass.Execute([pipelineManager, sigma, sceneIndex, renderExtent, frameNumber, passIndex,
+            inputTex, outputTex, tilesTex, depth, gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("sigma_shadow_blur"));
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
@@ -130,7 +130,7 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
     RenderPass& classify = graph.AddPass(SID("SIGMA Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
     classify.ReadSampledImage(SID("rt_sun_shadow"));
     classify.WriteStorageImage(SID("sigma_tiles"));
-    classify.Execute([&graph, pipelineManager, renderExtent, tilesX, tilesY](VkCommandBuffer cmd) {
+    classify.Execute([pipelineManager, renderExtent, tilesX, tilesY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("sigma_classify_tiles"));
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
@@ -147,7 +147,7 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
     RenderPass& smooth = graph.AddPass(SID("SIGMA Smooth Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
     smooth.ReadSampledImage(SID("sigma_tiles"));
     smooth.WriteStorageImage(SID("sigma_tiles_smoothed"));
-    smooth.Execute([&graph, pipelineManager, tilesX, tilesY](VkCommandBuffer cmd) {
+    smooth.Execute([pipelineManager, tilesX, tilesY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("sigma_smooth_tiles"));
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
@@ -199,8 +199,8 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
     pass.ReadSampledImage(sigmaGbuffer);
     if (bHasHistory) { pass.ReadSampledImage(SID("sigma_stabilized_prev")); }
     pass.WriteStorageImage(SID("sigma_stabilized"));
-    pass.Execute([&graph, pipelineManager, sigma, sceneIndex, renderExtent, bHasHistory, shadowTex,
-            depth = sigmaDepth, gbufferOne = sigmaGbuffer](VkCommandBuffer cmd) {
+    pass.Execute([pipelineManager, sigma, sceneIndex, renderExtent, bHasHistory, shadowTex,
+            depth = sigmaDepth, gbufferOne = sigmaGbuffer](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("sigma_shadow_temporal"));
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

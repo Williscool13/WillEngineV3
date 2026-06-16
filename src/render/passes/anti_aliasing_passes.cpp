@@ -30,7 +30,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     edgePass.WriteStorageImage(SID("smaa_edges"));
     edgePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
-            smaaConfig](VkCommandBuffer cmd) {
+            smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaEdgeDetectionPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
@@ -64,7 +64,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     blendPass.ReadBuffer(SID("scene_data"));
     blendPass.ReadSampledImage(SID("smaa_edges"));
     blendPass.WriteStorageImage(SID("smaa_blend"));
-    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], smaaConfig](VkCommandBuffer cmd) {
+    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         SmaaBlendWeightPushConstant pushData{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
             .edgeIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_edges")),
@@ -89,7 +89,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     neighborhoodPass.ReadSampledImage(SID("smaa_blend"));
     neighborhoodPass.WriteStorageImage(SID("smaa_output"));
     neighborhoodPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
-            outputColor = targets.colorOutput](VkCommandBuffer cmd) {
+            outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaNeighborhoodBlendPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
@@ -130,7 +130,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     edgePass.WriteStorageImage(SID("smaa_edges"));
     edgePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
-            smaaConfig](VkCommandBuffer cmd) {
+            smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaEdgeDetectionPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
@@ -164,7 +164,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     blendPass.ReadBuffer(SID("scene_data"));
     blendPass.ReadSampledImage(SID("smaa_edges"));
     blendPass.WriteStorageImage(SID("smaa_blend"));
-    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], smaaConfig](VkCommandBuffer cmd) {
+    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         SmaaBlendWeightPushConstant pushData{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
             .edgeIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_edges")),
@@ -189,7 +189,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     neighborhoodPass.ReadSampledImage(SID("smaa_blend"));
     neighborhoodPass.WriteStorageImage(SID("smaa_t2x_current"));
     neighborhoodPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
-            outputColor = targets.colorOutput](VkCommandBuffer cmd) {
+            outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaNeighborhoodBlendPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
@@ -220,7 +220,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     resolvePass.ReadSampledImage(targets.gbufferOne);
     resolvePass.WriteStorageImage(SID("smaa_t2x_output"));
     resolvePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
-            gbufferOne = targets.gbufferOne](VkCommandBuffer cmd) {
+            gbufferOne = targets.gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaTemporalResolvePushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .currentColorIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_t2x_current")),
@@ -255,7 +255,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
         RenderPass& taaPass = graph.AddPass(SID("TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::AntiAliasing);
         taaPass.ReadCopyImage(targets.colorOutput);
         taaPass.WriteCopyImage(SID("taa_current"));
-        taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], outputColor = targets.colorOutput](VkCommandBuffer cmd) {
+        taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkImage drawImage = graph.GetImageHandle(outputColor);
             VkImage taaImage = graph.GetImageHandle(SID("taa_current"));
 
@@ -298,7 +298,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     taaPass.WriteStorageImage(SID("taa_output"));
     taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
-            gbufferOne = targets.gbufferOne, pipelineSID, taaConfig](VkCommandBuffer cmd) {
+            gbufferOne = targets.gbufferOne, pipelineSID, taaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             TemporalAntialiasingPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),

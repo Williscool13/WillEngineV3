@@ -1359,7 +1359,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 label.pLabelName = pass->renderPassId.ToString();
                 allocFns.cmdBeginDebugUtilsLabel(cmd, &label);
 #endif
-                pass->executeFunc(cmd);
+                pass->executeFunc(cmd, context, *this);
 #ifdef WDEBUG
                 allocFns.cmdEndDebugUtilsLabel(cmd);
 #endif

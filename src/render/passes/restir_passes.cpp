@@ -44,7 +44,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     transformPass.ReadBuffer(SCENE_DATA_BUFFER);
     transformPass.ReadBuffer(SID("light_data"));
     transformPass.WriteBuffer(SID("restir_lights_vs"));
-    transformPass.Execute([&, pipelineManager, sceneIndex](VkCommandBuffer cmd) {
+    transformPass.Execute([&, pipelineManager, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_transform_lights"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -88,7 +88,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         combinedPass.WriteBuffer(SID("restir_reservoir_temporal"));
         if (bShadowVis) { combinedPass.WriteStorageImage(SID("restir_shadow_vis")); }
         if (bConfidence) { combinedPass.WriteStorageImage(SID("restir_confidence")); }
-        combinedPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+        combinedPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_combined_temporal"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -140,7 +140,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         genPass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { genPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         genPass.WriteBuffer(SID("restir_reservoir_buffer"));
-        genPass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, pixelScale, tlasIndex, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+        genPass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, pixelScale, tlasIndex, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_generate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -189,7 +189,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             temporalPass.ReadSampledImage(SID("depth_history"));
             if (bHasTLAS) { temporalPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
             temporalPass.WriteBuffer(SID("restir_reservoir_temporal"));
-            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -239,7 +239,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         boilingPass.ReadSampledImage(targets.gbufferTwo);
         boilingPass.ReadSampledImage(targets.depthCopy);
         boilingPass.WriteBuffer(SID("restir_reservoir_boiled"));
-        boilingPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, filterStrength = restirParams.boilingFilterStrength, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+        boilingPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, filterStrength = restirParams.boilingFilterStrength, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_boiling"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -301,7 +301,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         spatialPass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { spatialPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         spatialPass.WriteBuffer(outputName);
-        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, inputName, outputName, passIndex = i, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd) {
+        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, inputName, outputName, passIndex = i, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -387,7 +387,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
-            buckets, lightingCount](VkCommandBuffer cmd) {
+            buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
             for (uint32_t i = 0; i < lightingCount; ++i) {
@@ -450,10 +450,10 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     pass.ReadSampledImage(targets.depthCopy);
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    pass.Execute([&graph, pipelineManager, sceneIndex, outputMode, pixelScale, width, height, skyboxIndex, iblIntensity, frameNumber,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, pixelScale, width, height, skyboxIndex, iblIntensity, frameNumber,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            depth = targets.depthCopy, output = targets.colorOutput](VkCommandBuffer cmd) {
+            depth = targets.depthCopy, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = sceneIndex,

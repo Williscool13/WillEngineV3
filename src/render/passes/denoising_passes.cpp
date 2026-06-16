@@ -56,8 +56,8 @@ void SetupATrousWaveletDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(inputTex);
             pass.WriteStorageImage(outputTex);
         }
-        pass.Execute([&graph, pipelineManager, inputTex, outputTex, gbufferOne, depthStencil,
-                width, height, stepSize, params](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, inputTex, outputTex, gbufferOne, depthStencil,
+                width, height, stepSize, params](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 ATrousWaveletPushConstant pc{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                     .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(inputTex),
@@ -134,7 +134,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(SID("svgf_color_history"));
         }
         pass.WriteStorageImage(SID("svgf_gradient_samples"));
-        pass.Execute([&graph, pipelineManager, lightingOutput, gbufferOne, depth, width, height](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, lightingOutput, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const bool hasHistory = graph.HasTexture(SID("svgf_color_history"));
             SVGFGradientSamplesPushConstant pc{
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(lightingOutput),
@@ -172,7 +172,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(SID("depth_history"));
         }
         pass.WriteStorageImage(SID("svgf_gradient"));
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const bool hasHistory = graph.HasTexture(SID("svgf_gradient_history"));
             SVGFGradientTemporalPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
@@ -201,7 +201,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
         auto& pass = graph.AddPass(SID("[SVGF] Gradient Upsample"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
         pass.ReadSampledImage(SID("svgf_gradient"));
         pass.WriteStorageImage(SID("svgf_gradient_full"));
-        pass.Execute([&graph, pipelineManager, width, height](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SVGFGradientAtrousPushConstant pc{
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient")),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_gradient_full")),
@@ -218,7 +218,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
         auto& pass = graph.AddPass(SID("[SVGF] Gradient Spread"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
         pass.ReadSampledImage(SID("svgf_gradient_full"));
         pass.WriteStorageImage(SID("svgf_gradient_spread_0"));
-        pass.Execute([&graph, pipelineManager, width, height](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SVGFGradientAtrousPushConstant pc{
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_full")),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_gradient_spread_0")),
@@ -260,7 +260,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(SID("svgf_moments"));
         pass.WriteStorageImage(SID("svgf_history_length"));
         pass.WriteStorageImage(SID("svgf_variance"));
-        pass.Execute([&graph, pipelineManager, lightingOutput, gbufferOne, depth, width, height, params](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, lightingOutput, gbufferOne, depth, width, height, params](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const bool hasColorHist = graph.HasTexture(SID("svgf_color_history"));
             const bool hasMomentsHist = graph.HasTexture(SID("svgf_moments_history"));
             const bool hasLenHist = graph.HasTexture(SID("svgf_history_length_history"));
@@ -300,7 +300,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(SID("svgf_variance_estimated"));
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SVGFVarianceEstimatePushConstant pc{
                 .momentsIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_moments")),
                 .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_history_length")),
@@ -323,7 +323,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
         auto& pass = graph.AddPass(SID("[SVGF] ATrous Bypass"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Denoising);
         pass.ReadCopyImage(SID("svgf_color_accum"));
         pass.WriteCopyImage(SID("svgf_denoised"));
-        pass.Execute([&graph, width, height](VkCommandBuffer cmd) {
+        pass.Execute([width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkImage src = graph.GetImageHandle(SID("svgf_color_accum"));
             VkImage dst = graph.GetImageHandle(SID("svgf_denoised"));
             VkOffset3D extent = {static_cast<int32_t>(width), static_cast<int32_t>(height), 1};
@@ -374,8 +374,8 @@ void SetupASVGFDenoiser(RenderGraph& graph,
             }
             pass.ReadSampledImage(varIn);
             pass.WriteStorageImage(varOut);
-            pass.Execute([&graph, pipelineManager, colorIn, colorOut, varIn, varOut, gbufferOne, depth,
-                    width, height, stepSize, params](VkCommandBuffer cmd) {
+            pass.Execute([pipelineManager, colorIn, colorOut, varIn, varOut, gbufferOne, depth,
+                    width, height, stepSize, params](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     SVGFAtrousWaveletPushConstant pc{
                         .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                         .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(colorIn),
@@ -406,7 +406,7 @@ void SetupASVGFDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(gbufferTwo);
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(lightingOutput);
-        pass.Execute([&graph, pipelineManager, gbufferTwo, depth, lightingOutput, width, height](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, gbufferTwo, depth, lightingOutput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SVGFRemodulatePushConstant pc{
                 .irradianceIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_denoised")),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
@@ -568,7 +568,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     memcpy(rcAlloc.ptr, &rc, sizeof(RelaxDiffuseSpecularConstants)); {
         auto& pass = graph.AddPass(SID("[RELAX] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, ResourceCategory::Untagged);
         pass.WriteTransferBuffer(SID("relax_constants"));
-        pass.Execute([&graph, offset = rcAlloc.offset](VkCommandBuffer cmd) {
+        pass.Execute([offset = rcAlloc.offset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkBufferCopy2 region{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = offset, .dstOffset = 0, .size = sizeof(RelaxDiffuseSpecularConstants)};
             VkCopyBufferInfo2 info{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
@@ -599,7 +599,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
         pass.WriteStorageImage(SID("relax_viewz"));
-        pass.Execute([&graph, pipelineManager, depth, gbufferOne, width, height, pixelScale](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, depth, gbufferOne, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxGenerateViewZPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -622,7 +622,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(SID("relax_tiles"));
-        pass.Execute([&graph, pipelineManager, depth, tilesW, tilesH, pixelScale](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, depth, tilesW, tilesH, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxClassifyTilesPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -651,7 +651,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(diffInput);
         pass.WriteStorageImage(SID("relax_spec_prepass"));
         pass.WriteStorageImage(SID("relax_diff_prepass"));
-        pass.Execute([&graph, pipelineManager, depth, gbufferOne, specInput, diffInput, width, height, pixelScale](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, depth, gbufferOne, specInput, diffInput, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxPrepassPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -729,7 +729,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(SID("relax_spec_reproj_confidence"));
         pass.WriteStorageImage(SID("relax_prev_nr"));
 
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, specIn, diffIn, width, height, pixelScale](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, gbufferOne, depth, specIn, diffIn, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const bool hasHistory = graph.HasTexture(SID("relax_spec_illum_history"));
             const StringID fallbackSpec = hasHistory ? SID("relax_spec_illum_history") : specIn;
             const StringID fallbackDiff = hasHistory ? SID("relax_diff_illum_history") : diffIn;
@@ -791,7 +791,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("relax_diff_illum"));
         pass.WriteStorageImage(SID("relax_atrous_spec_0"));
         pass.WriteStorageImage(SID("relax_atrous_diff_0"));
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxHistoryFixPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -845,7 +845,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(diffNoisy);
         pass.WriteStorageImage(SID("relax_spec_fast_hist"));
         pass.WriteStorageImage(SID("relax_diff_fast_hist"));
-        pass.Execute([&graph, pipelineManager, depth, gbufferOne, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height, pixelScale](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, depth, gbufferOne, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxHistoryClampingPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -885,7 +885,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(SID("relax_spec_hist"));
         pass.WriteStorageImage(SID("relax_diff_hist"));
 
-        pass.Execute([&graph, pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxAntiFireflyPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -936,8 +936,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.WriteStorageImage(specOut);
             pass.WriteStorageImage(diffOut);
 
-            pass.Execute([&graph, pipelineManager, gbufferOne, depth,
-                    specIn, diffIn, specOut, diffOut, stepSize, width, height, pixelScale](VkCommandBuffer cmd) {
+            pass.Execute([pipelineManager, gbufferOne, depth,
+                    specIn, diffIn, specOut, diffOut, stepSize, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     RelaxAtrousPushConstant pc{
                         .constants = graph.GetBufferAddress(SID("relax_constants")),
                         .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -979,7 +979,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const uint32_t fullWidth = fullRenderExtent[0];
         const uint32_t fullHeight = fullRenderExtent[1];
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([&graph, pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode, pixelScale, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode, pixelScale, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
