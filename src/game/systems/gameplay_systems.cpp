@@ -93,8 +93,9 @@ void UpdatePathMovers(Engine::EngineContext* ctx, Engine::EngineState* state)
         glm::quat newRot;
         Component::EvaluatePath(mover.spline, mover.pointSettings, mover.currentSegment, targetSegment, mover.progress, newPos, newRot);
 
-        transform.translation += (newPos - oldPos);
-        transform.rotation = glm::inverse(oldRot) * newRot * transform.rotation;
+        const glm::quat anchorRot = transform.rotation * glm::inverse(oldRot);
+        transform.translation += anchorRot * (newPos - oldPos);
+        transform.rotation = anchorRot * newRot;
         state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
     }
 }
