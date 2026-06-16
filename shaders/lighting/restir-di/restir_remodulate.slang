@@ -79,8 +79,7 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 int2 hPos = clamp(hCenter + int2(dx, dy), int2(0, 0), int2(halfExtent) - 1);
-                // Compare against the gbuffer pixel this frame's lighting passes actually used for the tap
-                int2 fullPos = int2(QuadFullPixel(uint2(hPos), pc.pixelScale, pc.frameIndex, pc.depthIndex, pc.gbufferOneIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd));
+                int2 fullPos = FetchFullPixel(pc.quadSelectionIndex, hPos, pc.pixelScale);
 
                 float2 diff2 = float2(hPos) - hTexel;
                 float wSpatial = exp(-dot(diff2, diff2) * invTwoSigmaSq);

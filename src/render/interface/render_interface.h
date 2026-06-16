@@ -576,8 +576,6 @@ struct ReSTIRParams
     bool bHalfRes{false};
     uint32_t spatialPasses{1};
     bool bPermutationSampling{true};
-    bool bBoilingFilter{true};
-    float boilingFilterStrength{0.2f};
     bool bAdaptiveSpatial{true};
     float adaptiveSpatialBoost{1.0f};
     float antilagStrength{0.0f};

@@ -515,6 +515,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             Core::RELAXParams relax = restir.relax;
             const float renderFps = frameBuffer.timeFrame.renderFps;
             relax.framerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.1f, 4.0f);
+
+            const bool bRestirHalfRes = viewFamily.lightingMode == Core::LightingMode::ReSTIR && restir.bHalfRes;
+            const bool bSunShadowHalfRes = viewFamily.directionalLight.bEnabled
+                && (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)
+                && viewFamily.sigmaParams.bHalfRes;
+            if (bRestirHalfRes || bSunShadowHalfRes) {
+                SetupQuadSelectionPass(*renderGraph, pipelineManager, Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2}, targets, 0, frameNumber);
+            }
+
             switch (viewFamily.lightingMode) {
                 case Core::LightingMode::Default:
                 {
@@ -901,7 +910,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     // For Hi-Z, ReSTIR-DI, SVGF
     renderGraph->CarryTextureToNextFrame(targets.depthCopy, SID("depth_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    renderGraph->CarryTextureToNextFrame(targets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT); {
+    renderGraph->CarryTextureToNextFrame(targets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    // Previous-frame selection for the ReSTIR-DI history taps.
+    if (renderGraph->HasTexture(SID("quad_selection"))) {
+        renderGraph->CarryTextureToNextFrame(SID("quad_selection"), SID("quad_selection_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    }
+    {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
         renderGraph->Compile(frameNumber);

@@ -205,6 +205,7 @@ void SetupRTSunShadow(RenderGraph& graph,
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
+    if (bHalfRes) { pass.ReadSampledImage(SID("quad_selection")); }
     pass.WriteStorageImage(SID("rt_sun_shadow"));
     if (bHalfRes) {
         pass.WriteStorageImage(SID("rt_sun_depth"));
@@ -231,6 +232,7 @@ void SetupRTSunShadow(RenderGraph& graph,
             .pixelScale = pixelScale,
             .outputDepthIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_depth")) : ~0x0u,
             .outputGbufferIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_gbuffer")) : ~0x0u,
+            .quadSelectionIndex = bHalfRes ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

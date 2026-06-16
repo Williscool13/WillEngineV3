@@ -9,6 +9,7 @@ import bindless_declarations;
 import constants_interop;
 import relax_interop;
 import relax_utils;
+import restir_common;
 
 static const int AF_BORDER = 1;
 static const int AF_GROUP_X = 8;
@@ -54,7 +55,7 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
         return;
 
-    int2 fullPixel = RelaxQuadFullPixel(pixelPos, pc.pixelScale, rc.gFrameIndex, pc.viewZIndex, pc.normalRoughnessIndex, rc.gRectSizeInv / float(pc.pixelScale), rc.depthLinearizeMult, rc.depthLinearizeAdd);
+    int2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixelPos, pc.pixelScale);
     float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
         return;

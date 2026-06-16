@@ -19,6 +19,14 @@ namespace Render
 {
 class PipelineManager;
 
+// Precompute the half-res quad-corner selection once; ReSTIR DI, the RELAX DI denoiser, and the sun-shadow pass read it via FetchFullPixel. Runs whenever any of those is half-res.
+void SetupQuadSelectionPass(RenderGraph& graph,
+                           PipelineManager* pipelineManager,
+                           Core::Array<uint32_t, 2> renderExtent,
+                           const RenderTargets& targets,
+                           uint32_t sceneIndex,
+                           uint64_t frameNumber);
+
 void SetupReSTIRPasses(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,

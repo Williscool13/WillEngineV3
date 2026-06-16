@@ -6,7 +6,7 @@ import packing_functions;
 
 import shader_functions;
 import random_common;
-    import relax_utils;
+import restir_common;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -20,7 +20,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
 
     // Map this (possibly half-res) output pixel to a silhouette-correct full-res source pixel, then read the full-res depth/gbuffer there. At full res this is the identity.
-    int2 fullPixel = RelaxQuadFullPixel(int2(pixel), pc.pixelScale, pc.frameIndex, pc.depthIndex, pc.gbufferOneIndex, 1.0 / float2(pc.fullExtent), scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    int2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, int2(pixel), pc.pixelScale);
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));

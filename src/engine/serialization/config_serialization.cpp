@@ -94,8 +94,6 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bHalfRes", p.bHalfRes},
         {"spatialPasses", p.spatialPasses},
         {"bPermutationSampling", p.bPermutationSampling},
-        {"bBoilingFilter", p.bBoilingFilter},
-        {"boilingFilterStrength", p.boilingFilterStrength},
         {"bAdaptiveSpatial", p.bAdaptiveSpatial},
         {"adaptiveSpatialBoost", p.adaptiveSpatialBoost},
         {"antilagStrength", p.antilagStrength},
@@ -123,8 +121,6 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bHalfRes = getBool("bHalfRes", p.bHalfRes);
     p.spatialPasses = getUint("spatialPasses", getBool("bSpatial2", false) ? 2u : p.spatialPasses);
     p.bPermutationSampling = getBool("bPermutationSampling", p.bPermutationSampling);
-    p.bBoilingFilter = getBool("bBoilingFilter", p.bBoilingFilter);
-    p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bAdaptiveSpatial = getBool("bAdaptiveSpatial", p.bAdaptiveSpatial);
     p.adaptiveSpatialBoost = r.contains("adaptiveSpatialBoost") && r["adaptiveSpatialBoost"].is_number() ? r["adaptiveSpatialBoost"].get<float>() : p.adaptiveSpatialBoost;
     p.antilagStrength = r.contains("antilagStrength") && r["antilagStrength"].is_number() ? r["antilagStrength"].get<float>() : p.antilagStrength;

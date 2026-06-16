@@ -413,6 +413,8 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline(SID("restir_transform_lights"), src / "restir_di_transform_lights_compute.spv",
                             sizeof(ReSTIRTransformLightsPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("restir_quad_selection"), src / "restir_quad_selection_compute.spv",
+                            sizeof(QuadSelectionPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_generate"), src / "restir_di_main_compute.spv",
                             sizeof(ReSTIRDIGeneratePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_temporal"), src / "restir_di_temporal_compute.spv",
@@ -421,8 +423,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_combined_temporal"), src / "restir_di_combined_temporal_compute.spv",
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_di_boiling"), src / "restir_di_boiling_compute.spv",
-                            sizeof(ReSTIRDIBoilingPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate_compute.spv",
                             sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
 

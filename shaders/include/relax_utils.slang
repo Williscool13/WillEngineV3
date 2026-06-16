@@ -360,41 +360,6 @@ public float RelaxGetPlaneDistanceWeight(float3 centerWorldPos, float3 centerNor
     return d / centerViewZ > threshold ? 0.0 : 1.0;
 }
 
-// Relative view-depth spread across a 2x2 full-res quad above which it is treated as a silhouette. Must match QUAD_UNIFORM_DEPTH_THRESHOLD in restir_common.slang.
-public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
-
-// Minimum dot between a quad corner's normal and corner 0 below which the quad is treated as a normal crease (and the corner locks, like a silhouette). 0.85 ~= 32deg. -1.0 disables (reverts to depth-only). Must match restir_common.slang.
-public static const float QUAD_UNIFORM_NORMAL_DOT_THRESHOLD = 0.85;
-
-/**
- * Maps a half-res pixel to its representative full-res gbuffer pixel.
- * Must match QuadFullPixel in restir_common.slang exactly: the denoiser's geometry association has to be the same
- * 2x2 quad corner the ReSTIR passes lit that frame, otherwise edge texels carry radiance from a different surface
- * than the gbuffer says and the edge-stopping weights cannot reject it.
- * Uniform quads cycle the corner per frame; quads straddling a depth discontinuity lock to a temporally-stable,
- * spatially-dithered corner so RELAX accumulates history at silhouettes instead of resetting every frame.
- */
-public int2 RelaxQuadFullPixel(int2 pixel, uint pixelScale, uint frameIndex, uint depthIndex, uint normalIndex, float2 invFullExtent, float depthLinearizeMult, float depthLinearizeAdd)
-{
-    if (pixelScale == 1u) { return pixel; }
-    int2 base = pixel * int(pixelScale);
-    float2 uv = (float2(base) + 1.0) * invFullExtent;
-    float4 z = rdgTexturesFloat[depthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);
-    float4 zl = depthLinearizeMult / (depthLinearizeAdd - z);
-    float zMin = min(min(zl.x, zl.y), min(zl.z, zl.w));
-    float zMax = max(max(zl.x, zl.y), max(zl.z, zl.w));
-    bool quadUniform = (zMax - zMin) <= QUAD_UNIFORM_DEPTH_THRESHOLD * max(zMax, 1e-4);
-    // A normal crease at near-constant depth is invisible to the depth test but still flips the represented surface when the corner cycles, resetting the denoiser. Lock it too. Must match QuadFullPixel.
-    if (quadUniform) {
-        uint4 nOct = rdgTexturesUInt4[normalIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);
-        float3 n0 = UnpackNormalOct16(nOct.x);
-        float minDot = min(min(dot(n0, UnpackNormalOct16(nOct.y)), dot(n0, UnpackNormalOct16(nOct.z))), dot(n0, UnpackNormalOct16(nOct.w)));
-        quadUniform = minDot >= QUAD_UNIFORM_NORMAL_DOT_THRESHOLD;
-    }
-    uint sel = quadUniform ? ((uint(pixel.x) + uint(pixel.y) * 2u + frameIndex) & 3u) : ((uint(pixel.x) + uint(pixel.y) * 2u) & 3u);
-    return base + int2(int(sel & 1u), int(sel >> 1u));
-}
-
 public float RelaxGetPlaneDistanceWeightAtrous(float3 centerWorldPos, float3 centerNormal, float3 sampleWorldPos, float threshold)
 {
     return abs(dot(sampleWorldPos - centerWorldPos, centerNormal)) < threshold ? 1.0 : 0.0;

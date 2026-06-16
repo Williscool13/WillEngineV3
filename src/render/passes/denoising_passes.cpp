@@ -598,6 +598,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("relax_viewz"));
         pass.Execute([pipelineManager, depth, gbufferOne, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxGenerateViewZPushConstant pc{
@@ -606,6 +607,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_viewz")),
                 .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_generate_viewz"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -720,6 +722,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(SID("relax_viewz"));
         }
         if (graph.HasTexture(SID("restir_confidence"))) { pass.ReadSampledImage(SID("restir_confidence")); }
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("relax_spec_illum"));
         pass.WriteStorageImage(SID("relax_diff_illum"));
         pass.WriteStorageImage(SID("relax_spec_fast"));
@@ -765,6 +768,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_prev_nr")),
                 .pixelScale = pixelScale,
                 .confidenceIndex = graph.HasTexture(SID("restir_confidence")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_confidence")) : ~0u,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_temporal_accumulation"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -789,6 +793,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("relax_history_length"));
         pass.ReadSampledImage(SID("relax_spec_illum"));
         pass.ReadSampledImage(SID("relax_diff_illum"));
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("relax_atrous_spec_0"));
         pass.WriteStorageImage(SID("relax_atrous_diff_0"));
         pass.Execute([pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -803,6 +808,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_spec_0")),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_diff_0")),
                 .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_history_fix"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -843,6 +849,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         }
         pass.ReadSampledImage(specNoisy); // noisy preblur reference
         pass.ReadSampledImage(diffNoisy);
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("relax_spec_fast_hist"));
         pass.WriteStorageImage(SID("relax_diff_fast_hist"));
         pass.Execute([pipelineManager, depth, gbufferOne, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -864,6 +871,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_fast_hist")),
                 .outHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_history_length")),
                 .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_history_clamping"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -884,6 +892,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("relax_atrous_diff_0"));
         pass.WriteStorageImage(SID("relax_spec_hist"));
         pass.WriteStorageImage(SID("relax_diff_hist"));
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
 
         pass.Execute([pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxAntiFireflyPushConstant pc{
@@ -896,6 +905,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_hist")),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_hist")),
                 .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_antifirefly"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -933,6 +943,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(SID("relax_spec_reproj_confidence"));
             pass.ReadSampledImage(specIn);
             pass.ReadSampledImage(diffIn);
+            if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
             pass.WriteStorageImage(specOut);
             pass.WriteStorageImage(diffOut);
 
@@ -953,6 +964,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
                         .stepSize = stepSize,
                         .pixelScale = pixelScale,
+                        .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
                     };
                     const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_atrous"));
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

@@ -22,11 +22,9 @@
       "sigmaNormal": 128.0
     },
     "bAdaptiveSpatial": true,
-    "bBoilingFilter": true,
     "bHalfRes": true,
-    "bPermutationSampling": true,
-    "boilingFilterStrength": 0.20000000298023224,
-    "confidenceStrength": 0.3958333432674408,
+    "bPermutationSampling": false,
+    "confidenceStrength": 0.20000000298023224,
     "denoiserMode": 3,
     "iblIntensity": 0.0,
     "mode": 1,
@@ -67,7 +65,7 @@
     },
     "remodulateOutput": 0,
     "spatialMCap": 100,
-    "spatialNeighbors": 5,
+    "spatialNeighbors": 3,
     "spatialPasses": 2,
     "spatialRadius": 30,
     "svgf": {

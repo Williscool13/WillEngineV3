@@ -356,6 +356,18 @@ SHADER_PUBLIC struct ReSTIRTransformLightsPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
+SHADER_PUBLIC struct QuadSelectionPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t normalIndex;
+    SHADER_PUBLIC uint32_t outIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+};
+
 SHADER_PUBLIC struct ReSTIRDIGeneratePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -372,6 +384,7 @@ SHADER_PUBLIC struct ReSTIRDIGeneratePushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
@@ -400,6 +413,8 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC float confidenceStrength;
     SHADER_PUBLIC uint32_t bPermutationSampling;
     SHADER_PUBLIC float antilagStrength;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+    SHADER_PUBLIC uint32_t quadSelectionHistoryIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
@@ -424,25 +439,8 @@ SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC uint32_t bPermutationSampling;
-};
-
-SHADER_PUBLIC struct ReSTIRDIBoilingPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
-    SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;
-    SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
-    SHADER_PUBLIC uint32_t visibilityBufferIndex;
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
-    SHADER_PUBLIC uint32_t gbufferTwoIndex;
-    SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t frameIndex;
-    SHADER_PUBLIC uint32_t pixelScale;
-    SHADER_PUBLIC float filterStrength;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+    SHADER_PUBLIC uint32_t quadSelectionHistoryIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -469,6 +467,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t bAdaptiveSpatial;
     SHADER_PUBLIC float adaptiveSpatialBoost;
     SHADER_PUBLIC uint32_t adaptiveMReference;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct VisibilityLightingPushConstant
@@ -494,6 +493,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t accumulationCount;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct SVGFRemodulatePushConstant
@@ -523,6 +523,7 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
@@ -1091,6 +1092,7 @@ SHADER_PUBLIC struct RelaxGenerateViewZPushConstant
     SHADER_PUBLIC uint32_t normalRoughnessIndex;
     SHADER_PUBLIC uint32_t outViewZIndex;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct RelaxClassifyTilesPushConstant
@@ -1140,6 +1142,7 @@ SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
     SHADER_PUBLIC uint32_t outPrevNRIndex;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t confidenceIndex;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct RelaxHistoryFixPushConstant
@@ -1154,6 +1157,7 @@ SHADER_PUBLIC struct RelaxHistoryFixPushConstant
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct RelaxHistoryClampingPushConstant
@@ -1175,6 +1179,7 @@ SHADER_PUBLIC struct RelaxHistoryClampingPushConstant
     SHADER_PUBLIC uint32_t outDiffFastIndex;
     SHADER_PUBLIC uint32_t outHistoryLengthIndex;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct RelaxAtrousPushConstant
@@ -1193,6 +1198,7 @@ SHADER_PUBLIC struct RelaxAtrousPushConstant
     SHADER_PUBLIC uint32_t outDiffIndex;
     SHADER_PUBLIC uint32_t stepSize;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
@@ -1206,6 +1212,7 @@ SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct DepthCopyPushConstant
@@ -1256,6 +1263,7 @@ SHADER_PUBLIC struct RTSunShadowPushConstant
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t outputDepthIndex;   // for half res
     SHADER_PUBLIC uint32_t outputGbufferIndex; // for half res
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct DirectionalLightPushConstant

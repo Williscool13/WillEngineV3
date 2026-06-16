@@ -175,33 +175,19 @@ public float3 SampleLightPos(LightVS vs, float uU, float uV)
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
 
-/**
- * Maps a half-res pixel to its representative full-res gbuffer pixel.
- * Uniform 2x2 quads cycle the corner per pixel and per frame so the fixed-corner bias becomes noise that temporal accumulation averages out.
- * Quads straddling a depth discontinuity (silhouette) lock to a temporally-stable, spatially-dithered corner so the denoiser sees stable per-texel geometry and accumulates history instead of resetting every frame.
- * Every consumer in the same frame must use this mapping with the same depth source; history-side taps must pass the previous frame index and previous depth.
- * Must stay in sync with RelaxQuadFullPixel in relax_utils.slang.
- * Identity when pixelScale == 1.
- */
-public uint2 QuadFullPixel(uint2 pixel, uint pixelScale, uint frameIndex, uint depthIndex, uint normalIndex, float2 invFullExtent, float depthLinearizeMult, float depthLinearizeAdd)
+// Half-res pixel -> full-res pixel via the precomputed quad-selection texture (sel in [0,3]). Identity at full res.
+public uint2 FetchFullPixel(uint selectionIndex, uint2 pixel, uint pixelScale)
 {
     if (pixelScale == 1u) { return pixel; }
-    uint2 base = pixel * pixelScale;
-    float2 uv = (float2(base) + 1.0) * invFullExtent;
-    float4 z = rdgTexturesFloat[depthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);
-    float4 zl = depthLinearizeMult / (depthLinearizeAdd - z);
-    float zMin = min(min(zl.x, zl.y), min(zl.z, zl.w));
-    float zMax = max(max(zl.x, zl.y), max(zl.z, zl.w));
-    bool quadUniform = (zMax - zMin) <= QUAD_UNIFORM_DEPTH_THRESHOLD * max(zMax, 1e-4);
-    // A normal crease at near-constant depth is invisible to the depth test but still flips the represented surface when the corner cycles, resetting the denoiser. Lock it too.
-    if (quadUniform) {
-        uint4 nOct = rdgTexturesUInt4[normalIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);
-        float3 n0 = UnpackNormalOct16(nOct.x);
-        float minDot = min(min(dot(n0, UnpackNormalOct16(nOct.y)), dot(n0, UnpackNormalOct16(nOct.z))), dot(n0, UnpackNormalOct16(nOct.w)));
-        quadUniform = minDot >= QUAD_UNIFORM_NORMAL_DOT_THRESHOLD;
-    }
-    uint sel = quadUniform ? ((pixel.x + pixel.y * 2u + frameIndex) & 3u) : ((pixel.x + pixel.y * 2u) & 3u);
-    return base + uint2(sel & 1u, sel >> 1u);
+    uint sel = rdgTexturesUInt[selectionIndex].Load(int3(int2(pixel), 0)).r;
+    return pixel * pixelScale + uint2(sel & 1u, sel >> 1u);
+}
+
+public int2 FetchFullPixel(uint selectionIndex, int2 pixel, uint pixelScale)
+{
+    if (pixelScale == 1u) { return pixel; }
+    uint sel = rdgTexturesUInt[selectionIndex].Load(int3(pixel, 0)).r;
+    return pixel * int(pixelScale) + int2(int(sel & 1u), int(sel >> 1u));
 }
 
 // RTXDI permutation sampling: reflects the history pixel within a 4x4 block per frame to decorrelate temporal reuse. Permuted pixel must still pass disocclusion.
