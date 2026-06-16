@@ -166,6 +166,19 @@ public uint2 QuadFullPixel(uint2 pixel, uint pixelScale, uint frameIndex, uint d
     return base + uint2(sel & 1u, sel >> 1u);
 }
 
+// RTXDI permutation sampling: reflects the history pixel within a 4x4 block per frame to decorrelate temporal reuse. Permuted pixel must still pass disocclusion.
+public int2 ApplyPermutationSampling(int2 prevPixel, uint frameIndex)
+{
+    uint seed = frameIndex * 0x9E3779B9u;
+    seed ^= seed >> 16u;
+    int2 offset = int2(seed & 3u, (seed >> 2u) & 3u);
+    prevPixel += offset;
+    prevPixel.x ^= 3;
+    prevPixel.y ^= 3;
+    prevPixel -= offset;
+    return prevPixel;
+}
+
 public Reservoir ReservoirEmpty()
 {
     Reservoir r;

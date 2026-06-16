@@ -165,7 +165,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
         wasUsingGizmo = false;
     }
 
-    bool hasGizmoClaim = editPointIdx != -1 && !state->editor.bExclusiveGizmoActivePrev;
+    bool hasGizmoClaim = editPointIdx != -1;
 
     bool open = ImGui::CollapsingHeader("Path Mover", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

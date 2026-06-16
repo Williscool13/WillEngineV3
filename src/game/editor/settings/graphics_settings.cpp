@@ -493,6 +493,16 @@ void DrawLightingWindow(Engine::EngineState* state)
                 changed = true;
             }
             ImGui::Separator();
+            if (ImGui::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
+                changed = true;
+            }
+            if (ImGui::Checkbox("Boiling Filter", &restir.bBoilingFilter)) {
+                changed = true;
+            }
+            if (restir.bBoilingFilter && Widgets::SliderFloat("Boiling Strength##restir", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
+                changed = true;
+            }
+            ImGui::Separator();
             const char* stopLabels[] = {"After Spatial 1", "After Temporal", "After Generate"};
         }
 

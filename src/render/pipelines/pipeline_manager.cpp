@@ -421,6 +421,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_combined_temporal"), src / "restir_di_combined_temporal_compute.spv",
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("restir_di_boiling"), src / "restir_di_boiling_compute.spv",
+                            sizeof(ReSTIRDIBoilingPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate_compute.spv",
                             sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
 

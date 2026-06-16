@@ -398,6 +398,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t shadowVisIndex;
     SHADER_PUBLIC uint32_t confidenceIndex;
     SHADER_PUBLIC float confidenceStrength;
+    SHADER_PUBLIC uint32_t bPermutationSampling;
 };
 
 SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
@@ -421,6 +422,26 @@ SHADER_PUBLIC struct ReSTIRDITemporalPushConstant
     SHADER_PUBLIC uint32_t mCap;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t bPermutationSampling;
+};
+
+SHADER_PUBLIC struct ReSTIRDIBoilingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(AreaLightVSData) lightVS;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
+    SHADER_PUBLIC uint32_t visibilityBufferIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC float filterStrength;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant

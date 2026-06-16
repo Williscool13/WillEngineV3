@@ -62,6 +62,12 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     if (validHistory) {
         historyPixel = clamp(uint2(historyUV * float2(pc.renderExtent)), uint2(0, 0), pc.renderExtent - uint2(1, 1));
+        if (pc.bPermutationSampling != 0u) {
+            int2 permuted = ApplyPermutationSampling(int2(historyPixel), pc.frameIndex);
+            if (all(permuted >= int2(0, 0)) && all(permuted < int2(pc.renderExtent))) {
+                historyPixel = uint2(permuted);
+            }
+        }
         // History taps use the corner the previous frame's passes sampled (previous depth source)
         uint2 historyFullPixel = QuadFullPixel(historyPixel, pc.pixelScale, pc.frameIndex - 1u, pc.prevDepthIndex, pc.prevGbufferOneIndex, 1.0 / float2(scene.mainRenderTargetSize), scene.depthLinearizeMult, scene.depthLinearizeAdd);
 

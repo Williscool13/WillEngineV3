@@ -93,6 +93,9 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
     return {
         {"bHalfRes", p.bHalfRes},
         {"bSpatial2", p.bSpatial2},
+        {"bPermutationSampling", p.bPermutationSampling},
+        {"bBoilingFilter", p.bBoilingFilter},
+        {"boilingFilterStrength", p.boilingFilterStrength},
         {"iblIntensity", p.iblIntensity},
         {"mode", static_cast<int32_t>(p.mode)},
         {"spatialRadius", p.spatialRadius},
@@ -116,6 +119,9 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
 
     p.bHalfRes = getBool("bHalfRes", p.bHalfRes);
     p.bSpatial2 = getBool("bSpatial2", p.bSpatial2);
+    p.bPermutationSampling = getBool("bPermutationSampling", p.bPermutationSampling);
+    p.bBoilingFilter = getBool("bBoilingFilter", p.bBoilingFilter);
+    p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.iblIntensity = r.contains("iblIntensity") && r["iblIntensity"].is_number() ? r["iblIntensity"].get<float>() : p.iblIntensity;
     p.mode = static_cast<Core::ReSTIRParams::Mode>(getInt("mode", static_cast<int32_t>(p.mode)));
     p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
