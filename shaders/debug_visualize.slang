@@ -233,22 +233,28 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = ndotv <= 0.0 ? float3(1.0, 0, 0) : float3(0, ndotv, 0);
             break;
         }
-        case 28: { // SunShadowVisibility - rt_sun_shadow.r, grayscale (white lit, black shadowed)
-            srcPixel.xyz = float3(srcPixel.x);
+        case 28: { // SunShadowVisibility - .r is sqrt(visibility) (binary trace squares to itself); show linear (white lit, black shadowed)
+            float v = srcPixel.x * srcPixel.x;
+            srcPixel.xyz = float3(v);
             break;
         }
-        case 29: { // SunShadowHitDist - rt_sun_shadow.g closest-occluder distance; black where lit, gray ramp by distance (/20)
-            float lit = srcPixel.x;
-            float t = saturate(srcPixel.y / 20.0);
-            srcPixel.xyz = lit >= 0.5 ? float3(0.0) : float3(t);
+        case 29: { // SunShadowPenumbra - .g packed penumbra (world radius); dark blue where lit (FP16_MAX sentinel), grey ramp otherwise
+            float penum = srcPixel.y;
+            bool lit = penum >= 60000.0;
+            srcPixel.xyz = lit ? float3(0.0, 0.0, 0.15) : float3(saturate(penum * 2.0));
             break;
         }
-        case 30: { // SunShadowTiles - sigma_tiles (minVis, maxVis): red = penumbra (filtered), grey = lit, dark blue = shadowed
-            float mn = srcPixel.x;
-            float mx = srcPixel.y;
-            if (mx < 0.5) { srcPixel.xyz = float3(0.04, 0.04, 0.15); }
-            else if (mn > 0.5) { srcPixel.xyz = float3(0.15, 0.15, 0.15); }
-            else { srcPixel.xyz = float3(1.0, 0.1, 0.1); }
+        case 30: { // SunShadowTiles - sigma_tiles (needsFilter, maxRadius/16, isSky): red = penumbra tile (brighter = bigger radius), grey = uniform, blue = sky
+            float needsFilter = srcPixel.x;
+            float radius = srcPixel.y;
+            float isSky = srcPixel.z;
+            if (isSky > 0.5) { srcPixel.xyz = float3(0.0, 0.0, 0.3); }
+            else if (needsFilter > 0.5) { srcPixel.xyz = float3(0.3 + 0.7 * radius, 0.05, 0.05); }
+            else { srcPixel.xyz = float3(0.12); }
+            break;
+        }
+        case 31: { // SunShadowTileValue - sigma_tiles_smoothed.y dilated filter mask (the tileValue the blur uses to scale its kernel)
+            srcPixel.xyz = float3(srcPixel.y);
             break;
         }
     }

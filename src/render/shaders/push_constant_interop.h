@@ -1286,9 +1286,13 @@ SHADER_PUBLIC struct DirectionalLightPushConstant
 
 SHADER_PUBLIC struct SigmaClassifyPushConstant
 {
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t shadowIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC float maxKernelPixels;
 };
 
 SHADER_PUBLIC struct SigmaSmoothTilesPushConstant
@@ -1310,11 +1314,9 @@ SHADER_PUBLIC struct SigmaBlurPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t tilesIndex;
-    SHADER_PUBLIC uint32_t passIndex; // 0 = blur (blocker search), 1 = post-blur (reuse stored penumbra)
+    SHADER_PUBLIC uint32_t passIndex; // 0 = blur (derive shadow from penumbra), 1 = post-blur (unpack sqrt)
     SHADER_PUBLIC float maxKernelPixels;
-    SHADER_PUBLIC float blockerSearchPixels;
     SHADER_PUBLIC float penumbraScale;
-    SHADER_PUBLIC float normalWeightPower;
 };
 
 SHADER_PUBLIC struct SigmaTemporalPushConstant
@@ -1322,13 +1324,15 @@ SHADER_PUBLIC struct SigmaTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t shadowIndex;
-    SHADER_PUBLIC uint32_t historyIndex; // ~0u when no history this frame
+    SHADER_PUBLIC uint32_t historyIndex;       // ~0u when no history this frame
+    SHADER_PUBLIC uint32_t historyLengthIndex; // ~0u when no history this frame
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t outHistoryLengthIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t tilesIndex;
-    SHADER_PUBLIC float historyWeight;
+    SHADER_PUBLIC float stabilizationStrength;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

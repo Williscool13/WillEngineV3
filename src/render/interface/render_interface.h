@@ -562,7 +562,7 @@ struct SIGMAParams
 {
     bool bHalfRes{false};
     bool enablePostBlur{true};
-    float historyWeight{0.8f};
+    float historyWeight{1.0f};
     float maxKernelPixels{32.f};
     float blockerSearchPixels{32.f};
     float penumbraScale{1.f};

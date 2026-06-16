@@ -363,12 +363,26 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("GTAO AO")) setDebugTarget("gtao_ao", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Edges")) setDebugTarget("gtao_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Filtered")) setDebugTarget("gtao_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::Separator();
-            if (ImGui::Button("Sun Shadow (Visibility)")) setDebugTarget("rt_sun_shadow", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
-            if (ImGui::Button("Sun Shadow (Hit Dist)")) setDebugTarget("rt_sun_shadow", DebugTransformationType::SunShadowHitDist, Core::DebugViewAspect::None);
-            if (ImGui::Button("Sun Shadow (Denoised)")) setDebugTarget("sigma_shadow", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
-            if (ImGui::Button("Sun Shadow (Stabilized)")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
-            if (ImGui::Button("Sun Shadow (Tiles)")) setDebugTarget("sigma_tiles", DebugTransformationType::SunShadowTiles, Core::DebugViewAspect::None);
+        }
+
+        if (ImGui::CollapsingHeader("SIGMA")) {
+            if (ImGui::Button("Trace Visibility")) setDebugTarget("rt_sun_shadow", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Trace Penumbra")) setDebugTarget("rt_sun_shadow", DebugTransformationType::SunShadowPenumbra, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Tiles (Classify)")) setDebugTarget("sigma_tiles", DebugTransformationType::SunShadowTiles, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Tiles (Smoothed)")) setDebugTarget("sigma_tiles_smoothed", DebugTransformationType::SunShadowTileValue, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Blur Visibility")) setDebugTarget("sigma_shadow", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Blur Penumbra")) setDebugTarget("sigma_shadow", DebugTransformationType::SunShadowPenumbra, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Post-Blur Visibility")) setDebugTarget("sigma_shadow_2", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Stabilized Visibility")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Stabilized Penumbra")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowPenumbra, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("Anti-Aliasing")) {

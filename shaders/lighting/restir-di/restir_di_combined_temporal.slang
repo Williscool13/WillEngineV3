@@ -109,13 +109,13 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
             int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
             LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
-            float3 Xi = SampleLightPos(vs, uU, uV);
+            float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
             LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
 
             float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
             float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
 
-            float p_light_area = 1.0 / (float(lightCount) * vs.area);
+            float p_light_area = LightSamplePdfArea(vs, viewPosition, Xi) / float(lightCount);
             float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
             float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
             float denom = float(M_light) * p_light_area + float(M_brdf) * p_brdf_area;
@@ -156,7 +156,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 if (bestLightIdx >= 0) {
                     Xi = viewPosition + brdfL * bestT;
                     LightSample s = EvalLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
-                    p_light_area = 1.0 / (float(lightCount) * bestVS.area);
+                    p_light_area = LightSamplePdfArea(bestVS, viewPosition, Xi) / float(lightCount);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
                     float3 brdfLightColor = UnpackUnorm4x8(bestVS.packedColor).rgb;
                     p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, bestVS.intensity);

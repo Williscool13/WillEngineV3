@@ -23,7 +23,7 @@ void SetupQuadSelectionPass(RenderGraph& graph,
 {
     graph.CreateTexture(SID("quad_selection"), TextureInfo{VK_FORMAT_R32_UINT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
-    RenderPass& pass = graph.AddPass(SID("Quad Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Quad Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
@@ -73,7 +73,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     // Transform all lights (area + sphere) to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
     graph.CreateBuffer(SID("restir_lights_vs"), MAX_LIGHTS * sizeof(LightVSData), true);
 
-    RenderPass& transformPass = graph.AddPass(SID("ReSTIR Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    RenderPass& transformPass = graph.AddPass(SID("[ReSTIR DI] Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     transformPass.ReadBuffer(SCENE_DATA_BUFFER);
     transformPass.ReadBuffer(SID("light_data"));
     transformPass.WriteBuffer(SID("restir_lights_vs"));
@@ -105,7 +105,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             graph.CreateTexture(SID("restir_confidence"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
         }
 
-        RenderPass& combinedPass = graph.AddPass(SID("ReSTIR DI Combined Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& combinedPass = graph.AddPass(SID("[ReSTIR DI] Combined Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         combinedPass.ReadBuffer(SCENE_DATA_BUFFER);
         combinedPass.ReadBuffer(SID("light_data"));
         combinedPass.ReadBuffer(SID("restir_lights_vs"));
@@ -166,7 +166,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         // Separate generate pass
         graph.CreateBuffer(SID("restir_reservoir_buffer"), reservoirBufferSize, true);
 
-        RenderPass& genPass = graph.AddPass(SID("ReSTIR DI Generate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& genPass = graph.AddPass(SID("[ReSTIR DI] Generate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         genPass.ReadBuffer(SCENE_DATA_BUFFER);
         genPass.ReadBuffer(SID("light_data"));
         genPass.ReadBuffer(SID("restir_lights_vs"));
@@ -213,7 +213,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             graph.CreateBuffer(SID("restir_reservoir_temporal"), reservoirBufferSize, true);
             const bool bHasQuadHistory = restirParams.bHalfRes && graph.HasTexture(SID("quad_selection_history"));
 
-            RenderPass& temporalPass = graph.AddPass(SID("ReSTIR DI Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+            RenderPass& temporalPass = graph.AddPass(SID("[ReSTIR DI] Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
             temporalPass.ReadBuffer(SCENE_DATA_BUFFER);
             temporalPass.ReadBuffer(SID("light_data"));
             temporalPass.ReadBuffer(SID("restir_lights_vs"));
@@ -285,7 +285,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const StringID inputName = i == 0u ? reuseBuffer : spatialScratch[i - 1u & 1u];
         const StringID outputName = spatialScratch[i & 1u];
 
-        const Core::InlineString<32> passName = Core::InlineString<32>::Format("ReSTIR DI Spatial %u", i);
+        const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReSTIR DI] Spatial %u", i);
 
         RenderPass& spatialPass = graph.AddPass(SID(passName.c_str()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         spatialPass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -365,7 +365,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
         buckets[idx++] = {bucketIndex, shader};
     }
 
-    RenderPass& lightingResolve = graph.AddPass(SID("ReSTIR Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    RenderPass& lightingResolve = graph.AddPass(SID("[ReSTIR DI] Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
     if (graph.HasBuffer(SID("restir_reservoir_final"))) {
@@ -443,7 +443,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
 
-    RenderPass& pass = graph.AddPass(SID("ReSTIR Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadSampledImage(targets.intermediateOne);
     pass.ReadSampledImage(targets.intermediateTwo);

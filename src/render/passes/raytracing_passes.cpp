@@ -199,7 +199,7 @@ void SetupRTSunShadow(RenderGraph& graph,
         graph.CreateTexture(SID("rt_sun_gbuffer"), TextureInfo{VK_FORMAT_R32G32B32A32_UINT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
     }
 
-    RenderPass& pass = graph.AddPass(SID("RT Sun Shadow"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Shadow);
+    RenderPass& pass = graph.AddPass(SID("[SIGMA] RT Sun Shadow"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Shadow);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);

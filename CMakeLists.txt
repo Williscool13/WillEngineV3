@@ -383,6 +383,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/random_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/restir_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sobol_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/relax_utils.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sigma_utils.slang")
 
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize

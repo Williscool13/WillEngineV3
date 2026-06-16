@@ -1,35 +1,78 @@
 /*
- * SIGMA shadow denoiser: tile classification.
- * Reduces each 16x16 tile to (minVisibility, maxVisibility). The blur reads a tile neighborhood
- * to skip fully-lit / fully-shadowed regions, so only penumbra tiles pay the full filter.
+ * SIGMA shadow denoiser: tile classification (mirrors NRD SIGMA_ClassifyTiles).
+ * Reduces each 16x16 tile to (needsFilter, maxBlurRadius/16, isSky). "needsFilter" is 0 for tiles that
+ * are uniformly lit or uniformly umbra/sky/hard-shadow (nothing to soften) and 1 for tiles containing a
+ * soft penumbra. maxBlurRadius drives the dilation width in the smooth pass. Output RGBA8.
  */
 import common_interop;
 import push_constant_interop;
 import bindless_declarations;
+import shader_functions;
+import relax_utils;
+import sigma_utils;
 
-static const uint SIGMA_TILE_SIZE = 16;
-
-groupshared float gMin[SIGMA_TILE_SIZE * SIGMA_TILE_SIZE];
-groupshared float gMax[SIGMA_TILE_SIZE * SIGMA_TILE_SIZE];
+groupshared uint s_Mask;
+groupshared uint s_Radius;
 
 [shader("compute")]
-[numthreads(16, 16, 1)]
-void ComputeMain(uniform SigmaClassifyPushConstant pc, uint2 groupThread : SV_GroupThreadID, uint2 group : SV_GroupID)
+[numthreads(8, 4, 1)]
+void ComputeMain(uniform SigmaClassifyPushConstant pc, uint2 threadPos : SV_GroupThreadID, uint2 tilePos : SV_GroupID, uint threadIndex : SV_GroupIndex)
 {
-    int2 sp = min(int2(group * SIGMA_TILE_SIZE + groupThread), int2(pc.renderExtent) - 1);
-    float vis = rdgTexturesFloat2[pc.shadowIndex].Load(int3(sp, 0)).r;
-
-    uint li = groupThread.y * SIGMA_TILE_SIZE + groupThread.x;
-    gMin[li] = vis;
-    gMax[li] = vis;
+    if (threadIndex == 0) {
+        s_Mask = 0;
+        s_Radius = 0;
+    }
     GroupMemoryBarrierWithGroupSync();
 
+    SceneData scene = pc.sceneData[pc.sceneDataIndex];
+    uint2 basePixel = tilePos * 16 + threadPos * uint2(2, 4);
+
+    uint mask = 0;
+    float maxRadius = 0.0;
+
     [unroll]
-    for (uint s = (SIGMA_TILE_SIZE * SIGMA_TILE_SIZE) / 2; s > 0; s >>= 1)
+    for (uint i = 0; i < 2; i++)
     {
-        if (li < s) { gMin[li] = min(gMin[li], gMin[li + s]); gMax[li] = max(gMax[li], gMax[li + s]); }
-        GroupMemoryBarrierWithGroupSync();
+        [unroll]
+        for (uint j = 0; j < 4; j++)
+        {
+            int2 pos = min(int2(basePixel) + int2(i, j), int2(pc.renderExtent) - 1);
+            float penumbra = rdgTexturesFloat2[pc.shadowIndex].Load(int3(pos, 0)).g;
+            float rawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(pos, 0)).r;
+
+            bool isInf = rawDepth <= 0.0;
+            bool isShadow = penumbra == 0.0;
+            bool isLit = SigmaIsLit(penumbra);
+
+            mask += ((isLit || isInf || isShadow) ? 1u : 0u) << 0;
+            mask += ((!isLit || isInf || isShadow) ? 1u : 0u) << 9;
+            mask += (isInf ? 1u : 0u) << 18;
+
+            float hitDist = (isLit || isInf) ? 0.0 : penumbra;
+            float viewZ = ScreenToViewSpaceDepth(rawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+            float pixelSize = SigmaPixelSize(scene.ndcToViewMul, viewZ, pc.renderExtent.y);
+            float pixelRadius = SigmaGetKernelRadiusInPixels(hitDist, pixelSize, pc.maxKernelPixels);
+
+            maxRadius = max(pixelRadius, maxRadius);
+        }
     }
 
-    if (li == 0) { rdgStorageFloat2[pc.outputIndex][group] = float2(gMin[0], gMax[0]); }
+    InterlockedAdd(s_Mask, mask);
+    InterlockedMax(s_Radius, asuint(maxRadius));
+    GroupMemoryBarrierWithGroupSync();
+
+    if (threadIndex == 0)
+    {
+        bool isLit = ((s_Mask >> 0) & 511u) == 256u;
+        bool isUmbra = ((s_Mask >> 9) & 511u) == 256u;
+        bool isInf = ((s_Mask >> 18) & 511u) == 256u;
+
+        float4 result;
+        result.x = (isLit || isUmbra) ? 0.0 : 1.0;
+        result.y = saturate(asfloat(s_Radius) / 16.0);
+        result.z = isInf ? 1.0 : 0.0;
+        result.w = 0.0;
+
+        rdgStorageFloat4[pc.outputIndex][tilePos] = result;
+    }
 }

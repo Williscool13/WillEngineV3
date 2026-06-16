@@ -69,7 +69,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
 
             int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
             LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
-            float3 Xi = SampleLightPos(vs, uU, uV);
+            float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
             LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
 
             float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
@@ -78,7 +78,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
 
             // Talbot MIS in area measure. p_hat has cosLight/dist² baked in, so all PDFs must be area-measure.
             // p_brdf_area = p_brdf_sa * cosLight / dist²
-            float p_light_area = 1.0 / (float(lightCount) * vs.area);
+            float p_light_area = LightSamplePdfArea(vs, viewPosition, Xi) / float(lightCount);
             float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
             float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
             float denom = float(M_light) * p_light_area + float(M_brdf) * p_brdf_area;
@@ -127,7 +127,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
                     Xi = viewPosition + brdfL * bestT;
                     LightSample s = EvalLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
                     // Area-measure PDFs. p_brdf_area = p_brdf_sa * cosLight / dist²
-                    p_light_area = 1.0 / (float(lightCount) * bestVS.area);
+                    p_light_area = LightSamplePdfArea(bestVS, viewPosition, Xi) / float(lightCount);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
 
                     float3 brdfLightColor = UnpackUnorm4x8(bestVS.packedColor).rgb;

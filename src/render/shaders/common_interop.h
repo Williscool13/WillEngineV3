@@ -73,8 +73,9 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     NdotV = 26,
     GBufferViewZDelta = 27,
     SunShadowVisibility = 28,
-    SunShadowHitDist = 29,
+    SunShadowPenumbra = 29,
     SunShadowTiles = 30,
+    SunShadowTileValue = 31,
 };
 
 SHADER_PUBLIC struct Frustum

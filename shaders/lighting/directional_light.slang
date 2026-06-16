@@ -89,6 +89,9 @@ void ComputeMain(uniform DirectionalLightPushConstant pc, uint3 threadID : SV_Di
         visibility = wsum > 1e-4 ? vsum / wsum : nearest;
     }
 
+    // SIGMA stores shadow as sqrt(visibility); unpack to linear here (binary fallback squares to itself).
+    visibility *= visibility;
+
     float intensity = pc.lightData->directionalLight.directionIntensity.w;
     float3 lightColor = UnpackUnorm4x8(pc.lightData->directionalLight.packedColor).rgb;
     float3 sun = (diffuse + specular) * nDotL * visibility * intensity * lightColor;

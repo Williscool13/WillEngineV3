@@ -175,6 +175,58 @@ public float3 SampleLightPos(LightVS vs, float uU, float uV)
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
 
+/**
+ * Samples a point on the light for shading. Spheres use cone (solid-angle) sampling toward the subtended visible cap
+ * (no wasted back-hemisphere samples); rects use uniform area. Pair with LightSamplePdfArea for the source PDF.
+ */
+public float3 SampleLightSurface(LightVS vs, float3 shadingPos, float uU, float uV)
+{
+    if (vs.type == LIGHT_TYPE_SPHERE)
+    {
+        float3 toCenter = vs.center - shadingPos;
+        float d2 = max(dot(toCenter, toCenter), 1e-8);
+        float d = sqrt(d2);
+        float radius = vs.halfWidth;
+        float sin2ThetaMax = clamp(radius * radius / d2, 0.0, 0.9999);
+        float cosThetaMax = sqrt(1.0 - sin2ThetaMax);
+        float cosTheta = 1.0 - uU * (1.0 - cosThetaMax);
+        float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
+        float phi = 2.0 * PI * uV;
+        float3 w = toCenter / d;
+        float3 up = abs(w.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+        float3 t = normalize(cross(up, w));
+        float3 b = cross(w, t);
+        float3 dir = sinTheta * cos(phi) * t + sinTheta * sin(phi) * b + cosTheta * w;
+        float3 oc = shadingPos - vs.center;
+        float bq = dot(oc, dir);
+        float disc = max(bq * bq - (d2 - radius * radius), 0.0);
+        float s = -bq - sqrt(disc);
+        return shadingPos + max(s, 1e-4) * dir;
+    }
+    return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
+}
+
+/** Source PDF (area measure) of SampleLightSurface at a point: cone solid-angle (sphere) or uniform 1/area (rect). */
+public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
+{
+    if (vs.type == LIGHT_TYPE_SPHERE)
+    {
+        float3 toCenter = vs.center - shadingPos;
+        float d2 = max(dot(toCenter, toCenter), 1e-8);
+        float radius = vs.halfWidth;
+        float sin2ThetaMax = clamp(radius * radius / d2, 0.0, 0.9999);
+        float cosThetaMax = sqrt(1.0 - sin2ThetaMax);
+        float pdfSolidAngle = 1.0 / (2.0 * PI * max(1.0 - cosThetaMax, 1e-6));
+        float3 toSample = samplePos - shadingPos;
+        float dist2 = max(dot(toSample, toSample), 1e-8);
+        float3 L = toSample * rsqrt(dist2);
+        float3 outwardN = normalize(samplePos - vs.center);
+        float cosLight = max(dot(outwardN, -L), 0.0);
+        return pdfSolidAngle * cosLight / dist2;
+    }
+    return 1.0 / vs.area;
+}
+
 // Half-res pixel -> full-res pixel via the precomputed quad-selection texture (sel in [0,3]). Identity at full res.
 public uint2 FetchFullPixel(uint selectionIndex, uint2 pixel, uint pixelScale)
 {

@@ -1,3 +1,10 @@
+/*
+ * Sun-shadow trace for the SIGMA denoiser (matches NRD's input convention).
+ * One ray toward the light CENTER -> clean binary visibility (no Monte-Carlo noise). The soft
+ * penumbra is synthesized later by SIGMA's penumbra-sized blur, so here we only PACK the penumbra
+ * radius per pixel: penumbra = 0.5 * distanceToOccluder * tan(sunAngularRadius), or FP16_MAX if lit.
+ * Output R16G16: .r = binary visibility (1 lit / 0 occluded), .g = packed penumbra.
+ */
 import common_interop;
 import push_constant_interop;
 import lights_interop;
@@ -5,8 +12,8 @@ import bindless_declarations;
 import packing_functions;
 
 import shader_functions;
-import random_common;
 import restir_common;
+import sigma_utils;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -25,12 +32,13 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
 
+    if (pc.pixelScale > 1u) {
+        rdgStorageFloat[pc.outputDepthIndex][pixel] = depth;
+        rdgStorageUInt4[pc.outputGbufferIndex][pixel] = gt1;
+    }
+
     if (depth <= 0.0) {
-        rdgStorageFloat2[pc.outputIndex][pixel] = float2(1.0, 0.0);
-        if (pc.pixelScale > 1u) {
-            rdgStorageFloat[pc.outputDepthIndex][pixel] = depth;
-            rdgStorageUInt4[pc.outputGbufferIndex][pixel] = gt1;
-        }
+        rdgStorageFloat2[pc.outputIndex][pixel] = float2(1.0, SIGMA_FP16_MAX);
         return;
     }
 
@@ -40,37 +48,10 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
     float3 viewNormal = normalize(UnpackNormalOct16(gt1.r));
     float3 worldN = normalize(mul((float3x3)scene.invView, viewNormal));
 
-    if (pc.pixelScale > 1u) {
-        rdgStorageFloat[pc.outputDepthIndex][pixel] = depth;
-        rdgStorageUInt4[pc.outputGbufferIndex][pixel] = gt1;
-    }
-
     float3 toLight = normalize(-pc.lightData->directionalLight.directionIntensity.xyz);
 
-    // Jitter the shadow ray within the sun-disk cone for soft penumbrae
-    float angularRadius = pc.lightData->directionalLight.angularRadius;
-    float3 sampleDir = toLight;
-    if (angularRadius > 0.0)
-    {
-        uint h = SeedRng(pixel, pc.frameIndex, 0x6f3c12b7u);
-        float u1 = HashStep(h);
-        float u2 = HashStep(h);
-
-        // Orthonormal basis with toLight as the cone axis.
-        float3 up = abs(toLight.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
-        float3 tx = normalize(cross(up, toLight));
-        float3 ty = cross(toLight, tx);
-
-        // Uniform sample inside the cone of half-angle 'angularRadius'.
-        float cosThetaMax = cos(angularRadius);
-        float cosTheta = 1.0 - u1 * (1.0 - cosThetaMax);
-        float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
-        float phi = 6.28318530718 * u2;
-        sampleDir = normalize(tx * (cos(phi) * sinTheta) + ty * (sin(phi) * sinTheta) + toLight * cosTheta);
-    }
-
-    // Sample direction below the surface horizon: occluded by the surface itself (soft terminator).
-    if (dot(worldN, sampleDir) <= 0.0) {
+    // Surface faces away from the sun: fully self-shadowed (umbra), no ray needed.
+    if (dot(worldN, toLight) <= 0.0) {
         rdgStorageFloat2[pc.outputIndex][pixel] = float2(0.0, 0.0);
         return;
     }
@@ -79,7 +60,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
 
     RayDesc ray;
     ray.Origin = worldPos;
-    ray.Direction = sampleDir;
+    ray.Direction = toLight;
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
 
@@ -87,11 +68,12 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
     q.TraceRayInline(tlas, 0, 0xFF, ray);
     q.Proceed();
 
-    float visibility = 1.0;
-    float hitDist = 0.0;
     if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
-        visibility = 0.0;
-        hitDist = q.CommittedRayT();
+        float hitDist = q.CommittedRayT();
+        float tanAngularRadius = tan(pc.lightData->directionalLight.angularRadius);
+        float penumbra = min(0.5 * hitDist * tanAngularRadius, 32768.0);
+        rdgStorageFloat2[pc.outputIndex][pixel] = float2(0.0, penumbra);
+    } else {
+        rdgStorageFloat2[pc.outputIndex][pixel] = float2(1.0, SIGMA_FP16_MAX);
     }
-    rdgStorageFloat2[pc.outputIndex][pixel] = float2(visibility, hitDist);
 }
