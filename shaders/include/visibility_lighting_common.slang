@@ -30,15 +30,17 @@ public LightingInputs ReconstructLightingInputs(
     LightingInputs result;
     result.valid = false;
 
-    uint2 vis = rdgTexturesUInt2[visibilityBufferIndex].Load(int3(pixel, 0)).xy;
-    if (vis.x == VISIBILITY_BUFFER_SENTINEL && vis.y == VISIBILITY_BUFFER_SENTINEL) {
-        return result;
-    }
+    if (lightingIndex != ~0x0) {
+        uint2 vis = rdgTexturesUInt2[visibilityBufferIndex].Load(int3(pixel, 0)).xy;
+        if (vis.x == VISIBILITY_BUFFER_SENTINEL && vis.y == VISIBILITY_BUFFER_SENTINEL) {
+            return result;
+        }
 
-    uint instanceIndex = vis.y;
-    Instance instance = instanceBuffer[instanceIndex];
-    if (lightingIndex != ~0u && instance.lightingIndex != lightingIndex) {
-        return result;
+        uint instanceIndex = vis.y;
+        Instance instance = instanceBuffer[instanceIndex];
+        if (lightingIndex != ~0u && instance.lightingIndex != lightingIndex) {
+            return result;
+        }
     }
 
     uint4 gt1 = rdgTexturesUInt4[gbufferOneIndex].Load(int3(pixel, 0));

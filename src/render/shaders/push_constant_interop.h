@@ -468,6 +468,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC float adaptiveSpatialBoost;
     SHADER_PUBLIC uint32_t adaptiveMReference;
     SHADER_PUBLIC uint32_t quadSelectionIndex;
+    SHADER_PUBLIC uint32_t bValidateVisibility;
 };
 
 SHADER_PUBLIC struct VisibilityLightingPushConstant

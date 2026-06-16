@@ -91,7 +91,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     // Phase 1: generate candidates (Talbot MIS, same as restir_di_main)
     // -------------------------------------------------------------------------
     const int M_light = 16;
-    const int M_brdf = 1;
+    const int M_brdf = 0;
     const int M = M_light + M_brdf;
 
     Reservoir r_gen = ReservoirEmpty();
@@ -194,18 +194,13 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
 
-    // Finalise the generated reservoir with a visibility ray, then stream it.
+    // Stream the generated reservoir with its unshadowed target; only the combined winner is traced (Phase 3). An occluded fresh candidate that wins here is zeroed there.
     if (r_gen.lightIdx != ~0u) {
         LightVS vsGen = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
         float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
         LightSample sGen = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
         float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
-        float3 worldPosGen = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-        float3 worldNGen = normalize(mul(float3x3(scene.invView), N));
-        float3 worldyStarGen = mul(scene.invView, float4(yStarGen, 1.0)).xyz;
-        RaytracingAccelerationStructure tlasGen = rdgAccelerationStructures[pc.tlasIndex];
-        float p_hat_gen = EvalPHatVisibility(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity,
-                                              tlasGen, worldPosGen, worldNGen, worldyStarGen);
+        float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
         ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
 
         float w_gen = p_hat_gen * r_gen.W * float(r_gen.M);

@@ -28,7 +28,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
-        Reservoir passthrough = pc.inputBuffer[centerIdx];
+              Reservoir passthrough = pc.inputBuffer[centerIdx];
         passthrough.W = min(passthrough.W, 20.0);
         passthrough.M = min(passthrough.M, pc.mCap);
         pc.outputBuffer[centerIdx] = passthrough;
@@ -177,12 +177,18 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         float3 yStarFinal = DecodeSamplePos(combined, vsFinal);
         LightSample sFinal = EvalLightSample(vsFinal, yStarFinal, viewPosition, N, vsFinal.range);
         float3 finalLightColor = UnpackUnorm4x8(vsFinal.packedColor).rgb;
-        float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-        float3 worldN = normalize(mul(float3x3(scene.invView), N));
-        float3 worldyStarFinal = mul(scene.invView, float4(yStarFinal, 1.0)).xyz;
-        RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-        float p_hat_final = EvalPHatVisibility(sFinal, V, N, li.albedo.xyz, F0, li.metallic, roughness, finalLightColor, vsFinal.intensity,
-                                               tlas, worldPos, worldN, worldyStarFinal);
+        // Only the last spatial pass traces; intermediate passes finalise unshadowed and the final pass validates the winner.
+        float p_hat_final;
+        if (pc.bValidateVisibility != 0u) {
+            float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+            float3 worldN = normalize(mul(float3x3(scene.invView), N));
+            float3 worldyStarFinal = mul(scene.invView, float4(yStarFinal, 1.0)).xyz;
+            RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+            p_hat_final = EvalPHatVisibility(sFinal, V, N, li.albedo.xyz, F0, li.metallic, roughness, finalLightColor, vsFinal.intensity,
+                                             tlas, worldPos, worldN, worldyStarFinal);
+        } else {
+            p_hat_final = EvalPHat(sFinal, V, N, li.albedo.xyz, F0, li.metallic, roughness, finalLightColor, vsFinal.intensity);
+        }
         ReservoirFinalise(combined, accum, p_hat_final, float(neighborCount));
     } else {
         combined.W = 0.0;
