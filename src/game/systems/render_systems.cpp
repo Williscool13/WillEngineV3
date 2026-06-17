@@ -551,11 +551,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
-    // Gather area light emissive quads. Each area light draws a unit quad through the standard meshlet path, using the co-located
-    // transform maintained in AreaLightTransformComponent, so looking into the light shows a bright emissive surface. blasDeviceAddress
-    // stays 0 so the quad rasters but is excluded from the TLAS, keeping the light from self-shadowing its own ReSTIR rays. The
-    // emissive material is synthesized per frame from the light's live color/intensity; its id comes from HashMaterial so it dedups
-    // by content like any other material, and Material Recording below leaves it alone (key already present in activeMaterials).
     {
         ZoneScopedN("AreaLightQuads");
         const Engine::StaticModelHandle quadHandle = state->builtinAssets.GetUnitQuad(ctx->assetManager);
@@ -569,7 +564,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
             emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
 
-            for (auto [entity, light, areaLightTransform] : state->registry.view<Component::AreaLightComponent, Component::AreaLightTransformComponent>().each()) {
+            for (const auto& [entity, light, areaLightTransform] : state->registry.view<Component::AreaLightComponent, Component::AreaLightTransformComponent>().each()) {
                 const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
                 frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(areaLightTransform.modelMatrix, areaLightTransform.previousMatrix);
 
@@ -598,8 +593,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
-    // Gather sphere light emissive meshes. Mirrors the area-light quad path with a unit sphere; blasDeviceAddress stays 0 so the
-    // sphere rasters but is excluded from the TLAS, keeping the light from self-shadowing its own ReSTIR rays.
+    // Gather sphere light emissive meshes.
     {
         ZoneScopedN("SphereLightMeshes");
         const Engine::StaticModelHandle sphereHandle = state->builtinAssets.GetUnitSphere(ctx->assetManager);
@@ -613,7 +607,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
             emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
 
-            for (auto [entity, light, sphereLightTransform] : state->registry.view<Component::SphereLightComponent, Component::SphereLightTransformComponent>().each()) {
+            for (const auto& [entity, light, sphereLightTransform] : state->registry.view<Component::SphereLightComponent, Component::SphereLightTransformComponent>().each()) {
                 const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
                 frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(sphereLightTransform.modelMatrix, sphereLightTransform.previousMatrix);
 

@@ -931,10 +931,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             const StringID diffOut = isLast ? diffInput : scratchDiff[i & 1];
             const uint32_t stepSize = 1u << static_cast<uint32_t>(i);
 
-            char passName[32];
-            snprintf(passName, sizeof(passName), "[ReLAX] ATrous %d", i);
+            const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReLAX] ATrous %d", i);
 
-            auto& pass = graph.AddPass(SID(passName), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+            auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
             pass.ReadBuffer(SID("relax_constants"));
             pass.ReadSampledImage(SID("relax_tiles"));
             pass.ReadSampledImage(gbufferOne);

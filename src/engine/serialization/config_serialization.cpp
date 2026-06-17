@@ -98,7 +98,6 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"adaptiveSpatialBoost", p.adaptiveSpatialBoost},
         {"antilagStrength", p.antilagStrength},
         {"iblIntensity", p.iblIntensity},
-        {"mode", static_cast<int32_t>(p.mode)},
         {"spatialRadius", p.spatialRadius},
         {"spatialNeighbors", p.spatialNeighbors},
         {"spatialMCap", p.spatialMCap},
@@ -125,7 +124,6 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.adaptiveSpatialBoost = r.contains("adaptiveSpatialBoost") && r["adaptiveSpatialBoost"].is_number() ? r["adaptiveSpatialBoost"].get<float>() : p.adaptiveSpatialBoost;
     p.antilagStrength = r.contains("antilagStrength") && r["antilagStrength"].is_number() ? r["antilagStrength"].get<float>() : p.antilagStrength;
     p.iblIntensity = r.contains("iblIntensity") && r["iblIntensity"].is_number() ? r["iblIntensity"].get<float>() : p.iblIntensity;
-    p.mode = static_cast<Core::ReSTIRParams::Mode>(getInt("mode", static_cast<int32_t>(p.mode)));
     p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
     p.spatialNeighbors = getUint("spatialNeighbors", p.spatialNeighbors);
     p.spatialMCap = getUint("spatialMCap", p.spatialMCap);

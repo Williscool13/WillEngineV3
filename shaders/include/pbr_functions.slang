@@ -4,6 +4,30 @@ import shader_constants;
 module pbr_functions;
 
 
+public static const bool LIGHT_INVERSE_SQUARE = true;
+
+public float LightDistanceFalloff(float dist, float range)
+{
+    if (LIGHT_INVERSE_SQUARE) {
+        float distSq = dist * dist;
+        float rangeInvSq = 1.0 / max(range * range, 1e-8);
+        float falloff = saturate(1.0 - distSq * rangeInvSq);
+        return (1.0 / (distSq + 1.0)) * falloff * falloff;
+    }
+
+    float a = 1.0 - smoothstep(0.0, range, dist);
+    return a * a;
+}
+
+public float LightGeometryTerm(float cosLight, float dist)
+{
+    if (LIGHT_INVERSE_SQUARE)
+    {
+        return cosLight / max(dist * dist, 1e-4);
+    }
+    return cosLight;
+}
+
 // ==================== Normal Distribution Functions (D) ====================
 
 public float D_GGX(float3 N, float3 H, float roughness) {

@@ -492,6 +492,11 @@ void DrawLightingWindow(Engine::EngineState* state)
                 restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
                 changed = true;
             }
+            int regirHistory = static_cast<int>(restir.regirHistoryLength);
+            if (Widgets::SliderInt("ReGIR History Grids", &regirHistory, 0, 8)) {
+                restir.regirHistoryLength = static_cast<uint32_t>(regirHistory);
+                changed = true;
+            }
             if (ImGui::Checkbox("Adaptive Spatial", &restir.bAdaptiveSpatial)) {
                 changed = true;
             }
@@ -499,7 +504,7 @@ void DrawLightingWindow(Engine::EngineState* state)
                 changed = true;
             }
             if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
-                    {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. Combined-temporal mode only; may add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.0f})) {
+                    {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. May add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.0f})) {
                 changed = true;
             }
             ImGui::Separator();
@@ -507,12 +512,6 @@ void DrawLightingWindow(Engine::EngineState* state)
                 changed = true;
             }
             ImGui::Separator();
-            const char* modeLabels[] = {"Main + Temporal", "Combined Temporal"};
-            int modeIdx = static_cast<int>(restir.mode);
-            if (ImGui::Combo("ReSTIR Mode", &modeIdx, modeLabels, 2)) {
-                restir.mode = static_cast<Core::ReSTIRParams::Mode>(modeIdx);
-                changed = true;
-            }
             int spatialPasses = static_cast<int>(restir.spatialPasses);
             if (Widgets::SliderInt("Spatial Passes", &spatialPasses, 1, 8)) {
                 restir.spatialPasses = static_cast<uint32_t>(spatialPasses);
@@ -575,7 +574,7 @@ void DrawLightingWindow(Engine::EngineState* state)
                 ImGui::SeparatorText("RELAX");
 
                 if (Widgets::SliderFloat("History Confidence##restir", &state->debug.restir.confidenceStrength, 0.0f, 1.0f,
-                        {.format = "%.2f", .tooltip = "Moving-shadow antilag from ReSTIR: drops RELAX history confidence where the shadow term flipped vs reprojected history (0 disables). Combined-temporal mode only.", .reset = true, .resetTo = 0.75f})) {
+                        {.format = "%.2f", .tooltip = "Moving-shadow antilag from ReSTIR: drops RELAX history confidence where the shadow term flipped vs reprojected history (0 disables).", .reset = true, .resetTo = 0.75f})) {
                     changed = true;
                 }
 

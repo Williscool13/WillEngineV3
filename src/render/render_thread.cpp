@@ -639,7 +639,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             switch (viewFamily.debugTransformationType) {
                 case DebugTransformationType::ReservoirLightIdx:
                 case DebugTransformationType::ReservoirGenerateW:
-                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_buffer"));
+                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_temporal"));
                     break;
                 case DebugTransformationType::ReservoirTemporalLightIdx:
                 case DebugTransformationType::ReservoirTemporalW:
@@ -721,7 +721,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .instanceBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                         .modelBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MODEL_BUFFER),
                         .materialBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                        .reservoirBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_buffer")),
+                        .reservoirBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_temporal")),
                         .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_temporal")),
                         .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_spatial")),
                         .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_history")),

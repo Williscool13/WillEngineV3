@@ -99,8 +99,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
         float cosLight = (al.type == LIGHT_TYPE_SPHERE)
             ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
             : max(dot(-al.normal.xyz, L), 0.0);
-        float atten = 1.0 - smoothstep(0.0, al.range, lightDist);
-        atten = atten * atten;
+        float atten = LightDistanceFalloff(lightDist, al.range);
 
         if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
             RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
@@ -133,7 +132,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
                 float orenNayar = Diffuse_OrenNayar(cosShade, nDotV, L, V, roughness);
                 float3 diff = kD * albedo.xyz * orenNayar;
 
-                float geomTerm = cosLight / max(lightDist * lightDist, 0.0001);
+                float geomTerm = LightGeometryTerm(cosLight, lightDist);
                 float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
                 directLight = (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(lightCount) * lightArea;
             }

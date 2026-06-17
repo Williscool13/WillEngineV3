@@ -138,16 +138,14 @@ public LightSample EvalLightSample(LightVS vs, float3 samplePos, float3 shadingP
         s.cosLight = max(dot(-vs.normal, s.L), 0.0);
     }
 
-    // inv squared falloff
-    //float distSq = s.dist * s.dist;
-    //float rangeInvSq = 1.0 / max(range * range, 1e-8);
-    //float falloff = saturate(1.0 - distSq * rangeInvSq);
-    //s.attenuation = (1.0 / (distSq + 1.0)) * falloff * falloff;
-
-    // artist authored distance falloff
-    float a = 1.0 - smoothstep(0.0, range, s.dist);
-    s.attenuation = a * a;
+    s.attenuation = LightDistanceFalloff(s.dist, range);
     return s;
+}
+
+/** LightSample overload of pbr_functions::LightGeometryTerm. */
+public float LightGeometryTerm(LightSample s)
+{
+    return LightGeometryTerm(s.cosLight, s.dist);
 }
 
 /** Uniformly samples a unit direction on the sphere. */
@@ -225,6 +223,36 @@ public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
         return pdfSolidAngle * cosLight / dist2;
     }
     return 1.0 / vs.area;
+}
+
+public bool ReGIRWorldToCellIndex(float3 worldPos, out uint cellIndex)
+{
+    float gridHalf = 0.5 * float(REGIR_GRID_DIM) * REGIR_CELL_SIZE;
+    int3 c = int3(floor((worldPos + gridHalf) / REGIR_CELL_SIZE));
+    int dim = int(REGIR_GRID_DIM);
+    if (any(c < int3(0, 0, 0)) || any(c >= int3(dim, dim, dim)))
+    {
+        cellIndex = ~0u;
+        return false;
+    }
+    cellIndex = (uint(c.z) * REGIR_GRID_DIM + uint(c.y)) * REGIR_GRID_DIM + uint(c.x);
+    return true;
+}
+
+public float3 ReGIRCellCenter(uint cellIndex)
+{
+    uint cx = cellIndex % REGIR_GRID_DIM;
+    uint cy = (cellIndex / REGIR_GRID_DIM) % REGIR_GRID_DIM;
+    uint cz = cellIndex / (REGIR_GRID_DIM * REGIR_GRID_DIM);
+    float gridHalf = 0.5 * float(REGIR_GRID_DIM) * REGIR_CELL_SIZE;
+    return (float3(float(cx), float(cy), float(cz)) + 0.5) * REGIR_CELL_SIZE - gridHalf;
+}
+
+public float EvalCellTarget(LightSample s, float3 lightColor, float lightIntensity)
+{
+    if (s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
+    const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
+    return LightGeometryTerm(s) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
 }
 
 // Half-res pixel -> full-res pixel via the precomputed quad-selection texture (sel in [0,3]). Identity at full res.
@@ -389,10 +417,9 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
     float3 H = normalize(V + s.L);
     float D = D_GGX(N, H, roughness);
     float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
-    float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
     // Uniform color weight, not luminance: a luminance-weighted target under-samples low-luminance hues (red vs yellow ~4x), which W must compensate with sparse high-energy spikes.
-    //return brdf * s.cosShade * geomTerm * lightIntensity * dot(lightColor, float3(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)) * s.attenuation;
-    return brdf * s.cosShade * geomTerm * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
+    //return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * dot(lightColor, float3(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)) * s.attenuation;
+    return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
 
     // Full BRDF target (GGX + Smith + Fresnel), kept for reference:
     // float3 H = normalize(V + s.L);

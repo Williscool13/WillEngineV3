@@ -70,8 +70,7 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
         float orenNayarPl = Diffuse_OrenNayar(nDotLpl, nDotV, Lpl, V, roughness);
         float3 diffusePl = kDpl * li.albedo.xyz * orenNayarPl;
 
-        float attenuation = 1.0 - smoothstep(0.0, range, dist);
-        attenuation *= attenuation;
+        float attenuation = LightDistanceFalloff(dist, range);
         float3 plColor = UnpackUnorm4x8(pl.packedColor).rgb;
         directLight += (diffusePl + specularPl) * nDotLpl * attenuation * pl.intensity * plColor;
     }

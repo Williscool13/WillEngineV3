@@ -74,7 +74,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         // Normal disocclusion
         float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));
         if (dot(N, historyN) >= 0.906) {
-            // Plane-distance disocclusion (NRD style); see restir_di_temporal.slang
+            // Plane-distance disocclusion (NRD style)
             float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyFullPixel, 0)).r;
             float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
             float expectedPrevViewDepth = viewSpaceDepth + UnpackViewZDelta(g1.w);
@@ -88,7 +88,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     }
 
     // -------------------------------------------------------------------------
-    // Phase 1: generate candidates (Talbot MIS, same as restir_di_main)
+    // Phase 1: generate candidates. Talbot MIS over uniform light samples, or ReGIR grid taps when the surface is inside the grid.
     // -------------------------------------------------------------------------
     const int M_light = 16;
     const int M_brdf = 0;
@@ -100,7 +100,34 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
+    float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+    uint regirCell;
+    bool inGrid = ReGIRWorldToCellIndex(worldPos, regirCell);
+
     if (lightCount > 0) {
+        if (inGrid) {
+            for (int i = 0; i < M_light; i++) {
+                // Jitter the lookup by up to half a cell per tap so boundary pixels stochastically read neighbouring cells, dithering the hard cell edges into noise the denoiser resolves.
+                float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * REGIR_CELL_SIZE;
+                uint cell;
+                if (!ReGIRWorldToCellIndex(worldPos + jitter, cell)) { continue; }
+                float uSelect = HashStep(h);
+                uint slot = cell * REGIR_RESERVOIRS_PER_CELL + min(i, REGIR_RESERVOIRS_PER_CELL - 1u);
+                Reservoir gr = pc.gridBuffer[slot];
+                if (gr.lightIdx == ~0u || gr.W <= 0.0) { continue; }
+                LightVS vs = UnpackLightVS(pc.lightVS[gr.lightIdx]);
+                float3 Xi = DecodeSamplePos(gr, vs);
+                LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
+                float w_i = p_hat * gr.W;
+                if (ReservoirAddSample(accum_gen, r_gen, w_i, uSelect)) {
+                    r_gen.lightIdx = gr.lightIdx;
+                    r_gen.sampleOffsetPacked = gr.sampleOffsetPacked;
+                }
+            }
+        }
+        else {
         for (int i = 0; i < M_light; i++) {
             float uLight = HashStep(h);
             float uU = HashStep(h);
@@ -170,7 +197,8 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, bestVS);
             }
         }
-        r_gen.M = uint(M);
+        }
+        r_gen.M = inGrid ? uint(accum_gen.M) : uint(M);
     }
 
     // -------------------------------------------------------------------------
@@ -201,7 +229,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         LightSample sGen = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
         float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
         float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
-        ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
+        ReservoirFinalise(r_gen, accum_gen, p_hat_gen, inGrid ? float(r_gen.M) : 1.0);
 
         float w_gen = p_hat_gen * r_gen.W * float(r_gen.M);
         if (ReservoirAddSample(accum_combined, combined, w_gen, uSelect0)) {
@@ -238,7 +266,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         float3 yStar = DecodeSamplePos(combined, vsWinner);
         LightSample sWinner = EvalLightSample(vsWinner, yStar, viewPosition, N, vsWinner.range);
         float3 winnerLightColor = UnpackUnorm4x8(vsWinner.packedColor).rgb;
-        float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
         float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
         RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];

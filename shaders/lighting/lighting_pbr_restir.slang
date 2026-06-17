@@ -78,9 +78,8 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
                 float orenNayarAl = Diffuse_OrenNayar(s.cosShade, nDotV, Lal, V, roughness);
                 float3 diffuseAl = kDal * li.albedo.xyz * orenNayarAl;
 
-                float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
                 float3 alColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                float3 commonTerm = s.cosShade * geomTerm * vs.intensity * alColor * s.attenuation * r.W;
+                float3 commonTerm = s.cosShade * LightGeometryTerm(s) * vs.intensity * alColor * s.attenuation * r.W;
 
                 diffuseRadiance += diffuseAl * commonTerm;
                 float3 specContribution = specularAl * commonTerm;
