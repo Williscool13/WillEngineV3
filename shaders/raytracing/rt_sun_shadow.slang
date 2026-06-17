@@ -1,8 +1,10 @@
 /*
- * Sun-shadow trace for the SIGMA denoiser (matches NRD's input convention).
- * One ray toward the light CENTER -> clean binary visibility (no Monte-Carlo noise). The soft
- * penumbra is synthesized later by SIGMA's penumbra-sized blur, so here we only PACK the penumbra
- * radius per pixel: penumbra = 0.5 * distanceToOccluder * tan(sunAngularRadius), or FP16_MAX if lit.
+ * Sun-shadow trace for the SIGMA denoiser (NRD input convention).
+ * Stochastic 1spp: one ray per pixel, jittered uniformly inside the sun's angular cone (half-angle =
+ * angularRadius), so partial occlusion in the penumbra shows up as Monte-Carlo binary visibility that
+ * SIGMA's spatial blur + temporal stabilization reconstruct into the true soft shadow. Each occluded
+ * sample also packs a penumbra radius (0.5 * distanceToOccluder * tan(angularRadius)) to drive the blur
+ * kernel size; lit samples carry FP16_MAX.
  * Output R16G16: .r = binary visibility (1 lit / 0 occluded), .g = packed penumbra.
  */
 import common_interop;
@@ -14,6 +16,22 @@ import packing_functions;
 import shader_functions;
 import restir_common;
 import sigma_utils;
+import random_common;
+
+/** Uniformly sample a ray direction inside the sun's angular cone (half-angle = angularRadius) around the mean direction. */
+static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float u1, float u2)
+{
+    float cosThetaMax = cos(angularRadius);
+    float cosTheta = lerp(1.0, cosThetaMax, u1);
+    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
+    float phi = 6.28318530718 * u2;
+
+    float3 w = toLight;
+    float3 up = abs(w.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 t = normalize(cross(up, w));
+    float3 b = cross(w, t);
+    return normalize(sinTheta * cos(phi) * t + sinTheta * sin(phi) * b + cosTheta * w);
+}
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -56,11 +74,16 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
         return;
     }
 
+    uint rng = SeedRng(pixel, pc.frameIndex, 0x515A4Bu);
+    float u1 = HashStep(rng);
+    float u2 = HashStep(rng);
+    float3 rayDir = SampleSunConeDirection(toLight, pc.lightData->directionalLight.angularRadius, u1, u2);
+
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
     RayDesc ray;
     ray.Origin = worldPos;
-    ray.Direction = toLight;
+    ray.Direction = rayDir;
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
 

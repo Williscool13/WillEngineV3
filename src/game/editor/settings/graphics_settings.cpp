@@ -668,9 +668,7 @@ void DrawLightingWindow(Engine::EngineState* state)
             };
             sigmaF("History Weight##sigma", &sigma.historyWeight, sigmaDefaults.historyWeight, 0.0f, 0.95f, "%.2f", "Temporal stabilization strength. Higher = steadier but laggier on moving shadows; lower = snappier but shimmerier. Default 0.8.");
             sigmaF("Max Kernel Pixels##sigma", &sigma.maxKernelPixels, sigmaDefaults.maxKernelPixels, 1.0f, 64.0f, "%.0f", "Cap on the penumbra blur radius (px). Bounds cost on very soft shadows. Default 32.");
-            sigmaF("Blocker Search Pixels##sigma", &sigma.blockerSearchPixels, sigmaDefaults.blockerSearchPixels, 1.0f, 64.0f, "%.0f", "Radius (px) of the PCSS blocker search that estimates penumbra width. Default 32.");
             sigmaF("Penumbra Scale##sigma", &sigma.penumbraScale, sigmaDefaults.penumbraScale, 0.0f, 4.0f, "%.2f", "Artistic multiplier on the estimated penumbra. >1 softer, <1 sharper. Default 1.0.");
-            sigmaF("Normal Weight Power##sigma", &sigma.normalWeightPower, sigmaDefaults.normalWeightPower, 1.0f, 128.0f, "%.0f", "Edge-stopping tightness on surface normal. Higher preserves creases; lower blurs across them. Default 16.");
 
             if (ImGui::Button("Reset SIGMA")) {
                 sigma = Core::SIGMAParams{};

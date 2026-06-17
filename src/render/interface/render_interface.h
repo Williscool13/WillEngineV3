@@ -564,9 +564,7 @@ struct SIGMAParams
     bool enablePostBlur{true};
     float historyWeight{1.0f};
     float maxKernelPixels{32.f};
-    float blockerSearchPixels{32.f};
     float penumbraScale{1.f};
-    float normalWeightPower{16.f};
 };
 
 struct ReSTIRParams

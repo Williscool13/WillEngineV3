@@ -1,7 +1,7 @@
 /*
  * SIGMA shadow denoiser: penumbra-aware spatial filter (1:1 NRD SIGMA_Blur, FIRST_PASS via passIndex).
- * The input is a CLEAN binary shadow (1 lit / 0 occluded) plus a per-pixel penumbra radius; the soft
- * gradient is synthesized here by blurring the binary shadow with a kernel sized to the local penumbra.
+ * The input is a stochastic 1spp binary shadow (1 lit / 0 occluded) plus a per-pixel penumbra radius; the
+ * soft gradient is reconstructed here by blurring the binary shadow with a kernel sized to the local penumbra.
  *   pass 0 (blur):      derive shadow from the trace penumbra (IsLit), estimate penumbra, filter.
  *   pass 1 (post-blur): unpack the sqrt-encoded shadow from pass 0, re-estimate penumbra, filter again.
  * Dense 5x5 keeps small penumbrae crisp (center-tap fallback); sparse 8-tap (g_Special8) covers wide

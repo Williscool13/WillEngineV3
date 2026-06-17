@@ -39,7 +39,7 @@
       "diffPhiLuminance": 2.5,
       "disocclusionThreshold": 0.004999999888241291,
       "enableAntiFirefly": true,
-      "enablePrepass": true,
+      "enablePrepass": false,
       "fastHistoryClampingSigmaScale": 1.0,
       "historyAccelerationAmount": 1.0,
       "historyFixBasePixelStride": 14.0,
