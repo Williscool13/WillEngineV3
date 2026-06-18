@@ -13,6 +13,24 @@ module restir_interop;
 #include <cstdint>
 
 using uint = uint32_t;
+using int32 = int32_t;
+using uint32 = uint32_t;
+
+using float2 = glm::vec2;
+using float3 = glm::vec3;
+using float4 = glm::vec4;
+
+using int2 = glm::ivec2;
+using int3 = glm::ivec3;
+using int4 = glm::ivec4;
+
+using uint2 = glm::uvec2;
+using uint3 = glm::uvec3;
+using uint4 = glm::uvec4;
+
+using float2x2 = glm::mat2;
+using float3x3 = glm::mat3;
+using float4x4 = glm::mat4;
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
 #endif // __SLANG__
@@ -35,6 +53,23 @@ SHADER_PUBLIC struct Reservoir
     SHADER_PUBLIC uint M;
 };
 
+/**
+ * Grid reservoir for ReGIR (RTG2 Ch.23). Unlike the per-pixel Reservoir it does NOT pre-divide into W;
+ * it stores the raw RIS pieces from the fill pass so the shading-side RIS can resample correctly:
+ *   totalWeight = wSum / M_build  (the cell's running reservoir weight)
+ *   targetPdf   = the survivor's cell-center build target (intensity * geom, the EvalCellTarget value)
+ * At shading, sourcePdf = targetPdf / cellAverageWeight (averaged over the cell's slots in a separate pass).
+ * Carrying the per-slot W instead is what inflates variance / fires bright spots, hence this split.
+ * lightIdx == ~0u indicates an empty reservoir.
+ */
+SHADER_PUBLIC struct ReGIRReservoir
+{
+    SHADER_PUBLIC uint sampleOffsetPacked;
+    SHADER_PUBLIC uint lightIdx;
+    SHADER_PUBLIC float totalWeight;
+    SHADER_PUBLIC float targetPdf;
+};
+
 // Per-axis cell counts and cell sizes; the grid need not be a cube.
 SHADER_PUBLIC SHADER_CONST uint REGIR_GRID_DIM_X = 16u;
 SHADER_PUBLIC SHADER_CONST uint REGIR_GRID_DIM_Y = 16u;
@@ -48,10 +83,7 @@ SHADER_PUBLIC SHADER_CONST uint REGIR_FILL_CANDIDATES = 8u;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_X = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Y = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Z = 2.0;
-// World-space offset
-SHADER_PUBLIC SHADER_CONST float REGIR_GRID_OFFSET_X = 0.0;
-SHADER_PUBLIC SHADER_CONST float REGIR_GRID_OFFSET_Y = 0.0;
-SHADER_PUBLIC SHADER_CONST float REGIR_GRID_OFFSET_Z = 0.0;
+// World-space grid-centre offset is a runtime push-constant (ReSTIRParams.regirGridOffset), not a constant here.
 SHADER_PUBLIC SHADER_CONST uint REGIR_HISTORY_LENGTH = 8u;
 
 // Initial-candidate counts for ReSTIR DI Talbot MIS: light (uniform) samples and BRDF-guided samples.

@@ -19,13 +19,13 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
 
     int lightCount = pc.lightData->lightCount;
     if (lightCount <= 0) {
-        pc.gridBuffer[slot] = ReservoirEmpty();
+        pc.gridBuffer[slot] = ReGIRReservoirEmpty();
         return;
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     uint cellIndex = slot / REGIR_RESERVOIRS_PER_CELL;
-    float3 cellCenterWS = ReGIRCellCenter(cellIndex);
+    float3 cellCenterWS = ReGIRCellCenter(cellIndex, pc.gridOffset);
     float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
     // Floor the cell-target inverse-square distance at the cell half-extent² (bounding-sphere radius²) so a light inside/adjacent to the cell can't spike its target to infinity.
     float3 cellHalfExtent = 0.5 * ReGIRCellSize();
@@ -34,7 +34,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
     uint h = (slot * 2654435761u) ^ (pc.frameIndex * 0x9E3779B9u);
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
-    Reservoir r = ReservoirEmpty();
+    ReGIRReservoir r = ReGIRReservoirEmpty();
     ReservoirAccum accum = ReservoirAccumEmpty();
     float winnerPHat = 0.0;
     for (uint i = 0; i < REGIR_FILL_CANDIDATES; i++) {
@@ -56,79 +56,82 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
         // The joint pdf of picking this (light, surface point): P(light) · p(point|light)
         float sourcePdf = LightSamplePdfArea(vs, cellCenterVS, Xi) / float(lightCount);
         float w_i = (sourcePdf > 0.0) ? (target / sourcePdf) : 0.0;
-        if (ReservoirAddSample(accum, r, w_i, uSelect)) {
+        if (ReservoirAddSample(accum, w_i, uSelect)) {
             r.lightIdx = uint(lightIdx);
             r.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
             winnerPHat = target;
         }
     }
 
-    r.M = REGIR_FILL_CANDIDATES;
+    // Store the RIS pieces (totalWeight = wSum/M, targetPdf = winnerPHat) rather than a pre-divided W;
+    // the shading pass forms sourcePdf = targetPdf / cellAverageWeight (RTG2 Ch.23, Section 23.3.2).
+    FinalizeReservoirReGIR(r, accum, winnerPHat, float(REGIR_FILL_CANDIDATES));
 
-    ReservoirFinalise(r, accum, winnerPHat, float(REGIR_FILL_CANDIDATES));
+    // take another look at if this is right
     // From Temporal grid reuse (RTG2 Ch.23)
     //  To ensure that each reservoir’s running count M of the light candidates that it
     //  incorporates does not grow to infinity, we normalize it before storing the
     //  reservoir in the grid. This also enables removing M from the reservoir, as it is
     //  always one at this point
-    r.M = 1;
-    if (pc.wClamp > 0.0) { r.W = min(r.W, pc.wClamp); }
+    //r.M = 1;
+    ReGIRClampW(r, pc.wClamp);
 
     // Temporal grid reuse (RTG2 Ch.23): merge fresh with each prior-frame reservoir, renormalising to M=1 each round so confidence can't accumulate.
     // newest -> oldest. I'm not sure if this is the correct approach (this will positively weight older "good" samples.
-    Reservoir cur = r;
-    // for (uint g = pc.historyCount; g-- > 0; ) {
+    ReGIRReservoir cur = r;
     for (uint g = 0; g < pc.historyCount; g++) {
-        Reservoir hist = ReservoirEmpty();
+        ReGIRReservoir hist = ReGIRReservoirEmpty();
         if (pc.gridHistory[g] != nullptr) {
-            Reservoir c = pc.gridHistory[g][slot];
+            ReGIRReservoir c = pc.gridHistory[g][slot];
             if (c.lightIdx != ~0u && c.lightIdx < uint(lightCount)) { hist = c; }
         }
 
         ReservoirAccum accumM = ReservoirAccumEmpty();
-        Reservoir merged = ReservoirEmpty();
+        ReGIRReservoir merged = ReGIRReservoirEmpty();
         float mergedWinnerPHat = 0.0;
+        // Each stored grid reservoir is normalised to M=1, so the merge counts one candidate per non-empty reservoir.
+        float mTotal = 0.0;
 
         if (cur.lightIdx != ~0u) {
             LightVS vsCur = UnpackLightVS(pc.lightVS[cur.lightIdx]);
-            float3 yCur = DecodeSamplePos(cur, vsCur);
+            float3 yCur = DecodeSamplePos(cur.sampleOffsetPacked, vsCur);
             LightSample sCur = EvalLightSample(vsCur, yCur, cellCenterVS, float3(0.0, 0.0, 0.0), vsCur.range);
-            // w_i = (1/M_light) · p̂(y_i) · W_i
-            // 1 / M_light (omitted, we do it later in ReservoirFinalize)
-            // p̂(y_i) - Light contribution for this cell
             float pCur = EvalCellTarget(sCur, UnpackUnorm4x8(vsCur.packedColor).rgb, vsCur.intensity, cellMinDist2);
-            // for reservoir reuse, we multiply by r.W instead of divide by sourcePdf
-            float wCur = pCur * cur.W * float(cur.M);
-            if (ReservoirAddSample(accumM, merged, wCur, HashStep(h))) {
+            // Reuse multiplies by the reservoir's effective W (totalWeight/targetPdf) instead of dividing by a source pdf.
+            float wCur = pCur * ReGIRReservoirW(cur);
+            if (ReservoirAddSample(accumM, wCur, HashStep(h))) {
                 merged.lightIdx = cur.lightIdx;
                 merged.sampleOffsetPacked = cur.sampleOffsetPacked;
                 mergedWinnerPHat = pCur;
             }
+            mTotal += 1.0;
         }
 
-        uint mTotal = cur.M;
         if (hist.lightIdx != ~0u) {
             LightVS vsH = UnpackLightVS(pc.lightVS[hist.lightIdx]);
-            float3 yH = DecodeSamplePos(hist, vsH);
+            float3 yH = DecodeSamplePos(hist.sampleOffsetPacked, vsH);
             LightSample sH = EvalLightSample(vsH, yH, cellCenterVS, float3(0.0, 0.0, 0.0), vsH.range);
             float pH = EvalCellTarget(sH, UnpackUnorm4x8(vsH.packedColor).rgb, vsH.intensity, cellMinDist2);
-            float wH = pH * hist.W * float(hist.M);
-            if (ReservoirAddSample(accumM, merged, wH, HashStep(h))) {
+            float wH = pH * ReGIRReservoirW(hist);
+            if (ReservoirAddSample(accumM, wH, HashStep(h))) {
                 merged.lightIdx = hist.lightIdx;
                 merged.sampleOffsetPacked = hist.sampleOffsetPacked;
                 mergedWinnerPHat = pH;
             }
-            mTotal += hist.M;
+            mTotal += 1.0;
         }
 
         if (merged.lightIdx != ~0u) {
-            ReservoirFinalise(merged, accumM, mergedWinnerPHat, float(mTotal));
+            // Renormalising to M=1 (M_total folded into totalWeight here) stops confidence from accumulating across frames.
+            FinalizeReservoirReGIR(merged, accumM, mergedWinnerPHat, mTotal);
+
+            // take another look at if this is right
             // Resetting M=1 stops confidence from accumulating across frames. Suggestion from the source above.
-            merged.M = 1u;
+            // merged.M = 1u;
             cur = merged;
         }
     }
 
-    if (pc.wClamp > 0.0) { cur.W = min(cur.W, pc.wClamp); }
+    ReGIRClampW(cur, pc.wClamp);
     pc.gridBuffer[slot] = cur;
 }

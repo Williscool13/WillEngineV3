@@ -100,7 +100,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
     uint regirCell;
-    bool inGrid = ReGIRWorldToCellIndex(worldPos, regirCell);
+    bool inGrid = ReGIRWorldToCellIndex(worldPos, pc.gridOffset, regirCell);
 
     if (lightCount > 0) {
         if (inGrid) {
@@ -108,21 +108,24 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 // Jitter the lookup by up to half a cell per tap so boundary pixels stochastically read neighbouring cells, dithering the hard cell edges into noise the denoiser resolves.
                 float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * ReGIRCellSize();
                 uint cell;
-                if (!ReGIRWorldToCellIndex(worldPos + jitter, cell)) { continue; }
+                if (!ReGIRWorldToCellIndex(worldPos + jitter, pc.gridOffset, cell)) { continue; }
 
                 uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
                 uint slot = cell * REGIR_RESERVOIRS_PER_CELL + slotInCell;
 
                 float uSelect = HashStep(h);
-                Reservoir gr = pc.gridBuffer[slot];
-                if (gr.lightIdx == ~0u || gr.W <= 0.0) { continue; }
+                ReGIRReservoir gr = pc.gridBuffer[slot];
+                float cellAvgWeight = pc.cellAvgWeight[cell];
+                if (gr.lightIdx == ~0u || gr.targetPdf <= 0.0 || cellAvgWeight <= 0.0) { continue; }
                 LightVS vs = UnpackLightVS(pc.lightVS[gr.lightIdx]);
-                float3 Xi = DecodeSamplePos(gr, vs);
+                float3 Xi = DecodeSamplePos(gr.sampleOffsetPacked, vs);
                 LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                 float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
                 float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-                float w_i = p_hat * gr.W;
-                if (ReservoirAddSample(accum_gen, r_gen, w_i, uSelect)) {
+                // RTG2 Ch.23 §23.3.2: sourcePdf = candidate.targetPdf / cellAverageWeight; w_i = p_hat / sourcePdf.
+                float sourcePdf = gr.targetPdf / cellAvgWeight;
+                float w_i = p_hat / sourcePdf;
+                if (ReservoirAddSample(accum_gen, w_i, uSelect)) {
                     r_gen.lightIdx = gr.lightIdx;
                     r_gen.sampleOffsetPacked = gr.sampleOffsetPacked;
                 }
@@ -148,7 +151,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
                 float denom = float(RESTIR_M_LIGHT) * p_light_area + float(RESTIR_M_BRDF) * p_brdf_area;
                 float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
-                if (ReservoirAddSample(accum_gen, r_gen, w_i, uSelect)) {
+                if (ReservoirAddSample(accum_gen, w_i, uSelect)) {
                     r_gen.lightIdx = uint(lightIdx);
                     r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
                 }
@@ -193,7 +196,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
                 float denom = float(RESTIR_M_LIGHT) * p_light_area + float(RESTIR_M_BRDF) * p_brdf_area;
                 float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
-                if (ReservoirAddSample(accum_gen, r_gen, w_i, uSelect) && bestLightIdx >= 0) {
+                if (ReservoirAddSample(accum_gen, w_i, uSelect) && bestLightIdx >= 0) {
                     r_gen.lightIdx = uint(bestLightIdx);
                     r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, bestVS);
                 }
@@ -233,7 +236,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         ReservoirFinalise(r_gen, accum_gen, p_hat_gen, inGrid ? float(r_gen.M) : 1.0);
 
         float w_gen = p_hat_gen * r_gen.W * float(r_gen.M);
-        if (ReservoirAddSample(accum_combined, combined, w_gen, uSelect0)) {
+        if (ReservoirAddSample(accum_combined, w_gen, uSelect0)) {
             combined.lightIdx = r_gen.lightIdx;
             combined.sampleOffsetPacked = r_gen.sampleOffsetPacked;
         }
@@ -249,7 +252,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
         clampedHistoryM = min(history.M, pc.mCap);
         float w_history = p_hat_history * history.W * float(clampedHistoryM);
-        if (ReservoirAddSample(accum_combined, combined, w_history, uSelect1)) {
+        if (ReservoirAddSample(accum_combined, w_history, uSelect1)) {
             combined.lightIdx = history.lightIdx;
             combined.sampleOffsetPacked = history.sampleOffsetPacked;
         }

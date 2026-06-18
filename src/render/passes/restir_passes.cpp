@@ -90,7 +90,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         vkCmdDispatch(cmd, (MAX_LIGHTS + 63) / 64, 1, 1);
     });
 
-    graph.CreateBuffer(SID("regir_grid"), REGIR_CELL_COUNT * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(Reservoir)), true);
+    graph.CreateBuffer(SID("regir_grid"), REGIR_CELL_COUNT * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir)), true);
 
     const uint32_t regirHistoryCount = restirParams.regirHistoryLength < REGIR_HISTORY_LENGTH ? restirParams.regirHistoryLength : REGIR_HISTORY_LENGTH;
 
@@ -119,6 +119,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .lightData = graph.GetBufferAddress(SID("light_data")),
             .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
             .gridBuffer = graph.GetBufferAddress(SID("regir_grid")),
+            .gridOffset = restirParams.regirGridOffset,
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .historyCount = regirHistoryCount,
@@ -140,6 +141,26 @@ void SetupReSTIRPasses(RenderGraph& graph,
         }
     }
 
+    // Per-cell average reservoir weight (RTG2 Ch.23 §23.3.2). The shading RIS divides each grid candidate's build targetPdf by this to form its source pdf.
+    graph.CreateBuffer(SID("regir_cell_avg_weight"), REGIR_CELL_COUNT * static_cast<uint32_t>(sizeof(float)), true);
+
+    RenderPass& regirAvgPass = graph.AddPass(SID("[ReGIR] Cell Average"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    regirAvgPass.ReadBuffer(SID("regir_grid"));
+    regirAvgPass.WriteBuffer(SID("regir_cell_avg_weight"));
+    regirAvgPass.Execute([&, pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_cell_average"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        ReGIRCellAveragePushConstant pc{
+            .gridBuffer = graph.GetBufferAddress(SID("regir_grid")),
+            .cellAvgWeight = graph.GetBufferAddress(SID("regir_cell_avg_weight")),
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        // One workgroup per cell.
+        vkCmdDispatch(cmd, REGIR_CELL_COUNT, 1, 1);
+    });
+
     {
         graph.CreateBuffer(SID("restir_reservoir_temporal"), reservoirBufferSize, true);
 
@@ -158,6 +179,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         combinedPass.ReadBuffer(SID("light_data"));
         combinedPass.ReadBuffer(SID("restir_lights_vs"));
         combinedPass.ReadBuffer(SID("regir_grid"));
+        combinedPass.ReadBuffer(SID("regir_cell_avg_weight"));
         combinedPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         if (bHasHistory) { combinedPass.ReadBuffer(SID("restir_reservoir_history")); }
         combinedPass.ReadSampledImage(targets.gbufferOne);
@@ -182,6 +204,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .gridBuffer = graph.GetBufferAddress(SID("regir_grid")),
+                .cellAvgWeight = graph.GetBufferAddress(SID("regir_cell_avg_weight")),
                 .historyBuffer = bHasHistory ? graph.GetBufferAddress(SID("restir_reservoir_history")) : 0,
                 .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
                 .visibilityBufferIndex = ~0u,
@@ -191,6 +214,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .prevGbufferOneIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0u,
                 .prevDepthIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : ~0u,
                 .renderExtent = {renderExtent[0], renderExtent[1]},
+                .gridOffset = restirParams.regirGridOffset,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .mCap = restirParams.temporalMCap,

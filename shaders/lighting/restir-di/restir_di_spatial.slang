@@ -146,7 +146,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
         // Stream toward the center target. The shared 1/k is applied in finalise.
         float w_neighbor = misNeighbor * p_hat_neighbor_atCenter * neighbor.W;
-        if (ReservoirAddSample(accum, combined, w_neighbor, HashStep(h))) {
+        if (ReservoirAddSample(accum, w_neighbor, HashStep(h))) {
             combined.lightIdx = neighbor.lightIdx;
             combined.sampleOffsetPacked = neighbor.sampleOffsetPacked;
         }
@@ -165,7 +165,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     // Stream the canonical with its accumulated share.
     if (validCenter) {
         float w_center = centerMisAccum * p_hat_center_atCenter * center.W;
-        if (ReservoirAddSample(accum, combined, w_center, HashStep(h))) {
+        if (ReservoirAddSample(accum, w_center, HashStep(h))) {
             combined.lightIdx = center.lightIdx;
             combined.sampleOffsetPacked = center.sampleOffsetPacked;
         }

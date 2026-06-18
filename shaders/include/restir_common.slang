@@ -227,14 +227,13 @@ public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
 
 public int3 ReGIRGridDim() { return int3(int(REGIR_GRID_DIM_X), int(REGIR_GRID_DIM_Y), int(REGIR_GRID_DIM_Z)); }
 public float3 ReGIRCellSize() { return float3(REGIR_CELL_SIZE_X, REGIR_CELL_SIZE_Y, REGIR_CELL_SIZE_Z); }
-public float3 ReGIRGridOffset() { return float3(REGIR_GRID_OFFSET_X, REGIR_GRID_OFFSET_Y, REGIR_GRID_OFFSET_Z); }
 
-public bool ReGIRWorldToCellIndex(float3 worldPos, out uint cellIndex)
+public bool ReGIRWorldToCellIndex(float3 worldPos, float3 gridOffset, out uint cellIndex)
 {
     int3 dim = ReGIRGridDim();
     float3 cellSize = ReGIRCellSize();
     float3 gridHalf = 0.5 * float3(dim) * cellSize;
-    int3 c = int3(floor((worldPos - ReGIRGridOffset() + gridHalf) / cellSize));
+    int3 c = int3(floor((worldPos - gridOffset + gridHalf) / cellSize));
     if (any(c < int3(0, 0, 0)) || any(c >= dim))
     {
         cellIndex = ~0u;
@@ -244,14 +243,14 @@ public bool ReGIRWorldToCellIndex(float3 worldPos, out uint cellIndex)
     return true;
 }
 
-public float3 ReGIRCellCenter(uint cellIndex)
+public float3 ReGIRCellCenter(uint cellIndex, float3 gridOffset)
 {
     uint cx = cellIndex % REGIR_GRID_DIM_X;
     uint cy = (cellIndex / REGIR_GRID_DIM_X) % REGIR_GRID_DIM_Y;
     uint cz = cellIndex / (REGIR_GRID_DIM_X * REGIR_GRID_DIM_Y);
     float3 cellSize = ReGIRCellSize();
     float3 gridHalf = 0.5 * float3(ReGIRGridDim()) * cellSize;
-    return (float3(float(cx), float(cy), float(cz)) + 0.5) * cellSize - gridHalf + ReGIRGridOffset();
+    return (float3(float(cx), float(cy), float(cz)) + 0.5) * cellSize - gridHalf + gridOffset;
 }
 
 /** ReGIR cell-fill target. minDist2 floors the inverse-square distance term (use the cell half-extent²) so a light inside or adjacent to the cell can't produce an infinite cell-center target and a resulting bright spot. */
@@ -300,6 +299,43 @@ public Reservoir ReservoirEmpty()
     return r;
 }
 
+public ReGIRReservoir ReGIRReservoirEmpty()
+{
+    ReGIRReservoir r;
+    r.sampleOffsetPacked = 0u;
+    r.lightIdx = ~0u;
+    r.totalWeight = 0.0;
+    r.targetPdf = 0.0;
+    return r;
+}
+
+/**
+ * Finalises a ReGIR grid reservoir into the (totalWeight, targetPdf) form (no pre-divided W).
+ * totalWeight = wSum / M_total; targetPdf = the survivor's build target. The shading-side RIS
+ * later forms sourcePdf = targetPdf / cellAverageWeight, so W is never baked per slot.
+ */
+public void FinalizeReservoirReGIR(inout ReGIRReservoir r, ReservoirAccum accum, float targetPdf, float M_total)
+{
+    r.targetPdf = targetPdf;
+    if (targetPdf <= 0.0 || M_total <= 0.0) {
+        r.totalWeight = 0.0;
+    } else {
+        r.totalWeight = accum.wSum / M_total;
+    }
+}
+
+/** Effective unbiased weight W = totalWeight / targetPdf of a grid reservoir; used when merging history grids. */
+public float ReGIRReservoirW(ReGIRReservoir r)
+{
+    return (r.targetPdf > 0.0) ? (r.totalWeight / r.targetPdf) : 0.0;
+}
+
+/** Clamps the effective weight (totalWeight/targetPdf) to wClamp by capping totalWeight; wClamp <= 0 disables. */
+public void ReGIRClampW(inout ReGIRReservoir r, float wClamp)
+{
+    if (wClamp > 0.0 && r.targetPdf > 0.0) { r.totalWeight = min(r.totalWeight, wClamp * r.targetPdf); }
+}
+
 /**
  * Encodes a view-space sample position into a uint. For an area light, stores snorm16x2 offsets
  * in the right/up basis; for a sphere, stores the oct16-packed outward unit direction from center.
@@ -321,21 +357,26 @@ public uint EncodeSampleOffset(float3 samplePos, LightVS vs)
 }
 
 /**
- * Reconstructs the view-space sample position from a reservoir's packed offset.
+ * Reconstructs the view-space sample position from a packed sample offset.
  */
-public float3 DecodeSamplePos(Reservoir r, LightVS vs)
+public float3 DecodeSamplePos(uint sampleOffsetPacked, LightVS vs)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
     {
-        float3 localDir = UnpackNormalOct16(r.sampleOffsetPacked);
+        float3 localDir = UnpackNormalOct16(sampleOffsetPacked);
         float3 dir = localDir.x * vs.right + localDir.y * vs.up + localDir.z * vs.normal;
         return vs.center + vs.halfWidth * dir;
     }
-    int ix = int(r.sampleOffsetPacked << 16) >> 16;
-    int iy = int(r.sampleOffsetPacked) >> 16;
+    int ix = int(sampleOffsetPacked << 16) >> 16;
+    int iy = int(sampleOffsetPacked) >> 16;
     float u = max(float(ix) / 32767.0, -1.0);
     float v = max(float(iy) / 32767.0, -1.0);
     return vs.center + u * vs.halfWidth * vs.right + v * vs.halfHeight * vs.up;
+}
+
+public float3 DecodeSamplePos(Reservoir r, LightVS vs)
+{
+    return DecodeSamplePos(r.sampleOffsetPacked, vs);
 }
 
 /**
@@ -359,23 +400,19 @@ public ReservoirAccum ReservoirAccumEmpty()
 }
 
 /**
- * Streaming WRS update for a single new candidate.
+ * Streaming WRS update for a single new candidate. Returns whether the candidate was selected; the
+ * caller writes the survivor's fields into its reservoir on a true return.
  *
  * @param accum Running accumulator.
- * @param r Reservoir to update on selection.
  * @param candidateWeight w_i = targetPdf(x) / sourcePdf(x).
  * @param u Uniform random float in [0, 1).
  * @return True if this candidate was selected.
  */
-public bool ReservoirAddSample(inout ReservoirAccum accum, inout Reservoir r, float candidateWeight, float u)
+public bool ReservoirAddSample(inout ReservoirAccum accum, float candidateWeight, float u)
 {
     accum.wSum += candidateWeight;
     accum.M += 1;
-    if (u < candidateWeight / accum.wSum)
-    {
-        return true;
-    }
-    return false;
+    return u < candidateWeight / accum.wSum;
 }
 
 /**
