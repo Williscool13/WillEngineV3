@@ -33,7 +33,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
 
     Reservoir r = ReservoirEmpty();
     ReservoirAccum accum = ReservoirAccumEmpty();
-
+    float winnerPHat = 0.0;
     for (uint i = 0; i < REGIR_FILL_CANDIDATES; i++) {
         float uLight = HashStep(h);
         float uU = HashStep(h);
@@ -46,27 +46,32 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
         LightSample s = EvalLightSample(vs, Xi, cellCenterVS, float3(0.0, 0.0, 0.0), vs.range);
         float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
 
+        // w_i = (1/M_light) · p̂(y_i) · (1 / p_light_area)
+        // 1 / M_light (omitted, we do it later in ReservoirFinalize)
+        // p̂(y_i) - Light contribution for this cell
         float target = EvalCellTarget(s, lightColor, vs.intensity);
+        // The joint pdf of picking this (light, surface point): P(light) · p(point|light)
         float sourcePdf = LightSamplePdfArea(vs, cellCenterVS, Xi) / float(lightCount);
         float w_i = (sourcePdf > 0.0) ? (target / sourcePdf) : 0.0;
         if (ReservoirAddSample(accum, r, w_i, uSelect)) {
             r.lightIdx = uint(lightIdx);
             r.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
+            winnerPHat = target;
         }
     }
 
     r.M = REGIR_FILL_CANDIDATES;
-    float targetFresh = 0.0;
-    if (r.lightIdx != ~0u) {
-        LightVS vs = UnpackLightVS(pc.lightVS[r.lightIdx]);
-        float3 yStar = DecodeSamplePos(r, vs);
-        LightSample s = EvalLightSample(vs, yStar, cellCenterVS, float3(0.0, 0.0, 0.0), vs.range);
-        float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-        targetFresh = EvalCellTarget(s, lightColor, vs.intensity);
-        ReservoirFinalise(r, accum, targetFresh, float(REGIR_FILL_CANDIDATES));
-    }
+
+    ReservoirFinalise(r, accum, winnerPHat, float(REGIR_FILL_CANDIDATES));
+    // From Temporal grid reuse (RTG2 Ch.23)
+    //  To ensure that each reservoir’s running count M of the light candidates that it
+    //  incorporates does not grow to infinity, we normalize it before storing the
+    //  reservoir in the grid. This also enables removing M from the reservoir, as it is
+    //  always one at this point
+    r.M = 1;
 
     // Temporal grid reuse (RTG2 Ch.23): merge fresh with each prior-frame reservoir, renormalising to M=1 each round so confidence can't accumulate.
+    // newest -> oldest. I'm not sure if this is the correct approach (this will positively weight older "good" samples.
     Reservoir cur = r;
     for (uint g = 0; g < pc.historyCount; g++) {
         Reservoir hist = ReservoirEmpty();
@@ -77,16 +82,22 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
 
         ReservoirAccum accumM = ReservoirAccumEmpty();
         Reservoir merged = ReservoirEmpty();
+        float mergedWinnerPHat = 0.0;
 
         if (cur.lightIdx != ~0u) {
             LightVS vsCur = UnpackLightVS(pc.lightVS[cur.lightIdx]);
             float3 yCur = DecodeSamplePos(cur, vsCur);
             LightSample sCur = EvalLightSample(vsCur, yCur, cellCenterVS, float3(0.0, 0.0, 0.0), vsCur.range);
+            // w_i = (1/M_light) · p̂(y_i) · W_i
+            // 1 / M_light (omitted, we do it later in ReservoirFinalize)
+            // p̂(y_i) - Light contribution for this cell
             float pCur = EvalCellTarget(sCur, UnpackUnorm4x8(vsCur.packedColor).rgb, vsCur.intensity);
+            // for reservoir reuse, we multiply by r.W instead of divide by sourcePdf
             float wCur = pCur * cur.W * float(cur.M);
             if (ReservoirAddSample(accumM, merged, wCur, HashStep(h))) {
                 merged.lightIdx = cur.lightIdx;
                 merged.sampleOffsetPacked = cur.sampleOffsetPacked;
+                mergedWinnerPHat = pCur;
             }
         }
 
@@ -100,20 +111,17 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
             if (ReservoirAddSample(accumM, merged, wH, HashStep(h))) {
                 merged.lightIdx = hist.lightIdx;
                 merged.sampleOffsetPacked = hist.sampleOffsetPacked;
+                mergedWinnerPHat = pH;
             }
             mTotal += hist.M;
         }
 
         if (merged.lightIdx != ~0u) {
-            LightVS vsW = UnpackLightVS(pc.lightVS[merged.lightIdx]);
-            float3 yW = DecodeSamplePos(merged, vsW);
-            LightSample sW = EvalLightSample(vsW, yW, cellCenterVS, float3(0.0, 0.0, 0.0), vsW.range);
-            float pW = EvalCellTarget(sW, UnpackUnorm4x8(vsW.packedColor).rgb, vsW.intensity);
-            ReservoirFinalise(merged, accumM, pW, float(mTotal));
+            ReservoirFinalise(merged, accumM, mergedWinnerPHat, float(mTotal));
+            // Resetting M=1 stops confidence from accumulating across frames. Suggestion from the source above.
+            merged.M = 1u;
+            cur = merged;
         }
-        // W already carries the 1/mTotal normalisation; resetting M=1 stops confidence from accumulating across frames.
-        merged.M = 1u;
-        cur = merged;
     }
 
     pc.gridBuffer[slot] = cur;
