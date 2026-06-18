@@ -99,7 +99,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
         float cosLight = (al.type == LIGHT_TYPE_SPHERE)
             ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
             : max(dot(-al.normal.xyz, L), 0.0);
-        float atten = LightDistanceFalloff(lightDist, al.range);
+        float atten = LightRangeCull(lightDist, al.range);
 
         if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
             RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];

@@ -138,7 +138,7 @@ public LightSample EvalLightSample(LightVS vs, float3 samplePos, float3 shadingP
         s.cosLight = max(dot(-vs.normal, s.L), 0.0);
     }
 
-    s.attenuation = LightDistanceFalloff(s.dist, range);
+    s.attenuation = LightRangeCull(s.dist, range);
     return s;
 }
 

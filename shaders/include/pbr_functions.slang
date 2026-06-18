@@ -19,6 +19,20 @@ public float LightDistanceFalloff(float dist, float range)
     return a * a;
 }
 
+/** Windowed range cull only (no inverse-square); for paths that already apply LightGeometryTerm's 1/d^2. */
+public float LightRangeCull(float dist, float range)
+{
+    if (LIGHT_INVERSE_SQUARE) {
+        float distSq = dist * dist;
+        float rangeInvSq = 1.0 / max(range * range, 1e-8);
+        float falloff = saturate(1.0 - distSq * rangeInvSq);
+        return falloff * falloff;
+    }
+
+    float a = 1.0 - smoothstep(0.0, range, dist);
+    return a * a;
+}
+
 public float LightGeometryTerm(float cosLight, float dist)
 {
     if (LIGHT_INVERSE_SQUARE)

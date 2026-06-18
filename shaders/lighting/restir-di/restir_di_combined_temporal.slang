@@ -105,98 +105,101 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     bool inGrid = ReGIRWorldToCellIndex(worldPos, regirCell);
 
     if (lightCount > 0) {
-        if (inGrid) {
+    if (inGrid) {
+        for (int i = 0; i < M_light; i++) {
+            // Jitter the lookup by up to half a cell per tap so boundary pixels stochastically read neighbouring cells, dithering the hard cell edges into noise the denoiser resolves.
+            float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * REGIR_CELL_SIZE;
+            uint cell;
+            if (!ReGIRWorldToCellIndex(worldPos + jitter, cell)) { continue; }
+
+            uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
+            uint slot = cell * REGIR_RESERVOIRS_PER_CELL + slotInCell;
+
+            float uSelect = HashStep(h);
+            Reservoir gr = pc.gridBuffer[slot];
+            if (gr.lightIdx == ~0u || gr.W <= 0.0) { continue; }
+            LightVS vs = UnpackLightVS(pc.lightVS[gr.lightIdx]);
+            float3 Xi = DecodeSamplePos(gr, vs);
+            LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+            float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+            float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
+            float w_i = p_hat * gr.W;
+            if (ReservoirAddSample(accum_gen, r_gen, w_i, uSelect)) {
+                r_gen.lightIdx = gr.lightIdx;
+                r_gen.sampleOffsetPacked = gr.sampleOffsetPacked;
+            }
+        }
+    }
+        else {
             for (int i = 0; i < M_light; i++) {
-                // Jitter the lookup by up to half a cell per tap so boundary pixels stochastically read neighbouring cells, dithering the hard cell edges into noise the denoiser resolves.
-                float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * REGIR_CELL_SIZE;
-                uint cell;
-                if (!ReGIRWorldToCellIndex(worldPos + jitter, cell)) { continue; }
+                float uLight = HashStep(h);
+                float uU = HashStep(h);
+                float uV = HashStep(h);
                 float uSelect = HashStep(h);
-                uint slot = cell * REGIR_RESERVOIRS_PER_CELL + min(i, REGIR_RESERVOIRS_PER_CELL - 1u);
-                Reservoir gr = pc.gridBuffer[slot];
-                if (gr.lightIdx == ~0u || gr.W <= 0.0) { continue; }
-                LightVS vs = UnpackLightVS(pc.lightVS[gr.lightIdx]);
-                float3 Xi = DecodeSamplePos(gr, vs);
+
+                int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
+                LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
+                float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
                 LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+
                 float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-                float w_i = p_hat * gr.W;
+                float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
+
+                float p_light_area = LightSamplePdfArea(vs, viewPosition, Xi) / float(lightCount);
+                float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
+                float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                float denom = float(M_light) * p_light_area + float(M_brdf) * p_brdf_area;
+                float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
                 if (ReservoirAddSample(accum_gen, r_gen, w_i, uSelect)) {
-                    r_gen.lightIdx = gr.lightIdx;
-                    r_gen.sampleOffsetPacked = gr.sampleOffsetPacked;
+                    r_gen.lightIdx = uint(lightIdx);
+                    r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
                 }
             }
-        }
-        else {
-        for (int i = 0; i < M_light; i++) {
-            float uLight = HashStep(h);
-            float uU = HashStep(h);
-            float uV = HashStep(h);
-            float uSelect = HashStep(h);
 
-            int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
-            LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
-            float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
-            LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+            for (int i = 0; i < M_brdf; i++) {
+                float uXi0 = HashStep(h);
+                float uXi1 = HashStep(h);
+                float uSelect = HashStep(h);
 
-            float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-            float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
+                float p_brdf_sample;
+                float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, p_brdf_sample);
 
-            float p_light_area = LightSamplePdfArea(vs, viewPosition, Xi) / float(lightCount);
-            float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
-            float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
-            float denom = float(M_light) * p_light_area + float(M_brdf) * p_brdf_area;
-            float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
-            if (ReservoirAddSample(accum_gen, r_gen, w_i, uSelect)) {
-                r_gen.lightIdx = uint(lightIdx);
-                r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
-            }
-        }
+                float p_hat_Xi = 0.0;
+                int bestLightIdx = -1;
+                float3 Xi = float3(0.0);
+                float p_light_area = 0.0;
+                float p_brdf_area = 0.0;
+                LightVS bestVS = (LightVS)0;
 
-        for (int i = 0; i < M_brdf; i++) {
-            float uXi0 = HashStep(h);
-            float uXi1 = HashStep(h);
-            float uSelect = HashStep(h);
+                if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
+                    float bestT = 1e30;
+                    for (int j = 0; j < lightCount; j++) {
+                        LightVS vs = UnpackLightVS(pc.lightVS[j]);
+                        float t;
+                        if (RayIntersectLight(vs, viewPosition, brdfL, t) && t < bestT) {
+                            bestT = t;
+                            bestLightIdx = j;
+                            bestVS = vs;
+                        }
+                    }
 
-            float p_brdf_sample;
-            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, p_brdf_sample);
-
-            float p_hat_Xi = 0.0;
-            int bestLightIdx = -1;
-            float3 Xi = float3(0.0);
-            float p_light_area = 0.0;
-            float p_brdf_area = 0.0;
-            LightVS bestVS = (LightVS)0;
-
-            if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
-                float bestT = 1e30;
-                for (int j = 0; j < lightCount; j++) {
-                    LightVS vs = UnpackLightVS(pc.lightVS[j]);
-                    float t;
-                    if (RayIntersectLight(vs, viewPosition, brdfL, t) && t < bestT) {
-                        bestT = t;
-                        bestLightIdx = j;
-                        bestVS = vs;
+                    if (bestLightIdx >= 0) {
+                        Xi = viewPosition + brdfL * bestT;
+                        LightSample s = EvalLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
+                        p_light_area = LightSamplePdfArea(bestVS, viewPosition, Xi) / float(lightCount);
+                        p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                        float3 brdfLightColor = UnpackUnorm4x8(bestVS.packedColor).rgb;
+                        p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, bestVS.intensity);
                     }
                 }
 
-                if (bestLightIdx >= 0) {
-                    Xi = viewPosition + brdfL * bestT;
-                    LightSample s = EvalLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
-                    p_light_area = LightSamplePdfArea(bestVS, viewPosition, Xi) / float(lightCount);
-                    p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
-                    float3 brdfLightColor = UnpackUnorm4x8(bestVS.packedColor).rgb;
-                    p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, bestVS.intensity);
+                float denom = float(M_light) * p_light_area + float(M_brdf) * p_brdf_area;
+                float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
+                if (ReservoirAddSample(accum_gen, r_gen, w_i, uSelect) && bestLightIdx >= 0) {
+                    r_gen.lightIdx = uint(bestLightIdx);
+                    r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, bestVS);
                 }
             }
-
-            float denom = float(M_light) * p_light_area + float(M_brdf) * p_brdf_area;
-            float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
-            if (ReservoirAddSample(accum_gen, r_gen, w_i, uSelect) && bestLightIdx >= 0) {
-                r_gen.lightIdx = uint(bestLightIdx);
-                r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, bestVS);
-            }
-        }
         }
         r_gen.M = inGrid ? uint(accum_gen.M) : uint(M);
     }
