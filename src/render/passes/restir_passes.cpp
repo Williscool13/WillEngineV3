@@ -122,6 +122,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .historyCount = regirHistoryCount,
+            .wClamp = restirParams.regirWClamp,
         };
         for (uint32_t g = 0; g < regirHistoryCount; g++) {
             pc.gridHistory[g] = bHasHistory[g] ? graph.GetBufferAddress(historyNames[g]) : 0;

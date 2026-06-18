@@ -102,6 +102,7 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"spatialNeighbors", p.spatialNeighbors},
         {"spatialMCap", p.spatialMCap},
         {"temporalMCap", p.temporalMCap},
+        {"regirWClamp", p.regirWClamp},
         {"confidenceStrength", p.confidenceStrength},
         {"denoiserMode", static_cast<int32_t>(p.denoiserMode)},
         {"remodulateOutput", static_cast<int32_t>(p.remodulateOutput)},
@@ -128,6 +129,7 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.spatialNeighbors = getUint("spatialNeighbors", p.spatialNeighbors);
     p.spatialMCap = getUint("spatialMCap", p.spatialMCap);
     p.temporalMCap = getUint("temporalMCap", p.temporalMCap);
+    p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.confidenceStrength = r.contains("confidenceStrength") && r["confidenceStrength"].is_number() ? r["confidenceStrength"].get<float>() : p.confidenceStrength;
     p.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(getInt("denoiserMode", static_cast<int32_t>(p.denoiserMode)));
     p.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(getInt("remodulateOutput", static_cast<int32_t>(p.remodulateOutput)));

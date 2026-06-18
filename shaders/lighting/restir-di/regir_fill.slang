@@ -27,6 +27,9 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
     uint cellIndex = slot / REGIR_RESERVOIRS_PER_CELL;
     float3 cellCenterWS = ReGIRCellCenter(cellIndex);
     float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
+    // Floor the cell-target inverse-square distance at the cell half-extent² (bounding-sphere radius²) so a light inside/adjacent to the cell can't spike its target to infinity.
+    float3 cellHalfExtent = 0.5 * ReGIRCellSize();
+    float cellMinDist2 = dot(cellHalfExtent, cellHalfExtent);
 
     uint h = (slot * 2654435761u) ^ (pc.frameIndex * 0x9E3779B9u);
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
@@ -49,7 +52,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
         // w_i = (1/M_light) · p̂(y_i) · (1 / p_light_area)
         // 1 / M_light (omitted, we do it later in ReservoirFinalize)
         // p̂(y_i) - Light contribution for this cell
-        float target = EvalCellTarget(s, lightColor, vs.intensity);
+        float target = EvalCellTarget(s, lightColor, vs.intensity, cellMinDist2);
         // The joint pdf of picking this (light, surface point): P(light) · p(point|light)
         float sourcePdf = LightSamplePdfArea(vs, cellCenterVS, Xi) / float(lightCount);
         float w_i = (sourcePdf > 0.0) ? (target / sourcePdf) : 0.0;
@@ -69,10 +72,12 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
     //  reservoir in the grid. This also enables removing M from the reservoir, as it is
     //  always one at this point
     r.M = 1;
+    if (pc.wClamp > 0.0) { r.W = min(r.W, pc.wClamp); }
 
     // Temporal grid reuse (RTG2 Ch.23): merge fresh with each prior-frame reservoir, renormalising to M=1 each round so confidence can't accumulate.
     // newest -> oldest. I'm not sure if this is the correct approach (this will positively weight older "good" samples.
     Reservoir cur = r;
+    // for (uint g = pc.historyCount; g-- > 0; ) {
     for (uint g = 0; g < pc.historyCount; g++) {
         Reservoir hist = ReservoirEmpty();
         if (pc.gridHistory[g] != nullptr) {
@@ -91,7 +96,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
             // w_i = (1/M_light) · p̂(y_i) · W_i
             // 1 / M_light (omitted, we do it later in ReservoirFinalize)
             // p̂(y_i) - Light contribution for this cell
-            float pCur = EvalCellTarget(sCur, UnpackUnorm4x8(vsCur.packedColor).rgb, vsCur.intensity);
+            float pCur = EvalCellTarget(sCur, UnpackUnorm4x8(vsCur.packedColor).rgb, vsCur.intensity, cellMinDist2);
             // for reservoir reuse, we multiply by r.W instead of divide by sourcePdf
             float wCur = pCur * cur.W * float(cur.M);
             if (ReservoirAddSample(accumM, merged, wCur, HashStep(h))) {
@@ -106,7 +111,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
             LightVS vsH = UnpackLightVS(pc.lightVS[hist.lightIdx]);
             float3 yH = DecodeSamplePos(hist, vsH);
             LightSample sH = EvalLightSample(vsH, yH, cellCenterVS, float3(0.0, 0.0, 0.0), vsH.range);
-            float pH = EvalCellTarget(sH, UnpackUnorm4x8(vsH.packedColor).rgb, vsH.intensity);
+            float pH = EvalCellTarget(sH, UnpackUnorm4x8(vsH.packedColor).rgb, vsH.intensity, cellMinDist2);
             float wH = pH * hist.W * float(hist.M);
             if (ReservoirAddSample(accumM, merged, wH, HashStep(h))) {
                 merged.lightIdx = hist.lightIdx;
@@ -124,5 +129,6 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
         }
     }
 
+    if (pc.wClamp > 0.0) { cur.W = min(cur.W, pc.wClamp); }
     pc.gridBuffer[slot] = cur;
 }

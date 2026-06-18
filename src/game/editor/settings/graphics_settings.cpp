@@ -497,6 +497,9 @@ void DrawLightingWindow(Engine::EngineState* state)
                 restir.regirHistoryLength = static_cast<uint32_t>(regirHistory);
                 changed = true;
             }
+            if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
+                changed = true;
+            }
             if (ImGui::Checkbox("Adaptive Spatial", &restir.bAdaptiveSpatial)) {
                 changed = true;
             }

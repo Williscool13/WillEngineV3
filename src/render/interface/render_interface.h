@@ -581,6 +581,7 @@ struct ReSTIRParams
     uint32_t spatialMCap{500};
     uint32_t temporalMCap{20u * 17u};
     uint32_t regirHistoryLength{8};
+    float regirWClamp{0.0f};
 
     // 0 = di
     float confidenceStrength{0.75f};

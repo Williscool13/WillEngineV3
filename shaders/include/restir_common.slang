@@ -225,34 +225,41 @@ public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
     return 1.0 / vs.area;
 }
 
+public int3 ReGIRGridDim() { return int3(int(REGIR_GRID_DIM_X), int(REGIR_GRID_DIM_Y), int(REGIR_GRID_DIM_Z)); }
+public float3 ReGIRCellSize() { return float3(REGIR_CELL_SIZE_X, REGIR_CELL_SIZE_Y, REGIR_CELL_SIZE_Z); }
+public float3 ReGIRGridOffset() { return float3(REGIR_GRID_OFFSET_X, REGIR_GRID_OFFSET_Y, REGIR_GRID_OFFSET_Z); }
+
 public bool ReGIRWorldToCellIndex(float3 worldPos, out uint cellIndex)
 {
-    float gridHalf = 0.5 * float(REGIR_GRID_DIM) * REGIR_CELL_SIZE;
-    int3 c = int3(floor((worldPos + gridHalf) / REGIR_CELL_SIZE));
-    int dim = int(REGIR_GRID_DIM);
-    if (any(c < int3(0, 0, 0)) || any(c >= int3(dim, dim, dim)))
+    int3 dim = ReGIRGridDim();
+    float3 cellSize = ReGIRCellSize();
+    float3 gridHalf = 0.5 * float3(dim) * cellSize;
+    int3 c = int3(floor((worldPos - ReGIRGridOffset() + gridHalf) / cellSize));
+    if (any(c < int3(0, 0, 0)) || any(c >= dim))
     {
         cellIndex = ~0u;
         return false;
     }
-    cellIndex = (uint(c.z) * REGIR_GRID_DIM + uint(c.y)) * REGIR_GRID_DIM + uint(c.x);
+    cellIndex = (uint(c.z) * REGIR_GRID_DIM_Y + uint(c.y)) * REGIR_GRID_DIM_X + uint(c.x);
     return true;
 }
 
 public float3 ReGIRCellCenter(uint cellIndex)
 {
-    uint cx = cellIndex % REGIR_GRID_DIM;
-    uint cy = (cellIndex / REGIR_GRID_DIM) % REGIR_GRID_DIM;
-    uint cz = cellIndex / (REGIR_GRID_DIM * REGIR_GRID_DIM);
-    float gridHalf = 0.5 * float(REGIR_GRID_DIM) * REGIR_CELL_SIZE;
-    return (float3(float(cx), float(cy), float(cz)) + 0.5) * REGIR_CELL_SIZE - gridHalf;
+    uint cx = cellIndex % REGIR_GRID_DIM_X;
+    uint cy = (cellIndex / REGIR_GRID_DIM_X) % REGIR_GRID_DIM_Y;
+    uint cz = cellIndex / (REGIR_GRID_DIM_X * REGIR_GRID_DIM_Y);
+    float3 cellSize = ReGIRCellSize();
+    float3 gridHalf = 0.5 * float3(ReGIRGridDim()) * cellSize;
+    return (float3(float(cx), float(cy), float(cz)) + 0.5) * cellSize - gridHalf + ReGIRGridOffset();
 }
 
-public float EvalCellTarget(LightSample s, float3 lightColor, float lightIntensity)
+/** ReGIR cell-fill target. minDist2 floors the inverse-square distance term (use the cell half-extent²) so a light inside or adjacent to the cell can't produce an infinite cell-center target and a resulting bright spot. */
+public float EvalCellTarget(LightSample s, float3 lightColor, float lightIntensity, float minDist2)
 {
     if (s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
     const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
-    return LightGeometryTerm(s) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
+    return LightGeometryTerm(s.cosLight, s.dist, minDist2) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
 }
 
 // Half-res pixel -> full-res pixel via the precomputed quad-selection texture (sel in [0,3]). Identity at full res.

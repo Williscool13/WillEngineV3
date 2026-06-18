@@ -378,6 +378,7 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t historyCount;
+    SHADER_PUBLIC float wClamp;
 };
 
 SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
