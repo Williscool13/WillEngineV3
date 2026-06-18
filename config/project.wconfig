@@ -101,6 +101,12 @@
     "confidenceStrength": 0.0,
     "denoiserMode": 3,
     "iblIntensity": 0.0,
+    "regirGridOffset": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "regirWClamp": 0.0,
     "relax": {
       "atrousIterations": 4,
       "denoisingRange": 1000.0,

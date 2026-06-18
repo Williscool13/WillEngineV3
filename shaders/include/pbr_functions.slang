@@ -42,16 +42,6 @@ public float LightGeometryTerm(float cosLight, float dist)
     return cosLight;
 }
 
-/** Geometry term with a caller-supplied minimum distance-squared floor. ReGIR cell fill uses the cell half-extent² so a light inside or adjacent to a cell can't drive 1/d² (and thus the cell-center target) to infinity. */
-public float LightGeometryTerm(float cosLight, float dist, float minDist2)
-{
-    if (LIGHT_INVERSE_SQUARE)
-    {
-        return cosLight / max(dist * dist, minDist2);
-    }
-    return cosLight;
-}
-
 // ==================== Normal Distribution Functions (D) ====================
 
 public float D_GGX(float3 N, float3 H, float roughness) {

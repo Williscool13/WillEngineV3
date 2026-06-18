@@ -27,9 +27,6 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
     uint cellIndex = slot / REGIR_RESERVOIRS_PER_CELL;
     float3 cellCenterWS = ReGIRCellCenter(cellIndex, pc.gridOffset);
     float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
-    // Floor the cell-target inverse-square distance at the cell half-extent² (bounding-sphere radius²) so a light inside/adjacent to the cell can't spike its target to infinity.
-    float3 cellHalfExtent = 0.5 * ReGIRCellSize();
-    float cellMinDist2 = dot(cellHalfExtent, cellHalfExtent);
 
     uint h = (slot * 2654435761u) ^ (pc.frameIndex * 0x9E3779B9u);
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
@@ -45,15 +42,16 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
 
         int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
         LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
+        // Cone (solid-angle) sampling for spheres, uniform area for rects; anchored at the cell center. Pair with LightSamplePdfArea.
         float3 Xi = SampleLightSurface(vs, cellCenterVS, uU, uV);
         LightSample s = EvalLightSample(vs, Xi, cellCenterVS, float3(0.0, 0.0, 0.0), vs.range);
         float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
 
         // w_i = (1/M_light) · p̂(y_i) · (1 / p_light_area)
         // 1 / M_light (omitted, we do it later in ReservoirFinalize)
-        // p̂(y_i) - Light contribution for this cell
-        float target = EvalCellTarget(s, lightColor, vs.intensity, cellMinDist2);
-        // The joint pdf of picking this (light, surface point): P(light) · p(point|light)
+        // p̂(y_i): light contribution at the cell center.
+        float target = EvalCellTarget(s, lightColor, vs.intensity);
+        // Joint source pdf of picking this (light, surface point): P(light) · p(point | light).
         float sourcePdf = LightSamplePdfArea(vs, cellCenterVS, Xi) / float(lightCount);
         float w_i = (sourcePdf > 0.0) ? (target / sourcePdf) : 0.0;
         if (ReservoirAddSample(accum, w_i, uSelect)) {
@@ -66,19 +64,12 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
     // Store the RIS pieces (totalWeight = wSum/M, targetPdf = winnerPHat) rather than a pre-divided W;
     // the shading pass forms sourcePdf = targetPdf / cellAverageWeight (RTG2 Ch.23, Section 23.3.2).
     FinalizeReservoirReGIR(r, accum, winnerPHat, float(REGIR_FILL_CANDIDATES));
-
-    // take another look at if this is right
-    // From Temporal grid reuse (RTG2 Ch.23)
-    //  To ensure that each reservoir’s running count M of the light candidates that it
-    //  incorporates does not grow to infinity, we normalize it before storing the
-    //  reservoir in the grid. This also enables removing M from the reservoir, as it is
-    //  always one at this point
-    //r.M = 1;
     ReGIRClampW(r, pc.wClamp);
 
     // Temporal grid reuse (RTG2 Ch.23): merge fresh with each prior-frame reservoir, renormalising to M=1 each round so confidence can't accumulate.
     // newest -> oldest. I'm not sure if this is the correct approach (this will positively weight older "good" samples.
     ReGIRReservoir cur = r;
+    //for (uint g = pc.historyCount; g-- > 0; ) {
     for (uint g = 0; g < pc.historyCount; g++) {
         ReGIRReservoir hist = ReGIRReservoirEmpty();
         if (pc.gridHistory[g] != nullptr) {
@@ -96,7 +87,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
             LightVS vsCur = UnpackLightVS(pc.lightVS[cur.lightIdx]);
             float3 yCur = DecodeSamplePos(cur.sampleOffsetPacked, vsCur);
             LightSample sCur = EvalLightSample(vsCur, yCur, cellCenterVS, float3(0.0, 0.0, 0.0), vsCur.range);
-            float pCur = EvalCellTarget(sCur, UnpackUnorm4x8(vsCur.packedColor).rgb, vsCur.intensity, cellMinDist2);
+            float pCur = EvalCellTarget(sCur, UnpackUnorm4x8(vsCur.packedColor).rgb, vsCur.intensity);
             // Reuse multiplies by the reservoir's effective W (totalWeight/targetPdf) instead of dividing by a source pdf.
             float wCur = pCur * ReGIRReservoirW(cur);
             if (ReservoirAddSample(accumM, wCur, HashStep(h))) {
@@ -111,7 +102,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
             LightVS vsH = UnpackLightVS(pc.lightVS[hist.lightIdx]);
             float3 yH = DecodeSamplePos(hist.sampleOffsetPacked, vsH);
             LightSample sH = EvalLightSample(vsH, yH, cellCenterVS, float3(0.0, 0.0, 0.0), vsH.range);
-            float pH = EvalCellTarget(sH, UnpackUnorm4x8(vsH.packedColor).rgb, vsH.intensity, cellMinDist2);
+            float pH = EvalCellTarget(sH, UnpackUnorm4x8(vsH.packedColor).rgb, vsH.intensity);
             float wH = pH * ReGIRReservoirW(hist);
             if (ReservoirAddSample(accumM, wH, HashStep(h))) {
                 merged.lightIdx = hist.lightIdx;
@@ -124,10 +115,6 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
         if (merged.lightIdx != ~0u) {
             // Renormalising to M=1 (M_total folded into totalWeight here) stops confidence from accumulating across frames.
             FinalizeReservoirReGIR(merged, accumM, mergedWinnerPHat, mTotal);
-
-            // take another look at if this is right
-            // Resetting M=1 stops confidence from accumulating across frames. Suggestion from the source above.
-            // merged.M = 1u;
             cur = merged;
         }
     }

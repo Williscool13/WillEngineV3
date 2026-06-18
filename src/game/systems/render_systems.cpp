@@ -565,6 +565,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
 
             for (const auto& [entity, light, areaLightTransform] : state->registry.view<Component::AreaLightComponent, Component::AreaLightTransformComponent>().each()) {
+                if (!light.drawEmissiveSurface) { continue; }
                 const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
                 frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(areaLightTransform.modelMatrix, areaLightTransform.previousMatrix);
 
@@ -608,6 +609,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
 
             for (const auto& [entity, light, sphereLightTransform] : state->registry.view<Component::SphereLightComponent, Component::SphereLightTransformComponent>().each()) {
+                if (!light.drawEmissiveSurface) { continue; }
                 const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
                 frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(sphereLightTransform.modelMatrix, sphereLightTransform.previousMatrix);
 

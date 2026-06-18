@@ -7,6 +7,22 @@ import shader_constants;
 import shader_functions;
 import pbr_functions;
 import packing_functions;
+import random_common;
+
+/** Uniformly sample a ray direction inside the sun's angular cone (half-angle = angularRadius) around the mean direction. */
+static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float u1, float u2)
+{
+    float cosThetaMax = cos(angularRadius);
+    float cosTheta = lerp(1.0, cosThetaMax, u1);
+    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
+    float phi = 6.28318530718 * u2;
+
+    float3 w = toLight;
+    float3 up = abs(w.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 t = normalize(cross(up, w));
+    float3 b = cross(w, t);
+    return normalize(sinTheta * cos(phi) * t + sinTheta * sin(phi) * b + cosTheta * w);
+}
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -139,7 +155,53 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
         }
     }
 
-    float3 newSample = directLight + emissiveRGB;
+    // Directional (sun) light: stochastic cone-sampled shadow + BRDF, converges to a true soft-shadow reference.
+    float3 sunLight = float3(0.0);
+    {
+        DirectionalLightData dl = pc.lightData->directionalLight;
+        float sunIntensity = dl.directionIntensity.w;
+        if (sunIntensity > 0.0) {
+            float3 toLight = normalize(-dl.directionIntensity.xyz);
+
+            uint sunRng = SeedRng(pixel, pc.frameIndex, 0x5C6E1Fu);
+            float su1 = HashStep(sunRng);
+            float su2 = HashStep(sunRng);
+            float3 L = SampleSunConeDirection(toLight, dl.angularRadius, su1, su2);
+
+            float cosShade = dot(N, L);
+            if (cosShade > 0.0) {
+                RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+
+                RayDesc sunRay;
+                sunRay.Origin = worldPos + N * 0.05;
+                sunRay.Direction = L;
+                sunRay.TMin = 0.001;
+                sunRay.TMax = 10000.0;
+
+                RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+                q.TraceRayInline(tlas, 0, 0xFF, sunRay);
+                q.Proceed();
+
+                if (q.CommittedStatus() == COMMITTED_NOTHING) {
+                    float3 H = normalize(V + L);
+                    float NDF = D_GGX(N, H, roughness);
+                    float G = G_SMITH_HEIGHT_CORRELATED(N, V, L, roughness);
+                    float3 F = F_SCHLICK(V, H, F0);
+                    float3 spec = (NDF * G * F) / max(4.0 * nDotV * cosShade, 0.001);
+
+                    float3 kS = F;
+                    float3 kD = (1.0 - kS) * (1.0 - metallic);
+                    float orenNayar = Diffuse_OrenNayar(cosShade, nDotV, L, V, roughness);
+                    float3 diff = kD * albedo.xyz * orenNayar;
+
+                    float3 sunColor = UnpackUnorm4x8(dl.packedColor).rgb;
+                    sunLight = (diff + spec) * cosShade * sunIntensity * sunColor;
+                }
+            }
+        }
+    }
+
+    float3 newSample = directLight + sunLight + emissiveRGB;
     accum = (accum * count + float4(newSample, 1.0)) / (count + 1.0);
     pc.accumulationBuffer[pixelIdx] = accum;
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(accum.xyz, 1.0);

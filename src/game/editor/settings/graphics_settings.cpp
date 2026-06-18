@@ -503,6 +503,7 @@ void DrawLightingWindow(Engine::EngineState* state)
             if (ImGui::DragFloat3("ReGIR Grid Offset", &restir.regirGridOffset.x, 0.1f)) {
                 changed = true;
             }
+            if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
             if (ImGui::Checkbox("Adaptive Spatial", &restir.bAdaptiveSpatial)) {
                 changed = true;
             }

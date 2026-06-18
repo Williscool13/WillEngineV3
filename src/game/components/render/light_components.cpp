@@ -65,6 +65,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         }
         ImGui::EndDisabled();
         ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
+        ImGui::Checkbox("Draw Emissive Surface##al", &comp.drawEmissiveSurface);
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing);
@@ -141,6 +142,7 @@ void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, nl
     json["halfWidth"] = comp.halfWidth;
     json["halfHeight"] = comp.halfHeight;
     json["range"] = comp.range;
+    json["drawEmissiveSurface"] = comp.drawEmissiveSurface;
 }
 
 void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const nlohmann::json& json)
@@ -151,6 +153,7 @@ void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const 
     comp.halfWidth = json.value("halfWidth", 1.0f);
     comp.halfHeight = json.value("halfHeight", 1.0f);
     comp.range = json.value("range", 10.0f);
+    comp.drawEmissiveSurface = json.value("drawEmissiveSurface", true);
 }
 
 Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -246,6 +249,7 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
             registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); // recompute the emissive mesh matrix; radius doesn't dirty the transform on its own
         }
         ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
+        ImGui::Checkbox("Draw Emissive Surface##sl", &comp.drawEmissiveSurface);
     }
 
     auto* state = registry.ctx().get<Engine::EngineState*>();
@@ -268,6 +272,7 @@ void Component::SphereLightComponent::Serialize(const SphereLightComponent& comp
     json["intensity"] = comp.intensity;
     json["radius"] = comp.radius;
     json["range"] = comp.range;
+    json["drawEmissiveSurface"] = comp.drawEmissiveSurface;
 }
 
 void Component::SphereLightComponent::Deserialize(SphereLightComponent& comp, const nlohmann::json& json)
@@ -277,6 +282,7 @@ void Component::SphereLightComponent::Deserialize(SphereLightComponent& comp, co
     comp.intensity = json.value("intensity", 1.0f);
     comp.radius = json.value("radius", 0.5f);
     comp.range = json.value("range", 10.0f);
+    comp.drawEmissiveSurface = json.value("drawEmissiveSurface", true);
 }
 
 glm::mat4 Component::ComputeSphereLightMatrix(const TransformComponent& transform, const SphereLightComponent& light)

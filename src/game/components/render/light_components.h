@@ -39,6 +39,7 @@ struct AreaLightComponent
     float halfWidth{1.0f};
     float halfHeight{1.0f};
     float range{10.0f};
+    bool drawEmissiveSurface{true};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
@@ -65,6 +66,7 @@ struct SphereLightComponent
     float intensity{1.0f};
     float radius{0.5f};
     float range{10.0f};
+    bool drawEmissiveSurface{true};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 

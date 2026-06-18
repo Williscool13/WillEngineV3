@@ -71,7 +71,7 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
             }
         }
 
-        if (allHaveName) {
+        if (allHaveName && firstName) {
             char buf[256];
             if (allSame) {
                 strncpy_s(buf, firstName, sizeof(buf) - 1);
@@ -1281,7 +1281,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 ImGui::EndPopup();
             }
         }
-        else if (multiSelected) {
+        else if (state->editor.selectedEntities.Size() > 1) {
             DrawMultiSelectEditor(ctx, state, multiGizmoCentroid, transformCount);
         }
     }

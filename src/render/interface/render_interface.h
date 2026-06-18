@@ -583,8 +583,7 @@ struct ReSTIRParams
     uint32_t regirHistoryLength{8};
     float regirWClamp{0.0f};
     glm::vec3 regirGridOffset{0.0f};
-
-    // 0 = di
+    bool bResetReGIR{false};
     float confidenceStrength{0.75f};
 
     // todo: Disabled atrous and asvgf. Readd as needed

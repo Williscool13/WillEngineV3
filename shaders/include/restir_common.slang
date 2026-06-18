@@ -174,6 +174,22 @@ public float3 SampleLightPos(LightVS vs, float uU, float uV)
 }
 
 /**
+ * 1 - cosThetaMax of the cone a sphere subtends from shadingPos, computed without catastrophic cancellation.
+ * The naive 1 - sqrt(1 - sin2) loses all precision for small/distant spheres (sqrt rounds to 1.0), which then
+ * collides with the PDF floor and inflates sphere sample weights into persistent bright spots. This form is
+ * algebraically identical but stable: the numerator sin2ThetaMax is exact and the denominator is ~2.
+ * Shared by SampleLightSurface and LightSamplePdfArea so the sampled cone and the reported PDF use one value.
+ *
+ * @param d2 Squared distance from shadingPos to the sphere center.
+ * @param radius Sphere radius.
+ */
+public float SphereConeOneMinusCosThetaMax(float d2, float radius)
+{
+    float sin2ThetaMax = clamp(radius * radius / d2, 0.0, 0.9999);
+    return sin2ThetaMax / (1.0 + sqrt(max(1.0 - sin2ThetaMax, 0.0)));
+}
+
+/**
  * Samples a point on the light for shading. Spheres use cone (solid-angle) sampling toward the subtended visible cap
  * (no wasted back-hemisphere samples); rects use uniform area. Pair with LightSamplePdfArea for the source PDF.
  */
@@ -185,9 +201,8 @@ public float3 SampleLightSurface(LightVS vs, float3 shadingPos, float uU, float 
         float d2 = max(dot(toCenter, toCenter), 1e-8);
         float d = sqrt(d2);
         float radius = vs.halfWidth;
-        float sin2ThetaMax = clamp(radius * radius / d2, 0.0, 0.9999);
-        float cosThetaMax = sqrt(1.0 - sin2ThetaMax);
-        float cosTheta = 1.0 - uU * (1.0 - cosThetaMax);
+        float oneMinusCosThetaMax = SphereConeOneMinusCosThetaMax(d2, radius);
+        float cosTheta = 1.0 - uU * oneMinusCosThetaMax;
         float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
         float phi = 2.0 * PI * uV;
         float3 w = toCenter / d;
@@ -212,9 +227,8 @@ public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
         float3 toCenter = vs.center - shadingPos;
         float d2 = max(dot(toCenter, toCenter), 1e-8);
         float radius = vs.halfWidth;
-        float sin2ThetaMax = clamp(radius * radius / d2, 0.0, 0.9999);
-        float cosThetaMax = sqrt(1.0 - sin2ThetaMax);
-        float pdfSolidAngle = 1.0 / (2.0 * PI * max(1.0 - cosThetaMax, 1e-6));
+        float oneMinusCosThetaMax = SphereConeOneMinusCosThetaMax(d2, radius);
+        float pdfSolidAngle = 1.0 / (2.0 * PI * max(oneMinusCosThetaMax, 1e-12));
         float3 toSample = samplePos - shadingPos;
         float dist2 = max(dot(toSample, toSample), 1e-8);
         float3 L = toSample * rsqrt(dist2);
@@ -253,12 +267,18 @@ public float3 ReGIRCellCenter(uint cellIndex, float3 gridOffset)
     return (float3(float(cx), float(cy), float(cz)) + 0.5) * cellSize - gridHalf + gridOffset;
 }
 
-/** ReGIR cell-fill target. minDist2 floors the inverse-square distance term (use the cell half-extent²) so a light inside or adjacent to the cell can't produce an infinite cell-center target and a resulting bright spot. */
-public float EvalCellTarget(LightSample s, float3 lightColor, float lightIntensity, float minDist2)
+/**
+ * ReGIR cell-fill target. Uses the SAME (unfloored) geometry term as the shading target EvalPHat.
+ * A distance floor here would break the cone-sampling cancellation in both the fill and the in-grid
+ * shading RIS: the build target is the denominator of w_i = p_hat / (targetPdf / cellAvgWeight), so a
+ * floor caps the denominator for near samples and inflates w_i by minDist2/d² (a sphere-near-cap spike
+ * that recirculates through the grid and persists). Genuine near-field spikes are bounded by ReGIRClampW.
+ */
+public float EvalCellTarget(LightSample s, float3 lightColor, float lightIntensity)
 {
     if (s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
     const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
-    return LightGeometryTerm(s.cosLight, s.dist, minDist2) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
+    return LightGeometryTerm(s) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
 }
 
 // Half-res pixel -> full-res pixel via the precomputed quad-selection texture (sel in [0,3]). Identity at full res.
