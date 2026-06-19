@@ -127,6 +127,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 }
             }
 
+            float3 worldN = normalize(mul(float3x3(scene.invView), N));
             for (int i = 0; i < RESTIR_M_BRDF; i++) {
                 float uXi0 = HashStep(h);
                 float uXi1 = HashStep(h);
@@ -143,24 +144,32 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 LightVS bestVS = (LightVS)0;
 
                 if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
-                    float bestT = 1e30;
-                    for (int j = 0; j < lightCount; j++) {
-                        LightVS vs = UnpackLightVS(pc.lightVS[j]);
-                        float t;
-                        if (RayIntersectLight(vs, viewPosition, brdfL, t) && t < bestT) {
-                            bestT = t;
-                            bestLightIdx = j;
-                            bestVS = vs;
+                    RayDesc ray;
+                    ray.Origin = worldPos + worldN * 0.05;
+                    ray.Direction = normalize(mul(float3x3(scene.invView), brdfL));
+                    ray.TMin = 0.001;
+                    ray.TMax = 1e30;
+                    RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+                    // Mask 0xFF: hit scene geometry (0x01) and light proxies (0x02); an occluder hit first -> miss. Replaces the O(lightCount) analytic light scan.
+                    RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+                    q.TraceRayInline(tlas, 0, 0xFF, ray);
+                    q.Proceed();
+                    if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
+                        uint hitLightIdx = pc.instanceBuffer[q.CommittedInstanceID()].lightIndex;
+                        if (hitLightIdx != ~0u && hitLightIdx < uint(lightCount)) {
+                            LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
+                            float t;
+                            if (RayIntersectLight(vs, viewPosition, brdfL, t)) {
+                                Xi = viewPosition + brdfL * t;
+                                LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                                p_light_area = LightSamplePdfArea(vs, viewPosition, Xi) / float(lightCount);
+                                p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                                float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                                p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity);
+                                bestLightIdx = int(hitLightIdx);
+                                bestVS = vs;
+                            }
                         }
-                    }
-
-                    if (bestLightIdx >= 0) {
-                        Xi = viewPosition + brdfL * bestT;
-                        LightSample s = EvalLightSample(bestVS, Xi, viewPosition, N, bestVS.range);
-                        p_light_area = LightSamplePdfArea(bestVS, viewPosition, Xi) / float(lightCount);
-                        p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
-                        float3 brdfLightColor = UnpackUnorm4x8(bestVS.packedColor).rgb;
-                        p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, bestVS.intensity);
                     }
                 }
 
@@ -173,6 +182,17 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             }
         }
         r_gen.M = uint(RESTIR_M_LIGHT + RESTIR_M_BRDF);
+    }
+
+    // Initial-candidate visibility: an occluded fresh candidate contributes 0 below (so a visible history outweighs it)
+    // but is kept as a dark anchor, not dropped, otherwise the shadowed pixel leaks a neighbour light in spatial reuse.
+    bool genVisible = true;
+    if (pc.bInitialVisibility != 0u && r_gen.lightIdx != ~0u) {
+        LightVS vsGen = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
+        float3 yStar = DecodeSamplePos(r_gen, vsGen);
+        float3 worldN = normalize(mul(float3x3(scene.invView), N));
+        float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+        genVisible = RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar);
     }
 
     // -------------------------------------------------------------------------
@@ -192,6 +212,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     ReservoirAccum accum_combined = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
+    bool winnerIsGen = false;
 
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
@@ -205,10 +226,11 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
         ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
 
-        float w_gen = p_hat_gen * r_gen.W * float(r_gen.M);
+        float w_gen = genVisible ? (p_hat_gen * r_gen.W * float(r_gen.M)) : 0.0;
         if (ReservoirAddSample(accum_combined, w_gen, uSelect0)) {
             combined.lightIdx = r_gen.lightIdx;
             combined.sampleOffsetPacked = r_gen.sampleOffsetPacked;
+            winnerIsGen = true;
         }
     }
 
@@ -225,7 +247,14 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         if (ReservoirAddSample(accum_combined, w_history, uSelect1)) {
             combined.lightIdx = history.lightIdx;
             combined.sampleOffsetPacked = history.sampleOffsetPacked;
+            winnerIsGen = false;
         }
+    }
+
+    // Occluded candidate that no history outweighed: keep it as the anchor (winnerIsGen stays false, so Phase 3 re-traces it to W=0) instead of leaving the pixel empty for spatial reuse to fill with a neighbour light.
+    if (pc.bInitialVisibility != 0u && combined.lightIdx == ~0u && r_gen.lightIdx != ~0u) {
+        combined.lightIdx = r_gen.lightIdx;
+        combined.sampleOffsetPacked = r_gen.sampleOffsetPacked;
     }
 
     combined.M = r_gen.M + clampedHistoryM;
@@ -240,11 +269,17 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         float3 yStar = DecodeSamplePos(combined, vsWinner);
         LightSample sWinner = EvalLightSample(vsWinner, yStar, viewPosition, N, vsWinner.range);
         float3 winnerLightColor = UnpackUnorm4x8(vsWinner.packedColor).rgb;
-        float3 worldN = normalize(mul(float3x3(scene.invView), N));
-        float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
-        RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-        float p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
+        float p_hat_winner;
+        // The fresh candidate was already shadow-tested in the initial-visibility stage; if it won, reuse that result instead of re-tracing.
+        if (pc.bInitialVisibility != 0u && winnerIsGen) {
+            p_hat_winner = EvalPHat(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity);
+        } else {
+            float3 worldN = normalize(mul(float3x3(scene.invView), N));
+            float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+            RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+            p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
                                                  tlas, worldPos, worldN, worldyStar);
+        }
         ReservoirFinalise(combined, accum_combined, p_hat_winner, float(combined.M));
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
     }

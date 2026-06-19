@@ -238,6 +238,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .antilagStrength = restirParams.antilagStrength,
                 .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
                 .quadSelectionHistoryIndex = (pixelScale == 2u) ? (bHasQuadHistory ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection_history")) : graph.GetSampledImageViewDescriptorIndex(SID("quad_selection"))) : ~0u,
+                .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -248,6 +249,32 @@ void SetupReSTIRPasses(RenderGraph& graph,
     }
 
     StringID reuseBuffer = SID("restir_reservoir_temporal");
+
+    if (restirParams.boilingFilterStrength > 0.0f) {
+        graph.CreateBuffer(SID("restir_reservoir_boiled"), reservoirBufferSize, true);
+
+        RenderPass& boilingPass = graph.AddPass(SID("[ReSTIR DI] Boiling Filter"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        boilingPass.ReadBuffer(SID("restir_reservoir_temporal"));
+        boilingPass.WriteBuffer(SID("restir_reservoir_boiled"));
+        boilingPass.Execute([&, pipelineManager, renderExtent, strength = restirParams.boilingFilterStrength](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_boiling_filter"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            ReSTIRBoilingFilterPushConstant pc{
+                .inputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
+                .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_boiled")),
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .strength = strength,
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+            const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+            vkCmdDispatch(cmd, groupsX, groupsY, 1);
+        });
+
+        reuseBuffer = SID("restir_reservoir_boiled");
+    }
 
     graph.CarryBufferToNextFrame(reuseBuffer, SID("restir_reservoir_history"), 0);
     if (bShadowVis) {
@@ -309,6 +336,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .adaptiveMReference = restirParams.temporalMCap,
                 .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
                 .bValidateVisibility = bLastPass ? 1u : 0u,
+                .wClamp = restirParams.restirWClamp,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

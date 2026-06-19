@@ -2,7 +2,7 @@
   "postProcess": {
     "agxMaxEV": 4.026069164276123,
     "agxMinEV": -12.473930358886719,
-    "bBloomEnabled": true,
+    "bBloomEnabled": false,
     "bColorGradingEnabled": true,
     "bDitherEnabled": true,
     "bExposureEnabled": true,

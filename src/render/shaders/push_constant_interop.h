@@ -422,6 +422,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC float antilagStrength;
     SHADER_PUBLIC uint32_t quadSelectionIndex;
     SHADER_PUBLIC uint32_t quadSelectionHistoryIndex;
+    SHADER_PUBLIC uint32_t bInitialVisibility;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -450,6 +451,15 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t adaptiveMReference;
     SHADER_PUBLIC uint32_t quadSelectionIndex;
     SHADER_PUBLIC uint32_t bValidateVisibility;
+    SHADER_PUBLIC float wClamp;
+};
+
+SHADER_PUBLIC struct ReSTIRBoilingFilterPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(Reservoir) inputBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC float strength;
 };
 
 SHADER_PUBLIC struct VisibilityLightingPushConstant
@@ -1097,6 +1107,7 @@ SHADER_PUBLIC struct RelaxPrepassPushConstant
     SHADER_PUBLIC uint32_t specOutIndex;
     SHADER_PUBLIC uint32_t diffOutIndex;
     SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
 
 SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant

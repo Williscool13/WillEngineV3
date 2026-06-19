@@ -507,13 +507,12 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
  * @param worldN Shading normal in world space (used for ray origin bias).
  * @param worldyStar Light sample position in world space.
  */
-[ForceInline]
-public float EvalPHatVisibility(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity,
-                                 RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar)
+/**
+ * Binary shadow-ray test to a light sample. Returns true if the sample is visible from the shading point.
+ * Mask 0x01 = scene geometry only (light proxy meshes are skipped). worldN biases the origin so the ray doesn't self-intersect; TMax is measured from the offset origin so the bias can't eat the far-end margin.
+ */
+public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar)
 {
-    // Distance and TMax must be measured from the offset origin, not the surface point; otherwise the
-    // origin's advance toward the light (cosShade * offset) eats the far-end margin and the ray hits the
-    // light's own mesh when the normal faces it.
     float3 rayOrigin = worldShadingPos + worldN * 0.05;
     float3 toLight = worldyStar - rayOrigin;
     float lightDist = length(toLight);
@@ -525,7 +524,14 @@ public float EvalPHatVisibility(LightSample s, float3 V, float3 N, float3 albedo
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     q.TraceRayInline(tlas, 0, 0x01, shadowRay);
     q.Proceed();
-    if (q.CommittedStatus() != COMMITTED_NOTHING) { return 0.0; }
+    return q.CommittedStatus() == COMMITTED_NOTHING;
+}
+
+[ForceInline]
+public float EvalPHatVisibility(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity,
+                                 RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar)
+{
+    if (!RestirShadowVisible(tlas, worldShadingPos, worldN, worldyStar)) { return 0.0; }
     return EvalPHat(s, V, N, albedo, F0, metallic, roughness, lightColor, lightIntensity);
 }
 

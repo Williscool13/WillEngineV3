@@ -29,7 +29,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
               Reservoir passthrough = pc.inputBuffer[centerIdx];
-        passthrough.W = min(passthrough.W, 20.0);
+        passthrough.W = (pc.wClamp > 0.0) ? min(passthrough.W, pc.wClamp) : passthrough.W;
         passthrough.M = min(passthrough.M, pc.mCap);
         pc.outputBuffer[centerIdx] = passthrough;
         return;
@@ -156,7 +156,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     // No usable neighbor: passthrough with clamp/cap applied.
     if (neighborCount == 0u) {
-        center.W = min(center.W, 20.0);
+        center.W = (pc.wClamp > 0.0) ? min(center.W, pc.wClamp) : center.W;
         center.M = min(center.M, pc.mCap);
         pc.outputBuffer[centerIdx] = center;
         return;
@@ -194,7 +194,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         combined.W = 0.0;
     }
 
-    combined.W = min(combined.W, 20.0);
+    combined.W = (pc.wClamp > 0.0) ? min(combined.W, pc.wClamp) : combined.W;
     combined.M = min(combined.M, pc.mCap);
 
     pc.outputBuffer[centerIdx] = combined;

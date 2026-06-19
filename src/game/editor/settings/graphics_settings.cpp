@@ -494,6 +494,15 @@ void DrawLightingWindow(Engine::EngineState* state)
                 restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
                 changed = true;
             }
+            if (Widgets::SliderFloat("Boiling Filter (0=off)", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
+                changed = true;
+            }
+            if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 100.0f)) {
+                changed = true;
+            }
+            if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
+                changed = true;
+            }
             int regirHistory = static_cast<int>(restir.regirHistoryLength);
             if (Widgets::SliderInt("ReGIR History Grids", &regirHistory, 0, 8)) {
                 restir.regirHistoryLength = static_cast<uint32_t>(regirHistory);

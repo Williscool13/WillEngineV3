@@ -123,9 +123,13 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
             float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
             float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-            // RTG2 Ch.23 §23.3.2: sourcePdf = candidate.targetPdf / cellAverageWeight; w_i = p_hat / sourcePdf.
-            float sourcePdf = gr.targetPdf / cellAvgWeight;
-            float w_i = p_hat / sourcePdf;
+            // RTG2 Ch.23 §23.3.2: grid sample source pdf = candidate.targetPdf / cellAverageWeight.
+            float p_grid = gr.targetPdf / cellAvgWeight;
+            // Balance-heuristic MIS against the BRDF technique: a BRDF ray could also have produced this direction, so down-weight grid samples that sit in the specular lobe. The grid is discrete, so the reverse term (grid producing a continuous BRDF sample) is zero and the BRDF loop omits it.
+            float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
+            float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+            float denom = float(RESTIR_M_LIGHT) * p_grid + float(RESTIR_M_BRDF) * p_brdf_area;
+            float w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
             if (ReservoirAddSample(accum_gen, w_i, uSelect)) {
                 r_gen.lightIdx = gr.lightIdx;
                 r_gen.sampleOffsetPacked = gr.sampleOffsetPacked;
@@ -169,7 +173,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                             if (p_brdf_area > 0.0) {
                                 float3 lc = UnpackUnorm4x8(vs.packedColor).rgb;
                                 float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lc, vs.intensity);
-                                w_i = p_hat / p_brdf_area;
+                                w_i = p_hat / (float(RESTIR_M_BRDF) * p_brdf_area);
                                 brdfLightIdx = lightIdx;
                                 brdfXi = Xi;
                                 brdfVS = vs;
@@ -186,6 +190,17 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         }
 
         r_gen.M = uint(accum_gen.M);
+    }
+
+    // Initial-candidate visibility: an occluded fresh candidate contributes 0 below (so a visible history outweighs it)
+    // but is kept as a dark anchor, not dropped, otherwise the shadowed pixel leaks a neighbour light in spatial reuse.
+    bool genVisible = true;
+    if (pc.bInitialVisibility != 0u && r_gen.lightIdx != ~0u) {
+        LightVS vsGen = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
+        float3 yStar = DecodeSamplePos(r_gen, vsGen);
+        float3 worldN = normalize(mul(float3x3(scene.invView), N));
+        float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+        genVisible = RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar);
     }
 
     // -------------------------------------------------------------------------
@@ -205,6 +220,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     ReservoirAccum accum_combined = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
+    bool winnerIsGen = false;
 
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
@@ -216,12 +232,14 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         LightSample sGen = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
         float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
         float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
-        ReservoirFinalise(r_gen, accum_gen, p_hat_gen, float(r_gen.M));
+        // Talbot MIS: per-candidate counts live in the w_i denominators, so normalise by 1 (matches restir_di_combined_temporal).
+        ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
 
-        float w_gen = p_hat_gen * r_gen.W * float(r_gen.M);
+        float w_gen = genVisible ? (p_hat_gen * r_gen.W * float(r_gen.M)) : 0.0;
         if (ReservoirAddSample(accum_combined, w_gen, uSelect0)) {
             combined.lightIdx = r_gen.lightIdx;
             combined.sampleOffsetPacked = r_gen.sampleOffsetPacked;
+            winnerIsGen = true;
         }
     }
 
@@ -238,7 +256,13 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         if (ReservoirAddSample(accum_combined, w_history, uSelect1)) {
             combined.lightIdx = history.lightIdx;
             combined.sampleOffsetPacked = history.sampleOffsetPacked;
+            winnerIsGen = false;
         }
+    }
+
+    if (pc.bInitialVisibility != 0u && combined.lightIdx == ~0u && r_gen.lightIdx != ~0u) {
+        combined.lightIdx = r_gen.lightIdx;
+        combined.sampleOffsetPacked = r_gen.sampleOffsetPacked;
     }
 
     combined.M = r_gen.M + clampedHistoryM;
@@ -253,11 +277,17 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         float3 yStar = DecodeSamplePos(combined, vsWinner);
         LightSample sWinner = EvalLightSample(vsWinner, yStar, viewPosition, N, vsWinner.range);
         float3 winnerLightColor = UnpackUnorm4x8(vsWinner.packedColor).rgb;
-        float3 worldN = normalize(mul(float3x3(scene.invView), N));
-        float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
-        RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-        float p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
+        float p_hat_winner;
+        // The fresh candidate was already shadow-tested in the initial-visibility stage; if it won, reuse that result instead of re-tracing.
+        if (pc.bInitialVisibility != 0u && winnerIsGen) {
+            p_hat_winner = EvalPHat(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity);
+        } else {
+            float3 worldN = normalize(mul(float3x3(scene.invView), N));
+            float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+            RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+            p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
                                                  tlas, worldPos, worldN, worldyStar);
+        }
         ReservoirFinalise(combined, accum_combined, p_hat_winner, float(combined.M));
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
     }

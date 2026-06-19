@@ -24,7 +24,9 @@
     },
     "bAdaptiveSpatial": true,
     "bHalfRes": true,
+    "bInitialVisibility": false,
     "bPermutationSampling": false,
+    "boilingFilterStrength": 0.9020618796348572,
     "confidenceStrength": 0.0,
     "denoiserMode": 3,
     "iblIntensity": 0.0,
@@ -70,6 +72,7 @@
       "specVarianceBoost": 1.0
     },
     "remodulateOutput": 0,
+    "restirWClamp": 0.0,
     "spatialMCap": 200,
     "spatialNeighbors": 5,
     "spatialPasses": 2,

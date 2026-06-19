@@ -15,7 +15,7 @@
   "lightingMode": 4,
   "restir": {
     "adaptiveSpatialBoost": 3.0,
-    "antilagStrength": 0.8999999761581421,
+    "antilagStrength": 1.0,
     "atrous": {
       "iterations": 4,
       "sigmaDepth": 0.009999999776482582,
@@ -24,16 +24,18 @@
     },
     "bAdaptiveSpatial": true,
     "bHalfRes": true,
+    "bInitialVisibility": false,
     "bPermutationSampling": false,
+    "boilingFilterStrength": 0.20000000298023224,
     "confidenceStrength": 0.0,
     "denoiserMode": 3,
     "iblIntensity": 0.0,
     "regirGridOffset": [
-      0.0,
+      -5.199999809265137,
       0.0,
       0.0
     ],
-    "regirWClamp": 1.0,
+    "regirWClamp": 0.0,
     "relax": {
       "atrousIterations": 4,
       "denoisingRange": 1000.0,
@@ -53,7 +55,7 @@
       "historyFixFrameNum": 4.0,
       "historyResetAmount": 0.800000011920929,
       "historyResetSpatialSigmaScale": 1.0,
-      "historyResetTemporalSigmaScale": 1.5,
+      "historyResetTemporalSigmaScale": 2.0,
       "lobeAngleFraction": 0.6000000238418579,
       "luminanceEdgeStoppingRelaxation": 0.5,
       "minHitDistanceWeight": 0.10000000149011612,
@@ -63,14 +65,15 @@
       "roughnessFraction": 0.15000000596046448,
       "specBlurRadius": 50.0,
       "specLobeAngleSlack": 0.009999999776482582,
-      "specMaxAccumFrames": 32.0,
-      "specMaxFastAccumFrames": 4.0,
+      "specMaxAccumFrames": 16.0,
+      "specMaxFastAccumFrames": 1.5542857646942139,
       "specMaxLuminanceRelativeDifference": 3.0,
       "specPhiLuminance": 2.0,
       "specVarianceBoost": 1.0
     },
     "remodulateOutput": 0,
-    "spatialMCap": 304,
+    "restirWClamp": 1.0,
+    "spatialMCap": 73,
     "spatialNeighbors": 3,
     "spatialPasses": 1,
     "spatialRadius": 30,
@@ -82,6 +85,6 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 1
+    "temporalMCap": 8
   }
 }
