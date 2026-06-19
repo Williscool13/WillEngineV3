@@ -485,7 +485,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupTLASBuild(*renderGraph, context, viewFamily, renderExtent);
 
             // Copy depth to R32_SFLOAT for all downstream compute passes.
-            // TODO: Build Hi-Z mip chain here for next-frame use.
             {
                 auto& copyPass = renderGraph->AddPass(SID("Depth Copy"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Untagged);
                 copyPass.ReadSampledImage(targets.depthStencil);

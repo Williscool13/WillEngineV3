@@ -64,6 +64,12 @@ void SetupGeometryPass(RenderGraph& graph,
             graph.CreateBuffer(visibleMeshlets, renderFamilyProperties.visibleMeshletsBufferSize, false);
             graph.CreateBuffer(meshletCountDispatchArgs, sizeof(InstancingMeshletDispatchIndirect), false);
             graph.CreateBuffer(compactedMeshletDispatchArgs, sizeof(InstancingCompactedMeshletDispatchIndirect), false);
+
+            RenderPass& clearDispatchArgs = graph.AddPass(SID("Clear Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::ResourceCategory::Geometry);
+            clearDispatchArgs.WriteTransferBuffer(compactedMeshletDispatchArgs);
+            clearDispatchArgs.Execute([compactedMeshletDispatchArgs](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                vkCmdFillBuffer(cmd, graph.GetBufferHandle(compactedMeshletDispatchArgs), 0, VK_WHOLE_SIZE, 0);
+            });
         }
 
         // Instance Visibility/LOD
