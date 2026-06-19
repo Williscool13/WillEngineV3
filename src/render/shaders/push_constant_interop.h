@@ -374,6 +374,9 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) gridBuffer;
+    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) freshBuffer;
+    uint32_t pad0;
+    uint32_t pad1;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) gridHistory[REGIR_HISTORY_LENGTH];
     SHADER_PUBLIC float3 gridOffset;
     SHADER_PUBLIC uint32_t sceneDataIndex;

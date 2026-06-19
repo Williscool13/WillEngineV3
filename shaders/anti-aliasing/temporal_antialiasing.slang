@@ -203,8 +203,9 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_
         // No usable history: pull toward the neighborhood mean as cheap spatial anti-aliasing instead of outputting raw jittered color
         resultYCoCg = lerp(currentYCoCg, mean, pc.invalidHistoryBlend);
     } else {
+        uint4 gbufferOne = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(texelCoord, 0));
         float viewZ = min(ScreenToViewSpaceDepth(gsDepth[local.y][local.x], pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd), VIEWZ_CLAMP);
-        float viewZDelta = UnpackViewZDelta(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(texelCoord, 0)).w);
+        float viewZDelta = UnpackViewZDelta(gbufferOne.w);
         float disocclusion = ComputeDepthDisocclusion(historyUv, viewZ + viewZDelta);
 
         historyYCoCg = ClipToNeighborhood(historyYCoCg, minc, maxc);
@@ -214,6 +215,14 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_
         // Luma mismatch may only increase responsiveness; without the max an already-high alpha would be pulled back down toward the cap
         float boostedAlpha = max(alpha, min(alpha * 2.0, pc.lumaBoostCap));
         alpha = lerp(alpha, boostedAlpha, lumaDiff);
+
+        // Drop history where a grazing surface is rolling over its silhouette; gated by through-screen motion so static silhouettes keep accumulating
+        float3 normalVS = UnpackNormalOct16(gbufferOne.r);
+        float3 viewVec = normalize(-CheapReconstructViewSpacePosition(pc.sceneData.ndcToViewMul, pc.sceneData.ndcToViewAdd, uv, viewZ));
+        float grazing = 1.0 - saturate(dot(normalVS, viewVec));
+        float depthMotionFrac = abs(viewZDelta) / max(abs(viewZ), 1e-4);
+        float turnover = saturate(grazing * depthMotionFrac * pc.grazingTurnoverStrength);
+        alpha = lerp(alpha, 1.0, turnover);
 
         resultYCoCg = lerp(historyYCoCg, currentYCoCg, alpha);
     }

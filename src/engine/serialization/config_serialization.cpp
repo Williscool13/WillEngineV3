@@ -229,6 +229,7 @@ nlohmann::json ToJson(const Core::TAAConfiguration& p)
         {"karisStrength", p.karisStrength},
         {"invalidHistoryBlend", p.invalidHistoryBlend},
         {"lumaBoostCap", p.lumaBoostCap},
+        {"grazingTurnoverStrength", p.grazingTurnoverStrength},
     };
 }
 
@@ -242,6 +243,7 @@ void FromJson(const nlohmann::json& t, Core::TAAConfiguration& p)
     p.karisStrength = tFloat("karisStrength", p.karisStrength);
     p.invalidHistoryBlend = tFloat("invalidHistoryBlend", p.invalidHistoryBlend);
     p.lumaBoostCap = tFloat("lumaBoostCap", p.lumaBoostCap);
+    p.grazingTurnoverStrength = tFloat("grazingTurnoverStrength", p.grazingTurnoverStrength);
 }
 
 nlohmann::json ToJson(const Core::AntiAliasingConfiguration& p)

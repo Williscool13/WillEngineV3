@@ -207,20 +207,14 @@ struct SMAAConfiguration
 
 struct TAAConfiguration
 {
-    /** History blend weight for converged pixels; effective accumulation is ~1/alpha frames. Below ~1/16 risks fp16 history pinning */
     float baseBlendAlpha{0.0625f};
-    /** Depth disocclusion tolerance as a fraction of view depth; history is fully rejected at twice this */
     float disocclusionThreshold{0.02f};
-    /** Variance clip box size in luma stddevs; smaller = less ghosting, more flicker */
     float varianceGammaLuma{1.0f};
-    /** Variance clip box size in chroma stddevs */
     float varianceGammaChroma{1.0f};
-    /** Karis luma weighting strength for firefly suppression; 0 disables (blend in raw HDR) */
     float karisStrength{1.0f};
-    /** Blend toward the 3x3 neighborhood mean for pixels with offscreen history */
     float invalidHistoryBlend{0.5f};
-    /** Ceiling for the luma-mismatch alpha boost (anti-ghosting responsiveness) */
     float lumaBoostCap{0.5f};
+    float grazingTurnoverStrength{30.0f};
 };
 
 struct AntiAliasingConfiguration
@@ -256,6 +250,7 @@ struct PrimitiveInstanceData
     uint32_t modelIndex{};
     uint64_t stableId{};
     uint64_t blasDeviceAddress{};
+    uint32_t lightIndex{0xFFFFFFFFu};
 };
 
 struct CustomShaderDraw
@@ -660,6 +655,7 @@ struct ViewFamily
     DirectionalLight directionalLight{};
     InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
     InlineVector<LightInfo, MAX_LIGHTS> lights{};
+    ArenaMap<uint32_t, uint32_t> lightEntityToIndex{};
 
     GTAOConfiguration gtaoConfig{};
     AntiAliasingConfiguration aaConfig{};

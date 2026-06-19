@@ -316,6 +316,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                 .karisStrength = taaConfig.karisStrength,
                 .invalidHistoryBlend = taaConfig.invalidHistoryBlend,
                 .lumaBoostCap = taaConfig.lumaBoostCap,
+                .grazingTurnoverStrength = taaConfig.grazingTurnoverStrength,
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(pipelineSID);
