@@ -31,6 +31,18 @@ void ComputeMain(uniform QuadSelectionPushConstant pc, uint3 dtid : SV_DispatchT
         float minDot = min(min(dot(n0, UnpackNormalOct16(nOct.y)), dot(n0, UnpackNormalOct16(nOct.z))), dot(n0, UnpackNormalOct16(nOct.w)));
         quadUniform = minDot >= QUAD_UNIFORM_NORMAL_DOT_THRESHOLD;
     }
-    uint sel = quadUniform ? ((pixel.x + pixel.y * 2u + pc.frameIndex) & 3u) : ((pixel.x + pixel.y * 2u) & 3u);
+    uint sel;
+    if (quadUniform) {
+        // Interchangeable corners: rotate per frame so the temporal denoiser amortizes full-res coverage.
+        sel = (pixel.x + pixel.y * 2u + pc.frameIndex) & 3u;
+    } else {
+        // Silhouette/crease: lock to the nearest-depth corner so the half-res sample stays on one coherent (foreground) surface.
+        // Frame-stable so edges is at least a clean staircase instead of jagged/inconsistent
+        sel = 0u;
+        float best = zl.w;
+        if (zl.z < best) { best = zl.z; sel = 1u; }
+        if (zl.x < best) { best = zl.x; sel = 2u; }
+        if (zl.y < best) { best = zl.y; sel = 3u; }
+    }
     rdgStorageUInt[pc.outIndex][pixel] = sel;
 }
