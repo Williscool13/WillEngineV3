@@ -60,11 +60,14 @@ uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames)
     return ListProfiles("lighting", outNames, maxNames);
 }
 
-bool LoadLightingProfile(const char* name, Core::ReSTIRParams& restir, Core::GTAOConfiguration& gtao)
+bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::GTAOConfiguration& gtao)
 {
     const nlohmann::json j = ReadProfileJson("lighting", name);
     if (!j.is_object()) {
         return false;
+    }
+    if (j.contains("lightingMode") && j["lightingMode"].is_number_integer()) {
+        lightingMode = static_cast<Core::LightingMode>(j["lightingMode"].get<uint32_t>());
     }
     if (j.contains("restir") && j["restir"].is_object()) {
         ConfigSerialization::FromJson(j["restir"], restir);
@@ -75,9 +78,10 @@ bool LoadLightingProfile(const char* name, Core::ReSTIRParams& restir, Core::GTA
     return true;
 }
 
-bool SaveLightingProfile(const char* name, const Core::ReSTIRParams& restir, const Core::GTAOConfiguration& gtao)
+bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::GTAOConfiguration& gtao)
 {
     nlohmann::json j;
+    j["lightingMode"] = static_cast<uint32_t>(lightingMode);
     j["restir"] = ConfigSerialization::ToJson(restir);
     j["gtao"] = ConfigSerialization::ToJson(gtao);
     return WriteProfileJson("lighting", name, j);

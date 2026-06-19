@@ -468,7 +468,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
-            const bool bHalfResLighting = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.restir.bHalfRes;
+            const bool bHalfResLighting = (viewFamily.lightingMode == Core::LightingMode::ReSTIR || viewFamily.lightingMode == Core::LightingMode::ReGIRReSTIR) && frameBuffer.restir.bHalfRes;
             SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, bHalfResLighting);
 
             SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get());
@@ -516,9 +516,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             const float renderFps = frameBuffer.timeFrame.renderFps;
             relax.framerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.1f, 4.0f);
 
-            const bool bRestirHalfRes = viewFamily.lightingMode == Core::LightingMode::ReSTIR && restir.bHalfRes;
+            const bool bRestirHalfRes = (viewFamily.lightingMode == Core::LightingMode::ReSTIR || viewFamily.lightingMode == Core::LightingMode::ReGIRReSTIR) && restir.bHalfRes;
             const bool bSunShadowHalfRes = viewFamily.directionalLight.bEnabled
-                && (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)
+                && (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR || viewFamily.lightingMode == Core::LightingMode::ReGIRReSTIR)
                 && viewFamily.sigmaParams.bHalfRes;
             if (bRestirHalfRes || bSunShadowHalfRes) {
                 SetupQuadSelectionPass(*renderGraph, pipelineManager, Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2}, targets, 0, frameNumber);
@@ -531,9 +531,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     break;
                 }
                 case Core::LightingMode::ReSTIR:
+                case Core::LightingMode::ReGIRReSTIR:
                 {
+                    const bool bUseReGIR = viewFamily.lightingMode == Core::LightingMode::ReGIRReSTIR;
                     const uint32_t restirPixelScale = restir.bHalfRes ? 2u : 1u;
-                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restir);
+                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restir, bUseReGIR);
                     SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restirPixelScale);
                     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
@@ -560,7 +562,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
 
             if (viewFamily.directionalLight.bEnabled &&
-                (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)) {
+                (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR || viewFamily.lightingMode == Core::LightingMode::ReGIRReSTIR)) {
                 const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
                 const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes
                     ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;

@@ -14,6 +14,7 @@ namespace Core
 struct ReSTIRParams;
 struct GTAOConfiguration;
 struct PostProcessConfiguration;
+enum class LightingMode : uint8_t;
 }
 
 namespace Engine::Profiles
@@ -24,12 +25,12 @@ using ProfileName = Core::InlineString<64>;
 
 /**
  * Named config presets stored one-per-file under <config>/profiles/{lighting,postprocess}/*.wprofile.
- * A lighting profile bundles ReSTIRParams (incl. RELAX) + GTAOConfiguration; a post-process profile is a PostProcessConfiguration.
+ * A lighting profile bundles the LightingMode + ReSTIRParams (incl. RELAX) + GTAOConfiguration; a post-process profile is a PostProcessConfiguration.
  * Load applies a profile into the live configs, Save writes the live configs out, and List fills a caller-provided array with the discovered profile names and returns the count.
  */
 uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames);
-bool LoadLightingProfile(const char* name, Core::ReSTIRParams& restir, Core::GTAOConfiguration& gtao);
-bool SaveLightingProfile(const char* name, const Core::ReSTIRParams& restir, const Core::GTAOConfiguration& gtao);
+bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::GTAOConfiguration& gtao);
+bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::GTAOConfiguration& gtao);
 bool DeleteLightingProfile(const char* name);
 
 uint32_t ListPostProcessProfiles(ProfileName* outNames, uint32_t maxNames);

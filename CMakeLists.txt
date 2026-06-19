@@ -439,6 +439,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_quad_selection.slang compute ComputeMain restir_quad_selection
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_spatial.slang compute ComputeMain restir_di_spatial
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_combined_temporal.slang compute ComputeMain restir_di_combined_temporal
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_combined_temporal_regir.slang compute ComputeMain restir_di_combined_temporal_regir
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_remodulate.slang compute ReSTIRRemodulateMain restir_remodulate
 
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_fill.slang compute ComputeMain regir_fill

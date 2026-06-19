@@ -912,26 +912,70 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
 void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    if (state->editor.lightDebugDrawMode != Engine::LightDebugDrawMode::All) { return; }
+    const Engine::LightDebugDrawMode mode = state->editor.lightDebugDrawMode;
+    if (mode == Engine::LightDebugDrawMode::None) { return; }
 
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
 
+    auto shouldDraw = [&](entt::entity entity) {
+        return mode == Engine::LightDebugDrawMode::All || state->editor.selectedEntities.Contains(entity);
+    };
+
+    auto addHemisphereVolume = [&](const Vec3& center, const Vec3& forward, const Vec3& right, const Vec3& up, float radius, const Vec4& color) {
+        if (radius <= 0.0f) { return; }
+
+        constexpr int kRimSegments = 24;
+        constexpr int kArcSegments = 8;
+        constexpr float kWidth = 0.02f;
+        constexpr float kPi = 3.14159265358979323846f;
+        constexpr float twoPi = 2.0f * kPi;
+        constexpr float halfPi = 0.5f * kPi;
+
+        for (int i = 0; i < kRimSegments; ++i) {
+            const float a0 = (static_cast<float>(i) / kRimSegments) * twoPi;
+            const float a1 = (static_cast<float>(i + 1) / kRimSegments) * twoPi;
+            const Vec3 p0 = center + radius * (glm::cos(a0) * right + glm::sin(a0) * up);
+            const Vec3 p1 = center + radius * (glm::cos(a1) * right + glm::sin(a1) * up);
+            DEBUG_ADD_LINE(viewFamily.debugLines, {p0, p1, color, kWidth});
+        }
+
+        const Vec3 meridians[4] = {right, up, -right, -up};
+        for (const Vec3& dir : meridians) {
+            for (int i = 0; i < kArcSegments; ++i) {
+                const float a0 = (static_cast<float>(i) / kArcSegments) * halfPi;
+                const float a1 = (static_cast<float>(i + 1) / kArcSegments) * halfPi;
+                const Vec3 p0 = center + radius * (glm::cos(a0) * dir + glm::sin(a0) * forward);
+                const Vec3 p1 = center + radius * (glm::cos(a1) * dir + glm::sin(a1) * forward);
+                DEBUG_ADD_LINE(viewFamily.debugLines, {p0, p1, color, kWidth});
+            }
+        }
+    };
+
     for (auto [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>().each()) {
+        if (!shouldDraw(entity)) { continue; }
         const Vec3 center = transform.translation;
         const Vec3 right = transform.rotation * Vec3(1.0f, 0.0f, 0.0f);
         const Vec3 up = transform.rotation * Vec3(0.0f, 1.0f, 0.0f);
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
+        constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
         DEBUG_ADD_RECT(viewFamily.debugRects, {center, light.halfWidth * transform.scale.x, light.halfHeight * transform.scale.y, right, up, editColor, 0.03f});
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
+        addHemisphereVolume(center, forward, right, up, light.range, rangeColor);
     }
 
     for (auto [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>().each()) {
+        if (!shouldDraw(entity)) { continue; }
         constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
+        constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
         DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, light.radius * transform.scale.x, editColor, 0.02f});
+        if (light.range > 0.0f) {
+            DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, light.range, rangeColor, 0.02f});
+        }
     }
 
     for (auto [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>().each()) {
+        if (!shouldDraw(entity)) { continue; }
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform.translation, transform.translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});

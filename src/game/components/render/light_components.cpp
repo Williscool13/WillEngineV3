@@ -77,7 +77,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
-    if (transform) {
+    if (transform && bEditing) {
         auto& comp = registry.get<AreaLightComponent>(entity);
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
         const auto& vd = viewFamily.mainView.currentViewData;
@@ -85,36 +85,25 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         const Quat rot = transform->rotation;
         const Vec3 right = rot * Vec3(1.0f, 0.0f, 0.0f);
         const Vec3 up = rot * Vec3(0.0f, 1.0f, 0.0f);
-        const Vec3 forward = rot * Vec3(0.0f, 0.0f, 1.0f);
 
-        const bool showDirection = state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::Selected || state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::All;
-        const bool anotherHoldsExclusive = state->editor.bExclusiveGizmoActivePrev && !bEditing;
-        if (showDirection && !anotherHoldsExclusive) {
-            constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
-            DEBUG_ADD_RECT(viewFamily.debugRects, {center, comp.halfWidth * transform->scale.x, comp.halfHeight * transform->scale.y, right, up, editColor, 0.03f});
-            DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
-        }
+        const Vec4 viewport{
+            static_cast<float>(ctx->windowContext.viewportOffsetX),
+            static_cast<float>(ctx->windowContext.viewportOffsetY),
+            static_cast<float>(ctx->windowContext.viewportWidth),
+            static_cast<float>(ctx->windowContext.viewportHeight),
+        };
 
-        if (bEditing) {
-            const Vec4 viewport{
-                static_cast<float>(ctx->windowContext.viewportOffsetX),
-                static_cast<float>(ctx->windowContext.viewportOffsetY),
-                static_cast<float>(ctx->windowContext.viewportWidth),
-                static_cast<float>(ctx->windowContext.viewportHeight),
-            };
+        const Vec3 widthPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, right) * right);
+        Editor::DotHandle(20000, center + right * comp.halfWidth * transform->scale.x, widthPlaneNormal,
+                          vd.view, vd.proj, viewport, vd.cameraPos, state,
+                          [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
+                          Editor::COLOR_AXIS_X);
 
-            const Vec3 widthPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, right) * right);
-            Editor::DotHandle(20000, center + right * comp.halfWidth * transform->scale.x, widthPlaneNormal,
-                              vd.view, vd.proj, viewport, vd.cameraPos, state,
-                              [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
-                              Editor::COLOR_AXIS_X);
-
-            const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
-            Editor::DotHandle(20001, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
-                              vd.view, vd.proj, viewport, vd.cameraPos, state,
-                              [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
-                              Editor::COLOR_AXIS_Y);
-        }
+        const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
+        Editor::DotHandle(20001, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
+                          vd.view, vd.proj, viewport, vd.cameraPos, state,
+                          [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
+                          Editor::COLOR_AXIS_Y);
     }
 
     return {.requestRemoval = remove};
@@ -170,16 +159,6 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
         ImGui::DragFloat("Intensity##dl", &comp.intensity, 0.05f, 0.0f, 100.0f);
         ImGui::DragFloat("Angular Radius (deg)##dl", &comp.angularRadiusDegrees, 0.02f, 0.0f, 30.0f);
         ImGui::DragInt("Priority##dl", &comp.priority, 1.0f, -100, 100);
-    }
-
-    {
-        auto* state = registry.ctx().get<Engine::EngineState*>();
-        auto* transform = registry.try_get<TransformComponent>(entity);
-        if (transform && state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::Selected) {
-            const glm::vec3 forward = transform->rotation * glm::vec3(0.0f, 0.0f, 1.0f);
-            constexpr glm::vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
-            DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform->translation, transform->translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
-        }
     }
 
     return {.requestRemoval = remove};
@@ -250,17 +229,6 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         }
         ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
         ImGui::Checkbox("Draw Emissive Surface##sl", &comp.drawEmissiveSurface);
-    }
-
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto* transform = registry.try_get<TransformComponent>(entity);
-    if (transform) {
-        auto& comp = registry.get<SphereLightComponent>(entity);
-        const bool show = state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::Selected || state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::All;
-        if (show) {
-            constexpr Vec4 sphereColor{0.5f, 0.8f, 1.0f, 1.0f};
-            DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform->translation, comp.radius * transform->scale.x, sphereColor, 0.02f});
-        }
     }
 
     return {.requestRemoval = remove};

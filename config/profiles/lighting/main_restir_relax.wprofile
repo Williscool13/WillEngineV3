@@ -12,6 +12,7 @@
     "stepsPerSlice": 3.0,
     "thinOccluderCompensation": 0.0
   },
+  "lightingMode": 1,
   "restir": {
     "adaptiveSpatialBoost": 3.0,
     "antilagStrength": 0.8999999761581421,
@@ -27,7 +28,12 @@
     "confidenceStrength": 0.0,
     "denoiserMode": 3,
     "iblIntensity": 0.0,
-    "mode": 1,
+    "regirGridOffset": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "regirWClamp": 0.0,
     "relax": {
       "atrousIterations": 4,
       "denoisingRange": 1000.0,

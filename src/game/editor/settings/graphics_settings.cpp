@@ -20,7 +20,6 @@ namespace Game
 static void SaveProjectConfigTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
-    cfg.lightingMode = state->lighting.lightingMode;
     cfg.aaConfig = state->lighting.aaConfig;
     Engine::WriteProjectConfig(cfg);
 }
@@ -29,8 +28,9 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->debug.restir, state->lighting.gtaoConfig);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig);
     }
+    cfg.lightingMode = state->lighting.lightingMode;
     cfg.restir = state->debug.restir;
     cfg.gtaoConfig = state->lighting.gtaoConfig;
     Engine::WriteProjectConfig(cfg);
@@ -56,7 +56,8 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->debug.restir, state->lighting.gtaoConfig);
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig);
+                cfg.lightingMode = state->lighting.lightingMode;
                 cfg.restir = state->debug.restir;
                 cfg.gtaoConfig = state->lighting.gtaoConfig;
                 Engine::WriteProjectConfig(cfg);
@@ -78,7 +79,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->debug.restir, state->lighting.gtaoConfig);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -132,19 +133,6 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
         }
 
         ImGui::Separator();
-
-        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Ground-Truth ReSTIR", "Path Tracing"};
-        Core::LightingMode prevLightingMode = state->lighting.lightingMode;
-        int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
-        if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, 4)) {
-            state->lighting.lightingMode = static_cast<Core::LightingMode>(lightingModeIndex);
-            changed = true;
-            if (prevLightingMode != Core::LightingMode::GroundTruthReSTIR && state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR) {
-                state->lighting.bResetGroundTruth = true;
-            }
-        }
-
-        ImGui::Spacing();
 
         if (ImGui::Checkbox("Limit FPS", &state->projectConfig.bLimitFps)) { changed = true; }
         if (state->projectConfig.bLimitFps) {
@@ -462,6 +450,19 @@ void DrawLightingWindow(Engine::EngineState* state)
             SaveLightingTab(state);
         }
         DrawLightingProfiles(state);
+
+        ImGui::Separator();
+
+        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Ground-Truth ReSTIR", "Path Tracing", "ReGIR + ReSTIR"};
+        Core::LightingMode prevLightingMode = state->lighting.lightingMode;
+        int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
+        if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, IM_ARRAYSIZE(lightingModeLabels))) {
+            state->lighting.lightingMode = static_cast<Core::LightingMode>(lightingModeIndex);
+            changed = true;
+            if (prevLightingMode != Core::LightingMode::GroundTruthReSTIR && state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR) {
+                state->lighting.bResetGroundTruth = true;
+            }
+        }
 
         ImGui::Separator();
 

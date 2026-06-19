@@ -69,8 +69,8 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
     // Temporal grid reuse (RTG2 Ch.23): merge fresh with each prior-frame reservoir, renormalising to M=1 each round so confidence can't accumulate.
     // newest -> oldest. I'm not sure if this is the correct approach (this will positively weight older "good" samples.
     ReGIRReservoir cur = r;
-    //for (uint g = pc.historyCount; g-- > 0; ) {
-    for (uint g = 0; g < pc.historyCount; g++) {
+    for (uint g = pc.historyCount; g-- > 0; ) {
+    //for (uint g = 0; g < pc.historyCount; g++) {
         ReGIRReservoir hist = ReGIRReservoirEmpty();
         if (pc.gridHistory[g] != nullptr) {
             ReGIRReservoir c = pc.gridHistory[g][slot];

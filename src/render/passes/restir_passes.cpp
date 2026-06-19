@@ -55,7 +55,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
                        uint64_t frameNumber,
-                       const Core::ReSTIRParams& restirParams)
+                       const Core::ReSTIRParams& restirParams,
+                       bool bUseReGIR)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const uint32_t pixelScale = restirParams.bHalfRes ? 2u : 1u;
@@ -90,6 +91,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
         vkCmdDispatch(cmd, (MAX_LIGHTS + 63) / 64, 1, 1);
     });
 
+    // ReGIR grid is built only for the ReGIR-fed main pass; the plain ReSTIR pass never touches the grid.
+    if (bUseReGIR) {
     graph.CreateBuffer(SID("regir_grid"), REGIR_CELL_COUNT * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir)), true);
 
     const uint32_t regirHistoryCount = restirParams.regirHistoryLength < REGIR_HISTORY_LENGTH ? restirParams.regirHistoryLength : REGIR_HISTORY_LENGTH;
@@ -161,6 +164,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         // One workgroup per cell.
         vkCmdDispatch(cmd, REGIR_CELL_COUNT, 1, 1);
     });
+    } // if (bUseReGIR)
 
     {
         graph.CreateBuffer(SID("restir_reservoir_temporal"), reservoirBufferSize, true);
@@ -179,8 +183,10 @@ void SetupReSTIRPasses(RenderGraph& graph,
         combinedPass.ReadBuffer(SCENE_DATA_BUFFER);
         combinedPass.ReadBuffer(SID("light_data"));
         combinedPass.ReadBuffer(SID("restir_lights_vs"));
-        combinedPass.ReadBuffer(SID("regir_grid"));
-        combinedPass.ReadBuffer(SID("regir_cell_avg_weight"));
+        if (bUseReGIR) {
+            combinedPass.ReadBuffer(SID("regir_grid"));
+            combinedPass.ReadBuffer(SID("regir_cell_avg_weight"));
+        }
         combinedPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         if (bHasHistory) { combinedPass.ReadBuffer(SID("restir_reservoir_history")); }
         combinedPass.ReadSampledImage(targets.gbufferOne);
@@ -195,8 +201,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
         combinedPass.WriteBuffer(SID("restir_reservoir_temporal"));
         if (bShadowVis) { combinedPass.WriteStorageImage(SID("restir_shadow_vis")); }
         if (bConfidence) { combinedPass.WriteStorageImage(SID("restir_confidence")); }
-        combinedPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, bHasHistory, bHasQuadHistory, bConfidence, bShadowVis, bHasPrevVis, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_combined_temporal"));
+        combinedPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, tlasIndex, bUseReGIR, bHasHistory, bHasQuadHistory, bConfidence, bShadowVis, bHasPrevVis, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bUseReGIR ? SID("restir_di_combined_temporal_regir") : SID("restir_di_combined_temporal"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             ReSTIRDICombinedTemporalPushConstant pc{
@@ -204,8 +210,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .lightData = graph.GetBufferAddress(SID("light_data")),
                 .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                .gridBuffer = graph.GetBufferAddress(SID("regir_grid")),
-                .cellAvgWeight = graph.GetBufferAddress(SID("regir_cell_avg_weight")),
+                .gridBuffer = bUseReGIR ? graph.GetBufferAddress(SID("regir_grid")) : 0,
+                .cellAvgWeight = bUseReGIR ? graph.GetBufferAddress(SID("regir_cell_avg_weight")) : 0,
                 .historyBuffer = bHasHistory ? graph.GetBufferAddress(SID("restir_reservoir_history")) : 0,
                 .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
                 .visibilityBufferIndex = ~0u,
