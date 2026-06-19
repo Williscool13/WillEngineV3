@@ -11,7 +11,7 @@ module restir_interop;
 #define SHADER_CONST static const
 #else
 #include <cstdint>
-
+#include <glm/glm.hpp>
 using uint = uint32_t;
 using int32 = int32_t;
 using uint32 = uint32_t;
@@ -88,6 +88,6 @@ SHADER_PUBLIC SHADER_CONST uint REGIR_HISTORY_LENGTH = 8u;
 
 // Initial-candidate counts for ReSTIR DI Talbot MIS: light (uniform) samples and BRDF-guided samples.
 SHADER_PUBLIC SHADER_CONST int RESTIR_M_LIGHT = 16;
-SHADER_PUBLIC SHADER_CONST int RESTIR_M_BRDF = 0;
+SHADER_PUBLIC SHADER_CONST int RESTIR_M_BRDF = 1;
 
 #endif //WILL_ENGINE_RETIR_INTEROP_H

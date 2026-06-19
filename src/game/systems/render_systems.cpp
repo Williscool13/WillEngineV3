@@ -559,6 +559,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         if (defaultMaterial && quadModel && quadModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded
             && !quadModel->modelData.meshes.IsEmpty() && !quadModel->modelData.meshes[0].primitiveProperties.IsEmpty()) {
             const uint32_t quadPrimitiveIndex = quadModel->modelData.meshes[0].primitiveProperties[0].index;
+            const uint64_t quadBlasDeviceAddress = quadModel->modelData.meshes[0].primitiveProperties[0].blasDeviceAddress;
 
             Engine::Material emissiveMaterial = *defaultMaterial; // only emissiveFactor changes per light; black albedo so only emission shows
             emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -583,12 +584,15 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     stableId = stable->id.id;
                 }
 
+                const uint32_t* lightIdxPtr = frameBuffer->mainViewFamily.lightEntityToIndex.Find(static_cast<uint32_t>(entity));
+
                 frameBuffer->mainViewFamily.primitiveInstances.PushBack({
                     .primitiveIndex = quadPrimitiveIndex,
                     .materialID = materialKey,
                     .modelIndex = modelIndex,
                     .stableId = stableId,
-                    .blasDeviceAddress = 0,
+                    .blasDeviceAddress = quadBlasDeviceAddress,
+                    .lightIndex = lightIdxPtr ? *lightIdxPtr : 0xFFFFFFFFu,
                 });
             }
         }
@@ -603,6 +607,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         if (defaultMaterial && sphereModel && sphereModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded
             && !sphereModel->modelData.meshes.IsEmpty() && !sphereModel->modelData.meshes[0].primitiveProperties.IsEmpty()) {
             const uint32_t spherePrimitiveIndex = sphereModel->modelData.meshes[0].primitiveProperties[0].index;
+            const uint64_t sphereBlasDeviceAddress = sphereModel->modelData.meshes[0].primitiveProperties[0].blasDeviceAddress;
 
             Engine::Material emissiveMaterial = *defaultMaterial;
             emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -627,12 +632,14 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     stableId = stable->id.id;
                 }
 
+                const uint32_t* lightIdxPtr = frameBuffer->mainViewFamily.lightEntityToIndex.Find(static_cast<uint32_t>(entity));
                 frameBuffer->mainViewFamily.primitiveInstances.PushBack({
                     .primitiveIndex = spherePrimitiveIndex,
                     .materialID = materialKey,
                     .modelIndex = modelIndex,
                     .stableId = stableId,
-                    .blasDeviceAddress = 0,
+                    .blasDeviceAddress = sphereBlasDeviceAddress,
+                    .lightIndex = lightIdxPtr ? *lightIdxPtr : 0xFFFFFFFFu,
                 });
             }
         }
@@ -771,6 +778,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : areaView.each()) {
         if (vf.lights.IsFull()) { break; }
+        vf.lightEntityToIndex[static_cast<uint32_t>(entity)] = static_cast<uint32_t>(vf.lights.Size());
         const glm::mat3 rot = glm::mat3_cast(transform.rotation);
         const glm::vec3 normal = rot[2];
         const glm::vec3 right = rot[0];
@@ -795,6 +803,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     auto sphereView = state->registry.view<Component::SphereLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : sphereView.each()) {
         if (vf.lights.IsFull()) { break; }
+        vf.lightEntityToIndex[static_cast<uint32_t>(entity)] = static_cast<uint32_t>(vf.lights.Size());
         const glm::vec3& c = light.color;
         vf.lights.PushBack(LightInfo{
             .position = {transform.translation, 0.0f},

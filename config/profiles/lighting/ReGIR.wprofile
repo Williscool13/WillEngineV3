@@ -33,16 +33,16 @@
       0.0,
       0.0
     ],
-    "regirWClamp": 10.0,
+    "regirWClamp": 1.0,
     "relax": {
       "atrousIterations": 4,
       "denoisingRange": 1000.0,
       "depthThreshold": 0.003000000026077032,
       "diffBlurRadius": 29.6875,
-      "diffMaxAccumFrames": 64.0,
+      "diffMaxAccumFrames": 32.33333206176758,
       "diffMaxFastAccumFrames": 4.416666507720947,
-      "diffMaxLuminanceRelativeDifference": 4.0,
-      "diffPhiLuminance": 2.5,
+      "diffMaxLuminanceRelativeDifference": 3.0,
+      "diffPhiLuminance": 2.0,
       "disocclusionThreshold": 0.004999999888241291,
       "enableAntiFirefly": true,
       "enablePrepass": false,
@@ -70,7 +70,7 @@
       "specVarianceBoost": 1.0
     },
     "remodulateOutput": 0,
-    "spatialMCap": 100,
+    "spatialMCap": 304,
     "spatialNeighbors": 3,
     "spatialPasses": 1,
     "spatialRadius": 30,
@@ -82,6 +82,6 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 100
+    "temporalMCap": 1
   }
 }

@@ -128,14 +128,15 @@ SHADER_PUBLIC struct MaterialProperties
     SHADER_PUBLIC float4 physicalProperties; // x: IOR, y: dispersion, z: normal scale, w: occlusion strength
 };
 
-SHADER_PUBLIC struct Instance
+SHADER_PUBLIC struct    Instance
 {
     SHADER_PUBLIC uint32_t primitiveIndex;
     SHADER_PUBLIC uint32_t modelIndex;
     SHADER_PUBLIC uint32_t materialIndex;
     SHADER_PUBLIC uint32_t lightingIndex;
     SHADER_PUBLIC uint64_t stableId;
-    uint32_t padding2;
+    // Index into LightData.lights for an instance that is a light's representative emissive mesh
+    SHADER_PUBLIC uint32_t lightIndex;
     uint32_t padding3;
 };
 

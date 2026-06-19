@@ -132,7 +132,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
             shadowRay.TMax = shadowDist - 0.05;
 
             RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-            q.TraceRayInline(tlas, 0, 0xFF, shadowRay);
+            q.TraceRayInline(tlas, 0, 0x01, shadowRay);
             q.Proceed();
 
             bool visible = (q.CommittedStatus() == COMMITTED_NOTHING);
@@ -179,7 +179,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushCo
                 sunRay.TMax = 10000.0;
 
                 RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-                q.TraceRayInline(tlas, 0, 0xFF, sunRay);
+                q.TraceRayInline(tlas, 0, 0x01, sunRay);
                 q.Proceed();
 
                 if (q.CommittedStatus() == COMMITTED_NOTHING) {

@@ -523,6 +523,7 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC float karisStrength;
     SHADER_PUBLIC float invalidHistoryBlend;
     SHADER_PUBLIC float lumaBoostCap;
+    SHADER_PUBLIC float grazingTurnoverStrength;
 };
 
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant

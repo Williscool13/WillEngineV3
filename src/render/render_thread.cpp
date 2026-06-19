@@ -1376,6 +1376,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             .materialIndex = materialIndex,
             .lightingIndex = lightingIndex,
             .stableId = inst.stableId,
+            .lightIndex = inst.lightIndex,
         };
     }
 

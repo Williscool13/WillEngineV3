@@ -523,7 +523,7 @@ public float EvalPHatVisibility(LightSample s, float3 V, float3 N, float3 albedo
     shadowRay.TMin = 0.001;
     shadowRay.TMax = lightDist - 0.05;
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-    q.TraceRayInline(tlas, 0, 0xFF, shadowRay);
+    q.TraceRayInline(tlas, 0, 0x01, shadowRay);
     q.Proceed();
     if (q.CommittedStatus() != COMMITTED_NOTHING) { return 0.0; }
     return EvalPHat(s, V, N, albedo, F0, metallic, roughness, lightColor, lightIntensity);

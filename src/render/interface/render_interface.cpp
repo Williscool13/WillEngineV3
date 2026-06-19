@@ -20,6 +20,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     textDrawCalls = ArenaVector<TextDrawCall>(&arena, wm.textDrawCalls);
 
     activeMaterials = ArenaMap<Engine::MaterialID, uint32_t>(&arena, wm.activeMaterials);
+    lightEntityToIndex = ArenaMap<uint32_t, uint32_t>(&arena, MAX_LIGHTS);
     materials = ArenaVector<Engine::RenderMaterial>(&arena, wm.materials);
     activeTextMaterials = ArenaMap<Engine::TextMaterialID, uint32_t>(&arena, wm.activeTextMaterials);
     textMaterials = ArenaVector<TextRenderMaterial>(&arena, wm.textMaterials);

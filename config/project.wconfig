@@ -11,6 +11,7 @@
     "taa": {
       "baseBlendAlpha": 0.009999999776482582,
       "disocclusionThreshold": 0.10000000149011612,
+      "grazingTurnoverStrength": 30.0,
       "invalidHistoryBlend": 0.5,
       "karisStrength": 1.0,
       "lumaBoostCap": 0.5,
@@ -18,14 +19,14 @@
       "varianceGammaLuma": 1.0
     }
   },
-  "activeLightingProfile": "main_restir_relax",
+  "activeLightingProfile": "ReGIR",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,
   "bAutoSaveProjectConfig": false,
   "bLimitFps": false,
   "defaultScene": "Lighting 2",
-  "frameLimitTarget": 100,
+  "frameLimitTarget": 60,
   "gtao": {
     "bEnabled": false,
     "denoiseBlurBeta": 1.2000000476837158,
@@ -39,7 +40,7 @@
     "stepsPerSlice": 3.0,
     "thinOccluderCompensation": 0.0
   },
-  "lightingMode": 1,
+  "lightingMode": 4,
   "postProcess": {
     "agxMaxEV": 4.026069164276123,
     "agxMinEV": -12.473930358886719,
@@ -51,7 +52,7 @@
     "bPaniniEnabled": false,
     "bSharpeningEnabled": true,
     "bVignetteAberrationEnabled": true,
-    "bloomClamp": 100.0,
+    "bloomClamp": 10.98957347869873,
     "bloomIntensity": 0.03999999910593033,
     "bloomRadius": 1.0,
     "bloomSoftThreshold": 0.5,
@@ -106,34 +107,34 @@
       0.0,
       0.0
     ],
-    "regirWClamp": 0.0,
+    "regirWClamp": 1.0,
     "relax": {
       "atrousIterations": 4,
       "denoisingRange": 1000.0,
       "depthThreshold": 0.003000000026077032,
-      "diffBlurRadius": 30.0,
-      "diffMaxAccumFrames": 32.0,
-      "diffMaxFastAccumFrames": 4.0,
+      "diffBlurRadius": 29.6875,
+      "diffMaxAccumFrames": 32.33333206176758,
+      "diffMaxFastAccumFrames": 4.416666507720947,
       "diffMaxLuminanceRelativeDifference": 3.0,
       "diffPhiLuminance": 2.0,
       "disocclusionThreshold": 0.004999999888241291,
       "enableAntiFirefly": true,
       "enablePrepass": false,
-      "fastHistoryClampingSigmaScale": 2.0,
+      "fastHistoryClampingSigmaScale": 1.0,
       "historyAccelerationAmount": 1.0,
       "historyFixBasePixelStride": 14.0,
       "historyFixEdgeStoppingNormalPower": 8.0,
       "historyFixFrameNum": 4.0,
-      "historyResetAmount": 0.5,
+      "historyResetAmount": 0.800000011920929,
       "historyResetSpatialSigmaScale": 1.0,
-      "historyResetTemporalSigmaScale": 5.0,
-      "lobeAngleFraction": 0.39094650745391846,
+      "historyResetTemporalSigmaScale": 1.5,
+      "lobeAngleFraction": 0.6000000238418579,
       "luminanceEdgeStoppingRelaxation": 0.5,
-      "minHitDistanceWeight": 0.0,
+      "minHitDistanceWeight": 0.10000000149011612,
       "normalEdgeStoppingRelaxation": 0.30000001192092896,
       "roughnessEdgeStoppingEnabled": true,
       "roughnessEdgeStoppingRelaxation": 0.30000001192092896,
-      "roughnessFraction": 0.38683128356933594,
+      "roughnessFraction": 0.15000000596046448,
       "specBlurRadius": 50.0,
       "specLobeAngleSlack": 0.009999999776482582,
       "specMaxAccumFrames": 32.0,
@@ -143,9 +144,9 @@
       "specVarianceBoost": 1.0
     },
     "remodulateOutput": 0,
-    "spatialMCap": 200,
-    "spatialNeighbors": 5,
-    "spatialPasses": 2,
+    "spatialMCap": 304,
+    "spatialNeighbors": 3,
+    "spatialPasses": 1,
     "spatialRadius": 30,
     "svgf": {
       "alphaMin": 0.10000000149011612,
@@ -155,6 +156,6 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 93
+    "temporalMCap": 1
   }
 }

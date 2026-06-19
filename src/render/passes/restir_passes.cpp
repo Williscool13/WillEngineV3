@@ -94,6 +94,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     // ReGIR grid is built only for the ReGIR-fed main pass; the plain ReSTIR pass never touches the grid.
     if (bUseReGIR) {
     graph.CreateBuffer(SID("regir_grid"), REGIR_CELL_COUNT * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir)), true);
+    graph.CreateBuffer(SID("regir_grid_fresh"), REGIR_CELL_COUNT * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir)), true);
 
     const uint32_t regirHistoryCount = restirParams.regirHistoryLength < REGIR_HISTORY_LENGTH ? restirParams.regirHistoryLength : REGIR_HISTORY_LENGTH;
     const uint32_t regirFillHistoryCount = restirParams.bResetReGIR ? 0u : regirHistoryCount;
@@ -114,6 +115,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         if (bHasHistory[g]) { regirFillPass.ReadBuffer(historyNames[g]); }
     }
     regirFillPass.WriteBuffer(SID("regir_grid"));
+    regirFillPass.WriteBuffer(SID("regir_grid_fresh"));
     regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, regirHistoryCount, regirFillHistoryCount, historyNames, bHasHistory](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_fill"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -123,6 +125,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .lightData = graph.GetBufferAddress(SID("light_data")),
             .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
             .gridBuffer = graph.GetBufferAddress(SID("regir_grid")),
+            .freshBuffer = graph.GetBufferAddress(SID("regir_grid_fresh")),
             .gridOffset = restirParams.regirGridOffset,
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
@@ -139,7 +142,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     });
 
     if (regirHistoryCount > 0 && !restirParams.bResetReGIR) {
-        graph.CarryBufferToNextFrame(SID("regir_grid"), historyNames[0], 0);
+        graph.CarryBufferToNextFrame(SID("regir_grid_fresh"), historyNames[0], 0);
         for (uint32_t g = 0; g + 1 < regirHistoryCount; g++) {
             if (bHasHistory[g]) { graph.CarryBufferToNextFrame(historyNames[g], historyNames[g + 1], 0); }
         }

@@ -84,7 +84,8 @@ void SetupTLASBuild(RenderGraph& graph,
         VkAccelerationStructureInstanceKHR& inst = instanceData[instanceSlot++];
         inst.transform = transform;
         inst.instanceCustomIndex = static_cast<uint32_t>(i);
-        inst.mask = 0xFF;
+        // Mask bit 0x01 = scene geometry (occluders), 0x02 = light proxy meshes
+        inst.mask = (src.lightIndex != 0xFFFFFFFFu) ? 0x02 : 0x01;
         inst.instanceShaderBindingTableRecordOffset = 0;
         inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         inst.accelerationStructureReference = src.blasDeviceAddress;

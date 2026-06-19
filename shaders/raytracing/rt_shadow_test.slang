@@ -31,7 +31,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTShadowTestPushConst
 
     //RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     RayQuery<> q;
-    q.TraceRayInline(tlas, 0, 0xFF, ray);
+    q.TraceRayInline(tlas, 0, 0x01, ray);
     q.Proceed();
 
     float4 result = float4(0.0, 0.0, 0.0, 1.0);

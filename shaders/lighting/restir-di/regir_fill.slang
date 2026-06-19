@@ -20,6 +20,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
     int lightCount = pc.lightData->lightCount;
     if (lightCount <= 0) {
         pc.gridBuffer[slot] = ReGIRReservoirEmpty();
+        pc.freshBuffer[slot] = ReGIRReservoirEmpty();
         return;
     }
 
@@ -65,6 +66,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
     // the shading pass forms sourcePdf = targetPdf / cellAverageWeight (RTG2 Ch.23, Section 23.3.2).
     FinalizeReservoirReGIR(r, accum, winnerPHat, float(REGIR_FILL_CANDIDATES));
     ReGIRClampW(r, pc.wClamp);
+    pc.freshBuffer[slot] = r;
 
     // Temporal grid reuse (RTG2 Ch.23): merge fresh with each prior-frame reservoir, renormalising to M=1 each round so confidence can't accumulate.
     // newest -> oldest. I'm not sure if this is the correct approach (this will positively weight older "good" samples.

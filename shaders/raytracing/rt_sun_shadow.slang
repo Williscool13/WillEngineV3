@@ -88,7 +88,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
     ray.TMax = 10000.0;
 
     RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-    q.TraceRayInline(tlas, 0, 0xFF, ray);
+    q.TraceRayInline(tlas, 0, 0x01, ray);
     q.Proceed();
 
     if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {

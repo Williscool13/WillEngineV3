@@ -131,6 +131,60 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 r_gen.sampleOffsetPacked = gr.sampleOffsetPacked;
             }
         }
+
+        float3 worldN = normalize(mul(float3x3(scene.invView), N));
+        for (int i = 0; i < RESTIR_M_BRDF; i++) {
+            float uXi0 = HashStep(h);
+            float uXi1 = HashStep(h);
+            float uSelect = HashStep(h);
+
+            float p_brdf_sample;
+            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, p_brdf_sample);
+
+            float w_i = 0.0;
+            uint brdfLightIdx = ~0u;
+            float3 brdfXi = float3(0.0);
+            LightVS brdfVS = (LightVS)0;
+
+            if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
+                RayDesc ray;
+                ray.Origin = worldPos + worldN * 0.05;
+                ray.Direction = normalize(mul(float3x3(scene.invView), brdfL));
+                ray.TMin = 0.001;
+                ray.TMax = 1e30;
+                RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+                // Mask 0xFF: hit both scene geometry (0x01) and light proxies (0x02); an occluder hit first -> miss.
+                RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+                q.TraceRayInline(tlas, 0, 0xFF, ray);
+                q.Proceed();
+                if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
+                    uint lightIdx = pc.instanceBuffer[q.CommittedInstanceID()].lightIndex;
+                    if (lightIdx != ~0u && lightIdx < uint(lightCount)) {
+                        LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
+                        float t;
+                        if (RayIntersectLight(vs, viewPosition, brdfL, t)) {
+                            float3 Xi = viewPosition + brdfL * t;
+                            LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                            float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                            if (p_brdf_area > 0.0) {
+                                float3 lc = UnpackUnorm4x8(vs.packedColor).rgb;
+                                float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lc, vs.intensity);
+                                w_i = p_hat / p_brdf_area;
+                                brdfLightIdx = lightIdx;
+                                brdfXi = Xi;
+                                brdfVS = vs;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (ReservoirAddSample(accum_gen, w_i, uSelect) && brdfLightIdx != ~0u) {
+                r_gen.lightIdx = brdfLightIdx;
+                r_gen.sampleOffsetPacked = EncodeSampleOffset(brdfXi, brdfVS);
+            }
+        }
+
         r_gen.M = uint(accum_gen.M);
     }
 

@@ -338,9 +338,9 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 
     Game::RenderPrepareTransforms(ctx, state, frameBuffer);
+    Game::GatherLights(ctx, state, frameBuffer);
     Game::GatherRenderables(ctx, state, frameBuffer);
     Game::GatherTextRenderables(ctx, state, frameBuffer);
-    Game::GatherLights(ctx, state, frameBuffer);
     if (state->debug.bEnableUI) {
         Game::GatherUIRenderables(ctx, state, frameBuffer);
     }
