@@ -63,7 +63,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 threadID : SV_DispatchT
     }
 
     // Store the RIS pieces (totalWeight = wSum/M, targetPdf = winnerPHat) rather than a pre-divided W;
-    // the shading pass forms sourcePdf = targetPdf / cellAverageWeight (RTG2 Ch.23, Section 23.3.2).
+    // the shading pass forms sourcePdf = targetPdf / totalWeight (per-reservoir W).
     FinalizeReservoirReGIR(r, accum, winnerPHat, float(REGIR_FILL_CANDIDATES));
     ReGIRClampW(r, pc.wClamp);
     pc.freshBuffer[slot] = r;

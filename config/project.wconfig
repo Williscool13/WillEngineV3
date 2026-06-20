@@ -98,11 +98,11 @@
     },
     "bAdaptiveSpatial": true,
     "bHalfRes": true,
-    "bInitialVisibility": false,
+    "bInitialVisibility": true,
     "bPermutationSampling": false,
     "boilingFilterStrength": 0.20000000298023224,
     "confidenceStrength": 0.0,
-    "denoiserMode": 3,
+    "denoiserMode": 0,
     "iblIntensity": 0.0,
     "regirGridOffset": [
       -5.199999809265137,
@@ -115,10 +115,10 @@
       "denoisingRange": 1000.0,
       "depthThreshold": 0.003000000026077032,
       "diffBlurRadius": 29.6875,
-      "diffMaxAccumFrames": 32.33333206176758,
+      "diffMaxAccumFrames": 32.39506149291992,
       "diffMaxFastAccumFrames": 4.416666507720947,
       "diffMaxLuminanceRelativeDifference": 3.0,
-      "diffPhiLuminance": 2.0,
+      "diffPhiLuminance": 1.0,
       "disocclusionThreshold": 0.004999999888241291,
       "enableAntiFirefly": true,
       "enablePrepass": false,
@@ -159,6 +159,6 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 8
+    "temporalMCap": 32
   }
 }

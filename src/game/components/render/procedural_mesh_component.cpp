@@ -56,6 +56,7 @@ void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& 
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
+    rt.renderRotation = component.renderRotation;
     registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
 }
 }
@@ -72,6 +73,8 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
     json["type"] = comp.params.index();
     json["material"] = comp.material.id;
     json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
+    json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
+    json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
 
     std::visit([&json](const auto& p) {
         using T = std::decay_t<decltype(p)>;
@@ -205,6 +208,14 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
     if (json.contains("modelFlags")) {
         const auto& f = json["modelFlags"];
         comp.modelFlags = glm::vec4(f[0].get<float>(), f[1].get<float>(), f[2].get<float>(), f[3].get<float>());
+    }
+    if (json.contains("renderOffset")) {
+        const auto& o = json["renderOffset"];
+        comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
+    }
+    if (json.contains("renderRotation")) {
+        const auto& r = json["renderRotation"];
+        comp.renderRotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
     }
 
     int32_t type = json["type"].get<int32_t>();
@@ -384,7 +395,20 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
 Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                                               entt::entity entity, const char* name)
 {
+    static entt::entity editEntity = entt::null;
+    static bool bEditingOffset = false;
+
+    if (editEntity != entity) {
+        editEntity = entity;
+        bEditingOffset = false;
+    }
+
     auto& component = registry.get<ProceduralMeshComponent>(entity);
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+
+    if (bEditingOffset) { state->editor.bExclusiveGizmoActive = true; }
+
     bool open = ImGui::CollapsingHeader("Procedural Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -401,9 +425,6 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         if (ImGui::Checkbox("Shadow Caster##proceduralmesh", &shadowCaster)) {
             component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
         }
-
-        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-        auto* state = registry.ctx().get<Engine::EngineState*>();
 
         if (std::holds_alternative<std::monostate>(component.params)) {
             if (ImGui::BeginCombo("Shape", "")) {
@@ -754,6 +775,113 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 }
                 ImGui::EndCombo();
             }
+        }
+
+        ImGui::SeparatorText("Render Transform");
+
+        const float innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float outerSpacing = ImGui::GetStyle().ItemSpacing.x;
+        const float frameRounding = ImGui::GetStyle().FrameRounding;
+        const float labelColW = ImGui::CalcTextSize("Rotation").x + outerSpacing * 3.0f;
+        const float fieldW = (ImGui::GetContentRegionAvail().x - labelColW - innerSpacing * 2.0f) / 3.0f;
+        const float fieldH = ImGui::GetFrameHeight();
+        constexpr float stripW = 4.0f;
+
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        auto drawField = [&](const char* id, float* val, ImU32 strip, float speed, bool editable) -> bool {
+            ImGui::SetNextItemWidth(fieldW);
+            ImGui::BeginDisabled(!editable);
+            bool changed = ImGui::DragFloat(id, val, speed, 0, 0, "%.2f");
+            ImGui::EndDisabled();
+            ImVec2 p = ImGui::GetItemRectMin();
+            dl->AddRectFilled(p, {p.x + stripW, p.y + fieldH}, strip, frameRounding, ImDrawFlags_RoundCornersLeft);
+            return changed;
+        };
+        auto drawXYZ = [&](const char* idX, const char* idY, const char* idZ, float* v, float speed, bool editable) -> bool {
+            bool c = false;
+            c |= drawField(idX, v + 0, Editor::COLOR_AXIS_X, speed, editable);
+            ImGui::SameLine(0, innerSpacing);
+            c |= drawField(idY, v + 1, Editor::COLOR_AXIS_Y, speed, editable);
+            ImGui::SameLine(0, innerSpacing);
+            c |= drawField(idZ, v + 2, Editor::COLOR_AXIS_Z, speed, editable);
+            return c;
+        };
+
+        // Offset row
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Offset");
+        ImGui::SameLine(labelColW);
+        if (drawXYZ("##rox", "##roy", "##roz", &component.renderOffset.x, 0.1f, bEditingOffset)) {
+            auto* rt = registry.try_get<RenderTransformComponent>(entity);
+            if (rt) {
+                rt->renderOffset = component.renderOffset;
+                registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+            }
+        }
+
+        // Rotation row
+        glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(component.renderRotation));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Rotation");
+        ImGui::SameLine(labelColW);
+        if (drawXYZ("##rrx", "##rry", "##rrz", &renderEuler.x, 0.5f, bEditingOffset)) {
+            component.renderRotation = glm::quat(glm::radians(renderEuler));
+            auto* rt = registry.try_get<RenderTransformComponent>(entity);
+            if (rt) {
+                rt->renderRotation = component.renderRotation;
+                registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+            }
+        }
+
+        ImGui::PushStyleColor(ImGuiCol_Button, bEditingOffset ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
+        ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditingOffset);
+        if (ImGui::Button(bEditingOffset ? "Done##offsetedit" : "Edit##offsetedit")) {
+            bEditingOffset = !bEditingOffset;
+        }
+        ImGui::EndDisabled();
+        ImGui::PopStyleColor();
+    }
+
+    if (bEditingOffset) {
+        auto* transform = registry.try_get<TransformComponent>(entity);
+        if (transform) {
+            const Mat4 entityMat = GetMatrix(*transform);
+            const Mat4 entityMatInv = glm::inverse(entityMat);
+            const Vec3 pivotWorld = Vec3(entityMat * Vec4(component.renderOffset, 1.0f));
+
+            const Mat4 view = viewFamily.mainView.currentViewData.view;
+            const Mat4 proj = viewFamily.mainView.currentViewData.proj;
+
+            float snapArr[3] = {};
+            float* snap = nullptr;
+            if (state->editor.bSnapEnabled) {
+                if (state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE) {
+                    snapArr[0] = snapArr[1] = snapArr[2] = state->editor.snapTranslation;
+                } else if (state->editor.currentGizmoOperation == ImGuizmo::ROTATE) {
+                    snapArr[0] = snapArr[1] = snapArr[2] = state->editor.snapRotation;
+                } else {
+                    snapArr[0] = snapArr[1] = snapArr[2] = state->editor.snapScale;
+                }
+                snap = snapArr;
+            }
+
+            ImGuizmo::SetGizmoSizeClipSpace(0.10f);
+            ImGuizmo::PushID(9901);
+            const Quat worldRenderRot = transform->rotation * component.renderRotation;
+            Mat4 gizmoMat = glm::translate(Mat4(1.0f), pivotWorld) * glm::mat4_cast(worldRenderRot);
+            if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), state->editor.currentGizmoOperation, state->editor.currentGizmoMode, glm::value_ptr(gizmoMat), nullptr, snap)) {
+                component.renderOffset = Vec3(entityMatInv * Vec4(Vec3(gizmoMat[3]), 1.0f));
+                component.renderRotation = glm::inverse(transform->rotation) * glm::quat_cast(Mat3(gizmoMat));
+                auto* rt = registry.try_get<RenderTransformComponent>(entity);
+                if (rt) {
+                    rt->renderOffset = component.renderOffset;
+                    rt->renderRotation = component.renderRotation;
+                    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+                }
+            }
+            if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }
+            ImGuizmo::PopID();
+            ImGuizmo::SetGizmoSizeClipSpace(0.1f);
         }
     }
 

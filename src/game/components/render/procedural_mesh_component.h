@@ -25,6 +25,7 @@ struct ProceduralMeshComponent
     Engine::MaterialID material{};
     glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, zw: reserved
     glm::vec3 renderOffset{0.0f};
+    glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     static void Serialize(const ProceduralMeshComponent& comp, nlohmann::json& json);
     static void Deserialize(ProceduralMeshComponent& comp, const nlohmann::json& json);

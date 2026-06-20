@@ -116,15 +116,14 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
             float uSelect = HashStep(h);
             ReGIRReservoir gr = pc.gridBuffer[slot];
-            float cellAvgWeight = pc.cellAvgWeight[cell];
-            if (gr.lightIdx == ~0u || gr.targetPdf <= 0.0 || cellAvgWeight <= 0.0) { continue; }
+            if (gr.lightIdx == ~0u || gr.targetPdf <= 0.0 || gr.totalWeight <= 0.0) { continue; }
             LightVS vs = UnpackLightVS(pc.lightVS[gr.lightIdx]);
             float3 Xi = DecodeSamplePos(gr.sampleOffsetPacked, vs);
             LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
             float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
             float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-            // RTG2 Ch.23 §23.3.2: grid sample source pdf = candidate.targetPdf / cellAverageWeight.
-            float p_grid = gr.targetPdf / cellAvgWeight;
+            // Per-reservoir source pdf = targetPdf / totalWeight
+            float p_grid = gr.targetPdf / gr.totalWeight;
             // Balance-heuristic MIS against the BRDF technique: a BRDF ray could also have produced this direction, so down-weight grid samples that sit in the specular lobe. The grid is discrete, so the reverse term (grid producing a continuous BRDF sample) is zero and the BRDF loop omits it.
             float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
             float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;

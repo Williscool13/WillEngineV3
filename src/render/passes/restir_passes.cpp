@@ -148,25 +148,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
         }
     }
 
-    // Per-cell average reservoir weight (RTG2 Ch.23 §23.3.2). The shading RIS divides each grid candidate's build targetPdf by this to form its source pdf.
-    graph.CreateBuffer(SID("regir_cell_avg_weight"), REGIR_CELL_COUNT * static_cast<uint32_t>(sizeof(float)), true);
-
-    RenderPass& regirAvgPass = graph.AddPass(SID("[ReGIR] Cell Average"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
-    regirAvgPass.ReadBuffer(SID("regir_grid"));
-    regirAvgPass.WriteBuffer(SID("regir_cell_avg_weight"));
-    regirAvgPass.Execute([&, pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_cell_average"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-
-        ReGIRCellAveragePushConstant pc{
-            .gridBuffer = graph.GetBufferAddress(SID("regir_grid")),
-            .cellAvgWeight = graph.GetBufferAddress(SID("regir_cell_avg_weight")),
-        };
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-
-        // One workgroup per cell.
-        vkCmdDispatch(cmd, REGIR_CELL_COUNT, 1, 1);
-    });
     } // if (bUseReGIR)
 
     {
@@ -188,7 +169,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
         combinedPass.ReadBuffer(SID("restir_lights_vs"));
         if (bUseReGIR) {
             combinedPass.ReadBuffer(SID("regir_grid"));
-            combinedPass.ReadBuffer(SID("regir_cell_avg_weight"));
         }
         combinedPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         if (bHasHistory) { combinedPass.ReadBuffer(SID("restir_reservoir_history")); }
@@ -214,7 +194,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .gridBuffer = bUseReGIR ? graph.GetBufferAddress(SID("regir_grid")) : 0,
-                .cellAvgWeight = bUseReGIR ? graph.GetBufferAddress(SID("regir_cell_avg_weight")) : 0,
                 .historyBuffer = bHasHistory ? graph.GetBufferAddress(SID("restir_reservoir_history")) : 0,
                 .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
                 .visibilityBufferIndex = ~0u,

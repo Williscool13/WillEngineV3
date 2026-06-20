@@ -417,8 +417,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(QuadSelectionPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("regir_fill"), src / "regir_fill_compute.spv",
                             sizeof(ReGIRFillPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("regir_cell_average"), src / "regir_cell_average_compute.spv",
-                            sizeof(ReGIRCellAveragePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_spatial"), src / "restir_di_spatial_compute.spv",
                             sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_combined_temporal"), src / "restir_di_combined_temporal_compute.spv",

@@ -270,7 +270,7 @@ public float3 ReGIRCellCenter(uint cellIndex, float3 gridOffset)
 /**
  * ReGIR cell-fill target. Uses the SAME (unfloored) geometry term as the shading target EvalPHat.
  * A distance floor here would break the cone-sampling cancellation in both the fill and the in-grid
- * shading RIS: the build target is the denominator of w_i = p_hat / (targetPdf / cellAvgWeight), so a
+ * shading RIS: the build target is the denominator of w_i = p_hat / (targetPdf / totalWeight), so a
  * floor caps the denominator for near samples and inflates w_i by minDist2/d² (a sphere-near-cap spike
  * that recirculates through the grid and persists). Genuine near-field spikes are bounded by ReGIRClampW.
  */
@@ -332,7 +332,7 @@ public ReGIRReservoir ReGIRReservoirEmpty()
 /**
  * Finalises a ReGIR grid reservoir into the (totalWeight, targetPdf) form (no pre-divided W).
  * totalWeight = wSum / M_total; targetPdf = the survivor's build target. The shading-side RIS
- * later forms sourcePdf = targetPdf / cellAverageWeight, so W is never baked per slot.
+ * later forms sourcePdf = targetPdf / totalWeight (per-reservoir W computed at shading, not baked per slot).
  */
 public void FinalizeReservoirReGIR(inout ReGIRReservoir r, ReservoirAccum accum, float targetPdf, float M_total)
 {
