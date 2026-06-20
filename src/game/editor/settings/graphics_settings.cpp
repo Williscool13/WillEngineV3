@@ -30,9 +30,6 @@ static void SaveLightingTab(Engine::EngineState* state)
     if (!cfg.activeLightingProfile.IsEmpty()) {
         Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig);
     }
-    cfg.lightingMode = state->lighting.lightingMode;
-    cfg.restir = state->debug.restir;
-    cfg.gtaoConfig = state->lighting.gtaoConfig;
     Engine::WriteProjectConfig(cfg);
 }
 
@@ -42,7 +39,6 @@ static void SavePostProcessTab(Engine::EngineState* state)
     if (!cfg.activePostProcessProfile.IsEmpty()) {
         Engine::Profiles::SavePostProcessProfile(cfg.activePostProcessProfile.c_str(), state->lighting.postProcess);
     }
-    cfg.postProcess = state->lighting.postProcess;
     Engine::WriteProjectConfig(cfg);
 }
 
@@ -57,9 +53,6 @@ static void DrawLightingProfiles(Engine::EngineState* state)
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
                 Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig);
-                cfg.lightingMode = state->lighting.lightingMode;
-                cfg.restir = state->debug.restir;
-                cfg.gtaoConfig = state->lighting.gtaoConfig;
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -97,7 +90,6 @@ static void DrawPostProcessProfiles(Engine::EngineState* state)
             if (ImGui::Selectable(names[i].c_str(), cfg.activePostProcessProfile == names[i])) {
                 cfg.activePostProcessProfile = names[i];
                 Engine::Profiles::LoadPostProcessProfile(names[i].c_str(), state->lighting.postProcess);
-                cfg.postProcess = state->lighting.postProcess;
                 Engine::WriteProjectConfig(cfg);
             }
         }

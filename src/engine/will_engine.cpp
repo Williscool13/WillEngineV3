@@ -29,6 +29,7 @@
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
+#include "profiles/profile_library.h"
 #include "render/render_thread.h"
 #include "render/resource_manager.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -258,11 +259,13 @@ void WillEngine::Initialize(Utils::Logger* logger)
 
         engineState = new(memoryManager.PersistentAllocRaw(sizeof(EngineState), Core::AllocTag::AssetGenerator)) EngineState(&memoryManager.General());
         engineState->projectConfig = ReadProjectConfig();
-        engineState->debug.restir = engineState->projectConfig.restir;
-        engineState->lighting.lightingMode = engineState->projectConfig.lightingMode;
-        engineState->lighting.gtaoConfig = engineState->projectConfig.gtaoConfig;
         engineState->lighting.aaConfig = engineState->projectConfig.aaConfig;
-        engineState->lighting.postProcess = engineState->projectConfig.postProcess;
+        if (!engineState->projectConfig.activeLightingProfile.IsEmpty()) {
+            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.gtaoConfig);
+        }
+        if (!engineState->projectConfig.activePostProcessProfile.IsEmpty()) {
+            Profiles::LoadPostProcessProfile(engineState->projectConfig.activePostProcessProfile.c_str(), engineState->lighting.postProcess);
+        }
 
 #if LOGGING_ENABLED
         engineContext->engineLogger = engineLogger;

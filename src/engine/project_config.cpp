@@ -60,21 +60,8 @@ ProjectConfig ReadProjectConfig()
         config.activePostProcessProfile = Core::InlineString<64>(j["activePostProcessProfile"].get<std::string_view>());
     }
 
-    if (j.contains("lightingMode") && j["lightingMode"].is_number_integer()) {
-        config.lightingMode = static_cast<Core::LightingMode>(j["lightingMode"].get<uint32_t>());
-    }
-
-    if (j.contains("restir") && j["restir"].is_object()) {
-        ConfigSerialization::FromJson(j["restir"], config.restir);
-    }
-    if (j.contains("gtao") && j["gtao"].is_object()) {
-        ConfigSerialization::FromJson(j["gtao"], config.gtaoConfig);
-    }
     if (j.contains("aa") && j["aa"].is_object()) {
         ConfigSerialization::FromJson(j["aa"], config.aaConfig);
-    }
-    if (j.contains("postProcess") && j["postProcess"].is_object()) {
-        ConfigSerialization::FromJson(j["postProcess"], config.postProcess);
     }
 
     return config;
@@ -97,11 +84,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
     j["bAutoSavePostProcess"] = config.bAutoSavePostProcess;
     j["activeLightingProfile"] = std::string_view(config.activeLightingProfile.c_str(), config.activeLightingProfile.Size());
     j["activePostProcessProfile"] = std::string_view(config.activePostProcessProfile.c_str(), config.activePostProcessProfile.Size());
-    j["lightingMode"] = config.lightingMode;
-    j["restir"] = ConfigSerialization::ToJson(config.restir);
-    j["gtao"] = ConfigSerialization::ToJson(config.gtaoConfig);
     j["aa"] = ConfigSerialization::ToJson(config.aaConfig);
-    j["postProcess"] = ConfigSerialization::ToJson(config.postProcess);
 
     file << j.dump(2);
     return file.good();

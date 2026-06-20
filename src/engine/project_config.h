@@ -13,7 +13,6 @@ namespace Engine
 struct ProjectConfig
 {
     Core::InlineString<256> defaultScene{};
-    Core::LightingMode lightingMode{false};
 
     bool bLimitFps{false};
     int32_t frameLimitTarget{60};
@@ -22,14 +21,12 @@ struct ProjectConfig
     bool bAutoSaveLighting{false};
     bool bAutoSavePostProcess{false};
 
+    /** Names of the lighting/post-process profiles to load on startup; their contents live in the .wprofile files, not here. */
     Core::InlineString<64> activeLightingProfile{};
     Core::InlineString<64> activePostProcessProfile{};
 
-    Core::ReSTIRParams restir{};
-
-    Core::GTAOConfiguration gtaoConfig{};
+    /** Anti-aliasing is project-level (not bundled in any profile). */
     Core::AntiAliasingConfiguration aaConfig{};
-    Core::PostProcessConfiguration postProcess{};
 };
 
 /**
