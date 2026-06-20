@@ -443,7 +443,6 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_remodulate.slang compute ReSTIRRemodulateMain restir_remodulate
 
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_fill.slang compute ComputeMain regir_fill
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_cell_average.slang compute ComputeMain regir_cell_average
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_boiling_filter.slang compute ComputeMain restir_boiling_filter
 
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve

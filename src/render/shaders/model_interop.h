@@ -128,7 +128,7 @@ SHADER_PUBLIC struct MaterialProperties
     SHADER_PUBLIC float4 physicalProperties; // x: IOR, y: dispersion, z: normal scale, w: occlusion strength
 };
 
-SHADER_PUBLIC struct    Instance
+SHADER_PUBLIC struct Instance
 {
     SHADER_PUBLIC uint32_t primitiveIndex;
     SHADER_PUBLIC uint32_t modelIndex;
@@ -159,6 +159,7 @@ SHADER_PUBLIC struct ShadeDispatchParameters
 
     SHADER_PUBLIC uint32_t shadingIndex;
 };
+
 SHADER_PUBLIC struct LightingDispatchParameters
 {
     SHADER_PUBLIC uint32_t xDispatch;

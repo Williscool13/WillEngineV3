@@ -58,8 +58,8 @@ SHADER_PUBLIC struct Reservoir
  * it stores the raw RIS pieces from the fill pass so the shading-side RIS can resample correctly:
  *   totalWeight = wSum / M_build  (the cell's running reservoir weight)
  *   targetPdf   = the survivor's cell-center build target (intensity * geom, the EvalCellTarget value)
- * At shading, sourcePdf = targetPdf / cellAverageWeight (averaged over the cell's slots in a separate pass).
- * Carrying the per-slot W instead is what inflates variance / fires bright spots, hence this split.
+ * At shading the grid tap's source pdf = targetPdf / totalWeight (per-reservoir W = totalWeight/targetPdf,
+ * exactly unbiased at any fill count). targetPdf is kept separate for the BRDF-MIS denom and the temporal merge.
  * lightIdx == ~0u indicates an empty reservoir.
  */
 SHADER_PUBLIC struct ReGIRReservoir

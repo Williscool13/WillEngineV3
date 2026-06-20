@@ -385,12 +385,6 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC float wClamp;
 };
 
-SHADER_PUBLIC struct ReGIRCellAveragePushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) gridBuffer;
-    SHADER_PUBLIC SHADER_PTR(float) cellAvgWeight;
-};
-
 SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -398,9 +392,10 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) gridBuffer;
-    SHADER_PUBLIC SHADER_PTR(float) cellAvgWeight;
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
+    uint32_t pad0;
+    uint32_t pad1;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
