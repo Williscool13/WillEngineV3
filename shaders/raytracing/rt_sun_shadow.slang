@@ -81,8 +81,12 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
 
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
+    float3 toCamera = scene.cameraWorldPos.xyz - worldPos;
+    float camDist = length(toCamera);
+    float originBias = max(0.05, camDist * 0.001);
+
     RayDesc ray;
-    ray.Origin = worldPos;
+    ray.Origin = worldPos + (toCamera / camDist) * originBias;
     ray.Direction = rayDir;
     ray.TMin = 0.001;
     ray.TMax = 10000.0;

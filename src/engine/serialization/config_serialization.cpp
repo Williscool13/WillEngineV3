@@ -106,7 +106,6 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bInitialVisibility", p.bInitialVisibility},
         {"regirWClamp", p.regirWClamp},
         {"restirWClamp", p.restirWClamp},
-        {"regirGridOffset", {p.regirGridOffset.x, p.regirGridOffset.y, p.regirGridOffset.z}},
         {"confidenceStrength", p.confidenceStrength},
         {"denoiserMode", static_cast<int32_t>(p.denoiserMode)},
         {"remodulateOutput", static_cast<int32_t>(p.remodulateOutput)},
@@ -137,10 +136,6 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
-    if (r.contains("regirGridOffset") && r["regirGridOffset"].is_array() && r["regirGridOffset"].size() == 3) {
-        const auto& o = r["regirGridOffset"];
-        p.regirGridOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
-    }
     p.confidenceStrength = r.contains("confidenceStrength") && r["confidenceStrength"].is_number() ? r["confidenceStrength"].get<float>() : p.confidenceStrength;
     p.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(getInt("denoiserMode", static_cast<int32_t>(p.denoiserMode)));
     p.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(getInt("remodulateOutput", static_cast<int32_t>(p.remodulateOutput)));

@@ -96,19 +96,6 @@ void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::F
             break;
         }
     }
-
-    // ReGIR grid volume
-    const Core::ReSTIRParams& restir = state->debug.restir;
-    const glm::vec3 gridExtents = 0.5f * glm::vec3(
-        static_cast<float>(REGIR_GRID_DIM_X) * REGIR_CELL_SIZE_X,
-        static_cast<float>(REGIR_GRID_DIM_Y) * REGIR_CELL_SIZE_Y,
-        static_cast<float>(REGIR_GRID_DIM_Z) * REGIR_CELL_SIZE_Z);
-    DEBUG_ADD_BOX(vf.debugBoxes, Core::DebugBox{
-        .center = restir.regirGridOffset,
-        .extents = gridExtents,
-        .rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
-        .color = {0.1f, 0.8f, 1.0f, 1.0f},
-    });
 }
 #endif
 } // Game

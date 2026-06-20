@@ -5,6 +5,7 @@ module pbr_functions;
 
 
 public static const bool LIGHT_INVERSE_SQUARE = true;
+public static const float LIGHT_GEOM_MIN_DIST2 = 0.1;
 
 public float LightDistanceFalloff(float dist, float range)
 {
@@ -37,7 +38,7 @@ public float LightGeometryTerm(float cosLight, float dist)
 {
     if (LIGHT_INVERSE_SQUARE)
     {
-        return cosLight / max(dist * dist, 1e-4);
+        return cosLight / max(dist * dist, LIGHT_GEOM_MIN_DIST2);
     }
     return cosLight;
 }

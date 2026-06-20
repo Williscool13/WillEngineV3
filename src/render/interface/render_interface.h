@@ -578,10 +578,8 @@ struct ReSTIRParams
     uint32_t temporalMCap{20u * 17u};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{false};
-    uint32_t regirHistoryLength{8};
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
-    glm::vec3 regirGridOffset{0.0f};
     bool bResetReGIR{false};
     float confidenceStrength{0.75f};
 

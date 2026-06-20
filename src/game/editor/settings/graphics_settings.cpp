@@ -495,15 +495,7 @@ void DrawLightingWindow(Engine::EngineState* state)
             if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
                 changed = true;
             }
-            int regirHistory = static_cast<int>(restir.regirHistoryLength);
-            if (Widgets::SliderInt("ReGIR History Grids", &regirHistory, 0, 8)) {
-                restir.regirHistoryLength = static_cast<uint32_t>(regirHistory);
-                changed = true;
-            }
             if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
-                changed = true;
-            }
-            if (ImGui::DragFloat3("ReGIR Grid Offset", &restir.regirGridOffset.x, 0.1f)) {
                 changed = true;
             }
             if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }

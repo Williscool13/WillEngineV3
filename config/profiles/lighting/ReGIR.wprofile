@@ -26,15 +26,10 @@
     "bHalfRes": true,
     "bInitialVisibility": true,
     "bPermutationSampling": false,
-    "boilingFilterStrength": 0.699999988079071,
+    "boilingFilterStrength": 0.0,
     "confidenceStrength": 0.0,
-    "denoiserMode": 3,
+    "denoiserMode": 0,
     "iblIntensity": 0.0,
-    "regirGridOffset": [
-      -5.199999809265137,
-      0.0,
-      0.0
-    ],
     "regirWClamp": 0.0,
     "relax": {
       "atrousIterations": 4,

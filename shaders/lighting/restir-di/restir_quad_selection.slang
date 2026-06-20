@@ -38,11 +38,11 @@ void ComputeMain(uniform QuadSelectionPushConstant pc, uint3 dtid : SV_DispatchT
     } else {
         // Silhouette/crease: lock to the nearest-depth corner so the half-res sample stays on one coherent (foreground) surface.
         // Frame-stable so edges is at least a clean staircase instead of jagged/inconsistent
-        sel = 0u;
+        sel = 3u;
         float best = zl.w;
-        if (zl.z < best) { best = zl.z; sel = 1u; }
-        if (zl.x < best) { best = zl.x; sel = 2u; }
-        if (zl.y < best) { best = zl.y; sel = 3u; }
+        if (zl.z < best) { best = zl.z; sel = 2u; }
+        if (zl.x < best) { best = zl.x; sel = 1u; }
+        if (zl.y < best) { best = zl.y; sel = 0u; }
     }
     rdgStorageUInt[pc.outIndex][pixel] = sel;
 }

@@ -239,33 +239,7 @@ public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
     return 1.0 / vs.area;
 }
 
-public int3 ReGIRGridDim() { return int3(int(REGIR_GRID_DIM_X), int(REGIR_GRID_DIM_Y), int(REGIR_GRID_DIM_Z)); }
 public float3 ReGIRCellSize() { return float3(REGIR_CELL_SIZE_X, REGIR_CELL_SIZE_Y, REGIR_CELL_SIZE_Z); }
-
-public bool ReGIRWorldToCellIndex(float3 worldPos, float3 gridOffset, out uint cellIndex)
-{
-    int3 dim = ReGIRGridDim();
-    float3 cellSize = ReGIRCellSize();
-    float3 gridHalf = 0.5 * float3(dim) * cellSize;
-    int3 c = int3(floor((worldPos - gridOffset + gridHalf) / cellSize));
-    if (any(c < int3(0, 0, 0)) || any(c >= dim))
-    {
-        cellIndex = ~0u;
-        return false;
-    }
-    cellIndex = (uint(c.z) * REGIR_GRID_DIM_Y + uint(c.y)) * REGIR_GRID_DIM_X + uint(c.x);
-    return true;
-}
-
-public float3 ReGIRCellCenter(uint cellIndex, float3 gridOffset)
-{
-    uint cx = cellIndex % REGIR_GRID_DIM_X;
-    uint cy = (cellIndex / REGIR_GRID_DIM_X) % REGIR_GRID_DIM_Y;
-    uint cz = cellIndex / (REGIR_GRID_DIM_X * REGIR_GRID_DIM_Y);
-    float3 cellSize = ReGIRCellSize();
-    float3 gridHalf = 0.5 * float3(ReGIRGridDim()) * cellSize;
-    return (float3(float(cx), float(cy), float(cz)) + 0.5) * cellSize - gridHalf + gridOffset;
-}
 
 /**
  * ReGIR cell-fill target. Uses the SAME (unfloored) geometry term as the shading target EvalPHat.

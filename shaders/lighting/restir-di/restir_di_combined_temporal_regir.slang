@@ -13,6 +13,7 @@ import visibility_lighting_common;
 import bindless_declarations;
 import restir_common;
 import random_common;
+import regir_hash;
 
 // ReGIR-exclusive variant of the ReSTIR DI main pass: initial candidates are drawn only from the ReGIR world-space grid.
 // Surfaces outside the grid generate no fresh candidate and rely on temporal/spatial reuse. The uniform/BRDF generation lives in restir_di_combined_temporal.slang.
@@ -101,37 +102,60 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-    uint regirCell;
-    bool inGrid = ReGIRWorldToCellIndex(worldPos, pc.gridOffset, regirCell);
+    float3 cameraPos = scene.cameraWorldPos.xyz;
+    float camDist = distance(worldPos, cameraPos);
+    bool useGrid = camDist <= REGIR_MAX_DIST;
+    float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
 
-    if (lightCount > 0 && inGrid) {
+    if (lightCount > 0) {
         for (int i = 0; i < RESTIR_M_LIGHT; i++) {
-            // Jitter the lookup by up to half a cell per tap so boundary pixels stochastically read neighbouring cells, dithering the hard cell edges into noise the denoiser resolves.
-            float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * ReGIRCellSize();
-            uint cell;
-            if (!ReGIRWorldToCellIndex(worldPos + jitter, pc.gridOffset, cell)) { continue; }
+            if (useGrid) {
+                // Jitter the lookup by up to half a cell per tap so boundary pixels stochastically read neighbouring cells, dithering the hard cell edges into noise the denoiser resolves.
+                float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
+                uint cellSlot = ReGIRHashFind(pc.hashEntries, ReGIRComputeKey(worldPos + jitter, cameraPos));
+                if (cellSlot == REGIR_HASH_INVALID) { continue; }
 
-            uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
-            uint slot = cell * REGIR_RESERVOIRS_PER_CELL + slotInCell;
+                uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
+                uint slot = cellSlot * REGIR_RESERVOIRS_PER_CELL + slotInCell;
 
-            float uSelect = HashStep(h);
-            ReGIRReservoir gr = pc.gridBuffer[slot];
-            if (gr.lightIdx == ~0u || gr.targetPdf <= 0.0 || gr.totalWeight <= 0.0) { continue; }
-            LightVS vs = UnpackLightVS(pc.lightVS[gr.lightIdx]);
-            float3 Xi = DecodeSamplePos(gr.sampleOffsetPacked, vs);
-            LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-            float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-            float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-            // Per-reservoir source pdf = targetPdf / totalWeight
-            float p_grid = gr.targetPdf / gr.totalWeight;
-            // Balance-heuristic MIS against the BRDF technique: a BRDF ray could also have produced this direction, so down-weight grid samples that sit in the specular lobe. The grid is discrete, so the reverse term (grid producing a continuous BRDF sample) is zero and the BRDF loop omits it.
-            float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
-            float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
-            float denom = float(RESTIR_M_LIGHT) * p_grid + float(RESTIR_M_BRDF) * p_brdf_area;
-            float w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
-            if (ReservoirAddSample(accum_gen, w_i, uSelect)) {
-                r_gen.lightIdx = gr.lightIdx;
-                r_gen.sampleOffsetPacked = gr.sampleOffsetPacked;
+                float uSelect = HashStep(h);
+                ReGIRReservoir gr = pc.reservoirs[slot];
+                if (gr.lightIdx == ~0u || gr.targetPdf <= 0.0 || gr.totalWeight <= 0.0) { continue; }
+                LightVS vs = UnpackLightVS(pc.lightVS[gr.lightIdx]);
+                float3 Xi = DecodeSamplePos(gr.sampleOffsetPacked, vs);
+                LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
+                float p_grid = gr.targetPdf / gr.totalWeight;
+                float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
+                float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                float denom = float(RESTIR_M_LIGHT) * p_grid + float(RESTIR_M_BRDF) * p_brdf_area;
+                float w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
+                if (ReservoirAddSample(accum_gen, w_i, uSelect)) {
+                    r_gen.lightIdx = gr.lightIdx;
+                    r_gen.sampleOffsetPacked = gr.sampleOffsetPacked;
+                }
+            } else {
+                // Beyond grid range: uniform light candidate, same Talbot MIS as the non-ReGIR path.
+                float uLight = HashStep(h);
+                float uU = HashStep(h);
+                float uV = HashStep(h);
+                float uSelect = HashStep(h);
+                int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
+                LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
+                float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
+                LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
+                float p_light_area = LightSamplePdfArea(vs, viewPosition, Xi) / float(lightCount);
+                float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
+                float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                float denom = float(RESTIR_M_LIGHT) * p_light_area + float(RESTIR_M_BRDF) * p_brdf_area;
+                float w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
+                if (ReservoirAddSample(accum_gen, w_i, uSelect)) {
+                    r_gen.lightIdx = uint(lightIdx);
+                    r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
+                }
             }
         }
 

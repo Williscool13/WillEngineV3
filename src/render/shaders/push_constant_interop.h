@@ -368,20 +368,36 @@ SHADER_PUBLIC struct QuadSelectionPushConstant
     SHADER_PUBLIC uint32_t pixelScale;
 };
 
+SHADER_PUBLIC struct ReGIRTouchPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(uint) hashEntries;
+    SHADER_PUBLIC SHADER_PTR(int4) activeCells;
+    SHADER_PUBLIC SHADER_PTR(uint) activeCount;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+};
+
+SHADER_PUBLIC struct ReGIRBuildIndirectPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(uint) activeCount;
+    SHADER_PUBLIC SHADER_PTR(uint) indirectArgs;
+};
+
 SHADER_PUBLIC struct ReGIRFillPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
-    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) gridBuffer;
-    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) freshBuffer;
-    uint32_t pad0;
-    uint32_t pad1;
-    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) gridHistory[REGIR_HISTORY_LENGTH];
-    SHADER_PUBLIC float3 gridOffset;
+    SHADER_PUBLIC SHADER_PTR(int4) activeCells;
+    SHADER_PUBLIC SHADER_PTR(uint) activeCount;
+    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirs;
+    SHADER_PUBLIC SHADER_PTR(uint) hashEntriesPrev;
+    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirsPrev;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
-    SHADER_PUBLIC uint32_t historyCount;
+    SHADER_PUBLIC uint32_t bHasPrev;
     SHADER_PUBLIC float wClamp;
 };
 
@@ -391,11 +407,10 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) gridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) hashEntries;
+    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirs;
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
-    uint32_t pad0;
-    uint32_t pad1;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
@@ -403,7 +418,6 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t prevGbufferOneIndex;
     SHADER_PUBLIC uint32_t prevDepthIndex;
     SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC float3 gridOffset;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t mCap;

@@ -91,63 +91,106 @@ void SetupReSTIRPasses(RenderGraph& graph,
         vkCmdDispatch(cmd, (MAX_LIGHTS + 63) / 64, 1, 1);
     });
 
-    // ReGIR grid is built only for the ReGIR-fed main pass; the plain ReSTIR pass never touches the grid.
+    // ReGIR hash grid is built only for the ReGIR-fed main pass; the plain ReSTIR pass never touches the grid.
     if (bUseReGIR) {
-    graph.CreateBuffer(SID("regir_grid"), REGIR_CELL_COUNT * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir)), true);
-    graph.CreateBuffer(SID("regir_grid_fresh"), REGIR_CELL_COUNT * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir)), true);
+        const uint32_t fullW = renderExtent[0] * pixelScale;
+        const uint32_t fullH = renderExtent[1] * pixelScale;
+        const uint32_t entriesSize = REGIR_HASH_CAPACITY * static_cast<uint32_t>(sizeof(uint32_t));
+        const uint32_t reservoirsSize = REGIR_HASH_CAPACITY * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir));
+        const uint32_t activeCellsSize = REGIR_HASH_CAPACITY * 4u * static_cast<uint32_t>(sizeof(int32_t));
 
-    const uint32_t regirHistoryCount = restirParams.regirHistoryLength < REGIR_HISTORY_LENGTH ? restirParams.regirHistoryLength : REGIR_HISTORY_LENGTH;
-    const uint32_t regirFillHistoryCount = restirParams.bResetReGIR ? 0u : regirHistoryCount;
+        graph.CreateBuffer(SID("regir_hash_entries"), entriesSize, true);
+        graph.CreateBuffer(SID("regir_hash_reservoirs"), reservoirsSize, true);
+        graph.CreateBuffer(SID("regir_active_cells"), activeCellsSize, false);
+        graph.CreateBuffer(SID("regir_active_count"), static_cast<uint32_t>(sizeof(uint32_t)), false);
+        graph.CreateBuffer(SID("regir_fill_indirect"), 3u * static_cast<uint32_t>(sizeof(uint32_t)), false);
 
-    StringID historyNames[REGIR_HISTORY_LENGTH];
-    bool bHasHistory[REGIR_HISTORY_LENGTH] = {};
-    for (uint32_t g = 0; g < regirHistoryCount; g++) {
-        const Core::InlineString<32> name = Core::InlineString<32>::Format("regir_grid_history%u", g);
-        historyNames[g] = StringID(name.c_str(), name.Size());
-        bHasHistory[g] = graph.HasBuffer(historyNames[g]);
-    }
+        const bool bHasPrev = !restirParams.bResetReGIR && graph.HasBuffer(SID("regir_hash_entries_prev")) && graph.HasBuffer(SID("regir_hash_reservoirs_prev"));
 
-    RenderPass& regirFillPass = graph.AddPass(SID("[ReGIR] Fill"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
-    regirFillPass.ReadBuffer(SCENE_DATA_BUFFER);
-    regirFillPass.ReadBuffer(SID("light_data"));
-    regirFillPass.ReadBuffer(SID("restir_lights_vs"));
-    for (uint32_t g = 0; g < regirHistoryCount; g++) {
-        if (bHasHistory[g]) { regirFillPass.ReadBuffer(historyNames[g]); }
-    }
-    regirFillPass.WriteBuffer(SID("regir_grid"));
-    regirFillPass.WriteBuffer(SID("regir_grid_fresh"));
-    regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, regirHistoryCount, regirFillHistoryCount, historyNames, bHasHistory](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_fill"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        RenderPass& clearPass = graph.AddPass(SID("[ReGIR] Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::ReSTIR);
+        clearPass.WriteTransferBuffer(SID("regir_hash_entries"));
+        clearPass.WriteTransferBuffer(SID("regir_active_count"));
+        clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("regir_hash_entries")), 0, VK_WHOLE_SIZE, 0);
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("regir_active_count")), 0, VK_WHOLE_SIZE, 0);
+        });
 
-        ReGIRFillPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .lightData = graph.GetBufferAddress(SID("light_data")),
-            .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
-            .gridBuffer = graph.GetBufferAddress(SID("regir_grid")),
-            .freshBuffer = graph.GetBufferAddress(SID("regir_grid_fresh")),
-            .gridOffset = restirParams.regirGridOffset,
-            .sceneDataIndex = sceneIndex,
-            .frameIndex = static_cast<uint32_t>(frameNumber),
-            .historyCount = regirFillHistoryCount,
-            .wClamp = restirParams.regirWClamp,
-        };
-        for (uint32_t g = 0; g < regirHistoryCount; g++) {
-            pc.gridHistory[g] = bHasHistory[g] ? graph.GetBufferAddress(historyNames[g]) : 0;
+        RenderPass& touchPass = graph.AddPass(SID("[ReGIR] Touch"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        touchPass.ReadBuffer(SCENE_DATA_BUFFER);
+        touchPass.ReadSampledImage(targets.depthCopy);
+        touchPass.WriteBuffer(SID("regir_hash_entries"));
+        touchPass.WriteBuffer(SID("regir_active_cells"));
+        touchPass.WriteBuffer(SID("regir_active_count"));
+        touchPass.Execute([&, pipelineManager, sceneIndex, fullW, fullH, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_touch"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            ReGIRTouchPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .hashEntries = graph.GetBufferAddress(SID("regir_hash_entries")),
+                .activeCells = graph.GetBufferAddress(SID("regir_active_cells")),
+                .activeCount = graph.GetBufferAddress(SID("regir_active_count")),
+                .renderExtent = {fullW, fullH},
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .sceneDataIndex = sceneIndex,
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (fullW + 7) / 8, (fullH + 7) / 8, 1);
+        });
+
+        RenderPass& indirectPass = graph.AddPass(SID("[ReGIR] Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        indirectPass.ReadBuffer(SID("regir_active_count"));
+        indirectPass.WriteBuffer(SID("regir_fill_indirect"));
+        indirectPass.Execute([pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_build_indirect"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            ReGIRBuildIndirectPushConstant pc{
+                .activeCount = graph.GetBufferAddress(SID("regir_active_count")),
+                .indirectArgs = graph.GetBufferAddress(SID("regir_fill_indirect")),
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });
+
+        RenderPass& regirFillPass = graph.AddPass(SID("[ReGIR] Fill"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        regirFillPass.ReadBuffer(SCENE_DATA_BUFFER);
+        regirFillPass.ReadBuffer(SID("light_data"));
+        regirFillPass.ReadBuffer(SID("restir_lights_vs"));
+        regirFillPass.ReadBuffer(SID("regir_active_cells"));
+        regirFillPass.ReadBuffer(SID("regir_active_count"));
+        if (bHasPrev) {
+            regirFillPass.ReadBuffer(SID("regir_hash_entries_prev"));
+            regirFillPass.ReadBuffer(SID("regir_hash_reservoirs_prev"));
         }
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        regirFillPass.ReadIndirectBuffer(SID("regir_fill_indirect"));
+        regirFillPass.WriteBuffer(SID("regir_hash_reservoirs"));
+        regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, bHasPrev](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_fill"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
-        const uint32_t totalSlots = REGIR_CELL_COUNT * REGIR_RESERVOIRS_PER_CELL;
-        vkCmdDispatch(cmd, (totalSlots + 63) / 64, 1, 1);
-    });
+            ReGIRFillPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .lightData = graph.GetBufferAddress(SID("light_data")),
+                .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
+                .activeCells = graph.GetBufferAddress(SID("regir_active_cells")),
+                .activeCount = graph.GetBufferAddress(SID("regir_active_count")),
+                .reservoirs = graph.GetBufferAddress(SID("regir_hash_reservoirs")),
+                .hashEntriesPrev = bHasPrev ? graph.GetBufferAddress(SID("regir_hash_entries_prev")) : 0,
+                .reservoirsPrev = bHasPrev ? graph.GetBufferAddress(SID("regir_hash_reservoirs_prev")) : 0,
+                .sceneDataIndex = sceneIndex,
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+                .bHasPrev = bHasPrev ? 1u : 0u,
+                .wClamp = restirParams.regirWClamp,
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SID("regir_fill_indirect")), 0);
+        });
 
-    if (regirHistoryCount > 0 && !restirParams.bResetReGIR) {
-        graph.CarryBufferToNextFrame(SID("regir_grid_fresh"), historyNames[0], 0);
-        for (uint32_t g = 0; g + 1 < regirHistoryCount; g++) {
-            if (bHasHistory[g]) { graph.CarryBufferToNextFrame(historyNames[g], historyNames[g + 1], 0); }
+        if (!restirParams.bResetReGIR) {
+            graph.CarryBufferToNextFrame(SID("regir_hash_entries"), SID("regir_hash_entries_prev"), 0);
+            graph.CarryBufferToNextFrame(SID("regir_hash_reservoirs"), SID("regir_hash_reservoirs_prev"), 0);
         }
-    }
-
     } // if (bUseReGIR)
 
     {
@@ -168,7 +211,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
         combinedPass.ReadBuffer(SID("light_data"));
         combinedPass.ReadBuffer(SID("restir_lights_vs"));
         if (bUseReGIR) {
-            combinedPass.ReadBuffer(SID("regir_grid"));
+            combinedPass.ReadBuffer(SID("regir_hash_entries"));
+            combinedPass.ReadBuffer(SID("regir_hash_reservoirs"));
         }
         combinedPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         if (bHasHistory) { combinedPass.ReadBuffer(SID("restir_reservoir_history")); }
@@ -193,7 +237,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .lightData = graph.GetBufferAddress(SID("light_data")),
                 .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                .gridBuffer = bUseReGIR ? graph.GetBufferAddress(SID("regir_grid")) : 0,
+                .hashEntries = bUseReGIR ? graph.GetBufferAddress(SID("regir_hash_entries")) : 0,
+                .reservoirs = bUseReGIR ? graph.GetBufferAddress(SID("regir_hash_reservoirs")) : 0,
                 .historyBuffer = bHasHistory ? graph.GetBufferAddress(SID("restir_reservoir_history")) : 0,
                 .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
                 .visibilityBufferIndex = ~0u,
@@ -203,7 +248,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .prevGbufferOneIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0u,
                 .prevDepthIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : ~0u,
                 .renderExtent = {renderExtent[0], renderExtent[1]},
-                .gridOffset = restirParams.regirGridOffset,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .mCap = restirParams.temporalMCap,
