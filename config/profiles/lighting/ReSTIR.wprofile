@@ -24,9 +24,9 @@
     },
     "bAdaptiveSpatial": true,
     "bHalfRes": true,
-    "bInitialVisibility": false,
+    "bInitialVisibility": true,
     "bPermutationSampling": false,
-    "boilingFilterStrength": 0.9020618796348572,
+    "boilingFilterStrength": 0.20000000298023224,
     "confidenceStrength": 0.0,
     "denoiserMode": 3,
     "iblIntensity": 0.0,
@@ -69,8 +69,8 @@
     "remodulateOutput": 0,
     "restirWClamp": 0.0,
     "spatialMCap": 200,
-    "spatialNeighbors": 5,
-    "spatialPasses": 2,
+    "spatialNeighbors": 3,
+    "spatialPasses": 1,
     "spatialRadius": 30,
     "svgf": {
       "alphaMin": 0.10000000149011612,
@@ -80,6 +80,6 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 93
+    "temporalMCap": 64
   }
 }

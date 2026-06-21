@@ -46,34 +46,26 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
     }
 
     for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += 64u) {
-        uint h = (slot * 2654435761u) ^ ((r + 1u) * 0x9E3779B9u) ^ (pc.frameIndex * 0x85EBCA6Bu);
+            uint h = (slot * 2654435761u) ^ ((r + 1u) * 0x9E3779B9u) ^ (pc.frameIndex * 0x85EBCA6Bu);
         h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
         ReGIRReservoir res = ReGIRReservoirEmpty();
         ReservoirAccum accum = ReservoirAccumEmpty();
-        float winnerPHat = 0.0;
+        float winnerTarget = 0.0;
         for (uint i = 0; i < REGIR_FILL_CANDIDATES; i++) {
             float uLight = HashStep(h);
-            float uU = HashStep(h);
-            float uV = HashStep(h);
             float uSelect = HashStep(h);
 
             int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
             LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
-            float3 Xi = SampleLightSurface(vs, cellCenterVS, uU, uV);
-            LightSample s = EvalLightSample(vs, Xi, cellCenterVS, float3(0.0, 0.0, 0.0), vs.range);
-            float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-
-            float target = EvalCellTarget(s, lightColor, vs.intensity);
-            float sourcePdf = LightSamplePdfArea(vs, cellCenterVS, Xi) / float(lightCount);
-            float w_i = (sourcePdf > 0.0) ? (target / sourcePdf) : 0.0;
+            float target = EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb);
+            float w_i = target * float(lightCount);
             if (ReservoirAddSample(accum, w_i, uSelect)) {
                 res.lightIdx = uint(lightIdx);
-                res.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
-                winnerPHat = target;
+                winnerTarget = target;
             }
         }
-        FinalizeReservoirReGIR(res, accum, winnerPHat, float(REGIR_FILL_CANDIDATES));
+        FinalizeReservoirReGIR(res, accum, winnerTarget, float(REGIR_FILL_CANDIDATES));
         ReGIRClampW(res, pc.wClamp);
 
         // Temporal: merge fresh with the previous frame's reservoir, renormalising to M=1 so confidence can't accumulate.
@@ -82,36 +74,30 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
             if (prev.lightIdx != ~0u && prev.lightIdx < uint(lightCount)) {
                 ReservoirAccum accumM = ReservoirAccumEmpty();
                 ReGIRReservoir merged = ReGIRReservoirEmpty();
-                float mergedWinnerPHat = 0.0;
+                float mergedWinnerTarget = 0.0;
                 float mTotal = 0.0;
                 if (res.lightIdx != ~0u) {
                     LightVS vsCur = UnpackLightVS(pc.lightVS[res.lightIdx]);
-                    float3 yCur = DecodeSamplePos(res.sampleOffsetPacked, vsCur);
-                    LightSample sCur = EvalLightSample(vsCur, yCur, cellCenterVS, float3(0.0, 0.0, 0.0), vsCur.range);
-                    float pCur = EvalCellTarget(sCur, UnpackUnorm4x8(vsCur.packedColor).rgb, vsCur.intensity);
+                    float pCur = EvalCellLightTarget(vsCur, cellCenterVS, UnpackUnorm4x8(vsCur.packedColor).rgb);
                     float wCur = pCur * ReGIRReservoirW(res);
                     if (ReservoirAddSample(accumM, wCur, HashStep(h))) {
                         merged.lightIdx = res.lightIdx;
-                        merged.sampleOffsetPacked = res.sampleOffsetPacked;
-                        mergedWinnerPHat = pCur;
+                        mergedWinnerTarget = pCur;
                     }
                     mTotal += 1.0;
                 }
                 {
                     LightVS vsH = UnpackLightVS(pc.lightVS[prev.lightIdx]);
-                    float3 yH = DecodeSamplePos(prev.sampleOffsetPacked, vsH);
-                    LightSample sH = EvalLightSample(vsH, yH, cellCenterVS, float3(0.0, 0.0, 0.0), vsH.range);
-                    float pH = EvalCellTarget(sH, UnpackUnorm4x8(vsH.packedColor).rgb, vsH.intensity);
+                    float pH = EvalCellLightTarget(vsH, cellCenterVS, UnpackUnorm4x8(vsH.packedColor).rgb);
                     float wH = pH * ReGIRReservoirW(prev);
                     if (ReservoirAddSample(accumM, wH, HashStep(h))) {
                         merged.lightIdx = prev.lightIdx;
-                        merged.sampleOffsetPacked = prev.sampleOffsetPacked;
-                        mergedWinnerPHat = pH;
+                        mergedWinnerTarget = pH;
                     }
                     mTotal += 1.0;
                 }
                 if (merged.lightIdx != ~0u) {
-                    FinalizeReservoirReGIR(merged, accumM, mergedWinnerPHat, mTotal);
+                    FinalizeReservoirReGIR(merged, accumM, mergedWinnerTarget, mTotal);
                     ReGIRClampW(merged, pc.wClamp);
                     res = merged;
                 }

@@ -107,6 +107,20 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     bool useGrid = camDist <= REGIR_MAX_DIST;
     float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
 
+    // Canonical (unjittered) cell at the shading point. Supplies the grid-selection density for BRDF-sampled
+    // candidates so they MIS symmetrically against the grid taps; cellSumT approximates sum_L of per-light targets.
+    uint baseCellSlot = REGIR_HASH_INVALID;
+    float cellSumT = 0.0;
+    float3 cellCenterVS = float3(0.0);
+    if (useGrid) {
+        ReGIRHashKey baseKey = ReGIRComputeKey(worldPos, cameraPos);
+        baseCellSlot = ReGIRHashFind(pc.hashEntries, baseKey);
+        if (baseCellSlot != REGIR_HASH_INVALID) {
+            cellCenterVS = mul(scene.view, float4(ReGIRCellCenterFromKey(baseKey), 1.0)).xyz;
+            cellSumT = pc.reservoirs[baseCellSlot * REGIR_RESERVOIRS_PER_CELL].totalWeight;
+        }
+    }
+
     if (lightCount > 0) {
         for (int i = 0; i < RESTIR_M_LIGHT; i++) {
             if (useGrid) {
@@ -118,22 +132,28 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
                 uint slot = cellSlot * REGIR_RESERVOIRS_PER_CELL + slotInCell;
 
+                float uU = HashStep(h);
+                float uV = HashStep(h);
                 float uSelect = HashStep(h);
                 ReGIRReservoir gr = pc.reservoirs[slot];
                 if (gr.lightIdx == ~0u || gr.targetPdf <= 0.0 || gr.totalWeight <= 0.0) { continue; }
                 LightVS vs = UnpackLightVS(pc.lightVS[gr.lightIdx]);
-                float3 Xi = DecodeSamplePos(gr.sampleOffsetPacked, vs);
+                // The grid selected the light; sample the surface point fresh at the shading point so the
+                // cone/area pdf cancels p_hat's cosLight/dist² (the cell-center bake was the firefly source).
+                float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
                 LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                 float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
                 float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-                float p_grid = gr.targetPdf / gr.totalWeight;
+                float p_select = gr.targetPdf / gr.totalWeight; // grid light-selection pdf = 1 / W_grid
+                float p_point = LightSamplePdfArea(vs, viewPosition, Xi);
+                float p_grid = p_select * p_point;
                 float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
                 float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
                 float denom = float(RESTIR_M_LIGHT) * p_grid + float(RESTIR_M_BRDF) * p_brdf_area;
                 float w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
                 if (ReservoirAddSample(accum_gen, w_i, uSelect)) {
                     r_gen.lightIdx = gr.lightIdx;
-                    r_gen.sampleOffsetPacked = gr.sampleOffsetPacked;
+                    r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
                 }
             } else {
                 // Beyond grid range: uniform light candidate, same Talbot MIS as the non-ReGIR path.
@@ -196,7 +216,17 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                             if (p_brdf_area > 0.0) {
                                 float3 lc = UnpackUnorm4x8(vs.packedColor).rgb;
                                 float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lc, vs.intensity);
-                                w_i = p_hat / (float(RESTIR_M_BRDF) * p_brdf_area);
+                                // Light-technique density at this BRDF sample, symmetric with the grid / uniform light taps.
+                                float p_lighttech;
+                                if (useGrid) {
+                                    p_lighttech = (baseCellSlot != REGIR_HASH_INVALID && cellSumT > 0.0)
+                                        ? (EvalCellLightTarget(vs, cellCenterVS, lc) / cellSumT) * LightSamplePdfArea(vs, viewPosition, Xi)
+                                        : 0.0;
+                                } else {
+                                    p_lighttech = LightSamplePdfArea(vs, viewPosition, Xi) / float(lightCount);
+                                }
+                                float denom = float(RESTIR_M_LIGHT) * p_lighttech + float(RESTIR_M_BRDF) * p_brdf_area;
+                                w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
                                 brdfLightIdx = lightIdx;
                                 brdfXi = Xi;
                                 brdfVS = vs;

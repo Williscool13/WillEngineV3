@@ -242,17 +242,28 @@ public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
 public float3 ReGIRCellSize() { return float3(REGIR_CELL_SIZE_X, REGIR_CELL_SIZE_Y, REGIR_CELL_SIZE_Z); }
 
 /**
- * ReGIR cell-fill target. Uses the SAME (unfloored) geometry term as the shading target EvalPHat.
- * A distance floor here would break the cone-sampling cancellation in both the fill and the in-grid
- * shading RIS: the build target is the denominator of w_i = p_hat / (targetPdf / totalWeight), so a
- * floor caps the denominator for near samples and inflates w_i by minDist2/d² (a sphere-near-cap spike
- * that recirculates through the grid and persists). Genuine near-field spikes are bounded by ReGIRClampW.
+ * Per-light ReGIR build target: a bounded, BRDF-free proxy for light vs's unshadowed contribution to a
+ * point at the cell center. The grid reservoir selects a LIGHT proportional to this; the surface point is
+ * sampled fresh at the shading point in the main pass, so the cone/area pdf cancels p_hat's cosLight/dist²
+ * there instead of the cell-center geometry being baked into W (the near-field firefly source). Selection
+ * error only costs variance, never bias, so a representative center-point estimate with the standard
+ * distance floor is sufficient and is what keeps a light sitting inside the cell from spiking the target.
+ *
+ * @param vs View-space light.
+ * @param cellCenter Cell center (view space).
+ * @param lightColor Decoded linear light color.
  */
-public float EvalCellTarget(LightSample s, float3 lightColor, float lightIntensity)
+public float EvalCellLightTarget(LightVS vs, float3 cellCenter, float3 lightColor)
 {
-    if (s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
-    const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
-    return LightGeometryTerm(s) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
+    float3 toCenter = vs.center - cellCenter;
+    float dist = max(length(toCenter), 1e-5);
+    float atten = LightRangeCull(dist, vs.range);
+    if (atten <= 0.0) { return 0.0; }
+    float cosFacing = (vs.type == LIGHT_TYPE_SPHERE) ? 1.0 : max(dot(vs.normal, -toCenter / dist), 0.0);
+    if (cosFacing <= 0.0) { return 0.0; }
+    float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
+    float geom = cosFacing / max(dist * dist, LIGHT_GEOM_MIN_DIST2);
+    return geom * vs.area * vs.intensity * colorMax * atten;
 }
 
 // Half-res pixel -> full-res pixel via the precomputed quad-selection texture (sel in [0,3]). Identity at full res.
