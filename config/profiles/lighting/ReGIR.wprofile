@@ -24,11 +24,11 @@
     },
     "bAdaptiveSpatial": true,
     "bHalfRes": true,
-    "bInitialVisibility": false,
+    "bInitialVisibility": true,
     "bPermutationSampling": false,
     "boilingFilterStrength": 0.20000000298023224,
     "confidenceStrength": 0.0,
-    "denoiserMode": 3,
+    "denoiserMode": 0,
     "iblIntensity": 0.0,
     "regirWClamp": 0.0,
     "relax": {
