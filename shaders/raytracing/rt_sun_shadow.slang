@@ -81,12 +81,13 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
 
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
-    float3 toCamera = scene.cameraWorldPos.xyz - worldPos;
-    float camDist = length(toCamera);
+    // Bias along the surface normal (not toward the camera, which slides the directional shadow sideways across the surface),
+    // scaled by camera distance so a coarsely-reconstructed far position clears itself without anchoring the shadow off-place.
+    float camDist = length(scene.cameraWorldPos.xyz - worldPos);
     float originBias = max(0.05, camDist * 0.001);
 
     RayDesc ray;
-    ray.Origin = worldPos + (toCamera / camDist) * originBias;
+    ray.Origin = worldPos + worldN * originBias;
     ray.Direction = rayDir;
     ray.TMin = 0.001;
     ray.TMax = 10000.0;

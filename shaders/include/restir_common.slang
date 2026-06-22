@@ -493,19 +493,31 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
  * @param worldyStar Light sample position in world space.
  */
 /**
- * Binary shadow-ray test to a light sample. Returns true if the sample is visible from the shading point.
- * Mask 0x01 = scene geometry only (light proxy meshes are skipped). worldN biases the origin so the ray doesn't self-intersect; TMax is measured from the offset origin so the bias can't eat the far-end margin.
+ * World-space size of one reservoir texel at the given view depth, used to scale the shadow-ray self-intersection bias.
+ * Grows with depth and (via pixelScale) with half-res, where the depth-reconstructed shading position is coarser.
  */
-public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar)
+public float RestirWorldTexelSize(float viewZ, float2 ndcToViewMulXPixelSize, uint pixelScale)
 {
-    float3 rayOrigin = worldShadingPos + worldN * 0.05;
+    return abs(viewZ) * max(ndcToViewMulXPixelSize.x, ndcToViewMulXPixelSize.y) * float(pixelScale);
+}
+
+/**
+ * Binary shadow-ray test to a light sample. Returns true if the sample is visible from the shading point.
+ * Mask 0x01 = scene geometry only (light proxy meshes are skipped). The origin offset scales with the reconstructed-position
+ * uncertainty (worldTexelSize, grows with depth/half-res) over the grazing-light cosine, so a coarse far position can't self-shadow.
+ */
+public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize)
+{
+    float3 L = normalize(worldyStar - worldShadingPos);
+    float bias = max(0.05, worldTexelSize * 2.0 / max(dot(worldN, L), 0.1));
+    float3 rayOrigin = worldShadingPos + worldN * bias;
     float3 toLight = worldyStar - rayOrigin;
     float lightDist = length(toLight);
     RayDesc shadowRay;
     shadowRay.Origin = rayOrigin;
     shadowRay.Direction = toLight / lightDist;
-    shadowRay.TMin = 0.001;
-    shadowRay.TMax = lightDist - 0.05;
+    shadowRay.TMin = 0.0;
+    shadowRay.TMax = max(0.0, lightDist - 0.05);
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     q.TraceRayInline(tlas, 0, 0x01, shadowRay);
     q.Proceed();
@@ -514,9 +526,9 @@ public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 wor
 
 [ForceInline]
 public float EvalPHatVisibility(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity,
-                                 RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar)
+                                 RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize)
 {
-    if (!RestirShadowVisible(tlas, worldShadingPos, worldN, worldyStar)) { return 0.0; }
+    if (!RestirShadowVisible(tlas, worldShadingPos, worldN, worldyStar, worldTexelSize)) { return 0.0; }
     return EvalPHat(s, V, N, albedo, F0, metallic, roughness, lightColor, lightIntensity);
 }
 

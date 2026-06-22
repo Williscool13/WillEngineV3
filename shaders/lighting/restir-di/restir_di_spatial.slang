@@ -25,6 +25,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     uint2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixel, pc.pixelScale);
     float viewSpaceDepth = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
+    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, pc.pixelScale);
 
     LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
@@ -185,7 +186,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             float3 worldyStarFinal = mul(scene.invView, float4(yStarFinal, 1.0)).xyz;
             RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
             p_hat_final = EvalPHatVisibility(sFinal, V, N, li.albedo.xyz, F0, li.metallic, roughness, finalLightColor, vsFinal.intensity,
-                                             tlas, worldPos, worldN, worldyStarFinal);
+                                             tlas, worldPos, worldN, worldyStarFinal, worldTexelSize);
         } else {
             p_hat_final = EvalPHat(sFinal, V, N, li.albedo.xyz, F0, li.metallic, roughness, finalLightColor, vsFinal.intensity);
         }

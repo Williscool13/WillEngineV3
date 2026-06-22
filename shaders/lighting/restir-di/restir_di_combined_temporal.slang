@@ -48,6 +48,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
+    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, pc.pixelScale);
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
@@ -193,7 +194,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         float3 yStar = DecodeSamplePos(r_gen, vsGen);
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
         float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
-        genVisible = RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar);
+        genVisible = RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize);
     }
 
     // -------------------------------------------------------------------------
@@ -284,7 +285,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             p_hat_winner = pHatUnshadowed;
         } else {
             p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
-                                                 rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar);
+                                                 rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize);
         }
         ReservoirFinalise(combined, accum_combined, p_hat_winner, float(combined.M));
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
@@ -293,7 +294,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         // previous occluder positions isolates the moving-caster shadow change with zero Monte-Carlo noise (identical sample),
         // unlike a cross-frame luminance difference. Receiver assumed static (worldPos unchanged). ~0u prev TLAS -> no change.
         if (pc.prevTlasIndex != ~0u) {
-            visPrev = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, worldyStar) ? 1.0 : 0.0;
+            visPrev = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? 1.0 : 0.0;
         } else {
             visPrev = winnerVisibility;
         }

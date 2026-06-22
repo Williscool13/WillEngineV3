@@ -23,6 +23,12 @@
 
 namespace Game::Component
 {
+static void ApplyRenderTransform(PhysicsShapeDesc& shape, const glm::vec3& scale, const glm::vec3& renderOffset, const glm::quat& renderRotation)
+{
+    shape.offset = scale * renderOffset + renderRotation * shape.offset;
+    shape.rotation = renderRotation * shape.rotation;
+}
+
 void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<PhysicsBodyDesc>(entity);
@@ -43,10 +49,13 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
                 box.box.halfExtents = meta->bounds.aabb.HalfExtents() * scale;
                 box.offset = meta->bounds.aabb.Center() * scale;
             }
+            ApplyRenderTransform(box, scale, sm->renderOffset, sm->renderRotation);
             component.shapes.PushBack(box);
         }
         else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
-            component.shapes.PushBack(MakeProceduralShape(pm->params, scale));
+            PhysicsShapeDesc shape = MakeProceduralShape(pm->params, scale);
+            ApplyRenderTransform(shape, scale, pm->renderOffset, pm->renderRotation);
+            component.shapes.PushBack(shape);
         }
         else if (auto* splm = registry.try_get<SplineMeshComponent>(entity); splm && !splm->spline.points.IsEmpty()) {
             PhysicsShapeDesc s{};
@@ -725,6 +734,17 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 ImGui::BeginDisabled(!bModelLoaded && !isMeshType);
                 if (ImGui::Button("Auto-Fit")) {
                     const glm::vec3 scale = transform ? transform->scale : glm::vec3(1.0f);
+                    glm::vec3 renderOffset{0.0f};
+                    glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
+                    if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
+                        renderOffset = sm->renderOffset;
+                        renderRotation = sm->renderRotation;
+                    }
+                    else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
+                        renderOffset = pm->renderOffset;
+                        renderRotation = pm->renderRotation;
+                    }
+                    shape.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
                     switch (shape.type) {
                         case PhysicsShapeType::Box:
                             shape.box.halfExtents = fitModel->bounds.aabb.HalfExtents() * scale;
@@ -765,6 +785,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                             break;
                     }
 
+                    ApplyRenderTransform(shape, scale, renderOffset, renderRotation);
                     registry.patch<PhysicsBodyDesc>(entity);
                 }
                 ImGui::EndDisabled();
