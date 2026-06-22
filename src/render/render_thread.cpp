@@ -84,10 +84,8 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 #if WILL_EDITOR
     RegisterDebugReadbacks();
 #endif
-
-    renderGraph->RegisterPersistentBuffer(RT_TLAS_BUFFER, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, [device = context->device](uint64_t userData) {
-        vkDestroyAccelerationStructureKHR(device, reinterpret_cast<VkAccelerationStructureKHR>(userData), nullptr);
-    });
+    // The TLAS is now a first-class RDG acceleration-structure resource (CreateTLAS); the graph owns its buffer, handle and
+    // descriptor and destroys them via the physical-pool death timer, so no persistent-buffer registration is needed.
 }
 
 RenderThread::~RenderThread()

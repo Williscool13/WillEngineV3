@@ -26,6 +26,9 @@ namespace Render
 struct TextureResource;
 using TransientImageHandle = Core::Handle<TextureResource>;
 
+struct BufferResource;
+using TransientASHandle = Core::Handle<BufferResource>;
+
 enum class ResourceCategory : uint64_t
 {
     Untagged = 0,
@@ -174,7 +177,7 @@ struct PipelineEvent
 
 struct ResourceDimensions
 {
-    enum class Type { Image, Buffer } type = Type::Image;
+    enum class Type { Image, Buffer, AccelerationStructure } type = Type::Image;
 
     // Image fields
     VkFormat format = VK_FORMAT_UNDEFINED;
@@ -194,14 +197,17 @@ struct ResourceDimensions
     // Shared
     StringID resourceId;
 
-    [[nodiscard]] bool IsBuffer() const { return type == Type::Buffer; }
+    [[nodiscard]] bool IsBuffer() const { return type == Type::Buffer || type == Type::AccelerationStructure; }
     [[nodiscard]] bool IsImage() const { return type == Type::Image; }
+    // Basically a buffer that also additionally allocates an AS
+    [[nodiscard]] bool IsAccelerationStructure() const { return type == Type::AccelerationStructure; }
 
     bool operator==(const ResourceDimensions& other) const
     {
         return bufferSize == other.bufferSize &&
                bufferUsage == other.bufferUsage &&
                bufferMinAlignment == other.bufferMinAlignment &&
+               type == other.type &&
                format == other.format &&
                width == other.width &&
                height == other.height &&
@@ -254,6 +260,9 @@ struct PhysicalResource
     VmaAllocation bufferAllocation = VK_NULL_HANDLE;
     VkDeviceAddress bufferAddress = 0;
     bool addressRetrieved = false;
+
+    VkAccelerationStructureKHR accelerationStructure = VK_NULL_HANDLE;
+    TransientASHandle asDescriptorHandle{TransientASHandle::INVALID};
 
     [[nodiscard]] bool IsAllocated() const { return dimensions.IsImage() ? (image != VK_NULL_HANDLE) : (buffer != VK_NULL_HANDLE); }
 
@@ -312,6 +321,9 @@ struct BufferResource
     uint32_t physicalIndex = UINT32_MAX;
     bool bCanUseAliasedBuffer = true;
     bool bIsViewportScaled = false;
+    bool bIsAccelerationStructure = false;
+
+    uint32_t carriedCount = 0;
 
     ResourceCategory category{ResourceCategory::Untagged};
 
@@ -364,6 +376,7 @@ struct BufferFrameCarryover
 {
     StringID srcName;
     StringID dstName;
+    uint32_t srcCarriedCount{0};
 
     VkBuffer buffer{};
     BufferInfo bufferInfo{};

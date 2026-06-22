@@ -423,9 +423,11 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t mCap;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t prevTlasIndex;
     SHADER_PUBLIC uint32_t prevShadowVisIndex;
     SHADER_PUBLIC uint32_t shadowVisIndex;
     SHADER_PUBLIC uint32_t confidenceIndex;
+    SHADER_PUBLIC uint32_t signalIndex;
     SHADER_PUBLIC float confidenceStrength;
     SHADER_PUBLIC uint32_t bPermutationSampling;
     SHADER_PUBLIC float antilagStrength;
@@ -469,6 +471,31 @@ SHADER_PUBLIC struct ReSTIRBoilingFilterPushConstant
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC float strength;
+};
+
+SHADER_PUBLIC struct ReSTIRConfidenceGradientPushConstant
+{
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint2 gradientExtent;
+    SHADER_PUBLIC uint32_t signalIndex;
+    SHADER_PUBLIC uint32_t gradientIndex;
+};
+
+SHADER_PUBLIC struct ReSTIRConfidenceResolvePushConstant
+{
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint2 gradientExtent;
+    SHADER_PUBLIC uint32_t gradientIndex;
+    SHADER_PUBLIC uint32_t prevConfidenceIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+    SHADER_PUBLIC uint32_t confidenceIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC float confidenceStrength;
+    SHADER_PUBLIC float sensitivity;
+    SHADER_PUBLIC float darknessBias;
+    SHADER_PUBLIC float blendFactor;
+    SHADER_PUBLIC uint32_t blurRadius;
 };
 
 SHADER_PUBLIC struct VisibilityLightingPushConstant

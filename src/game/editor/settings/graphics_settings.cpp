@@ -410,6 +410,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("History Confidence (ReSTIR)")) setDebugTarget("restir_confidence", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();
             if (ImGui::Button("Shadow Vis (ReSTIR)")) setDebugTarget("restir_shadow_vis", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Signal (ReSTIR)")) setDebugTarget("restir_signal", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Gradient (ReSTIR)")) setDebugTarget("restir_gradient", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Prev NR")) setDebugTarget("relax_prev_nr", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("ATrous Spec 0")) setDebugTarget("relax_atrous_spec_0", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();
@@ -439,6 +442,20 @@ void DrawLightingWindow(Engine::EngineState* state)
     if (ImGui::Begin("Lighting")) {
         bool changed = false;
 
+        auto featureSection = [&](const char* label, bool* enabled, auto&& body) {
+            ImGui::PushID(label);
+            if (ImGui::Checkbox("##enabled", enabled)) { changed = true; }
+            ImGui::SameLine();
+            const bool open = ImGui::TreeNodeEx("##section", ImGuiTreeNodeFlags_SpanAvailWidth, "%s", label);
+            if (open) {
+                ImGui::BeginDisabled(!*enabled);
+                body();
+                ImGui::EndDisabled();
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        };
+
         if (Widgets::SaveBar("lighting", &state->projectConfig.bAutoSaveLighting)) {
             SaveLightingTab(state);
         }
@@ -461,26 +478,38 @@ void DrawLightingWindow(Engine::EngineState* state)
 
         if (ImGui::CollapsingHeader("ReSTIR DI Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
             Core::ReSTIRParams& restir = state->debug.restir;
-            ImGui::Separator();
-            if (ImGui::Checkbox("Half Res", &restir.bHalfRes)) {
+            const bool bReGIR = state->lighting.lightingMode == Core::LightingMode::ReGIRReSTIR;
+
+            ImGui::SeparatorText("Spatial Reuse");
+            int spatialPasses = static_cast<int>(restir.spatialPasses);
+            if (Widgets::SliderInt("Spatial Passes (0=off)", &spatialPasses, 0, 8)) {
+                restir.spatialPasses = static_cast<uint32_t>(spatialPasses);
                 changed = true;
             }
-            ImGui::Separator();
-            int spatialRadius = static_cast<int>(restir.spatialRadius);
-            if (Widgets::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
-                restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
-                changed = true;
+            if (restir.spatialPasses > 0u) {
+                int spatialRadius = static_cast<int>(restir.spatialRadius);
+                if (Widgets::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
+                    restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
+                    changed = true;
+                }
+                int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
+                if (Widgets::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
+                    restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
+                    changed = true;
+                }
+                int spatialMCap = static_cast<int>(restir.spatialMCap);
+                if (Widgets::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
+                    restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
+                    changed = true;
+                }
+                featureSection("Spatial Dilate", &restir.bAdaptiveSpatial, [&] {
+                    if (Widgets::SliderFloat("Dilate Boost##restir", &restir.adaptiveSpatialBoost, 0.0f, 3.0f)) {
+                        changed = true;
+                    }
+                });
             }
-            int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
-            if (Widgets::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
-                restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
-                changed = true;
-            }
-            int spatialMCap = static_cast<int>(restir.spatialMCap);
-            if (Widgets::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
-                restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
-                changed = true;
-            }
+
+            ImGui::SeparatorText("Temporal");
             int temporalMCap = static_cast<int>(restir.temporalMCap);
             if (Widgets::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
                 restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
@@ -492,50 +521,26 @@ void DrawLightingWindow(Engine::EngineState* state)
             if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 100.0f)) {
                 changed = true;
             }
-            if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
-                changed = true;
-            }
-            if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
-                changed = true;
-            }
-            if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
-            if (ImGui::Checkbox("Adaptive Spatial", &restir.bAdaptiveSpatial)) {
-                changed = true;
-            }
-            if (restir.bAdaptiveSpatial && Widgets::SliderFloat("Adaptive Boost##restir", &restir.adaptiveSpatialBoost, 0.0f, 3.0f)) {
-                changed = true;
-            }
-            if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
-                    {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. May add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.0f})) {
-                changed = true;
-            }
-            ImGui::Separator();
-            if (Widgets::SliderFloat("IBL Intensity##restir", &restir.iblIntensity, 0.0f, 2.0f)) {
-                changed = true;
-            }
-            ImGui::Separator();
-            int spatialPasses = static_cast<int>(restir.spatialPasses);
-            if (Widgets::SliderInt("Spatial Passes", &spatialPasses, 1, 8)) {
-                restir.spatialPasses = static_cast<uint32_t>(spatialPasses);
-                changed = true;
-            }
-            ImGui::Separator();
             if (ImGui::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
                 changed = true;
             }
-            ImGui::Separator();
-            const char* stopLabels[] = {"After Spatial 1", "After Temporal", "After Generate"};
-        }
-
-        if (ImGui::CollapsingHeader("Denoiser")) {
-            Core::ReSTIRParams& restir = state->debug.restir;
-            const char* denoiserModes[] = {"None", "A-Trous Wavelet", "A-SVGF", "RELAX"};
-            int currentDenoiser = static_cast<int>(restir.denoiserMode);
-            if (ImGui::Combo("Mode##denoiser", &currentDenoiser, denoiserModes, IM_ARRAYSIZE(denoiserModes))) {
-                restir.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(currentDenoiser);
+            if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
                 changed = true;
             }
 
+            ImGui::SeparatorText("Options");
+            if (ImGui::Checkbox("Half Res", &restir.bHalfRes)) {
+                changed = true;
+            }
+            featureSection("Antilag", &restir.bEnableAntilag, [&] {
+                if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
+                        {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. May add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.5f})) {
+                    changed = true;
+                }
+            });
+            if (Widgets::SliderFloat("IBL Intensity##restir", &restir.iblIntensity, 0.0f, 2.0f)) {
+                changed = true;
+            }
             const char* remodulateOutputModes[] = {"Both", "Diffuse Only", "Specular Only"};
             int currentRemodulateOutput = static_cast<int>(restir.remodulateOutput);
             if (ImGui::Combo("Remodulate Output##restir", &currentRemodulateOutput, remodulateOutputModes, IM_ARRAYSIZE(remodulateOutputModes))) {
@@ -543,42 +548,42 @@ void DrawLightingWindow(Engine::EngineState* state)
                 changed = true;
             }
 
-            const bool bATrous = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ATrous;
-            const bool bSVGF = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ASVGF;
-            const bool bRELAX = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
-
-            if (bATrous) {
-                ImGui::SeparatorText("A-Trous");
-                if (Widgets::SliderInt("Iterations##atrous", &restir.atrous.iterations, 1, 4)) { changed = true; }
-                if (Widgets::SliderFloat("Sigma Luminance##atrous", &restir.atrous.sigmaLuminance, 0.0f, 10.0f)) { changed = true; }
-                if (Widgets::SliderFloat("Sigma Normal##atrous", &restir.atrous.sigmaNormal, 1.0f, 256.0f)) { changed = true; }
-                if (Widgets::SliderFloat("Sigma Depth##atrous", &restir.atrous.sigmaDepth, 0.0001f, 1.0f)) { changed = true; }
-                if (ImGui::Button("Reset A-Trous")) {
-                    restir.atrous = Core::ReSTIRParams::ATrousParams{};
+            if (bReGIR) {
+                ImGui::SeparatorText("ReGIR");
+                if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
                     changed = true;
                 }
+                if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
             }
-            if (bSVGF) {
-                ImGui::SeparatorText("A-SVGF");
-                if (Widgets::SliderInt("ATrous Iterations##svgf", &restir.svgf.atrousIterations, 0, 4)) { changed = true; }
-                if (Widgets::SliderFloat("Alpha Min##svgf", &restir.svgf.alphaMin, 0.005f, 1.0f)) { changed = true; }
-                if (Widgets::SliderFloat("Gradient Threshold##svgf", &restir.svgf.gradientThreshold, 0.0f, 0.2f)) { changed = true; }
-                if (Widgets::SliderFloat("Sigma Luminance##svgf", &restir.svgf.sigmaLuminance, 0.1f, 20.0f)) { changed = true; }
-                if (Widgets::SliderFloat("Sigma Normal##svgf", &restir.svgf.sigmaNormal, 1.0f, 256.0f)) { changed = true; }
-                if (Widgets::SliderFloat("Sigma Depth##svgf", &restir.svgf.sigmaDepth, 0.0001f, 1.0f)) { changed = true; }
-                if (ImGui::Button("Reset A-SVGF")) {
-                    restir.svgf = Core::ReSTIRParams::SVGFParams{};
-                    changed = true;
-                }
-            }
-            if (bRELAX) {
-                Core::RELAXParams& relax = state->debug.restir.relax;
-                ImGui::SeparatorText("RELAX");
+            ImGui::SeparatorText("Denoiser");
+            bool bRELAX = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
+            featureSection("RELAX", &bRELAX, [&] {
+                Core::RELAXParams& relax = restir.relax;
 
-                if (Widgets::SliderFloat("History Confidence##restir", &state->debug.restir.confidenceStrength, 0.0f, 1.0f,
-                        {.format = "%.2f", .tooltip = "Moving-shadow antilag from ReSTIR: drops RELAX history confidence where the shadow term flipped vs reprojected history (0 disables).", .reset = true, .resetTo = 0.75f})) {
-                    changed = true;
-                }
+                featureSection("Confidence (Moving-Shadow Antilag)", &restir.bEnableConfidence, [&] {
+                    if (Widgets::SliderFloat("History Confidence##restir", &state->debug.restir.confidenceStrength, 0.0f, 1.0f,
+                            {.format = "%.2f", .tooltip = "Moving-shadow antilag: temporal luminance-gradient confidence fed to RELAX (RTXDI-style). Master mix.", .reset = true, .resetTo = 0.75f})) {
+                        changed = true;
+                    }
+                    if (Widgets::SliderFloat("Confidence Sensitivity##restir", &state->debug.restir.confidenceSensitivity, 0.5f, 16.0f,
+                            {.format = "%.2f", .tooltip = "Pow exponent on the gradient->confidence curve. Higher = collapses history on smaller lighting changes (more aggressive antilag, more noise).", .reset = true, .resetTo = 3.0f})) {
+                        changed = true;
+                    }
+                    if (Widgets::SliderFloat("Confidence Darkness Bias##restir", &state->debug.restir.confidenceDarknessBias, 0.0f, 1.0f,
+                            {.format = "%.4f", .tooltip = "Floor added to the gradient normalizer so dark-region noise does not produce a large relative gradient (false history collapse).", .reset = true, .resetTo = 0.01f})) {
+                        changed = true;
+                    }
+                    if (Widgets::SliderFloat("Confidence History##restir", &state->debug.restir.confidenceHistoryLength, 0.0f, 16.0f,
+                            {.format = "%.1f", .tooltip = "Frames the confidence temporal filter holds a dip. Drops fast, recovers slowly; gives ReSTIR time to re-converge before RELAX trusts history again. 0 = no temporal filter.", .reset = true, .resetTo = 4.0f})) {
+                        changed = true;
+                    }
+                    int confidenceBlurRadius = static_cast<int>(state->debug.restir.confidenceBlurRadius);
+                    if (Widgets::SliderInt("Confidence Blur##restir", &confidenceBlurRadius, 0, 6,
+                            {.tooltip = "Gradient blur radius (in downsampled gradient texels). Wider = smoother penumbra confidence, less noise; too wide blurs the antilag region."})) {
+                        state->debug.restir.confidenceBlurRadius = static_cast<uint32_t>(confidenceBlurRadius);
+                        changed = true;
+                    }
+                });
 
                 static const Core::RELAXParams relaxDefaults{};
                 auto relaxTip = [&](const char* tip) {
@@ -648,7 +653,8 @@ void DrawLightingWindow(Engine::EngineState* state)
                     relax = Core::RELAXParams{};
                     changed = true;
                 }
-            }
+            });
+            restir.denoiserMode = bRELAX ? Core::ReSTIRParams::DenoiserMode::RELAX : Core::ReSTIRParams::DenoiserMode::None;
         }
 
         if (ImGui::CollapsingHeader("SIGMA Shadow Denoiser")) {

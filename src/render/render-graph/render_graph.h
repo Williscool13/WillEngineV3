@@ -37,6 +37,7 @@ struct RenderGraphAllocFns
     static BufferAlloc DefaultCreateBuffer(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&);
     static BufferAlloc DefaultCreateBufferAligned(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&, VkDeviceSize minAlignment);
     static void DefaultDestroyBuffer(const VulkanContext*, VkBuffer, VmaAllocation);
+    static void DefaultDestroyAccelerationStructure(const VulkanContext*, VkAccelerationStructureKHR);
     static VkDeviceAddress DefaultGetBufferDeviceAddress(const VulkanContext*, VkBuffer);
     static void DefaultSetDebugName(const VulkanContext*, VkObjectType, uint64_t handle, const char* name);
     static void DefaultCmdPipelineBarrier2(VkCommandBuffer, const VkDependencyInfo*);
@@ -52,6 +53,7 @@ struct RenderGraphAllocFns
     Core::InlineFunction<BufferAlloc(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&), 64> createBuffer{DefaultCreateBuffer};
     Core::InlineFunction<BufferAlloc(const VulkanContext*, const VkBufferCreateInfo&, const VmaAllocationCreateInfo&, VkDeviceSize), 64> createBufferAligned{DefaultCreateBufferAligned};
     Core::InlineFunction<void(const VulkanContext*, VkBuffer, VmaAllocation), 64> destroyBuffer{DefaultDestroyBuffer};
+    Core::InlineFunction<void(const VulkanContext*, VkAccelerationStructureKHR), 64> destroyAccelerationStructure{DefaultDestroyAccelerationStructure};
     Core::InlineFunction<VkDeviceAddress(const VulkanContext*, VkBuffer), 64> getBufferDeviceAddress{DefaultGetBufferDeviceAddress};
     Core::InlineFunction<void(const VulkanContext*, VkObjectType, uint64_t, const char*), 64> setDebugName{DefaultSetDebugName};
     Core::InlineFunction<void(VkCommandBuffer, const VkDependencyInfo*), 64> cmdPipelineBarrier2{DefaultCmdPipelineBarrier2};
@@ -248,8 +250,14 @@ public: // Persistent Per-FIF Buffers
      */
     void WriteAccelerationStructureDescriptor(StringID name, VkAccelerationStructureKHR handle);
 
-    /** @return the descriptor slot index written by WriteAccelerationStructureDescriptor, stored in userData2. */
+public:
+    void CreateTLAS(StringID name, VkDeviceSize asSize, ResourceCategory category = ResourceCategory::Untagged);
+
+    VkAccelerationStructureKHR GetAccelerationStructureHandle(StringID name);
+
     uint32_t GetAccelerationStructureDescriptorIndex(StringID name);
+
+    void CarryTLASToNextFrame(StringID name, StringID historyName);
 
 public: // Transient Uploader
     UploadAllocation AllocateTransient(size_t size);
@@ -288,6 +296,7 @@ private:
     Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_UINT> transientSampledUIntHandleAllocator;
     Core::HandleAllocator<TextureResource, RDG_MAX_MULTISAMPLED_IMAGE> transientMultisampledImageHandleAllocator;
     Core::HandleAllocator<TextureResource, RDG_MAX_MULTISAMPLED_UINT_IMAGE> transientMultisampledUIntImageHandleAllocator;
+    Core::HandleAllocator<BufferResource, RDG_MAX_TLAS> transientASHandleAllocator;
 
     Core::ArenaFixedVector<BufferResource> buffers;
     Core::ArenaFixedMap<StringID, uint32_t> bufferNameToIndex;

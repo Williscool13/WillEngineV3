@@ -67,7 +67,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
 
 
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);
-    bindlessRDGRTDescriptorBuffer = BindlessRDGRTResourcesDescriptorBuffer<4>(context);
+    bindlessRDGRTDescriptorBuffer = BindlessRDGRTResourcesDescriptorBuffer<RDG_MAX_TLAS>(context);
     bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<
         4,
         4,

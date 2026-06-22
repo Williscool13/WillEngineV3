@@ -96,6 +96,7 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bPermutationSampling", p.bPermutationSampling},
         {"bAdaptiveSpatial", p.bAdaptiveSpatial},
         {"adaptiveSpatialBoost", p.adaptiveSpatialBoost},
+        {"bEnableAntilag", p.bEnableAntilag},
         {"antilagStrength", p.antilagStrength},
         {"iblIntensity", p.iblIntensity},
         {"spatialRadius", p.spatialRadius},
@@ -106,7 +107,12 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bInitialVisibility", p.bInitialVisibility},
         {"regirWClamp", p.regirWClamp},
         {"restirWClamp", p.restirWClamp},
+        {"bEnableConfidence", p.bEnableConfidence},
         {"confidenceStrength", p.confidenceStrength},
+        {"confidenceSensitivity", p.confidenceSensitivity},
+        {"confidenceDarknessBias", p.confidenceDarknessBias},
+        {"confidenceHistoryLength", p.confidenceHistoryLength},
+        {"confidenceBlurRadius", p.confidenceBlurRadius},
         {"denoiserMode", static_cast<int32_t>(p.denoiserMode)},
         {"remodulateOutput", static_cast<int32_t>(p.remodulateOutput)},
         {"atrous", nlohmann::json{{"iterations", p.atrous.iterations}, {"sigmaLuminance", p.atrous.sigmaLuminance}, {"sigmaNormal", p.atrous.sigmaNormal}, {"sigmaDepth", p.atrous.sigmaDepth}}},
@@ -126,6 +132,7 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bPermutationSampling = getBool("bPermutationSampling", p.bPermutationSampling);
     p.bAdaptiveSpatial = getBool("bAdaptiveSpatial", p.bAdaptiveSpatial);
     p.adaptiveSpatialBoost = r.contains("adaptiveSpatialBoost") && r["adaptiveSpatialBoost"].is_number() ? r["adaptiveSpatialBoost"].get<float>() : p.adaptiveSpatialBoost;
+    p.bEnableAntilag = getBool("bEnableAntilag", p.bEnableAntilag);
     p.antilagStrength = r.contains("antilagStrength") && r["antilagStrength"].is_number() ? r["antilagStrength"].get<float>() : p.antilagStrength;
     p.iblIntensity = r.contains("iblIntensity") && r["iblIntensity"].is_number() ? r["iblIntensity"].get<float>() : p.iblIntensity;
     p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
@@ -136,7 +143,12 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
+    p.bEnableConfidence = getBool("bEnableConfidence", p.bEnableConfidence);
     p.confidenceStrength = r.contains("confidenceStrength") && r["confidenceStrength"].is_number() ? r["confidenceStrength"].get<float>() : p.confidenceStrength;
+    p.confidenceSensitivity = r.contains("confidenceSensitivity") && r["confidenceSensitivity"].is_number() ? r["confidenceSensitivity"].get<float>() : p.confidenceSensitivity;
+    p.confidenceDarknessBias = r.contains("confidenceDarknessBias") && r["confidenceDarknessBias"].is_number() ? r["confidenceDarknessBias"].get<float>() : p.confidenceDarknessBias;
+    p.confidenceHistoryLength = r.contains("confidenceHistoryLength") && r["confidenceHistoryLength"].is_number() ? r["confidenceHistoryLength"].get<float>() : p.confidenceHistoryLength;
+    p.confidenceBlurRadius = getUint("confidenceBlurRadius", p.confidenceBlurRadius);
     p.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(getInt("denoiserMode", static_cast<int32_t>(p.denoiserMode)));
     p.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(getInt("remodulateOutput", static_cast<int32_t>(p.remodulateOutput)));
     if (r.contains("atrous") && r["atrous"].is_object()) {

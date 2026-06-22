@@ -49,21 +49,7 @@ void SetupTLASBuild(RenderGraph& graph,
     const VkDeviceSize alignedTLASSize = (sizeInfo.accelerationStructureSize + 255ull) & ~255ull;
     const VkDeviceSize scratchSize = sizeInfo.buildScratchSize;
 
-    // Grow buffer if needed; rebuild AS handle when buffer was reallocated
-    const bool bReallocated = graph.EnsurePersistentBufferCapacity(RT_TLAS_BUFFER, alignedTLASSize);
-    PersistentBuffer& tlas = graph.GetPersistentBuffer(RT_TLAS_BUFFER);
-    if (bReallocated || tlas.userData == 0) {
-        VkAccelerationStructureCreateInfoKHR createInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
-        createInfo.buffer = tlas.buffer;
-        createInfo.offset = 0;
-        createInfo.size = tlas.capacity;
-        createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-        VkAccelerationStructureKHR handle{};
-        VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, nullptr, &handle));
-        graph.WriteAccelerationStructureDescriptor(RT_TLAS_BUFFER, handle);
-    }
-
-    graph.ImportPersistentBuffer(RT_TLAS_BUFFER);
+    graph.CreateTLAS(RT_TLAS_BUFFER, alignedTLASSize);
 
     // Upload TLAS instance buffer
     const size_t instanceDataSize = instanceCount * sizeof(VkAccelerationStructureInstanceKHR);
@@ -119,7 +105,7 @@ void SetupTLASBuild(RenderGraph& graph,
     buildPass.ReadASInputBuffer(RT_TLAS_INSTANCE_BUFFER);
     buildPass.WriteTLASBuffer(RT_TLAS_BUFFER);
     buildPass.WriteScratchBuffer(RT_TLAS_SCRATCH_BUFFER);
-    buildPass.Execute([primitiveCount, tlasHandle = tlas.userData](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    buildPass.Execute([primitiveCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkAccelerationStructureGeometryKHR geom{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
         geom.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
         geom.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
@@ -130,7 +116,7 @@ void SetupTLASBuild(RenderGraph& graph,
         build.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
         build.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
         build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-        build.dstAccelerationStructure = reinterpret_cast<VkAccelerationStructureKHR>(tlasHandle);
+        build.dstAccelerationStructure = graph.GetAccelerationStructureHandle(RT_TLAS_BUFFER);
         build.geometryCount = 1;
         build.pGeometries = &geom;
         build.scratchData.deviceAddress = graph.GetBufferAddress(RT_TLAS_SCRATCH_BUFFER);
@@ -157,15 +143,14 @@ void SetupRTShadowTest(RenderGraph& graph,
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);
     pass.WriteStorageImage(outputTarget);
-    const uint32_t tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER);
-    pass.Execute([pipelineManager, sceneIndex, renderExtent, tlasIndex,
+    pass.Execute([pipelineManager, sceneIndex, renderExtent,
                   depth = targets.depthCopy, output = outputTarget](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_shadow_test"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
         RTShadowTestPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .tlasIndex = tlasIndex,
+            .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .sceneDataIndex = sceneIndex,
@@ -212,8 +197,7 @@ void SetupRTSunShadow(RenderGraph& graph,
         pass.WriteStorageImage(SID("rt_sun_depth"));
         pass.WriteStorageImage(SID("rt_sun_gbuffer"));
     }
-    const uint32_t tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER);
-    pass.Execute([pipelineManager, sceneIndex, shadowExtent, fullExtent, pixelScale, bHalfRes, tlasIndex, frameNumber,
+    pass.Execute([pipelineManager, sceneIndex, shadowExtent, fullExtent, pixelScale, bHalfRes, frameNumber,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_sun_shadow"));
         if (!pipeline) { return; }
@@ -223,7 +207,7 @@ void SetupRTSunShadow(RenderGraph& graph,
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
             .renderExtent = {shadowExtent[0], shadowExtent[1]},
-            .tlasIndex = tlasIndex,
+            .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_shadow")),
@@ -271,8 +255,6 @@ void SetupRTGroundTruthDI(RenderGraph& graph,
         });
     }
 
-    const uint32_t tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER);
-
     RenderPass& pass = graph.AddPass(SID("RT Ground Truth DI"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -282,7 +264,7 @@ void SetupRTGroundTruthDI(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.WriteStorageImage(targets.colorOutput);
-    pass.Execute([pipelineManager, sceneIndex, tlasIndex, accumulationCount, frameNumber, renderExtent,
+    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_di"));
@@ -293,7 +275,7 @@ void SetupRTGroundTruthDI(RenderGraph& graph,
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(SID("light_data")),
             .accumulationBuffer = graph.GetBufferAddress(SID("rt_gt_di_accum")),
-            .tlasIndex = tlasIndex,
+            .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),

@@ -586,7 +586,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
 
         if (!buf.HasPhysical()) {
             ResourceDimensions desiredDim;
-            desiredDim.type = ResourceDimensions::Type::Buffer;
+            desiredDim.type = buf.bIsAccelerationStructure ? ResourceDimensions::Type::AccelerationStructure : ResourceDimensions::Type::Buffer;
             desiredDim.bufferSize = buf.bufferInfo.size;
             desiredDim.bufferUsage = buf.accumulatedUsage;
             desiredDim.bufferMinAlignment = buf.minAlignment;
@@ -1599,6 +1599,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             newBuf->bufferInfo = carryover.bufferInfo;
             newBuf->accumulatedUsage = carryover.accumulatedUsage;
             newBuf->physicalIndex = physicalIndex;
+            newBuf->carriedCount = carryover.srcCarriedCount + 1;
 
             PhysicalResource& phys = physicalResources[physicalIndex];
             phys.logicalResourceIndices.PushBack(newBuf->index);
@@ -1655,6 +1656,22 @@ void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsVie
     buf->bufferInfo.size = size;
     buf->bCanUseAliasedBuffer = bCanAlias;
     buf->bIsViewportScaled = bIsViewportScaled;
+}
+
+void RenderGraph::CreateTLAS(StringID name, VkDeviceSize asSize, ResourceCategory category)
+{
+    BufferResource* buf = GetOrCreateBuffer(name);
+
+    if (buf->bufferInfo.size != 0) {
+        ENGINE_ASSERT(Renderer, buf->bufferInfo.size == asSize, "TLAS size mismatch");
+    }
+
+    buf->bufferInfo.size = asSize;
+    buf->bIsAccelerationStructure = true;
+    // The AS backing memory must never be aliased; each frame gets a fresh physical and the previous one becomes the carried history.
+    buf->bCanUseAliasedBuffer = false;
+    buf->bIsViewportScaled = false;
+    buf->category |= category;
 }
 
 void RenderGraph::CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDeviceSize minAlignment, bool bIsViewportScaled, bool bCanAlias)
@@ -2079,7 +2096,9 @@ void RenderGraph::CarryBufferToNextFrame(StringID bufferId, StringID newBufferId
         ENGINE_ASSERT(Renderer, c.dstName != newBufferId, "Destination buffer name already used in another carryover");
     }
 
-    bufferCarryovers.PushBack(BufferFrameCarryover{bufferId, newBufferId});
+    BufferFrameCarryover carry{bufferId, newBufferId};
+    carry.srcCarriedCount = buf->carriedCount;
+    bufferCarryovers.PushBack(carry);
 }
 
 UploadAllocation RenderGraph::AllocateTransient(size_t size)
@@ -2212,9 +2231,29 @@ void RenderGraph::WriteAccelerationStructureDescriptor(StringID name, VkAccelera
     buf.userData2 = currentFrameIndex;
 }
 
+VkAccelerationStructureKHR RenderGraph::GetAccelerationStructureHandle(StringID name)
+{
+    const BufferResource* buf = GetBuffer(name);
+    if (!buf || !buf->HasPhysical()) { return VK_NULL_HANDLE; }
+    return physicalResources[buf->physicalIndex].accelerationStructure;
+}
+
 uint32_t RenderGraph::GetAccelerationStructureDescriptorIndex(StringID name)
 {
-    return static_cast<uint32_t>(GetPersistentBuffer(name).userData2);
+    const BufferResource* buf = GetBuffer(name);
+    if (!buf || !buf->HasPhysical()) { return ~0u; }
+    const PhysicalResource& phys = physicalResources[buf->physicalIndex];
+    return phys.asDescriptorHandle.IsValid() ? phys.asDescriptorHandle.index : ~0u;
+}
+
+void RenderGraph::CarryTLASToNextFrame(StringID name, StringID historyName)
+{
+    // BLAS are only guaranteed to survive 4 frames after death command (3x fif and +1 for extra).
+    // So a TLAS history can only be carried over once: restoring it bumps carriedCount to 1, and re-carrying would outlive its BLAS.
+    if (const BufferResource* buf = GetBuffer(name)) {
+        ENGINE_ASSERT(Renderer, buf->carriedCount == 0, "CarryTLASToNextFrame: '{}' has already been carried {} time(s) and cannot be carried again (BLAS lifetime)", name.ToString(), buf->carriedCount);
+    }
+    CarryBufferToNextFrame(name, historyName, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 }
 
 void RenderGraph::ExportGraphviz()
@@ -2436,6 +2475,11 @@ void RenderGraphAllocFns::DefaultDestroyBuffer(const VulkanContext* context, VkB
     vmaDestroyBuffer(context->allocator, buffer, allocation);
 }
 
+void RenderGraphAllocFns::DefaultDestroyAccelerationStructure(const VulkanContext* context, VkAccelerationStructureKHR accelerationStructure)
+{
+    vkDestroyAccelerationStructureKHR(context->device, accelerationStructure, nullptr);
+}
+
 VkDeviceAddress RenderGraphAllocFns::DefaultGetBufferDeviceAddress(const VulkanContext* context, VkBuffer buffer)
 {
     VkBufferDeviceAddressInfo info = {VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
@@ -2571,6 +2615,14 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
         }
     }
     else {
+        if (resource.accelerationStructure != VK_NULL_HANDLE) {
+            allocFns.destroyAccelerationStructure(context, resource.accelerationStructure);
+            resource.accelerationStructure = VK_NULL_HANDLE;
+        }
+        if (resource.asDescriptorHandle.IsValid()) {
+            transientASHandleAllocator.Remove(resource.asDescriptorHandle);
+            resource.asDescriptorHandle = {};
+        }
         if (resource.buffer != VK_NULL_HANDLE) {
             allocFns.destroyBuffer(context, resource.buffer, resource.bufferAllocation);
             resource.buffer = VK_NULL_HANDLE;
@@ -2674,6 +2726,23 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
 
     resource.dimensions = dim;
     resource.event = {};
+
+    if (dim.IsAccelerationStructure()) {
+        VkAccelerationStructureCreateInfoKHR createInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+        createInfo.buffer = resource.buffer;
+        createInfo.offset = 0;
+        createInfo.size = dim.bufferSize;
+        createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+        VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, nullptr, &resource.accelerationStructure));
+
+        resource.asDescriptorHandle = transientASHandleAllocator.Add();
+        ENGINE_ASSERT(Renderer, resource.asDescriptorHandle.IsValid(), "Acceleration-structure descriptor pool exhausted (RDG_MAX_TLAS)");
+
+        VkAccelerationStructureDeviceAddressInfoKHR addrInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+        addrInfo.accelerationStructure = resource.accelerationStructure;
+        const VkDeviceAddress asAddress = vkGetAccelerationStructureDeviceAddressKHR(context->device, &addrInfo);
+        resourceManager->bindlessRDGRTDescriptorBuffer.WriteAccelerationStructureDescriptor(resource.asDescriptorHandle.index, asAddress);
+    }
 }
 
 VRAMReport RenderGraph::GenerateVramReport() const

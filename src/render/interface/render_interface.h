@@ -570,7 +570,8 @@ struct ReSTIRParams
     bool bPermutationSampling{true};
     bool bAdaptiveSpatial{true};
     float adaptiveSpatialBoost{1.0f};
-    float antilagStrength{0.0f};
+    bool bEnableAntilag{false};
+    float antilagStrength{0.5f};
     float iblIntensity{1.0f};
     uint32_t spatialRadius{30};
     uint32_t spatialNeighbors{5};
@@ -581,12 +582,18 @@ struct ReSTIRParams
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};
+    // Temporal-gradient antilag confidence (RELAX only)
+    bool bEnableConfidence{false};
     float confidenceStrength{0.75f};
+    float confidenceSensitivity{3.0f};
+    float confidenceDarknessBias{0.01f};
+    float confidenceHistoryLength{4.0f};
+    uint32_t confidenceBlurRadius{2u};
 
     // todo: Disabled atrous and asvgf. Readd as needed
     enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
 
-    DenoiserMode denoiserMode{DenoiserMode::ASVGF};
+    DenoiserMode denoiserMode{DenoiserMode::None};
 
     enum class RemodulateOutput : uint32_t { Both = 0, DiffuseOnly = 1, SpecularOnly = 2 };
 

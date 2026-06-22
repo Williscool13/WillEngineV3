@@ -22,7 +22,8 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     }
 
     if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][pixel] = 1.0; }
-    if (pc.confidenceIndex != ~0u) { rdgStorageFloat[pc.confidenceIndex][pixel] = 1.0; }
+    // restir_signal (RG16F): re-shade visibility delta + brightness normalizer for the gradient passes. Sky/invalid texels carry 0.
+    if (pc.signalIndex != ~0u) { rdgStorageFloat2[pc.signalIndex][pixel] = float2(0.0, 0.0); }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     uint2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixel, pc.pixelScale);
@@ -262,26 +263,40 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     // -------------------------------------------------------------------------
     // Phase 3: finalise with visibility
     // -------------------------------------------------------------------------
-    // winnerVisibility: 1 = the displayed sample is lit this frame, 0 = occluded. The visibility ray here is binary (single ray to the sample), so this is a clean shadow term.
+    // winnerVisibility: visibility of the displayed sample against the current TLAS. visPrev: the SAME sample against the previous-frame TLAS.
     float winnerVisibility = 1.0;
+    float visPrev = 1.0;
+    // Visibility-independent target luminance: the gradient's brightness weight (valid whether or not the sample is occluded this frame).
+    float pHatUnshadowed = 0.0;
     if (combined.lightIdx != ~0u) {
         LightVS vsWinner = UnpackLightVS(pc.lightVS[combined.lightIdx]);
         float3 yStar = DecodeSamplePos(combined, vsWinner);
         LightSample sWinner = EvalLightSample(vsWinner, yStar, viewPosition, N, vsWinner.range);
         float3 winnerLightColor = UnpackUnorm4x8(vsWinner.packedColor).rgb;
+        pHatUnshadowed = EvalPHat(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity);
+
+        float3 worldN = normalize(mul(float3x3(scene.invView), N));
+        float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+
         float p_hat_winner;
         // The fresh candidate was already shadow-tested in the initial-visibility stage; if it won, reuse that result instead of re-tracing.
         if (pc.bInitialVisibility != 0u && winnerIsGen) {
-            p_hat_winner = EvalPHat(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity);
+            p_hat_winner = pHatUnshadowed;
         } else {
-            float3 worldN = normalize(mul(float3x3(scene.invView), N));
-            float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
-            RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
             p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
-                                                 tlas, worldPos, worldN, worldyStar);
+                                                 rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar);
         }
         ReservoirFinalise(combined, accum_combined, p_hat_winner, float(combined.M));
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
+
+        // Same-sample re-shade against the previous-frame TLAS (carried). Tracing THIS frame's winner sample against the
+        // previous occluder positions isolates the moving-caster shadow change with zero Monte-Carlo noise (identical sample),
+        // unlike a cross-frame luminance difference. Receiver assumed static (worldPos unchanged). ~0u prev TLAS -> no change.
+        if (pc.prevTlasIndex != ~0u) {
+            visPrev = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, worldyStar) ? 1.0 : 0.0;
+        } else {
+            visPrev = winnerVisibility;
+        }
     }
 
     float flip = 0.0;
@@ -298,5 +313,8 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     pc.outputBuffer[pixelIdx] = combined;
 
     if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][pixel] = winnerVisibility; }
-    if (pc.confidenceIndex != ~0u) { rdgStorageFloat[pc.confidenceIndex][pixel] = 1.0 - pc.confidenceStrength * flip; }
+    // restir_signal (RG16F): x = signed visibility-change * brightness, y = brightness normalizer. The gradient pass means these over a stratum; the resolve rectifies after blurring.
+    if (pc.signalIndex != ~0u) {
+        rdgStorageFloat2[pc.signalIndex][pixel] = float2(pHatUnshadowed * (winnerVisibility - visPrev), pHatUnshadowed * max(winnerVisibility, visPrev));
+    }
 }

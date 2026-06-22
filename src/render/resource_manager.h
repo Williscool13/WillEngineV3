@@ -95,7 +95,7 @@ struct ResourceManager
         RDG_MAX_MULTISAMPLED_UINT_IMAGE
     > bindlessRDGTransientDescriptorBuffer{};
 
-    BindlessRDGRTResourcesDescriptorBuffer<4> bindlessRDGRTDescriptorBuffer{};
+    BindlessRDGRTResourcesDescriptorBuffer<RDG_MAX_TLAS> bindlessRDGRTDescriptorBuffer{};
 
 #if WILL_EDITOR
     Editor::DebugReadbackBuffer debugReadback;
