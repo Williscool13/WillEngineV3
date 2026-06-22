@@ -10,6 +10,9 @@ import restir_common;
 import random_common;
 import regir_hash;
 
+groupshared float gCellTargetReduce[64];
+groupshared float gCellOccupancyReduce[64];
+
 [numthreads(64, 1, 1)]
 void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID) {
     uint cellIdx = groupID.x;
@@ -26,6 +29,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
         for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += 64u) {
             pc.reservoirs[baseOut + r] = ReGIRReservoirEmpty();
         }
+        if (localID.x == 0u) { pc.cellData[slot] = float2(0.0, 0.0); }
         return;
     }
 
@@ -34,6 +38,21 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
     key.cellPos = active.xyz;
     key.level = ReGIRActiveLevel(uint(active.w));
     float3 cellCenterVS = mul(scene.view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
+
+    // Cell target sum S_cell = sum over all lights of the cell target. The shading pass divides each light's cell target by this to recover the analytic grid selection pdf p_grid(L) = target(L)/S_cell, used for balance-heuristic MIS.
+    float localSum = 0.0;
+    for (uint li = localID.x; li < uint(lightCount); li += 64u) {
+        LightVS vsl = UnpackLightVS(pc.lightVS[li]);
+        localSum += EvalCellLightTarget(vsl, cellCenterVS, UnpackUnorm4x8(vsl.packedColor).rgb);
+    }
+    gCellTargetReduce[localID.x] = localSum;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (localID.x < stride) {
+            gCellTargetReduce[localID.x] += gCellTargetReduce[localID.x + stride];
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
 
     uint prevBase = 0u;
     bool hasPrev = false;
@@ -45,6 +64,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
         }
     }
 
+    uint localNonEmpty = 0u;
     for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += 64u) {
             uint h = (slot * 2654435761u) ^ ((r + 1u) * 0x9E3779B9u) ^ (pc.frameIndex * 0x85EBCA6Bu);
         h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
@@ -105,5 +125,17 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
         }
 
         pc.reservoirs[baseOut + r] = res;
+        if (res.lightIdx != ~0u) { localNonEmpty++; }
     }
+
+    // Per-cell occupancy = fraction of non-empty reservoirs. The shading pass mixes (1-occupancy) of uniform selection into the grid pdf so sparse cells (few in-range lights -> mostly-empty reservoirs) stay lit and correctly weighted.
+    gCellOccupancyReduce[localID.x] = float(localNonEmpty);
+    GroupMemoryBarrierWithGroupSync();
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (localID.x < stride) {
+            gCellOccupancyReduce[localID.x] += gCellOccupancyReduce[localID.x + stride];
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (localID.x == 0u) { pc.cellData[slot] = float2(gCellTargetReduce[0], gCellOccupancyReduce[0] / float(REGIR_RESERVOIRS_PER_CELL)); }
 }

@@ -6,6 +6,7 @@
 
 #include "render/render_config.h"
 #include "render/render_utils.h"
+#include "core/math/math_helpers.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/render-graph/render_pass.h"
@@ -105,6 +106,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
         graph.CreateBuffer(SID("regir_hash_entries"), entriesSize, true);
         graph.CreateBuffer(SID("regir_hash_reservoirs"), reservoirsSize, true);
+        graph.CreateBuffer(SID("regir_cell_data"), REGIR_HASH_CAPACITY * 2u * static_cast<uint32_t>(sizeof(float)), true);
         graph.CreateBuffer(SID("regir_active_cells"), activeCellsSize, false);
         graph.CreateBuffer(SID("regir_active_count"), static_cast<uint32_t>(sizeof(uint32_t)), false);
         graph.CreateBuffer(SID("regir_fill_indirect"), 3u * static_cast<uint32_t>(sizeof(uint32_t)), false);
@@ -169,6 +171,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         }
         regirFillPass.ReadIndirectBuffer(SID("regir_fill_indirect"));
         regirFillPass.WriteBuffer(SID("regir_hash_reservoirs"));
+        regirFillPass.WriteBuffer(SID("regir_cell_data"));
         regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, bHasPrev](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_fill"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -180,6 +183,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .activeCells = graph.GetBufferAddress(SID("regir_active_cells")),
                 .activeCount = graph.GetBufferAddress(SID("regir_active_count")),
                 .reservoirs = graph.GetBufferAddress(SID("regir_hash_reservoirs")),
+                .cellData = graph.GetBufferAddress(SID("regir_cell_data")),
                 .hashEntriesPrev = bHasPrev ? graph.GetBufferAddress(SID("regir_hash_entries_prev")) : 0,
                 .reservoirsPrev = bHasPrev ? graph.GetBufferAddress(SID("regir_hash_reservoirs_prev")) : 0,
                 .sceneDataIndex = sceneIndex,
@@ -218,9 +222,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
         combinedPass.ReadBuffer(SCENE_DATA_BUFFER);
         combinedPass.ReadBuffer(SID("light_data"));
         combinedPass.ReadBuffer(SID("restir_lights_vs"));
+        combinedPass.ReadBuffer(SID("light_bvh"));
         if (bUseReGIR) {
             combinedPass.ReadBuffer(SID("regir_hash_entries"));
             combinedPass.ReadBuffer(SID("regir_hash_reservoirs"));
+            combinedPass.ReadBuffer(SID("regir_cell_data"));
         }
         combinedPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         if (bHasHistory) { combinedPass.ReadBuffer(SID("restir_reservoir_history")); }
@@ -239,7 +245,10 @@ void SetupReSTIRPasses(RenderGraph& graph,
         combinedPass.WriteBuffer(SID("restir_reservoir_temporal"));
         if (bShadowVis) { combinedPass.WriteStorageImage(SID("restir_shadow_vis")); }
         if (bConfidence) { combinedPass.WriteStorageImage(SID("restir_signal")); }
-        combinedPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, bHasTLAS, bHasPrevTlas, bUseReGIR, bHasHistory, bHasQuadHistory, bConfidence, bShadowVis, bHasPrevVis, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        // numLeaves must match the CPU build (render_thread BuildLightBVH); both derive it from the same light count.
+        const uint32_t bvhLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
+        const uint32_t bvhNumLeaves = bvhLightCount > 0u ? static_cast<uint32_t>(NextPowerOfTwo(bvhLightCount)) : 0u;
+        combinedPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, bHasTLAS, bHasPrevTlas, bUseReGIR, bHasHistory, bHasQuadHistory, bConfidence, bShadowVis, bHasPrevVis, bvhNumLeaves, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bUseReGIR ? SID("restir_di_combined_temporal_regir") : SID("restir_di_combined_temporal"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -253,8 +262,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .hashEntries = bUseReGIR ? graph.GetBufferAddress(SID("regir_hash_entries")) : 0,
                 .reservoirs = bUseReGIR ? graph.GetBufferAddress(SID("regir_hash_reservoirs")) : 0,
+                .cellData = bUseReGIR ? graph.GetBufferAddress(SID("regir_cell_data")) : 0,
                 .historyBuffer = bHasHistory ? graph.GetBufferAddress(SID("restir_reservoir_history")) : 0,
                 .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
+                .bvhNodes = graph.GetBufferAddress(SID("light_bvh")),
+                .lightLeaf = graph.GetBufferAddress(SID("light_bvh")) + static_cast<VkDeviceAddress>(bvhNumLeaves > 0u ? 2u * bvhNumLeaves - 1u : 0u) * sizeof(LightBVHNode),
                 .visibilityBufferIndex = ~0u,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),

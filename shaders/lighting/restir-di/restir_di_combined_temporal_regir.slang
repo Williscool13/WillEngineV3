@@ -106,61 +106,74 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
     float3 cameraPos = scene.cameraWorldPos.xyz;
     float camDist = distance(worldPos, cameraPos);
-    bool useGrid = camDist <= REGIR_MAX_DIST;
-    float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
+
+    // Pick one grid cell per pixel (jittered so cell boundaries dither into noise), shared by every light + BRDF candidate so the balance-heuristic MIS sees one consistent selection pdf q(L) = occupancy*cellTarget(L)/S_cell + (1-occupancy)/lightCount. No cell -> uniform.
+    bool useGrid = false;
+    uint gridBase = 0u;
+    float3 cellCenterVS = float3(0.0);
+    float cellTargetSum = 0.0;
+    float cellOccupancy = 0.0;
+    if (camDist <= REGIR_MAX_DIST) {
+        float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
+        float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
+        ReGIRHashKey key = ReGIRComputeKey(worldPos + jitter, cameraPos);
+        uint cellSlot = ReGIRHashFind(pc.hashEntries, key);
+        if (cellSlot != REGIR_HASH_INVALID) {
+            float2 cd = pc.cellData[cellSlot];
+            cellTargetSum = cd.x;
+            if (cellTargetSum > 0.0) {
+                gridBase = ReGIRCellReservoirBase(cellSlot);
+                cellCenterVS = mul(scene.view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
+                cellOccupancy = cd.y;
+                useGrid = true;
+            }
+        }
+    }
 
     if (lightCount > 0) {
+        float invLightCount = 1.0 / float(lightCount);
         for (int i = 0; i < RESTIR_M_LIGHT; i++) {
             uint candLightIdx = ~0u;
             float3 candXi = float3(0.0);
             LightVS candVS = (LightVS)0;
             float w_i = 0.0;
-            bool gotGrid = false;
 
+            // Light selection: grid reservoir (~ proportional to the cell target), with a uniform fallback on an empty slot.
+            int lightIdx = -1;
             if (useGrid) {
-                // Jitter the lookup by up to half a cell per tap so boundary pixels stochastically read neighbouring cells, dithering the hard cell edges into noise the denoiser resolves.
-                float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
-                uint cellSlot = ReGIRHashFind(pc.hashEntries, ReGIRComputeKey(worldPos + jitter, cameraPos));
-                if (cellSlot != REGIR_HASH_INVALID) {
-                    uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
-                    ReGIRReservoir gr = pc.reservoirs[cellSlot * REGIR_RESERVOIRS_PER_CELL + slotInCell];
-                    if (gr.lightIdx != ~0u && gr.targetPdf > 0.0 && gr.totalWeight > 0.0) {
-                        float uU = HashStep(h);
-                        float uV = HashStep(h);
-                        LightVS vs = UnpackLightVS(pc.lightVS[gr.lightIdx]);
-                        // The grid selected the light; sample the surface point fresh at the shading point so the cone/area pdf cancels p_hat's cosLight/dist² (the cell-center bake was the firefly source).
-                        float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
-                        LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                        float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                        float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-                        float p_point = LightSamplePdfArea(vs, viewPosition, Xi);
-                        // Contribution-weight RIS: the grid's unbiased light-selection weight is W_grid = totalWeight/targetPdf and the fresh point adds 1/p_point. No analytic grid pdf is fabricated, so no balance-heuristic MIS against BRDF; unbiased at any fill count.
-                        float W_grid = gr.totalWeight / gr.targetPdf;
-                        w_i = (p_point > 0.0) ? (p_hat * W_grid / p_point) : 0.0;
-                        candLightIdx = gr.lightIdx;
-                        candXi = Xi;
-                        candVS = vs;
-                        gotGrid = true;
-                    }
+                uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
+                ReGIRReservoir gr = pc.reservoirs[gridBase + slotInCell];
+                if (gr.lightIdx != ~0u && gr.lightIdx < uint(lightCount)) {
+                    lightIdx = int(gr.lightIdx);
+                } else {
+                    // Empty grid slot (sparse cell): fall back to a uniform light. Realizes the (1-occupancy) uniform branch of q(L).
+                    lightIdx = clamp(int(HashStep(h) * float(lightCount)), 0, lightCount - 1);
                 }
+            } else {
+                lightIdx = clamp(int(HashStep(h) * float(lightCount)), 0, lightCount - 1);
             }
 
-            if (!gotGrid) {
-                // Out of grid range, unbuilt cell, or empty reservoir: uniform light candidate. Keeps every tap viable so the candidate count stays fixed and the RIS normalisation is exact.
-                float uLight = HashStep(h);
-                float uU = HashStep(h);
-                float uV = HashStep(h);
-                int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
+            if (lightIdx >= 0) {
                 LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
-                float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
-                LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                 float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-                float p_point = LightSamplePdfArea(vs, viewPosition, Xi);
-                w_i = (p_point > 0.0) ? (p_hat * float(lightCount) / p_point) : 0.0;
-                candLightIdx = uint(lightIdx);
-                candXi = Xi;
-                candVS = vs;
+                // Occupancy-weighted selection pdf q(L) = occupancy * grid pdf + (1-occupancy) * uniform; keeps sparse cells lit and correctly weighted.
+                float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, lightColor) / cellTargetSum) + (1.0 - cellOccupancy) * invLightCount) : invLightCount;
+                if (pSelect > 0.0) {
+                    float uU = HashStep(h);
+                    float uV = HashStep(h);
+                    float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
+                    LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                    float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
+                    // Balance-heuristic MIS against the BRDF stream, identical to the non-ReGIR path but with the grid selection pdf.
+                    float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
+                    float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
+                    float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                    float denom = float(RESTIR_M_LIGHT) * p_light_area + float(RESTIR_M_BRDF) * p_brdf_area;
+                    w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
+                    candLightIdx = uint(lightIdx);
+                    candXi = Xi;
+                    candVS = vs;
+                }
             }
 
             float uSelect = HashStep(h);
@@ -179,10 +192,12 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             float p_brdf_sample;
             float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, p_brdf_sample);
 
-            float w_i = 0.0;
-            uint brdfLightIdx = ~0u;
-            float3 brdfXi = float3(0.0);
-            LightVS brdfVS = (LightVS)0;
+            float p_hat_Xi = 0.0;
+            int bestLightIdx = -1;
+            float3 Xi = float3(0.0);
+            float p_light_area = 0.0;
+            float p_brdf_area = 0.0;
+            LightVS bestVS = (LightVS)0;
 
             if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
                 RayDesc ray;
@@ -191,40 +206,40 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 ray.TMin = 0.001;
                 ray.TMax = 1e30;
                 RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-                // Mask 0xFF: hit both scene geometry (0x01) and light proxies (0x02); an occluder hit first -> miss.
+                // Mask 0xFF: hit scene geometry (0x01) and light proxies (0x02); an occluder hit first -> miss. Replaces the O(lightCount) analytic light scan.
                 RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
                 q.TraceRayInline(tlas, 0, 0xFF, ray);
                 q.Proceed();
                 if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
-                    uint lightIdx = pc.instanceBuffer[q.CommittedInstanceID()].lightIndex;
-                    if (lightIdx != ~0u && lightIdx < uint(lightCount)) {
-                        LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
+                    uint hitLightIdx = pc.instanceBuffer[q.CommittedInstanceID()].lightIndex;
+                    if (hitLightIdx != ~0u && hitLightIdx < uint(lightCount)) {
+                        LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
                         float t;
                         if (RayIntersectLight(vs, viewPosition, brdfL, t)) {
-                            float3 Xi = viewPosition + brdfL * t;
+                            Xi = viewPosition + brdfL * t;
                             LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                            float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
-                            if (p_brdf_area > 0.0) {
-                                float3 lc = UnpackUnorm4x8(vs.packedColor).rgb;
-                                float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lc, vs.intensity);
-                                // Contribution-weight RIS: BRDF candidate weighted by its own source pdf only (p_brdf_area > 0 here), no MIS denom.
-                                w_i = p_hat / p_brdf_area;
-                                brdfLightIdx = lightIdx;
-                                brdfXi = Xi;
-                                brdfVS = vs;
-                            }
+                            // Same occupancy-weighted selection pdf as the light stream; only divergence from restir_di_combined_temporal.
+                            float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(lightCount))) : (1.0 / float(lightCount));
+                            p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
+                            p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                            float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                            p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity);
+                            bestLightIdx = int(hitLightIdx);
+                            bestVS = vs;
                         }
                     }
                 }
             }
 
-            if (ReservoirAddSample(accum_gen, w_i, uSelect) && brdfLightIdx != ~0u) {
-                r_gen.lightIdx = brdfLightIdx;
-                r_gen.sampleOffsetPacked = EncodeSampleOffset(brdfXi, brdfVS);
+            float denom = float(RESTIR_M_LIGHT) * p_light_area + float(RESTIR_M_BRDF) * p_brdf_area;
+            float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
+            if (ReservoirAddSample(accum_gen, w_i, uSelect) && bestLightIdx >= 0) {
+                r_gen.lightIdx = uint(bestLightIdx);
+                r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, bestVS);
             }
         }
 
-        r_gen.M = uint(accum_gen.M);
+        r_gen.M = uint(RESTIR_M_LIGHT + RESTIR_M_BRDF);
     }
 
     // Initial-candidate visibility: an occluded fresh candidate contributes 0 below (so a visible history outweighs it)
@@ -267,8 +282,8 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         LightSample sGen = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
         float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
         float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
-        // Plain RIS over a fixed candidate count (every tap streams a sample): normalise by the number of candidates.
-        ReservoirFinalise(r_gen, accum_gen, p_hat_gen, float(r_gen.M));
+        // Balance-heuristic MIS-RIS: the per-candidate denom already carries the M_L/M_B counts, so the UCW is normalised by 1.
+        ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
 
         float w_gen = genVisible ? (p_hat_gen * r_gen.W * float(r_gen.M)) : 0.0;
         if (ReservoirAddSample(accum_combined, w_gen, uSelect0)) {

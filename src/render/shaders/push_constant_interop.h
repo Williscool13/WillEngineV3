@@ -393,6 +393,7 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC SHADER_PTR(int4) activeCells;
     SHADER_PUBLIC SHADER_PTR(uint) activeCount;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirs;
+    SHADER_PUBLIC SHADER_PTR(float2) cellData;
     SHADER_PUBLIC SHADER_PTR(uint) hashEntriesPrev;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirsPrev;
     SHADER_PUBLIC uint32_t sceneDataIndex;
@@ -409,6 +410,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) hashEntries;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirs;
+    SHADER_PUBLIC SHADER_PTR(float2) cellData;
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
