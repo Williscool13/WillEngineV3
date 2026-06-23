@@ -151,7 +151,7 @@ void Swapchain::Create(uint32_t width, uint32_t height)
 
 void Swapchain::Recreate(uint32_t width, uint32_t height)
 {
-    vkDeviceWaitIdle(context->device);
+    vkQueueWaitIdle(context->graphicsQueue);
     vkDestroySwapchainKHR(context->device, handle, nullptr);
     for (const auto swapchainImage : swapchainImageViews) {
         vkDestroyImageView(context->device, swapchainImage, nullptr);

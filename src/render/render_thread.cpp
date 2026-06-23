@@ -170,7 +170,7 @@ void RenderThread::ThreadMain()
                 bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
                 if (!frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate) {
                     ZoneScopedN("SwapchainRecreate");
-                    vkDeviceWaitIdle(context->device);
+                    vkQueueWaitIdle(context->graphicsQueue);
                     LOG_INFO(Renderer, "Swapchain Recreated");
 
                     swapchain->Recreate(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
@@ -183,7 +183,7 @@ void RenderThread::ThreadMain()
                 }
 
                 if (frameBuffer.viewportResizeCommand.bEngineCommandsResize) {
-                    vkDeviceWaitIdle(context->device);
+                    vkQueueWaitIdle(context->graphicsQueue);
                     LOG_INFO(Renderer, "Viewport remade");
 
                     renderExtents->ApplyViewportResize(frameBuffer.viewportResizeCommand.offsetX, frameBuffer.viewportResizeCommand.offsetY, frameBuffer.viewportResizeCommand.sizeX,
