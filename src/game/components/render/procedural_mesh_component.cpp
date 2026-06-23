@@ -33,21 +33,10 @@ void ProceduralMeshComponent::OnDestroy(entt::registry& registry, entt::entity e
 
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
 
-    // Teardown
-    for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
-        ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
-    }
-    runtime.primitives.Clear();
-    if (runtime.modelHandle.IsValid()) {
-        ctx->assetManager->UnloadModel(runtime.modelHandle);
-        runtime.modelHandle = {};
-    }
+    registry.remove<MeshRuntime>(entity);
 
-    // Arm only; StartProceduralMeshLoads kicks the build, then ResolveProceduralMeshLoads binds it.
     registry.remove<ProceduralMeshLoadingTag>(entity);
     if (!std::holds_alternative<std::monostate>(component.params)) {
         registry.emplace_or_replace<ProceduralMeshLoadPendingTag>(entity);

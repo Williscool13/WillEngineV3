@@ -1079,6 +1079,12 @@ void WillEngine::EditorImgui()
                     Platform::GetAssetPath() / "fonts/JetBrainsMono/JetBrainsMono.wsfont");
             }
 
+            if (ImGui::Button("Generate FascinateInline")) {
+                assetGenerator->RequestFontGenerate(
+                    Platform::GetAssetPath() / "fonts/FascinateInline/FascinateInline-Regular.ttf",
+                    Platform::GetAssetPath() / "fonts/FascinateInline/FascinateInline.wsfont");
+            }
+
             ImGui::SeparatorText("Sprites:");
             static bool spriteFlipY = true;
             ImGui::Checkbox("Flip Y##sprite", &spriteFlipY);

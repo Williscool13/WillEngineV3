@@ -56,8 +56,6 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
         component.spline.rolls.PushBack(0.0f);
     }
 
-    // Arm only; StartSplineMeshLoads kicks the build, then ResolveSplineMeshLoads binds it.
-    registry.get_or_emplace<MeshRuntime>(entity);
     registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
     state->bPendingModelResolve = true;
 
@@ -419,7 +417,6 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                 ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
             }
             runtime.primitives.Clear();
-            // Arm only; StartSplineMeshLoads kicks the rebuild.
             registry.remove<SplineMeshLoadingTag>(entity);
             registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
             state->bPendingModelResolve = true;

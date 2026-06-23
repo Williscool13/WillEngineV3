@@ -1418,6 +1418,17 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     if (ImGui::Begin("Scene")) {
         ImGui::Checkbox("Enable Physics", &state->physics.bEnabled);
+
+        ImGui::SeparatorText("Meshes");
+        ImGui::Text("Static:     %zu", state->registry.view<Component::StaticMeshComponent>().size());
+        ImGui::Text("Procedural: %zu", state->registry.view<Component::ProceduralMeshComponent>().size());
+        ImGui::Text("Spline:     %zu", state->registry.view<Component::SplineMeshComponent>().size());
+        ImGui::Text("Text:       %zu", state->registry.view<Component::TextComponent>().size());
+        ImGui::Text("Text3D:     %zu", state->registry.view<Component::Text3DComponent>().size());
+
+        ImGui::SeparatorText("Lights");
+        ImGui::Text("Area:   %zu", state->registry.view<Component::AreaLightComponent>().size());
+        ImGui::Text("Sphere: %zu", state->registry.view<Component::SphereLightComponent>().size());
     }
     ImGui::End();
 

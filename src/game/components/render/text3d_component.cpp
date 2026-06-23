@@ -33,7 +33,6 @@ void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
 
-    // Arm only; Text3DGeneratePendingKickoff acquires the font (freeze-gated) and generates the mesh.
     registry.remove<Text3DLoadingTag>(entity);
     if (component.fontId.IsValid()) {
         registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);

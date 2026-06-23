@@ -36,9 +36,7 @@ void UnloadStaticMesh(entt::registry& registry, entt::entity entity)
 void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
 
-    // Arm only; StartStaticMeshLoads kicks the load (freeze-gated), then ResolveStaticMeshLoads binds it.
     registry.remove<StaticMeshLoadingTag>(entity);
     if (component.modelId.IsValid() && component.meshIndex != -1) {
         registry.emplace_or_replace<StaticMeshLoadPendingTag>(entity);

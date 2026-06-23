@@ -44,7 +44,6 @@ struct RingInfo
     uint32_t offset{0};
     uint32_t count{0};
     double area{0.0};
-    int32_t nestingDepth{0};
     bool bHole{false};
     int32_t parent{-1};
 };
@@ -220,30 +219,35 @@ bool BuildText3DGeometry(const Engine::Font& font, const Engine::Text3DParams& p
             }
 
             if (!rings.IsEmpty()) {
-                // Classify outer/hole by even-odd nesting depth, then link each hole to its enclosing ring.
-                for (uint32_t a = 0; a < rings.Size(); ++a) {
-                    const EcPoint rep = ringPts[rings[a].offset];
-                    int32_t depth = 0;
-                    for (uint32_t b = 0; b < rings.Size(); ++b) {
-                        if (b == a) { continue; }
-                        if (PointInPolygon(rep, ringPts.Data() + rings[b].offset, rings[b].count)) { ++depth; }
-                    }
-                    rings[a].nestingDepth = depth;
-                    rings[a].bHole = (depth & 1) != 0;
+                // Classify fill vs hole by intrinsic winding, not even-odd nesting: glyphs are often built from
+                // overlapping same-winding components (stems/bowls) that nesting miscounts as holes (flipping their
+                // walls). The largest contour sets the fill direction; opposite-winding contours are the holes.
+                uint32_t largest = 0;
+                for (uint32_t a = 1; a < rings.Size(); ++a) {
+                    if (std::abs(rings[a].area) > std::abs(rings[largest].area)) { largest = a; }
                 }
+                const bool fillPositive = rings[largest].area > 0.0;
                 for (uint32_t a = 0; a < rings.Size(); ++a) {
-                    if (rings[a].nestingDepth == 0) { continue; }
+                    rings[a].bHole = (rings[a].area > 0.0) != fillPositive;
+                }
+
+                // Assign each hole to the tightest enclosing fill so earcut subtracts it from the right region.
+                for (uint32_t a = 0; a < rings.Size(); ++a) {
+                    if (!rings[a].bHole) { continue; }
                     const EcPoint rep = ringPts[rings[a].offset];
+                    double bestArea = 0.0;
                     for (uint32_t b = 0; b < rings.Size(); ++b) {
-                        if (b == a || rings[b].nestingDepth != rings[a].nestingDepth - 1) { continue; }
-                        if (PointInPolygon(rep, ringPts.Data() + rings[b].offset, rings[b].count)) {
+                        if (rings[b].bHole) { continue; }
+                        if (!PointInPolygon(rep, ringPts.Data() + rings[b].offset, rings[b].count)) { continue; }
+                        const double absArea = std::abs(rings[b].area);
+                        if (rings[a].parent < 0 || absArea < bestArea) {
                             rings[a].parent = static_cast<int32_t>(b);
-                            break;
+                            bestArea = absArea;
                         }
                     }
                 }
 
-                // Canonicalize winding (outer CCW, hole CW) so the solid is always left of each edge; the wall normals rely on this.
+                // Canonicalize winding (fill CCW, hole CW) so the solid is always left of each edge; the wall normals rely on this.
                 for (uint32_t a = 0; a < rings.Size(); ++a) {
                     const bool wantPositive = !rings[a].bHole;
                     if ((rings[a].area > 0.0) != wantPositive) {

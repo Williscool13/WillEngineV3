@@ -73,7 +73,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
         }
     }
 
-    // Arm only; the source model is loaded (freeze-gated) in PhysicsMeshPendingKickoff, so a model hot-reload can release this body's ref and have it re-acquire after the drain.
+    // Source loaded (freeze-gated) in PhysicsMeshPendingKickoff so a model hot-reload can release this body's ref and re-acquire after the drain.
     bool bHasMeshShape = false;
     for (const auto& shape : component.shapes) {
         if (shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh) {
@@ -645,6 +645,15 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
         auto renderShapeContent = [&](PhysicsShapeDesc& shape) {
             const bool bIsDynamic = component.motionType == PhysicsMotionType::Dynamic;
+            const glm::vec3 scale = transform ? transform->scale : glm::vec3(1.0f);
+
+            Engine::StaticModelHandle fitHandle{};
+            if (auto* rt = registry.try_get<MeshRuntime>(entity)) {
+                fitHandle = rt->modelHandle;
+            }
+            Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;
+            const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
+
             static constexpr const char* kShapeTypes[] = {"Box", "Sphere", "Capsule", "ConvexHull", "TriangleMesh"};
             if (ImGui::BeginCombo("Shape Type", kShapeTypes[static_cast<int>(shape.type)])) {
                 for (int s = 0; s < IM_ARRAYSIZE(kShapeTypes); ++s) {
@@ -661,7 +670,35 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                             shape.splineParams.spline.points.Clear();
                             shape.text3DSource = {};
                         }
+
                         shape.type = newType;
+                        if (wasMesh && !isMesh) {
+                            if (bModelLoaded) {
+                                FitPrimitiveShapeToEntity(registry, entity, shape, scale, fitModel->bounds);
+                            }
+                            else {
+                                shape.offset = glm::vec3(0.0f);
+                                shape.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+                                shape.bakedScale = glm::vec3(1.0f);
+                                switch (newType) {
+                                    case PhysicsShapeType::Box:
+                                        shape.box.halfExtents = glm::vec3(0.5f);
+                                        break;
+                                    case PhysicsShapeType::Sphere:
+                                        shape.sphere.radius = 0.5f;
+                                        break;
+                                    case PhysicsShapeType::Capsule:
+                                        shape.capsule.radius = 0.5f;
+                                        shape.capsule.halfHeight = 0.5f;
+                                        break;
+                                    default:
+                                        break;
+                                }
+                            }
+                        }
+                        else if (!wasMesh && isMesh) {
+                            FitMeshShapeToEntity(registry, entity, shape, scale);
+                        }
                         registry.patch<PhysicsBodyDesc>(entity);
                     }
                     ImGui::EndDisabled();
@@ -746,84 +783,14 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             {
                 const bool isMeshType = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh;
 
-                Engine::StaticModelHandle fitHandle{};
-                if (auto* rt = registry.try_get<MeshRuntime>(entity)) {
-                    fitHandle = rt->modelHandle;
-                }
-
-                Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;
-                const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
-
-
                 ImGui::BeginDisabled(!bModelLoaded && !isMeshType);
                 if (ImGui::Button("Auto-Fit")) {
-                    const glm::vec3 scale = transform ? transform->scale : glm::vec3(1.0f);
-                    glm::vec3 renderOffset{0.0f};
-                    glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
-                    if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
-                        renderOffset = sm->renderOffset;
-                        renderRotation = sm->renderRotation;
+                    if (isMeshType) {
+                        FitMeshShapeToEntity(registry, entity, shape, scale);
                     }
-                    else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
-                        renderOffset = pm->renderOffset;
-                        renderRotation = pm->renderRotation;
+                    else {
+                        FitPrimitiveShapeToEntity(registry, entity, shape, scale, fitModel->bounds);
                     }
-                    else if (auto* t3 = registry.try_get<Text3DComponent>(entity)) {
-                        renderOffset = t3->renderOffset;
-                        renderRotation = t3->renderRotation;
-                    }
-                    shape.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-                    switch (shape.type) {
-                        case PhysicsShapeType::Box:
-                            shape.box.halfExtents = fitModel->bounds.aabb.HalfExtents() * scale;
-                            shape.offset = fitModel->bounds.aabb.Center() * scale;
-                            break;
-                        case PhysicsShapeType::Sphere:
-                        {
-                            const float maxScale = glm::max(scale.x, glm::max(scale.y, scale.z));
-                            shape.sphere.radius = fitModel->bounds.sphere.radius * maxScale;
-                            shape.offset = fitModel->bounds.sphere.center * scale;
-                            break;
-                        }
-                        case PhysicsShapeType::Capsule:
-                        {
-                            const glm::vec3 he = fitModel->bounds.aabb.HalfExtents() * scale;
-                            const float radius = glm::max(he.x, he.z);
-                            shape.capsule.radius = radius;
-                            shape.capsule.halfHeight = glm::max(0.001f, he.y - radius);
-                            shape.offset = fitModel->bounds.aabb.Center() * scale;
-                            break;
-                        }
-                        case PhysicsShapeType::ConvexHull:
-                        case PhysicsShapeType::TriangleMesh:
-                            shape.meshSourceModelId = Engine::ModelID::INVALID;
-                            shape.proceduralParams = std::monostate{};
-                            shape.splineParams.spline.points.Clear();
-                            shape.text3DSource = {};
-                            shape.offset = {};
-                            shape.bakedScale = scale;
-                            if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
-                                shape.meshSourceModelId = sm->modelId;
-                            }
-                            else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
-                                shape.proceduralParams = pm->params;
-                            }
-                            else if (auto* splm = registry.try_get<SplineMeshComponent>(entity)) {
-                                FillSplineParams(shape.splineParams, *splm);
-                            }
-                            else if (auto* t3 = registry.try_get<Text3DComponent>(entity)) {
-                                shape.text3DSource.fontId = t3->fontId;
-                                shape.text3DSource.text = t3->text;
-                                shape.text3DSource.depth = t3->depth;
-                                shape.text3DSource.flatness = t3->flatness;
-                                shape.text3DSource.tracking = t3->tracking;
-                                shape.text3DSource.scale = t3->scale;
-                                shape.text3DSource.bSmoothNormals = t3->bSmoothNormals;
-                            }
-                            break;
-                    }
-
-                    ApplyRenderTransform(shape, scale, renderOffset, renderRotation);
                     registry.patch<PhysicsBodyDesc>(entity);
                 }
                 ImGui::EndDisabled();

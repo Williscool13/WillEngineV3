@@ -8,6 +8,8 @@
 #include <type_traits>
 
 #include "game/components/render/spline_mesh_component.h"
+#include "game/components/render/static_mesh_component.h"
+#include "game/components/render/text3d_component.h"
 
 namespace Game::Component
 {
@@ -70,5 +72,92 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
         }
     }, params);
     return shape;
+}
+
+void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale)
+{
+    shape.meshSourceModelId = Engine::ModelID::INVALID;
+    shape.proceduralParams = std::monostate{};
+    shape.splineParams.spline.points.Clear();
+    shape.text3DSource = {};
+    shape.bakedScale = scale;
+
+    glm::vec3 renderOffset{0.0f};
+    glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
+    if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
+        shape.meshSourceModelId = sm->modelId;
+        renderOffset = sm->renderOffset;
+        renderRotation = sm->renderRotation;
+    }
+    else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
+        shape.proceduralParams = pm->params;
+        renderOffset = pm->renderOffset;
+        renderRotation = pm->renderRotation;
+    }
+    else if (auto* splm = registry.try_get<SplineMeshComponent>(entity)) {
+        FillSplineParams(shape.splineParams, *splm);
+    }
+    else if (auto* t3 = registry.try_get<Text3DComponent>(entity)) {
+        shape.text3DSource.fontId = t3->fontId;
+        shape.text3DSource.text = t3->text;
+        shape.text3DSource.depth = t3->depth;
+        shape.text3DSource.flatness = t3->flatness;
+        shape.text3DSource.tracking = t3->tracking;
+        shape.text3DSource.scale = t3->scale;
+        shape.text3DSource.bSmoothNormals = t3->bSmoothNormals;
+        renderOffset = t3->renderOffset;
+        renderRotation = t3->renderRotation;
+    }
+
+    shape.offset = scale * renderOffset;
+    shape.rotation = renderRotation;
+}
+
+void FitPrimitiveShapeToEntity(entt::registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale, const Engine::ModelBounds& bounds)
+{
+    shape.bakedScale = glm::vec3(1.0f);
+
+    glm::vec3 renderOffset{0.0f};
+    glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
+    if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
+        renderOffset = sm->renderOffset;
+        renderRotation = sm->renderRotation;
+    }
+    else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
+        renderOffset = pm->renderOffset;
+        renderRotation = pm->renderRotation;
+    }
+    else if (auto* t3 = registry.try_get<Text3DComponent>(entity)) {
+        renderOffset = t3->renderOffset;
+        renderRotation = t3->renderRotation;
+    }
+
+    switch (shape.type) {
+        case PhysicsShapeType::Box:
+            shape.box.halfExtents = bounds.aabb.HalfExtents() * scale;
+            shape.offset = bounds.aabb.Center() * scale;
+            break;
+        case PhysicsShapeType::Sphere:
+        {
+            const float maxScale = glm::max(scale.x, glm::max(scale.y, scale.z));
+            shape.sphere.radius = bounds.sphere.radius * maxScale;
+            shape.offset = bounds.sphere.center * scale;
+            break;
+        }
+        case PhysicsShapeType::Capsule:
+        {
+            const glm::vec3 he = bounds.aabb.HalfExtents() * scale;
+            const float radius = glm::max(he.x, he.z);
+            shape.capsule.radius = radius;
+            shape.capsule.halfHeight = glm::max(0.001f, he.y - radius);
+            shape.offset = bounds.aabb.Center() * scale;
+            break;
+        }
+        default:
+            break;
+    }
+
+    shape.offset = scale * renderOffset + renderRotation * shape.offset;
+    shape.rotation = renderRotation;
 }
 } // Game::Component
