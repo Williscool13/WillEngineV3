@@ -47,13 +47,7 @@ struct Text3DComponent
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
-/** Keeps the source font loaded for the component's lifetime. */
-struct Text3DRuntime
-{
-    Engine::FontHandle fontHandle{Engine::FontHandle::INVALID};
-};
-
-/** Mesh needs (re)generating; the kickoff acquires the font (freeze-gated) and generates. */
+/** Mesh needs (re)generating; the kickoff generates it (freeze-gated on the source font). */
 struct Text3DGeneratePendingTag
 {};
 
@@ -61,11 +55,11 @@ struct Text3DGeneratePendingTag
 struct Text3DLoadingTag
 {};
 
-/** Arms the generate pipeline (font acquired lazily in the kickoff); call after changing fontId. */
+/** Arms the generate pipeline; call after changing fontId. */
 void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::entity entity);
 
-/** Releases the font ref and clears pending state without removing the component (for font hot-reload). */
-void UnloadText3DFont(Text3DComponent& component, entt::registry& registry, entt::entity entity);
+/** Releases the generated mesh and clears pending state without removing the component (for font hot-reload). */
+void UnloadText3DFont(entt::registry& registry, entt::entity entity);
 } // Game::Component
 
 #endif //WILL_ENGINE_TEXT3D_COMPONENT_H

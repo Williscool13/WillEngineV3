@@ -117,6 +117,8 @@ public:
 
     // Populated by AssetManager, Only for 3D text models
     std::optional<Text3DParams> text3DParams{};
+    // Generation-scoped font ref: held while the worker reads the font, released when the model finalizes.
+    FontHandle text3DFontHandle{};
 
     ModelBounds bounds{};
 };

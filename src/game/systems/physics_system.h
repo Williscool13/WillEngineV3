@@ -35,6 +35,7 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
 void MarkPhysicsTransformsDirty(Engine::EngineState* state);
 void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state);
 void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state);

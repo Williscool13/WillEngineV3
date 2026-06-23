@@ -22,38 +22,33 @@
 
 namespace Game::Component
 {
-void UnloadText3DFont(Text3DComponent& component, entt::registry& registry, entt::entity entity)
+void UnloadText3DFont(entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    if (auto* runtime = registry.try_get<Text3DRuntime>(entity)) {
-        if (runtime->fontHandle.IsValid()) {
-            ctx->assetManager->UnloadFont(runtime->fontHandle);
-            runtime->fontHandle = {};
-        }
-    }
+    registry.remove<Component::MeshRuntime>(entity);
     registry.remove<Text3DGeneratePendingTag>(entity);
     registry.remove<Text3DLoadingTag>(entity);
 }
 
 void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::entity entity)
 {
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+
     // Arm only; Text3DGeneratePendingKickoff acquires the font (freeze-gated) and generates the mesh.
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto& runtime = registry.get_or_emplace<Text3DRuntime>(entity);
-
-    if (runtime.fontHandle.IsValid()) {
-        ctx->assetManager->UnloadFont(runtime.fontHandle);
-        runtime.fontHandle = {};
-    }
     registry.remove<Text3DLoadingTag>(entity);
-
     if (component.fontId.IsValid()) {
         registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
-        registry.ctx().get<Engine::EngineState*>()->bPendingModelResolve = true;
+        state->bPendingModelResolve = true;
     }
     else {
         registry.remove<Text3DGeneratePendingTag>(entity);
     }
+
+    auto* transform = registry.try_get<TransformComponent>(entity);
+    glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
+    auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
+    rt.renderOffset = component.renderOffset;
+    rt.renderRotation = component.renderRotation;
+    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
 }
 
 void Text3DComponent::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -71,17 +66,7 @@ void Text3DComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 
 void Text3DComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    if (auto* runtime = registry.try_get<Text3DRuntime>(entity)) {
-        if (runtime->fontHandle.IsValid()) {
-            ctx->assetManager->UnloadFont(runtime->fontHandle);
-            runtime->fontHandle = {};
-        }
-    }
-    registry.remove<Text3DRuntime>(entity);
-    registry.remove<MeshRuntime>(entity);
-    registry.remove<Text3DGeneratePendingTag>(entity);
-    registry.remove<Text3DLoadingTag>(entity);
+    UnloadText3DFont(registry, entity);
     registry.remove<RenderTransformComponent>(entity);
 }
 }
@@ -153,8 +138,6 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
         ImGui::TextDisabled("Generating mesh...");
     }
 
-    auto& textRuntime = registry.get_or_emplace<Text3DRuntime>(entity);
-
     bool visible = comp.modelFlags.x != 0.0f;
     bool shadowCaster = comp.modelFlags.y != 0.0f;
     if (ImGui::Checkbox("Visible##text3d", &visible)) { comp.modelFlags.x = visible ? 1.0f : 0.0f; }
@@ -164,18 +147,15 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     ImGui::BeginDisabled(busy);
 
     const char* fontLabel = "(none)";
-    if (textRuntime.fontHandle.IsValid()) {
-        if (Engine::Font* font = ctx->assetManager->GetFont(textRuntime.fontHandle)) {
-            if (const Engine::AssetManager::CachedFontMetadata* meta = ctx->assetManager->GetFontMetadata(font->fontId)) {
-                fontLabel = meta->name.c_str();
-            }
-        }
+    if (const Engine::AssetManager::CachedFontMetadata* meta = ctx->assetManager->GetFontMetadata(comp.fontId)) {
+        fontLabel = meta->name.c_str();
     }
     if (ImGui::BeginCombo("Font", fontLabel)) {
         const auto& fontCache = ctx->assetManager->GetFontCache();
         for (const auto& [fontId, meta] : fontCache) {
             const bool selected = comp.fontId == fontId;
             if (ImGui::Selectable(meta.name.c_str(), selected) && fontId != comp.fontId) {
+                Component::UnloadText3DFont(registry, entity);
                 comp.fontId = fontId;
                 LoadText3DFont(comp, registry, entity);
             }
@@ -260,11 +240,9 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
         }
     }
 
-    if (textRuntime.fontHandle.IsValid()) {
-        if (Engine::Font* font = ctx->assetManager->GetFont(textRuntime.fontHandle)) {
-            if (font->header.contourGlyphCount == 0) {
-                ImGui::TextColored({1, 0.6f, 0, 1}, "Font has no contours; regenerate it with the updated importer.");
-            }
+    if (const Engine::AssetManager::CachedFontMetadata* meta = ctx->assetManager->GetFontMetadata(comp.fontId)) {
+        if (meta->header.contourGlyphCount == 0) {
+            ImGui::TextColored({1, 0.6f, 0, 1}, "Font has no contours; regenerate it with the updated importer.");
         }
     }
 

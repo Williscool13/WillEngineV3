@@ -430,7 +430,7 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
     return nullptr;
 }
 
-void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsMeshTag>();
@@ -438,21 +438,83 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
     if (viewCount == 0) {
         return;
     }
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    auto abandoned = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    for (auto [entity, bodyDesc] : view.each()) {
+        bool allArmed = true;
+        bool shouldAbandon = false;
+
+        for (auto& shapeDesc : bodyDesc.shapes) {
+            if (shapeDesc.type != Component::PhysicsShapeType::ConvexHull && shapeDesc.type != Component::PhysicsShapeType::TriangleMesh) { continue; }
+            if (shapeDesc.meshSourceHandle.IsValid()) { continue; }
+
+            if (shapeDesc.meshSourceModelId.IsValid()) {
+                if (ctx->assetManager->IsModelFrozen(shapeDesc.meshSourceModelId)) { allArmed = false; break; }
+                shapeDesc.meshSourceHandle = ctx->assetManager->LoadModel(shapeDesc.meshSourceModelId);
+            }
+            else if (!std::holds_alternative<std::monostate>(shapeDesc.proceduralParams)) {
+                shapeDesc.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shapeDesc.proceduralParams);
+            }
+            else if (!shapeDesc.splineParams.spline.points.IsEmpty()) {
+                shapeDesc.meshSourceHandle = ctx->assetManager->LoadSplineModel(shapeDesc.splineParams);
+            }
+            else if (shapeDesc.text3DSource.IsValid()) {
+                const Component::Text3DShapeSource& t = shapeDesc.text3DSource;
+                if (ctx->assetManager->IsFontFrozen(t.fontId)) { allArmed = false; break; }
+                shapeDesc.meshSourceHandle = ctx->assetManager->LoadText3DModel(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals);
+            }
+            if (!shapeDesc.meshSourceHandle.IsValid()) {
+                LOG_WARN(Game, "Physics mesh source could not be loaded. Removing pending tag.");
+                shouldAbandon = true;
+                break;
+            }
+        }
+
+        if (shouldAbandon) {
+            abandoned.PushBack(entity);
+            continue;
+        }
+        if (!allArmed) {
+            state->bPendingModelResolve = true; // a source is frozen; stay pending until it drains
+            continue;
+        }
+        started.PushBack(entity);
+    }
+
+    for (const entt::entity entity : abandoned) {
+        state->registry.remove<Component::PendingPhysicsMeshTag>(entity);
+    }
+    for (const entt::entity entity : started) {
+        state->registry.remove<Component::PendingPhysicsMeshTag>(entity);
+        state->registry.emplace_or_replace<Component::PhysicsMeshLoadingTag>(entity);
+        state->bPendingModelResolve = true;
+    }
+}
+
+void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PhysicsMeshLoadingTag>();
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
-    for (const auto& [entity, bodyDesc] : view.each()) {
+    for (auto [entity, bodyDesc] : view.each()) {
         bool allReady = true;
         bool shouldAbandon = false;
 
         for (const auto& shapeDesc : bodyDesc.shapes) {
-            if (shapeDesc.type != Component::PhysicsShapeType::ConvexHull && shapeDesc.type != Component::PhysicsShapeType::TriangleMesh) continue;
+            if (shapeDesc.type != Component::PhysicsShapeType::ConvexHull && shapeDesc.type != Component::PhysicsShapeType::TriangleMesh) { continue; }
+
             auto* model = ctx->assetManager->GetModel(shapeDesc.meshSourceHandle);
             if (!model) {
-                LOG_WARN(Game, "Physics mesh source model not found. Removing pending tag.");
+                LOG_WARN(Game, "Physics mesh source model not found. Removing loading tag.");
                 shouldAbandon = true;
                 break;
             }
             if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-                LOG_WARN(Game, "Physics mesh source model failed to load. Removing pending tag.");
+                LOG_WARN(Game, "Physics mesh source model failed to load. Removing loading tag.");
                 shouldAbandon = true;
                 break;
             }
@@ -461,7 +523,7 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
                 break;
             }
             if (!model->physicsCache) {
-                LOG_WARN(Game, "Physics mesh cache unavailable. Removing pending tag.");
+                LOG_WARN(Game, "Physics mesh cache unavailable. Removing loading tag.");
                 shouldAbandon = true;
                 break;
             }
@@ -476,7 +538,7 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::PendingPhysicsMeshTag>(entity);
+        state->registry.remove<Component::PhysicsMeshLoadingTag>(entity);
     }
 }
 
@@ -486,7 +548,7 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
 
     // Mesh based physics need to wait for its mesh to load
     auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsShapeCreationTag>(
-        entt::exclude<Component::PendingPhysicsMeshTag>);
+        entt::exclude<Component::PendingPhysicsMeshTag, Component::PhysicsMeshLoadingTag>);
 
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {

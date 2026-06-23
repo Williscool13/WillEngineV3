@@ -28,6 +28,11 @@
 #include "game/components/common_components.h"
 #include "game/components/editor_components.h"
 #include "game/components/scene_components.h"
+#include "game/components/render/light_components.h"
+#include "game/components/render/procedural_mesh_component.h"
+#include "game/components/render/spline_mesh_component.h"
+#include "game/components/render/text3d_component.h"
+#include "game/components/render/text_component.h"
 
 namespace Game
 {

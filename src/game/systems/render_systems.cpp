@@ -27,6 +27,7 @@
 #include "game/components/render/text_component.h"
 #include "game/components/common/stable_id_component.h"
 #include "game/components/core_components.h"
+#include "game/components/physics/physics_body_desc.h"
 
 
 namespace Game
@@ -114,12 +115,34 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     for (const auto& [entity, smc, runtime] : view.each()) {
         if (!isHot(smc.modelId)) { continue; }
-        Component::UnloadStaticMesh(smc, state->registry, entity);
+        Component::UnloadStaticMesh(state->registry, entity);
         entitiesToRestart.PushBack(entity);
     }
 
     for (const entt::entity entity : entitiesToRestart) {
         Component::LoadStaticMesh(state->registry.get<Component::StaticMeshComponent>(entity), state->registry, entity);
+    }
+
+    // Physics holds its own model ref (its serialized key, loaded independently), so it must also release + re-arm or the model can never drain.
+    auto physicsView = state->registry.view<Component::PhysicsBodyDesc>();
+    Core::ArenaVector<entt::entity> physicsToRestart{&ctx->gameplayArena.Get(), physicsView.size()};
+    for (auto [entity, bodyDesc] : physicsView.each()) {
+        bool affected = false;
+        for (auto& shape : bodyDesc.shapes) {
+            if (shape.meshSourceModelId.IsValid() && isHot(shape.meshSourceModelId) && shape.meshSourceHandle.IsValid()) {
+                ctx->assetManager->UnloadModel(shape.meshSourceHandle);
+                shape.meshSourceHandle = {};
+                affected = true;
+            }
+        }
+        if (affected) { physicsToRestart.PushBack(entity); }
+    }
+    for (const entt::entity entity : physicsToRestart) {
+        state->registry.remove<Component::PhysicsMeshLoadingTag>(entity);
+        state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
+        state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
+        state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
+        state->bPendingModelResolve = true;
     }
 }
 
@@ -127,29 +150,73 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (state->pendingHotReloadFontIds.IsEmpty()) { return; }
 
-    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime>();
-    if (view.size_hint() == 0) { return; }
+    // The UI font is engine-held (no component owns it) so it can never drain; reject its hot-reload and require a restart.
+    Engine::FontID uiFontId{};
+    if (const Engine::Font* uiFont = ctx->assetManager->GetFont(state->uiFont)) { uiFontId = uiFont->fontId; }
 
-    Core::ArenaVector<entt::entity> entitiesToReload{&ctx->gameplayArena.Get(), view.size_hint()};
-
-    for (auto [entity, textComp, runtime] : view.each()) {
+    // Freeze + release refs so the font drains, then re-arm; the resolve systems re-acquire the fresh version after ResolveUnloads unfreezes on reclaim.
+    auto isHot = [&](Engine::FontID id) {
+        if (!ctx->assetManager->IsFontFrozen(id)) { return false; }
         for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
-            if (textComp.fontId != hotId) { continue; }
-            Component::UnloadTextComponent(textComp, state->registry, entity);
-            entitiesToReload.PushBack(entity);
-            break;
+            if (id == hotId) { return true; }
+        }
+        return false;
+    };
+
+    for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
+        if (uiFontId.IsValid() && hotId == uiFontId) {
+            LOG_WARN(Game, "UI font hot-reload ignored; restart required to apply changes to the UI font.");
+            continue;
+        }
+        if (ctx->assetManager->IsFontResident(hotId)) {
+            ctx->assetManager->FreezeFont(hotId);
         }
     }
 
-    if (state->pendingHotReloadFontIds.IsEmpty()) { return; }
+    auto textView = state->registry.view<Component::TextComponent, Component::TextRuntime>();
+    auto text3DView = state->registry.view<Component::Text3DComponent>();
 
-    for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
-        ctx->assetManager->EvictFont(hotId);
+    Core::ArenaVector<entt::entity> textEntitiesToRestart{&ctx->gameplayArena.Get(), textView.size_hint()};
+    Core::ArenaVector<entt::entity> text3DEntitiesToRestart{&ctx->gameplayArena.Get(), text3DView.size()};
+
+    for (auto [entity, textComp, runtime] : textView.each()) {
+        if (!isHot(textComp.fontId)) { continue; }
+        Component::UnloadTextComponent(textComp, state->registry, entity);
+        textEntitiesToRestart.PushBack(entity);
+    }
+    for (auto [entity, text3DComp] : text3DView.each()) {
+        if (!isHot(text3DComp.fontId)) { continue; }
+        Component::UnloadText3DFont(state->registry, entity);
+        text3DEntitiesToRestart.PushBack(entity);
     }
 
-    for (const entt::entity entity : entitiesToReload) {
-        auto& textComp = state->registry.get<Component::TextComponent>(entity);
-        Component::LoadTextComponent(textComp, state->registry, entity);
+    for (const entt::entity entity : textEntitiesToRestart) {
+        Component::LoadTextComponent(state->registry.get<Component::TextComponent>(entity), state->registry, entity);
+    }
+    for (const entt::entity entity : text3DEntitiesToRestart) {
+        Component::LoadText3DFont(state->registry.get<Component::Text3DComponent>(entity), state->registry, entity);
+    }
+
+    // A Text3D physics collider holds its own ref to the generated mesh (keyed on the font), so it must release + re-arm too or that mesh can never drain.
+    auto physicsView = state->registry.view<Component::PhysicsBodyDesc>();
+    Core::ArenaVector<entt::entity> physicsToRestart{&ctx->gameplayArena.Get(), physicsView.size()};
+    for (auto [entity, bodyDesc] : physicsView.each()) {
+        bool affected = false;
+        for (auto& shape : bodyDesc.shapes) {
+            if (shape.text3DSource.IsValid() && isHot(shape.text3DSource.fontId) && shape.meshSourceHandle.IsValid()) {
+                ctx->assetManager->UnloadModel(shape.meshSourceHandle);
+                shape.meshSourceHandle = {};
+                affected = true;
+            }
+        }
+        if (affected) { physicsToRestart.PushBack(entity); }
+    }
+    for (const entt::entity entity : physicsToRestart) {
+        state->registry.remove<Component::PhysicsMeshLoadingTag>(entity);
+        state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
+        state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
+        state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
+        state->bPendingModelResolve = true;
     }
 }
 
@@ -437,29 +504,14 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
     }
     auto done = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
     for (const auto& [entity, textComponent] : view.each()) {
-        auto& textRuntime = state->registry.get_or_emplace<Component::Text3DRuntime>(entity);
-        // Acquire the font here (not at construct) so font hot-reload can hold it pending. Contours load synchronously in LoadFont, so there is no atlas wait.
-        // We acquire so that the font is not hotreloaded while being referenced by the generator
-        if (!textRuntime.fontHandle.IsValid()) {
-            if (!textComponent.fontId.IsValid() || ctx->assetManager->IsFontFrozen(textComponent.fontId)) { continue; }
-            textRuntime.fontHandle = ctx->assetManager->LoadFont(textComponent.fontId);
-            if (!textRuntime.fontHandle.IsValid()) { continue; }
-        }
+        // Stay pending while the font is missing or frozen (e.g. mid hot-reload drain). The generated mesh takes its own font ref, so we hold none here.
+        if (!textComponent.fontId.IsValid() || ctx->assetManager->IsFontFrozen(textComponent.fontId)) { continue; }
 
-        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
-
-        // Unload any previously generated model.
-        for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
-            ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
-        }
-        runtime.primitives.Clear();
-        if (runtime.modelHandle.IsValid()) {
-            ctx->assetManager->UnloadModel(runtime.modelHandle);
-            runtime.modelHandle = {};
-        }
+        state->registry.remove<Component::MeshRuntime>(entity);
 
         if (textComponent.text.Size() > 0) {
-            runtime.modelHandle = ctx->assetManager->LoadText3DModel(textRuntime.fontHandle, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals);
+            auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
+            runtime.modelHandle = ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals);
             if (runtime.modelHandle.IsValid()) {
                 state->registry.emplace_or_replace<Component::Text3DLoadingTag>(entity);
                 state->bPendingModelResolve = true;

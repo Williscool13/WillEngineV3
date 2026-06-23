@@ -30,6 +30,9 @@ struct DirtyKinematicPhysicsTransformTag
 struct PendingPhysicsMeshTag
 {};
 
+struct PhysicsMeshLoadingTag
+{};
+
 struct PendingPhysicsShapeCreationTag
 {};
 

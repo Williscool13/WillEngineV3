@@ -85,11 +85,9 @@ public: // Models
     StaticModelHandle LoadSplineModel(const SplineParams& params);
 
     /**
-     * Loads (or dedups) an extruded 3D-text model. Dedup key is the identity (font + text + depth + flatness + tracking + scale)
+     * Loads (or dedups) an extruded 3D-text model, resolving the font by id. Dedup key is the identity (font + text + depth + flatness + tracking + scale + smoothNormals).
+     * The model holds a font ref until it finalizes so the generation worker can read the glyph contours.
      */
-    StaticModelHandle LoadText3DModel(FontHandle fontHandle, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals);
-
-    /** Resolves the font by id internally (for callers without a font ref, e.g. physics shapes); the font's retire delay keeps it alive while the worker reads it. */
     StaticModelHandle LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals);
 
     StaticModel* GetModel(StaticModelHandle handle);

@@ -73,28 +73,16 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
         }
     }
 
-    bool bNeedsModelLoad = false;
-    for (auto& shape : component.shapes) {
-        if (shape.type != PhysicsShapeType::ConvexHull && shape.type != PhysicsShapeType::TriangleMesh) { continue; }
-        if (shape.meshSourceModelId.IsValid()) {
-            shape.meshSourceHandle = ctx->assetManager->LoadModel(shape.meshSourceModelId);
-            bNeedsModelLoad = true;
-        }
-        else if (!std::holds_alternative<std::monostate>(shape.proceduralParams)) {
-            shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
-            bNeedsModelLoad = true;
-        }
-        else if (!shape.splineParams.spline.points.IsEmpty()) {
-            shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
-            bNeedsModelLoad = true;
-        }
-        else if (shape.text3DSource.IsValid()) {
-            const Text3DShapeSource& t = shape.text3DSource;
-            shape.meshSourceHandle = ctx->assetManager->LoadText3DModel(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals);
-            bNeedsModelLoad = true;
+    // Arm only; the source model is loaded (freeze-gated) in PhysicsMeshPendingKickoff, so a model hot-reload can release this body's ref and have it re-acquire after the drain.
+    bool bHasMeshShape = false;
+    for (const auto& shape : component.shapes) {
+        if (shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh) {
+            bHasMeshShape = true;
+            break;
         }
     }
-    if (bNeedsModelLoad) {
+    if (bHasMeshShape) {
+        registry.remove<PhysicsMeshLoadingTag>(entity);
         registry.emplace_or_replace<PendingPhysicsMeshTag>(entity);
         state->bPendingModelResolve = true;
     }

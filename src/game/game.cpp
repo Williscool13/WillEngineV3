@@ -265,6 +265,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::SplineMeshPendingKickoff(ctx, state);
     Game::TextFontPendingKickoff(ctx, state);
     Game::Text3DGeneratePendingKickoff(ctx, state);
+    Game::PhysicsMeshPendingKickoff(ctx, state);
 
     if (ctx->bAssetsChangedThisFrame || state->bPendingModelResolve) {
         Game::StaticMeshLoadResolve(ctx, state);

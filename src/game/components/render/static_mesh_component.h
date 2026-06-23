@@ -49,7 +49,7 @@ struct StaticMeshLoadPendingTag
 struct StaticMeshLoadingTag
 {};
 
-void UnloadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
+void UnloadStaticMesh(entt::registry& registry, entt::entity entity);
 void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
 }
 

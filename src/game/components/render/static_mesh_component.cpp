@@ -26,22 +26,9 @@
 
 namespace Game::Component
 {
-void UnloadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
+void UnloadStaticMesh(entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
-
-    // Materials acquired when the model has resolved. If it never resolves this is a no-op
-    for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
-        ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
-    }
-    runtime.primitives.Clear();
-
-    if (runtime.modelHandle.IsValid()) {
-        ctx->assetManager->UnloadModel(runtime.modelHandle);
-        runtime.modelHandle = {};
-    }
-
+    registry.remove<MeshRuntime>(entity);
     registry.remove<StaticMeshLoadPendingTag>(entity);
     registry.remove<StaticMeshLoadingTag>(entity);
 }
@@ -49,7 +36,7 @@ void UnloadStaticMesh(StaticMeshComponent& component, entt::registry& registry, 
 void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    registry.get_or_emplace<MeshRuntime>(entity);
+    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
 
     // Arm only; StartStaticMeshLoads kicks the load (freeze-gated), then ResolveStaticMeshLoads binds it.
     registry.remove<StaticMeshLoadingTag>(entity);
@@ -77,9 +64,7 @@ void StaticMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 
 void StaticMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    registry.remove<MeshRuntime>(entity);
-    registry.remove<StaticMeshLoadPendingTag>(entity);
-    registry.remove<StaticMeshLoadingTag>(entity);
+    UnloadStaticMesh(registry, entity);
     registry.remove<RenderTransformComponent>(entity);
 }
 }
@@ -229,9 +214,10 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
         if (component.meshIndex == -1) {
             if (model->modelData.meshes.Size() == 1) {
-                UnloadStaticMesh(component, registry, entity);
+                Component::UnloadStaticMesh(registry, entity);
                 component.meshIndex = 0;
                 LoadStaticMesh(component, registry, entity);
+                return {.requestRemoval = remove};
             }
             else {
                 if (ImGui::BeginCombo("Select Mesh", "")) {
@@ -241,7 +227,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                         if (meshName.Size() == 0) { snprintf(fallback, sizeof(fallback), "Mesh %d", i); }
                         const char* displayName = meshName.Size() > 0 ? meshName.c_str() : fallback;
                         if (ImGui::Selectable(displayName, false)) {
-                            UnloadStaticMesh(component, registry, entity);
+                            Component::UnloadStaticMesh(registry, entity);
                             component.meshIndex = i;
                             LoadStaticMesh(component, registry, entity);
                         }
