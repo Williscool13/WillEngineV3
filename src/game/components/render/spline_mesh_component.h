@@ -45,8 +45,15 @@ struct SplineMeshComponent
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
+/** Generation requested; StartSplineMeshLoads kicks the model build. */
+struct SplineMeshLoadPendingTag
+{};
+
+/** Model build in flight; ResolveSplineMeshLoads binds it once finished. */
 struct SplineMeshLoadingTag
 {};
+
+Engine::SplineParams ToSplineParams(const SplineMeshComponent& component);
 }
 
 #endif //WILL_ENGINE_SPLINE_MESH_COMPONENT_H

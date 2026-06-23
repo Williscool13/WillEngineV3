@@ -41,6 +41,11 @@ struct StaticMeshComponent
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
+/** Load requested; StartStaticMeshLoads kicks the model load (when not frozen). */
+struct StaticMeshLoadPendingTag
+{};
+
+/** Model load in flight; ResolveStaticMeshLoads binds primitives once it finishes. */
 struct StaticMeshLoadingTag
 {};
 

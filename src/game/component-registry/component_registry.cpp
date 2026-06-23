@@ -24,6 +24,7 @@
 #include "game/components/render/light_components.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/render/text_component.h"
+#include "game/components/render/text3d_component.h"
 
 namespace Game
 {
@@ -46,6 +47,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, "DirectionalLightComponent");
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, "ProceduralMeshComponent");
     RegisterComponent<Component::SplineMeshComponent>(componentRegistry, "SplineMeshComponent");
+    RegisterComponent<Component::Text3DComponent>(componentRegistry, "Text3DComponent");
 
     RegisterComponent<Component::CharacterPhysicsComponent>(componentRegistry, "CharacterPhysicsComponent");
     RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, "PhysicsBodyDesc");

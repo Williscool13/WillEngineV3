@@ -24,6 +24,7 @@
 #include "par/par_shapes.h"
 #include "par/par_shapes_ext.h"
 #include "meshoptimizer/src/meshoptimizer.h"
+#include "text3d_geometry.h"
 
 namespace AssetLoad
 {
@@ -180,6 +181,10 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
 {
     ZoneScopedN("GenerateGeometry");
 
+    if (outputModel->text3DParams.has_value()) {
+        return GenerateText3D(*outputModel->text3DParams);
+    }
+
     if (outputModel->splineParams.has_value()) {
         return GenerateSpline(*outputModel->splineParams);
     }
@@ -213,6 +218,21 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
                    [&](const Engine::BowlParams& p) { bSuccess = GenerateBowl(p); },
                }, params);
     return bSuccess;
+}
+
+bool ProceduralModelLoadSlot::GenerateText3D(const Engine::Text3DParams& p)
+{
+    ZoneScopedN("GenerateText3D");
+
+    if (p.font == nullptr) { return false; }
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    if (!BuildText3DGeometry(*p.font, p, memoryManager->AssetsScratch(), vertices, indices)) {
+        return false;
+    }
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateStaircase(const Engine::StaircaseParams& p)

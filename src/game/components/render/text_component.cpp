@@ -28,16 +28,16 @@ void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::en
         ctx->assetManager->UnloadFont(runtime.fontHandle);
         runtime.fontHandle = {};
     }
-    registry.remove<TextLoadingTag>(entity);
+    registry.remove<TextFontPendingTag>(entity);
 }
 
 void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    // Arm only; the load happens in ResolveTextFontPending (freeze-gated).
+    registry.get_or_emplace<TextRuntime>(entity);
     if (comp.fontId.IsValid()) {
-        runtime.fontHandle = ctx->assetManager->LoadFont(comp.fontId);
-        registry.emplace_or_replace<TextLoadingTag>(entity);
+        registry.emplace_or_replace<TextFontPendingTag>(entity);
+        registry.ctx().get<Engine::EngineState*>()->bPendingModelResolve = true;
     }
 }
 

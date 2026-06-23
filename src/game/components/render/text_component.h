@@ -38,7 +38,7 @@ struct TextRuntime
     Engine::FontHandle fontHandle{Engine::FontHandle::INVALID};
 };
 
-struct TextLoadingTag
+struct TextFontPendingTag
 {};
 
 void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity);

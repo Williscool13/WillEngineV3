@@ -15,7 +15,7 @@
 namespace Engine
 {
 constexpr uint32_t FONT_MAJOR_VERSION = 0;
-constexpr uint32_t FONT_MINOR_VERSION = 3;
+constexpr uint32_t FONT_MINOR_VERSION = 4;
 constexpr size_t WFONT_NAME_LENGTH = 128;
 
 /**
@@ -37,6 +37,36 @@ struct WGlyphInfo
     float uvBottom{0.0f};
     float uvRight{0.0f};
     float uvTop{0.0f};
+};
+
+/**
+ * Vector outline data for extruded 3D text. Only present when a font is imported with contour emission.
+ * Coordinates are in the same EM space as WGlyphInfo planeBounds/advance.
+ */
+enum class WFontEdgeKind : uint32_t
+{
+    Linear = 0,
+    Quadratic = 1,
+    Cubic = 2,
+};
+
+/** One Bezier segment. p[0..1]=start, then 0/1/2 control points, then end; (x,y) pairs in EM units. */
+struct WFontEdge
+{
+    WFontEdgeKind kind{WFontEdgeKind::Linear};
+    float p[8]{};
+};
+
+struct WContourRange
+{
+    uint32_t firstEdge{0};
+    uint32_t edgeCount{0};
+};
+
+struct WGlyphContourRange
+{
+    uint32_t firstContour{0};
+    uint32_t contourCount{0};
 };
 
 struct WFontHeader
@@ -68,10 +98,21 @@ struct WFontHeader
     CompressionType atlasCompressionType{DEFAULT_FONT_COMPRESSION};
 
     /**
+     * Contour outline tables for 3D text. contourGlyphCount==0 means no contours were baked (flat-only font).
+     * When present, contourGlyphCount==glyphCount and the range table is indexed parallel to the glyph array.
+     */
+    uint32_t contourGlyphCount{0};
+    uint32_t contourCount{0};
+    uint32_t edgeCount{0};
+
+    /**
      * Byte offsets from file start -- set by the reader after parsing end_header.
-     * Layout: [header text] [glyphCount x WGlyphInfo] [atlas KTX2 blob]
+     * Layout: [header text] [glyphCount x WGlyphInfo] [contourGlyphCount x WGlyphContourRange] [contourCount x WContourRange] [edgeCount x WFontEdge] [atlas KTX2 blob]
      */
     uint64_t glyphDataOffset{0};
+    uint64_t glyphContourRangeOffset{0};
+    uint64_t contourRangeOffset{0};
+    uint64_t edgeDataOffset{0};
     uint64_t atlasDataOffset{0};
 };
 

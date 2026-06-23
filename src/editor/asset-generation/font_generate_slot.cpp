@@ -179,8 +179,43 @@ bool FontGenerateSlot::GenerateAndWrite()
 
     Core::Vector<Engine::WGlyphInfo> glyphInfos(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
     glyphInfos.Reserve(glyphs.size());
+
+    // Vector outlines for 3D text. Built parallel to glyphInfos so codepoint -> glyph index -> contour range stays aligned.
+    Core::Vector<Engine::WGlyphContourRange> glyphContourRanges(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+    Core::Vector<Engine::WContourRange> contourRanges(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+    Core::Vector<Engine::WFontEdge> contourEdges(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+
     for (const msdf_atlas::GlyphGeometry& g : glyphs) {
         if (g.getCodepoint() == 0) { continue; }
+
+        const double geometryScale = g.getGeometryScale();
+        Engine::WGlyphContourRange gcr{};
+        gcr.firstContour = static_cast<uint32_t>(contourRanges.Size());
+        const msdfgen::Shape& shape = g.getShape();
+        for (const msdfgen::Contour& contour : shape.contours) {
+            Engine::WContourRange cr{};
+            cr.firstEdge = static_cast<uint32_t>(contourEdges.Size());
+            for (const msdfgen::EdgeHolder& holder : contour.edges) {
+                const msdfgen::EdgeSegment* seg = holder;
+                const msdfgen::Point2* cp = seg->controlPoints();
+                Engine::WFontEdge edge{};
+                int pointCount = 2;
+                switch (seg->type()) {
+                    case msdfgen::QuadraticSegment::EDGE_TYPE: edge.kind = Engine::WFontEdgeKind::Quadratic; pointCount = 3; break;
+                    case msdfgen::CubicSegment::EDGE_TYPE: edge.kind = Engine::WFontEdgeKind::Cubic; pointCount = 4; break;
+                    default: edge.kind = Engine::WFontEdgeKind::Linear; pointCount = 2; break;
+                }
+                for (int i = 0; i < pointCount; ++i) {
+                    edge.p[i * 2] = static_cast<float>(cp[i].x * geometryScale);
+                    edge.p[i * 2 + 1] = static_cast<float>(cp[i].y * geometryScale);
+                }
+                contourEdges.PushBack(edge);
+            }
+            cr.edgeCount = static_cast<uint32_t>(contourEdges.Size()) - cr.firstEdge;
+            contourRanges.PushBack(cr);
+        }
+        gcr.contourCount = static_cast<uint32_t>(contourRanges.Size()) - gcr.firstContour;
+        glyphContourRanges.PushBack(gcr);
 
         Engine::WGlyphInfo info{};
         info.codepoint = static_cast<uint32_t>(g.getCodepoint());
@@ -222,6 +257,9 @@ bool FontGenerateSlot::GenerateAndWrite()
     header.glyphCount = static_cast<uint32_t>(glyphInfos.Size());
     header.atlasDataSize = static_cast<uint64_t>(compressedSize);
     header.atlasUncompressedSize = static_cast<uint64_t>(ktxSize);
+    header.contourGlyphCount = static_cast<uint32_t>(glyphContourRanges.Size());
+    header.contourCount = static_cast<uint32_t>(contourRanges.Size());
+    header.edgeCount = static_cast<uint32_t>(contourEdges.Size());
 
     const Core::InlineString<> stem = Core::InlineString(outputPath.Stem());
     const size_t copyLen = std::min(stem.Size(), Engine::WFONT_NAME_LENGTH - 1);
@@ -241,6 +279,9 @@ bool FontGenerateSlot::GenerateAndWrite()
     }
 
     f.write(reinterpret_cast<const char*>(glyphInfos.Data()), static_cast<std::streamsize>(glyphInfos.Size() * sizeof(Engine::WGlyphInfo)));
+    f.write(reinterpret_cast<const char*>(glyphContourRanges.Data()), static_cast<std::streamsize>(glyphContourRanges.Size() * sizeof(Engine::WGlyphContourRange)));
+    f.write(reinterpret_cast<const char*>(contourRanges.Data()), static_cast<std::streamsize>(contourRanges.Size() * sizeof(Engine::WContourRange)));
+    f.write(reinterpret_cast<const char*>(contourEdges.Data()), static_cast<std::streamsize>(contourEdges.Size() * sizeof(Engine::WFontEdge)));
     f.write(reinterpret_cast<const char*>(atlasCompressed.Data()), static_cast<std::streamsize>(compressedSize));
 
     LOG_INFO(Asset, "Wrote font {}", outputPath.c_str());

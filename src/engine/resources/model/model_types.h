@@ -13,6 +13,7 @@
 #include "offsetAllocator.hpp"
 #include "core/containers/heap_array.h"
 #include "engine/resources/material/material.h"
+#include "engine/asset_manager_types.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
 #include "core/types/math.h"
@@ -342,6 +343,25 @@ struct CurvedRampParams
 
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
     , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams>;
+
+/**
+ * Input for an extruded 3D-text model.
+ * `depth`/`scale`/`flatness` are consumed at generation time; `flatness` is an EM-space tolerance.
+ */
+struct Text3DParams
+{
+    // Identity (hashed for dedup)
+    uint64_t fontId{0};
+    Core::InlineString<256> text{};
+    float depth{0.2f};
+    float flatness{0.005f};
+    float tracking{0.0f};
+    float scale{1.0f};
+    bool bSmoothNormals{true};
+
+    // Font the generation job reads; kept alive by the requesting component (not a model-owned ref, so font hot-reload can evict cleanly).
+    const Font* font{nullptr};
+};
 } // Render
 
 #endif //WILL_ENGINE_MODEL_TYPES_H

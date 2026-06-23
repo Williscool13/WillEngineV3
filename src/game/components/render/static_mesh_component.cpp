@@ -22,6 +22,7 @@
 #include "game/components/core_components.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
+#include "game/components/render/text3d_component.h"
 
 namespace Game::Component
 {
@@ -41,22 +42,20 @@ void UnloadStaticMesh(StaticMeshComponent& component, entt::registry& registry, 
         runtime.modelHandle = {};
     }
 
-    // If unloaded before it finished loading
+    registry.remove<StaticMeshLoadPendingTag>(entity);
     registry.remove<StaticMeshLoadingTag>(entity);
 }
 
 void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
+    registry.get_or_emplace<MeshRuntime>(entity);
 
+    // Arm only; StartStaticMeshLoads kicks the load (freeze-gated), then ResolveStaticMeshLoads binds it.
+    registry.remove<StaticMeshLoadingTag>(entity);
     if (component.modelId.IsValid() && component.meshIndex != -1) {
-        runtime.modelHandle = ctx->assetManager->LoadModel(component.modelId);
-        if (runtime.modelHandle.IsValid()) {
-            registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
-            state->bPendingModelResolve |= true;
-        }
+        registry.emplace_or_replace<StaticMeshLoadPendingTag>(entity);
+        state->bPendingModelResolve |= true;
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
@@ -79,6 +78,7 @@ void StaticMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 void StaticMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     registry.remove<MeshRuntime>(entity);
+    registry.remove<StaticMeshLoadPendingTag>(entity);
     registry.remove<StaticMeshLoadingTag>(entity);
     registry.remove<RenderTransformComponent>(entity);
 }
@@ -89,7 +89,7 @@ namespace Game
 {
 bool Component::StaticMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
-    return !registry.any_of<ProceduralMeshComponent, SplineMeshComponent>(entity);
+    return !registry.any_of<ProceduralMeshComponent, SplineMeshComponent, Text3DComponent>(entity);
 }
 
 void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, nlohmann::json& json)
@@ -205,6 +205,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             }
             component.modelId = Engine::ModelID::INVALID;
             component.meshIndex = -1;
+            registry.remove<StaticMeshLoadPendingTag>(entity);
             registry.remove<StaticMeshLoadingTag>(entity);
             registry.remove<RenderTransformComponent>(entity);
             registry.remove<MultiframeDirtyTransformComponent>(entity);
@@ -212,6 +213,10 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         }
 
         if (!runtime || !runtime->modelHandle.IsValid()) {
+            if (registry.any_of<StaticMeshLoadPendingTag, StaticMeshLoadingTag>(entity)) {
+                ImGui::Text("Loading Model...");
+                return {.requestRemoval = remove};
+            }
             LOG_WARN(Game, "modelId specified but model handle is invalid, resetting to unset");
             component.modelId = Engine::ModelID::INVALID;
             return {.requestRemoval = remove};

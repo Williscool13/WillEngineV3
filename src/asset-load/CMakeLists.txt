@@ -24,6 +24,8 @@ add_library(asset-load STATIC
         model_types.cpp
         asset-load-jobs/procedural_texture_load_slot.cpp
         asset-load-jobs/procedural_texture_load_slot.h
+        asset-load-jobs/text3d_geometry.cpp
+        asset-load-jobs/text3d_geometry.h
 )
 
 target_include_directories(asset-load PUBLIC

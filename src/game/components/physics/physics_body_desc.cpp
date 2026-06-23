@@ -20,6 +20,7 @@
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/static_mesh_component.h"
+#include "game/components/render/text3d_component.h"
 
 namespace Game::Component
 {
@@ -85,6 +86,11 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
         }
         else if (!shape.splineParams.spline.points.IsEmpty()) {
             shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
+            bNeedsModelLoad = true;
+        }
+        else if (shape.text3DSource.IsValid()) {
+            const Text3DShapeSource& t = shape.text3DSource;
+            shape.meshSourceHandle = ctx->assetManager->LoadText3DModel(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals);
             bNeedsModelLoad = true;
         }
     }
@@ -178,6 +184,17 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     sp["crossPlankInterval"] = shape.splineParams.crossPlankInterval;
                     sp["crossPlankHeight"] = shape.splineParams.crossPlankHeight;
                     shapeJson["splineParams"] = sp;
+                }
+                if (shape.text3DSource.IsValid()) {
+                    nlohmann::json t3;
+                    t3["fontId"] = shape.text3DSource.fontId.id;
+                    t3["text"] = shape.text3DSource.text.c_str();
+                    t3["depth"] = shape.text3DSource.depth;
+                    t3["flatness"] = shape.text3DSource.flatness;
+                    t3["tracking"] = shape.text3DSource.tracking;
+                    t3["scale"] = shape.text3DSource.scale;
+                    t3["smoothNormals"] = shape.text3DSource.bSmoothNormals;
+                    shapeJson["text3DSource"] = t3;
                 }
                 std::visit([&shapeJson](const auto& p) {
                     using T = std::decay_t<decltype(p)>;
@@ -547,6 +564,18 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                     spline.crossPlankHeight = sp.value("crossPlankHeight", 0.0f);
                     shape.splineParams = spline;
                 }
+                if (shapeJson.contains("text3DSource")) {
+                    const auto& t3 = shapeJson["text3DSource"];
+                    Text3DShapeSource src{};
+                    src.fontId = Engine::FontID(t3["fontId"].get<uint64_t>());
+                    src.text = Core::InlineString<256>(t3["text"].get<std::string>().c_str());
+                    src.depth = t3.value("depth", 0.2f);
+                    src.flatness = t3.value("flatness", 0.005f);
+                    src.tracking = t3.value("tracking", 0.0f);
+                    src.scale = t3.value("scale", 1.0f);
+                    src.bSmoothNormals = t3.value("smoothNormals", true);
+                    shape.text3DSource = src;
+                }
                 break;
         }
 
@@ -595,6 +624,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         shape.meshSourceModelId = Engine::ModelID::INVALID;
                         shape.proceduralParams = std::monostate{};
                         shape.splineParams.spline.points.Clear();
+                        shape.text3DSource = {};
                         shape.type = PhysicsShapeType::Box;
                     }
                 }
@@ -641,6 +671,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                             shape.meshSourceHandle = {};
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.splineParams.spline.points.Clear();
+                            shape.text3DSource = {};
                         }
                         shape.type = newType;
                         registry.patch<PhysicsBodyDesc>(entity);
@@ -690,6 +721,10 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         ImGui::Text("Mesh Source: Procedural Spline");
                         bHasAny = true;
                     }
+                    else if (shape.text3DSource.IsValid()) {
+                        ImGui::Text("Mesh Source: 3D Text");
+                        bHasAny = true;
+                    }
                     else {
                         ImGui::Text("Mesh Source: (none)");
                     }
@@ -708,6 +743,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
                             shape.splineParams.spline.points.Clear();
+                            shape.text3DSource = {};
                             bAnyChange = true;
                         }
                     }
@@ -744,6 +780,10 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         renderOffset = pm->renderOffset;
                         renderRotation = pm->renderRotation;
                     }
+                    else if (auto* t3 = registry.try_get<Text3DComponent>(entity)) {
+                        renderOffset = t3->renderOffset;
+                        renderRotation = t3->renderRotation;
+                    }
                     shape.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
                     switch (shape.type) {
                         case PhysicsShapeType::Box:
@@ -771,6 +811,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
                             shape.splineParams.spline.points.Clear();
+                            shape.text3DSource = {};
                             shape.offset = {};
                             shape.bakedScale = scale;
                             if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
@@ -781,6 +822,15 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                             }
                             else if (auto* splm = registry.try_get<SplineMeshComponent>(entity)) {
                                 FillSplineParams(shape.splineParams, *splm);
+                            }
+                            else if (auto* t3 = registry.try_get<Text3DComponent>(entity)) {
+                                shape.text3DSource.fontId = t3->fontId;
+                                shape.text3DSource.text = t3->text;
+                                shape.text3DSource.depth = t3->depth;
+                                shape.text3DSource.flatness = t3->flatness;
+                                shape.text3DSource.tracking = t3->tracking;
+                                shape.text3DSource.scale = t3->scale;
+                                shape.text3DSource.bSmoothNormals = t3->bSmoothNormals;
                             }
                             break;
                     }

@@ -12,6 +12,7 @@
 #include "ImGuizmo.h"
 
 #include "static_mesh_component.h"
+#include "text3d_component.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -22,7 +23,7 @@
 
 namespace Game::Component
 {
-static Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
+Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
 {
     Engine::SplineParams params{};
     params.spline = component.spline;
@@ -42,7 +43,6 @@ static Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
 void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<SplineMeshComponent>(entity);
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
 
     if (component.spline.points.IsEmpty()) {
@@ -56,9 +56,9 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
         component.spline.rolls.PushBack(0.0f);
     }
 
-    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
-    runtime.modelHandle = ctx->assetManager->LoadSplineModel(ToSplineParams(component));
-    registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
+    // Arm only; StartSplineMeshLoads kicks the build, then ResolveSplineMeshLoads binds it.
+    registry.get_or_emplace<MeshRuntime>(entity);
+    registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
     state->bPendingModelResolve = true;
 
     auto* transform = registry.try_get<TransformComponent>(entity);
@@ -71,6 +71,7 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 void SplineMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     registry.remove<MeshRuntime>(entity);
+    registry.remove<SplineMeshLoadPendingTag>(entity);
     registry.remove<SplineMeshLoadingTag>(entity);
     registry.remove<RenderTransformComponent>(entity);
 }
@@ -80,7 +81,7 @@ namespace Game
 {
 bool Component::SplineMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
-    return !registry.any_of<Component::StaticMeshComponent, Component::ProceduralMeshComponent>(entity);
+    return !registry.any_of<Component::StaticMeshComponent, Component::ProceduralMeshComponent, Component::Text3DComponent>(entity);
 }
 
 void Component::SplineMeshComponent::Serialize(const SplineMeshComponent& comp, nlohmann::json& json)
@@ -418,8 +419,9 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                 ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
             }
             runtime.primitives.Clear();
-            runtime.modelHandle = ctx->assetManager->LoadSplineModel(ToSplineParams(component));
-            registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
+            // Arm only; StartSplineMeshLoads kicks the rebuild.
+            registry.remove<SplineMeshLoadingTag>(entity);
+            registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
             state->bPendingModelResolve = true;
         }
     }

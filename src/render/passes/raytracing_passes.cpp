@@ -9,6 +9,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "render/render_config.h"
+#include "render/frame_resources.h"
 #include "render/render-graph/render_pass.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/pipelines/pipeline_data.h"

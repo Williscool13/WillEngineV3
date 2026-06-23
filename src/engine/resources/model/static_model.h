@@ -115,6 +115,9 @@ public:
     // Populated by AssetManager, Only for spline models
     std::optional<SplineParams> splineParams{};
 
+    // Populated by AssetManager, Only for 3D text models
+    std::optional<Text3DParams> text3DParams{};
+
     ModelBounds bounds{};
 };
 } // AssetLoad

@@ -30,6 +30,9 @@ bool WriteWFontHeader(std::ostream& out, const WFontHeader& header)
     out << "atlas_data_size " << header.atlasDataSize << "\n";
     out << "atlas_uncompressed_size " << header.atlasUncompressedSize << "\n";
     out << "atlas_compression " << static_cast<uint32_t>(header.atlasCompressionType) << "\n";
+    out << "contour_glyph_count " << header.contourGlyphCount << "\n";
+    out << "contour_count " << header.contourCount << "\n";
+    out << "edge_count " << header.edgeCount << "\n";
     out << "end_header\n";
     return out.good();
 }
@@ -37,7 +40,10 @@ bool WriteWFontHeader(std::ostream& out, const WFontHeader& header)
 static void ComputeOffsets(WFontHeader& header, uint64_t headerEnd)
 {
     header.glyphDataOffset = headerEnd;
-    header.atlasDataOffset = header.glyphDataOffset + static_cast<uint64_t>(header.glyphCount) * sizeof(WGlyphInfo);
+    header.glyphContourRangeOffset = header.glyphDataOffset + static_cast<uint64_t>(header.glyphCount) * sizeof(WGlyphInfo);
+    header.contourRangeOffset = header.glyphContourRangeOffset + static_cast<uint64_t>(header.contourGlyphCount) * sizeof(WGlyphContourRange);
+    header.edgeDataOffset = header.contourRangeOffset + static_cast<uint64_t>(header.contourCount) * sizeof(WContourRange);
+    header.atlasDataOffset = header.edgeDataOffset + static_cast<uint64_t>(header.edgeCount) * sizeof(WFontEdge);
 }
 
 static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& header)
@@ -65,6 +71,9 @@ static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& h
         std::from_chars(line + 18, line + lineBufSize, v);
         header.atlasCompressionType = static_cast<CompressionType>(v);
     }
+    else if (strncmp(line, "contour_glyph_count ", 20) == 0) { std::from_chars(line + 20, line + lineBufSize, header.contourGlyphCount); }
+    else if (strncmp(line, "contour_count ", 14) == 0) { std::from_chars(line + 14, line + lineBufSize, header.contourCount); }
+    else if (strncmp(line, "edge_count ", 11) == 0) { std::from_chars(line + 11, line + lineBufSize, header.edgeCount); }
     return true;
 }
 
@@ -95,7 +104,7 @@ std::optional<WFontHeader> ReadWFontHeader(std::istream& in)
             uint32_t major = 0, minor = 0;
             auto res = std::from_chars(line + 8, line + LINE_BUF, major);
             if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, minor); }
-            if (major != FONT_MAJOR_VERSION || minor != FONT_MINOR_VERSION) { return std::nullopt; }
+            if (major != FONT_MAJOR_VERSION || minor > FONT_MINOR_VERSION) { return std::nullopt; }
         }
         else {
             if (strncmp(line, "atlas_compression ", 18) == 0) { bCompressionSeen = true; }

@@ -103,6 +103,8 @@ set(GAME_SOURCES
         editor/settings/graphics_settings.h
         editor/editor_widgets.cpp
         editor/editor_widgets.h
+        components/render/text3d_component.cpp
+        components/render/text3d_component.h
 )
 
 set(GAME_INCLUDE_DIRS

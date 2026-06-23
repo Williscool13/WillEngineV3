@@ -35,6 +35,11 @@ struct ProceduralMeshComponent
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
+/** Generation requested; StartProceduralMeshLoads kicks the model build. */
+struct ProceduralMeshLoadPendingTag
+{};
+
+/** Model build in flight; ResolveProceduralMeshLoads binds it once finished. */
 struct ProceduralMeshLoadingTag
 {};
 

@@ -255,22 +255,27 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     // Resolve Creations
 #if WILL_EDITOR
-    Game::ResolveModelHotReloads(ctx, state);
-    Game::ResolveFontHotReloads(ctx, state);
-    Game::ResolveTextureHotReloads(ctx, state);
+    Game::ModelHotReload(ctx, state);
+    Game::FontHotReload(ctx, state);
+    Game::TextureHotReload(ctx, state);
 #endif
-    Game::ResolveTextLoads(ctx, state);
 
-    if (ctx->bModelLoadedThisFrame || state->bPendingModelResolve) {
-        Game::ResolveStaticMeshLoads(ctx, state);
-        Game::ResolveProceduralMeshLoads(ctx, state);
-        Game::ResolveSplineMeshLoads(ctx, state);
+    Game::StaticMeshPendingKickoff(ctx, state);
+    Game::ProceduralMeshPendingKickoff(ctx, state);
+    Game::SplineMeshPendingKickoff(ctx, state);
+    Game::TextFontPendingKickoff(ctx, state);
+    Game::Text3DGeneratePendingKickoff(ctx, state);
 
-        Game::ResolvePhysicsMeshLoads(ctx, state);
+    if (ctx->bAssetsChangedThisFrame || state->bPendingModelResolve) {
+        Game::StaticMeshLoadResolve(ctx, state);
+        Game::ProceduralMeshLoadResolve(ctx, state);
+        Game::SplineMeshLoadResolve(ctx, state);
+        Game::Text3DLoadResolve(ctx, state);
+        Game::PhysicsMeshLoadResolve(ctx, state);
         state->bPendingModelResolve = false;
     }
-    Game::ResolvePhysicsShapeCreation(ctx, state);
-    Game::ResolvePhysicsBodyCreation(ctx, state);
+    Game::PhysicsShapeCreationResolve(ctx, state);
+    Game::PhysicsBodyCreationResolve(ctx, state);
 
     // Dirty carry-over to next frame
     Game::MarkRenderTransformsDirty(ctx, state);

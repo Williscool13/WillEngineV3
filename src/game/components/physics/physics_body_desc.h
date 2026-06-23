@@ -16,6 +16,7 @@
 #include "Jolt/Physics/Collision/ObjectLayer.h"
 #include "Jolt/Physics/Collision/Shape/Shape.h"
 #include "engine/core/model_id.h"
+#include "engine/core/font_id.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
 #include "engine/engine_api.h"
@@ -41,6 +42,20 @@ enum class PhysicsMotionType : uint8_t
     Dynamic,
 };
 
+/** Identity needed to re-derive a 3D-text collision mesh on load (mirrors the component's fields). Valid when fontId is set and text is non-empty. */
+struct Text3DShapeSource
+{
+    Engine::FontID fontId{};
+    Core::InlineString<256> text{};
+    float depth{0.2f};
+    float flatness{0.005f};
+    float tracking{0.0f};
+    float scale{1.0f};
+    bool bSmoothNormals{true};
+
+    bool IsValid() const { return fontId.IsValid() && text.Size() > 0; }
+};
+
 struct PhysicsShapeDesc
 {
     PhysicsShapeType type{PhysicsShapeType::Box};
@@ -48,10 +63,11 @@ struct PhysicsShapeDesc
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 bakedScale{1.0f};
 
-    // Only used for ConvexHull / TriangleMesh (Mutually exclusive, if modelID has priority).
+    // Only used for ConvexHull / TriangleMesh (mutually exclusive; modelId has priority, then procedural, spline, text3D).
     Engine::ModelID meshSourceModelId{};
     Engine::ProceduralParams proceduralParams{};
     Engine::SplineParams splineParams{};
+    Text3DShapeSource text3DSource{};
 
     // Transient
     Engine::StaticModelHandle meshSourceHandle{};

@@ -1329,7 +1329,7 @@ void WillEngine::Run()
 
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(*engineRenderSynchronization->GetCurrentFrameBuffer());
         assetManager->KickOffRetires();
-        assetManager->ResolveUnloads();
+        const bool assetsReclaimed = assetManager->ResolveUnloads();
 #if WILL_EDITOR
         {
             engineState->pendingHotReloadModelIds.Clear();
@@ -1372,7 +1372,7 @@ void WillEngine::Run()
         engineContext->bImguiKeyboardCaptured = ImGui::GetIO().WantCaptureKeyboard;
         engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;
         engineContext->bImGuiWantsTextInput = ImGui::GetIO().WantTextInput;
-        engineContext->bModelLoadedThisFrame = loadCounts.modelLoadedCount > 0;
+        engineContext->bAssetsChangedThisFrame = loadCounts.modelLoadedCount > 0 || loadCounts.fontLoadedCount > 0 || assetsReclaimed;
 
         //
         {

@@ -29,6 +29,11 @@ struct Font
     /** Glyph map loaded synchronously in LoadFont. Freed on unload. */
     Core::HeapArray<WGlyphInfo> glyphs{};
 
+    /** Vector outline tables for 3D text, loaded synchronously when the font was imported with contours. Indexed parallel to glyphs. */
+    Core::HeapArray<WGlyphContourRange> glyphContourRanges{};
+    Core::HeapArray<WContourRange> contourRanges{};
+    Core::HeapArray<WFontEdge> contourEdges{};
+
     /** Atlas texture; not registered in the texture name/ID maps. Lifecycle owned by Font. */
     Texture atlasTexture{};
 

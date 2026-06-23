@@ -430,7 +430,7 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
     return nullptr;
 }
 
-void ResolvePhysicsMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsMeshTag>();
@@ -480,7 +480,7 @@ void ResolvePhysicsMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 }
 
-void ResolvePhysicsShapeCreation(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
 
@@ -556,7 +556,7 @@ void ResolvePhysicsShapeCreation(Engine::EngineContext* ctx, Engine::EngineState
     }
 }
 
-void ResolvePhysicsBodyCreation(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
 

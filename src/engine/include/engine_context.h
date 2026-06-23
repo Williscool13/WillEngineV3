@@ -96,7 +96,8 @@ struct EngineContext
     Clay_Context* clayContext{nullptr};
 
     uint64_t currentRenderFrame{0};
-    bool bModelLoadedThisFrame{false};
+    /** Set when any model/font finished loading or a model/font was reclaimed this frame; gates the per-frame asset-resolve block. */
+    bool bAssetsChangedThisFrame{false};
 
 
     // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded)

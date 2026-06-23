@@ -84,15 +84,23 @@ public: // Models
 
     StaticModelHandle LoadSplineModel(const SplineParams& params);
 
+    /**
+     * Loads (or dedups) an extruded 3D-text model. Dedup key is the identity (font + text + depth + flatness + tracking + scale)
+     */
+    StaticModelHandle LoadText3DModel(FontHandle fontHandle, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals);
+
+    /** Resolves the font by id internally (for callers without a font ref, e.g. physics shapes); the font's retire delay keeps it alive while the worker reads it. */
+    StaticModelHandle LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals);
+
     StaticModel* GetModel(StaticModelHandle handle);
 
     void UnloadModel(StaticModelHandle handle);
 
-    /**
-     * Evict model. Forcing it to unload (will not be recovered if loaded again before retire frame arrives).
-     * @param modelId
-     */
-    void EvictModel(ModelID modelId);
+    /** Hot-reload: while frozen, the load resolve systems skip (re)acquiring this model so it can drain and retire. */
+    void FreezeModel(ModelID modelId);
+    void UnfreezeModel(ModelID modelId);
+    [[nodiscard]] bool IsModelFrozen(ModelID modelId) const;
+    [[nodiscard]] bool IsModelResident(ModelID modelId) const { return modelIdToHandle.Contains(modelId); }
 
     struct CachedModelMetadata
     {
@@ -238,11 +246,11 @@ public: // Fonts
 
     void UnloadFont(FontHandle handle);
 
-    /**
-     * Unloads the font and immediately removes it from the active handle map, so a subsequent LoadFont allocates a fresh slot.
-     * @param fontId
-     */
-    void EvictFont(FontID fontId);
+    /** Hot-reload: while frozen, the load resolve systems skip (re)acquiring this font so it can drain and retire. */
+    void FreezeFont(FontID fontId);
+    void UnfreezeFont(FontID fontId);
+    [[nodiscard]] bool IsFontFrozen(FontID fontId) const;
+    [[nodiscard]] bool IsFontResident(FontID fontId) const { return fontIdToHandle.Contains(fontId); }
 
     Font* GetFont(FontHandle handle);
 
@@ -266,7 +274,8 @@ public: // Per-Tick calls
 
     void KickOffRetires();
 
-    void ResolveUnloads();
+    /** Reclaims drained assets. Returns true if a model/font was reclaimed (which may have lifted a hot-reload freeze). */
+    bool ResolveUnloads();
 
     /**
      * Scan for assets. Done once in constructor, but editor calls this frequently to gather generated assets.
@@ -327,6 +336,10 @@ private:
     Core::HandleAllocator<Font, MAX_LOADED_FONTS> fontAllocator;
     Core::Array<Font, MAX_LOADED_FONTS> fonts{};
     Core::InlineMap<FontID, FontHandle, MAX_LOADED_FONTS> fontIdToHandle;
+
+    // Hot-reload freeze sets (editor-only): load resolve systems must not (re)acquire them until unfrozen.
+    Core::InlineVector<ModelID, 16> frozenModelIds{};
+    Core::InlineVector<FontID, 16> frozenFontIds{};
 
     int32_t pendingFontLogCount{0};
     std::chrono::steady_clock::time_point fontLastActivity{};

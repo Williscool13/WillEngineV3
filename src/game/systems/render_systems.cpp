@@ -19,6 +19,7 @@
 #include "game/components/debug_components.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
+#include "game/components/render/text3d_component.h"
 #include "game/components/render/light_components.h"
 #include "render/shaders/lights_interop.h"
 #include "render/shaders/text_interop.h"
@@ -49,6 +50,9 @@ void ConnectRenderObservers(entt::registry& registry)
     registry.on_construct<Component::TextComponent>().connect<&Component::TextComponent::OnConstruct>();
     registry.on_destroy<Component::TextComponent>().connect<&Component::TextComponent::OnDestroy>();
 
+    registry.on_construct<Component::Text3DComponent>().connect<&Component::Text3DComponent::OnConstruct>();
+    registry.on_destroy<Component::Text3DComponent>().connect<&Component::Text3DComponent::OnDestroy>();
+
     registry.on_construct<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnConstruct>();
     registry.on_destroy<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnDestroy>();
 
@@ -75,6 +79,9 @@ void DisconnectRenderObservers(entt::registry& registry)
     registry.on_construct<Component::TextComponent>().disconnect<&Component::TextComponent::OnConstruct>();
     registry.on_destroy<Component::TextComponent>().disconnect<&Component::TextComponent::OnDestroy>();
 
+    registry.on_construct<Component::Text3DComponent>().disconnect<&Component::Text3DComponent::OnConstruct>();
+    registry.on_destroy<Component::Text3DComponent>().disconnect<&Component::Text3DComponent::OnDestroy>();
+
     registry.on_construct<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnConstruct>();
     registry.on_destroy<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnDestroy>();
 
@@ -82,37 +89,41 @@ void DisconnectRenderObservers(entt::registry& registry)
     registry.on_destroy<Component::SphereLightComponent>().disconnect<&Component::SphereLightComponent::OnDestroy>();
 }
 
-void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (state->pendingHotReloadModelIds.IsEmpty()) { return; }
 
-    auto view = state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>();
-    if (view.size_hint() == 0) { return; }
-
-    Core::ArenaVector<entt::entity> entitiesToReload{&ctx->gameplayArena.Get(), view.size_hint()};
-
-    for (const auto& [entity, smc, runtime] : view.each()) {
+    // Freeze + release refs so the model drains, then re-arm; the load resolves re-acquire the fresh version after ResolveUnloads unfreezes on reclaim.
+    auto isHot = [&](Engine::ModelID id) {
+        if (!ctx->assetManager->IsModelFrozen(id)) { return false; }
         for (const Engine::ModelID& hotId : state->pendingHotReloadModelIds) {
-            if (smc.modelId != hotId) { continue; }
-            Component::UnloadStaticMesh(smc, state->registry, entity);
-            entitiesToReload.PushBack(entity);
-            break;
+            if (id == hotId) { return true; }
+        }
+        return false;
+    };
+
+    // Only resident models need freezing; a non-resident one's fresh load already reads the regenerated file.
+    for (const Engine::ModelID& hotId : state->pendingHotReloadModelIds) {
+        if (ctx->assetManager->IsModelResident(hotId)) {
+            ctx->assetManager->FreezeModel(hotId);
         }
     }
 
-    if (entitiesToReload.IsEmpty()) { return; }
+    auto view = state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>();
+    Core::ArenaVector<entt::entity> entitiesToRestart{&ctx->gameplayArena.Get(), view.size_hint()};
 
-    for (const Engine::ModelID& hotId : state->pendingHotReloadModelIds) {
-        ctx->assetManager->EvictModel(hotId);
+    for (const auto& [entity, smc, runtime] : view.each()) {
+        if (!isHot(smc.modelId)) { continue; }
+        Component::UnloadStaticMesh(smc, state->registry, entity);
+        entitiesToRestart.PushBack(entity);
     }
 
-    for (const entt::entity entity : entitiesToReload) {
-        auto& smc = state->registry.get<Component::StaticMeshComponent>(entity);
-        Component::LoadStaticMesh(smc, state->registry, entity);
+    for (const entt::entity entity : entitiesToRestart) {
+        Component::LoadStaticMesh(state->registry.get<Component::StaticMeshComponent>(entity), state->registry, entity);
     }
 }
 
-void ResolveFontHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state)
+void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (state->pendingHotReloadFontIds.IsEmpty()) { return; }
 
@@ -142,7 +153,7 @@ void ResolveFontHotReloads(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
-void ResolveTextureHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state)
+void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (state->pendingHotReloadTextureIds.IsEmpty()) { return; }
 
@@ -153,7 +164,25 @@ void ResolveTextureHotReloads(Engine::EngineContext* ctx, Engine::EngineState* s
     }
 }
 
-void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
+void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadPendingTag>();
+    if (view.size_hint() == 0) { return; }
+
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    for (const auto& [entity, meshComponent] : view.each()) {
+        if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; } // stay pending while frozen
+        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
+        runtime.modelHandle = ctx->assetManager->LoadModel(meshComponent.modelId);
+        if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
+    }
+    for (const entt::entity entity : started) {
+        state->registry.remove<Component::StaticMeshLoadPendingTag>(entity);
+        state->registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+    }
+}
+
+void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>();
     size_t viewCount = view.size_hint();
@@ -176,7 +205,7 @@ void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
 
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
-            LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", runtime->modelHandle.index);
+            LOG_ERROR(Game, "Model ({}) is not in the asset manager after a load request.", runtime->modelHandle.index);
             resolved.PushBack(entity);
             continue;
         }
@@ -247,7 +276,24 @@ void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
-void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadPendingTag>();
+    if (view.size_hint() == 0) { return; }
+
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    for (auto [entity, meshComponent] : view.each()) {
+        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
+        runtime.modelHandle = ctx->assetManager->LoadProceduralModel(meshComponent.params);
+        if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
+    }
+    for (const entt::entity entity : started) {
+        state->registry.remove<Component::ProceduralMeshLoadPendingTag>(entity);
+        state->registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+    }
+}
+
+void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>();
     size_t viewCount = view.size_hint();
@@ -313,7 +359,24 @@ void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState*
     }
 }
 
-void ResolveSplineMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
+void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadPendingTag>();
+    if (view.size_hint() == 0) { return; }
+
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    for (auto [entity, meshComponent] : view.each()) {
+        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
+        runtime.modelHandle = ctx->assetManager->LoadSplineModel(Component::ToSplineParams(meshComponent));
+        if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
+    }
+    for (const entt::entity entity : started) {
+        state->registry.remove<Component::SplineMeshLoadPendingTag>(entity);
+        state->registry.emplace_or_replace<Component::SplineMeshLoadingTag>(entity);
+    }
+}
+
+void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>();
     size_t viewCount = view.size_hint();
@@ -362,6 +425,111 @@ void ResolveSplineMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
 
     for (const auto entity : resolved) {
         state->registry.remove<Component::SplineMeshLoadingTag>(entity);
+    }
+}
+
+void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::Text3DComponent, Component::Text3DGeneratePendingTag>();
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
+    auto done = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    for (const auto& [entity, textComponent] : view.each()) {
+        auto& textRuntime = state->registry.get_or_emplace<Component::Text3DRuntime>(entity);
+        // Acquire the font here (not at construct) so font hot-reload can hold it pending. Contours load synchronously in LoadFont, so there is no atlas wait.
+        // We acquire so that the font is not hotreloaded while being referenced by the generator
+        if (!textRuntime.fontHandle.IsValid()) {
+            if (!textComponent.fontId.IsValid() || ctx->assetManager->IsFontFrozen(textComponent.fontId)) { continue; }
+            textRuntime.fontHandle = ctx->assetManager->LoadFont(textComponent.fontId);
+            if (!textRuntime.fontHandle.IsValid()) { continue; }
+        }
+
+        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
+
+        // Unload any previously generated model.
+        for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+            ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
+        }
+        runtime.primitives.Clear();
+        if (runtime.modelHandle.IsValid()) {
+            ctx->assetManager->UnloadModel(runtime.modelHandle);
+            runtime.modelHandle = {};
+        }
+
+        if (textComponent.text.Size() > 0) {
+            runtime.modelHandle = ctx->assetManager->LoadText3DModel(textRuntime.fontHandle, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals);
+            if (runtime.modelHandle.IsValid()) {
+                state->registry.emplace_or_replace<Component::Text3DLoadingTag>(entity);
+                state->bPendingModelResolve = true;
+            }
+        }
+        done.PushBack(entity);
+    }
+    for (const entt::entity entity : done) {
+        state->registry.remove<Component::Text3DGeneratePendingTag>(entity);
+    }
+}
+
+void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::Text3DComponent, Component::Text3DLoadingTag>();
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    for (auto [entity, textComponent] : view.each()) {
+        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        if (!runtime) continue;
+
+        for (size_t i = 0; i < runtime->primitives.Size(); ++i) {
+            ctx->materialManager->ReleaseMaterial(runtime->primitives[i].materialID);
+        }
+        runtime->primitives.Clear();
+
+        if (!runtime->modelHandle.IsValid()) {
+            resolved.PushBack(entity); // nothing to resolve (e.g. empty text / no font); drop the tag
+            continue;
+        }
+
+        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
+        if (!model) {
+            LOG_ERROR(Game, "Text3D model ({}) is not in the asset manager.", runtime->modelHandle.index);
+            continue;
+        }
+        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            resolved.PushBack(entity); // generation failed (e.g. empty/whitespace text); stop waiting so editing unlocks
+            continue;
+        }
+        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+            continue;
+        }
+
+        Engine::MeshInformation& mesh = model->modelData.meshes[0];
+        Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[0];
+
+        Engine::MaterialManager* materialManager = ctx->materialManager;
+        Engine::MaterialID matID = materialManager->GetDefaultMaterialID();
+        if (textComponent.material.IsValid()) {
+            if (materialManager->DoesMutableMaterialExist(textComponent.material)) {
+                matID = textComponent.material;
+            }
+        }
+
+        runtime->primitives.PushBack({
+            .primitiveIndex = primitive.index,
+            .originalMaterialIndex = -1,
+            .materialID = matID,
+        });
+        materialManager->AcquireMaterial(matID);
+
+        resolved.PushBack(entity);
+    }
+
+    for (const auto entity : resolved) {
+        state->registry.remove<Component::Text3DLoadingTag>(entity);
     }
 }
 
@@ -452,6 +620,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             entt::exclude<
                 Component::PortalPlaneTag,
                 Component::CubemapVisualizeTag,
+                Component::StaticMeshLoadPendingTag,
                 Component::StaticMeshLoadingTag
             >);
 
@@ -487,7 +656,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     // Gather procedural meshes
     {
         ZoneScopedN("ProceduralMeshes");
-        auto view = state->registry.view<Component::MeshRuntime, Component::ProceduralMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::ProceduralMeshLoadingTag>);
+        auto view = state->registry.view<Component::MeshRuntime, Component::ProceduralMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::ProceduralMeshLoadPendingTag, Component::ProceduralMeshLoadingTag>);
 
         for (const auto& [entity, runtime, renderable, renderTransform] : view.each()) {
             if (runtime.primitives.IsEmpty()) { continue; }
@@ -521,7 +690,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     // Gather spline meshes
     {
         ZoneScopedN("SplineMeshes");
-        auto view = state->registry.view<Component::MeshRuntime, Component::SplineMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::SplineMeshLoadingTag>);
+        auto view = state->registry.view<Component::MeshRuntime, Component::SplineMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::SplineMeshLoadPendingTag, Component::SplineMeshLoadingTag>);
         for (const auto& [entity, runtime, renderable, renderTransform] : view.each()) {
             if (runtime.primitives.IsEmpty()) { continue; }
             if (renderable.modelFlags.x == 0.0f) { continue; }
@@ -551,7 +720,38 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
+    // Gather 3D text meshes
     {
+        ZoneScopedN("Text3DMeshes");
+        auto view = state->registry.view<Component::MeshRuntime, Component::Text3DComponent, Component::RenderTransformComponent>(entt::exclude<Component::Text3DLoadingTag>);
+        for (const auto& [entity, runtime, renderable, renderTransform] : view.each()) {
+            if (runtime.primitives.IsEmpty()) { continue; }
+            if (renderable.modelFlags.x == 0.0f) { continue; }
+
+            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+            frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
+
+            uint64_t stableId = 1234567890;
+            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                stableId = stable->id.id;
+            }
+
+            Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
+            ENGINE_ASSERT(Game, model, "Loaded entity references a model that is not in the asset manager");
+            const Engine::MeshInformation& mesh = model->modelData.meshes[0];
+
+            for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+                const auto& prim = runtime.primitives[i];
+                frameBuffer->mainViewFamily.primitiveInstances.PushBack({
+                    .primitiveIndex = prim.primitiveIndex,
+                    .materialID = prim.materialID,
+                    .modelIndex = modelIndex,
+                    .stableId = stableId,
+                    .blasDeviceAddress = mesh.primitiveProperties[i].blasDeviceAddress,
+                });
+            }
+        }
+    } {
         ZoneScopedN("AreaLightQuads");
         const Engine::StaticModelHandle quadHandle = state->builtinAssets.GetUnitQuad(ctx->assetManager);
         Engine::StaticModel* quadModel = ctx->assetManager->GetModel(quadHandle);
@@ -666,14 +866,19 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     }
 }
 
-void ResolveTextLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
+void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::TextRuntime, Component::TextLoadingTag>();
+    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::TextFontPendingTag>();
     if (view.size_hint() == 0) { return; }
 
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
-    for (auto [entity, runtime] : view.each()) {
-        if (!runtime.fontHandle.IsValid()) { continue; }
+    for (auto [entity, textComp, runtime] : view.each()) {
+        // Load here (not at construct) so the freeze can hold it pending.
+        if (!runtime.fontHandle.IsValid()) {
+            if (!textComp.fontId.IsValid() || ctx->assetManager->IsFontFrozen(textComp.fontId)) { continue; }
+            runtime.fontHandle = ctx->assetManager->LoadFont(textComp.fontId);
+            if (!runtime.fontHandle.IsValid()) { continue; }
+        }
 
         Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
         if (!font) { continue; }
@@ -687,14 +892,14 @@ void ResolveTextLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::TextLoadingTag>(entity);
+        state->registry.remove<Component::TextFontPendingTag>(entity);
     }
 }
 
 void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::RenderTransformComponent>(entt::exclude<Component::TextLoadingTag>);
+    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::RenderTransformComponent>(entt::exclude<Component::TextFontPendingTag>);
 
     for (const auto& [entity, textComp, runtime, renderTransform] : view.each()) {
         if (textComp.text.IsEmpty()) { continue; }

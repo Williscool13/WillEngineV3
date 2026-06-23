@@ -363,6 +363,88 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
     return handle;
 }
 
+StaticModelHandle AssetManager::LoadText3DModel(FontHandle fontHandle, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals)
+{
+    const Font* probe = GetFont(fontHandle);
+    if (probe == nullptr) {
+        LOG_ERROR(Asset, "LoadText3DModel called with an invalid font handle");
+        return StaticModelHandle::INVALID;
+    }
+    const uint64_t fontIdValue = probe->fontId.id;
+
+    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&fontIdValue), sizeof(fontIdValue));
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(text.c_str()), text.Size(), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&depth), sizeof(depth), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&flatness), sizeof(flatness), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&tracking), sizeof(tracking), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&scale), sizeof(scale), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bSmoothNormals), sizeof(bSmoothNormals), hash);
+
+    ModelID textModelId{hash};
+
+    StaticModelHandle* existingPtr = modelIdToHandle.Find(textModelId);
+    if (existingPtr != nullptr) {
+        StaticModelHandle existingHandle = *existingPtr;
+        if (modelAllocator.IsValid(existingHandle)) {
+            StaticModel& model = models[existingHandle.index];
+            model.refCount++;
+            model.retireFrame = 0;
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Text3D model already loaded: {}, refCount: {}", textModelId.id, model.refCount);
+            }
+            return existingHandle;
+        }
+        modelIdToHandle.Remove(textModelId);
+    }
+
+    StaticModelHandle handle = modelAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate model slot for 3D text");
+        return StaticModelHandle::INVALID;
+    }
+
+    // The component owns the font ref; if it dies mid-generation the font's retire delay keeps the slot alive until the worker job finishes reading it.
+    Text3DParams params{};
+    params.fontId = fontIdValue;
+    params.text = text;
+    params.depth = depth;
+    params.flatness = flatness;
+    params.tracking = tracking;
+    params.scale = scale;
+    params.bSmoothNormals = bSmoothNormals;
+    params.font = probe;
+
+    static int32_t text3DCounter = 0;
+    StaticModel& model = models[handle.index];
+    model.selfHandle = handle;
+    model.name = Core::InlineString<128>::Format("Text3D Mesh %d", text3DCounter++);
+    model.modelId = textModelId;
+    model.text3DParams = std::move(params);
+    model.refCount = 1;
+    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+
+    modelIdToHandle[textModelId] = handle;
+
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting Text3D model load: {}", model.name.c_str());
+    }
+    assetLoadManager->RequestProceduralModelLoad(&model);
+    return handle;
+}
+
+StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals)
+{
+    FontHandle fontHandle = LoadFont(fontId);
+    if (!fontHandle.IsValid()) {
+        LOG_ERROR(Asset, "LoadText3DModel: font {} could not be loaded", fontId.id);
+        return StaticModelHandle::INVALID;
+    }
+
+    StaticModelHandle handle = LoadText3DModel(fontHandle, text, depth, flatness, tracking, scale, bSmoothNormals);
+    UnloadFont(fontHandle);
+    return handle;
+}
+
 StaticModel* AssetManager::GetModel(StaticModelHandle handle)
 {
     if (!modelAllocator.IsValid(handle)) {
@@ -390,16 +472,22 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
     }
 }
 
-void AssetManager::EvictModel(ModelID modelId)
+void AssetManager::FreezeModel(ModelID modelId)
 {
-    StaticModelHandle* handle = modelIdToHandle.Find(modelId);
-    if (!handle) {
-        // Model is not currently loaded
-        return;
+    if (!IsModelFrozen(modelId)) { frozenModelIds.PushBack(modelId); }
+}
+
+void AssetManager::UnfreezeModel(ModelID modelId)
+{
+    frozenModelIds.RemoveFirst(modelId);
+}
+
+bool AssetManager::IsModelFrozen(ModelID modelId) const
+{
+    for (const ModelID& id : frozenModelIds) {
+        if (id == modelId) { return true; }
     }
-    StaticModel& model = models[handle->index];
-    assert(model.refCount == 0 && "EvictModel called while model still has active references");
-    modelIdToHandle.Remove(modelId);
+    return false;
 }
 
 ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer)
@@ -626,7 +714,7 @@ void AssetManager::KickOffRetires()
     }
 }
 
-void AssetManager::ResolveUnloads()
+bool AssetManager::ResolveUnloads()
 {
     const uint64_t currentFrame = ctx->currentRenderFrame;
 
@@ -645,6 +733,7 @@ void AssetManager::ResolveUnloads()
         if (stored && *stored == model.selfHandle) {
             modelIdToHandle.Remove(model.modelId);
         }
+        UnfreezeModel(model.modelId); // drained: lift any hot-reload freeze
         modelAllocator.Remove(model.selfHandle);
         model = {};
         modelsUnloadedThisTick++;
@@ -722,6 +811,7 @@ void AssetManager::ResolveUnloads()
         if (storedFont && *storedFont == font.selfHandle) {
             fontIdToHandle.Remove(font.fontId);
         }
+        UnfreezeFont(font.fontId); // drained: lift any hot-reload freeze
         fontAllocator.Remove(font.selfHandle);
         font = {};
         fontsUnloadedThisTick++;
@@ -735,6 +825,9 @@ void AssetManager::ResolveUnloads()
         LOG_INFO(Asset, "{} font(s) unloaded", pendingFontUnloadLogCount);
         pendingFontUnloadLogCount = 0;
     }
+
+    // A reclaimed model/font may have just lifted a hot-reload freeze; signal so the load resolves re-run and re-acquire.
+    return modelsUnloadedThisTick > 0 || fontsUnloadedThisTick > 0;
 }
 
 void AssetManager::Scan()
@@ -1297,6 +1390,23 @@ FontHandle AssetManager::LoadFont(FontID id)
             font = {};
             return FontHandle::INVALID;
         }
+
+        // 3D Text
+        if (meta.header.contourGlyphCount != 0) {
+            font.glyphContourRanges = Core::HeapArray<WGlyphContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.contourGlyphCount);
+            font.contourRanges = Core::HeapArray<WContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.contourCount);
+            font.contourEdges = Core::HeapArray<WFontEdge>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.edgeCount);
+            f.seekg(static_cast<std::streamoff>(meta.header.glyphContourRangeOffset));
+            f.read(reinterpret_cast<char*>(font.glyphContourRanges.Data()), static_cast<std::streamsize>(meta.header.contourGlyphCount * sizeof(WGlyphContourRange)));
+            f.read(reinterpret_cast<char*>(font.contourRanges.Data()), static_cast<std::streamsize>(meta.header.contourCount * sizeof(WContourRange)));
+            f.read(reinterpret_cast<char*>(font.contourEdges.Data()), static_cast<std::streamsize>(meta.header.edgeCount * sizeof(WFontEdge)));
+            if (!f) {
+                LOG_ERROR(Asset, "Failed to read contour data for font: {}", meta.name.c_str());
+                fontAllocator.Remove(handle);
+                font = {};
+                return FontHandle::INVALID;
+            }
+        }
     }
 
     font.atlasTexture.source = meta.source;
@@ -1340,13 +1450,22 @@ void AssetManager::UnloadFont(FontHandle handle)
     }
 }
 
-void AssetManager::EvictFont(FontID fontId)
+void AssetManager::FreezeFont(FontID fontId)
 {
-    FontHandle* handle = fontIdToHandle.Find(fontId);
-    assert(handle);
-    Font& font = fonts[handle->index];
-    assert(font.refCount == 0 && "EvictFont called while font still has active references");
-    fontIdToHandle.Remove(fontId);
+    if (!IsFontFrozen(fontId)) { frozenFontIds.PushBack(fontId); }
+}
+
+void AssetManager::UnfreezeFont(FontID fontId)
+{
+    frozenFontIds.RemoveFirst(fontId);
+}
+
+bool AssetManager::IsFontFrozen(FontID fontId) const
+{
+    for (const FontID& id : frozenFontIds) {
+        if (id == fontId) { return true; }
+    }
+    return false;
 }
 
 Font* AssetManager::GetFont(FontHandle handle)

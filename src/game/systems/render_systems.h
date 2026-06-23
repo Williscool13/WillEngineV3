@@ -29,14 +29,20 @@ void ConnectRenderObservers(entt::registry& registry);
 void DisconnectRenderObservers(entt::registry& registry);
 
 // Editor-only (generate while engine is running)
-void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state);
-void ResolveFontHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state);
-void ResolveTextureHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
+void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
+void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
-void ResolveTextLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
-void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
-void ResolveSplineMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
+void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state);
 

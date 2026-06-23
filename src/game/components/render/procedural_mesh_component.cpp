@@ -8,6 +8,7 @@
 
 #include "spline_mesh_component.h"
 #include "static_mesh_component.h"
+#include "text3d_component.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -25,6 +26,7 @@ void ProceduralMeshComponent::OnConstruct(entt::registry& registry, entt::entity
 void ProceduralMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     registry.remove<MeshRuntime>(entity);
+    registry.remove<ProceduralMeshLoadPendingTag>(entity);
     registry.remove<ProceduralMeshLoadingTag>(entity);
     registry.remove<RenderTransformComponent>(entity);
 }
@@ -45,11 +47,14 @@ void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& 
         runtime.modelHandle = {};
     }
 
-    // Rebuild
+    // Arm only; StartProceduralMeshLoads kicks the build, then ResolveProceduralMeshLoads binds it.
+    registry.remove<ProceduralMeshLoadingTag>(entity);
     if (!std::holds_alternative<std::monostate>(component.params)) {
-        runtime.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
-        registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
+        registry.emplace_or_replace<ProceduralMeshLoadPendingTag>(entity);
         state->bPendingModelResolve |= true;
+    }
+    else {
+        registry.remove<ProceduralMeshLoadPendingTag>(entity);
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
@@ -65,7 +70,7 @@ namespace Game
 {
 bool Component::ProceduralMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
-    return !registry.any_of<Component::StaticMeshComponent, Component::SplineMeshComponent>(entity);
+    return !registry.any_of<Component::StaticMeshComponent, Component::SplineMeshComponent, Component::Text3DComponent>(entity);
 }
 
 void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent& comp, nlohmann::json& json)
