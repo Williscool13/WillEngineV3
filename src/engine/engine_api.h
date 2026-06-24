@@ -102,6 +102,9 @@ struct ComponentEntry
 
     DrawEditorFn drawEditor;
     HasComponentFn has;
+
+    /** Engine-managed components hidden from user-facing component lists (Add Component, filters). */
+    bool hidden{false};
 };
 
 struct ComponentRegistry
@@ -198,6 +201,7 @@ struct EditorState
     char sceneBrowserSearch[64]{};
     StringID sceneBrowserComponentFilter{};
     entt::entity sceneBrowserSelectionAnchor{entt::null};
+    bool sceneBrowserFilterWasActive{false};
 
     // ImGui textures
     EditorTextureResidency texResidency{};

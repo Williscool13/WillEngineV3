@@ -20,18 +20,29 @@ namespace Game::Component
 struct EntityFolderComponent
 {
     /**
-     * Up to 2 levels deep
+     * Immediate containing folder, referencing a SceneFolderComponent::folderId.
+     * Invalid (or pointing at a missing anchor) means the entity sits at the scene root.
      */
-    Core::Array<StringID, 2> folderHierarchy;
-
-    /**
-     * Stack-based strings (max 16 char)
-     */
-    Core::Array<Core::ShortString, 2> folderHierarchyNames;
+    StringID folderId;
 
     static void Serialize(const EntityFolderComponent& comp, nlohmann::json& json);
     static void Deserialize(EntityFolderComponent& comp, const nlohmann::json& json);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+};
+
+/**
+ * Scene-hierarchy folder anchor. Lives as its own (gameplay-less) scene entity so a folder persists even with no members.
+ * Identity (folderId) is a stable random id decoupled from the display name, so folders can be renamed without orphaning their members.
+ */
+struct SceneFolderComponent
+{
+    StringID folderId;
+    StringID parentFolder;
+    Core::ShortString name;
+
+    static bool CanAdd(const entt::registry& registry, entt::entity entity);
+    static void Serialize(const SceneFolderComponent& comp, nlohmann::json& json);
+    static void Deserialize(SceneFolderComponent& comp, const nlohmann::json& json);
 };
 }
 

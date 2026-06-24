@@ -101,11 +101,9 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
     // Folder
     if (ImGui::CollapsingHeader("Folder##multi_folder", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool allHaveFolder = true;
-        bool folder0Same = true, folder1Same = true;
-        Core::ShortString firstFolder0, firstFolder1;
-        StringID firstFolder0Id;
+        bool sameFolder = true;
+        StringID firstFolderId;
         bool first = true;
-
         for (auto e : entities) {
             auto* fc = state->registry.try_get<Component::EntityFolderComponent>(e);
             if (!fc) {
@@ -113,120 +111,54 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
                 break;
             }
             if (first) {
-                firstFolder0 = fc->folderHierarchyNames[0];
-                firstFolder1 = fc->folderHierarchyNames[1];
-                firstFolder0Id = fc->folderHierarchy[0];
+                firstFolderId = fc->folderId;
                 first = false;
             }
-            else {
-                if (!(fc->folderHierarchyNames[0] == firstFolder0)) {
-                    folder0Same = false;
-                }
-                if (!(fc->folderHierarchyNames[1] == firstFolder1)) {
-                    folder1Same = false;
-                }
+            else if (fc->folderId != firstFolderId) {
+                sameFolder = false;
             }
         }
 
         if (allHaveFolder) {
-            Core::ArenaVector<Core::ShortString> existingFolders0{&ctx->editorArena.Get(), 16};
-            auto folderView = state->registry.view<Component::EntityFolderComponent>();
-            for (auto e : folderView) {
-                auto& fc = folderView.get<Component::EntityFolderComponent>(e);
-                if (fc.folderHierarchyNames[0].Size() == 0) {
-                    continue;
-                }
-                bool dup = false;
-                for (auto& ex : existingFolders0) {
-                    if (ex == fc.folderHierarchyNames[0]) {
-                        dup = true;
-                        break;
+            auto anchorView = state->registry.view<Component::SceneFolderComponent>();
+            const char* display = "...";
+            if (sameFolder) {
+                display = "(None)";
+                if (firstFolderId.IsValid()) {
+                    for (auto a : anchorView) {
+                        if (anchorView.get<Component::SceneFolderComponent>(a).folderId == firstFolderId) {
+                            display = anchorView.get<Component::SceneFolderComponent>(a).name.c_str();
+                            break;
+                        }
                     }
                 }
-                if (!dup) {
-                    existingFolders0.PushBack(fc.folderHierarchyNames[0]);
-                }
             }
-            std::ranges::sort(existingFolders0);
-
-            const char* folder0Display = folder0Same ? (firstFolder0.Size() > 0 ? firstFolder0.c_str() : "(None)") : "...";
 
             ImGui::Text("Folder");
-            if (ImGui::BeginCombo("##multi_folder_0", folder0Display)) {
-                if (ImGui::Selectable("(None)", folder0Same && firstFolder0.Size() == 0)) {
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::BeginCombo("##multi_folder", display)) {
+                if (ImGui::Selectable("(None)", sameFolder && !firstFolderId.IsValid())) {
                     for (auto e : entities) {
-                        auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
-                        fc.folderHierarchyNames[0] = Core::ShortString();
-                        fc.folderHierarchy[0] = StringID();
-                        fc.folderHierarchyNames[1] = Core::ShortString();
-                        fc.folderHierarchy[1] = StringID();
+                        state->registry.get_or_emplace<Component::EntityFolderComponent>(e).folderId = StringID();
                     }
                     MarkEntitiesModified(state, entities);
                 }
-                for (auto& fn : existingFolders0) {
-                    bool selected = folder0Same && fn == firstFolder0;
-                    if (ImGui::Selectable(fn.c_str(), selected)) {
-                        StringID id(fn.c_str(), fn.Size());
+                for (auto a : anchorView) {
+                    const auto& fc = anchorView.get<Component::SceneFolderComponent>(a);
+                    if (const auto* sc = state->registry.try_get<Component::SceneComponent>(a); sc && sc->sceneId != state->currentSceneId) {
+                        continue;
+                    }
+                    Core::ShortString label;
+                    if (fc.parentFolder.IsValid()) { label.Append("    "); }
+                    label.Append(fc.name);
+                    if (ImGui::Selectable(label.c_str(), sameFolder && firstFolderId == fc.folderId)) {
                         for (auto e : entities) {
-                            auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
-                            fc.folderHierarchyNames[0] = fn;
-                            fc.folderHierarchy[0] = id;
+                            state->registry.get_or_emplace<Component::EntityFolderComponent>(e).folderId = fc.folderId;
                         }
                         MarkEntitiesModified(state, entities);
                     }
                 }
                 ImGui::EndCombo();
-            }
-
-            if (folder0Same && firstFolder0Id.IsValid()) {
-                Core::ArenaVector<Core::ShortString> existingFolders1{&ctx->editorArena.Get(), 16};
-                for (auto e : folderView) {
-                    auto& fc = folderView.get<Component::EntityFolderComponent>(e);
-                    if (fc.folderHierarchy[0] != firstFolder0Id) {
-                        continue;
-                    }
-                    if (fc.folderHierarchyNames[1].Size() == 0) {
-                        continue;
-                    }
-                    bool dup = false;
-                    for (auto& ex : existingFolders1) {
-                        if (ex == fc.folderHierarchyNames[1]) {
-                            dup = true;
-                            break;
-                        }
-                    }
-                    if (!dup) {
-                        existingFolders1.PushBack(fc.folderHierarchyNames[1]);
-                    }
-                }
-                std::ranges::sort(existingFolders1);
-
-                const char* folder1Display = folder1Same ? (firstFolder1.Size() > 0 ? firstFolder1.c_str() : "(None)") : "...";
-
-                ImGui::Text("Subfolder");
-                if (ImGui::BeginCombo("##multi_folder_1", folder1Display)) {
-                    if (ImGui::Selectable("(None)", folder1Same && firstFolder1.Size() == 0)) {
-                        for (auto e : entities) {
-                            auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
-                            fc.folderHierarchyNames[1] = Core::ShortString();
-                            fc.folderHierarchy[1] = StringID();
-                        }
-                        MarkEntitiesModified(state, entities);
-                    }
-                    for (auto& fn : existingFolders1) {
-                        bool selected = folder1Same && fn == firstFolder1;
-                        if (ImGui::Selectable(fn.c_str(), selected)) {
-                            StringID id(fn.c_str(), fn.Size());
-                            for (auto e : entities) {
-                                auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
-                                fc.folderHierarchyNames[1] = fn;
-                                fc.folderHierarchy[1] = id;
-                            }
-                            MarkEntitiesModified(state, entities);
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
             }
         }
         else {
@@ -1020,6 +952,16 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->editor.selectedEntities.PushBack(newEntity);
             MarkSceneModified(state, state->currentSceneId);
         }
+        ImGui::SameLine();
+        if (ImGui::Button("New Folder")) {
+            entt::entity f = state->registry.create();
+            state->registry.emplace<Component::SceneComponent>(f, state->currentSceneId);
+            Component::SceneFolderComponent folder{};
+            folder.folderId = StringID{state->rng()};
+            folder.name = Core::ShortString("New Folder");
+            state->registry.emplace<Component::SceneFolderComponent>(f, std::move(folder));
+            MarkSceneModified(state, state->currentSceneId);
+        }
         char* search = state->editor.sceneBrowserSearch;
         ImGui::SetNextItemWidth(-1);
         ImGui::InputText("##search", search, sizeof(state->editor.sceneBrowserSearch));
@@ -1041,6 +983,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 componentFilterId = {};
             }
             for (const auto& entry : state->componentRegistry.registry) {
+                if (entry.hidden) { continue; }
                 if (ImGui::Selectable(entry.name, componentFilterId == entry.typeId)) {
                     componentFilterId = entry.typeId;
                 }
@@ -1049,17 +992,14 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
         const bool filterActive = search[0] != '\0' || componentFilter != nullptr;
 
-        // Collect entities for the current scene, filtered by search
+        // Collect entities
         struct EntityEntry
         {
             entt::entity entity;
             const char* label;
             uint64_t stableId;
             uint64_t sortOrder;
-            StringID folder0;
-            StringID folder1;
-            const char* folderName0;
-            const char* folderName1;
+            StringID folderId;
         };
 
         Core::ArenaVector<EntityEntry> entries{&ctx->editorArena.Get(), 1024};
@@ -1069,6 +1009,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         for (auto entity : view2) {
             auto& scene = view2.get<Component::SceneComponent>(entity);
             if (scene.sceneId != state->currentSceneId) continue;
+            if (state->registry.all_of<Component::SceneFolderComponent>(entity)) continue;
             ++totalInScene;
 
             if (componentFilter && !componentFilter->has(state->registry, entity)) continue;
@@ -1088,22 +1029,28 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             uint64_t stableId = stable ? stable->id.id : static_cast<uint64_t>(entity);
             uint64_t sortOrder = stable ? stable->sortOrder : 0;
 
-            StringID f0, f1;
-            const char* fn0 = "";
-            const char* fn1 = "";
+            StringID folderId;
             if (auto* fc = state->registry.try_get<Component::EntityFolderComponent>(entity)) {
-                f0 = fc->folderHierarchy[0];
-                f1 = fc->folderHierarchy[1];
-                fn0 = fc->folderHierarchyNames[0].c_str();
-                fn1 = fc->folderHierarchyNames[1].c_str();
+                folderId = fc->folderId;
             }
-            entries.PushBack({entity, label, stableId, sortOrder, f0, f1, fn0, fn1});
+            entries.PushBack({entity, label, stableId, sortOrder, folderId});
         }
         std::ranges::sort(entries, [](const EntityEntry& a, const EntityEntry& b) { return a.sortOrder < b.sortOrder; });
 
         entt::entity& s_selectionAnchor = state->editor.sceneBrowserSelectionAnchor;
 
-        // Draw a single entity row. prev/next are neighbors within the same group for reordering.
+        // Deferred ops
+        entt::entity reorderDragged = entt::null;
+        entt::entity reorderTarget = entt::null;
+        bool reorderBelow = false;
+        entt::entity moveToFolderEntity = entt::null;
+        StringID moveToFolderId{};
+        entt::entity folderToDelete = entt::null;
+        StringID newSubfolderParent{};
+        entt::entity reparentFolderEntity = entt::null;
+        StringID reparentFolderTo{};
+
+        // Entity row
         auto drawEntityRow = [&](const EntityEntry& e, const EntityEntry* prev, const EntityEntry* next) {
             ImGui::BeginDisabled(prev == nullptr);
             if (ImGui::SmallButton(fmt::format("^##{}", e.stableId).c_str())) {
@@ -1154,7 +1101,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                         }
                     }
                     else {
-                        // Anchor no longer in the list (e.g. deleted): fall back to a fresh single selection
                         state->editor.selectedEntities.Clear();
                         state->editor.selectedEntities.PushBack(e.entity);
                         s_selectionAnchor = e.entity;
@@ -1176,6 +1122,38 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     s_selectionAnchor = e.entity;
                 }
             }
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                ImGui::SetDragDropPayload("SCENE_ENTITY", &e.entity, sizeof(e.entity));
+                const bool inSelection = std::ranges::find(state->editor.selectedEntities, e.entity) != state->editor.selectedEntities.end();
+                if (inSelection && state->editor.selectedEntities.Size() > 1) {
+                    ImGui::Text("%d entities", static_cast<int>(state->editor.selectedEntities.Size()));
+                }
+                else {
+                    ImGui::TextUnformatted(e.label);
+                }
+                ImGui::EndDragDropSource();
+            }
+            if (!filterActive && ImGui::BeginDragDropTarget()) {
+                const ImGuiPayload* p = ImGui::AcceptDragDropPayload("SCENE_ENTITY", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+                if (p) {
+                    const entt::entity dragged = *static_cast<const entt::entity*>(p->Data);
+                    const auto* draggedFolder = state->registry.try_get<Component::EntityFolderComponent>(dragged);
+                    const StringID draggedFolderId = draggedFolder ? draggedFolder->folderId : StringID();
+                    if (dragged != e.entity && draggedFolderId == e.folderId) {
+                        const ImVec2 mn = ImGui::GetItemRectMin();
+                        const ImVec2 mx = ImGui::GetItemRectMax();
+                        const bool below = ImGui::GetMousePos().y > (mn.y + mx.y) * 0.5f;
+                        const float lineY = below ? mx.y : mn.y;
+                        ImGui::GetWindowDrawList()->AddLine(ImVec2(mn.x, lineY), ImVec2(mx.x, lineY), IM_COL32(255, 220, 0, 255), 2.0f);
+                        if (p->IsDelivery()) {
+                            reorderDragged = dragged;
+                            reorderTarget = e.entity;
+                            reorderBelow = below;
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
             if (isPrefab) ImGui::PopStyleColor();
         };
 
@@ -1187,87 +1165,251 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         };
 
+        // Folder anchors
+        struct AnchorInfo { entt::entity entity; StringID id; StringID parent; const char* name; };
+        Core::ArenaVector<AnchorInfo> anchors{&ctx->editorArena.Get(), 64};
+        {
+            auto av = state->registry.view<Component::SceneFolderComponent, Component::SceneComponent>();
+            for (auto a : av) {
+                if (av.get<Component::SceneComponent>(a).sceneId != state->currentSceneId) { continue; }
+                const auto& fc = av.get<Component::SceneFolderComponent>(a);
+                anchors.PushBack({a, fc.folderId, fc.parentFolder, fc.name.c_str()});
+            }
+        }
+
+        auto anchorExists = [&](StringID folderId) {
+            for (auto& a : anchors) { if (a.id == folderId) { return true; } }
+            return false;
+        };
+        auto folderHasMembers = [&](StringID folderId) {
+            auto fv = state->registry.view<Component::EntityFolderComponent, Component::SceneComponent>();
+            for (auto en : fv) {
+                if (fv.get<Component::SceneComponent>(en).sceneId != state->currentSceneId) { continue; }
+                if (fv.get<Component::EntityFolderComponent>(en).folderId == folderId) { return true; }
+            }
+            return false;
+        };
+        auto folderHasChildren = [&](StringID folderId) {
+            for (auto& a : anchors) { if (a.parent == folderId) { return true; } }
+            return false;
+        };
+
+        const bool expandFoldersForFilter = filterActive && !state->editor.sceneBrowserFilterWasActive;
+
+        // Folder node
+        auto drawFolderNode = [&](const AnchorInfo& a, const char* idPrefix) {
+            if (expandFoldersForFilter) { ImGui::SetNextItemOpen(true, ImGuiCond_Always); }
+            bool open = ImGui::TreeNodeEx(fmt::format("{}##{}{}", a.name, idPrefix, a.id.id).c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                ImGui::SetDragDropPayload("SCENE_FOLDER", &a.entity, sizeof(a.entity));
+                ImGui::TextUnformatted(a.name);
+                ImGui::EndDragDropSource();
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("SCENE_ENTITY")) {
+                    moveToFolderEntity = *static_cast<const entt::entity*>(p->Data);
+                    moveToFolderId = a.id;
+                }
+                if (!a.parent.IsValid()) {
+                    const ImGuiPayload* fp = ImGui::AcceptDragDropPayload("SCENE_FOLDER", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+                    if (fp) {
+                        const entt::entity draggedAnchor = *static_cast<const entt::entity*>(fp->Data);
+                        const auto* dfc = state->registry.try_get<Component::SceneFolderComponent>(draggedAnchor);
+                        const bool valid = dfc && draggedAnchor != a.entity && !folderHasChildren(dfc->folderId);
+                        if (valid) {
+                            ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(255, 220, 0, 255), 0.0f, 0, 2.0f);
+                            if (fp->IsDelivery()) {
+                                reparentFolderEntity = draggedAnchor;
+                                reparentFolderTo = a.id;
+                            }
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+            if (ImGui::BeginPopupContextItem(fmt::format("folderctx##{}", a.id.id).c_str())) {
+                static char nameBuf[64];
+                if (ImGui::IsWindowAppearing()) { strncpy_s(nameBuf, a.name, sizeof(nameBuf) - 1); }
+                ImGui::SetNextItemWidth(160.0f);
+                if (ImGui::InputText("##foldername", nameBuf, sizeof(nameBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    state->registry.get<Component::SceneFolderComponent>(a.entity).name = Core::ShortString(nameBuf);
+                    MarkSceneModified(state, state->currentSceneId);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (!a.parent.IsValid() && ImGui::MenuItem("New Subfolder")) {
+                    newSubfolderParent = a.id;
+                }
+                const bool empty = !folderHasMembers(a.id) && !folderHasChildren(a.id);
+                ImGui::BeginDisabled(!empty);
+                if (ImGui::MenuItem("Delete Folder")) { folderToDelete = a.entity; }
+                ImGui::EndDisabled();
+                if (!empty && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Folder must be empty to delete"); }
+                ImGui::EndPopup();
+            }
+            return open;
+        };
+
+        auto drawMembers = [&](StringID folderId) {
+            Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), entries.Size() + 1};
+            for (auto& en : entries) { if (en.folderId == folderId) { group.PushBack(&en); } }
+            drawGroup(group);
+        };
+
         const float footerHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
         ImGui::BeginChild("##entity_list", ImVec2(0.0f, -footerHeight), ImGuiChildFlags_None);
-        if (filterActive) {
-            // Flatten
+
+        // Scene root
+        {
+            const ImGuiPayload* active = ImGui::GetDragDropPayload();
+            const bool dragging = active && (active->IsDataType("SCENE_ENTITY") || active->IsDataType("SCENE_FOLDER"));
+            if (dragging) {
+                ImGui::Selectable("- Scene Root -");
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("SCENE_ENTITY")) {
+                        moveToFolderEntity = *static_cast<const entt::entity*>(p->Data);
+                        moveToFolderId = StringID();
+                    }
+                    if (const ImGuiPayload* fp = ImGui::AcceptDragDropPayload("SCENE_FOLDER")) {
+                        reparentFolderEntity = *static_cast<const entt::entity*>(fp->Data);
+                        reparentFolderTo = StringID();
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+            }
+            else {
+                ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight()));
+            }
+        }
+
+        // Top-level folders
+        Core::ArenaVector<AnchorInfo*> topFolders{&ctx->editorArena.Get(), anchors.Size() + 1};
+        for (auto& a : anchors) { if (!a.parent.IsValid()) { topFolders.PushBack(&a); } }
+        std::ranges::sort(topFolders, [](const AnchorInfo* x, const AnchorInfo* y) { return strcmp(x->name, y->name) < 0; });
+
+        for (auto* a : topFolders) {
+            if (drawFolderNode(*a, "folder_")) {
+                drawMembers(a->id);
+                Core::ArenaVector<AnchorInfo*> children{&ctx->editorArena.Get(), anchors.Size() + 1};
+                for (auto& c : anchors) { if (c.parent == a->id) { children.PushBack(&c); } }
+                std::ranges::sort(children, [](const AnchorInfo* x, const AnchorInfo* y) { return strcmp(x->name, y->name) < 0; });
+                for (auto* c : children) {
+                    if (drawFolderNode(*c, "subfolder_")) {
+                        drawMembers(c->id);
+                        ImGui::TreePop();
+                    }
+                }
+                ImGui::TreePop();
+            }
+        }
+
+        // Root entities
+        {
             Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), entries.Size() + 1};
-            for (auto& e : entries) { group.PushBack(&e); }
+            for (auto& en : entries) {
+                if (!en.folderId.IsValid() || !anchorExists(en.folderId)) { group.PushBack(&en); }
+            }
             drawGroup(group);
         }
-        else {
-            // Collect unique folder names at level 0, sorted alphabetically
-            struct FolderInfo
-            {
-                StringID id;
-                const char* name;
-            };
-            Core::ArenaVector<FolderInfo> folders0{&ctx->editorArena.Get(), 64};
-            for (auto& e : entries) {
-                if (!e.folder0.IsValid()) continue;
-                bool found = false;
-                for (auto& f : folders0) {
-                    if (f.id == e.folder0) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) folders0.PushBack({e.folder0, e.folderName0});
+
+        // Auto-scroll
+        if (ImGui::GetDragDropPayload() && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
+            const float mouseY = ImGui::GetMousePos().y;
+            const float top = ImGui::GetWindowPos().y;
+            const float bottom = top + ImGui::GetWindowSize().y;
+            if (mouseY < top + 20.0f) { ImGui::SetScrollY(ImGui::GetScrollY() - 10.0f); }
+            else if (mouseY > bottom - 20.0f) { ImGui::SetScrollY(ImGui::GetScrollY() + 10.0f); }
+        }
+
+        ImGui::EndChild();
+        state->editor.sceneBrowserFilterWasActive = filterActive;
+
+        // Apply deferred
+        if (moveToFolderEntity != entt::null) {
+            Core::ArenaVector<entt::entity> toMove{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
+            if (std::ranges::find(state->editor.selectedEntities, moveToFolderEntity) != state->editor.selectedEntities.end()) {
+                for (entt::entity e : state->editor.selectedEntities) { toMove.PushBack(e); }
             }
-            std::ranges::sort(folders0, [](const FolderInfo& a, const FolderInfo& b) { return strcmp(a.name, b.name) < 0; });
-
-            // Draw folder tree nodes
-            for (auto& [id0, name0] : folders0) {
-                if (ImGui::TreeNode(fmt::format("{}##folder_{}", name0, id0.id).c_str())) {
-                    // Collect subfolders for this folder, sorted alphabetically
-                    Core::ArenaVector<FolderInfo> subfolders{&ctx->editorArena.Get(), 64};
-                    for (auto& e : entries) {
-                        if (e.folder0 != id0 || !e.folder1.IsValid()) continue;
-                        bool found = false;
-                        for (auto& sf : subfolders) {
-                            if (sf.id == e.folder1) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) subfolders.PushBack({e.folder1, e.folderName1});
-                    }
-                    std::ranges::sort(subfolders, [](const FolderInfo& a, const FolderInfo& b) { return strcmp(a.name, b.name) < 0; });
-
-                    // Direct folder members (no subfolder)
-                    {
-                        Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), 1024};
-                        for (auto& e : entries) {
-                            if (e.folder0 == id0 && !e.folder1.IsValid()) group.PushBack(&e);
-                        }
-                        drawGroup(group);
-                    }
-
-                    // Subfolder tree nodes
-                    for (auto& [id1, name1] : subfolders) {
-                        if (ImGui::TreeNode(fmt::format("{}##subfolder_{}_{}", name1, id0.id, id1.id).c_str())) {
-                            Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), 1024};
-                            for (auto& e : entries) {
-                                if (e.folder0 == id0 && e.folder1 == id1) group.PushBack(&e);
-                            }
-                            drawGroup(group);
-                            ImGui::TreePop();
-                        }
-                    }
-                    ImGui::TreePop();
+            else {
+                toMove.PushBack(moveToFolderEntity);
+            }
+            std::ranges::sort(toMove, [&](entt::entity a, entt::entity b) {
+                const auto* sa = state->registry.try_get<Component::StableIdComponent>(a);
+                const auto* sb = state->registry.try_get<Component::StableIdComponent>(b);
+                return (sa ? sa->sortOrder : 0) < (sb ? sb->sortOrder : 0);
+            });
+            uint64_t order = HighestSortOrderInScene(state->registry, state->currentSceneId);
+            for (entt::entity e : toMove) {
+                state->registry.get_or_emplace<Component::EntityFolderComponent>(e).folderId = moveToFolderId;
+                if (auto* st = state->registry.try_get<Component::StableIdComponent>(e)) {
+                    st->sortOrder = ++order;
                 }
             }
-
-            // Draw unfoldered entities below the folders
-            {
-                Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), 1024};
-                for (auto& e : entries) {
-                    if (!e.folder0.IsValid()) group.PushBack(&e);
+            MarkSceneModified(state, state->currentSceneId);
+        }
+        if (reparentFolderEntity != entt::null) {
+            if (auto* fc = state->registry.try_get<Component::SceneFolderComponent>(reparentFolderEntity)) {
+                if (fc->parentFolder != reparentFolderTo && fc->folderId != reparentFolderTo) {
+                    fc->parentFolder = reparentFolderTo;
+                    MarkSceneModified(state, state->currentSceneId);
                 }
-                drawGroup(group);
             }
         }
-        ImGui::EndChild();
+        if (reorderDragged != entt::null && reorderTarget != entt::null && reorderDragged != reorderTarget) {
+            const auto* draggedFc = state->registry.try_get<Component::EntityFolderComponent>(reorderDragged);
+            const StringID reorderFolder = draggedFc ? draggedFc->folderId : StringID();
+            Core::ArenaVector<entt::entity> moved{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
+            if (std::ranges::find(state->editor.selectedEntities, reorderDragged) != state->editor.selectedEntities.end()) {
+                for (entt::entity e : state->editor.selectedEntities) {
+                    if (e == reorderTarget) { continue; }
+                    const auto* fc = state->registry.try_get<Component::EntityFolderComponent>(e);
+                    if ((fc ? fc->folderId : StringID()) == reorderFolder) { moved.PushBack(e); }
+                }
+            }
+            else {
+                moved.PushBack(reorderDragged);
+            }
+
+            Core::ArenaVector<entt::entity> order{&ctx->editorArena.Get(), totalInScene + 1};
+            auto rv = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
+            for (auto en : rv) {
+                if (rv.get<Component::SceneComponent>(en).sceneId == state->currentSceneId) { order.PushBack(en); }
+            }
+            std::ranges::sort(order, [&](entt::entity a, entt::entity b) {
+                return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
+            });
+            std::ranges::sort(moved, [&](entt::entity a, entt::entity b) {
+                return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
+            });
+            auto inMoved = [&](entt::entity e) {
+                for (entt::entity m : moved) { if (m == e) { return true; } }
+                return false;
+            };
+
+            Core::ArenaVector<entt::entity> finalOrder{&ctx->editorArena.Get(), order.Size() + 1};
+            for (entt::entity en : order) {
+                if (inMoved(en)) { continue; }
+                if (en == reorderTarget && !reorderBelow) { for (entt::entity m : moved) { finalOrder.PushBack(m); } }
+                finalOrder.PushBack(en);
+                if (en == reorderTarget && reorderBelow) { for (entt::entity m : moved) { finalOrder.PushBack(m); } }
+            }
+            uint64_t n = 1;
+            for (entt::entity en : finalOrder) { state->registry.get<Component::StableIdComponent>(en).sortOrder = n++; }
+            MarkSceneModified(state, state->currentSceneId);
+        }
+        if (newSubfolderParent.IsValid()) {
+            entt::entity f = state->registry.create();
+            state->registry.emplace<Component::SceneComponent>(f, state->currentSceneId);
+            Component::SceneFolderComponent folder{};
+            folder.folderId = StringID{state->rng()};
+            folder.parentFolder = newSubfolderParent;
+            folder.name = Core::ShortString("New Subfolder");
+            state->registry.emplace<Component::SceneFolderComponent>(f, std::move(folder));
+            MarkSceneModified(state, state->currentSceneId);
+        }
+        if (folderToDelete != entt::null) {
+            state->registry.destroy(folderToDelete);
+            MarkSceneModified(state, state->currentSceneId);
+        }
 
         ImGui::Separator();
         if (ImGui::SmallButton("Compact Order")) {
@@ -1325,7 +1467,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                     Engine::ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity, entry.name);
 
-                    if (result.requestRemoval) {
+                    if (result.requestRemoval && !entry.hidden) {
                         entryToRemove = &entry;
                         if (entityScene) MarkSceneModified(state, entityScene->sceneId);
                     }
@@ -1351,6 +1493,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 ImGui::InputText("##compsearch", compSearch, sizeof(compSearch));
 
                 for (auto& entry : state->componentRegistry.registry) {
+                    if (entry.hidden) { continue; }
                     if (compSearch[0] && !strstr(entry.name, compSearch)) { continue; }
                     bool disabled = entry.has(state->registry, entity) || !entry.canAdd(state->registry, entity);
                     if (disabled) {

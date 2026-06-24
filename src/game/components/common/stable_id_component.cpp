@@ -61,11 +61,7 @@ Engine::ComponentEditorResult Component::StableIdComponent::DrawEditor(Core::Vie
     auto& component = registry.get<Component::StableIdComponent>(entity);
     char headerLabel[64];
     snprintf(headerLabel, sizeof(headerLabel), "Stable ID: %llu", component.id.id);
-    ImGui::CollapsingHeader(headerLabel, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    bool remove = ImGui::SmallButton("X##deletestableid");
-    ImGui::PopStyleColor();
-    return {.requestRemoval = remove};
+    ImGui::CollapsingHeader(headerLabel, ImGuiTreeNodeFlags_Leaf);
+    return {};
 }
 } // Game

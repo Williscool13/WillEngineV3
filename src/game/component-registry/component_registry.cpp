@@ -32,10 +32,11 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
 {
     componentRegistry.registry.Clear();
 
-    RegisterComponent<Component::NameComponent>(componentRegistry, "NameComponent");
-    RegisterComponent<Component::StableIdComponent>(componentRegistry, "StableIdComponent");
+    RegisterComponent<Component::NameComponent>(componentRegistry, "NameComponent", true);
+    RegisterComponent<Component::StableIdComponent>(componentRegistry, "StableIdComponent", true);
     RegisterComponent<Component::PrefabInstanceComponent>(componentRegistry, "PrefabInstanceComponent");
-    RegisterComponent<Component::EntityFolderComponent>(componentRegistry, "EntityFolderComponent");
+    RegisterComponent<Component::EntityFolderComponent>(componentRegistry, "EntityFolderComponent", true);
+    RegisterComponent<Component::SceneFolderComponent>(componentRegistry, "SceneFolderComponent", true);
 
     RegisterComponent<Component::TransformComponent>(componentRegistry, "TransformComponent");
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent");

@@ -66,11 +66,7 @@ void NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
 Engine::ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     auto& component = registry.get<NameComponent>(entity);
-    bool open = ImGui::CollapsingHeader("Name##componentname", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    bool remove = ImGui::SmallButton("X##deletename");
-    ImGui::PopStyleColor();
+    bool open = ImGui::CollapsingHeader("Name##componentname", ImGuiTreeNodeFlags_DefaultOpen);
 
     if (open) {
         char buf[256];
@@ -80,6 +76,6 @@ Engine::ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFa
             component.name = Core::InlineString<256>(buf);
         }
     }
-    return {.requestRemoval = remove};
+    return {};
 }
 } // Game::Component
