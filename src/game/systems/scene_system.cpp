@@ -149,16 +149,17 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
                 maxSortOrder = std::max(maxSortOrder, sortView.get<Component::StableIdComponent>(entity).sortOrder);
             }
         }
+        // For those without a valid sort order
         for (auto entity : sortView) {
             if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
                 auto& stable = sortView.get<Component::StableIdComponent>(entity);
                 if (stable.sortOrder == 0) {
-                    maxSortOrder += 100;
+                    maxSortOrder += 1;
                     stable.sortOrder = maxSortOrder;
                 }
             }
         }
-        state->editor.loadedScenes.PushBack({loadedId, maxSortOrder + 100});
+        state->editor.loadedScenes.PushBack({loadedId});
         LOG_INFO(Game, "Loaded scene snapshot '{}'", loadedId.ToString());
     }
 
@@ -287,17 +288,18 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
                 maxSortOrder = std::max(maxSortOrder, sortView.get<Component::StableIdComponent>(entity).sortOrder);
             }
         }
+        // For those without a valid sort order
         for (auto entity : sortView) {
             if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
                 auto& stable = sortView.get<Component::StableIdComponent>(entity);
                 if (stable.sortOrder == 0) {
-                    maxSortOrder += 100;
+                    maxSortOrder += 1;
                     stable.sortOrder = maxSortOrder;
                 }
             }
         }
     }
-    state->editor.loadedScenes.PushBack({loadedId, maxSortOrder + 100});
+    state->editor.loadedScenes.PushBack({loadedId});
     state->editor.modifiedScenes.RemoveFirst(loadedId);
 
     ResolvePrefabLoads(state, assetManager);
@@ -376,17 +378,25 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
     return spawned;
 }
 
+uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId)
+{
+    uint64_t maxSortOrder = 0;
+    auto view = registry.view<Component::SceneComponent, Component::StableIdComponent>();
+    for (auto entity : view) {
+        if (view.get<Component::SceneComponent>(entity).sceneId == sceneId) {
+            maxSortOrder = std::max(maxSortOrder, view.get<Component::StableIdComponent>(entity).sortOrder);
+        }
+    }
+    return maxSortOrder;
+}
+
 entt::entity CreateSceneEntity(Engine::EngineState* state)
 {
     entt::entity newEntity = state->registry.create();
     state->registry.emplace<Component::TransformComponent>(newEntity);
     state->registry.emplace<Component::SceneComponent>(newEntity, state->currentSceneId);
     state->registry.emplace<Component::StableIdComponent>(newEntity);
-    auto metaIt = std::ranges::find_if(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
-    if (metaIt != state->editor.loadedScenes.end()) {
-        state->registry.get<Component::StableIdComponent>(newEntity).sortOrder = metaIt->nextSortOrder;
-        metaIt->nextSortOrder += 100;
-    }
+    state->registry.get<Component::StableIdComponent>(newEntity).sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
     state->registry.emplace<Component::EntityFolderComponent>(newEntity);
     static int32_t runningNameTally = 0;
     auto newName = fmt::format("New Entity {}", runningNameTally++);
@@ -490,11 +500,7 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
 
     if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
         if (stable->sortOrder == 0) {
-            auto metaIt = std::ranges::find_if(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
-            if (metaIt != state->editor.loadedScenes.end()) {
-                stable->sortOrder = metaIt->nextSortOrder;
-                metaIt->nextSortOrder += 100;
-            }
+            stable->sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
         }
     }
 

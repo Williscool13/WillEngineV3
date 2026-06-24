@@ -11,6 +11,8 @@
 
 namespace Core
 {
+enum class CaseSensitivity { Sensitive, Insensitive };
+
 template<size_t N = 64>
 struct InlineString
 {
@@ -50,6 +52,24 @@ struct InlineString
     [[nodiscard]] const char* c_str() const { return buf; }
     [[nodiscard]] size_t Size() const { return len; }
     [[nodiscard]] bool IsEmpty() const { return len == 0; }
+
+    [[nodiscard]] bool Contains(std::string_view needle, CaseSensitivity caseSensitivity = CaseSensitivity::Sensitive) const
+    {
+        if (needle.empty()) { return true; }
+        if (needle.size() > len) { return false; }
+        if (caseSensitivity == CaseSensitivity::Sensitive) {
+            return View().find(needle) != std::string_view::npos;
+        }
+        auto lower = [](char c) -> char { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; };
+        for (size_t i = 0; i + needle.size() <= len; ++i) {
+            size_t j = 0;
+            for (; j < needle.size(); ++j) {
+                if (lower(buf[i + j]) != lower(needle[j])) { break; }
+            }
+            if (j == needle.size()) { return true; }
+        }
+        return false;
+    }
 
     bool Append(const char* str)
     {

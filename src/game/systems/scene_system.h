@@ -67,6 +67,9 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
 
 entt::entity CreateSceneEntity(Engine::EngineState* state);
 
+/** Highest sortOrder value among entities in the given scene (0 if none). */
+uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId);
+
 /**
  * Copies all registered components from src to a new entity.
  * Signals (on_construct) fire during emplace, handling initialization.

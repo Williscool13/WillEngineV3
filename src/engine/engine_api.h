@@ -122,7 +122,6 @@ enum class LightDebugDrawMode : uint8_t { None, Selected, All };
 struct RuntimeSceneMetadata
 {
     StringID sceneId;
-    uint64_t nextSortOrder{100};
 };
 
 struct PhysicsState
@@ -194,6 +193,11 @@ struct EditorState
     Core::Vector<entt::entity> prevSelectedEntities{};
     bool bWantCopyEntities{false};
     bool bWantDeleteEntities{false};
+
+    // Scene browser filter + selection
+    char sceneBrowserSearch[64]{};
+    StringID sceneBrowserComponentFilter{};
+    entt::entity sceneBrowserSelectionAnchor{entt::null};
 
     // ImGui textures
     EditorTextureResidency texResidency{};
