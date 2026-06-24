@@ -396,9 +396,11 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC SHADER_PTR(float2) cellData;
     SHADER_PUBLIC SHADER_PTR(uint) hashEntriesPrev;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirsPrev;
+    SHADER_PUBLIC SHADER_PTR(LightBVHNode) bvhNodes;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t bHasPrev;
+    SHADER_PUBLIC uint32_t bvhNumLeaves;
     SHADER_PUBLIC float wClamp;
 };
 
@@ -413,6 +415,8 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(float2) cellData;
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
+    SHADER_PUBLIC SHADER_PTR(LightBVHNode) bvhNodes;
+    SHADER_PUBLIC SHADER_PTR(uint) lightLeaf;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
@@ -436,6 +440,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t quadSelectionIndex;
     SHADER_PUBLIC uint32_t quadSelectionHistoryIndex;
     SHADER_PUBLIC uint32_t bInitialVisibility;
+    SHADER_PUBLIC uint32_t bvhNumLeaves;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant

@@ -382,6 +382,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/procedural_texture_decla
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/random_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/restir_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/regir_hash.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/light_tree.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sobol_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/relax_utils.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sigma_utils.slang")

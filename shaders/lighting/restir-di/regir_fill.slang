@@ -9,6 +9,7 @@ import packing_functions;
 import restir_common;
 import random_common;
 import regir_hash;
+import light_tree;
 
 groupshared float gCellTargetReduce[64];
 groupshared float gCellOccupancyReduce[64];
@@ -37,7 +38,8 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
     ReGIRHashKey key;
     key.cellPos = active.xyz;
     key.level = ReGIRActiveLevel(uint(active.w));
-    float3 cellCenterVS = mul(scene.view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
+    float3 cellCenterWS = ReGIRCellCenterFromKey(key);
+    float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
 
     // Cell target sum S_cell = sum over all lights of the cell target. The shading pass divides each light's cell target by this to recover the analytic grid selection pdf p_grid(L) = target(L)/S_cell, used for balance-heuristic MIS.
     float localSum = 0.0;
@@ -73,13 +75,15 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
         ReservoirAccum accum = ReservoirAccumEmpty();
         float winnerTarget = 0.0;
         for (uint i = 0; i < REGIR_FILL_CANDIDATES; i++) {
-            float uLight = HashStep(h);
+            // Candidate selection via the world-space light BVH (analytic selection pdf), replacing uniform selection.
+            LightTreeSample ts = SampleLightTree(pc.bvhNodes, pc.bvhNumLeaves, cellCenterWS, h);
             float uSelect = HashStep(h);
+            if (ts.lightIdx == ~0u || ts.lightIdx >= uint(lightCount) || ts.pdf <= 0.0) { continue; }
 
-            int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
+            int lightIdx = int(ts.lightIdx);
             LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
             float target = EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb);
-            float w_i = target * float(lightCount);
+            float w_i = target / ts.pdf;
             if (ReservoirAddSample(accum, w_i, uSelect)) {
                 res.lightIdx = uint(lightIdx);
                 winnerTarget = target;

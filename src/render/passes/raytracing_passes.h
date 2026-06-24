@@ -16,6 +16,7 @@ struct ViewFamily;
 namespace Render
 {
 class PipelineManager;
+struct FrameResourceLimits;
 
 /**
  * Uploads per-frame TLAS instance data and builds the TLAS.
@@ -23,7 +24,8 @@ class PipelineManager;
 void SetupTLASBuild(RenderGraph& graph,
                     VulkanContext* context,
                     const Core::ViewFamily& viewFamily,
-                    Core::Array<uint32_t, 2> renderExtent);
+                    Core::Array<uint32_t, 2> renderExtent,
+                    const FrameResourceLimits& limits);
 
 /**
  * Temporary smoke-test: traces a ray per pixel, writes linearized depth on hit and 0 otherwise.

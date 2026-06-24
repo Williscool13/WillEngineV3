@@ -11,8 +11,6 @@ namespace Core::Math
 {
 constexpr size_t NextPowerOfTwo(size_t number)
 {
-    if (number == 0) return 1;
-    if (std::has_single_bit(number)) return number;
     return std::bit_ceil(number);
 }
 } // Core::Math

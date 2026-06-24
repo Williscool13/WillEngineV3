@@ -22,7 +22,8 @@ namespace Render
 void SetupTLASBuild(RenderGraph& graph,
                     VulkanContext* context,
                     const Core::ViewFamily& viewFamily,
-                    Core::Array<uint32_t, 2> renderExtent)
+                    Core::Array<uint32_t, 2> renderExtent,
+                    const FrameResourceLimits& limits)
 {
     size_t instanceCount = 0;
     for (const auto& p : viewFamily.primitiveInstances) {
@@ -44,8 +45,10 @@ void SetupTLASBuild(RenderGraph& graph,
     buildInfo.pGeometries = &geometry;
 
     const uint32_t primitiveCount = static_cast<uint32_t>(instanceCount);
+    const uint32_t maxPrimitiveCount = static_cast<uint32_t>(limits.highestTLASInstanceCount);
+
     VkAccelerationStructureBuildSizesInfoKHR sizeInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-    vkGetAccelerationStructureBuildSizesKHR(context->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primitiveCount, &sizeInfo);
+    vkGetAccelerationStructureBuildSizesKHR(context->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &maxPrimitiveCount, &sizeInfo);
 
     const VkDeviceSize alignedTLASSize = (sizeInfo.accelerationStructureSize + 255ull) & ~255ull;
     const VkDeviceSize scratchSize = sizeInfo.buildScratchSize;
@@ -78,7 +81,8 @@ void SetupTLASBuild(RenderGraph& graph,
         inst.accelerationStructureReference = src.blasDeviceAddress;
     }
 
-    graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceDataSize, 16, false, false);
+    const size_t instanceBufferSize = limits.highestTLASInstanceCount * sizeof(VkAccelerationStructureInstanceKHR);
+    graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, 16, false, false);
 
     RenderPass& uploadPass = graph.AddPass(SID("RT Upload TLAS Instances"), VK_PIPELINE_STAGE_2_COPY_BIT, ResourceCategory::Untagged);
     uploadPass.WriteTransferBuffer(RT_TLAS_INSTANCE_BUFFER);

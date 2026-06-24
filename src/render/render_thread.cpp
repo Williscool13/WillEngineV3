@@ -24,6 +24,7 @@
 #include "platform/paths.h"
 #include "render-graph/render_graph.h"
 #include "render-graph/render_pass.h"
+#include "light_bvh.h"
 #include "shaders/constants_interop.h"
 #include "shaders/push_constant_interop.h"
 
@@ -480,7 +481,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
 
 
-            SetupTLASBuild(*renderGraph, context, viewFamily, renderExtent);
+            SetupTLASBuild(*renderGraph, context, viewFamily, renderExtent, frameResourceLimits);
 
             // Copy depth to R32_SFLOAT for all downstream compute passes.
             {
@@ -1268,6 +1269,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 {
     renderGraph->CreateBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE, false);
     renderGraph->CreateBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE, false);
+    renderGraph->CreateBuffer(LIGHT_BVH_BUFFER, LIGHT_BVH_BUFFER_SIZE, false);
 
     // Scene Data
     SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
@@ -1310,14 +1312,32 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
     memcpy(lightDataUploadAllocation.ptr, &lightData, sizeof(LightData));
 
+    // Light BVH (rebuilt every frame on the CPU, world space). Nodes then the light->leaf inverse map, contiguous.
+    static thread_local LightBVHNode bvhNodes[LIGHT_BVH_NODE_COUNT];
+    static thread_local uint32_t bvhLeaf[MAX_LIGHTS];
+    const uint32_t bvhLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
+    const uint32_t bvhNumLeaves = BuildLightBVH(viewFamily.lights.Data(), bvhLightCount, bvhNodes, bvhLeaf);
+    const uint32_t bvhNodeCount = bvhNumLeaves > 0u ? 2u * bvhNumLeaves - 1u : 0u;
+    const size_t bvhNodesBytes = static_cast<size_t>(bvhNodeCount) * sizeof(LightBVHNode);
+    const size_t bvhTotalBytes = bvhNodesBytes + static_cast<size_t>(bvhLightCount) * sizeof(uint32_t);
+    UploadAllocation bvhUploadAllocation{};
+    if (bvhTotalBytes > 0) {
+        bvhUploadAllocation = renderGraph->AllocateTransient(bvhTotalBytes);
+        memcpy(bvhUploadAllocation.ptr, bvhNodes, bvhNodesBytes);
+        memcpy(static_cast<char*>(bvhUploadAllocation.ptr) + bvhNodesBytes, bvhLeaf, static_cast<size_t>(bvhLightCount) * sizeof(uint32_t));
+    }
+
     auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
     uploadUniformsPass.WriteTransferBuffer(SCENE_DATA_BUFFER);
     uploadUniformsPass.WriteTransferBuffer(LIGHT_DATA_BUFFER);
+    uploadUniformsPass.WriteTransferBuffer(LIGHT_BVH_BUFFER);
     uploadUniformsPass.Execute([&,
             sceneOffset = sceneDataUploadAllocation.offset,
             portalOffset = portalSceneDataUploadAllocation.offset,
             hasPortal = bHasPortal,
-            lightOffset = lightDataUploadAllocation.offset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            lightOffset = lightDataUploadAllocation.offset,
+            bvhOffset = bvhUploadAllocation.offset,
+            bvhBytes = bvhTotalBytes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Core::Array<VkBufferCopy2, 2> sceneDataRegions{};
             uint32_t sceneDataCount{1};
             sceneDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
@@ -1354,6 +1374,22 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
                 .pRegions = lightDataRegions.Data()
             };
             vkCmdCopyBuffer2(cmd, &lightDataCopyInfo);
+
+            if (bvhBytes > 0) {
+                VkBufferCopy2 bvhRegion{};
+                bvhRegion.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+                bvhRegion.srcOffset = bvhOffset;
+                bvhRegion.dstOffset = 0;
+                bvhRegion.size = bvhBytes;
+                const VkCopyBufferInfo2 bvhCopyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle(LIGHT_BVH_BUFFER),
+                    .regionCount = 1,
+                    .pRegions = &bvhRegion
+                };
+                vkCmdCopyBuffer2(cmd, &bvhCopyInfo);
+            }
         });
 }
 

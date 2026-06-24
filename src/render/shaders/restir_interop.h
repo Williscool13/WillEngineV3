@@ -70,6 +70,18 @@ SHADER_PUBLIC struct ReGIRReservoir
     SHADER_PUBLIC float targetPdf;
 };
 
+/**
+ * Implicit complete binary tree, children of node i at 2i+1/2i+2, leaves at [numLeaves-1 .. 2*numLeaves-2].
+ * Leaf nodes hold a single light; internal nodes and padding leaves carry lightIdx == ~0u. power is the subtree sum (leaf = intensity * area * max(colorRGB)). 32 bytes.
+ */
+SHADER_PUBLIC struct LightBVHNode
+{
+    SHADER_PUBLIC float3 bmin;
+    SHADER_PUBLIC float power;
+    SHADER_PUBLIC float3 bmax;
+    SHADER_PUBLIC uint lightIdx;
+};
+
 SHADER_PUBLIC SHADER_CONST uint REGIR_RESERVOIRS_PER_CELL = 512u;
 
 // ReGIR Hash Grid

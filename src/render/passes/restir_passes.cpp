@@ -159,10 +159,14 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, 1, 1, 1);
         });
 
+        const uint32_t fillBvhLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
+        const uint32_t fillBvhNumLeaves = fillBvhLightCount > 0u ? static_cast<uint32_t>(NextPowerOfTwo(fillBvhLightCount)) : 0u;
+
         RenderPass& regirFillPass = graph.AddPass(SID("[ReGIR] Fill"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         regirFillPass.ReadBuffer(SCENE_DATA_BUFFER);
         regirFillPass.ReadBuffer(SID("light_data"));
         regirFillPass.ReadBuffer(SID("restir_lights_vs"));
+        regirFillPass.ReadBuffer(SID("light_bvh"));
         regirFillPass.ReadBuffer(SID("regir_active_cells"));
         regirFillPass.ReadBuffer(SID("regir_active_count"));
         if (bHasPrev) {
@@ -172,7 +176,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         regirFillPass.ReadIndirectBuffer(SID("regir_fill_indirect"));
         regirFillPass.WriteBuffer(SID("regir_hash_reservoirs"));
         regirFillPass.WriteBuffer(SID("regir_cell_data"));
-        regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, bHasPrev](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, bHasPrev, fillBvhNumLeaves](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_fill"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -186,9 +190,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .cellData = graph.GetBufferAddress(SID("regir_cell_data")),
                 .hashEntriesPrev = bHasPrev ? graph.GetBufferAddress(SID("regir_hash_entries_prev")) : 0,
                 .reservoirsPrev = bHasPrev ? graph.GetBufferAddress(SID("regir_hash_reservoirs_prev")) : 0,
+                .bvhNodes = graph.GetBufferAddress(SID("light_bvh")),
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .bHasPrev = bHasPrev ? 1u : 0u,
+                .bvhNumLeaves = fillBvhNumLeaves,
                 .wClamp = restirParams.regirWClamp,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -290,6 +296,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
                 .quadSelectionHistoryIndex = (pixelScale == 2u) ? (bHasQuadHistory ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection_history")) : graph.GetSampledImageViewDescriptorIndex(SID("quad_selection"))) : ~0u,
                 .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
+                .bvhNumLeaves = bvhNumLeaves,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

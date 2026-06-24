@@ -10,7 +10,7 @@
     "bPaniniEnabled": false,
     "bSharpeningEnabled": true,
     "bVignetteAberrationEnabled": true,
-    "bloomClamp": 10.98957347869873,
+    "bloomClamp": 100.0,
     "bloomIntensity": 0.03999999910593033,
     "bloomRadius": 1.0,
     "bloomSoftThreshold": 0.5,

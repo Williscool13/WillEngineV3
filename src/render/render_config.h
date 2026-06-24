@@ -10,6 +10,7 @@
 #include "core/containers/array.h"
 #include "shaders/lights_interop.h"
 #include "shaders/model_interop.h"
+#include "shaders/restir_interop.h"
 
 namespace Render
 {
@@ -31,10 +32,11 @@ inline constexpr int32_t RDG_MAX_STORAGE_FLOAT = 256;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT4 = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT2 = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT = 64;
-inline constexpr int32_t RDG_MAX_TLAS = 8;
+inline constexpr int32_t RDG_MAX_TLAS = 16;
 
 inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
 inline const StringID LIGHT_DATA_BUFFER = SID("light_data");
+inline const StringID LIGHT_BVH_BUFFER = SID("light_bvh");
 inline const StringID GEOMETRY_PRIMITIVE_BUFFER = SID("primitive_buffer");
 inline const StringID GEOMETRY_MODEL_BUFFER = SID("model_buffer");
 inline const StringID GEOMETRY_INSTANCE_BUFFER = SID("main_instance_buffer");
@@ -80,6 +82,11 @@ inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE = sizeof(Primitive) * MEGA_P
 inline constexpr int32_t VIEW_COUNT = 4; // Up to 4 views per frame, 0 is main view. 1 is portal. Idk what 2/3 are (maybe remove)
 inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * VIEW_COUNT;
 inline constexpr int32_t LIGHT_DATA_BUFFER_SIZE = sizeof(LightData) * VIEW_COUNT;
+
+// [ nodeCount * LightBVHNode ][ MAX_LIGHTS * uint (light -> leaf-slot inverse map) ].
+inline constexpr int32_t LIGHT_BVH_MAX_LEAVES = 2048; // NextPowerOfTwo(MAX_LIGHTS)
+inline constexpr int32_t LIGHT_BVH_NODE_COUNT = 2 * LIGHT_BVH_MAX_LEAVES - 1;
+inline constexpr int32_t LIGHT_BVH_BUFFER_SIZE = LIGHT_BVH_NODE_COUNT * static_cast<int32_t>(sizeof(LightBVHNode)) + MAX_LIGHTS * static_cast<int32_t>(sizeof(uint32_t));
 
 inline constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE = 1 << 27; // 64MB indices
 inline constexpr int32_t MEGA_MESHLET_TRIANGLE_BUFFER_SIZE = 1 << 27; // 64MB triangles

@@ -13,6 +13,7 @@ import visibility_lighting_common;
 import bindless_declarations;
 import restir_common;
 import random_common;
+import light_tree;
 
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
@@ -105,25 +106,31 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     if (lightCount > 0) {
         {
             for (int i = 0; i < RESTIR_M_LIGHT; i++) {
-                float uLight = HashStep(h);
+                // Light selection via the world-space light BVH (analytic selection pdf), replacing uniform selection.
+                LightTreeSample ts = SampleLightTree(pc.bvhNodes, pc.bvhNumLeaves, worldPos, h);
                 float uU = HashStep(h);
                 float uV = HashStep(h);
                 float uSelect = HashStep(h);
 
-                int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
-                LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
-                float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
-                LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                float w_i = 0.0;
+                int lightIdx = -1;
+                float3 Xi = float3(0.0);
+                LightVS vs = (LightVS)0;
+                if (ts.lightIdx != ~0u && ts.lightIdx < uint(lightCount) && ts.pdf > 0.0) {
+                    lightIdx = int(ts.lightIdx);
+                    vs = UnpackLightVS(pc.lightVS[lightIdx]);
+                    Xi = SampleLightSurface(vs, viewPosition, uU, uV);
+                    LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                    float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                    float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
 
-                float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-
-                float p_light_area = LightSamplePdfArea(vs, viewPosition, Xi) / float(lightCount);
-                float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
-                float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
-                float denom = float(RESTIR_M_LIGHT) * p_light_area + float(RESTIR_M_BRDF) * p_brdf_area;
-                float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
-                if (ReservoirAddSample(accum_gen, w_i, uSelect)) {
+                    float p_light_area = ts.pdf * LightSamplePdfArea(vs, viewPosition, Xi);
+                    float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
+                    float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                    float denom = float(RESTIR_M_LIGHT) * p_light_area + float(RESTIR_M_BRDF) * p_brdf_area;
+                    w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
+                }
+                if (ReservoirAddSample(accum_gen, w_i, uSelect) && lightIdx >= 0) {
                     r_gen.lightIdx = uint(lightIdx);
                     r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
                 }
@@ -164,7 +171,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                             if (RayIntersectLight(vs, viewPosition, brdfL, t)) {
                                 Xi = viewPosition + brdfL * t;
                                 LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                                p_light_area = LightSamplePdfArea(vs, viewPosition, Xi) / float(lightCount);
+                                p_light_area = LightTreePdf(pc.bvhNodes, pc.lightLeaf, pc.bvhNumLeaves, worldPos, hitLightIdx) * LightSamplePdfArea(vs, viewPosition, Xi);
                                 p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
                                 float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
                                 p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity);

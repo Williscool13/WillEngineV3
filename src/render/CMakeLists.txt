@@ -1,6 +1,8 @@
 add_library(render STATIC
         render_thread.cpp
         render_thread.h
+        light_bvh.cpp
+        light_bvh.h
         resource_manager.cpp
         resource_manager.h
         frame_resources.h
