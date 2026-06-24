@@ -64,6 +64,25 @@ ProjectConfig ReadProjectConfig()
         ConfigSerialization::FromJson(j["aa"], config.aaConfig);
     }
 
+    if (j.contains("gameCameraFovDegrees") && j["gameCameraFovDegrees"].is_number()) {
+        config.gameCameraFovDegrees = j["gameCameraFovDegrees"].get<float>();
+    }
+    if (j.contains("gameCameraNearPlane") && j["gameCameraNearPlane"].is_number()) {
+        config.gameCameraNearPlane = j["gameCameraNearPlane"].get<float>();
+    }
+    if (j.contains("editorCameraFovDegrees") && j["editorCameraFovDegrees"].is_number()) {
+        config.editorCameraFovDegrees = j["editorCameraFovDegrees"].get<float>();
+    }
+    if (j.contains("editorCameraNearPlane") && j["editorCameraNearPlane"].is_number()) {
+        config.editorCameraNearPlane = j["editorCameraNearPlane"].get<float>();
+    }
+    if (j.contains("gameCameraLockAspect") && j["gameCameraLockAspect"].is_boolean()) {
+        config.gameCameraLockAspect = j["gameCameraLockAspect"].get<bool>();
+    }
+    if (j.contains("gameCameraAspect") && j["gameCameraAspect"].is_array() && j["gameCameraAspect"].size() == 2) {
+        config.gameCameraAspect = Vec2(j["gameCameraAspect"][0].get<float>(), j["gameCameraAspect"][1].get<float>());
+    }
+
     return config;
 }
 
@@ -85,6 +104,12 @@ bool WriteProjectConfig(const ProjectConfig& config)
     j["activeLightingProfile"] = std::string_view(config.activeLightingProfile.c_str(), config.activeLightingProfile.Size());
     j["activePostProcessProfile"] = std::string_view(config.activePostProcessProfile.c_str(), config.activePostProcessProfile.Size());
     j["aa"] = ConfigSerialization::ToJson(config.aaConfig);
+    j["gameCameraFovDegrees"] = config.gameCameraFovDegrees;
+    j["gameCameraNearPlane"] = config.gameCameraNearPlane;
+    j["editorCameraFovDegrees"] = config.editorCameraFovDegrees;
+    j["editorCameraNearPlane"] = config.editorCameraNearPlane;
+    j["gameCameraLockAspect"] = config.gameCameraLockAspect;
+    j["gameCameraAspect"] = {config.gameCameraAspect.x, config.gameCameraAspect.y};
 
     file << j.dump(2);
     return file.good();

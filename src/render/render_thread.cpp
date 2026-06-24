@@ -728,7 +728,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .srcExtent = {dims.width, dims.height},
                         .dstExtent = {renderExtent[0], renderExtent[1]},
                         .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
-                        .farPlane = viewFamily.mainView.currentViewData.farPlane,
                         .textureArrayIndex = textureArrayIndex,
                         .textureIndexInArray = textureIndexInArray,
                         .valueTransformationType = static_cast<uint32_t>(viewFamily.debugTransformationType),

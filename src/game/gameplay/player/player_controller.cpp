@@ -65,11 +65,12 @@ void PlayerController::Update(Engine::EngineContext* ctx, Engine::EngineState* s
     state->registry.emplace_or_replace<Component::DirtyTransformTag>(character->GetEntity());
 
     // Camera
-    const float aspectRatio = static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight);
+    const float aspectRatio = state->projectConfig.ResolvedGameAspect(static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight));
     Core::ViewData viewData = Camera::ComputeOrbitCameraSwept(
         transform.translation, lookYaw, lookPitch,
-        cameraParams, aspectRatio, deltaTime,
-        cameraState, ctx->physicsSystem
+        cameraParams, aspectRatio,
+        glm::radians(state->projectConfig.gameCameraFovDegrees), state->projectConfig.gameCameraNearPlane,
+        deltaTime, cameraState, ctx->physicsSystem
     );
 
     auto cameraView = state->registry.view<Component::GameCameraTag, Component::CameraComponent>();
@@ -77,7 +78,6 @@ void PlayerController::Update(Engine::EngineContext* ctx, Engine::EngineState* s
         auto& camera = cameraView.get<Component::CameraComponent>(camEntity);
         camera.currentViewData = viewData;
     }
-
 }
 
 void PlayerController::Shutdown(Physics::PhysicsSystem* physicsSystem)

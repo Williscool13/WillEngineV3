@@ -270,114 +270,25 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
     if (state->bIsPlaying) {
+        const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
         if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
             if (state->bGameCursorCaptured) {
                 state->bGameCursorCaptured = false;
                 ctx->setCursorHiddenFn(false);
+
+                // Snap the editor camera to the game camera
+                auto gameCamView = state->registry.view<Component::GameCameraTag, Component::TransformComponent>();
+                auto editorCamView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+                if (gameCamView.front() != entt::null && editorCamView.front() != entt::null) {
+                    const auto& gameT = gameCamView.get<Component::TransformComponent>(gameCamView.front());
+                    auto& editorT = editorCamView.get<Component::TransformComponent>(editorCamView.front());
+                    editorT.translation = gameT.translation;
+                    editorT.rotation = gameT.rotation;
+                }
             }
             else {
                 PlayStop(ctx, state);
-            }
-        }
-
-        if (!state->bGameCursorCaptured && !ctx->bImguiMouseCaptured
-            && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
-            state->bGameCursorCaptured = true;
-            ctx->setCursorHiddenFn(true);
-        }
-
-        return;
-    }
-
-    if (ctx->bImGuiWantsTextInput) { return; }
-
-    const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
-
-    const bool multiSelectActive = state->editor.selectedEntities.Size() > 1;
-    if (multiSelectActive && state->editor.currentGizmoOperation == ImGuizmo::SCALE) {
-        state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE;
-    }
-    if (!ctrlHeld) {
-        if (state->inputFrame->GetKey(Key::W).pressed) {
-            state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE;
-        }
-        else if (state->inputFrame->GetKey(Key::E).pressed) {
-            state->editor.currentGizmoOperation = ImGuizmo::ROTATE;
-        }
-        else if (state->inputFrame->GetKey(Key::R).pressed && !multiSelectActive) {
-            state->editor.currentGizmoOperation = ImGuizmo::SCALE;
-        }
-    }
-
-    const bool rmbHeld = state->inputFrame->GetMouse(MouseButton::RMB).down;
-    if (!rmbHeld) {
-        if (!popupOpen && ctrlHeld && state->inputFrame->GetKey(Key::W).pressed) {
-            state->editor.bWantCopyEntities = true;
-        }
-
-        if (!popupOpen && state->inputFrame->GetKey(Key::DEL).pressed) {
-            state->editor.bWantDeleteEntities = true;
-        }
-
-        if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
-            state->editor.selectedEntities.Clear();
-        }
-
-        if (!popupOpen && state->inputFrame->GetKey(Key::F).pressed && !state->editor.selectedEntities.IsEmpty()) {
-            entt::entity target = state->editor.selectedEntities.Front();
-            if (state->registry.valid(target)) {
-                auto* targetTransform = state->registry.try_get<Component::TransformComponent>(target);
-
-                auto editorCamView = state->registry.view<Component::EditorCameraTag, Component::FreeCameraComponent, Component::TransformComponent>();
-                for (entt::entity camEntity : editorCamView) {
-                    auto& camTransform = editorCamView.get<Component::TransformComponent>(camEntity);
-                    const glm::vec3 camForward = glm::normalize(camTransform.rotation * WORLD_FORWARD);
-
-                    glm::vec3 focusPoint = targetTransform ? targetTransform->translation : glm::vec3(0.0f);
-                    float focusDist = 1.0f;
-
-                    Engine::StaticModelHandle modelHandle = Engine::StaticModelHandle::INVALID;
-                    if (const auto* rt = state->registry.try_get<Component::MeshRuntime>(target)) {
-                        modelHandle = rt->modelHandle;
-                    }
-
-                    if (modelHandle.IsValid()) {
-                        if (const Engine::StaticModel* model = ctx->assetManager->GetModel(modelHandle)) {
-                            if (model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
-                                const Engine::AABB& aabb = model->bounds.aabb;
-                                const glm::vec3 localCenter = aabb.Center();
-                                const glm::vec3 localHalf = aabb.HalfExtents();
-
-                                if (targetTransform) {
-                                    const glm::mat4 worldMatrix = GetMatrix(*targetTransform);
-                                    focusPoint = glm::vec3(worldMatrix * glm::vec4(localCenter, 1.0f));
-                                    const glm::vec3 scale = targetTransform->scale;
-                                    const float maxScale = glm::max(glm::max(glm::abs(scale.x), glm::abs(scale.y)), glm::abs(scale.z));
-                                    focusDist = glm::length(localHalf) * maxScale + 2.0f;
-                                }
-                            }
-                        }
-                    }
-
-                    camTransform.translation = focusPoint - camForward * focusDist;
-                    break;
-                }
-            }
-        }
-    }
-
-
-    for (const auto& hotkey : DEBUG_HOTKEYS) {
-        if (state->inputFrame->GetKey(hotkey.key).pressed) {
-            if (state->debug.resourceName == hotkey.resourceName && state->debug.viewAspect == hotkey.aspect && state->debug.transformationType == hotkey.transform) {
-                state->debug.resourceName.Clear();
-            }
-            else {
-                state->debug.resourceName = Core::InlineString(hotkey.resourceName);
-                state->debug.transformationType = hotkey.transform;
-                state->debug.viewAspect = hotkey.aspect;
             }
         }
     }
@@ -395,7 +306,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     bool bJustSelected = false;
 
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
-    if (!ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
+    if (!state->bGameCursorCaptured && !ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
         auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
         if (it != nullptr) {
             bJustSelected = true;
@@ -420,31 +331,110 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 
 
-    if (state->editor.bWantDeleteEntities) {
-        state->editor.bWantDeleteEntities = false;
-        const bool hadSelection = !state->editor.selectedEntities.IsEmpty();
-        for (entt::entity entity : state->editor.selectedEntities) {
-            if (!state->registry.valid(entity)) continue;
-            state->registry.destroy(entity);
-        }
-        state->editor.selectedEntities.Clear();
-        if (hadSelection) { MarkSceneModified(state, state->currentSceneId); }
-    }
+    // Editor shortcuts
+    if (!state->bIsPlaying && !ctx->bImGuiWantsTextInput) {
+        const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+        const bool rmbHeld = state->inputFrame->GetMouse(MouseButton::RMB).down;
+        const bool multiSelectActive = state->editor.selectedEntities.Size() > 1;
 
-    if (state->editor.bWantCopyEntities) {
-        state->editor.bWantCopyEntities = false;
-        auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), state->editor.selectedEntities.Size());
-        for (entt::entity entity : state->editor.selectedEntities) {
-            if (!state->registry.valid(entity)) continue;
-            entt::entity copy = CopySceneEntity(state, entity, state->currentSceneId);
-            state->registry.get<Component::StableIdComponent>(copy).sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
-            copies.PushBack(copy);
+        if (multiSelectActive && state->editor.currentGizmoOperation == ImGuizmo::SCALE) {
+            state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE;
         }
-        state->editor.selectedEntities.Clear();
-        for (auto copy : copies) {
-            state->editor.selectedEntities.PushBack(copy);
+        if (!ctrlHeld) {
+            if (state->inputFrame->GetKey(Key::W).pressed) {
+                state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE;
+            }
+            else if (state->inputFrame->GetKey(Key::E).pressed) {
+                state->editor.currentGizmoOperation = ImGuizmo::ROTATE;
+            }
+            else if (state->inputFrame->GetKey(Key::R).pressed && !multiSelectActive) {
+                state->editor.currentGizmoOperation = ImGuizmo::SCALE;
+            }
         }
-        if (!copies.IsEmpty()) { MarkSceneModified(state, state->currentSceneId); }
+
+        if (!rmbHeld) {
+            if (!popupOpen && ctrlHeld && state->inputFrame->GetKey(Key::W).pressed) {
+                auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), state->editor.selectedEntities.Size());
+                for (entt::entity entity : state->editor.selectedEntities) {
+                    if (!state->registry.valid(entity)) continue;
+                    entt::entity copy = CopySceneEntity(state, entity, state->currentSceneId);
+                    state->registry.get<Component::StableIdComponent>(copy).sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
+                    copies.PushBack(copy);
+                }
+                state->editor.selectedEntities.Clear();
+                for (auto copy : copies) { state->editor.selectedEntities.PushBack(copy); }
+                if (!copies.IsEmpty()) { MarkSceneModified(state, state->currentSceneId); }
+            }
+
+            if (!popupOpen && state->inputFrame->GetKey(Key::DEL).pressed) {
+                const bool hadSelection = !state->editor.selectedEntities.IsEmpty();
+                for (entt::entity entity : state->editor.selectedEntities) {
+                    if (!state->registry.valid(entity)) continue;
+                    state->registry.destroy(entity);
+                }
+                state->editor.selectedEntities.Clear();
+                if (hadSelection) { MarkSceneModified(state, state->currentSceneId); }
+            }
+
+            if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+                state->editor.selectedEntities.Clear();
+            }
+
+            if (!popupOpen && state->inputFrame->GetKey(Key::F).pressed && !state->editor.selectedEntities.IsEmpty()) {
+                entt::entity target = state->editor.selectedEntities.Front();
+                if (state->registry.valid(target)) {
+                    auto* targetTransform = state->registry.try_get<Component::TransformComponent>(target);
+
+                    auto editorCamView = state->registry.view<Component::EditorCameraTag, Component::FreeCameraComponent, Component::TransformComponent>();
+                    for (entt::entity camEntity : editorCamView) {
+                        auto& camTransform = editorCamView.get<Component::TransformComponent>(camEntity);
+                        const glm::vec3 camForward = glm::normalize(camTransform.rotation * WORLD_FORWARD);
+
+                        glm::vec3 focusPoint = targetTransform ? targetTransform->translation : glm::vec3(0.0f);
+                        float focusDist = 1.0f;
+
+                        Engine::StaticModelHandle modelHandle = Engine::StaticModelHandle::INVALID;
+                        if (const auto* rt = state->registry.try_get<Component::MeshRuntime>(target)) {
+                            modelHandle = rt->modelHandle;
+                        }
+
+                        if (modelHandle.IsValid()) {
+                            if (const Engine::StaticModel* model = ctx->assetManager->GetModel(modelHandle)) {
+                                if (model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
+                                    const Engine::AABB& aabb = model->bounds.aabb;
+                                    const glm::vec3 localCenter = aabb.Center();
+                                    const glm::vec3 localHalf = aabb.HalfExtents();
+
+                                    if (targetTransform) {
+                                        const glm::mat4 worldMatrix = GetMatrix(*targetTransform);
+                                        focusPoint = glm::vec3(worldMatrix * glm::vec4(localCenter, 1.0f));
+                                        const glm::vec3 scale = targetTransform->scale;
+                                        const float maxScale = glm::max(glm::max(glm::abs(scale.x), glm::abs(scale.y)), glm::abs(scale.z));
+                                        focusDist = glm::length(localHalf) * maxScale + 2.0f;
+                                    }
+                                }
+                            }
+                        }
+
+                        camTransform.translation = focusPoint - camForward * focusDist;
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (const auto& hotkey : DEBUG_HOTKEYS) {
+            if (state->inputFrame->GetKey(hotkey.key).pressed) {
+                if (state->debug.resourceName == hotkey.resourceName && state->debug.viewAspect == hotkey.aspect && state->debug.transformationType == hotkey.transform) {
+                    state->debug.resourceName.Clear();
+                }
+                else {
+                    state->debug.resourceName = Core::InlineString(hotkey.resourceName);
+                    state->debug.transformationType = hotkey.transform;
+                    state->debug.viewAspect = hotkey.aspect;
+                }
+            }
+        }
     }
 
     DrawDebugViewWindow(ctx, state);
@@ -466,9 +456,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     auto editorCameraView = state->registry.view<Component::FreeCameraComponent, Component::TransformComponent, Component::EditorCameraTag>();
     assert(editorCameraView.size_hint() > 0);
-    auto [freeCam, editorCameraTransform] = editorCameraView.get<Component::FreeCameraComponent, Component::TransformComponent>(editorCameraView.front());
+    auto& editorCameraTransform = editorCameraView.get<Component::TransformComponent>(editorCameraView.front());
 
-    ImGuizmo::SetOrthographic(freeCam.bOrtho);
+    ImGuizmo::SetOrthographic(false);
     ImGuizmo::BeginFrame();
     ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
     ImGuizmo::SetRect(
@@ -518,18 +508,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             frameBuffer->mainViewFamily.mainView.currentViewData.cameraLookAt = editorCameraTransform.translation + newForward;
             frameBuffer->mainViewFamily.mainView.currentViewData.view = glm::lookAt(editorCameraTransform.translation, editorCameraTransform.translation + newForward, newUp);
         }
-
-        constexpr ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
-                                                  ImGuiWindowFlags_NoFocusOnAppearing;
-        ImGui::SetNextWindowPos(ImVec2(vpRight - gizmoSize, vpTop + gizmoSize), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(gizmoSize, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.5f);
-        if (ImGui::Begin("##cam_overlay", nullptr, overlayFlags)) {
-            if (ImGui::Button(freeCam.bOrtho ? "Ortho" : "Persp", ImVec2(-1, 0))) {
-                freeCam.bOrtho = !freeCam.bOrtho;
-            }
-        }
-        ImGui::End();
 
         constexpr ImGuiWindowFlags fpsFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                               ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize;
@@ -631,6 +609,14 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         if (state->bIsPlaying) {
             if (ImGui::Button("Stop")) {
                 PlayStop(ctx, state);
+            }
+            if (!state->bGameCursorCaptured) {
+                ImGui::SameLine();
+                if (ImGui::Button("Enter Game")) {
+                    state->bGameCursorCaptured = true;
+                    ctx->setCursorHiddenFn(true);
+                    state->editor.selectedEntities.Clear();
+                }
             }
         }
         else {

@@ -133,6 +133,18 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             if (Widgets::SliderInt("##fps_cap", &state->projectConfig.frameLimitTarget, 15, 240)) { changed = true; }
         }
 
+        ImGui::SeparatorText("Cameras");
+        if (Widgets::SliderFloat("Game FOV##cam", &state->projectConfig.gameCameraFovDegrees, 30.0f, 120.0f, {.format = "%.0f deg"})) { changed = true; }
+        if (Widgets::SliderFloat("Game Near##cam", &state->projectConfig.gameCameraNearPlane, 0.01f, 5.0f, {.format = "%.3f"})) { changed = true; }
+        if (Widgets::SliderFloat("Editor FOV##cam", &state->projectConfig.editorCameraFovDegrees, 30.0f, 120.0f, {.format = "%.0f deg"})) { changed = true; }
+        if (Widgets::SliderFloat("Editor Near##cam", &state->projectConfig.editorCameraNearPlane, 0.01f, 5.0f, {.format = "%.3f"})) { changed = true; }
+        if (ImGui::Checkbox("Lock Game Aspect##cam", &state->projectConfig.gameCameraLockAspect)) { changed = true; }
+        if (state->projectConfig.gameCameraLockAspect) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::InputFloat2("##game_aspect", &state->projectConfig.gameCameraAspect.x, "%.2f")) { changed = true; }
+        }
+
         ImGui::Spacing();
 
         auto bIsGroundTruth = state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR;

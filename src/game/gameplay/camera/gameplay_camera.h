@@ -33,12 +33,17 @@ struct OrbitCameraState
     bool initialized{false};
 };
 
+/** Shared reverse-Z, infinite-far perspective view-data builder. */
+Core::ViewData BuildPerspectiveView(glm::vec3 pos, glm::vec3 forward, glm::vec3 up, float aspectRatio, float fovRadians, float nearPlane);
+
 Core::ViewData ComputeOrbitCamera(
     glm::vec3 focusPosition,
     float yaw,
     float pitch,
     const OrbitCameraParams& params,
-    float aspectRatio
+    float aspectRatio,
+    float fovRadians,
+    float nearPlane
 );
 
 Core::ViewData ComputeOrbitCameraSwept(
@@ -47,6 +52,8 @@ Core::ViewData ComputeOrbitCameraSwept(
     float pitch,
     const OrbitCameraParams& params,
     float aspectRatio,
+    float fovRadians,
+    float nearPlane,
     float deltaTime,
     OrbitCameraState& state,
     Physics::PhysicsSystem* physicsSystem
@@ -55,7 +62,9 @@ Core::ViewData ComputeOrbitCameraSwept(
 Core::ViewData ComputeFixedFollowCamera(
     glm::vec3 targetPosition,
     glm::vec3 cameraOffset,
-    float aspectRatio
+    float aspectRatio,
+    float fovRadians,
+    float nearPlane
 );
 } // Game::Camera
 

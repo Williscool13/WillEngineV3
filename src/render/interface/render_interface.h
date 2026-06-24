@@ -34,7 +34,6 @@ struct ViewData
     float fovRadians;
     float aspectRatio;
     float nearPlane;
-    float farPlane;
     glm::vec3 cameraPos;
     glm::vec3 cameraLookAt;
     glm::vec3 cameraForward;

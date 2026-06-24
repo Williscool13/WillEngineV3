@@ -194,8 +194,6 @@ struct EditorState
     // Entity selection
     Core::Vector<entt::entity> selectedEntities{};
     Core::Vector<entt::entity> prevSelectedEntities{};
-    bool bWantCopyEntities{false};
-    bool bWantDeleteEntities{false};
 
     // Scene browser filter + selection
     char sceneBrowserSearch[64]{};

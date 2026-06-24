@@ -27,34 +27,36 @@ public:
         return inLayer != Physics::Layers::PLAYER && inLayer != Physics::Layers::SENSOR;
     }
 };
-static Core::ViewData BuildViewData(glm::vec3 cameraPos, glm::vec3 focusPoint, float aspectRatio)
+Core::ViewData BuildPerspectiveView(glm::vec3 pos, glm::vec3 forward, glm::vec3 up, float aspectRatio, float fovRadians, float nearPlane)
 {
-    glm::vec3 forward = glm::normalize(focusPoint - cameraPos);
+    const glm::vec3 f = glm::normalize(forward);
 
     Core::ViewData vd{};
-    vd.cameraPos = cameraPos;
-    vd.cameraLookAt = focusPoint;
-    vd.cameraForward = forward;
-    vd.cameraUp = WORLD_UP;
+    vd.cameraPos = pos;
+    vd.cameraForward = f;
+    vd.cameraUp = up;
+    vd.cameraLookAt = pos + f;
     vd.aspectRatio = aspectRatio;
-    vd.fovRadians = glm::radians(70.0f);
-    vd.nearPlane = 0.1f;
-    vd.farPlane = 100.0f;
-    vd.view = glm::lookAt(vd.cameraPos, vd.cameraLookAt, vd.cameraUp);
+    vd.fovRadians = fovRadians;
+    vd.nearPlane = nearPlane;
+    vd.view = glm::lookAt(pos, vd.cameraLookAt, up);
 
-    float tanHalfFov = glm::tan(vd.fovRadians * 0.5f);
+    const float tanHalfFov = glm::tan(fovRadians * 0.5f);
+    // Reverse-Z, infinite far: ndc.z = near/dist (1 at near, ->0 at infinity).
+    // Hand-rolled rather than glm::infinitePerspective(fovRadians, aspectRatio, nearPlane), which isn't reverse-Z.
     glm::mat4 proj(0.0f);
-    proj[0][0] = 1.0f / (vd.aspectRatio * tanHalfFov);
+    proj[0][0] = 1.0f / (aspectRatio * tanHalfFov);
     proj[1][1] = 1.0f / tanHalfFov;
     proj[2][3] = -1.0f;
-    proj[3][2] = vd.nearPlane;
+    proj[3][2] = nearPlane;
     vd.proj = proj;
-    // glm::mat4 mat(0.0f);
-    // mat[0][0] = 1.0f / (aspect * tanHalfFov);
-    // mat[1][1] = 1.0f / tanHalfFov;
-    // mat[2][3] = -1.0f;
-    // mat[3][2] = near;
-    // vd.proj = glm::infinitePerspective(vd.fovRadians, vd.aspectRatio, vd.farPlane);
+    return vd;
+}
+
+static Core::ViewData BuildViewData(glm::vec3 cameraPos, glm::vec3 focusPoint, float aspectRatio, float fovRadians, float nearPlane)
+{
+    Core::ViewData vd = BuildPerspectiveView(cameraPos, focusPoint - cameraPos, WORLD_UP, aspectRatio, fovRadians, nearPlane);
+    vd.cameraLookAt = focusPoint;
     return vd;
 }
 
@@ -74,13 +76,15 @@ Core::ViewData ComputeOrbitCamera(
     float yaw,
     float pitch,
     const OrbitCameraParams& params,
-    float aspectRatio)
+    float aspectRatio,
+    float fovRadians,
+    float nearPlane)
 {
     glm::vec3 focusPoint, direction, right;
     ComputeOrbitVectors(focusPosition, yaw, pitch, params, focusPoint, direction, right);
 
     glm::vec3 cameraPos = focusPoint - direction * params.distance + right * params.sideOffset;
-    return BuildViewData(cameraPos, focusPoint, aspectRatio);
+    return BuildViewData(cameraPos, focusPoint, aspectRatio, fovRadians, nearPlane);
 }
 
 Core::ViewData ComputeOrbitCameraSwept(
@@ -89,6 +93,8 @@ Core::ViewData ComputeOrbitCameraSwept(
     float pitch,
     const OrbitCameraParams& params,
     float aspectRatio,
+    float fovRadians,
+    float nearPlane,
     float deltaTime,
     OrbitCameraState& state,
     Physics::PhysicsSystem* physicsSystem)
@@ -146,15 +152,17 @@ Core::ViewData ComputeOrbitCameraSwept(
     }
 
     glm::vec3 cameraPos = focusPoint - direction * state.currentDistance + right * params.sideOffset;
-    return BuildViewData(cameraPos, focusPoint, aspectRatio);
+    return BuildViewData(cameraPos, focusPoint, aspectRatio, fovRadians, nearPlane);
 }
 
 Core::ViewData ComputeFixedFollowCamera(
     glm::vec3 targetPosition,
     glm::vec3 cameraOffset,
-    float aspectRatio)
+    float aspectRatio,
+    float fovRadians,
+    float nearPlane)
 {
     glm::vec3 cameraPos = targetPosition + cameraOffset;
-    return BuildViewData(cameraPos, targetPosition, aspectRatio);
+    return BuildViewData(cameraPos, targetPosition, aspectRatio, fovRadians, nearPlane);
 }
 } // Game::Camera

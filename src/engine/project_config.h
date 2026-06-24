@@ -6,6 +6,7 @@
 #define WILL_ENGINE_PROJECT_CONFIG_H
 
 #include "core/containers/inline_string.h"
+#include "core/types/math.h"
 #include "render/interface/render_interface.h"
 
 namespace Engine
@@ -27,6 +28,22 @@ struct ProjectConfig
 
     /** Anti-aliasing is project-level (not bundled in any profile). */
     Core::AntiAliasingConfiguration aaConfig{};
+
+    /** Camera projection. Aspect is viewport-derived, far is infinite (reverse-Z). */
+    float gameCameraFovDegrees{70.0f};
+    float gameCameraNearPlane{0.1f};
+    float editorCameraFovDegrees{70.0f};
+    float editorCameraNearPlane{0.1f};
+
+    // Optional
+    bool gameCameraLockAspect{false};
+    Vec2 gameCameraAspect{16.0f, 9.0f};
+
+    [[nodiscard]] float ResolvedGameAspect(float viewportAspect) const
+    {
+        if (!gameCameraLockAspect) { return viewportAspect; }
+        return gameCameraAspect.y > 0.0f ? gameCameraAspect.x / gameCameraAspect.y : viewportAspect;
+    }
 };
 
 /**

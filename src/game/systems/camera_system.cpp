@@ -12,6 +12,7 @@
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
+#include "game/gameplay/camera/gameplay_camera.h"
 
 namespace Game
 {
@@ -72,37 +73,14 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
 
         if (!ctx->bImguiMouseCaptured && state->inputFrame->GetMouse(MouseButton::MMB).down) {
-            const float panScale = freeCam.bOrtho ? freeCam.orthoSize * 0.002f : scaledMoveSpeed * 0.1f;
+            const float panScale = scaledMoveSpeed * 0.1f;
             transform.translation -= right * state->inputFrame->mouseXDelta * panScale;
             transform.translation += WORLD_UP * state->inputFrame->mouseYDelta * panScale;
         }
 
-        camera.currentViewData.cameraPos = transform.translation;
-        camera.currentViewData.cameraLookAt = transform.translation + forwardDir;
-        camera.currentViewData.cameraForward = normalize(forwardDir);
-        camera.currentViewData.cameraUp = WORLD_UP;
-        camera.currentViewData.aspectRatio = static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight);
-        camera.currentViewData.fovRadians = glm::radians(70.0f);
-        camera.currentViewData.nearPlane = 0.1f;
-        camera.currentViewData.farPlane = 100.0f;
-
-        camera.currentViewData.view = glm::lookAt(camera.currentViewData.cameraPos, camera.currentViewData.cameraLookAt, camera.currentViewData.cameraUp);
-        if (freeCam.bOrtho) {
-            const float halfH = freeCam.orthoSize * 0.5f;
-            const float halfW = halfH * camera.currentViewData.aspectRatio;
-            camera.currentViewData.proj = glm::ortho(-halfW, halfW, -halfH, halfH, camera.currentViewData.farPlane, camera.currentViewData.nearPlane);
-        }
-        else {
-            auto& vd = camera.currentViewData;
-            float tanHalfFov = glm::tan(vd.fovRadians * 0.5f);
-            glm::mat4 proj(0.0f);
-            proj[0][0] = 1.0f / (vd.aspectRatio * tanHalfFov);
-            proj[1][1] = 1.0f / tanHalfFov;
-            proj[2][3] = -1.0f;
-            proj[3][2] = vd.nearPlane;
-            vd.proj = proj;
-            // camera.currentViewData.proj = glm::infinitePerspective(camera.currentViewData.fovRadians, camera.currentViewData.aspectRatio, camera.currentViewData.farPlane);
-        }
+        const float aspectRatio = static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight);
+        const float fovRadians = glm::radians(state->projectConfig.editorCameraFovDegrees);
+        camera.currentViewData = Camera::BuildPerspectiveView(transform.translation, forwardDir, WORLD_UP, aspectRatio, fovRadians, state->projectConfig.editorCameraNearPlane);
     }
 }
 
@@ -110,7 +88,7 @@ void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamil
 {
     ZoneScoped;
     entt::entity mainCamera;
-    if (state->bIsPlaying) {
+    if (state->bIsPlaying && state->bGameCursorCaptured) {
         auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
     } else {
@@ -129,7 +107,7 @@ void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainVie
 {
     ZoneScoped;
     entt::entity mainCamera;
-    if (state->bIsPlaying) {
+    if (state->bIsPlaying && state->bGameCursorCaptured) {
         auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
     } else {
@@ -186,7 +164,6 @@ void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainVie
             portalRenderView.view.currentViewData.fovRadians = cam.currentViewData.fovRadians;
             portalRenderView.view.currentViewData.aspectRatio = cam.currentViewData.aspectRatio;
             portalRenderView.view.currentViewData.nearPlane = cam.currentViewData.nearPlane;
-            portalRenderView.view.currentViewData.farPlane = cam.currentViewData.farPlane;
             portalRenderView.view.currentViewData.cameraPos = portalCameraPos;
             portalRenderView.view.currentViewData.cameraLookAt = portalLookAt;
             portalRenderView.view.currentViewData.cameraForward = portalForward;
@@ -194,7 +171,7 @@ void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainVie
             portalRenderView.view.currentViewData.view = glm::lookAt(portalRenderView.view.currentViewData.cameraPos, portalRenderView.view.currentViewData.cameraLookAt,
                                                                      portalRenderView.view.currentViewData.cameraUp);
             portalRenderView.view.currentViewData.proj = glm::infinitePerspective(portalRenderView.view.currentViewData.fovRadians, portalRenderView.view.currentViewData.aspectRatio,
-                                                                          portalRenderView.view.currentViewData.farPlane);
+                                                                          portalRenderView.view.currentViewData.nearPlane);
 
             glm::mat3 entryRotation = glm::mat3(sourceMatrix);
             portalRenderView.entryPortalTransform = Transform(entryTransform.translation, entryTransform.rotation, entryTransform.scale);

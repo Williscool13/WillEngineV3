@@ -55,17 +55,29 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
 
     // Camera always updates (even when cursor released, so the view doesn't freeze)
     glm::vec3 characterPos = character->GetInterpolatedPosition();
-    const float aspectRatio = static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight);
+    const float aspectRatio = state->projectConfig.ResolvedGameAspect(static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight));
     Core::ViewData viewData = Camera::ComputeOrbitCameraSwept(
         characterPos, lookYaw, lookPitch,
-        cameraParams, aspectRatio, deltaTime,
-        cameraState, ctx->physicsSystem
+        cameraParams, aspectRatio,
+        glm::radians(state->projectConfig.gameCameraFovDegrees), state->projectConfig.gameCameraNearPlane,
+        deltaTime, cameraState, ctx->physicsSystem
     );
 
-    auto cameraView = state->registry.view<Component::GameCameraTag, Component::CameraComponent>();
+    auto cameraView = state->registry.view<Component::GameCameraTag, Component::CameraComponent, Component::TransformComponent>();
     for (auto camEntity : cameraView) {
         auto& camera = cameraView.get<Component::CameraComponent>(camEntity);
+        auto& transform = cameraView.get<Component::TransformComponent>(camEntity);
         camera.currentViewData = viewData;
+        // Mirror the pose into the transform (portals / editor eject read it)
+        transform.translation = viewData.cameraPos;
+        const glm::vec3 f = glm::normalize(viewData.cameraForward);
+        glm::vec3 right = glm::cross(f, WORLD_UP);
+        const float rightLen = glm::length(right);
+        if (rightLen > 1e-4f) {
+            right /= rightLen;
+            const glm::vec3 up = glm::cross(right, f);
+            transform.rotation = glm::normalize(glm::quat_cast(glm::mat3(right, up, -f)));
+        }
     }
 }
 

@@ -224,7 +224,8 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     Game::FunctionKeyUpdate(ctx, state);
 
-    if (state->bIsPlaying) {
+    // Gameplay simulation runs only while playing AND game-focused
+    if (state->bIsPlaying && state->bGameCursorCaptured) {
         if (state->physics.bEnabled) {
             Game::PhysicsUpdate(ctx, state);
         }
@@ -242,14 +243,18 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
             playerController->Update(ctx, state);
         }
     }
-    else {
 #if WILL_EDITOR
-        Game::UpdateEditorCamera(ctx, state);
+    if (!state->bIsPlaying) {
         Game::UpdatePhysicsEditor(ctx, state);
-#else
-        Game::PlayStart(ctx, state);
-#endif
     }
+    if (!state->bGameCursorCaptured) {
+        Game::UpdateEditorCamera(ctx, state);
+    }
+#else
+    if (!state->bIsPlaying) {
+        Game::PlayStart(ctx, state);
+    }
+#endif
 
     Game::DebugUpdate(ctx, state);
 

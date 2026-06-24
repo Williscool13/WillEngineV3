@@ -580,6 +580,7 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
     state->bIsPlaying = true;
     state->bGameCursorCaptured = true;
     ctx->setCursorHiddenFn(true);
+    state->editor.selectedEntities.Clear();
 
     glm::vec3 spawnPosition{0.0f, 3.0f, 0.0f};
     {

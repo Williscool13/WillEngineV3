@@ -27,8 +27,6 @@ struct FreeCameraComponent
 {
     float moveSpeed = 5.0f;
     float lookSpeed = 0.1f;
-    bool bOrtho = false;
-    float orthoSize = 10.0f;
 
     static void Serialize(const FreeCameraComponent& comp, nlohmann::json& json);
     static void Deserialize(FreeCameraComponent& comp, const nlohmann::json& json);
