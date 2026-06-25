@@ -15,6 +15,9 @@ import restir_common;
 import random_common;
 import light_tree;
 
+// 0 compiles the BRDF closest-hit ray out.
+#define RESTIR_ENABLE_BRDF_RAY 1
+
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     uint2 pixel = threadID.xy;
@@ -139,7 +142,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 }
             }
 
-            float3 worldN = normalize(mul(float3x3(scene.invView), N));
             for (int i = 0; i < mBrdf; i++) {
                 float uXi0 = HashStep(h);
                 float uXi1 = HashStep(h);
@@ -156,32 +158,49 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 LightVS bestVS = (LightVS)0;
 
                 if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
+                    int hitLightIdx = -1;
+                    float hitT = 0.0;
+#if RESTIR_ENABLE_BRDF_RAY
+                    // Closest-hit ray: nearest light proxy before scene geometry (mask 0xFF; occluder first -> miss).
+                    float3 worldN = normalize(mul(float3x3(scene.invView), N));
                     RayDesc ray;
                     ray.Origin = worldPos + worldN * 0.05;
                     ray.Direction = normalize(mul(float3x3(scene.invView), brdfL));
                     ray.TMin = 0.001;
                     ray.TMax = 1e30;
-                    RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-                    // Mask 0xFF: hit scene geometry (0x01) and light proxies (0x02); an occluder hit first -> miss. Replaces the O(lightCount) analytic light scan.
                     RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-                    q.TraceRayInline(tlas, 0, 0xFF, ray);
+                    q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0xFF, ray);
                     q.Proceed();
                     if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
-                        uint hitLightIdx = pc.instanceBuffer[q.CommittedInstanceID()].lightIndex;
-                        if (hitLightIdx != ~0u && hitLightIdx < uint(lightCount)) {
-                            LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
-                            float t;
-                            if (RayIntersectLight(vs, viewPosition, brdfL, t)) {
-                                Xi = viewPosition + brdfL * t;
-                                LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                                p_light_area = LightTreePdf(pc.bvhNodes, pc.lightLeaf, pc.bvhNumLeaves, worldPos, hitLightIdx) * LightSamplePdfArea(vs, viewPosition, Xi);
-                                p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
-                                float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                                p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity);
-                                bestLightIdx = int(hitLightIdx);
-                                bestVS = vs;
-                            }
+                        uint hl = pc.instanceBuffer[q.CommittedInstanceID()].lightIndex;
+                        float t;
+                        if (hl != ~0u && hl < uint(lightCount) && RayIntersectLight(UnpackLightVS(pc.lightVS[hl]), viewPosition, brdfL, t)) {
+                            hitLightIdx = int(hl);
+                            hitT = t;
                         }
+                    }
+#else
+                    // Analytic nearest-light hit; occlusion deferred to the Phase 3 winner test, as for light-stream candidates.
+                    float nearestT = 1e30;
+                    for (int li2 = 0; li2 < lightCount; li2++) {
+                        float t;
+                        if (RayIntersectLight(UnpackLightVS(pc.lightVS[li2]), viewPosition, brdfL, t) && t < nearestT) {
+                            nearestT = t;
+                            hitLightIdx = li2;
+                        }
+                    }
+                    hitT = nearestT;
+#endif
+                    if (hitLightIdx >= 0) {
+                        LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
+                        Xi = viewPosition + brdfL * hitT;
+                        LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                        p_light_area = LightTreePdf(pc.bvhNodes, pc.lightLeaf, pc.bvhNumLeaves, worldPos, uint(hitLightIdx)) * LightSamplePdfArea(vs, viewPosition, Xi);
+                        p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                        float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                        p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity);
+                        bestLightIdx = hitLightIdx;
+                        bestVS = vs;
                     }
                 }
 

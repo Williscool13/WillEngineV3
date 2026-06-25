@@ -390,7 +390,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                         auto& camTransform = editorCamView.get<Component::TransformComponent>(camEntity);
                         const glm::vec3 camForward = glm::normalize(camTransform.rotation * WORLD_FORWARD);
 
-                        glm::vec3 focusPoint = targetTransform ? targetTransform->translation : glm::vec3(0.0f);
+                        glm::vec3 focusPoint = targetTransform ? Component::ComputeWorldTransform(state->registry, target).translation : glm::vec3(0.0f);
                         float focusDist = 1.0f;
 
                         Engine::StaticModelHandle modelHandle = Engine::StaticModelHandle::INVALID;
@@ -406,9 +406,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                                     const glm::vec3 localHalf = aabb.HalfExtents();
 
                                     if (targetTransform) {
-                                        const glm::mat4 worldMatrix = GetMatrix(*targetTransform);
+                                        const Transform world = Component::ComputeWorldTransform(state->registry, target);
+                                        const glm::mat4 worldMatrix = world.GetMatrix();
                                         focusPoint = glm::vec3(worldMatrix * glm::vec4(localCenter, 1.0f));
-                                        const glm::vec3 scale = targetTransform->scale;
+                                        const glm::vec3 scale = world.scale;
                                         const float maxScale = glm::max(glm::max(glm::abs(scale.x), glm::abs(scale.y)), glm::abs(scale.z));
                                         focusDist = glm::length(localHalf) * maxScale + 2.0f;
                                     }
@@ -986,6 +987,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             uint64_t stableId;
             uint64_t sortOrder;
             StringID folderId;
+            entt::entity parentEntity; // entt::null if a hierarchy root
+            uint16_t depth; // (0 = root)
         };
 
         Core::ArenaVector<EntityEntry> entries{&ctx->editorArena.Get(), 1024};
@@ -1006,8 +1009,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
             if (search[0]) {
                 const bool nameMatches = nameComp
-                    ? nameComp->name.Contains(search, Core::CaseSensitivity::Insensitive)
-                    : Core::InlineString<16>("Unnamed").Contains(search, Core::CaseSensitivity::Insensitive);
+                                             ? nameComp->name.Contains(search, Core::CaseSensitivity::Insensitive)
+                                             : Core::InlineString<16>("Unnamed").Contains(search, Core::CaseSensitivity::Insensitive);
                 if (!nameMatches) { continue; }
             }
 
@@ -1019,7 +1022,16 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (auto* fc = state->registry.try_get<Component::EntityFolderComponent>(entity)) {
                 folderId = fc->folderId;
             }
-            entries.PushBack({entity, label, stableId, sortOrder, folderId});
+            entt::entity parentEntity = entt::null;
+            uint16_t depth = 0;
+            if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
+                const auto* ps = state->registry.try_get<Component::SceneComponent>(h->parent);
+                if (ps && ps->sceneId == state->currentSceneId) {
+                    parentEntity = h->parent;
+                    depth = h->depth;
+                }
+            }
+            entries.PushBack({entity, label, stableId, sortOrder, folderId, parentEntity, depth});
         }
         std::ranges::sort(entries, [](const EntityEntry& a, const EntityEntry& b) { return a.sortOrder < b.sortOrder; });
 
@@ -1029,6 +1041,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         entt::entity reorderDragged = entt::null;
         entt::entity reorderTarget = entt::null;
         bool reorderBelow = false;
+        entt::entity parentDragged = entt::null;
+        entt::entity parentTarget = entt::null;
         entt::entity moveToFolderEntity = entt::null;
         StringID moveToFolderId{};
         entt::entity folderToDelete = entt::null;
@@ -1036,10 +1050,31 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         entt::entity reparentFolderEntity = entt::null;
         StringID reparentFolderTo{};
 
-        // Entity row
-        auto drawEntityRow = [&](const EntityEntry& e, const EntityEntry* prev, const EntityEntry* next) {
+        // Direct transform children of an entity, in sort order (entries is already sorted by sortOrder).
+        auto collectChildren = [&](entt::entity parent) {
+            Core::ArenaVector<EntityEntry*> kids{&ctx->editorArena.Get(), 8};
+            for (auto& en : entries) {
+                if (en.parentEntity == parent) { kids.PushBack(&en); }
+            }
+            return kids;
+        };
+
+        // True if `ancestor` lies on `node`'s parent chain (so parenting node under ancestor would form a cycle).
+        auto isAncestorOf = [&](entt::entity ancestor, entt::entity node) {
+            entt::entity e = node;
+            for (int guard = 0; e != entt::null && guard < 1024; ++guard) {
+                const auto* h = state->registry.try_get<Component::HierarchyComponent>(e);
+                e = (h && state->registry.valid(h->parent)) ? h->parent : entt::null;
+                if (e == ancestor) { return true; }
+            }
+            return false;
+        };
+
+        // Entity row. Returns true if the row is an expanded parent (caller should recurse into children).
+        auto drawEntityRow = [&](const EntityEntry& e, const EntityEntry* prev, const EntityEntry* next, bool hasChildren) -> bool {
+            ImGui::PushID(static_cast<int>(entt::to_integral(e.entity)));
             ImGui::BeginDisabled(prev == nullptr);
-            if (ImGui::SmallButton(fmt::format("^##{}", e.stableId).c_str())) {
+            if (ImGui::SmallButton("^")) {
                 std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
                           state->registry.get<Component::StableIdComponent>(prev->entity).sortOrder);
                 MarkSceneModified(state, state->currentSceneId);
@@ -1047,13 +1082,30 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             ImGui::EndDisabled();
             ImGui::SameLine();
             ImGui::BeginDisabled(next == nullptr);
-            if (ImGui::SmallButton(fmt::format("v##{}", e.stableId).c_str())) {
+            if (ImGui::SmallButton("v")) {
                 std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
                           state->registry.get<Component::StableIdComponent>(next->entity).sortOrder);
                 MarkSceneModified(state, state->currentSceneId);
             }
             ImGui::EndDisabled();
             ImGui::SameLine();
+
+            // Expand/collapse arrow for entities with transform children (state persists per-entity via ImGui storage, default open).
+            ImGuiStorage* storage = ImGui::GetStateStorage();
+            const ImGuiID openId = ImGui::GetID("hierarchy_open");
+            bool open = storage->GetInt(openId, 1) != 0;
+            if (hasChildren) {
+                if (ImGui::ArrowButton("expand", open ? ImGuiDir_Down : ImGuiDir_Right)) {
+                    open = !open;
+                    storage->SetInt(openId, open ? 1 : 0);
+                }
+            }
+            else {
+                ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), 0.0f));
+                open = false;
+            }
+            ImGui::SameLine();
+
             const auto* prefabInst2 = state->registry.try_get<Component::PrefabInstanceComponent>(e.entity);
             const bool isPrefab = prefabInst2 != nullptr;
             const bool isMasterPrefab2 = isPrefab && prefabInst2->bMasterPrefab;
@@ -1062,10 +1114,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
             char uniqueLabel[256];
             if (isMasterPrefab2) {
-                snprintf(uniqueLabel, sizeof(uniqueLabel), "[M] %s##%llu", e.label, e.stableId);
+                snprintf(uniqueLabel, sizeof(uniqueLabel), "[M] %s##sel", e.label);
             }
             else {
-                snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", e.label, e.stableId);
+                snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##sel", e.label);
             }
             if (ImGui::Selectable(uniqueLabel, selected)) {
                 const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
@@ -1077,10 +1129,13 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                         if (entries[i].entity == s_selectionAnchor) { anchorIdx = i; }
                         if (entries[i].entity == e.entity) { clickedIdx = i; }
                     }
-                    if (anchorIdx >= 0 && clickedIdx >= 0) {
+                    // Range-select stays within the anchor's peer group: same folder and hierarchy depth.
+                    const bool samePeerGroup = anchorIdx >= 0 && entries[anchorIdx].folderId == e.folderId && entries[anchorIdx].depth == e.depth;
+                    if (anchorIdx >= 0 && clickedIdx >= 0 && samePeerGroup) {
                         if (anchorIdx > clickedIdx) { std::swap(anchorIdx, clickedIdx); }
                         if (!ctrlHeld) { state->editor.selectedEntities.Clear(); }
                         for (int i = anchorIdx; i <= clickedIdx; ++i) {
+                            if (entries[i].folderId != e.folderId || entries[i].depth != e.depth) { continue; }
                             if (std::ranges::find(state->editor.selectedEntities, entries[i].entity) == state->editor.selectedEntities.end()) {
                                 state->editor.selectedEntities.PushBack(entries[i].entity);
                             }
@@ -1123,38 +1178,71 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 const ImGuiPayload* p = ImGui::AcceptDragDropPayload("SCENE_ENTITY", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
                 if (p) {
                     const entt::entity dragged = *static_cast<const entt::entity*>(p->Data);
-                    const auto* draggedFolder = state->registry.try_get<Component::EntityFolderComponent>(dragged);
-                    const StringID draggedFolderId = draggedFolder ? draggedFolder->folderId : StringID();
-                    if (dragged != e.entity && draggedFolderId == e.folderId) {
+                    // Top/bottom 25% reorders as a sibling of the target. Middle 50% parents onto the target.
+                    if (dragged != e.entity && !isAncestorOf(dragged, e.entity)) {
                         const ImVec2 mn = ImGui::GetItemRectMin();
                         const ImVec2 mx = ImGui::GetItemRectMax();
-                        const bool below = ImGui::GetMousePos().y > (mn.y + mx.y) * 0.5f;
-                        const float lineY = below ? mx.y : mn.y;
-                        ImGui::GetWindowDrawList()->AddLine(ImVec2(mn.x, lineY), ImVec2(mx.x, lineY), IM_COL32(255, 220, 0, 255), 2.0f);
-                        if (p->IsDelivery()) {
-                            reorderDragged = dragged;
-                            reorderTarget = e.entity;
-                            reorderBelow = below;
+                        const float height = mx.y - mn.y;
+                        const float frac = height > 0.0f ? (ImGui::GetMousePos().y - mn.y) / height : 0.5f;
+                        if (frac < 0.25f || frac > 0.75f) {
+                            const bool below = frac > 0.75f;
+                            const float lineY = below ? mx.y : mn.y;
+                            ImGui::GetWindowDrawList()->AddLine(ImVec2(mn.x, lineY), ImVec2(mx.x, lineY), IM_COL32(255, 220, 0, 255), 2.0f);
+                            if (p->IsDelivery()) {
+                                reorderDragged = dragged;
+                                reorderTarget = e.entity;
+                                reorderBelow = below;
+                            }
+                        }
+                        else {
+                            ImGui::GetWindowDrawList()->AddRect(mn, mx, IM_COL32(0, 200, 255, 255), 0.0f, 0, 2.0f);
+                            if (p->IsDelivery()) {
+                                parentDragged = dragged;
+                                parentTarget = e.entity;
+                            }
                         }
                     }
                 }
                 ImGui::EndDragDropTarget();
             }
             if (isPrefab) ImGui::PopStyleColor();
+            ImGui::PopID();
+            return hasChildren && open;
         };
 
+        // Flat draw (used while filtering)
         auto drawGroup = [&](Core::Span<EntityEntry*> group) {
             for (size_t i = 0; i < group.Size(); ++i) {
                 const EntityEntry* prev = i > 0 ? group[i - 1] : nullptr;
                 const EntityEntry* next = (i + 1 < group.Size()) ? group[i + 1] : nullptr;
-                drawEntityRow(*group[i], prev, next);
+                drawEntityRow(*group[i], prev, next, false);
+            }
+        };
+
+        // Nested draw
+        auto drawSubtree = [&](this auto&& drawSubtree, Core::Span<EntityEntry*> group) -> void {
+            for (size_t i = 0; i < group.Size(); ++i) {
+                const EntityEntry* prev = i > 0 ? group[i - 1] : nullptr;
+                const EntityEntry* next = (i + 1 < group.Size()) ? group[i + 1] : nullptr;
+                Core::ArenaVector<EntityEntry*> kids = collectChildren(group[i]->entity);
+                const bool open = drawEntityRow(*group[i], prev, next, !kids.IsEmpty());
+                if (open) {
+                    ImGui::Indent();
+                    drawSubtree(kids);
+                    ImGui::Unindent();
+                }
             }
         };
 
         // Folder anchors
-        struct AnchorInfo { entt::entity entity; StringID id; StringID parent; const char* name; };
-        Core::ArenaVector<AnchorInfo> anchors{&ctx->editorArena.Get(), 64};
+        struct AnchorInfo
         {
+            entt::entity entity;
+            StringID id;
+            StringID parent;
+            const char* name;
+        };
+        Core::ArenaVector<AnchorInfo> anchors{&ctx->editorArena.Get(), 64}; {
             auto av = state->registry.view<Component::SceneFolderComponent, Component::SceneComponent>();
             for (auto a : av) {
                 if (av.get<Component::SceneComponent>(a).sceneId != state->currentSceneId) { continue; }
@@ -1237,8 +1325,13 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         auto drawMembers = [&](StringID folderId) {
             Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), entries.Size() + 1};
-            for (auto& en : entries) { if (en.folderId == folderId) { group.PushBack(&en); } }
-            drawGroup(group);
+            for (auto& en : entries) {
+                if (en.folderId != folderId) { continue; }
+                if (!filterActive && en.parentEntity != entt::null) { continue; } // children are drawn nested under their parent
+                group.PushBack(&en);
+            }
+            if (filterActive) { drawGroup(group); }
+            else { drawSubtree(group); }
         };
 
         const float footerHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
@@ -1288,13 +1381,17 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         }
 
-        // Root entities
+        // Root entities (no folder)
         {
             Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), entries.Size() + 1};
             for (auto& en : entries) {
-                if (!en.folderId.IsValid() || !anchorExists(en.folderId)) { group.PushBack(&en); }
+                const bool noFolder = !en.folderId.IsValid() || !anchorExists(en.folderId);
+                if (!noFolder) { continue; }
+                if (!filterActive && en.parentEntity != entt::null) { continue; } // children are drawn nested under their parent
+                group.PushBack(&en);
             }
-            drawGroup(group);
+            if (filterActive) { drawGroup(group); }
+            else { drawSubtree(group); }
         }
 
         // Auto-scroll
@@ -1325,6 +1422,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             });
             uint64_t order = HighestSortOrderInScene(state->registry, state->currentSceneId);
             for (entt::entity e : toMove) {
+                ClearParent(state, e);
                 state->registry.get_or_emplace<Component::EntityFolderComponent>(e).folderId = moveToFolderId;
                 if (auto* st = state->registry.try_get<Component::StableIdComponent>(e)) {
                     st->sortOrder = ++order;
@@ -1341,18 +1439,35 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         }
         if (reorderDragged != entt::null && reorderTarget != entt::null && reorderDragged != reorderTarget) {
-            const auto* draggedFc = state->registry.try_get<Component::EntityFolderComponent>(reorderDragged);
-            const StringID reorderFolder = draggedFc ? draggedFc->folderId : StringID();
+            // The dragged entities become siblings of the target: reparent to the target's level, then position via sort order.
+            entt::entity targetParent = entt::null;
+            if (auto* th = state->registry.try_get<Component::HierarchyComponent>(reorderTarget); th && state->registry.valid(th->parent)) {
+                targetParent = th->parent;
+            }
+            StringID targetFolder;
+            if (auto* tf = state->registry.try_get<Component::EntityFolderComponent>(reorderTarget)) {
+                targetFolder = tf->folderId;
+            }
+
             Core::ArenaVector<entt::entity> moved{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
             if (std::ranges::find(state->editor.selectedEntities, reorderDragged) != state->editor.selectedEntities.end()) {
                 for (entt::entity e : state->editor.selectedEntities) {
                     if (e == reorderTarget) { continue; }
-                    const auto* fc = state->registry.try_get<Component::EntityFolderComponent>(e);
-                    if ((fc ? fc->folderId : StringID()) == reorderFolder) { moved.PushBack(e); }
+                    moved.PushBack(e);
                 }
             }
             else {
                 moved.PushBack(reorderDragged);
+            }
+
+            for (entt::entity m : moved) {
+                if (targetParent == entt::null) {
+                    ClearParent(state, m); // sibling of a root
+                    state->registry.get_or_emplace<Component::EntityFolderComponent>(m).folderId = targetFolder;
+                }
+                else {
+                    SetParent(state, m, targetParent); // sibling of a child
+                }
             }
 
             Core::ArenaVector<entt::entity> order{&ctx->editorArena.Get(), totalInScene + 1};
@@ -1380,6 +1495,22 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
             uint64_t n = 1;
             for (entt::entity en : finalOrder) { state->registry.get<Component::StableIdComponent>(en).sortOrder = n++; }
+            MarkSceneModified(state, state->currentSceneId);
+        }
+        if (parentDragged != entt::null && parentTarget != entt::null) {
+            Core::ArenaVector<entt::entity> moved{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
+            if (std::ranges::find(state->editor.selectedEntities, parentDragged) != state->editor.selectedEntities.end()) {
+                for (entt::entity e : state->editor.selectedEntities) {
+                    if (e == parentTarget) { continue; }
+                    moved.PushBack(e);
+                }
+            }
+            else {
+                moved.PushBack(parentDragged);
+            }
+            for (entt::entity m : moved) {
+                SetParent(state, m, parentTarget); // keeps world pose, rejects cycles
+            }
             MarkSceneModified(state, state->currentSceneId);
         }
         if (newSubfolderParent.IsValid()) {
@@ -1427,8 +1558,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     glm::vec3 multiGizmoCentroid{0.0f};
     int transformCount = 0;
     for (auto entity : state->editor.selectedEntities) {
-        if (auto* tf = state->registry.try_get<Component::TransformComponent>(entity)) {
-            multiGizmoCentroid += tf->translation;
+        if (state->registry.all_of<Component::TransformComponent>(entity)) {
+            multiGizmoCentroid += Component::ComputeWorldTransform(state->registry, entity).translation;
             ++transformCount;
         }
     }
@@ -1507,7 +1638,11 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         if (state->editor.selectedEntities.Size() == 1) {
             entt::entity entity = state->editor.selectedEntities[0];
             if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
-                auto model = Component::GetMatrix(*transform);
+                glm::mat4 parentWorld(1.0f);
+                if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
+                    parentWorld = Component::ComputeWorldTransform(state->registry, h->parent).GetMatrix();
+                }
+                glm::mat4 model = parentWorld * Component::GetMatrix(*transform);
                 float snapArr[3] = {};
                 float* snap = nullptr;
                 if (state->editor.bSnapEnabled) {
@@ -1530,8 +1665,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     snap
                 );
                 if (ImGuizmo::IsUsing()) {
+                    const glm::mat4 localModel = glm::inverse(parentWorld) * model;
                     float t[3], r[3], s[3];
-                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
+                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localModel), t, r, s);
                     glm::vec3 translation = glm::vec3(t[0], t[1], t[2]);
                     if (state->editor.bSnapEnabled && state->editor.bSnapWorldGrid && state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE) {
                         const float g = state->editor.snapTranslation;
@@ -1606,11 +1742,19 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
                     if (!transform) continue;
 
-                    transform->translation += deltaTranslation;
+                    Transform world = Component::ComputeWorldTransform(state->registry, entity);
+                    world.translation += deltaTranslation;
+                    const glm::vec3 rel = world.translation - multiGizmoCentroid;
+                    world.translation = multiGizmoCentroid + deltaRotation * rel;
+                    world.rotation = glm::normalize(deltaRotation * world.rotation);
 
-                    const glm::vec3 rel = transform->translation - multiGizmoCentroid;
-                    transform->translation = multiGizmoCentroid + deltaRotation * rel;
-                    transform->rotation = deltaRotation * transform->rotation;
+                    Transform parentWorld = Transform::IDENTITY;
+                    if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
+                        parentWorld = Component::ComputeWorldTransform(state->registry, h->parent);
+                    }
+                    const Transform local = Component::ComposeLocalFromWorld(parentWorld, world);
+                    transform->translation = local.translation;
+                    transform->rotation = local.rotation;
 
                     state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
                     if (state->bIsPlaying) {
