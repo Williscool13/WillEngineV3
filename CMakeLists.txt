@@ -100,6 +100,12 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build Shared Libraries" FORCE)
 
 add_compile_definitions(NOMINMAX)
 add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
+# EnTT Debug-build perf on Windows: https://github.com/skypjack/entt/wiki/Frequently-Asked-Questions#why-is-my-debug-build-on-windows-so-slow
+add_compile_definitions(ENTT_DISABLE_ASSERT)
+if (MSVC)
+    add_compile_definitions($<$<CONFIG:Debug>:_ITERATOR_DEBUG_LEVEL=0>)
+    add_compile_options($<$<CONFIG:Debug>:/JMC->)
+endif ()
 add_subdirectory(extern/fmt)
 set(SPDLOG_FMT_EXTERNAL ON)
 add_subdirectory(extern/spdlog)

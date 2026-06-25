@@ -4,6 +4,8 @@
 
 #include "scene_system.h"
 
+#include <tracy/Tracy.hpp>
+
 #include <algorithm>
 #include <fstream>
 #include <limits>
@@ -25,6 +27,7 @@
 #include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/scene_components.h"
+#include "game/components/physics/physics_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
 #include "game/systems/physics_system.h"
 #include "platform/file_utils.h"
@@ -165,6 +168,7 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
 
     auto* ctx = state->registry.ctx().get<Engine::EngineContext*>();
     ResolvePrefabLoads(state, ctx->assetManager);
+    ResolveHierarchyLinks(state);
 }
 
 void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes)
@@ -217,9 +221,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
         assert(path.Extension() == ".wscene");
     }
 
-    Engine::Scene s = SaveScene(state->componentRegistry, state->registry, assetManager, sceneID, sceneName);
-
-    {
+    Engine::Scene s = SaveScene(state->componentRegistry, state->registry, assetManager, sceneID, sceneName); {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
@@ -280,8 +282,7 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
     s.content = nlohmann::json::parse(file);
     StringID loadedId = LoadScene(state->componentRegistry, state->registry, s);
     assert(loadedId == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
-    uint64_t maxSortOrder = 0;
-    {
+    uint64_t maxSortOrder = 0; {
         auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
         for (auto entity : sortView) {
             if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
@@ -303,6 +304,7 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
     state->editor.modifiedScenes.RemoveFirst(loadedId);
 
     ResolvePrefabLoads(state, assetManager);
+    ResolveHierarchyLinks(state);
 
     if (s.content.contains("editor_camera")) {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
@@ -323,6 +325,7 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
 
 Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset)
 {
+    ZoneScoped;
     const Engine::AssetManager::CachedModelMetadata* cached = ctx->assetManager->GetModelMetadata(modelId);
     if (!cached) {
         LOG_ERROR(Game, "SpawnModel: modelId {} not in asset registry", modelId.id);
@@ -330,51 +333,50 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
     }
 
     const auto& nodes = cached->nodes;
+    auto& registry = state->registry;
 
-     auto worldT = Core::ArenaArray<Vec3>(&ctx->gameplayArena.Get(),nodes.Size());
-     auto worldR = Core::ArenaArray<Quat>(&ctx->gameplayArena.Get(),nodes.Size());
-     auto worldS = Core::ArenaArray<Vec3>(&ctx->gameplayArena.Get(),nodes.Size());
-
-    for (size_t i = 0; i < nodes.Size(); ++i) {
-        const auto& node = nodes[i];
-        if (node.parent == ~0u) {
-            worldT[i] = node.localTranslation;
-            worldR[i] = node.localRotation;
-            worldS[i] = node.localScale;
-        }
-        else {
-            worldT[i] = worldR[node.parent] * (worldS[node.parent] * node.localTranslation) + worldT[node.parent];
-            worldR[i] = worldR[node.parent] * node.localRotation;
-            worldS[i] = worldS[node.parent] * node.localScale;
-        }
-    }
-
-    auto spawned = Core::ArenaVector<entt::entity>(&ctx->gameplayArena.Get(), 32);
+    // One entity per node (including non-mesh group nodes
+    auto nodeEntity = Core::ArenaArray<entt::entity>(&ctx->gameplayArena.Get(), nodes.Size());
+    auto spawned = Core::ArenaVector<entt::entity>(&ctx->gameplayArena.Get(), nodes.Size());
 
     for (size_t i = 0; i < nodes.Size(); ++i) {
         const auto& node = nodes[i];
-        if (node.meshIndex == ~0u) continue;
-
         entt::entity entity = CreateSceneEntity(state);
 
         if (node.name.Size() > 0) {
-            state->registry.get<Component::NameComponent>(entity).name = Core::InlineString<256>(node.name.c_str());
+            registry.get<Component::NameComponent>(entity).name = Core::InlineString<256>(node.name.c_str());
         }
 
-        auto& transform = state->registry.get<Component::TransformComponent>(entity);
-        transform.translation = worldT[i] + offset;
-        transform.rotation = worldR[i];
-        transform.scale = worldS[i];
+        auto& transform = registry.get<Component::TransformComponent>(entity);
+        transform.translation = node.localTranslation;
+        transform.rotation = node.localRotation;
+        transform.scale = node.localScale;
+        if (node.parent == ~0u) {
+            transform.translation += offset;
+        }
 
-        Component::StaticMeshComponent meshComp{};
-        meshComp.modelId = modelId;
-        meshComp.meshIndex = static_cast<int32_t>(node.meshIndex);
-        meshComp.modelFlags = {1.0f, 1.0f, 0.0f, 0.0f};
-        state->registry.emplace<Component::StaticMeshComponent>(entity, std::move(meshComp));
+        if (node.meshIndex != ~0u) {
+            Component::StaticMeshComponent meshComp{};
+            meshComp.modelId = modelId;
+            meshComp.meshIndex = static_cast<int32_t>(node.meshIndex);
+            meshComp.modelFlags = {1.0f, 1.0f, 0.0f, 0.0f};
+            registry.emplace<Component::StaticMeshComponent>(entity, std::move(meshComp));
+        }
 
+        nodeEntity[i] = entity;
         spawned.PushBack(entity);
     }
 
+    for (size_t i = 0; i < nodes.Size(); ++i) {
+        const auto& node = nodes[i];
+        if (node.parent == ~0u) { continue; }
+        entt::entity parentEntity = nodeEntity[node.parent];
+        auto& hierarchy = registry.emplace<Component::HierarchyComponent>(nodeEntity[i]);
+        hierarchy.parent = parentEntity;
+        hierarchy.parentStableId = registry.get<Component::StableIdComponent>(parentEntity).id;
+    }
+
+    state->bHierarchyOrderDirty = true;
     return spawned;
 }
 
@@ -403,6 +405,113 @@ entt::entity CreateSceneEntity(Engine::EngineState* state)
     state->registry.emplace<Component::NameComponent>(newEntity, Core::InlineString<256>(newName.c_str()));
     LOG_TRACE(Game, "Created new entity {}", entt::to_integral(newEntity));
     return newEntity;
+}
+
+static uint16_t HierarchyDepth(const entt::registry& registry, entt::entity entity)
+{
+    uint16_t depth = 0;
+    const auto* node = registry.try_get<Component::HierarchyComponent>(entity);
+    while (node && node->parent != entt::null && registry.valid(node->parent)) {
+        node = registry.try_get<Component::HierarchyComponent>(node->parent);
+        if (++depth >= 1024) { break; }
+    }
+    return depth;
+}
+
+static void RefreshHierarchyOrder(entt::registry& registry)
+{
+    ZoneScoped;
+    for (auto [entity, node] : registry.view<Component::HierarchyComponent>().each()) {
+        node.depth = HierarchyDepth(registry, entity);
+    }
+    registry.sort<Component::HierarchyComponent>(
+        [](const Component::HierarchyComponent& a, const Component::HierarchyComponent& b) { return a.depth < b.depth; },
+        entt::insertion_sort{});
+}
+
+void EnsureHierarchyOrder(Engine::EngineState* state)
+{
+    if (!state->bHierarchyOrderDirty) { return; }
+    RefreshHierarchyOrder(state->registry);
+    state->bHierarchyOrderDirty = false;
+}
+
+void ResolveHierarchyLinks(Engine::EngineState* state)
+{
+    ZoneScoped;
+    auto& registry = state->registry;
+    for (auto [entity, node] : registry.view<Component::HierarchyComponent>().each()) {
+        const auto* found = node.parentStableId.IsValid() ? state->stableIdToEntityMap.Find(node.parentStableId) : nullptr;
+        node.parent = found ? *found : entt::null;
+    }
+    state->bHierarchyOrderDirty = true;
+}
+
+void SetParent(Engine::EngineState* state, entt::entity child, entt::entity parent)
+{
+    ZoneScoped;
+    auto& registry = state->registry;
+    if (child == parent || !registry.valid(child) || !registry.valid(parent)) { return; }
+
+    // Parent must not already be a descendant of child.
+    for (entt::entity e = parent; e != entt::null;) {
+        if (e == child) { return; }
+        const auto* ancestor = registry.try_get<Component::HierarchyComponent>(e);
+        e = (ancestor && registry.valid(ancestor->parent)) ? ancestor->parent : entt::null;
+    }
+
+    const Transform parentWorld = Component::ComputeWorldTransform(registry, parent);
+    const Transform childWorld = Component::ComputeWorldTransform(registry, child);
+
+    auto& node = registry.get_or_emplace<Component::HierarchyComponent>(child);
+    node.parent = parent;
+    node.parentStableId = registry.get<Component::StableIdComponent>(parent).id;
+
+    // Keep the child's world pose fixed.
+    if (!registry.all_of<Component::DynamicPhysicsBodyComponent>(child)) {
+        registry.get<Component::TransformComponent>(child) = Component::ComposeLocalFromWorld(parentWorld, childWorld);
+        registry.emplace_or_replace<Component::DirtyTransformTag>(child);
+    }
+
+    state->bHierarchyOrderDirty = true;
+}
+
+void ClearParent(Engine::EngineState* state, entt::entity child)
+{
+    ZoneScoped;
+    auto& registry = state->registry;
+    if (!registry.valid(child) || !registry.all_of<Component::HierarchyComponent>(child)) { return; }
+
+    const Transform childWorld = Component::ComputeWorldTransform(registry, child);
+    registry.remove<Component::HierarchyComponent>(child);
+
+    if (!registry.all_of<Component::DynamicPhysicsBodyComponent>(child)) {
+        auto& local = registry.get<Component::TransformComponent>(child);
+        local.translation = childWorld.translation;
+        local.rotation = childWorld.rotation;
+        local.scale = childWorld.scale;
+        registry.emplace_or_replace<Component::DirtyTransformTag>(child);
+    }
+
+    state->bHierarchyOrderDirty = true;
+}
+
+void SetWorldTransform(Engine::EngineState* state, entt::entity entity, const Transform& world)
+{
+    ZoneScoped;
+    auto& registry = state->registry;
+    if (!registry.valid(entity) || !registry.all_of<Component::TransformComponent>(entity)) { return; }
+
+    const auto* node = registry.try_get<Component::HierarchyComponent>(entity);
+    if (node && registry.valid(node->parent)) {
+        // The parent's cached world already encodes the chain above it; reading it is O(1) and keeps both on the same one-frame-behind clock.
+        const Transform parentWorld = registry.get<Component::WorldTransformComponent>(node->parent);
+        registry.get<Component::TransformComponent>(entity) = Component::ComposeLocalFromWorld(parentWorld, world);
+    }
+    else {
+        registry.get<Component::TransformComponent>(entity) = world;
+    }
+    registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
 }
 
 void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName)
@@ -548,8 +657,7 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
 }
 
 void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
-{
-    {
+{ {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
@@ -559,9 +667,7 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    state->editor.pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes);
-
-    {
+    state->editor.pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes); {
         auto view = state->registry.view<Component::PrefabInstanceComponent>();
         if (view.size() > 0) {
             auto masterPrefabs = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size());
@@ -574,7 +680,6 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
                 state->registry.destroy(entity);
             }
         }
-
     }
 
     state->bIsPlaying = true;
@@ -582,8 +687,7 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
     ctx->setCursorHiddenFn(true);
     state->editor.selectedEntities.Clear();
 
-    glm::vec3 spawnPosition{0.0f, 3.0f, 0.0f};
-    {
+    glm::vec3 spawnPosition{0.0f, 3.0f, 0.0f}; {
         int32_t bestPriority = std::numeric_limits<int32_t>::min();
         auto spawnView = state->registry.view<Component::PlayerSpawnComponent, Component::TransformComponent>();
         for (auto entity : spawnView) {
@@ -616,9 +720,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     state->bIsPlaying = false;
     state->bGameCursorCaptured = false;
-    ctx->setCursorHiddenFn(false);
-
-    {
+    ctx->setCursorHiddenFn(false); {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
         auto camEntity = camView.front();
         if (camEntity != entt::null) {

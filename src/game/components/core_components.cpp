@@ -38,11 +38,36 @@ void Game::Component::TransformComponent::Deserialize(TransformComponent& comp, 
 void Game::Component::TransformComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<WorldTransformComponent>(entity);
 }
 
 void Game::Component::TransformComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     registry.remove<MultiframeDirtyTransformComponent>(entity);
+    registry.remove<WorldTransformComponent>(entity);
+}
+
+Transform Game::Component::ComputeWorldTransform(const entt::registry& registry, entt::entity entity)
+{
+    const auto& local = registry.get<TransformComponent>(entity);
+    const auto* node = registry.try_get<HierarchyComponent>(entity);
+    if (!node || node->parent == entt::null || !registry.valid(node->parent)) {
+        return {local.translation, local.rotation, local.scale};
+    }
+    return ComposeWorldTransform(ComputeWorldTransform(registry, node->parent), local);
+}
+
+void Game::Component::HierarchyComponent::Serialize(const HierarchyComponent& comp, nlohmann::json& json)
+{
+    json["parentStableId"] = comp.parentStableId.id;
+}
+
+void Game::Component::HierarchyComponent::Deserialize(HierarchyComponent& comp, const nlohmann::json& json)
+{
+    if (json.contains("parentStableId")) {
+        comp.parentStableId = StringID(json["parentStableId"].get<uint64_t>());
+    }
+    comp.parent = entt::null;
 }
 
 namespace Game

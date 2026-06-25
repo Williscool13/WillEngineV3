@@ -26,5 +26,14 @@
   "bAutoSaveProjectConfig": false,
   "bLimitFps": false,
   "defaultScene": "Lighting 2",
-  "frameLimitTarget": 108
+  "editorCameraFovDegrees": 70.0,
+  "editorCameraNearPlane": 0.10000000149011612,
+  "frameLimitTarget": 60,
+  "gameCameraAspect": [
+    16.0,
+    9.0
+  ],
+  "gameCameraFovDegrees": 70.0,
+  "gameCameraLockAspect": false,
+  "gameCameraNearPlane": 0.10000000149011612
 }

@@ -348,6 +348,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }
 
+    Game::ResolveWorldTransforms(ctx, state);
     Game::RenderPrepareTransforms(ctx, state, frameBuffer);
     Game::GatherLights(ctx, state, frameBuffer);
     Game::GatherRenderables(ctx, state, frameBuffer);

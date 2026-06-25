@@ -252,6 +252,8 @@ struct EngineState
 
     entt::registry registry;
     Core::Map<StringID, entt::entity> stableIdToEntityMap;
+    /** Set by hierarchy mutators (SetParent/ClearParent/SpawnModel/load); EnsureHierarchyOrder re-sorts the HierarchyComponent pool when set. */
+    bool bHierarchyOrderDirty{true};
     ComponentRegistry componentRegistry{};
     Clay_Arena clayArena{};
     // todo: remove

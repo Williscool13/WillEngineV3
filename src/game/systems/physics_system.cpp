@@ -58,22 +58,28 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         // Teleport
         auto teleportView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::TeleportPhysicsTransformTag>();
         for (const auto& [entity, physicsBody, transform] : teleportView.each()) {
+            const Transform world = Component::ComputeWorldTransform(state->registry, entity);
             bodyInterface.SetPositionAndRotation(
                 physicsBody.bodyID,
-                JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
-                JPH::Quat(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w),
+                JPH::RVec3(world.translation.x, world.translation.y, world.translation.z),
+                JPH::Quat(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w),
                 JPH::EActivation::Activate
             );
+            if (auto* dynamic = state->registry.try_get<Component::DynamicPhysicsBodyComponent>(entity)) {
+                dynamic->previousPosition = dynamic->currentPosition = world.translation;
+                dynamic->previousRotation = dynamic->currentRotation = world.rotation;
+            }
         }
         state->registry.clear<Component::TeleportPhysicsTransformTag>();
 
         // Kinematic
         auto kinematicView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::DirtyKinematicPhysicsTransformTag>();
         for (const auto& [entity, physicsBody, transform] : kinematicView.each()) {
+            const Transform world = Component::ComputeWorldTransform(state->registry, entity);
             bodyInterface.MoveKinematic(
                 physicsBody.bodyID,
-                JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
-                JPH::Quat(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w),
+                JPH::RVec3(world.translation.x, world.translation.y, world.translation.z),
+                JPH::Quat(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w),
                 Physics::PHYSICS_TIMESTEP
             );
         }
@@ -90,10 +96,10 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         state->registry.clear<Component::SetVelocityTag>();
 
-        auto saveView = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent>();
-        for (auto [entity, dynamic, transform] : saveView.each()) {
-            dynamic.previousPosition = transform.translation;
-            dynamic.previousRotation = transform.rotation;
+        auto saveView = state->registry.view<Component::DynamicPhysicsBodyComponent>();
+        for (auto [entity, dynamic] : saveView.each()) {
+            dynamic.previousPosition = dynamic.currentPosition;
+            dynamic.previousRotation = dynamic.currentRotation;
         }
 
         physics->Step(Physics::PHYSICS_TIMESTEP);
@@ -103,28 +109,22 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
             JPH::RVec3 pos = bodyInterface.GetPosition(physicsBody.bodyID);
             JPH::Quat rot = bodyInterface.GetRotation(physicsBody.bodyID);
 
-            transform.translation = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
-            transform.rotation = glm::quat(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
-            state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+            const glm::vec3 worldPosition(pos.GetX(), pos.GetY(), pos.GetZ());
+            const glm::quat worldRotation(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
+            dynamic.currentPosition = worldPosition;
+            dynamic.currentRotation = worldRotation;
 
-            /*glm::vec3 newPos(pos.GetX(), pos.GetY(), pos.GetZ());
-            glm::quat newRot(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
-
-            constexpr float POS_EPSILON = 0.0001f;
-            constexpr float ROT_EPSILON = 0.9999f;
-
-            float dx = transform.translation.x - newPos.x;
-            float dy = transform.translation.y - newPos.y;
-            float dz = transform.translation.z - newPos.z;
-            float distSq = dx*dx + dy*dy + dz*dz;
-            bool posChanged = distSq > POS_EPSILON * POS_EPSILON;
-            bool rotChanged = glm::abs(glm::dot(transform.rotation, newRot)) < ROT_EPSILON;
-
-            if (posChanged || rotChanged) {
-                transform.translation = newPos;
-                transform.rotation = newRot;
-                state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
-            }*/
+            // Back-fill the local transform (T/R; physics never scales) so it stays the body's parent-relative pose.
+            if (const auto* node = state->registry.try_get<Component::HierarchyComponent>(entity); node && state->registry.valid(node->parent)) {
+                const auto& parentWorld = state->registry.get<Component::WorldTransformComponent>(node->parent);
+                const glm::quat invParentRotation = glm::inverse(parentWorld.rotation);
+                transform.translation = (invParentRotation * (worldPosition - parentWorld.translation)) / parentWorld.scale;
+                transform.rotation = glm::normalize(invParentRotation * worldRotation);
+            }
+            else {
+                transform.translation = worldPosition;
+                transform.rotation = worldRotation;
+            }
         }
 
         state->physics.deltaTimeAccumulator -= Physics::PHYSICS_TIMESTEP;
@@ -191,11 +191,16 @@ void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state)
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
     auto view = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::DirtyTransformTag>();
     for (const auto& [entity, physicsBody, transform] : view.each()) {
+        const Transform world = Component::ComputeWorldTransform(state->registry, entity);
         bodyInterface.SetPositionAndRotation(
             physicsBody.bodyID,
-            JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
-            JPH::Quat(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w),
+            JPH::RVec3(world.translation.x, world.translation.y, world.translation.z),
+            JPH::Quat(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w),
             JPH::EActivation::DontActivate);
+        if (auto* dynamic = state->registry.try_get<Component::DynamicPhysicsBodyComponent>(entity)) {
+            dynamic->previousPosition = dynamic->currentPosition = world.translation;
+            dynamic->previousRotation = dynamic->currentRotation = world.rotation;
+        }
     }
 }
 
@@ -650,8 +655,10 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
         state->registry.remove<Component::PhysicsBodyComponent>(entity);
         state->registry.remove<Component::DynamicPhysicsBodyComponent>(entity);
 
-        JPH::Vec3 pos(transform->translation.x, transform->translation.y, transform->translation.z);
-        JPH::Quat rot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
+        // Jolt is world-space. Place the body at the entity's world pose (equals local for an unparented entity).
+        const Transform world = Component::ComputeWorldTransform(state->registry, entity);
+        JPH::Vec3 pos(world.translation.x, world.translation.y, world.translation.z);
+        JPH::Quat rot(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w);
         JPH::BodyID bodyId = CreateBodyFromShape(bodyInterface, bodyDesc, pos, rot, bodyDesc.layerOverride);
         if (!bodyId.IsInvalid()) {
             if (bodyDesc.restitution > 0.0f) {
@@ -659,7 +666,7 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
             }
             state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
             if (bodyDesc.motionType == Component::PhysicsMotionType::Dynamic) {
-                state->registry.emplace_or_replace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
+                state->registry.emplace_or_replace<Component::DynamicPhysicsBodyComponent>(entity, world.translation, world.rotation, world.translation, world.rotation);
             }
         }
         resolved.PushBack(entity);

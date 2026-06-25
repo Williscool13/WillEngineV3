@@ -39,6 +39,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::SceneFolderComponent>(componentRegistry, "SceneFolderComponent", true);
 
     RegisterComponent<Component::TransformComponent>(componentRegistry, "TransformComponent");
+    RegisterComponent<Component::HierarchyComponent>(componentRegistry, "HierarchyComponent", true);
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent");
     RegisterComponent<Component::StaticMeshComponent>(componentRegistry, "StaticMeshComponent");
     RegisterComponent<Component::TextComponent>(componentRegistry, "TextComponent");

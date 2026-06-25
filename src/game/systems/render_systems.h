@@ -46,6 +46,13 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state);
 
+/**
+ * Resolves every dirty entity's world transform into WorldTransformComponent.
+ * @param ctx
+ * @param state
+ */
+void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);

@@ -6,6 +6,7 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "scene_system.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/arena_vector.h"
 #include "engine/include/engine_context.h"
@@ -593,19 +594,86 @@ void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 }
 
+void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    auto& registry = state->registry;
+    const float alpha = state->physics.interpolationAlpha;
+
+    // Roots (no parent), non-physics
+    for (auto [entity, local, world, dirty] : registry.view<Component::TransformComponent, Component::WorldTransformComponent, Component::MultiframeDirtyTransformComponent>(
+             entt::exclude<Component::HierarchyComponent, Component::DynamicPhysicsBodyComponent>).each()) {
+        world.translation = local.translation;
+        world.rotation = local.rotation;
+        world.scale = local.scale;
+    }
+
+    // Roots, physics (interpolated Jolt pose)
+    for (auto [entity, physics, local, world] : registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent, Component::WorldTransformComponent>(
+             entt::exclude<Component::HierarchyComponent>).each()) {
+        world.translation = glm::mix(physics.previousPosition, physics.currentPosition, alpha);
+        world.rotation = glm::slerp(physics.previousRotation, physics.currentRotation, alpha);
+        world.scale = local.scale;
+        registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+    }
+
+    // Children in depth order. EnsureHierarchyOrder re-sorts only if a topology change flagged it dirty (cheap bool check otherwise).
+    EnsureHierarchyOrder(state);
+    auto orphans = Core::ArenaVector<entt::entity>(&ctx->gameplayArena.Get(), 8);
+    auto hierarchy = registry.view<Component::HierarchyComponent>();
+    for (auto entity : hierarchy) {
+        const auto& node = hierarchy.get<Component::HierarchyComponent>(entity);
+
+        auto& local = registry.get<Component::TransformComponent>(entity);
+        auto& world = registry.get<Component::WorldTransformComponent>(entity);
+
+        // Missing parent (invalid state)
+        if (node.parent == entt::null || !registry.valid(node.parent) || !registry.all_of<Component::WorldTransformComponent>(node.parent)) {
+            world.translation = local.translation;
+            world.rotation = local.rotation;
+            world.scale = local.scale;
+            registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+            orphans.PushBack(entity);
+            continue;
+        }
+
+        auto* physics = registry.try_get<Component::DynamicPhysicsBodyComponent>(entity);
+        const bool selfDirty = physics || registry.all_of<Component::MultiframeDirtyTransformComponent>(entity);
+        const bool parentDirty = registry.all_of<Component::MultiframeDirtyTransformComponent>(node.parent);
+        if (!selfDirty && !parentDirty) { continue; }
+        if (!registry.all_of<Component::MultiframeDirtyTransformComponent>(entity)) {
+            registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        }
+
+        // Physics (interpolated Jolt pose)
+        if (physics) {
+            world.translation = glm::mix(physics->previousPosition, physics->currentPosition, alpha);
+            world.rotation = glm::slerp(physics->previousRotation, physics->currentRotation, alpha);
+            world.scale = local.scale;
+        }
+        else {
+            const auto& parentWorld = registry.get<Component::WorldTransformComponent>(node.parent);
+            world = Component::ComposeWorldTransform(parentWorld, local);
+        }
+    }
+
+    for (entt::entity entity : orphans) {
+        registry.remove<Component::HierarchyComponent>(entity);
+    }
+}
+
 void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
 
-    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::MultiframeDirtyTransformComponent>(
-        entt::exclude<Component::DynamicPhysicsBodyComponent>);
+    auto dirtyView = state->registry.view<Component::WorldTransformComponent, Component::RenderTransformComponent, Component::MultiframeDirtyTransformComponent>();
     constexpr size_t TASK_THRESHOLD = 1000;
     size_t dirtyViewCount = dirtyView.size_hint();
     if (dirtyViewCount < TASK_THRESHOLD) {
         ZoneScopedN("Serial");
-        for (auto [entity, transform, renderTransform, dirtyRender] : dirtyView.each()) {
+        for (auto [entity, world, renderTransform, dirtyRender] : dirtyView.each()) {
             renderTransform.previousMatrix = renderTransform.modelMatrix;
-            renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
+            renderTransform.modelMatrix = glm::translate(GetMatrix(world), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
         }
     }
     else {
@@ -618,26 +686,15 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         enki::TaskSet task(entities.Size(), [&](enki::TaskSetPartition range, uint32_t) {
             for (uint32_t i = range.start; i < range.end; ++i) {
                 auto entity = entities[i];
-                auto& transform = dirtyView.get<Component::TransformComponent>(entity);
+                auto& world = dirtyView.get<Component::WorldTransformComponent>(entity);
                 auto& renderTransform = dirtyView.get<Component::RenderTransformComponent>(entity);
 
                 renderTransform.previousMatrix = renderTransform.modelMatrix;
-                renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
+                renderTransform.modelMatrix = glm::translate(GetMatrix(world), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
             }
         });
         ctx->scheduler->AddTaskSetToPipe(&task);
         ctx->scheduler->WaitforTask(&task);
-    }
-
-    // Physics always dirty until I find a better way
-    auto physicsView = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent, Component::RenderTransformComponent>();
-    for (auto [entity, physics, transform, renderTransform] : physicsView.each()) {
-        renderTransform.previousMatrix = renderTransform.modelMatrix;
-
-        float alpha = state->physics.interpolationAlpha;
-        glm::vec3 interpPos = glm::mix(physics.previousPosition, transform.translation, alpha);
-        glm::quat interpRot = glm::slerp(physics.previousRotation, transform.rotation, alpha);
-        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale) * glm::translate(glm::mat4(1.0f), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
     }
 
     // Area light emissive quads

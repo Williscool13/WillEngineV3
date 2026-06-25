@@ -15,10 +15,13 @@ namespace Core { struct ViewFamily; }
 
 namespace Game::Component
 {
+/** Physics state. Interpolate w/ physics alpha for smooth physics*/
 struct DynamicPhysicsBodyComponent
 {
     glm::vec3 previousPosition{};
     glm::quat previousRotation{};
+    glm::vec3 currentPosition{};
+    glm::quat currentRotation{};
 };
 
 struct TeleportPhysicsTransformTag

@@ -65,6 +65,34 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
 
 Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset = {});
 
+
+/**
+ * Resolves every HierarchyComponent's runtime parent handle from its serialized parentStableId. Call after loading entities.
+ * @param state
+ */
+void ResolveHierarchyLinks(Engine::EngineState* state);
+
+/**
+ * Refreshes the hierarchy iteration order iff a topology change flagged it dirty; a no-op otherwise.
+ * Called by the children-resolve pass; any system that iterates the depth-sorted HierarchyComponent pool itself should call this first.
+ */
+void EnsureHierarchyOrder(Engine::EngineState* state);
+
+/**
+ * Parents child under parent, preserving the child's world pose (rejects cycles).
+ */
+void SetParent(Engine::EngineState* state, entt::entity child, entt::entity parent);
+
+/**
+ * Detaches child from its parent, preserving its world pose.
+ */
+void ClearParent(Engine::EngineState* state, entt::entity child);
+
+/**
+ * Sets an entity's world transform by writing the equivalent local transform (O(1): reads the parent's cached world, one frame behind by design).
+ */
+void SetWorldTransform(Engine::EngineState* state, entt::entity entity, const Transform& world);
+
 entt::entity CreateSceneEntity(Engine::EngineState* state);
 
 /** Highest sortOrder value among entities in the given scene (0 if none). */

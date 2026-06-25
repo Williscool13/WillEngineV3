@@ -89,9 +89,8 @@ glm::vec3 PhysicsCharacter::GetInterpolatedPosition() const
     if (!engineState || !engineState->registry.valid(entity)) return {};
     auto* dynamic = engineState->registry.try_get<Component::DynamicPhysicsBodyComponent>(entity);
     if (!dynamic) return GetPosition();
-    const auto& transform = engineState->registry.get<Component::TransformComponent>(entity);
     float alpha = engineState->physics.interpolationAlpha;
-    return glm::mix(dynamic->previousPosition, transform.translation, alpha);
+    return glm::mix(dynamic->previousPosition, dynamic->currentPosition, alpha);
 }
 
 glm::vec3 PhysicsCharacter::GetLinearVelocity() const
