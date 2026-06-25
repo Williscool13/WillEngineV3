@@ -26,5 +26,5 @@
   "bAutoSaveProjectConfig": false,
   "bLimitFps": false,
   "defaultScene": "Lighting 2",
-  "frameLimitTarget": 60
+  "frameLimitTarget": 108
 }

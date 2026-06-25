@@ -11,7 +11,45 @@
 
 namespace Render
 {
-static_assert(sizeof(LightBVHNode) == 32, "LightBVHNode must be 32 bytes; check glm::vec3 alignment");
+static_assert(sizeof(LightBVHNode) == 52, "LightBVHNode must be 52 bytes; check glm::vec3 alignment");
+
+static constexpr float LIGHT_BVH_PI = 3.14159265358979323846f;
+
+struct LightCone
+{
+    glm::vec3 axis;
+    float thetaO;
+    float thetaE;
+};
+
+/**
+ * Bounding cone of two orientation cones (Conty-Estevez & Kulla 2018). thetaE is the max of the two; the axis is
+ * rotated from the wider cone toward the other by half the angular slack so the result encloses both.
+ */
+static LightCone ConeUnion(LightCone a, LightCone b)
+{
+    if (b.thetaO > a.thetaO) { std::swap(a, b); }
+    const float thetaE = glm::max(a.thetaE, b.thetaE);
+    const float thetaD = glm::acos(glm::clamp(glm::dot(a.axis, b.axis), -1.0f, 1.0f));
+    if (glm::min(thetaD + b.thetaO, LIGHT_BVH_PI) <= a.thetaO) {
+        return {a.axis, a.thetaO, thetaE};
+    }
+    const float thetaO = (a.thetaO + thetaD + b.thetaO) * 0.5f;
+    if (thetaO >= LIGHT_BVH_PI) {
+        return {a.axis, LIGHT_BVH_PI, thetaE};
+    }
+    const float thetaR = thetaO - a.thetaO;
+    glm::vec3 rotAxis = glm::cross(a.axis, b.axis);
+    const float len = glm::length(rotAxis);
+    if (len < 1e-6f) {
+        return {a.axis, thetaO, thetaE};
+    }
+    rotAxis /= len;
+    const float c = glm::cos(thetaR);
+    const float s = glm::sin(thetaR);
+    const glm::vec3 axis = glm::normalize(a.axis * c + glm::cross(rotAxis, a.axis) * s + rotAxis * glm::dot(rotAxis, a.axis) * (1.0f - c));
+    return {axis, thetaO, thetaE};
+}
 
 /** Spread the low 10 bits of v so each occupies every third bit, for a 30-bit 3D Morton code. */
 static uint32_t MortonExpandBits(uint32_t v)
@@ -57,6 +95,7 @@ uint32_t BuildLightBVH(const LightInfo* lights, uint32_t count, LightBVHNode* ou
         float power;
         uint32_t idx;
         uint32_t morton;
+        LightCone cone;
     };
     static thread_local LightAttr attrs[MAX_LIGHTS];
     static thread_local uint32_t order[MAX_LIGHTS];
@@ -69,18 +108,25 @@ uint32_t BuildLightBVH(const LightInfo* lights, uint32_t count, LightBVHNode* ou
         glm::vec3 bmin;
         glm::vec3 bmax;
         float area;
+        LightCone cone;
         if (L.type == LIGHT_TYPE_SPHERE) {
             const float radius = L.right.w;
             bmin = c - glm::vec3(radius);
             bmax = c + glm::vec3(radius);
             area = 4.0f * PI * radius * radius;
+            // Isotropic emission: a full orientation cone (thetaO = pi) so it is never culled by the cone test.
+            cone = {glm::vec3(0.0f, 0.0f, 1.0f), PI, PI * 0.5f};
         } else {
             const glm::vec3 ext = glm::abs(glm::vec3(L.right)) * L.right.w + glm::abs(glm::vec3(L.up)) * L.up.w;
             bmin = c - ext;
             bmax = c + ext;
             area = 4.0f * L.right.w * L.up.w;
+            // One-sided front-hemisphere emission about the light normal (matches the cosFacing/cosLight one-sidedness).
+            const glm::vec3 nrm = glm::vec3(L.normal);
+            const float nl = glm::length(nrm);
+            cone = {(nl > 1e-6f) ? (nrm / nl) : glm::vec3(0.0f, 0.0f, 1.0f), 0.0f, PI * 0.5f};
         }
-        attrs[i] = {c, bmin, bmax, L.intensity * area * LightColorMax(L.packedColor), i, 0u};
+        attrs[i] = {c, bmin, bmax, L.intensity * area * LightColorMax(L.packedColor), i, 0u, cone};
         order[i] = i;
         sceneMin = glm::min(sceneMin, c);
         sceneMax = glm::max(sceneMax, c);
@@ -103,13 +149,19 @@ uint32_t BuildLightBVH(const LightInfo* lights, uint32_t count, LightBVHNode* ou
             node.bmax = a.bmax;
             node.power = a.power;
             node.lightIdx = a.idx;
+            node.coneAxis = a.cone.axis;
+            node.coneThetaO = a.cone.thetaO;
+            node.coneThetaE = a.cone.thetaE;
             outLightLeaf[a.idx] = s;
         } else {
-            // Padding leaf: empty box (identity under min/max) and zero power so it is never selected.
+            // Padding leaf: empty box (identity under min/max) and zero power so it is never selected; inert cone.
             node.bmin = glm::vec3(1e30f);
             node.bmax = glm::vec3(-1e30f);
             node.power = 0.0f;
             node.lightIdx = ~0u;
+            node.coneAxis = glm::vec3(0.0f, 0.0f, 1.0f);
+            node.coneThetaO = 0.0f;
+            node.coneThetaE = 0.0f;
         }
     }
 
@@ -121,6 +173,13 @@ uint32_t BuildLightBVH(const LightInfo* lights, uint32_t count, LightBVHNode* ou
         node.bmax = glm::max(l.bmax, r.bmax);
         node.power = l.power + r.power;
         node.lightIdx = ~0u;
+        // Union the children's orientation cones, skipping zero-power (padding/empty) subtrees so they never widen it.
+        const LightCone lc{l.coneAxis, l.coneThetaO, l.coneThetaE};
+        const LightCone rc{r.coneAxis, r.coneThetaO, r.coneThetaE};
+        const LightCone merged = (l.power <= 0.0f) ? rc : (r.power <= 0.0f) ? lc : ConeUnion(lc, rc);
+        node.coneAxis = merged.axis;
+        node.coneThetaO = merged.thetaO;
+        node.coneThetaE = merged.thetaE;
     }
 
     return numLeaves;

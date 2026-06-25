@@ -11,16 +11,37 @@ public float Dist2ToAABB(float3 p, float3 bmin, float3 bmax)
 }
 
 /**
- * v1 node importance: cluster power over inverse-square distance to its bounds. The distance is floored at the node's own
- * bounding-sphere radius (dot(he,he)); without it Dist2ToAABB collapses to ~0 for points inside the loose, scene-spanning
- * boxes near the root, so the top splits would be driven by power alone and an extreme light would drag every pixel down
- * its branch. Padding nodes (power 0) still score 0.
+ * Node importance: cluster power over inverse-square distance to its bounds, attenuated by the orientation cone (v2).
+ *
+ * Distance floor: max(Dist2ToAABB, bounding-sphere r2); without it Dist2ToAABB collapses to ~0 for points inside the
+ * loose, scene-spanning boxes near the root, so the top splits would be driven by power alone and an extreme light
+ * would drag every pixel down its branch. Padding nodes (power 0) still score 0.
+ *
+ * Cone (Conty-Estevez): thetaW is the angle from the cluster axis to p; thetaB the half-angle the bounds subtend from p;
+ * thetaPrime = max(0, thetaW - thetaO - thetaB) measures how far p sits outside the combined orientation cone, hard-culled
+ * past the emission angle thetaE. This culls clusters facing away from p, which the one-sided cosFacing/cosLight in
+ * EvalCellLightTarget/EvalPHat already zero, so it only removes wasted candidates (variance, never bias). Inside the
+ * bounding sphere the orientation is unreliable, so it falls back to the plain v1 importance.
  */
 public float NodeImportance(LightBVHNode n, float3 p)
 {
     float3 he = 0.5 * (n.bmax - n.bmin);
-    float dist2 = max(Dist2ToAABB(p, n.bmin, n.bmax), dot(he, he));
-    return n.power / max(dist2, 1e-4);
+    float r2 = dot(he, he);
+    float dist2 = max(Dist2ToAABB(p, n.bmin, n.bmax), r2);
+    float imp = n.power / max(dist2, 1e-4);
+    if (imp <= 0.0) { return 0.0; }
+
+    float3 center = 0.5 * (n.bmin + n.bmax);
+    float3 toP = p - center;
+    float centerDist2 = dot(toP, toP);
+    if (centerDist2 <= r2) { return imp; }
+
+    float centerDist = sqrt(centerDist2);
+    float thetaB = asin(clamp(sqrt(r2) / centerDist, 0.0, 1.0));
+    float thetaW = acos(clamp(dot(n.coneAxis, toP / centerDist), -1.0, 1.0));
+    float thetaPrime = max(0.0, thetaW - n.coneThetaO - thetaB);
+    if (thetaPrime > n.coneThetaE) { return 0.0; }
+    return imp * cos(thetaPrime);
 }
 
 public struct LightTreeSample
