@@ -29,9 +29,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
- * Draws the "Lighting" window: per-tab save + lighting profile picker, ReSTIR DI settings, the denoiser (A-Trous / A-SVGF / RELAX), and ambient occlusion (GTAO).
+ * Draws the "Lighting" window: per-tab save + lighting profile picker, shading/lighting shader overrides, ReSTIR DI settings, the denoiser (A-Trous / A-SVGF / RELAX), and ambient occlusion (GTAO).
  */
-void DrawLightingWindow(Engine::EngineState* state);
+void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
  * Draws the collapsible editor for one PostProcessConfiguration (tonemapping, exposure, bloom ... dither).

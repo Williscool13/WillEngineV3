@@ -441,7 +441,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     DrawProjectConfigWindow(ctx, state);
 
-    DrawLightingWindow(state);
+    DrawLightingWindow(ctx, state);
 
     if (ImGui::Begin("Gameplay")) {
         if (state->bIsPlaying) {

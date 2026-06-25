@@ -13,6 +13,7 @@
     "thinOccluderCompensation": 0.0
   },
   "lightingMode": 1,
+  "lightingShaderOverride": 7554520945661456859,
   "restir": {
     "adaptiveSpatialBoost": 3.0,
     "antilagStrength": 0.8999999761581421,
@@ -26,7 +27,7 @@
     "bEnableAntilag": false,
     "bEnableConfidence": false,
     "bHalfRes": true,
-    "bInitialVisibility": true,
+    "bInitialVisibility": false,
     "bPermutationSampling": false,
     "boilingFilterStrength": 0.20000000298023224,
     "confidenceBlurRadius": 2,
@@ -87,5 +88,6 @@
       "sigmaNormal": 64.0
     },
     "temporalMCap": 32
-  }
+  },
+  "shadingShaderOverride": 11262630175972558216
 }

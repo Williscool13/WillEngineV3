@@ -25,7 +25,7 @@
   "bAutoSavePostProcess": true,
   "bAutoSaveProjectConfig": false,
   "bLimitFps": false,
-  "defaultScene": "Lighting 2",
+  "defaultScene": "Bistro Test",
   "editorCameraFovDegrees": 70.0,
   "editorCameraNearPlane": 0.10000000149011612,
   "frameLimitTarget": 60,

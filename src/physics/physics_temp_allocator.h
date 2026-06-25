@@ -14,16 +14,20 @@
 
 namespace Physics
 {
-// LIFO bump allocator for Jolt's per-step scratch memory.
-// Buffer is owned by PhysicsSystem's ManagedArena; no locking needed
-// since Jolt guarantees LIFO ordering through job dependencies.
 class PhysicsTempAllocator final : public JPH::TempAllocator
 {
 public:
     PhysicsTempAllocator() = default;
 
     PhysicsTempAllocator(void* mem, size_t size)
-        : mBase(static_cast<uint8_t*>(mem)), mSize(size) {}
+    {
+        // Jolt SIMD types needsd alignment, backing buffer not necessarily aligned
+        const uintptr_t raw = reinterpret_cast<uintptr_t>(mem);
+        const uintptr_t aligned = (raw + JPH_RVECTOR_ALIGNMENT - 1) & ~(uintptr_t(JPH_RVECTOR_ALIGNMENT) - 1);
+        const size_t adjust = aligned - raw;
+        mBase = reinterpret_cast<uint8_t*>(aligned);
+        mSize = size > adjust ? size - adjust : 0;
+    }
 
     ~PhysicsTempAllocator() override
     {

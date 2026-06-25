@@ -55,6 +55,9 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
+    // Gate on roughness
+    int mBrdf = (roughness <= RESTIR_BRDF_ROUGHNESS_MAX) ? RESTIR_M_BRDF : 0;
+
     int lightCount = pc.lightData->lightCount;
 
     // History reprojection validity.
@@ -168,7 +171,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                     float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
                     float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
-                    float denom = float(RESTIR_M_LIGHT) * p_light_area + float(RESTIR_M_BRDF) * p_brdf_area;
+                    float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdf) * p_brdf_area;
                     w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
                     candLightIdx = uint(lightIdx);
                     candXi = Xi;
@@ -184,7 +187,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         }
 
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
-        for (int i = 0; i < RESTIR_M_BRDF; i++) {
+        for (int i = 0; i < mBrdf; i++) {
             float uXi0 = HashStep(h);
             float uXi1 = HashStep(h);
             float uSelect = HashStep(h);
@@ -231,7 +234,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 }
             }
 
-            float denom = float(RESTIR_M_LIGHT) * p_light_area + float(RESTIR_M_BRDF) * p_brdf_area;
+            float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdf) * p_brdf_area;
             float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
             if (ReservoirAddSample(accum_gen, w_i, uSelect) && bestLightIdx >= 0) {
                 r_gen.lightIdx = uint(bestLightIdx);
@@ -239,7 +242,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             }
         }
 
-        r_gen.M = uint(RESTIR_M_LIGHT + RESTIR_M_BRDF);
+        r_gen.M = uint(RESTIR_M_LIGHT + mBrdf);
     }
 
     // Initial-candidate visibility: an occluded fresh candidate contributes 0 below (so a visible history outweighs it)
