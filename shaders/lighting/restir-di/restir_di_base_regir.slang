@@ -1,0 +1,243 @@
+import common_interop;
+import push_constant_interop;
+import constants_interop;
+import model_interop;
+import lights_interop;
+import restir_interop;
+
+import shader_functions;
+import pbr_functions;
+import packing_functions;
+import visibility_lighting_common;
+
+import bindless_declarations;
+import restir_common;
+import random_common;
+import regir_hash;
+
+#include "restir_features_macros.slang"
+
+// ReGIR variant of ReSTIR DI candidate generation
+[numthreads(16, 16, 1)]
+void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+    uint2 pixel = threadID.xy;
+    if (any(pixel >= pc.renderExtent)) {
+        return;
+    }
+
+    SceneData scene = pc.sceneData[pc.sceneDataIndex];
+    uint2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixel, pc.pixelScale);
+
+    uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
+
+    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
+    if (depth <= 0.0) {
+        pc.outputBuffer[pixelIdx] = ReservoirEmpty();
+        return;
+    }
+
+    LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
+    if (!li.valid) {
+        pc.outputBuffer[pixelIdx] = ReservoirEmpty();
+        return;
+    }
+
+    float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
+    float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
+
+    float3 N = normalize(li.viewNormal);
+    float3 V = normalize(-viewPosition);
+    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, pc.pixelScale);
+    float roughness = max(li.roughness, 0.045);
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
+
+    // Gate on roughness
+    int mBrdf = (roughness <= RESTIR_BRDF_ROUGHNESS_MAX) ? RESTIR_M_BRDF : 0;
+
+    int lightCount = pc.lightData->lightCount;
+
+    Reservoir r_gen = ReservoirEmpty();
+    ReservoirAccum accum_gen = ReservoirAccumEmpty();
+
+    uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
+    h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
+
+    float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+    float3 cameraPos = scene.cameraWorldPos.xyz;
+    float camDist = distance(worldPos, cameraPos);
+
+    // Pick one grid cell per pixel (jittered so cell boundaries dither into noise), shared by every light + BRDF candidate so the balance-heuristic MIS sees one consistent selection pdf q(L) = occupancy*cellTarget(L)/S_cell + (1-occupancy)/lightCount. No cell -> uniform.
+    bool useGrid = false;
+    uint gridBase = 0u;
+    float3 cellCenterVS = float3(0.0);
+    float cellTargetSum = 0.0;
+    float cellOccupancy = 0.0;
+    if (camDist <= REGIR_MAX_DIST) {
+        float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
+        float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
+        ReGIRHashKey key = ReGIRComputeKey(worldPos + jitter, cameraPos);
+        uint cellSlot = ReGIRHashFind(pc.hashEntries, key);
+        if (cellSlot != REGIR_HASH_INVALID) {
+            float2 cd = pc.cellData[cellSlot];
+            cellTargetSum = cd.x;
+            if (cellTargetSum > 0.0) {
+                gridBase = ReGIRCellReservoirBase(cellSlot);
+                cellCenterVS = mul(scene.view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
+                cellOccupancy = cd.y;
+                useGrid = true;
+            }
+        }
+    }
+
+    if (lightCount > 0) {
+        float invLightCount = 1.0 / float(lightCount);
+        for (int i = 0; i < RESTIR_M_LIGHT; i++) {
+            uint candLightIdx = ~0u;
+            float3 candXi = float3(0.0);
+            LightVS candVS = (LightVS)0;
+            float w_i = 0.0;
+
+            // Light selection: grid reservoir (~ proportional to the cell target), with a uniform fallback on an empty slot.
+            int lightIdx = -1;
+            if (useGrid) {
+                uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
+                ReGIRReservoir gr = pc.reservoirs[gridBase + slotInCell];
+                if (gr.lightIdx != ~0u && gr.lightIdx < uint(lightCount)) {
+                    lightIdx = int(gr.lightIdx);
+                } else {
+                    // Empty grid slot (sparse cell): fall back to a uniform light. Realizes the (1-occupancy) uniform branch of q(L).
+                    lightIdx = clamp(int(HashStep(h) * float(lightCount)), 0, lightCount - 1);
+                }
+            } else {
+                lightIdx = clamp(int(HashStep(h) * float(lightCount)), 0, lightCount - 1);
+            }
+
+            if (lightIdx >= 0) {
+                LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
+                float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                // Occupancy-weighted selection pdf q(L) = occupancy * grid pdf + (1-occupancy) * uniform; keeps sparse cells lit and correctly weighted.
+                float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, lightColor) / cellTargetSum) + (1.0 - cellOccupancy) * invLightCount) : invLightCount;
+                if (pSelect > 0.0) {
+                    float uU = HashStep(h);
+                    float uV = HashStep(h);
+                    float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
+                    LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                    float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
+                    // Balance-heuristic MIS against the BRDF stream, identical to the non-ReGIR path but with the grid selection pdf.
+                    float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
+                    float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
+                    float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                    float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdf) * p_brdf_area;
+                    w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
+                    candLightIdx = uint(lightIdx);
+                    candXi = Xi;
+                    candVS = vs;
+                }
+            }
+
+            float uSelect = HashStep(h);
+            if (ReservoirAddSample(accum_gen, w_i, uSelect) && candLightIdx != ~0u) {
+                r_gen.lightIdx = candLightIdx;
+                r_gen.sampleOffsetPacked = EncodeSampleOffset(candXi, candVS);
+            }
+        }
+
+        for (int i = 0; i < mBrdf; i++) {
+            float uXi0 = HashStep(h);
+            float uXi1 = HashStep(h);
+            float uSelect = HashStep(h);
+
+            float p_brdf_sample;
+            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, p_brdf_sample);
+
+            float p_hat_Xi = 0.0;
+            int bestLightIdx = -1;
+            float3 Xi = float3(0.0);
+            float p_light_area = 0.0;
+            float p_brdf_area = 0.0;
+            LightVS bestVS = (LightVS)0;
+
+            if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
+                int hitLightIdx = -1;
+                float hitT = 0.0;
+#if RESTIR_ENABLE_BRDF_RAY
+                // Closest-hit ray: nearest light proxy before scene geometry (mask 0xFF; occluder first -> miss).
+                float3 worldN = normalize(mul(float3x3(scene.invView), N));
+                RayDesc ray;
+                ray.Origin = worldPos + worldN * 0.05;
+                ray.Direction = normalize(mul(float3x3(scene.invView), brdfL));
+                ray.TMin = 0.001;
+                ray.TMax = 1e30;
+                RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+                q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0xFF, ray);
+                q.Proceed();
+                if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
+                    uint hl = pc.instanceBuffer[q.CommittedInstanceID()].lightIndex;
+                    float t;
+                    if (hl != ~0u && hl < uint(lightCount) && RayIntersectLight(UnpackLightVS(pc.lightVS[hl]), viewPosition, brdfL, t)) {
+                        hitLightIdx = int(hl);
+                        hitT = t;
+                    }
+                }
+#else
+                // Analytic nearest-light hit; occlusion deferred to the Phase 3 winner test, as for light-stream candidates.
+                float nearestT = 1e30;
+                for (int li2 = 0; li2 < lightCount; li2++) {
+                    float t;
+                    if (RayIntersectLight(UnpackLightVS(pc.lightVS[li2]), viewPosition, brdfL, t) && t < nearestT) {
+                        nearestT = t;
+                        hitLightIdx = li2;
+                    }
+                }
+                hitT = nearestT;
+#endif
+                if (hitLightIdx >= 0) {
+                    LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
+                    Xi = viewPosition + brdfL * hitT;
+                    LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
+                    // Same occupancy-weighted selection pdf as the light stream.
+                    float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(lightCount))) : (1.0 / float(lightCount));
+                    p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
+                    p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                    float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
+                    p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity);
+                    bestLightIdx = hitLightIdx;
+                    bestVS = vs;
+                }
+            }
+
+            float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdf) * p_brdf_area;
+            float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
+            if (ReservoirAddSample(accum_gen, w_i, uSelect) && bestLightIdx >= 0) {
+                r_gen.lightIdx = uint(bestLightIdx);
+                r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, bestVS);
+            }
+        }
+
+        r_gen.M = uint(RESTIR_M_LIGHT + mBrdf);
+    }
+
+    // Finalise W (Talbot MIS: M already absorbed into each w_i, so M_total = 1) so the temporal pass streams w = p_hat*W*M directly.
+    if (r_gen.lightIdx != ~0u) {
+        LightVS vsGen = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
+        float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
+        LightSample sGen = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
+        float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
+        float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
+        ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
+
+#if RESTIR_ENABLE_INITIAL_VISIBILITY
+        // Initial-candidate visibility baked into W: an occluded candidate streams to 0 in temporal but keeps its lightIdx as a dark anchor for spatial reuse.
+        if (pc.bInitialVisibility != 0u) {
+            float3 worldN = normalize(mul(float3x3(scene.invView), N));
+            float3 worldyStar = mul(scene.invView, float4(yStarGen, 1.0)).xyz;
+            if (!RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize)) {
+                r_gen.W = 0.0;
+            }
+        }
+#endif
+    }
+
+    pc.outputBuffer[pixelIdx] = r_gen;
+}

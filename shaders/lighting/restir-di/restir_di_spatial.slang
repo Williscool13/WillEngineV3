@@ -11,6 +11,8 @@ import bindless_declarations;
 import restir_common;
 import random_common;
 
+#include "restir_features_macros.slang"
+
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     uint2 pixel = threadID.xy;
@@ -71,10 +73,15 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     uint neighborCount = 0;
     combined.M = validCenter ? center.M : 0u;
 
+#if RESTIR_ENABLE_SPATIAL_DILATE
     float convergence = saturate(Mc / float(max(pc.adaptiveMReference, 1u)));
     float adaptiveBoost = (pc.bAdaptiveSpatial != 0u) ? (1.0 + pc.adaptiveSpatialBoost * (1.0 - convergence)) : 1.0;
     uint spatialNeighbors = clamp(uint(round(float(pc.spatialNeighbors) * adaptiveBoost)), 1u, 32u);
     float spatialRadius = float(pc.spatialRadius) * adaptiveBoost;
+#else
+    uint spatialNeighbors = clamp(pc.spatialNeighbors, 1u, 32u);
+    float spatialRadius = float(pc.spatialRadius);
+#endif
     float frustumSize = abs(scene.ndcToViewMul.y) * abs(viewSpaceDepth);
     float bnRot = BlueNoiseAngle(pixel, pc.frameIndex + pc.passIndex * 32u);
     for (uint i = 0; i < spatialNeighbors; i++) {

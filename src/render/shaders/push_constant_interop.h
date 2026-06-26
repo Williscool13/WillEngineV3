@@ -413,6 +413,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirs;
     SHADER_PUBLIC SHADER_PTR(float2) cellData;
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) genBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
     SHADER_PUBLIC SHADER_PTR(LightBVHNode) bvhNodes;
     SHADER_PUBLIC SHADER_PTR(uint) lightLeaf;

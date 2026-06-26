@@ -4,6 +4,9 @@
 # interop generated .slang include files
 *_interop.slang
 
+# macro-only .slang headers copied verbatim from src (see copy_shader_macros)
+*_macros.slang
+
 # Exclude everything in assets/ including subdirectories
 assets/**
 

@@ -15,6 +15,8 @@
 #include "engine/engine_api.h"
 #include "engine/profiles/profile_library.h"
 
+#include "render/shaders/restir_features_macros.h"
+
 namespace Game
 {
 static void SaveProjectConfigTab(Engine::EngineState* state)
@@ -491,6 +493,37 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             Core::ReSTIRParams& restir = state->debug.restir;
             const bool bReGIR = state->lighting.lightingMode == Core::LightingMode::ReGIRReSTIR;
 
+            // Sections compiled out via restir_features_macros.h are greyed: the runtime toggle has no effect until the macro is set to 1 and shaders are rebuilt.
+            ImGui::SeparatorText("Base (Candidate Generation)");
+            ImGui::BeginDisabled(!RESTIR_ENABLE_INITIAL_VISIBILITY);
+            if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
+                changed = true;
+            }
+            ImGui::EndDisabled();
+
+            ImGui::SeparatorText("Temporal");
+            int temporalMCap = static_cast<int>(restir.temporalMCap);
+            if (Widgets::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
+                restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
+                changed = true;
+            }
+            ImGui::BeginDisabled(!RESTIR_ENABLE_PERMUTATION_SAMPLING);
+            if (ImGui::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
+                changed = true;
+            }
+            ImGui::EndDisabled();
+            if (Widgets::SliderFloat("Boiling Filter (0=off)", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
+                changed = true;
+            }
+            ImGui::BeginDisabled(!RESTIR_ENABLE_ANTILAG);
+            featureSection("Antilag", &restir.bEnableAntilag, [&] {
+                if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
+                        {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. May add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.5f})) {
+                    changed = true;
+                }
+            });
+            ImGui::EndDisabled();
+
             ImGui::SeparatorText("Spatial Reuse");
             int spatialPasses = static_cast<int>(restir.spatialPasses);
             if (Widgets::SliderInt("Spatial Passes (0=off)", &spatialPasses, 0, 8)) {
@@ -513,42 +546,22 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
                     changed = true;
                 }
+                if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 100.0f)) {
+                    changed = true;
+                }
+                ImGui::BeginDisabled(!RESTIR_ENABLE_SPATIAL_DILATE);
                 featureSection("Spatial Dilate", &restir.bAdaptiveSpatial, [&] {
                     if (Widgets::SliderFloat("Dilate Boost##restir", &restir.adaptiveSpatialBoost, 0.0f, 3.0f)) {
                         changed = true;
                     }
                 });
-            }
-
-            ImGui::SeparatorText("Temporal");
-            int temporalMCap = static_cast<int>(restir.temporalMCap);
-            if (Widgets::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
-                restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
-                changed = true;
-            }
-            if (Widgets::SliderFloat("Boiling Filter (0=off)", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
-                changed = true;
-            }
-            if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 100.0f)) {
-                changed = true;
-            }
-            if (ImGui::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
-                changed = true;
-            }
-            if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
-                changed = true;
+                ImGui::EndDisabled();
             }
 
             ImGui::SeparatorText("Options");
             if (ImGui::Checkbox("Half Res", &restir.bHalfRes)) {
                 changed = true;
             }
-            featureSection("Antilag", &restir.bEnableAntilag, [&] {
-                if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
-                        {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. May add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.5f})) {
-                    changed = true;
-                }
-            });
             if (Widgets::SliderFloat("IBL Intensity##restir", &restir.iblIntensity, 0.0f, 2.0f)) {
                 changed = true;
             }

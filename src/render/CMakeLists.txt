@@ -164,6 +164,17 @@ function(preprocess_shader_interop INPUT_HEADER OUTPUT_SLANG)
     set_property(GLOBAL APPEND PROPERTY SHADER_INTEROP_FILES ${OUTPUT_SLANG})
 endfunction()
 
+# Macro-only header (a plain copy)
+function(copy_shader_macros INPUT_HEADER OUTPUT_SLANG)
+    add_custom_command(
+            OUTPUT ${OUTPUT_SLANG}
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${INPUT_HEADER} ${OUTPUT_SLANG}
+            DEPENDS ${INPUT_HEADER}
+            COMMENT "Copying ${OUTPUT_SLANG}"
+    )
+    set_property(GLOBAL APPEND PROPERTY SHADER_INTEROP_FILES ${OUTPUT_SLANG})
+endfunction()
+
 function(compile_shader TARGET SHADER_SOURCE STAGE ENTRY)
     # Parse optional OUTPUT_NAME argument
     set(options "")
