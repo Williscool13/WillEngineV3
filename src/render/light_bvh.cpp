@@ -116,7 +116,8 @@ uint32_t BuildLightBVH(const LightInfo* lights, uint32_t count, LightBVHNode* ou
             area = 4.0f * PI * radius * radius;
             // Isotropic emission: a full orientation cone (thetaO = pi) so it is never culled by the cone test.
             cone = {glm::vec3(0.0f, 0.0f, 1.0f), PI, PI * 0.5f};
-        } else {
+        }
+        else {
             const glm::vec3 ext = glm::abs(glm::vec3(L.right)) * L.right.w + glm::abs(glm::vec3(L.up)) * L.up.w;
             bmin = c - ext;
             bmax = c + ext;
@@ -153,7 +154,8 @@ uint32_t BuildLightBVH(const LightInfo* lights, uint32_t count, LightBVHNode* ou
             node.coneThetaO = a.cone.thetaO;
             node.coneThetaE = a.cone.thetaE;
             outLightLeaf[a.idx] = s;
-        } else {
+        }
+        else {
             // Padding leaf: empty box (identity under min/max) and zero power so it is never selected; inert cone.
             node.bmin = glm::vec3(1e30f);
             node.bmax = glm::vec3(-1e30f);
@@ -183,5 +185,83 @@ uint32_t BuildLightBVH(const LightInfo* lights, uint32_t count, LightBVHNode* ou
     }
 
     return numLeaves;
+}
+
+uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, LightAliasEntry* outEntries)
+{
+    if (count == 0u) { return 0u; }
+
+    // pdf[i] holds raw power(i) first, then the normalised probability power(i)/total.
+    float pdf[MAX_LIGHTS];
+    float scaled[MAX_LIGHTS]; // Vose scaled probability = pdf[i] * count
+    float prob[MAX_LIGHTS]; // Vose per-bin split threshold
+    uint32_t aliasIdx[MAX_LIGHTS];
+    uint32_t smallQ[MAX_LIGHTS];
+    uint32_t largeQ[MAX_LIGHTS];
+
+    // Power metric mirrors BuildLightBVH (intensity * area * max(colorRGB))
+    double total = 0.0;
+    for (uint32_t i = 0; i < count; i++) {
+        const LightInfo& L = lights[i];
+        float area;
+        if (L.type == LIGHT_TYPE_SPHERE) {
+            const float radius = L.right.w;
+            area = 4.0f * LIGHT_BVH_PI * radius * radius;
+        }
+        else {
+            area = 4.0f * L.right.w * L.up.w;
+        }
+        const float power = L.intensity * area * LightColorMax(L.packedColor);
+        pdf[i] = power > 0.0f ? power : 0.0f;
+        total += static_cast<double>(pdf[i]);
+    }
+
+    // Degenerate (no positive power)
+    if (total <= 0.0) {
+        const float uniformPdf = 1.0f / static_cast<float>(count);
+        for (uint32_t i = 0; i < count; i++) {
+            outEntries[i].prob = 1.0f;
+            outEntries[i].alias = i;
+            outEntries[i].pdf = uniformPdf;
+            outEntries[i].pdfAlias = uniformPdf;
+        }
+        return count;
+    }
+
+    const float invTotal = static_cast<float>(1.0 / total);
+    for (uint32_t i = 0; i < count; i++) {
+        pdf[i] *= invTotal;
+        scaled[i] = pdf[i] * static_cast<float>(count);
+        aliasIdx[i] = i;
+        prob[i] = 1.0f;
+    }
+
+    uint32_t nSmall = 0u;
+    uint32_t nLarge = 0u;
+    for (uint32_t i = 0; i < count; i++) {
+        if (scaled[i] < 1.0f) { smallQ[nSmall++] = i; }
+        else { largeQ[nLarge++] = i; }
+    }
+
+    while (nSmall > 0u && nLarge > 0u) {
+        const uint32_t s = smallQ[--nSmall];
+        const uint32_t g = largeQ[--nLarge];
+        prob[s] = scaled[s];
+        aliasIdx[s] = g;
+        scaled[g] = (scaled[g] + scaled[s]) - 1.0f;
+        if (scaled[g] < 1.0f) { smallQ[nSmall++] = g; }
+        else { largeQ[nLarge++] = g; }
+    }
+
+    while (nLarge > 0u) { prob[largeQ[--nLarge]] = 1.0f; }
+    while (nSmall > 0u) { prob[smallQ[--nSmall]] = 1.0f; }
+
+    for (uint32_t i = 0; i < count; i++) {
+        outEntries[i].prob = prob[i];
+        outEntries[i].alias = aliasIdx[i];
+        outEntries[i].pdf = pdf[i];
+        outEntries[i].pdfAlias = pdf[aliasIdx[i]];
+    }
+    return count;
 }
 } // namespace Render

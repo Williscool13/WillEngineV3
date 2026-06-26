@@ -1277,6 +1277,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     renderGraph->CreateBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE, false);
     renderGraph->CreateBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE, false);
     renderGraph->CreateBuffer(LIGHT_BVH_BUFFER, LIGHT_BVH_BUFFER_SIZE, false);
+    renderGraph->CreateBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE, false);
 
     // Scene Data
     SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
@@ -1334,17 +1335,30 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         memcpy(static_cast<char*>(bvhUploadAllocation.ptr) + bvhNodesBytes, bvhLeaf, static_cast<size_t>(bvhLightCount) * sizeof(uint32_t));
     }
 
+    // Power alias table (rebuilt every frame on the CPU, world space) — mirrors the BVH build+upload, feeds the presample-tiles pass.
+    LightAliasEntry aliasEntries[MAX_LIGHTS];
+    const uint32_t aliasLightCount = BuildLightPowerAlias(viewFamily.lights.Data(), bvhLightCount, aliasEntries);
+    const size_t aliasBytes = static_cast<size_t>(aliasLightCount) * sizeof(LightAliasEntry);
+    UploadAllocation aliasUploadAllocation{};
+    if (aliasBytes > 0) {
+        aliasUploadAllocation = renderGraph->AllocateTransient(aliasBytes);
+        memcpy(aliasUploadAllocation.ptr, aliasEntries, aliasBytes);
+    }
+
     auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
     uploadUniformsPass.WriteTransferBuffer(SCENE_DATA_BUFFER);
     uploadUniformsPass.WriteTransferBuffer(LIGHT_DATA_BUFFER);
     uploadUniformsPass.WriteTransferBuffer(LIGHT_BVH_BUFFER);
+    uploadUniformsPass.WriteTransferBuffer(LIGHT_ALIAS_BUFFER);
     uploadUniformsPass.Execute([&,
             sceneOffset = sceneDataUploadAllocation.offset,
             portalOffset = portalSceneDataUploadAllocation.offset,
             hasPortal = bHasPortal,
             lightOffset = lightDataUploadAllocation.offset,
             bvhOffset = bvhUploadAllocation.offset,
-            bvhBytes = bvhTotalBytes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            bvhBytes = bvhTotalBytes,
+            aliasOffset = aliasUploadAllocation.offset,
+            aliasBytes = aliasBytes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Core::Array<VkBufferCopy2, 2> sceneDataRegions{};
             uint32_t sceneDataCount{1};
             sceneDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
@@ -1396,6 +1410,22 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
                     .pRegions = &bvhRegion
                 };
                 vkCmdCopyBuffer2(cmd, &bvhCopyInfo);
+            }
+
+            if (aliasBytes > 0) {
+                VkBufferCopy2 aliasRegion{};
+                aliasRegion.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+                aliasRegion.srcOffset = aliasOffset;
+                aliasRegion.dstOffset = 0;
+                aliasRegion.size = aliasBytes;
+                const VkCopyBufferInfo2 aliasCopyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle(LIGHT_ALIAS_BUFFER),
+                    .regionCount = 1,
+                    .pRegions = &aliasRegion
+                };
+                vkCmdCopyBuffer2(cmd, &aliasCopyInfo);
             }
         });
 }

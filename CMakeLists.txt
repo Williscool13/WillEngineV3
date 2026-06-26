@@ -459,6 +459,7 @@ compile_shaders(will-engine
 
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_touch.slang compute ComputeMain regir_touch
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_build_indirect.slang compute ComputeMain regir_build_indirect
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_presample_tiles.slang compute ComputeMain regir_presample_tiles
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_fill.slang compute ComputeMain regir_fill
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_boiling_filter.slang compute ComputeMain restir_boiling_filter
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_confidence_gradient.slang compute ComputeMain restir_confidence_gradient

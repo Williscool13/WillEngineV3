@@ -421,6 +421,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReGIRTouchPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("regir_build_indirect"), src / "regir_build_indirect_compute.spv",
                             sizeof(ReGIRBuildIndirectPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("regir_presample_tiles"), src / "regir_presample_tiles_compute.spv",
+                            sizeof(ReGIRPresampleTilesPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("regir_fill"), src / "regir_fill_compute.spv",
                             sizeof(ReGIRFillPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_spatial"), src / "restir_di_spatial_compute.spv",

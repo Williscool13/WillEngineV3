@@ -54,12 +54,10 @@ SHADER_PUBLIC struct Reservoir
 };
 
 /**
- * Grid reservoir for ReGIR (RTG2 Ch.23). Unlike the per-pixel Reservoir it does NOT pre-divide into W;
- * it stores the raw RIS pieces from the fill pass so the shading-side RIS can resample correctly:
- *   totalWeight = wSum / M_build  (the cell's running reservoir weight)
- *   targetPdf   = the survivor's cell-center build target (intensity * geom, the EvalCellTarget value)
- * At shading the grid tap's source pdf = targetPdf / totalWeight (per-reservoir W = totalWeight/targetPdf,
- * exactly unbiased at any fill count). targetPdf is kept separate for the BRDF-MIS denom and the temporal merge.
+ * Grid reservoir for ReGIR (RTG2 Ch.23). Stores raw RIS pieces from fill (not a pre-divided W):
+ *   totalWeight = wSum / M_build  (running reservoir weight)
+ *   targetPdf   = survivor's cell-center build target (intensity * geom, EvalCellTarget); kept separate for BRDF-MIS denom + temporal merge
+ * Shading-side grid tap source pdf = targetPdf / totalWeight (per-reservoir 1/W), unbiased at any fill count.
  * lightIdx == ~0u indicates an empty reservoir.
  */
 SHADER_PUBLIC struct ReGIRReservoir
@@ -86,6 +84,26 @@ SHADER_PUBLIC struct LightBVHNode
     SHADER_PUBLIC float coneThetaE;
 };
 
+/**
+ * Vose alias-table entry
+ */
+SHADER_PUBLIC struct LightAliasEntry
+{
+    SHADER_PUBLIC float prob;     // Vose split threshold for the primary light (this bin)
+    SHADER_PUBLIC uint alias;     // alias light index drawn when u >= prob
+    SHADER_PUBLIC float pdf;      // p(primary) = power(primary) / totalPower
+    SHADER_PUBLIC float pdfAlias; // p(alias)   = power(alias)   / totalPower
+};
+
+/**
+ * One presampled-tile slot
+ */
+SHADER_PUBLIC struct ReGIRTileSlot
+{
+    SHADER_PUBLIC uint lightIdx;
+    SHADER_PUBLIC float sourcePdf;
+};
+
 SHADER_PUBLIC SHADER_CONST uint REGIR_RESERVOIRS_PER_CELL = 512u;
 
 // ReGIR Hash Grid
@@ -98,10 +116,14 @@ SHADER_PUBLIC SHADER_CONST uint REGIR_HASH_INVALID = 0xFFFFFFFFu;
 SHADER_PUBLIC SHADER_CONST float REGIR_LOD_BASE_DIST = 32.0;
 SHADER_PUBLIC SHADER_CONST uint REGIR_MAX_LEVEL = 8u;
 SHADER_PUBLIC SHADER_CONST float REGIR_MAX_DIST = 1024.0;
-SHADER_PUBLIC SHADER_CONST uint REGIR_FILL_CANDIDATES = 8u;
+SHADER_PUBLIC SHADER_CONST uint REGIR_FILL_CANDIDATES = 24u;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_X = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Y = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Z = 2.0;
+
+// Presampled light tiles
+SHADER_PUBLIC SHADER_CONST uint REGIR_TILE_COUNT = 128u;
+SHADER_PUBLIC SHADER_CONST uint REGIR_TILE_SIZE = 1024u;
 
 // Initial-candidate counts for ReSTIR DI Talbot MIS: light (uniform) samples and BRDF-guided samples.
 SHADER_PUBLIC SHADER_CONST int RESTIR_M_LIGHT = 16;

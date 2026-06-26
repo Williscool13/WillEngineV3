@@ -7,7 +7,7 @@
       "maxRadiance": 1000.0,
       "newFrameWeight": 0.10000000149011612
     },
-    "mode": 2,
+    "mode": 5,
     "smaa": {
       "edgeDetectionMode": 1,
       "localContrastAdaptation": 2.0,
@@ -26,13 +26,13 @@
       "varianceGammaLuma": 1.0
     }
   },
-  "activeLightingProfile": "FINAL RESTIR",
+  "activeLightingProfile": "FINAL RESTIR + REGIR",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,
   "bAutoSaveProjectConfig": false,
-  "bLimitFps": false,
-  "defaultScene": "Bistro Test",
+  "bLimitFps": true,
+  "defaultScene": "Lighting 2",
   "editorCameraFovDegrees": 70.0,
   "editorCameraNearPlane": 0.10000000149011612,
   "frameLimitTarget": 60,

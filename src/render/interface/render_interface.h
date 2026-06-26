@@ -594,6 +594,7 @@ struct ReSTIRParams
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};
+    bool bUseTileFeeder{false};
     // Temporal-gradient antilag confidence (RELAX only)
     bool bEnableConfidence{false};
     float confidenceStrength{0.75f};

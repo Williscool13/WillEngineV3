@@ -74,8 +74,29 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
         ReGIRReservoir res = ReGIRReservoirEmpty();
         ReservoirAccum accum = ReservoirAccumEmpty();
         float winnerTarget = 0.0;
+        if (pc.useTileFeeder != 0u) {
+            // Presampled-tile feeder
+            uint tile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u);
+            tile ^= tile >> 15u; tile *= 0x2c1b3c6du; tile ^= tile >> 12u;
+            uint tileBase = (tile % REGIR_TILE_COUNT) * REGIR_TILE_SIZE;
+            uint startSlot = h % REGIR_TILE_SIZE;
+            for (uint i = 0; i < REGIR_FILL_CANDIDATES; i++) {
+                uint slotInTile = (startSlot + i) % REGIR_TILE_SIZE;
+                ReGIRTileSlot cand = pc.tiles[tileBase + slotInTile];
+                float uSelect = HashStep(h);
+                if (cand.lightIdx == ~0u || cand.lightIdx >= uint(lightCount) || cand.sourcePdf <= 0.0) { continue; }
+
+                LightVS vs = UnpackLightVS(pc.lightVS[cand.lightIdx]);
+                float target = EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb);
+                float w_i = target / cand.sourcePdf;
+                if (ReservoirAddSample(accum, w_i, uSelect)) {
+                    res.lightIdx = cand.lightIdx;
+                    winnerTarget = target;
+                }
+            }
+        } else {
         for (uint i = 0; i < REGIR_FILL_CANDIDATES; i++) {
-            // Candidate selection via the world-space light BVH (analytic selection pdf), replacing uniform selection.
+            // Candidate selection via the world-space light BVH (analytic selection pdf).
             LightTreeSample ts = SampleLightTree(pc.bvhNodes, pc.bvhNumLeaves, cellCenterWS, h);
             float uSelect = HashStep(h);
             if (ts.lightIdx == ~0u || ts.lightIdx >= uint(lightCount) || ts.pdf <= 0.0) { continue; }
@@ -88,6 +109,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
                 res.lightIdx = uint(lightIdx);
                 winnerTarget = target;
             }
+        }
         }
         FinalizeReservoirReGIR(res, accum, winnerTarget, float(REGIR_FILL_CANDIDATES));
         ReGIRClampW(res, pc.wClamp);

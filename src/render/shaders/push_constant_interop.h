@@ -396,11 +396,21 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC SHADER_PTR(uint) hashEntriesPrev;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirsPrev;
     SHADER_PUBLIC SHADER_PTR(LightBVHNode) bvhNodes;
+    SHADER_PUBLIC SHADER_PTR(ReGIRTileSlot) tiles; // presampled light tiles; only read when useTileFeeder != 0
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t bHasPrev;
     SHADER_PUBLIC uint32_t bvhNumLeaves;
     SHADER_PUBLIC float wClamp;
+    SHADER_PUBLIC uint32_t useTileFeeder;
+};
+
+SHADER_PUBLIC struct ReGIRPresampleTilesPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(LightAliasEntry) aliasEntries;
+    SHADER_PUBLIC SHADER_PTR(ReGIRTileSlot) tiles;
+    SHADER_PUBLIC uint32_t lightCount;
+    SHADER_PUBLIC uint32_t frameIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant

@@ -595,6 +595,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
                     changed = true;
                 }
+                if (ImGui::Checkbox("Tile Feeder (alias tiles vs BVH)", &restir.bUseTileFeeder)) {
+                    changed = true;
+                }
                 if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
             }
             ImGui::SeparatorText("Denoiser");

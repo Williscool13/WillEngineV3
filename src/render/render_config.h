@@ -37,6 +37,7 @@ inline constexpr int32_t RDG_MAX_TLAS = 16;
 inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
 inline const StringID LIGHT_DATA_BUFFER = SID("light_data");
 inline const StringID LIGHT_BVH_BUFFER = SID("light_bvh");
+inline const StringID LIGHT_ALIAS_BUFFER = SID("light_alias");
 inline const StringID GEOMETRY_PRIMITIVE_BUFFER = SID("primitive_buffer");
 inline const StringID GEOMETRY_MODEL_BUFFER = SID("model_buffer");
 inline const StringID GEOMETRY_INSTANCE_BUFFER = SID("main_instance_buffer");
@@ -87,6 +88,11 @@ inline constexpr int32_t LIGHT_DATA_BUFFER_SIZE = sizeof(LightData) * VIEW_COUNT
 inline constexpr int32_t LIGHT_BVH_MAX_LEAVES = 2048; // NextPowerOfTwo(MAX_LIGHTS)
 inline constexpr int32_t LIGHT_BVH_NODE_COUNT = 2 * LIGHT_BVH_MAX_LEAVES - 1;
 inline constexpr int32_t LIGHT_BVH_BUFFER_SIZE = LIGHT_BVH_NODE_COUNT * static_cast<int32_t>(sizeof(LightBVHNode)) + MAX_LIGHTS * static_cast<int32_t>(sizeof(uint32_t));
+
+// Alias Table
+inline constexpr int32_t LIGHT_ALIAS_BUFFER_SIZE = MAX_LIGHTS * static_cast<int32_t>(sizeof(LightAliasEntry));
+// Pre-sampled lights
+inline constexpr int32_t REGIR_TILE_BUFFER_SIZE = REGIR_TILE_COUNT * REGIR_TILE_SIZE * sizeof(ReGIRTileSlot);
 
 inline constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE = 1 << 27; // 64MB indices
 inline constexpr int32_t MEGA_MESHLET_TRIANGLE_BUFFER_SIZE = 1 << 27; // 64MB triangles

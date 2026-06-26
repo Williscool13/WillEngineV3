@@ -67,7 +67,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     float3 cameraPos = scene.cameraWorldPos.xyz;
     float camDist = distance(worldPos, cameraPos);
 
-    // Pick one grid cell per pixel (jittered so cell boundaries dither into noise), shared by every light + BRDF candidate so the balance-heuristic MIS sees one consistent selection pdf q(L) = occupancy*cellTarget(L)/S_cell + (1-occupancy)/lightCount. No cell -> uniform.
     bool useGrid = false;
     uint gridBase = 0u;
     float3 cellCenterVS = float3(0.0);
@@ -76,16 +75,23 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     if (camDist <= REGIR_MAX_DIST) {
         float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
         float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
-        ReGIRHashKey key = ReGIRComputeKey(worldPos + jitter, cameraPos);
-        uint cellSlot = ReGIRHashFind(pc.hashEntries, key);
-        if (cellSlot != REGIR_HASH_INVALID) {
-            float2 cd = pc.cellData[cellSlot];
-            cellTargetSum = cd.x;
-            if (cellTargetSum > 0.0) {
-                gridBase = ReGIRCellReservoirBase(cellSlot);
-                cellCenterVS = mul(scene.view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
-                cellOccupancy = cd.y;
-                useGrid = true;
+
+        // Jittered cell first, then the pixel's own un-jittered cell, before uniform
+        [unroll]
+        for (int attempt = 0; attempt < 2 && !useGrid; attempt++)
+        {
+            float3 queryPos = (attempt == 0) ? (worldPos + jitter) : worldPos;
+            ReGIRHashKey key = ReGIRComputeKey(queryPos, cameraPos);
+            uint cellSlot = ReGIRHashFind(pc.hashEntries, key);
+            if (cellSlot != REGIR_HASH_INVALID) {
+                float2 cd = pc.cellData[cellSlot];
+                if (cd.x > 0.0) {
+                    cellTargetSum = cd.x;
+                    gridBase = ReGIRCellReservoirBase(cellSlot);
+                    cellCenterVS = mul(scene.view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
+                    cellOccupancy = cd.y;
+                    useGrid = true;
+                }
             }
         }
     }
@@ -98,26 +104,27 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             LightVS candVS = (LightVS)0;
             float w_i = 0.0;
 
-            // Light selection: grid reservoir (~ proportional to the cell target), with a uniform fallback on an empty slot.
+            // Grid tap source pdf
             int lightIdx = -1;
+            float pSelect = 0.0;
             if (useGrid) {
                 uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
                 ReGIRReservoir gr = pc.reservoirs[gridBase + slotInCell];
-                if (gr.lightIdx != ~0u && gr.lightIdx < uint(lightCount)) {
+                if (gr.lightIdx != ~0u && gr.lightIdx < uint(lightCount) && gr.totalWeight > 0.0) {
                     lightIdx = int(gr.lightIdx);
+                    pSelect = gr.targetPdf / gr.totalWeight;
                 } else {
-                    // Empty grid slot (sparse cell): fall back to a uniform light. Realizes the (1-occupancy) uniform branch of q(L).
                     lightIdx = clamp(int(HashStep(h) * float(lightCount)), 0, lightCount - 1);
+                    pSelect = invLightCount;
                 }
             } else {
                 lightIdx = clamp(int(HashStep(h) * float(lightCount)), 0, lightCount - 1);
+                pSelect = invLightCount;
             }
 
             if (lightIdx >= 0) {
                 LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
                 float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                // Occupancy-weighted selection pdf q(L) = occupancy * grid pdf + (1-occupancy) * uniform; keeps sparse cells lit and correctly weighted.
-                float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, lightColor) / cellTargetSum) + (1.0 - cellOccupancy) * invLightCount) : invLightCount;
                 if (pSelect > 0.0) {
                     float uU = HashStep(h);
                     float uV = HashStep(h);

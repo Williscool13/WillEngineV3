@@ -111,8 +111,14 @@ void SetupReSTIRPasses(RenderGraph& graph,
         graph.CreateBuffer(SID("regir_hash_reservoirs"), reservoirsSize, true);
         graph.CreateBuffer(SID("regir_cell_data"), REGIR_HASH_CAPACITY * 2u * static_cast<uint32_t>(sizeof(float)), true);
         graph.CreateBuffer(SID("regir_active_cells"), activeCellsSize, false);
-        graph.CreateBuffer(SID("regir_active_count"), static_cast<uint32_t>(sizeof(uint32_t)), false);
+        graph.CreateBuffer(SID("regir_active_count"), sizeof(uint32_t), false);
         graph.CreateBuffer(SID("regir_fill_indirect"), 3u * static_cast<uint32_t>(sizeof(uint32_t)), false);
+
+        // Presampled ReGIR
+        const bool bUseTileFeeder = restirParams.bUseTileFeeder;
+        if (bUseTileFeeder) {
+            graph.CreateBuffer(SID("regir_tiles"), REGIR_TILE_BUFFER_SIZE, false);
+        }
 
         const bool bHasPrev = !restirParams.bResetReGIR && graph.HasBuffer(SID("regir_hash_entries_prev")) && graph.HasBuffer(SID("regir_hash_reservoirs_prev"));
 
@@ -165,6 +171,27 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const uint32_t fillBvhLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
         const uint32_t fillBvhNumLeaves = fillBvhLightCount > 0u ? static_cast<uint32_t>(NextPowerOfTwo(fillBvhLightCount)) : 0u;
 
+        if (bUseTileFeeder) {
+            RenderPass& presamplePass = graph.AddPass(SID("[ReGIR] Presample Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+            presamplePass.ReadBuffer(LIGHT_ALIAS_BUFFER);
+            presamplePass.WriteBuffer(SID("regir_tiles"));
+            presamplePass.Execute([pipelineManager, frameNumber, fillBvhLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_presample_tiles"));
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+                ReGIRPresampleTilesPushConstant pc{
+                    .aliasEntries = graph.GetBufferAddress(LIGHT_ALIAS_BUFFER),
+                    .tiles = graph.GetBufferAddress(SID("regir_tiles")),
+                    .lightCount = fillBvhLightCount,
+                    .frameIndex = static_cast<uint32_t>(frameNumber),
+                };
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+                const uint32_t totalSlots = REGIR_TILE_COUNT * REGIR_TILE_SIZE;
+                vkCmdDispatch(cmd, (totalSlots + 255u) / 256u, 1, 1);
+            });
+        }
+
         RenderPass& regirFillPass = graph.AddPass(SID("[ReGIR] Fill"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         regirFillPass.ReadBuffer(SCENE_DATA_BUFFER);
         regirFillPass.ReadBuffer(SID("light_data"));
@@ -172,6 +199,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         regirFillPass.ReadBuffer(SID("light_bvh"));
         regirFillPass.ReadBuffer(SID("regir_active_cells"));
         regirFillPass.ReadBuffer(SID("regir_active_count"));
+        if (bUseTileFeeder) { regirFillPass.ReadBuffer(SID("regir_tiles")); }
         if (bHasPrev) {
             regirFillPass.ReadBuffer(SID("regir_hash_entries_prev"));
             regirFillPass.ReadBuffer(SID("regir_hash_reservoirs_prev"));
@@ -179,7 +207,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         regirFillPass.ReadIndirectBuffer(SID("regir_fill_indirect"));
         regirFillPass.WriteBuffer(SID("regir_hash_reservoirs"));
         regirFillPass.WriteBuffer(SID("regir_cell_data"));
-        regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, bHasPrev, fillBvhNumLeaves](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, bHasPrev, fillBvhNumLeaves, bUseTileFeeder](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_fill"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -194,11 +222,13 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .hashEntriesPrev = bHasPrev ? graph.GetBufferAddress(SID("regir_hash_entries_prev")) : 0,
                 .reservoirsPrev = bHasPrev ? graph.GetBufferAddress(SID("regir_hash_reservoirs_prev")) : 0,
                 .bvhNodes = graph.GetBufferAddress(SID("light_bvh")),
+                .tiles = bUseTileFeeder ? graph.GetBufferAddress(SID("regir_tiles")) : 0,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .bHasPrev = bHasPrev ? 1u : 0u,
                 .bvhNumLeaves = fillBvhNumLeaves,
                 .wClamp = restirParams.regirWClamp,
+                .useTileFeeder = bUseTileFeeder ? 1u : 0u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SID("regir_fill_indirect")), 0);

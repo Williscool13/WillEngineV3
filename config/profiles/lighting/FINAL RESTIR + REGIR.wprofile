@@ -13,6 +13,7 @@
     "thinOccluderCompensation": 0.0
   },
   "lightingMode": 4,
+  "lightingShaderOverride": 7554520945661456859,
   "restir": {
     "adaptiveSpatialBoost": 3.0,
     "antilagStrength": 0.8999999761581421,
@@ -25,9 +26,11 @@
     "bAdaptiveSpatial": true,
     "bEnableAntilag": false,
     "bEnableConfidence": false,
+    "bEnableTemporal": true,
     "bHalfRes": true,
     "bInitialVisibility": true,
     "bPermutationSampling": false,
+    "bUseTileFeeder": true,
     "boilingFilterStrength": 0.30000001192092896,
     "confidenceBlurRadius": 2,
     "confidenceDarknessBias": 0.009999999776482582,
@@ -73,7 +76,7 @@
       "specVarianceBoost": 1.0
     },
     "remodulateOutput": 0,
-    "restirWClamp": 100.0,
+    "restirWClamp": 0.0,
     "spatialMCap": 32,
     "spatialNeighbors": 3,
     "spatialPasses": 1,
@@ -86,6 +89,7 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 32
-  }
+    "temporalMCap": 320
+  },
+  "shadingShaderOverride": 11262630175972558216
 }
