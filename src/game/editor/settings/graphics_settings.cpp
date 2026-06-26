@@ -150,7 +150,7 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
         ImGui::Spacing();
         ImGui::Separator();
 
-        const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA"};
+        const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
         int currentAA = static_cast<int>(state->lighting.aaConfig.mode);
         if (ImGui::Combo("Anti-Aliasing", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
             state->lighting.aaConfig.mode = static_cast<Core::AntiAliasingMode>(currentAA);
@@ -160,6 +160,7 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
         const Core::AntiAliasingMode aaMode = state->lighting.aaConfig.mode;
         const bool bSMAA = aaMode == Core::AntiAliasingMode::SMAA || aaMode == Core::AntiAliasingMode::SMAAT2X;
         const bool bTAA = aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA;
+        const bool bDonutTAA = aaMode == Core::AntiAliasingMode::DonutTAA;
 
         if (bSMAA && ImGui::CollapsingHeader("SMAA")) {
             Core::SMAAConfiguration& smaa = state->lighting.aaConfig.smaa;
@@ -193,6 +194,20 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             if (Widgets::SliderFloat("Grazing Turnover##taa", &taa.grazingTurnoverStrength, 0.0f, 100.0f, {.format = "%.1f"})) { changed = true; }
             if (ImGui::Button("Reset TAA")) {
                 taa = defaultTAA;
+                changed = true;
+            }
+        }
+
+        if (bDonutTAA && ImGui::CollapsingHeader("Donut TAA")) {
+            Core::DonutTAAConfiguration& donutTaa = state->lighting.aaConfig.donutTaa;
+            constexpr Core::DonutTAAConfiguration defaultDonutTaa{};
+            if (Widgets::SliderFloat("Clamping Factor##donuttaa", &donutTaa.clampingFactor, -1.0f, 4.0f, {.format = "%.2f"})) { changed = true; }
+            if (Widgets::SliderFloat("New Frame Weight##donuttaa", &donutTaa.newFrameWeight, 0.01f, 1.0f, {.format = "%.3f"})) { changed = true; }
+            if (Widgets::SliderFloat("Max Radiance (pqC)##donuttaa", &donutTaa.maxRadiance, 1.0f, 10000.0f, {.format = "%.1f"})) { changed = true; }
+            if (ImGui::Checkbox("Catmull-Rom History##donuttaa", &donutTaa.bUseCatmullRom)) { changed = true; }
+            if (ImGui::Checkbox("History Clamp Relax##donuttaa", &donutTaa.bUseHistoryClampRelax)) { changed = true; }
+            if (ImGui::Button("Reset Donut TAA")) {
+                donutTaa = defaultDonutTaa;
                 changed = true;
             }
         }

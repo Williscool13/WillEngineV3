@@ -1,5 +1,12 @@
 {
   "aa": {
+    "donutTaa": {
+      "bUseCatmullRom": true,
+      "bUseHistoryClampRelax": false,
+      "clampingFactor": 1.0,
+      "maxRadiance": 1000.0,
+      "newFrameWeight": 0.10000000149011612
+    },
     "mode": 2,
     "smaa": {
       "edgeDetectionMode": 1,

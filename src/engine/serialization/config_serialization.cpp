@@ -261,12 +261,35 @@ void FromJson(const nlohmann::json& t, Core::TAAConfiguration& p)
     p.grazingTurnoverStrength = tFloat("grazingTurnoverStrength", p.grazingTurnoverStrength);
 }
 
+nlohmann::json ToJson(const Core::DonutTAAConfiguration& p)
+{
+    return {
+        {"clampingFactor", p.clampingFactor},
+        {"newFrameWeight", p.newFrameWeight},
+        {"maxRadiance", p.maxRadiance},
+        {"bUseCatmullRom", p.bUseCatmullRom},
+        {"bUseHistoryClampRelax", p.bUseHistoryClampRelax},
+    };
+}
+
+void FromJson(const nlohmann::json& t, Core::DonutTAAConfiguration& p)
+{
+    auto tFloat = [&](const char* k, float def) { return t.contains(k) && t[k].is_number() ? t[k].get<float>() : def; };
+    auto tBool = [&](const char* k, bool def) { return t.contains(k) && t[k].is_boolean() ? t[k].get<bool>() : def; };
+    p.clampingFactor = tFloat("clampingFactor", p.clampingFactor);
+    p.newFrameWeight = tFloat("newFrameWeight", p.newFrameWeight);
+    p.maxRadiance = tFloat("maxRadiance", p.maxRadiance);
+    p.bUseCatmullRom = tBool("bUseCatmullRom", p.bUseCatmullRom);
+    p.bUseHistoryClampRelax = tBool("bUseHistoryClampRelax", p.bUseHistoryClampRelax);
+}
+
 nlohmann::json ToJson(const Core::AntiAliasingConfiguration& p)
 {
     return {
         {"mode", static_cast<int32_t>(p.mode)},
         {"smaa", ToJson(p.smaa)},
         {"taa", ToJson(p.taa)},
+        {"donutTaa", ToJson(p.donutTaa)},
     };
 }
 
@@ -280,6 +303,9 @@ void FromJson(const nlohmann::json& j, Core::AntiAliasingConfiguration& p)
     }
     if (j.contains("taa") && j["taa"].is_object()) {
         FromJson(j["taa"], p.taa);
+    }
+    if (j.contains("donutTaa") && j["donutTaa"].is_object()) {
+        FromJson(j["donutTaa"], p.donutTaa);
     }
 }
 

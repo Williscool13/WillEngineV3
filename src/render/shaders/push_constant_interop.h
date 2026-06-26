@@ -582,6 +582,24 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC float grazingTurnoverStrength;
 };
 
+// Donut-ported native-res TAA resolve (shaders/donut_taa.slang); fields match the shader.
+SHADER_PUBLIC struct DonutTaaPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t colorInputIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t feedbackInputIndex;
+    SHADER_PUBLIC uint32_t historyClampRelaxIndex;
+    SHADER_PUBLIC uint32_t colorOutputIndex;
+    SHADER_PUBLIC uint32_t feedbackOutputIndex;
+    SHADER_PUBLIC float clampingFactor;
+    SHADER_PUBLIC float newFrameWeight;
+    SHADER_PUBLIC float pqC;
+    SHADER_PUBLIC float invPqC;
+    SHADER_PUBLIC uint32_t useHistoryClampRelax;
+    SHADER_PUBLIC uint32_t useCatmullRom;
+};
+
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;

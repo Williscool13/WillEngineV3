@@ -25,7 +25,7 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
     sceneData.view = viewMatrix;
     sceneData.prevView = prevViewMatrix;
 
-    if (aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA) {
+    if (aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA || aaMode == Core::AntiAliasingMode::DonutTAA) {
         const HaltonSample& currSample = HALTON_SEQUENCE[(frameNumber + 1) % HALTON_SEQUENCE_COUNT];
         const HaltonSample& prevSample = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
 

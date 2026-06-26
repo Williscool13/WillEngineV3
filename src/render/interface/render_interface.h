@@ -186,6 +186,7 @@ enum class AntiAliasingMode
     TAA,
     SMAAT2X,
     NaiveTAA,
+    DonutTAA,
 };
 
 enum class SMAAEdgeDetectionMode : int32_t
@@ -216,11 +217,22 @@ struct TAAConfiguration
     float grazingTurnoverStrength{30.0f};
 };
 
+
+struct DonutTAAConfiguration
+{
+    float clampingFactor{1.0f}; // mean +/- k*sigma in PQ space; < 0 disables clamping
+    float newFrameWeight{0.1f}; // steady-state new-sample blend
+    float maxRadiance{1000.0f}; // pqC (cd/m^2); clamped to [1e-4, 1e8] CPU-side
+    bool bUseCatmullRom{true};
+    bool bUseHistoryClampRelax{false}; // no mask resource wired by default
+};
+
 struct AntiAliasingConfiguration
 {
     AntiAliasingMode mode{AntiAliasingMode::TAA};
     SMAAConfiguration smaa{};
     TAAConfiguration taa{};
+    DonutTAAConfiguration donutTaa{};
 };
 
 struct GTAOConfiguration

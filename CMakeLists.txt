@@ -497,6 +497,7 @@ compile_shaders(will-engine
 
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/temporal_antialiasing.slang compute ComputeMain temporal_antialiasing
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/naive_temporal_antialiasing.slang compute ComputeMain naive_temporal_antialiasing
+        ${CMAKE_SOURCE_DIR}/shaders/donut_taa.slang compute ComputeMain donut_taa
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute LumaEdgeDetectionMain smaa_luma_edge_detection
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute ColorEdgeDetectionMain smaa_color_edge_detection
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute DepthEdgeDetectionMain smaa_depth_edge_detection

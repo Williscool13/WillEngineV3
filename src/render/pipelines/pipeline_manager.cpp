@@ -481,6 +481,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
     RegisterComputePipeline(SID("naive_temporal_antialiasing"), src / "naive_temporal_antialiasing_compute.spv",
                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
+    RegisterComputePipeline(SID("donut_taa"), src / "donut_taa_compute.spv",
+                            sizeof(DonutTaaPushConstant), PipelineCategory::Legacy);
 
     RegisterComputePipeline(SID("smaa_luma_edge_detection"), src / "smaa_luma_edge_detection_compute.spv",
                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);

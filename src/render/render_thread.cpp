@@ -614,6 +614,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             case Core::AntiAliasingMode::NaiveTAA:
                 targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, SID("naive_temporal_antialiasing"));
                 break;
+            case Core::AntiAliasingMode::DonutTAA:
+                targets.colorOutput = SetupDonutTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
+                break;
             case Core::AntiAliasingMode::SMAAT2X:
                 targets.colorOutput = SetupSMAA_T2X(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
                 break;

@@ -13,6 +13,7 @@ struct ReSTIRParams;
 struct GTAOConfiguration;
 struct SMAAConfiguration;
 struct TAAConfiguration;
+struct DonutTAAConfiguration;
 struct AntiAliasingConfiguration;
 struct PostProcessConfiguration;
 }
@@ -33,6 +34,9 @@ void FromJson(const nlohmann::json& j, Core::SMAAConfiguration& p);
 
 nlohmann::json ToJson(const Core::TAAConfiguration& p);
 void FromJson(const nlohmann::json& j, Core::TAAConfiguration& p);
+
+nlohmann::json ToJson(const Core::DonutTAAConfiguration& p);
+void FromJson(const nlohmann::json& j, Core::DonutTAAConfiguration& p);
 
 nlohmann::json ToJson(const Core::AntiAliasingConfiguration& p);
 void FromJson(const nlohmann::json& j, Core::AntiAliasingConfiguration& p);
