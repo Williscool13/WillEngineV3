@@ -22,7 +22,7 @@ template<typename T>
 concept DataComponent = !std::is_empty_v<T>;
 
 template<DataComponent T>
-void RegisterComponent(Engine::ComponentRegistry& componentRegistry, const char* name, bool hidden = false)
+void RegisterComponent(Engine::ComponentRegistry& componentRegistry, const char* name, bool hidden, bool hideInInspector)
 {
     auto typeId = TypeSID<T>();
     auto index = componentRegistry.registry.Size();
@@ -69,14 +69,15 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, const char*
         [](const entt::registry& reg, entt::entity e) -> bool {
             return reg.all_of<T>(e);
         },
-        hidden
+        hidden,
+        hideInInspector
     });
 
     componentRegistry.registryMapping[typeId] = index;
 }
 
 template<TagComponent T>
-void RegisterComponent(Engine::ComponentRegistry& componentRegistry, const char* name, bool hidden = false)
+void RegisterComponent(Engine::ComponentRegistry& componentRegistry, const char* name, bool hidden, bool hideInInspector)
 {
     auto typeId = TypeSID<T>();
     auto index = componentRegistry.registry.Size();
@@ -115,7 +116,8 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, const char*
         [](const entt::registry& reg, entt::entity e) -> bool {
             return reg.all_of<T>(e);
         },
-        hidden
+        hidden,
+        hideInInspector
     });
     componentRegistry.registryMapping[typeId] = index;
 }

@@ -1,16 +1,20 @@
-﻿//
+//
 // Created by William on 2026-01-30.
 //
 
 #include "editor_systems.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstring>
 
 #include <tracy/Tracy.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "game/systems/debug_system.h"
 #include "game/editor/settings/graphics_settings.h"
+#include "game/editor/editor_scene_browser.h"
+#include "game/editor/editor_materials.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "game/systems/scene_system.h"
@@ -36,6 +40,15 @@
 
 namespace Game
 {
+static bool HandleViewportSelection(Engine::EngineContext* ctx, Engine::EngineState* state);
+static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState* state);
+static void DrawGameplayWindow(Engine::EngineState* state);
+static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state);
+static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, const glm::vec3& centroid, int transformCount);
+static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& view, const glm::mat4& proj, const glm::vec3& multiGizmoCentroid, bool bJustSelected);
+static void DrawSceneStatsWindow(Engine::EngineState* state);
+
 void MarkSceneModified(Engine::EngineState* state, StringID sceneId)
 {
     if (!state->editor.modifiedScenes.Contains(sceneId)) {
@@ -302,7 +315,59 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     state->editor.bExclusiveGizmoActivePrev = state->editor.bExclusiveGizmoActive;
     state->editor.bExclusiveGizmoActive = false;
 
+    const bool bJustSelected = HandleViewportSelection(ctx, state);
+    HandleEditorHotkeys(ctx, state);
 
+    DrawDebugViewWindow(ctx, state);
+    DrawProjectConfigWindow(ctx, state);
+    DrawLightingWindow(ctx, state);
+    DrawGameplayWindow(state);
+
+    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::BeginFrame();
+    ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
+    ImGuizmo::SetRect(
+        static_cast<float>(ctx->windowContext.viewportOffsetX),
+        static_cast<float>(ctx->windowContext.viewportOffsetY),
+        static_cast<float>(ctx->windowContext.viewportWidth),
+        static_cast<float>(ctx->windowContext.viewportHeight)
+    );
+
+    DrawViewManipulatorAndOverlay(ctx, state, frameBuffer);
+
+    const glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
+    const glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
+
+    DrawToolbar(ctx, state);
+    DrawSceneBrowser(ctx, state, frameBuffer);
+
+    glm::vec3 multiGizmoCentroid{0.0f};
+    int transformCount = 0;
+    for (auto entity : state->editor.selectedEntities) {
+        if (state->registry.all_of<Component::TransformComponent>(entity)) {
+            multiGizmoCentroid += Component::ComputeWorldTransform(state->registry, entity).translation;
+            ++transformCount;
+        }
+    }
+    if (transformCount > 0) {
+        multiGizmoCentroid /= static_cast<float>(transformCount);
+    }
+
+    DrawDetailsPanel(ctx, state, frameBuffer, multiGizmoCentroid, transformCount);
+    DrawSelectionGizmos(state, view, proj, multiGizmoCentroid, bJustSelected);
+
+    DrawPostProcessingWindow(state);
+    DrawSceneStatsWindow(state);
+    DrawMaterialsWindow(ctx, state);
+    DrawTexturesWindow(ctx, state);
+
+    frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
+    frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
+    frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;
+}
+
+static bool HandleViewportSelection(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
     bool bJustSelected = false;
 
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
@@ -310,6 +375,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
         if (it != nullptr) {
             bJustSelected = true;
+            state->editor.selectedFolders.Clear();
             entt::entity clicked = *it;
             if (ctrlHeld) {
                 auto pos = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), clicked);
@@ -326,12 +392,18 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         }
         else if (!ctrlHeld) {
+            state->editor.selectedFolders.Clear();
             state->editor.selectedEntities.Clear();
         }
     }
 
+    return bJustSelected;
+}
 
-    // Editor shortcuts
+static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
+
     if (!state->bIsPlaying && !ctx->bImGuiWantsTextInput) {
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
         const bool rmbHeld = state->inputFrame->GetMouse(MouseButton::RMB).down;
@@ -377,7 +449,27 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
 
             if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+                state->editor.selectedFolders.Clear();
                 state->editor.selectedEntities.Clear();
+            }
+
+            if (!popupOpen && state->inputFrame->GetKey(Key::F2).pressed) {
+                if (state->editor.selectedFolders.Size() == 1 && state->registry.valid(state->editor.selectedFolders[0])) {
+                    if (const auto* fc = state->registry.try_get<Component::SceneFolderComponent>(state->editor.selectedFolders[0])) {
+                        state->editor.renamingEntity = state->editor.selectedFolders[0];
+                        state->editor.renameRequestFocus = true;
+                        strncpy_s(state->editor.renameBuffer, fc->name.c_str(), sizeof(state->editor.renameBuffer) - 1);
+                    }
+                }
+                else if (state->editor.selectedEntities.Size() == 1) {
+                    entt::entity target = state->editor.selectedEntities[0];
+                    if (state->registry.valid(target)) {
+                        state->editor.renamingEntity = target;
+                        state->editor.renameRequestFocus = true;
+                        const auto* nc = state->registry.try_get<Component::NameComponent>(target);
+                        strncpy_s(state->editor.renameBuffer, nc ? nc->name.c_str() : "", sizeof(state->editor.renameBuffer) - 1);
+                    }
+                }
             }
 
             if (!popupOpen && state->inputFrame->GetKey(Key::F).pressed && !state->editor.selectedEntities.IsEmpty()) {
@@ -437,13 +529,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         }
     }
+}
 
-    DrawDebugViewWindow(ctx, state);
-
-    DrawProjectConfigWindow(ctx, state);
-
-    DrawLightingWindow(ctx, state);
-
+static void DrawGameplayWindow(Engine::EngineState* state)
+{
     if (ImGui::Begin("Gameplay")) {
         if (state->bIsPlaying) {
             ImGui::Text("Checkpoint ID:       %llu", state->currentCheckpointId.id);
@@ -454,20 +543,13 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
     }
     ImGui::End();
+}
 
+static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
     auto editorCameraView = state->registry.view<Component::FreeCameraComponent, Component::TransformComponent, Component::EditorCameraTag>();
     assert(editorCameraView.size_hint() > 0);
     auto& editorCameraTransform = editorCameraView.get<Component::TransformComponent>(editorCameraView.front());
-
-    ImGuizmo::SetOrthographic(false);
-    ImGuizmo::BeginFrame();
-    ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
-    ImGuizmo::SetRect(
-        static_cast<float>(ctx->windowContext.viewportOffsetX),
-        static_cast<float>(ctx->windowContext.viewportOffsetY),
-        static_cast<float>(ctx->windowContext.viewportWidth),
-        static_cast<float>(ctx->windowContext.viewportHeight)
-    );
 
     // View Manipulator Gizmo
     {
@@ -521,12 +603,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
         ImGui::End();
     }
+}
 
-    const glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
-    const glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
-    const glm::vec3 cameraPos = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;
-    const glm::vec3 cameraFwd = frameBuffer->mainViewFamily.mainView.currentViewData.cameraForward;
-
+static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
     const bool multiSelected = state->editor.selectedEntities.Size() > 1;
     if (multiSelected) {
         state->editor.currentGizmoMode = ImGuizmo::WORLD;
@@ -655,918 +735,15 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
     }
     ImGui::End();
+}
 
-    if (ImGui::Begin("Scene Browser")) {
-        const auto& sceneCache = ctx->assetManager->GetSceneCache();
-
-        if (!sceneCache.IsEmpty() && !sceneCache.Contains(state->currentSceneId)) {
-            for (const auto& [id, meta] : sceneCache) {
-                state->currentSceneId = id;
-                state->currentSceneName = meta.sceneName;
-                break;
-            }
-        }
-        if (sceneCache.IsEmpty()) {
-            state->currentSceneId = {};
-            state->currentSceneName.Clear();
-        }
-
-        const bool bIsLoaded = std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
-        const bool bIsModified = std::ranges::find(state->editor.modifiedScenes, state->currentSceneId) != state->editor.modifiedScenes.end();
-        const bool bIsMaxLoaded = state->editor.loadedScenes.Size() > Engine::MAX_LOADED_SCENES;
-        const bool hasScene = sceneCache.Contains(state->currentSceneId);
-
-        // Scene dropdown
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##scene_list", state->currentSceneName.c_str())) {
-            struct ScenePair
-            {
-                StringID sceneId;
-                Core::InlineString<128> name;
-            };
-            auto sceneList = Core::ArenaFixedVector<ScenePair>(&ctx->editorArena.Get(), sceneCache.Size());
-            for (const auto& [id, meta] : sceneCache) {
-                sceneList.EmplaceBack(id, meta.sceneName);
-            }
-            std::ranges::sort(sceneList, {}, &ScenePair::name);
-
-            for (auto& [id, name] : sceneList) {
-                const bool selected = (id == state->currentSceneId);
-                if (ImGui::Selectable(name.c_str(), selected)) {
-                    state->currentSceneId = id;
-                    state->currentSceneName = name;
-                }
-                if (std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == id; })) {
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("(loaded)");
-                }
-            }
-            ImGui::EndCombo();
-        }
-
-        ImGui::BeginDisabled(!hasScene || bIsLoaded || bIsMaxLoaded);
-        if (ImGui::Button("Load")) {
-            LoadSceneFromFile(state, ctx->assetManager, state->currentSceneId);
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!bIsLoaded);
-        if (ImGui::Button("Unload")) { UnloadScene(state, state->currentSceneId); }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!bIsLoaded);
-        if (bIsModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
-        if (ImGui::Button(bIsModified ? "Save*" : "Save")) {
-            SaveSceneToFile(state->currentSceneId, state->currentSceneName.View(), state, ctx->assetManager, ctx);
-            state->editor.modifiedScenes.RemoveFirst(state->currentSceneId);
-        }
-        if (bIsModified) { ImGui::PopStyleColor(); }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Auto", &state->editor.bAutoSave)) {
-            state->editor.autoSaveTimer = 0.0f;
-        }
-        if (state->editor.bAutoSave && ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Auto-save in %.0fs", state->editor.autoSaveInterval - state->editor.autoSaveTimer);
-        }
-
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!hasScene || bIsLoaded);
-        if (ImGui::Button("Delete")) {
-            ctx->assetManager->DeleteScene(state->currentSceneId);
-            state->currentSceneId = {};
-            state->currentSceneName.Clear();
-        }
-        ImGui::EndDisabled();
-        if (bIsLoaded && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("Unload scene before deleting");
-        }
-
-        ImGui::TextDisabled("ID: %llu", state->currentSceneId.id);
-
-        ImGui::BeginDisabled(!hasScene);
-        if (ImGui::Button("Set Default")) {
-            state->projectConfig.defaultScene = Core::InlineString<256>(state->currentSceneName.View());
-            Engine::WriteProjectConfig(state->projectConfig);
-        }
-        ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && hasScene) {
-            ImGui::SetTooltip("Set '%s' as the scene loaded on startup (non-editor)", state->currentSceneName.c_str());
-        }
-
-        ImGui::SeparatorText("New Scene");
-        static char newSceneName[128] = "New Scene";
-        ImGui::InputText("##new_scene_name", newSceneName, sizeof(newSceneName));
-        ImGui::SameLine();
-        const bool nameEmpty = newSceneName[0] == '\0';
-        bool nameInUse = false;
-        if (!nameEmpty) {
-            for (const auto& pair : sceneCache) {
-                if (pair.value.sceneName == newSceneName) {
-                    nameInUse = true;
-                    break;
-                }
-            }
-        }
-        ImGui::BeginDisabled(nameEmpty || nameInUse);
-        if (ImGui::Button("Create")) {
-            StringID newId{state->rng()};
-            ctx->assetManager->RegisterScene(newId, newSceneName);
-            state->currentSceneId = newId;
-            state->currentSceneName = Core::InlineString<128>(newSceneName);
-            state->editor.loadedScenes.PushBack({newId});
-            state->editor.modifiedScenes.PushBack(newId);
-            newSceneName[0] = '\0';
-        }
-        ImGui::EndDisabled();
-        if (nameInUse && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("A scene with this name already exists");
-        }
-
-        ImGui::SeparatorText("Spawn Model");
-
-        const auto& modelCache = ctx->assetManager->GetModelCache();
-        static int selectedModel = 0;
-
-        struct ModelPair
-        {
-            Core::InlineString<128> name;
-            Engine::ModelID id;
-        };
-
-        if (modelCache.IsEmpty()) { ImGui::TextDisabled("No models loaded"); }
-        auto modelList = Core::ArenaFixedVector<ModelPair>(&ctx->editorArena.Get(), std::max(modelCache.Size(), size_t{1}));
-        for (const auto& [id, meta] : modelCache) {
-            modelList.EmplaceBack(meta.name, id);
-        }
-
-        if (!modelList.IsEmpty()) {
-            std::ranges::sort(modelList, {}, &ModelPair::name);
-            selectedModel = std::clamp(selectedModel, 0, static_cast<int>(modelList.Size()) - 1);
-        }
-
-        ImGui::SetNextItemWidth(-1);
-        ImGui::BeginDisabled(modelList.IsEmpty());
-        if (ImGui::BeginCombo("##model_list", modelList.IsEmpty() ? "No models" : modelList[selectedModel].name.c_str())) {
-            for (int i = 0; i < static_cast<int>(modelList.Size()); ++i) {
-                bool sel = (i == selectedModel);
-                if (ImGui::Selectable(modelList[i].name.c_str(), sel)) {
-                    selectedModel = i;
-                }
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::EndDisabled();
-
-        ImGui::BeginDisabled(modelList.IsEmpty());
-        if (ImGui::Button("Spawn")) {
-            glm::vec3 offset = cameraPos + normalize(cameraFwd) * 5.0f;
-            auto spawned = SpawnModel(ctx, state, modelList[selectedModel].id, offset);
-            if (!spawned.IsEmpty()) {
-                state->editor.selectedEntities.Clear();
-                for (auto entity : spawned) {
-                    state->editor.selectedEntities.PushBack(entity);
-                }
-                MarkSceneModified(state, state->currentSceneId);
-            }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SeparatorText("Prefabs");
-
-        const bool hasOneSelected = state->editor.selectedEntities.Size() == 1;
-        static char prefabName[128] = "New Prefab";
-
-        Component::PrefabInstanceComponent* prefabInst = hasOneSelected ? state->registry.try_get<Component::PrefabInstanceComponent>(state->editor.selectedEntities[0]) : nullptr;
-        const bool isExistingPrefab = prefabInst != nullptr;
-
-        const bool isMasterPrefab = isExistingPrefab && prefabInst->bMasterPrefab;
-
-        if (isExistingPrefab) {
-            const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabInst->prefabId);
-            if (meta) {
-                strncpy_s(prefabName, meta->prefabName.c_str(), sizeof(prefabName) - 1);
-            }
-        }
-
-        ImGui::SetNextItemWidth(-1);
-        ImGui::BeginDisabled(!hasOneSelected);
-        ImGui::BeginDisabled(isExistingPrefab);
-        ImGui::InputText("##prefab_name", prefabName, sizeof(prefabName));
-        ImGui::EndDisabled();
-        ImGui::BeginDisabled(isExistingPrefab && !isMasterPrefab);
-        if (ImGui::Button(isExistingPrefab ? "Save Prefab" : "Save as Prefab")) {
-            SaveEntityAsPrefab(state, ctx->assetManager, ctx, state->editor.selectedEntities[0], prefabName);
-        }
-        ImGui::EndDisabled();
-        ImGui::EndDisabled();
-
-        const auto& prefabCache = ctx->assetManager->GetPrefabCache();
-        static int selectedPrefab = 0;
-        struct PrefabPair
-        {
-            Core::InlineString<128> name;
-            StringID id;
-        };
-
-        auto prefabList = Core::ArenaFixedVector<PrefabPair>(&ctx->editorArena.Get(), prefabCache.Size());
-        for (const auto& [id, meta] : prefabCache) {
-            prefabList.EmplaceBack(meta.prefabName, id);
-        }
-
-        if (!prefabList.IsEmpty()) {
-            std::ranges::sort(prefabList, {}, &PrefabPair::name);
-            selectedPrefab = std::clamp(selectedPrefab, 0, static_cast<int>(prefabList.Size()) - 1);
-        }
-
-        ImGui::SetNextItemWidth(-1);
-        ImGui::BeginDisabled(prefabList.IsEmpty());
-        if (ImGui::BeginCombo("##prefab_list", prefabList.IsEmpty() ? "No prefabs" : prefabList[selectedPrefab].name.c_str())) {
-            for (int i = 0; i < static_cast<int>(prefabList.Size()); ++i) {
-                bool sel = (i == selectedPrefab);
-                if (ImGui::Selectable(prefabList[i].name.c_str(), sel)) {
-                    selectedPrefab = i;
-                }
-            }
-            ImGui::EndCombo();
-        }
-
-        if (ImGui::Button("Spawn Prefab")) {
-            const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
-            glm::vec3 spawnPos = viewData.cameraPos + viewData.cameraForward * 5.0f;
-            entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].id, spawnPos);
-            if (spawned != entt::null) {
-                state->editor.selectedEntities.Clear();
-                state->editor.selectedEntities.PushBack(spawned);
-                MarkSceneModified(state, state->currentSceneId);
-            }
-        }
-        ImGui::SameLine(); {
-            const StringID selectedPrefabId = prefabList.IsEmpty() ? StringID{} : prefabList[selectedPrefab].id;
-            bool prefabInUse = false;
-            if (!prefabList.IsEmpty()) {
-                auto prefabView = state->registry.view<Component::PrefabInstanceComponent>();
-                for (auto entity : prefabView) {
-                    if (prefabView.get<Component::PrefabInstanceComponent>(entity).prefabId == selectedPrefabId) {
-                        prefabInUse = true;
-                        break;
-                    }
-                }
-            }
-            ImGui::BeginDisabled(prefabList.IsEmpty() || prefabInUse);
-            if (ImGui::Button("Delete Prefab")) {
-                ctx->assetManager->DeletePrefab(selectedPrefabId);
-                selectedPrefab = 0;
-            }
-            ImGui::EndDisabled();
-            if (prefabInUse && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("Prefab is referenced by scene entities");
-            }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::NewLine();
-
-        ImGui::SeparatorText("Entities");
-        if (ImGui::Button("Create Entity")) {
-            auto newEntity = CreateSceneEntity(state);
-            const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
-            state->registry.get<Component::TransformComponent>(newEntity).translation = viewData.cameraPos + viewData.cameraForward * 5.0f;
-            state->editor.selectedEntities.Clear();
-            state->editor.selectedEntities.PushBack(newEntity);
-            MarkSceneModified(state, state->currentSceneId);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("New Folder")) {
-            entt::entity f = state->registry.create();
-            state->registry.emplace<Component::SceneComponent>(f, state->currentSceneId);
-            Component::SceneFolderComponent folder{};
-            folder.folderId = StringID{state->rng()};
-            folder.name = Core::ShortString("New Folder");
-            state->registry.emplace<Component::SceneFolderComponent>(f, std::move(folder));
-            MarkSceneModified(state, state->currentSceneId);
-        }
-        char* search = state->editor.sceneBrowserSearch;
-        ImGui::SetNextItemWidth(-1);
-        ImGui::InputText("##search", search, sizeof(state->editor.sceneBrowserSearch));
-
-        // Component filter
-        StringID& componentFilterId = state->editor.sceneBrowserComponentFilter;
-        const Engine::ComponentEntry* componentFilter = nullptr;
-        if (componentFilterId.IsValid()) {
-            if (const auto* idx = state->componentRegistry.registryMapping.Find(componentFilterId)) {
-                componentFilter = &state->componentRegistry.registry[*idx];
-            }
-            else {
-                componentFilterId = {};
-            }
-        }
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##component_filter", componentFilter ? componentFilter->name : "All Components")) {
-            if (ImGui::Selectable("All Components", componentFilter == nullptr)) {
-                componentFilterId = {};
-            }
-            for (const auto& entry : state->componentRegistry.registry) {
-                if (entry.hidden) { continue; }
-                if (ImGui::Selectable(entry.name, componentFilterId == entry.typeId)) {
-                    componentFilterId = entry.typeId;
-                }
-            }
-            ImGui::EndCombo();
-        }
-        const bool filterActive = search[0] != '\0' || componentFilter != nullptr;
-
-        // Collect entities
-        struct EntityEntry
-        {
-            entt::entity entity;
-            const char* label;
-            uint64_t stableId;
-            uint64_t sortOrder;
-            StringID folderId;
-            entt::entity parentEntity; // entt::null if a hierarchy root
-            uint16_t depth; // (0 = root)
-        };
-
-        Core::ArenaVector<EntityEntry> entries{&ctx->editorArena.Get(), 1024};
-
-        size_t totalInScene = 0;
-        auto view2 = state->registry.view<Component::SceneComponent>();
-        for (auto entity : view2) {
-            auto& scene = view2.get<Component::SceneComponent>(entity);
-            if (scene.sceneId != state->currentSceneId) continue;
-            if (state->registry.all_of<Component::SceneFolderComponent>(entity)) continue;
-            ++totalInScene;
-
-            if (componentFilter && !componentFilter->has(state->registry, entity)) continue;
-
-            const char* label = "Unnamed";
-            const auto* nameComp = state->registry.try_get<Component::NameComponent>(entity);
-            if (nameComp) { label = nameComp->name.c_str(); }
-
-            if (search[0]) {
-                const bool nameMatches = nameComp
-                                             ? nameComp->name.Contains(search, Core::CaseSensitivity::Insensitive)
-                                             : Core::InlineString<16>("Unnamed").Contains(search, Core::CaseSensitivity::Insensitive);
-                if (!nameMatches) { continue; }
-            }
-
-            auto* stable = state->registry.try_get<Component::StableIdComponent>(entity);
-            uint64_t stableId = stable ? stable->id.id : static_cast<uint64_t>(entity);
-            uint64_t sortOrder = stable ? stable->sortOrder : 0;
-
-            StringID folderId;
-            if (auto* fc = state->registry.try_get<Component::EntityFolderComponent>(entity)) {
-                folderId = fc->folderId;
-            }
-            entt::entity parentEntity = entt::null;
-            uint16_t depth = 0;
-            if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
-                const auto* ps = state->registry.try_get<Component::SceneComponent>(h->parent);
-                if (ps && ps->sceneId == state->currentSceneId) {
-                    parentEntity = h->parent;
-                    depth = h->depth;
-                }
-            }
-            entries.PushBack({entity, label, stableId, sortOrder, folderId, parentEntity, depth});
-        }
-        std::ranges::sort(entries, [](const EntityEntry& a, const EntityEntry& b) { return a.sortOrder < b.sortOrder; });
-
-        entt::entity& s_selectionAnchor = state->editor.sceneBrowserSelectionAnchor;
-
-        // Deferred ops
-        entt::entity reorderDragged = entt::null;
-        entt::entity reorderTarget = entt::null;
-        bool reorderBelow = false;
-        entt::entity parentDragged = entt::null;
-        entt::entity parentTarget = entt::null;
-        entt::entity moveToFolderEntity = entt::null;
-        StringID moveToFolderId{};
-        entt::entity folderToDelete = entt::null;
-        StringID newSubfolderParent{};
-        entt::entity reparentFolderEntity = entt::null;
-        StringID reparentFolderTo{};
-
-        // Direct transform children of an entity, in sort order (entries is already sorted by sortOrder).
-        auto collectChildren = [&](entt::entity parent) {
-            Core::ArenaVector<EntityEntry*> kids{&ctx->editorArena.Get(), 8};
-            for (auto& en : entries) {
-                if (en.parentEntity == parent) { kids.PushBack(&en); }
-            }
-            return kids;
-        };
-
-        // True if `ancestor` lies on `node`'s parent chain (so parenting node under ancestor would form a cycle).
-        auto isAncestorOf = [&](entt::entity ancestor, entt::entity node) {
-            entt::entity e = node;
-            for (int guard = 0; e != entt::null && guard < 1024; ++guard) {
-                const auto* h = state->registry.try_get<Component::HierarchyComponent>(e);
-                e = (h && state->registry.valid(h->parent)) ? h->parent : entt::null;
-                if (e == ancestor) { return true; }
-            }
-            return false;
-        };
-
-        // Entity row. Returns true if the row is an expanded parent (caller should recurse into children).
-        auto drawEntityRow = [&](const EntityEntry& e, const EntityEntry* prev, const EntityEntry* next, bool hasChildren) -> bool {
-            ImGui::PushID(static_cast<int>(entt::to_integral(e.entity)));
-            ImGui::BeginDisabled(prev == nullptr);
-            if (ImGui::SmallButton("^")) {
-                std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
-                          state->registry.get<Component::StableIdComponent>(prev->entity).sortOrder);
-                MarkSceneModified(state, state->currentSceneId);
-            }
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            ImGui::BeginDisabled(next == nullptr);
-            if (ImGui::SmallButton("v")) {
-                std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
-                          state->registry.get<Component::StableIdComponent>(next->entity).sortOrder);
-                MarkSceneModified(state, state->currentSceneId);
-            }
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-
-            // Expand/collapse arrow for entities with transform children (state persists per-entity via ImGui storage, default open).
-            ImGuiStorage* storage = ImGui::GetStateStorage();
-            const ImGuiID openId = ImGui::GetID("hierarchy_open");
-            bool open = storage->GetInt(openId, 1) != 0;
-            if (hasChildren) {
-                if (ImGui::ArrowButton("expand", open ? ImGuiDir_Down : ImGuiDir_Right)) {
-                    open = !open;
-                    storage->SetInt(openId, open ? 1 : 0);
-                }
-            }
-            else {
-                ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), 0.0f));
-                open = false;
-            }
-            ImGui::SameLine();
-
-            const auto* prefabInst2 = state->registry.try_get<Component::PrefabInstanceComponent>(e.entity);
-            const bool isPrefab = prefabInst2 != nullptr;
-            const bool isMasterPrefab2 = isPrefab && prefabInst2->bMasterPrefab;
-            bool selected = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), e.entity) != state->editor.selectedEntities.end();
-
-            if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
-            char uniqueLabel[256];
-            if (isMasterPrefab2) {
-                snprintf(uniqueLabel, sizeof(uniqueLabel), "[M] %s##sel", e.label);
-            }
-            else {
-                snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##sel", e.label);
-            }
-            if (ImGui::Selectable(uniqueLabel, selected)) {
-                const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
-                const bool shiftHeld = state->inputFrame->GetKey(Key::LSHIFT).down || state->inputFrame->GetKey(Key::RSHIFT).down;
-                if (shiftHeld && s_selectionAnchor != entt::null) {
-                    int anchorIdx = -1;
-                    int clickedIdx = -1;
-                    for (int i = 0; i < static_cast<int>(entries.Size()); ++i) {
-                        if (entries[i].entity == s_selectionAnchor) { anchorIdx = i; }
-                        if (entries[i].entity == e.entity) { clickedIdx = i; }
-                    }
-                    // Range-select stays within the anchor's peer group: same folder and hierarchy depth.
-                    const bool samePeerGroup = anchorIdx >= 0 && entries[anchorIdx].folderId == e.folderId && entries[anchorIdx].depth == e.depth;
-                    if (anchorIdx >= 0 && clickedIdx >= 0 && samePeerGroup) {
-                        if (anchorIdx > clickedIdx) { std::swap(anchorIdx, clickedIdx); }
-                        if (!ctrlHeld) { state->editor.selectedEntities.Clear(); }
-                        for (int i = anchorIdx; i <= clickedIdx; ++i) {
-                            if (entries[i].folderId != e.folderId || entries[i].depth != e.depth) { continue; }
-                            if (std::ranges::find(state->editor.selectedEntities, entries[i].entity) == state->editor.selectedEntities.end()) {
-                                state->editor.selectedEntities.PushBack(entries[i].entity);
-                            }
-                        }
-                    }
-                    else {
-                        state->editor.selectedEntities.Clear();
-                        state->editor.selectedEntities.PushBack(e.entity);
-                        s_selectionAnchor = e.entity;
-                    }
-                }
-                else if (ctrlHeld) {
-                    auto it = std::ranges::find(state->editor.selectedEntities, e.entity);
-                    if (it != state->editor.selectedEntities.end()) {
-                        state->editor.selectedEntities.Remove(it);
-                    }
-                    else {
-                        state->editor.selectedEntities.PushBack(e.entity);
-                    }
-                    s_selectionAnchor = e.entity;
-                }
-                else {
-                    state->editor.selectedEntities.Clear();
-                    state->editor.selectedEntities.PushBack(e.entity);
-                    s_selectionAnchor = e.entity;
-                }
-            }
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-                ImGui::SetDragDropPayload("SCENE_ENTITY", &e.entity, sizeof(e.entity));
-                const bool inSelection = std::ranges::find(state->editor.selectedEntities, e.entity) != state->editor.selectedEntities.end();
-                if (inSelection && state->editor.selectedEntities.Size() > 1) {
-                    ImGui::Text("%d entities", static_cast<int>(state->editor.selectedEntities.Size()));
-                }
-                else {
-                    ImGui::TextUnformatted(e.label);
-                }
-                ImGui::EndDragDropSource();
-            }
-            if (!filterActive && ImGui::BeginDragDropTarget()) {
-                const ImGuiPayload* p = ImGui::AcceptDragDropPayload("SCENE_ENTITY", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
-                if (p) {
-                    const entt::entity dragged = *static_cast<const entt::entity*>(p->Data);
-                    // Top/bottom 25% reorders as a sibling of the target. Middle 50% parents onto the target.
-                    if (dragged != e.entity && !isAncestorOf(dragged, e.entity)) {
-                        const ImVec2 mn = ImGui::GetItemRectMin();
-                        const ImVec2 mx = ImGui::GetItemRectMax();
-                        const float height = mx.y - mn.y;
-                        const float frac = height > 0.0f ? (ImGui::GetMousePos().y - mn.y) / height : 0.5f;
-                        if (frac < 0.25f || frac > 0.75f) {
-                            const bool below = frac > 0.75f;
-                            const float lineY = below ? mx.y : mn.y;
-                            ImGui::GetWindowDrawList()->AddLine(ImVec2(mn.x, lineY), ImVec2(mx.x, lineY), IM_COL32(255, 220, 0, 255), 2.0f);
-                            if (p->IsDelivery()) {
-                                reorderDragged = dragged;
-                                reorderTarget = e.entity;
-                                reorderBelow = below;
-                            }
-                        }
-                        else {
-                            ImGui::GetWindowDrawList()->AddRect(mn, mx, IM_COL32(0, 200, 255, 255), 0.0f, 0, 2.0f);
-                            if (p->IsDelivery()) {
-                                parentDragged = dragged;
-                                parentTarget = e.entity;
-                            }
-                        }
-                    }
-                }
-                ImGui::EndDragDropTarget();
-            }
-            if (isPrefab) ImGui::PopStyleColor();
-            ImGui::PopID();
-            return hasChildren && open;
-        };
-
-        // Flat draw (used while filtering)
-        auto drawGroup = [&](Core::Span<EntityEntry*> group) {
-            for (size_t i = 0; i < group.Size(); ++i) {
-                const EntityEntry* prev = i > 0 ? group[i - 1] : nullptr;
-                const EntityEntry* next = (i + 1 < group.Size()) ? group[i + 1] : nullptr;
-                drawEntityRow(*group[i], prev, next, false);
-            }
-        };
-
-        // Nested draw
-        auto drawSubtree = [&](this auto&& drawSubtree, Core::Span<EntityEntry*> group) -> void {
-            for (size_t i = 0; i < group.Size(); ++i) {
-                const EntityEntry* prev = i > 0 ? group[i - 1] : nullptr;
-                const EntityEntry* next = (i + 1 < group.Size()) ? group[i + 1] : nullptr;
-                Core::ArenaVector<EntityEntry*> kids = collectChildren(group[i]->entity);
-                const bool open = drawEntityRow(*group[i], prev, next, !kids.IsEmpty());
-                if (open) {
-                    ImGui::Indent();
-                    drawSubtree(kids);
-                    ImGui::Unindent();
-                }
-            }
-        };
-
-        // Folder anchors
-        struct AnchorInfo
-        {
-            entt::entity entity;
-            StringID id;
-            StringID parent;
-            const char* name;
-        };
-        Core::ArenaVector<AnchorInfo> anchors{&ctx->editorArena.Get(), 64}; {
-            auto av = state->registry.view<Component::SceneFolderComponent, Component::SceneComponent>();
-            for (auto a : av) {
-                if (av.get<Component::SceneComponent>(a).sceneId != state->currentSceneId) { continue; }
-                const auto& fc = av.get<Component::SceneFolderComponent>(a);
-                anchors.PushBack({a, fc.folderId, fc.parentFolder, fc.name.c_str()});
-            }
-        }
-
-        auto anchorExists = [&](StringID folderId) {
-            for (auto& a : anchors) { if (a.id == folderId) { return true; } }
-            return false;
-        };
-        auto folderHasMembers = [&](StringID folderId) {
-            auto fv = state->registry.view<Component::EntityFolderComponent, Component::SceneComponent>();
-            for (auto en : fv) {
-                if (fv.get<Component::SceneComponent>(en).sceneId != state->currentSceneId) { continue; }
-                if (fv.get<Component::EntityFolderComponent>(en).folderId == folderId) { return true; }
-            }
-            return false;
-        };
-        auto folderHasChildren = [&](StringID folderId) {
-            for (auto& a : anchors) { if (a.parent == folderId) { return true; } }
-            return false;
-        };
-
-        const bool expandFoldersForFilter = filterActive && !state->editor.sceneBrowserFilterWasActive;
-
-        // Folder node
-        auto drawFolderNode = [&](const AnchorInfo& a, const char* idPrefix) {
-            if (expandFoldersForFilter) { ImGui::SetNextItemOpen(true, ImGuiCond_Always); }
-            bool open = ImGui::TreeNodeEx(fmt::format("{}##{}{}", a.name, idPrefix, a.id.id).c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-                ImGui::SetDragDropPayload("SCENE_FOLDER", &a.entity, sizeof(a.entity));
-                ImGui::TextUnformatted(a.name);
-                ImGui::EndDragDropSource();
-            }
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("SCENE_ENTITY")) {
-                    moveToFolderEntity = *static_cast<const entt::entity*>(p->Data);
-                    moveToFolderId = a.id;
-                }
-                if (!a.parent.IsValid()) {
-                    const ImGuiPayload* fp = ImGui::AcceptDragDropPayload("SCENE_FOLDER", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
-                    if (fp) {
-                        const entt::entity draggedAnchor = *static_cast<const entt::entity*>(fp->Data);
-                        const auto* dfc = state->registry.try_get<Component::SceneFolderComponent>(draggedAnchor);
-                        const bool valid = dfc && draggedAnchor != a.entity && !folderHasChildren(dfc->folderId);
-                        if (valid) {
-                            ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(255, 220, 0, 255), 0.0f, 0, 2.0f);
-                            if (fp->IsDelivery()) {
-                                reparentFolderEntity = draggedAnchor;
-                                reparentFolderTo = a.id;
-                            }
-                        }
-                    }
-                }
-                ImGui::EndDragDropTarget();
-            }
-            if (ImGui::BeginPopupContextItem(fmt::format("folderctx##{}", a.id.id).c_str())) {
-                static char nameBuf[64];
-                if (ImGui::IsWindowAppearing()) { strncpy_s(nameBuf, a.name, sizeof(nameBuf) - 1); }
-                ImGui::SetNextItemWidth(160.0f);
-                if (ImGui::InputText("##foldername", nameBuf, sizeof(nameBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                    state->registry.get<Component::SceneFolderComponent>(a.entity).name = Core::ShortString(nameBuf);
-                    MarkSceneModified(state, state->currentSceneId);
-                    ImGui::CloseCurrentPopup();
-                }
-                if (!a.parent.IsValid() && ImGui::MenuItem("New Subfolder")) {
-                    newSubfolderParent = a.id;
-                }
-                const bool empty = !folderHasMembers(a.id) && !folderHasChildren(a.id);
-                ImGui::BeginDisabled(!empty);
-                if (ImGui::MenuItem("Delete Folder")) { folderToDelete = a.entity; }
-                ImGui::EndDisabled();
-                if (!empty && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Folder must be empty to delete"); }
-                ImGui::EndPopup();
-            }
-            return open;
-        };
-
-        auto drawMembers = [&](StringID folderId) {
-            Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), entries.Size() + 1};
-            for (auto& en : entries) {
-                if (en.folderId != folderId) { continue; }
-                if (!filterActive && en.parentEntity != entt::null) { continue; } // children are drawn nested under their parent
-                group.PushBack(&en);
-            }
-            if (filterActive) { drawGroup(group); }
-            else { drawSubtree(group); }
-        };
-
-        const float footerHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
-        ImGui::BeginChild("##entity_list", ImVec2(0.0f, -footerHeight), ImGuiChildFlags_None);
-
-        // Scene root
-        {
-            const ImGuiPayload* active = ImGui::GetDragDropPayload();
-            const bool dragging = active && (active->IsDataType("SCENE_ENTITY") || active->IsDataType("SCENE_FOLDER"));
-            if (dragging) {
-                ImGui::Selectable("- Scene Root -");
-                if (ImGui::BeginDragDropTarget()) {
-                    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("SCENE_ENTITY")) {
-                        moveToFolderEntity = *static_cast<const entt::entity*>(p->Data);
-                        moveToFolderId = StringID();
-                    }
-                    if (const ImGuiPayload* fp = ImGui::AcceptDragDropPayload("SCENE_FOLDER")) {
-                        reparentFolderEntity = *static_cast<const entt::entity*>(fp->Data);
-                        reparentFolderTo = StringID();
-                    }
-                    ImGui::EndDragDropTarget();
-                }
-            }
-            else {
-                ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight()));
-            }
-        }
-
-        // Top-level folders
-        Core::ArenaVector<AnchorInfo*> topFolders{&ctx->editorArena.Get(), anchors.Size() + 1};
-        for (auto& a : anchors) { if (!a.parent.IsValid()) { topFolders.PushBack(&a); } }
-        std::ranges::sort(topFolders, [](const AnchorInfo* x, const AnchorInfo* y) { return strcmp(x->name, y->name) < 0; });
-
-        for (auto* a : topFolders) {
-            if (drawFolderNode(*a, "folder_")) {
-                drawMembers(a->id);
-                Core::ArenaVector<AnchorInfo*> children{&ctx->editorArena.Get(), anchors.Size() + 1};
-                for (auto& c : anchors) { if (c.parent == a->id) { children.PushBack(&c); } }
-                std::ranges::sort(children, [](const AnchorInfo* x, const AnchorInfo* y) { return strcmp(x->name, y->name) < 0; });
-                for (auto* c : children) {
-                    if (drawFolderNode(*c, "subfolder_")) {
-                        drawMembers(c->id);
-                        ImGui::TreePop();
-                    }
-                }
-                ImGui::TreePop();
-            }
-        }
-
-        // Root entities (no folder)
-        {
-            Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), entries.Size() + 1};
-            for (auto& en : entries) {
-                const bool noFolder = !en.folderId.IsValid() || !anchorExists(en.folderId);
-                if (!noFolder) { continue; }
-                if (!filterActive && en.parentEntity != entt::null) { continue; } // children are drawn nested under their parent
-                group.PushBack(&en);
-            }
-            if (filterActive) { drawGroup(group); }
-            else { drawSubtree(group); }
-        }
-
-        // Auto-scroll
-        if (ImGui::GetDragDropPayload() && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
-            const float mouseY = ImGui::GetMousePos().y;
-            const float top = ImGui::GetWindowPos().y;
-            const float bottom = top + ImGui::GetWindowSize().y;
-            if (mouseY < top + 20.0f) { ImGui::SetScrollY(ImGui::GetScrollY() - 10.0f); }
-            else if (mouseY > bottom - 20.0f) { ImGui::SetScrollY(ImGui::GetScrollY() + 10.0f); }
-        }
-
-        ImGui::EndChild();
-        state->editor.sceneBrowserFilterWasActive = filterActive;
-
-        // Apply deferred
-        if (moveToFolderEntity != entt::null) {
-            Core::ArenaVector<entt::entity> toMove{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
-            if (std::ranges::find(state->editor.selectedEntities, moveToFolderEntity) != state->editor.selectedEntities.end()) {
-                for (entt::entity e : state->editor.selectedEntities) { toMove.PushBack(e); }
-            }
-            else {
-                toMove.PushBack(moveToFolderEntity);
-            }
-            std::ranges::sort(toMove, [&](entt::entity a, entt::entity b) {
-                const auto* sa = state->registry.try_get<Component::StableIdComponent>(a);
-                const auto* sb = state->registry.try_get<Component::StableIdComponent>(b);
-                return (sa ? sa->sortOrder : 0) < (sb ? sb->sortOrder : 0);
-            });
-            uint64_t order = HighestSortOrderInScene(state->registry, state->currentSceneId);
-            for (entt::entity e : toMove) {
-                ClearParent(state, e);
-                state->registry.get_or_emplace<Component::EntityFolderComponent>(e).folderId = moveToFolderId;
-                if (auto* st = state->registry.try_get<Component::StableIdComponent>(e)) {
-                    st->sortOrder = ++order;
-                }
-            }
-            MarkSceneModified(state, state->currentSceneId);
-        }
-        if (reparentFolderEntity != entt::null) {
-            if (auto* fc = state->registry.try_get<Component::SceneFolderComponent>(reparentFolderEntity)) {
-                if (fc->parentFolder != reparentFolderTo && fc->folderId != reparentFolderTo) {
-                    fc->parentFolder = reparentFolderTo;
-                    MarkSceneModified(state, state->currentSceneId);
-                }
-            }
-        }
-        if (reorderDragged != entt::null && reorderTarget != entt::null && reorderDragged != reorderTarget) {
-            // The dragged entities become siblings of the target: reparent to the target's level, then position via sort order.
-            entt::entity targetParent = entt::null;
-            if (auto* th = state->registry.try_get<Component::HierarchyComponent>(reorderTarget); th && state->registry.valid(th->parent)) {
-                targetParent = th->parent;
-            }
-            StringID targetFolder;
-            if (auto* tf = state->registry.try_get<Component::EntityFolderComponent>(reorderTarget)) {
-                targetFolder = tf->folderId;
-            }
-
-            Core::ArenaVector<entt::entity> moved{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
-            if (std::ranges::find(state->editor.selectedEntities, reorderDragged) != state->editor.selectedEntities.end()) {
-                for (entt::entity e : state->editor.selectedEntities) {
-                    if (e == reorderTarget) { continue; }
-                    moved.PushBack(e);
-                }
-            }
-            else {
-                moved.PushBack(reorderDragged);
-            }
-
-            for (entt::entity m : moved) {
-                if (targetParent == entt::null) {
-                    ClearParent(state, m); // sibling of a root
-                    state->registry.get_or_emplace<Component::EntityFolderComponent>(m).folderId = targetFolder;
-                }
-                else {
-                    SetParent(state, m, targetParent); // sibling of a child
-                }
-            }
-
-            Core::ArenaVector<entt::entity> order{&ctx->editorArena.Get(), totalInScene + 1};
-            auto rv = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
-            for (auto en : rv) {
-                if (rv.get<Component::SceneComponent>(en).sceneId == state->currentSceneId) { order.PushBack(en); }
-            }
-            std::ranges::sort(order, [&](entt::entity a, entt::entity b) {
-                return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
-            });
-            std::ranges::sort(moved, [&](entt::entity a, entt::entity b) {
-                return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
-            });
-            auto inMoved = [&](entt::entity e) {
-                for (entt::entity m : moved) { if (m == e) { return true; } }
-                return false;
-            };
-
-            Core::ArenaVector<entt::entity> finalOrder{&ctx->editorArena.Get(), order.Size() + 1};
-            for (entt::entity en : order) {
-                if (inMoved(en)) { continue; }
-                if (en == reorderTarget && !reorderBelow) { for (entt::entity m : moved) { finalOrder.PushBack(m); } }
-                finalOrder.PushBack(en);
-                if (en == reorderTarget && reorderBelow) { for (entt::entity m : moved) { finalOrder.PushBack(m); } }
-            }
-            uint64_t n = 1;
-            for (entt::entity en : finalOrder) { state->registry.get<Component::StableIdComponent>(en).sortOrder = n++; }
-            MarkSceneModified(state, state->currentSceneId);
-        }
-        if (parentDragged != entt::null && parentTarget != entt::null) {
-            Core::ArenaVector<entt::entity> moved{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
-            if (std::ranges::find(state->editor.selectedEntities, parentDragged) != state->editor.selectedEntities.end()) {
-                for (entt::entity e : state->editor.selectedEntities) {
-                    if (e == parentTarget) { continue; }
-                    moved.PushBack(e);
-                }
-            }
-            else {
-                moved.PushBack(parentDragged);
-            }
-            for (entt::entity m : moved) {
-                SetParent(state, m, parentTarget); // keeps world pose, rejects cycles
-            }
-            MarkSceneModified(state, state->currentSceneId);
-        }
-        if (newSubfolderParent.IsValid()) {
-            entt::entity f = state->registry.create();
-            state->registry.emplace<Component::SceneComponent>(f, state->currentSceneId);
-            Component::SceneFolderComponent folder{};
-            folder.folderId = StringID{state->rng()};
-            folder.parentFolder = newSubfolderParent;
-            folder.name = Core::ShortString("New Subfolder");
-            state->registry.emplace<Component::SceneFolderComponent>(f, std::move(folder));
-            MarkSceneModified(state, state->currentSceneId);
-        }
-        if (folderToDelete != entt::null) {
-            state->registry.destroy(folderToDelete);
-            MarkSceneModified(state, state->currentSceneId);
-        }
-
-        ImGui::Separator();
-        if (ImGui::SmallButton("Compact Order")) {
-            Core::ArenaVector<entt::entity> ordered{&ctx->editorArena.Get(), totalInScene + 1};
-            auto compactView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
-            for (auto entity : compactView) {
-                if (compactView.get<Component::SceneComponent>(entity).sceneId == state->currentSceneId) { ordered.PushBack(entity); }
-            }
-            std::ranges::sort(ordered, [&](entt::entity a, entt::entity b) {
-                return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
-            });
-            uint64_t next = 1;
-            for (entt::entity e : ordered) {
-                state->registry.get<Component::StableIdComponent>(e).sortOrder = next++;
-            }
-            if (next > 1) { MarkSceneModified(state, state->currentSceneId); }
-        }
-        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reassign gap-free 1..N sort order to all entities in this scene, preserving current order"); }
-        ImGui::SameLine();
-        if (filterActive) {
-            ImGui::Text("%d entities (%d shown)", static_cast<int>(totalInScene), static_cast<int>(entries.Size()));
-        }
-        else {
-            ImGui::Text("%d entities", static_cast<int>(totalInScene));
-        }
-    }
-    ImGui::End();
-
-    glm::vec3 multiGizmoCentroid{0.0f};
-    int transformCount = 0;
-    for (auto entity : state->editor.selectedEntities) {
-        if (state->registry.all_of<Component::TransformComponent>(entity)) {
-            multiGizmoCentroid += Component::ComputeWorldTransform(state->registry, entity).translation;
-            ++transformCount;
-        }
-    }
-    if (transformCount > 0)
-        multiGizmoCentroid /= static_cast<float>(transformCount);
-
+static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, const glm::vec3& centroid, int transformCount)
+{
     if (ImGui::Begin("Details")) {
+        ImGui::Checkbox("Expose all components", &state->editor.bExposeAllComponents);
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Show engine-managed components (read-only)"); }
+        ImGui::Separator();
+
         if (state->editor.selectedEntities.Size() == 1) {
             Engine::ComponentEntry* entryToRemove = nullptr;
             entt::entity entity = state->editor.selectedEntities[0];
@@ -1578,11 +755,16 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
             auto* entityScene = state->registry.try_get<Component::SceneComponent>(entity);
             for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
+                if (entry.hideInInspector && !state->editor.bExposeAllComponents) { continue; }
                 if (entry.has(state->registry, entity)) {
+                    const bool readOnly = entry.hideInInspector;
+
                     nlohmann::json before;
                     entry.serialize(state->registry, entity, before);
 
+                    if (readOnly) { ImGui::BeginDisabled(true); }
                     Engine::ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity, entry.name);
+                    if (readOnly) { ImGui::EndDisabled(); }
 
                     if (result.requestRemoval && !entry.hidden) {
                         entryToRemove = &entry;
@@ -1629,11 +811,14 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         }
         else if (state->editor.selectedEntities.Size() > 1) {
-            DrawMultiSelectEditor(ctx, state, multiGizmoCentroid, transformCount);
+            DrawMultiSelectEditor(ctx, state, centroid, transformCount);
         }
     }
     ImGui::End();
+}
 
+static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& view, const glm::mat4& proj, const glm::vec3& multiGizmoCentroid, bool bJustSelected)
+{
     if (!state->editor.bExclusiveGizmoActive && !bJustSelected && !state->editor.selectedEntities.IsEmpty()) {
         if (state->editor.selectedEntities.Size() == 1) {
             entt::entity entity = state->editor.selectedEntities[0];
@@ -1768,9 +953,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         }
     }
+}
 
-    DrawPostProcessingWindow(state);
-
+static void DrawSceneStatsWindow(Engine::EngineState* state)
+{
     if (ImGui::Begin("Scene")) {
         ImGui::Checkbox("Enable Physics", &state->physics.bEnabled);
 
@@ -1786,549 +972,5 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Text("Sphere: %zu", state->registry.view<Component::SphereLightComponent>().size());
     }
     ImGui::End();
-
-    if (ImGui::Begin("Materials")) {
-        Engine::MaterialManager* materialManager = ctx->materialManager;
-
-        if (ImGui::BeginTabBar("##MaterialTabs")) {
-            if (ImGui::BeginTabItem("Mesh Materials")) {
-                static char newMatName[128] = "new_material";
-                ImGui::SetNextItemWidth(200.0f);
-                ImGui::InputText("##matname", newMatName, sizeof(newMatName));
-                ImGui::SameLine();
-                const bool nameEmpty = newMatName[0] == '\0';
-                const bool nameExists = !nameEmpty && materialManager->FindMutableMaterial(StringID{newMatName, strlen(newMatName)}).IsValid();
-                ImGui::BeginDisabled(nameEmpty || nameExists);
-                if (ImGui::Button("Create Material")) {
-                    materialManager->CreateMaterial(newMatName);
-                }
-                ImGui::EndDisabled();
-                if (nameExists) {
-                    ImGui::SameLine();
-                    ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "already exists");
-                }
-
-                const auto& allMaterials = materialManager->GetMaterials();
-                int32_t mutableCount = 0;
-                for (const auto& [id, mat] : allMaterials) {
-                    if (!mat.immutable) { ++mutableCount; }
-                }
-                ImGui::SeparatorText(fmt::format("Materials ({})", mutableCount).c_str());
-
-                static Engine::MaterialID matRenameActive = Engine::MaterialID::INVALID;
-                static char matRenameBuffer[128] = {};
-
-                Engine::MaterialID materialPendingDelete = Engine::MaterialID::INVALID;
-                for (const auto& [id, mat] : allMaterials) {
-                    if (mat.immutable) continue;
-                    ImGui::PushID(static_cast<int>(id.id));
-                    if (ImGui::CollapsingHeader(mat.name.c_str())) {
-                        ImGui::BeginDisabled(true);
-                        ImGui::Text("ID: %llu", id.id);
-                        ImGui::EndDisabled(); {
-                            const auto& entryMap = materialManager->GetIdToEntryMap();
-                            const bool materialInUse = entryMap.Contains(id) && materialManager->GetActiveMaterials()[entryMap.At(id)].refCounter > 0;
-                            ImGui::BeginDisabled(materialInUse);
-                            if (ImGui::Button("Delete Material")) {
-                                materialPendingDelete = id;
-                            }
-                            ImGui::EndDisabled();
-                            if (materialInUse && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                                ImGui::SetTooltip("Material is referenced by scene entities");
-                            }
-                        }
-                        ImGui::SameLine();
-                        const bool isRenaming = matRenameActive == id;
-                        if (isRenaming) {
-                            ImGui::SetNextItemWidth(180.0f);
-                            ImGui::InputText("##rename", matRenameBuffer, sizeof(matRenameBuffer));
-                            ImGui::SameLine();
-                            const bool nameUnchanged = strcmp(matRenameBuffer, mat.name.c_str()) == 0;
-                            const bool nameEmpty = matRenameBuffer[0] == '\0';
-                            const bool nameExists = !nameEmpty && !nameUnchanged && materialManager->FindMutableMaterial(StringID{matRenameBuffer, strlen(matRenameBuffer)}).IsValid();
-                            ImGui::BeginDisabled(nameEmpty || nameUnchanged || nameExists);
-                            if (ImGui::Button("Apply")) {
-                                materialManager->RenameMutableMaterial(id, matRenameBuffer);
-                                matRenameActive = Engine::MaterialID::INVALID;
-                            }
-                            ImGui::EndDisabled();
-                            ImGui::SameLine();
-                            if (ImGui::Button("Cancel")) {
-                                matRenameActive = Engine::MaterialID::INVALID;
-                            }
-                            if (nameExists) {
-                                ImGui::SameLine();
-                                ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "already exists");
-                            }
-                        }
-                        else {
-                            if (ImGui::Button("Rename")) {
-                                matRenameActive = id;
-                                const auto& n = mat.name;
-                                const size_t copyLen = std::min(n.Size(), sizeof(matRenameBuffer) - 1);
-                                memcpy(matRenameBuffer, n.c_str(), copyLen);
-                                matRenameBuffer[copyLen] = '\0';
-                            }
-                        }
-
-                        Engine::Material editMat = mat;
-                        MaterialProperties& props = editMat.props;
-                        bool changed = false;
-
-                        ImGui::SeparatorText("Base");
-                        changed |= ImGui::ColorEdit4("Color Factor", &props.colorFactor.x);
-                        changed |= ImGui::SliderFloat("Metallic", &props.metalRoughFactors.x, 0.0f, 1.0f);
-                        changed |= ImGui::SliderFloat("Roughness", &props.metalRoughFactors.y, 0.0f, 1.0f);
-
-                        ImGui::SeparatorText("Emissive");
-                        changed |= ImGui::ColorEdit3("Emissive Color", &props.emissiveFactor.x);
-                        changed |= ImGui::DragFloat("Emissive Strength", &props.emissiveFactor.w, 0.01f, 0.0f, 100.0f);
-
-                        ImGui::SeparatorText("Alpha");
-                        const char* alphaModes[] = {"Opaque", "Mask", "Blend"};
-                        int alphaMode = static_cast<int>(props.alphaProperties.y);
-                        if (ImGui::Combo("Alpha Mode", &alphaMode, alphaModes, 3)) {
-                            props.alphaProperties.y = static_cast<float>(alphaMode);
-                            changed = true;
-                        }
-                        if (alphaMode == 1) {
-                            changed |= ImGui::SliderFloat("Alpha Cutoff", &props.alphaProperties.x, 0.0f, 1.0f);
-                        }
-                        bool doubleSided = props.alphaProperties.z > 0.5f;
-                        if (ImGui::Checkbox("Double Sided", &doubleSided)) {
-                            props.alphaProperties.z = doubleSided ? 1.0f : 0.0f;
-                            changed = true;
-                        }
-                        bool unlit = props.alphaProperties.w > 0.5f;
-                        if (ImGui::Checkbox("Unlit", &unlit)) {
-                            props.alphaProperties.w = unlit ? 1.0f : 0.0f;
-                            changed = true;
-                        }
-
-                        ImGui::SeparatorText("Physical");
-                        changed |= ImGui::SliderFloat("IOR", &props.physicalProperties.x, 1.0f, 3.0f);
-                        changed |= ImGui::SliderFloat("Normal Intensity", &props.physicalProperties.z, 0.0f, 2.0f);
-                        changed |= ImGui::SliderFloat("Occlusion Strength", &props.physicalProperties.w, 0.0f, 1.0f);
-
-                        if (ImGui::TreeNode("UV Transforms")) {
-                            ImGui::SeparatorText("Color");
-                            changed |= ImGui::DragFloat2("Scale##color_uv", &props.colorUvTransform.x, 0.01f);
-                            changed |= ImGui::DragFloat2("Offset##color_uv", &props.colorUvTransform.z, 0.01f);
-                            ImGui::SeparatorText("Metal/Rough");
-                            changed |= ImGui::DragFloat2("Scale##mr_uv", &props.metalRoughUvTransform.x, 0.01f);
-                            changed |= ImGui::DragFloat2("Offset##mr_uv", &props.metalRoughUvTransform.z, 0.01f);
-                            ImGui::SeparatorText("Normal");
-                            changed |= ImGui::DragFloat2("Scale##normal_uv", &props.normalUvTransform.x, 0.01f);
-                            changed |= ImGui::DragFloat2("Offset##normal_uv", &props.normalUvTransform.z, 0.01f);
-                            ImGui::SeparatorText("Emissive");
-                            changed |= ImGui::DragFloat2("Scale##emissive_uv", &props.emissiveUvTransform.x, 0.01f);
-                            changed |= ImGui::DragFloat2("Offset##emissive_uv", &props.emissiveUvTransform.z, 0.01f);
-                            ImGui::SeparatorText("Occlusion");
-                            changed |= ImGui::DragFloat2("Scale##occlusion_uv", &props.occlusionUvTransform.x, 0.01f);
-                            changed |= ImGui::DragFloat2("Offset##occlusion_uv", &props.occlusionUvTransform.z, 0.01f);
-                            ImGui::TreePop();
-                        }
-
-                        ImGui::SeparatorText("Shader"); {
-                            Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
-                            const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
-                            Core::Arena& arena = ctx->editorArena.Get();
-
-                            int currentShader = -1;
-                            for (int32_t i = 0; i < pipelineCount; ++i) {
-                                if (editMat.fragmentShader == shadingPipelines[i]) {
-                                    currentShader = i;
-                                    break;
-                                }
-                            }
-
-                            const bool isUnknown = currentShader < 0;
-                            const int32_t optionCount = isUnknown ? pipelineCount + 1 : pipelineCount;
-                            Core::ArenaArray<Core::InlineString<> > labels(&arena, optionCount);
-                            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString(shadingPipelines[i].ToString()); }
-                            if (isUnknown) {
-                                labels[pipelineCount] = Core::InlineString("(unknown) ");
-                                labels[pipelineCount].Append(editMat.fragmentShader.ToString());
-                                currentShader = pipelineCount;
-                            }
-                            auto shadingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
-                            if (ImGui::Combo("Fragment Shader", &currentShader, shadingGetter, &labels, static_cast<int32_t>(labels.Size()))) {
-                                if (currentShader < pipelineCount) {
-                                    editMat.fragmentShader = shadingPipelines[currentShader];
-                                    changed = true;
-                                }
-                            }
-                        } {
-                            Core::Span<const StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelines();
-                            const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
-                            Core::Arena& arena = ctx->editorArena.Get();
-
-                            int currentShader = -1;
-                            for (int32_t i = 0; i < pipelineCount; ++i) {
-                                if (editMat.lightingShader == lightingPipelines[i]) {
-                                    currentShader = i;
-                                    break;
-                                }
-                            }
-
-                            const bool isUnknown = currentShader < 0;
-                            const int32_t optionCount = isUnknown ? pipelineCount + 1 : pipelineCount;
-                            Core::ArenaArray<Core::InlineString<> > labels(&arena, optionCount);
-                            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString(lightingPipelines[i].ToString()); }
-                            if (isUnknown) {
-                                labels[pipelineCount] = Core::InlineString("(unknown) ");
-                                labels[pipelineCount].Append(editMat.lightingShader.ToString());
-                                currentShader = pipelineCount;
-                            }
-                            auto lightingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
-                            if (ImGui::Combo("Lighting Shader", &currentShader, lightingGetter, &labels, static_cast<int32_t>(labels.Size()))) {
-                                if (currentShader < pipelineCount) {
-                                    editMat.lightingShader = lightingPipelines[currentShader];
-                                    changed = true;
-                                }
-                            }
-                        }
-
-                        ImGui::SeparatorText("Textures");
-                        static const char* slotNames[] = {"Color", "Metal/Rough", "Normal", "Emissive", "Occlusion", "Packed NRM"};
-                        static Engine::TextureID texEditPending = Engine::TextureID::INVALID;
-                        static Engine::SamplerDesc samplerEditPending{};
-
-                        if (!state->editor.textureInfoCache) {
-                            const uint32_t count = ctx->assetManager->GetTextureInfoCount();
-                            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(&ctx->editorArena.Get(), count);
-                            ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
-                        }
-                        const auto& matTexInfoMap = *state->editor.textureInfoCache;
-
-                        for (int32_t slot = 0; slot < 6; ++slot) {
-                            ImGui::PushID(slot);
-
-                            const Engine::TextureID& texId = mat.textureRefs[slot];
-                            const char* currentTexName = "None";
-                            if (const Engine::AssetManager::EditorTextureInfo* info = texId.IsValid() ? matTexInfoMap.Find(texId) : nullptr) {
-                                currentTexName = info->name.c_str();
-                            }
-
-                            ImGui::Text("%-13s", slotNames[slot]);
-                            ImGui::SameLine();
-                            ImGui::TextDisabled("|");
-                            ImGui::SameLine();
-                            if (ImGui::SmallButton("Tex")) {
-                                texEditPending = texId;
-                                ImGui::OpenPopup("TextureSelect");
-                            }
-                            ImGui::SameLine();
-                            ImGui::Text("%-32s", currentTexName);
-                            ImGui::SameLine();
-                            if (ImGui::SmallButton("Smp")) {
-                                samplerEditPending = mat.samplerDesc[slot];
-                                ImGui::OpenPopup("SamplerEdit");
-                            }
-                            ImGui::SameLine(); {
-                                const Engine::SamplerDesc& sd = mat.samplerDesc[slot];
-                                const Engine::SamplerDesc def{};
-                                const bool filterDiff = sd.magFilter != def.magFilter || sd.minFilter != def.minFilter;
-                                const bool mipDiff = sd.mipmapMode != def.mipmapMode;
-                                const bool addrDiff = sd.addressModeU != def.addressModeU || sd.addressModeV != def.addressModeV || sd.addressModeW != def.addressModeW;
-                                const bool anisoDiff = sd.anisotropyEnable != def.anisotropyEnable || sd.maxAnisotropy != def.maxAnisotropy;
-                                const bool lodDiff = sd.mipLodBias != def.mipLodBias || sd.minLod != def.minLod || sd.maxLod != def.maxLod;
-                                const int diffCount = filterDiff + mipDiff + addrDiff + anisoDiff + lodDiff;
-                                const char* label = "Default";
-                                if (diffCount == 1) {
-                                    if (filterDiff) { label = "Custom Filter"; }
-                                    else if (mipDiff) { label = "Custom Mip Mode"; }
-                                    else if (addrDiff) { label = "Custom Address"; }
-                                    else if (anisoDiff) { label = "Custom Aniso"; }
-                                    else if (lodDiff) { label = "Custom LOD"; }
-                                }
-                                else if (diffCount > 1) {
-                                    label = "Custom Sampler";
-                                }
-                                ImGui::TextDisabled("%s", label);
-                            }
-
-                            if (ImGui::BeginPopupModal("TextureSelect", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-                                static Engine::TextureID previewId = Engine::TextureID::INVALID;
-
-                                ImGui::Text("Slot: %s", slotNames[slot]);
-                                ImGui::Separator();
-
-                                if (ImGui::BeginChild("##texlist", {400.0f, 300.0f}, ImGuiChildFlags_Borders)) {
-                                    bool noneSelected = !texEditPending.IsValid();
-                                    if (ImGui::Selectable("(None)", noneSelected)) {
-                                        texEditPending = Engine::TextureID::INVALID;
-                                    }
-                                    if (!state->editor.textureInfoCache) {
-                                        const uint32_t count = ctx->assetManager->GetTextureInfoCount();
-                                        state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(&ctx->editorArena.Get(), count);
-                                        ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
-                                    }
-                                    const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
-                                    auto sorted = Core::ArenaFixedVector<Engine::AssetManager::EditorTextureInfo>(&ctx->editorArena.Get(), texCount);
-                                    for (const auto& [id2, info] : *state->editor.textureInfoCache) {
-                                        sorted.EmplaceBack(info);
-                                    }
-                                    std::ranges::sort(sorted, {}, &Engine::AssetManager::EditorTextureInfo::name);
-                                    for (const auto& info : sorted) {
-                                        const auto& id2 = info.id;
-                                        const auto& name = info.name;
-                                        bool selected = texEditPending == id2;
-                                        if (ImGui::Selectable(name.c_str(), selected)) {
-                                            texEditPending = id2;
-                                        }
-                                        if (ImGui::IsItemHovered()) {
-                                            if (previewId != id2) {
-                                                if (previewId.IsValid()) state->editor.texResidency.Release(previewId, ctx);
-                                                previewId = id2;
-                                                // todo: ideally only load the lowest mip for preview
-                                                state->editor.texResidency.Acquire(id2, ctx);
-                                            }
-                                            ImGui::BeginTooltip();
-                                            uint64_t ds = state->editor.texResidency.GetDescSet(id2, ctx);
-                                            if (ds) {
-                                                ImGui::Image(ds, {128.0f, 128.0f});
-                                            }
-                                            else {
-                                                ImGui::Text("Loading...");
-                                            }
-                                            ImGui::EndTooltip();
-                                        }
-                                    }
-                                }
-                                ImGui::EndChild();
-
-                                if (ImGui::Button("OK")) {
-                                    Engine::Material _editMat = mat;
-                                    _editMat.textureRefs[slot] = texEditPending;
-                                    materialManager->UpdateMutableMaterial(id, _editMat, true);
-                                    if (previewId.IsValid()) {
-                                        state->editor.texResidency.Release(previewId, ctx);
-                                        previewId = Engine::TextureID::INVALID;
-                                    }
-                                    ImGui::CloseCurrentPopup();
-                                }
-                                ImGui::SameLine();
-                                if (ImGui::Button("Cancel") || state->inputFrame->GetKey(Key::ESCAPE).pressed) {
-                                    if (previewId.IsValid()) {
-                                        state->editor.texResidency.Release(previewId, ctx);
-                                        previewId = Engine::TextureID::INVALID;
-                                    }
-                                    ImGui::CloseCurrentPopup();
-                                }
-                                ImGui::EndPopup();
-                            }
-
-                            if (ImGui::BeginPopupModal("SamplerEdit", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-                                ImGui::Text("Slot: %s", slotNames[slot]);
-                                ImGui::Separator();
-
-                                static const char* filterNames[] = {"Nearest", "Linear"};
-                                int magF = static_cast<int>(samplerEditPending.magFilter);
-                                int minF = static_cast<int>(samplerEditPending.minFilter);
-                                if (ImGui::Combo("Mag Filter", &magF, filterNames, 2)) samplerEditPending.magFilter = static_cast<VkFilter>(magF);
-                                if (ImGui::Combo("Min Filter", &minF, filterNames, 2)) samplerEditPending.minFilter = static_cast<VkFilter>(minF);
-
-                                static const char* mipmapModeNames[] = {"Nearest", "Linear"};
-                                int mipMode = static_cast<int>(samplerEditPending.mipmapMode);
-                                if (ImGui::Combo("Mip Mode", &mipMode, mipmapModeNames, 2)) samplerEditPending.mipmapMode = static_cast<VkSamplerMipmapMode>(mipMode);
-
-                                static const char* addressModeNames[] = {"Repeat", "Mirrored Repeat", "Clamp To Edge", "Clamp To Border", "Mirror Clamp"};
-                                int addrU = static_cast<int>(samplerEditPending.addressModeU);
-                                int addrV = static_cast<int>(samplerEditPending.addressModeV);
-                                int addrW = static_cast<int>(samplerEditPending.addressModeW);
-                                if (ImGui::Combo("Address U", &addrU, addressModeNames, 5)) samplerEditPending.addressModeU = static_cast<VkSamplerAddressMode>(addrU);
-                                if (ImGui::Combo("Address V", &addrV, addressModeNames, 5)) samplerEditPending.addressModeV = static_cast<VkSamplerAddressMode>(addrV);
-                                if (ImGui::Combo("Address W", &addrW, addressModeNames, 5)) samplerEditPending.addressModeW = static_cast<VkSamplerAddressMode>(addrW);
-
-                                bool aniso = samplerEditPending.anisotropyEnable == VK_TRUE;
-                                if (ImGui::Checkbox("Anisotropy", &aniso)) samplerEditPending.anisotropyEnable = aniso ? VK_TRUE : VK_FALSE;
-                                if (aniso) {
-                                    static const float anisoLevels[] = {1.0f, 2.0f, 4.0f, 8.0f, 16.0f};
-                                    static const char* anisoLabels[] = {"1x", "2x", "4x", "8x", "16x"};
-                                    int anisoIdx = 0;
-                                    for (int k = 4; k >= 0; --k) {
-                                        if (samplerEditPending.maxAnisotropy >= anisoLevels[k]) {
-                                            anisoIdx = k;
-                                            break;
-                                        }
-                                    }
-                                    if (ImGui::Combo("Max Anisotropy", &anisoIdx, anisoLabels, 5)) {
-                                        samplerEditPending.maxAnisotropy = anisoLevels[anisoIdx];
-                                    }
-                                }
-
-                                ImGui::DragFloat("Mip LOD Bias", &samplerEditPending.mipLodBias, 0.1f);
-                                ImGui::DragFloat("Min LOD", &samplerEditPending.minLod, 0.1f, 0.0f, 100.0f);
-                                ImGui::DragFloat("Max LOD", &samplerEditPending.maxLod, 0.1f, 0.0f, 1000.0f);
-
-                                if (ImGui::Button("OK")) {
-                                    Engine::Material _editMat = mat;
-                                    _editMat.samplerDesc[slot] = samplerEditPending;
-                                    materialManager->UpdateMutableMaterial(id, _editMat, true);
-                                    ImGui::CloseCurrentPopup();
-                                }
-                                ImGui::SameLine();
-                                if (ImGui::Button("Cancel") || state->inputFrame->GetKey(Key::ESCAPE).pressed) {
-                                    ImGui::CloseCurrentPopup();
-                                }
-                                ImGui::EndPopup();
-                            }
-
-                            ImGui::PopID();
-                        }
-
-                        if (changed) {
-                            materialManager->UpdateMutableMaterial(id, editMat, true);
-                        }
-                    }
-                    ImGui::PopID();
-                }
-                if (materialPendingDelete.IsValid()) {
-                    materialManager->DeleteMutableMaterial(materialPendingDelete);
-                }
-
-                ImGui::EndTabItem();
-            }
-
-            if (ImGui::BeginTabItem("Text Materials")) {
-                static char newTextMatName[128] = "new_text_material";
-                ImGui::SetNextItemWidth(200.0f);
-                ImGui::InputText("##textmatname", newTextMatName, sizeof(newTextMatName));
-                ImGui::SameLine();
-                const bool textNameEmpty = newTextMatName[0] == '\0';
-                const bool textNameExists = !textNameEmpty && materialManager->FindTextMaterial(StringID{newTextMatName, strlen(newTextMatName)}).IsValid();
-                ImGui::BeginDisabled(textNameEmpty || textNameExists);
-                if (ImGui::Button("Create Text Material")) {
-                    materialManager->CreateTextMaterial(newTextMatName);
-                }
-                ImGui::EndDisabled();
-                if (textNameExists) {
-                    ImGui::SameLine();
-                    ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "already exists");
-                }
-
-                const auto& allTextMaterials = materialManager->GetTextMaterials();
-                ImGui::SeparatorText(fmt::format("Text Materials ({})", allTextMaterials.Size()).c_str());
-
-                static Engine::TextMaterialID textMatRenameActive = Engine::TextMaterialID::INVALID;
-                static char textMatRenameBuffer[128] = {};
-
-                Engine::TextMaterialID textMatPendingDelete = Engine::TextMaterialID::INVALID;
-                for (const auto& [id, mat] : allTextMaterials) {
-                    ImGui::PushID(static_cast<int>(id.id));
-                    if (ImGui::CollapsingHeader(mat.name.c_str())) {
-                        ImGui::BeginDisabled(true);
-                        ImGui::Text("ID: %llu", id.id);
-                        ImGui::EndDisabled();
-                        if (ImGui::Button("Delete")) {
-                            textMatPendingDelete = id;
-                        }
-                        ImGui::SameLine();
-                        const bool isRenaming = textMatRenameActive == id;
-                        if (isRenaming) {
-                            ImGui::SetNextItemWidth(180.0f);
-                            ImGui::InputText("##rename", textMatRenameBuffer, sizeof(textMatRenameBuffer));
-                            ImGui::SameLine();
-                            const bool nameUnchanged = strcmp(textMatRenameBuffer, mat.name.c_str()) == 0;
-                            const bool nameEmpty = textMatRenameBuffer[0] == '\0';
-                            const bool nameExists = !nameEmpty && !nameUnchanged && materialManager->FindTextMaterial(StringID{textMatRenameBuffer, strlen(textMatRenameBuffer)}).IsValid();
-                            ImGui::BeginDisabled(nameEmpty || nameUnchanged || nameExists);
-                            if (ImGui::Button("Apply")) {
-                                materialManager->RenameTextMaterial(id, textMatRenameBuffer);
-                                textMatRenameActive = Engine::TextMaterialID::INVALID;
-                            }
-                            ImGui::EndDisabled();
-                            ImGui::SameLine();
-                            if (ImGui::Button("Cancel")) {
-                                textMatRenameActive = Engine::TextMaterialID::INVALID;
-                            }
-                            if (nameExists) {
-                                ImGui::SameLine();
-                                ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "already exists");
-                            }
-                        }
-                        else {
-                            if (ImGui::Button("Rename")) {
-                                textMatRenameActive = id;
-                                const auto& n = mat.name;
-                                const size_t copyLen = std::min(n.Size(), sizeof(textMatRenameBuffer) - 1);
-                                memcpy(textMatRenameBuffer, n.c_str(), copyLen);
-                                textMatRenameBuffer[copyLen] = '\0';
-                            }
-                        }
-
-                        Engine::TextMaterial editMat = mat;
-                        bool changed = false;
-
-                        changed |= ImGui::ColorEdit4("Color Tint", &editMat.colorTint.x);
-
-                        ImGui::SeparatorText("Outline");
-                        changed |= ImGui::ColorEdit4("Outline Color", &editMat.outlineColor.x);
-                        changed |= ImGui::SliderFloat("Outline Width", &editMat.outlineWidth, 0.0f, 0.475f);
-
-                        ImGui::SeparatorText("Shadow");
-                        changed |= ImGui::ColorEdit4("Shadow Color", &editMat.shadowColor.x);
-                        changed |= ImGui::DragFloat2("Shadow Offset", &editMat.shadowOffset.x, 0.001f);
-                        changed |= ImGui::SliderFloat("Shadow Softness", &editMat.shadowSoftness, 0.0f, 1.0f);
-
-                        if (changed) {
-                            materialManager->UpdateTextMaterial(id, editMat);
-                        }
-                    }
-                    ImGui::PopID();
-                }
-                if (textMatPendingDelete.IsValid()) {
-                    materialManager->DeleteTextMaterial(textMatPendingDelete);
-                }
-
-                ImGui::EndTabItem();
-            }
-
-            ImGui::EndTabBar();
-        }
-    }
-    ImGui::End();
-
-    if (ImGui::Begin("Textures")) {
-        if (!state->editor.textureInfoCache) {
-            const uint32_t count = ctx->assetManager->GetTextureInfoCount();
-            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(&ctx->editorArena.Get(), count);
-            ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
-        }
-        const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
-        auto sorted = Core::ArenaFixedVector<Engine::AssetManager::EditorTextureInfo>(&ctx->editorArena.Get(), texCount);
-        for (const auto& [texId, info] : *state->editor.textureInfoCache) {
-            sorted.EmplaceBack(info);
-        }
-        std::ranges::sort(sorted, {}, &Engine::AssetManager::EditorTextureInfo::name);
-
-        if (ImGui::BeginTable("##textures", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
-            ImGui::TableSetupScrollFreeze(0, 1);
-            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Width", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-            ImGui::TableSetupColumn("Height", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-            ImGui::TableSetupColumn("Mips", ImGuiTableColumnFlags_WidthFixed, 40.0f);
-            ImGui::TableHeadersRow();
-
-            for (const auto& entry : sorted) {
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0);
-                ImGui::TextUnformatted(entry.name.c_str());
-                ImGui::TableSetColumnIndex(1);
-                ImGui::Text("%u", entry.width);
-                ImGui::TableSetColumnIndex(2);
-                ImGui::Text("%u", entry.height);
-                ImGui::TableSetColumnIndex(3);
-                ImGui::Text("%u", entry.mipCount);
-            }
-            ImGui::EndTable();
-        }
-    }
-    ImGui::End();
-
-    frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
-    frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
-    frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;
 }
 }

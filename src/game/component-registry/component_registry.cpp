@@ -32,38 +32,38 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
 {
     componentRegistry.registry.Clear();
 
-    RegisterComponent<Component::NameComponent>(componentRegistry, "NameComponent", true);
-    RegisterComponent<Component::StableIdComponent>(componentRegistry, "StableIdComponent", true);
-    RegisterComponent<Component::PrefabInstanceComponent>(componentRegistry, "PrefabInstanceComponent");
-    RegisterComponent<Component::EntityFolderComponent>(componentRegistry, "EntityFolderComponent", true);
-    RegisterComponent<Component::SceneFolderComponent>(componentRegistry, "SceneFolderComponent", true);
+    RegisterComponent<Component::NameComponent>(componentRegistry, "NameComponent", true, false);
+    RegisterComponent<Component::StableIdComponent>(componentRegistry, "StableIdComponent", true, true);
+    RegisterComponent<Component::PrefabInstanceComponent>(componentRegistry, "PrefabInstanceComponent", false, false);
+    RegisterComponent<Component::EntityFolderComponent>(componentRegistry, "EntityFolderComponent", true, true);
+    RegisterComponent<Component::SceneFolderComponent>(componentRegistry, "SceneFolderComponent", true, false);
 
-    RegisterComponent<Component::TransformComponent>(componentRegistry, "TransformComponent");
-    RegisterComponent<Component::HierarchyComponent>(componentRegistry, "HierarchyComponent", true);
-    RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent");
-    RegisterComponent<Component::StaticMeshComponent>(componentRegistry, "StaticMeshComponent");
-    RegisterComponent<Component::TextComponent>(componentRegistry, "TextComponent");
-    RegisterComponent<Component::PointLightComponent>(componentRegistry, "PointLightComponent");
-    RegisterComponent<Component::AreaLightComponent>(componentRegistry, "AreaLightComponent");
-    RegisterComponent<Component::SphereLightComponent>(componentRegistry, "SphereLightComponent");
-    RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, "DirectionalLightComponent");
-    RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, "ProceduralMeshComponent");
-    RegisterComponent<Component::SplineMeshComponent>(componentRegistry, "SplineMeshComponent");
-    RegisterComponent<Component::Text3DComponent>(componentRegistry, "Text3DComponent");
+    RegisterComponent<Component::TransformComponent>(componentRegistry, "TransformComponent", false, false);
+    RegisterComponent<Component::HierarchyComponent>(componentRegistry, "HierarchyComponent", true, true);
+    RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent", false, false);
+    RegisterComponent<Component::StaticMeshComponent>(componentRegistry, "StaticMeshComponent", false, false);
+    RegisterComponent<Component::TextComponent>(componentRegistry, "TextComponent", false, false);
+    RegisterComponent<Component::PointLightComponent>(componentRegistry, "PointLightComponent", false, false);
+    RegisterComponent<Component::AreaLightComponent>(componentRegistry, "AreaLightComponent", false, false);
+    RegisterComponent<Component::SphereLightComponent>(componentRegistry, "SphereLightComponent", false, false);
+    RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, "DirectionalLightComponent", false, false);
+    RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, "ProceduralMeshComponent", false, false);
+    RegisterComponent<Component::SplineMeshComponent>(componentRegistry, "SplineMeshComponent", false, false);
+    RegisterComponent<Component::Text3DComponent>(componentRegistry, "Text3DComponent", false, false);
 
-    RegisterComponent<Component::CharacterPhysicsComponent>(componentRegistry, "CharacterPhysicsComponent");
-    RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, "PhysicsBodyDesc");
-    RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, "DrawPhysicsDebugTag");
+    RegisterComponent<Component::CharacterPhysicsComponent>(componentRegistry, "CharacterPhysicsComponent", false, false);
+    RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, "PhysicsBodyDesc", false, false);
+    RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, "DrawPhysicsDebugTag", false, false);
 
-    RegisterComponent<Component::MotionBlurMovementComponent>(componentRegistry, "MotionBlurMovementComponent");
-    RegisterComponent<Component::AntiGravityTag>(componentRegistry, "AntiGravityTag");
-    RegisterComponent<Component::FloorTag>(componentRegistry, "FloorTag");
+    RegisterComponent<Component::MotionBlurMovementComponent>(componentRegistry, "MotionBlurMovementComponent", false, false);
+    RegisterComponent<Component::AntiGravityTag>(componentRegistry, "AntiGravityTag", false, false);
+    RegisterComponent<Component::FloorTag>(componentRegistry, "FloorTag", false, false);
 
-    RegisterComponent<Component::DebugGizmoComponent>(componentRegistry, "DebugGizmoComponent");
-    RegisterComponent<Component::CheckpointComponent>(componentRegistry, "CheckpointComponent");
-    RegisterComponent<Component::DeathZoneComponent>(componentRegistry, "DeathZoneComponent");
-    RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, "PlayerSpawnComponent");
-    RegisterComponent<Component::PathMoverComponent>(componentRegistry, "PathMoverComponent");
-    RegisterComponent<Component::RotateInPlaceComponent>(componentRegistry, "RotateInPlaceComponent");
+    RegisterComponent<Component::DebugGizmoComponent>(componentRegistry, "DebugGizmoComponent", false, false);
+    RegisterComponent<Component::CheckpointComponent>(componentRegistry, "CheckpointComponent", false, false);
+    RegisterComponent<Component::DeathZoneComponent>(componentRegistry, "DeathZoneComponent", false, false);
+    RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, "PlayerSpawnComponent", false, false);
+    RegisterComponent<Component::PathMoverComponent>(componentRegistry, "PathMoverComponent", false, false);
+    RegisterComponent<Component::RotateInPlaceComponent>(componentRegistry, "RotateInPlaceComponent", false, false);
 }
 } // Core

@@ -106,7 +106,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
         .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 64 MB
         .renderPoolSize = 4ull * 1024 * 1024, // 4 MB
-        .arenaPoolSize = 128ull * 1024 * 1024, // 128 MB
+        .arenaPoolSize = 256ull * 1024 * 1024, // 256 MB
     });
 
 #if LOGGING_ENABLED
@@ -289,7 +289,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->scheduler = scheduler;
         engineContext->memoryManager = &memoryManager;
         engineContext->gameplayArena = Core::ManagedArena(memoryManager.ArenaPool(), 512ull * 1024, Core::AllocTag::ECS);
-        engineContext->editorArena = Core::ManagedArena(memoryManager.ArenaPool(), 1ull * 1024 * 1024, Core::AllocTag::Editor);
+        engineContext->editorArena = Core::ManagedArena(memoryManager.ArenaPool(), 32ull * 1024 * 1024, Core::AllocTag::Editor);
         engineContext->setCursorHiddenFn = [this](bool hidden) {
             if (bCursorHidden == hidden) { return; }
             bCursorHidden = hidden;

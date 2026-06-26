@@ -12,6 +12,10 @@ set(GAME_SOURCES
         systems/render_systems.cpp
         editor/editor_systems.cpp
         editor/editor_systems.h
+        editor/editor_scene_browser.cpp
+        editor/editor_scene_browser.h
+        editor/editor_materials.cpp
+        editor/editor_materials.h
 
         fwd_components.h
 

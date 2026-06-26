@@ -105,6 +105,9 @@ struct ComponentEntry
 
     /** Engine-managed components hidden from user-facing component lists (Add Component, filters). */
     bool hidden{false};
+
+    /** Hide in Details inspector unless "Expose all" is enabled. */
+    bool hideInInspector{false};
 };
 
 struct ComponentRegistry
@@ -200,6 +203,15 @@ struct EditorState
     StringID sceneBrowserComponentFilter{};
     entt::entity sceneBrowserSelectionAnchor{entt::null};
     bool sceneBrowserFilterWasActive{false};
+
+    // Inline hierarchy rename (F2)
+    entt::entity renamingEntity{entt::null};
+    char renameBuffer[256]{};
+    bool renameRequestFocus{false};
+    bool bExposeAllComponents{false};
+
+    // Folder selection
+    Core::Vector<entt::entity> selectedFolders{};
 
     // ImGui textures
     EditorTextureResidency texResidency{};

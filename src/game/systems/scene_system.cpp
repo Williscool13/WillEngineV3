@@ -608,9 +608,7 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
     state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, prefabId);
 
     if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-        if (stable->sortOrder == 0) {
-            stable->sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
-        }
+        stable->sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
     }
 
     LOG_INFO(Game, "Spawned prefab '{}' as entity {}", meta->prefabName.c_str(), entt::to_integral(entity));

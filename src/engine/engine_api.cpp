@@ -99,6 +99,7 @@ PhysicsState::PhysicsState(Core::TlsfAllocator* allocator)
 EditorState::EditorState(Core::TlsfAllocator* allocator)
     : selectedEntities(allocator, Core::AllocTag::EngineState, 64),
       prevSelectedEntities(allocator, Core::AllocTag::EngineState, 64),
+      selectedFolders(allocator, Core::AllocTag::EngineState, 64),
       texResidency(allocator)
 {}
 
