@@ -584,6 +584,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             featureSection("RELAX", &bRELAX, [&] {
                 Core::RELAXParams& relax = restir.relax;
 
+                ImGui::BeginDisabled(!RESTIR_ENABLE_CONFIDENCE);
                 featureSection("Confidence (Moving-Shadow Antilag)", &restir.bEnableConfidence, [&] {
                     if (Widgets::SliderFloat("History Confidence##restir", &state->debug.restir.confidenceStrength, 0.0f, 1.0f,
                             {.format = "%.2f", .tooltip = "Moving-shadow antilag: temporal luminance-gradient confidence fed to RELAX (RTXDI-style). Master mix.", .reset = true, .resetTo = 0.75f})) {
@@ -608,6 +609,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                         changed = true;
                     }
                 });
+                ImGui::EndDisabled();
 
                 static const Core::RELAXParams relaxDefaults{};
                 auto relaxTip = [&](const char* tip) {

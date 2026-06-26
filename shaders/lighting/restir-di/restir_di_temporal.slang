@@ -24,9 +24,13 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         return;
     }
 
+#if RESTIR_ENABLE_ANTILAG
     if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][pixel] = 1.0; }
+#endif
+#if RESTIR_ENABLE_CONFIDENCE
     // restir_signal (RG16F): re-shade visibility delta + brightness normalizer for the gradient passes. Sky/invalid texels carry 0.
     if (pc.signalIndex != ~0u) { rdgStorageFloat2[pc.signalIndex][pixel] = float2(0.0, 0.0); }
+#endif
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     uint2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixel, pc.pixelScale);
@@ -174,7 +178,9 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     // -------------------------------------------------------------------------
     // winnerVisibility: visibility of the displayed sample against the current TLAS. visPrev: the SAME sample against the previous-frame TLAS.
     float winnerVisibility = 1.0;
+#if RESTIR_ENABLE_CONFIDENCE
     float visPrev = 1.0;
+#endif
     // Visibility-independent target luminance: the gradient's brightness weight (valid whether or not the sample is occluded this frame).
     float pHatUnshadowed = 0.0;
     if (combined.lightIdx != ~0u) {
@@ -203,6 +209,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         ReservoirFinalise(combined, accum_combined, p_hat_winner, float(combined.M));
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
 
+#if RESTIR_ENABLE_CONFIDENCE
         // Same-sample re-shade against the previous-frame TLAS (carried). Tracing THIS frame's winner sample against the
         // previous occluder positions isolates the moving-caster shadow change with zero Monte-Carlo noise (identical sample),
         // unlike a cross-frame luminance difference. Receiver assumed static (worldPos unchanged). ~0u prev TLAS -> no change.
@@ -211,6 +218,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         } else {
             visPrev = winnerVisibility;
         }
+#endif
     }
 
 #if RESTIR_ENABLE_ANTILAG
@@ -228,9 +236,13 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     pc.outputBuffer[pixelIdx] = combined;
 
+#if RESTIR_ENABLE_ANTILAG
     if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][pixel] = winnerVisibility; }
+#endif
+#if RESTIR_ENABLE_CONFIDENCE
     // restir_signal (RG16F): x = signed visibility-change * brightness, y = brightness normalizer. The gradient pass means these over a stratum; the resolve rectifies after blurring.
     if (pc.signalIndex != ~0u) {
         rdgStorageFloat2[pc.signalIndex][pixel] = float2(pHatUnshadowed * (winnerVisibility - visPrev), pHatUnshadowed * max(winnerVisibility, visPrev));
     }
+#endif
 }

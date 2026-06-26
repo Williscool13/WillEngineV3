@@ -16,6 +16,9 @@
 // [temporal] Moving-shadow antilag.
 #define RESTIR_ENABLE_ANTILAG 0
 
+// [temporal] RELAX moving-shadow confidence chain.
+#define RESTIR_ENABLE_CONFIDENCE 0
+
 // [spatial] Adaptive spatial dilation.
 #define RESTIR_ENABLE_SPATIAL_DILATE 1
 

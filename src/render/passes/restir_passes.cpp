@@ -12,6 +12,7 @@
 #include "render/render-graph/render_pass.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_config.h"
+#include "render/shaders/restir_features_macros.h"
 
 namespace Render
 {
@@ -65,11 +66,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     // tlasIndex (and the carried prev-TLAS index) resolve inside the Execute lambdas: the AS resource's physical + RT descriptor are assigned during Compile, after pass setup.
-    // History confidence for the RELAX denoiser; only RELAX consumes it. Both combined-temporal variants (plain + ReGIR) write restir_signal.
-    const bool bConfidence = restirParams.bEnableConfidence && restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
-    // Antilag reuses the shadow-flip signal but needs only the shadow-vis history, not the confidence texture or RELAX.
-    const bool bAntilag = restirParams.bEnableAntilag;
-    const bool bShadowVis = bConfidence || bAntilag;
+    // RELAX moving-shadow confidence
+    const bool bConfidence = RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
+    // restir_shadow_vis is antilag-only
+    const bool bAntilag = RESTIR_ENABLE_ANTILAG && restirParams.bEnableAntilag;
+    const bool bShadowVis = bAntilag;
 
     // Temporal-gradient confidence runs at 1/GRAD_FACTOR of the half-res ReSTIR grid (must match GRAD_FACTOR in the confidence shaders).
     const uint32_t GRAD_FACTOR = 3u;
