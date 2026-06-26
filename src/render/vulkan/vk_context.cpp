@@ -174,6 +174,9 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     VkPhysicalDeviceMaintenance9FeaturesKHR maintenance9Features{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_FEATURES_KHR};
     VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
     VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
+#ifdef ENABLE_VULKAN_VALIDATION
+    VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR pipelineExecutablePropertiesFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR};
+#endif
 
     // --- Physical Device Selection ---
     {
@@ -203,6 +206,9 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         bool selectedIsDiscrete = false;
         bool selectedMaintenance9 = false;
         bool selectedMeshShaderQueries = false;
+#ifdef ENABLE_VULKAN_VALIDATION
+        bool selectedPipelineExecProps = false;
+#endif
         uint32_t selectedGraphicsFamily = UINT32_MAX;
         uint32_t selectedTransferFamily = UINT32_MAX;
 
@@ -346,6 +352,16 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                 }
             }
 
+#ifdef ENABLE_VULKAN_VALIDATION
+            bool hasPipelineExecProps = false;
+            for (uint32_t j = 0; j < extCount; j++) {
+                if (strcmp(exts[j].extensionName, VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME) == 0) {
+                    hasPipelineExecProps = true;
+                    break;
+                }
+            }
+#endif
+
             bool isDiscrete = (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
             if (selected == VK_NULL_HANDLE || (isDiscrete && !selectedIsDiscrete)) {
                 selected = pd;
@@ -354,6 +370,9 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                 selectedMaintenance9 = hasMaintenance9;
                 selectedMeshShaderQueries = static_cast<bool>(qMesh.meshShaderQueries);
                 selectedIsDiscrete = isDiscrete;
+#ifdef ENABLE_VULKAN_VALIDATION
+                selectedPipelineExecProps = hasPipelineExecProps;
+#endif
             }
         }
 
@@ -367,6 +386,9 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         transferQueueFamily = selectedTransferFamily;
         bMaintenance9Enabled = selectedMaintenance9;
         bMeshShaderQueriesEnabled = selectedMeshShaderQueries;
+#ifdef ENABLE_VULKAN_VALIDATION
+        bPipelineExecutablePropertiesEnabled = selectedPipelineExecProps;
+#endif
     }
 
     // --- Logical Device ---
@@ -436,6 +458,17 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         extendedDynamicState3Features.pNext = &accelerationStructureFeatures;
         accelerationStructureFeatures.pNext = &rayQueryFeatures;
         rayQueryFeatures.pNext = bMaintenance9Enabled ? static_cast<void*>(&maintenance9Features) : nullptr;
+#ifdef ENABLE_VULKAN_VALIDATION
+        if (bPipelineExecutablePropertiesEnabled) {
+            pipelineExecutablePropertiesFeatures.pipelineExecutableInfo = VK_TRUE;
+            if (bMaintenance9Enabled) {
+                maintenance9Features.pNext = &pipelineExecutablePropertiesFeatures;
+            }
+            else {
+                rayQueryFeatures.pNext = &pipelineExecutablePropertiesFeatures;
+            }
+        }
+#endif
 
         Core::InlineVector<const char*, 12> deviceExts;
         deviceExts.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
@@ -451,6 +484,11 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         if (bMaintenance9Enabled) {
             deviceExts.PushBack(VK_KHR_MAINTENANCE_9_EXTENSION_NAME);
         }
+#ifdef ENABLE_VULKAN_VALIDATION
+        if (bPipelineExecutablePropertiesEnabled) {
+            deviceExts.PushBack(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME);
+        }
+#endif
 
         float queuePriority = 1.0f;
         Core::Array<VkDeviceQueueCreateInfo, 2> queueInfos = {

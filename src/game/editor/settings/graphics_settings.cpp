@@ -502,6 +502,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::EndDisabled();
 
             ImGui::SeparatorText("Temporal");
+            if (ImGui::Checkbox("Temporal Reuse", &restir.bEnableTemporal)) {
+                changed = true;
+            }
             int temporalMCap = static_cast<int>(restir.temporalMCap);
             if (Widgets::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
                 restir.temporalMCap = static_cast<uint32_t>(temporalMCap);

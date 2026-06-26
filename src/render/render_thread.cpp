@@ -917,6 +917,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
+#ifdef ENABLE_VULKAN_VALIDATION
+        if (frameBuffer.bLogRDG) {
+            pipelineManager->DumpExecutableStats(Platform::GetAssetPath() / "visualizations" / "pipeline_executable_stats.txt");
+        }
+#endif
         renderGraph->Compile(frameNumber);
         if (bVRAMReportShouldWrite.load(std::memory_order_relaxed)) {
             bVRAMReportShouldWrite.store(false, std::memory_order_relaxed);

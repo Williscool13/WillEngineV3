@@ -53,6 +53,11 @@ bool ComputePipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMan
     shaderStage.pSpecializationInfo = &specInfo;
 
     VkComputePipelineCreateInfo pipelineInfo = VkHelpers::ComputePipelineCreateInfo(loadingEntry.layout, shaderStage);
+#ifdef ENABLE_VULKAN_VALIDATION
+    if (context->bPipelineExecutablePropertiesEnabled) {
+        pipelineInfo.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
+    }
+#endif
     VkResult pipelineResult = vkCreateComputePipelines(context->device, pipelineCache, 1, &pipelineInfo, nullptr, &loadingEntry.pipeline);
 
     if (pipelineResult != VK_SUCCESS) {
@@ -137,6 +142,11 @@ bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMa
         .pDynamicState = &dynamicInfo,
         .layout = loadingEntry.layout,
     };
+#ifdef ENABLE_VULKAN_VALIDATION
+    if (context->bPipelineExecutablePropertiesEnabled) {
+        pipelineInfo.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
+    }
+#endif
 
     Core::Array<uint32_t, 6> specConstantData{
         VulkanContext::deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0],

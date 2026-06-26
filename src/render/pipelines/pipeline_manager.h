@@ -70,6 +70,15 @@ public:
 
     void LogRegistrationSummary();
 
+#ifdef ENABLE_VULKAN_VALIDATION
+    /**
+     * Dumps per-pipeline shader executable statistics (VGPR/SGPR/LDS/occupancy/spills, as reported by the driver) to a plaintext file.
+     * No-op unless VK_KHR_pipeline_executable_properties is enabled; pipelines must have been created with the capture-statistics flag.
+     * @param outputPath
+     */
+    void DumpExecutableStats(const Core::Path& outputPath);
+#endif
+
     VkPipelineLayout GetGlobalPipelineLayout() const { return globalPipelineLayout.handle; }
 
     VkPipelineCache GetPipelineCache() const { return pipelineCache; }

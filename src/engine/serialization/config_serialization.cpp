@@ -102,6 +102,7 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"spatialRadius", p.spatialRadius},
         {"spatialNeighbors", p.spatialNeighbors},
         {"spatialMCap", p.spatialMCap},
+        {"bEnableTemporal", p.bEnableTemporal},
         {"temporalMCap", p.temporalMCap},
         {"boilingFilterStrength", p.boilingFilterStrength},
         {"bInitialVisibility", p.bInitialVisibility},
@@ -138,6 +139,7 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
     p.spatialNeighbors = getUint("spatialNeighbors", p.spatialNeighbors);
     p.spatialMCap = getUint("spatialMCap", p.spatialMCap);
+    p.bEnableTemporal = getBool("bEnableTemporal", p.bEnableTemporal);
     p.temporalMCap = getUint("temporalMCap", p.temporalMCap);
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);

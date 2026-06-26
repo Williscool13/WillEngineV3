@@ -575,6 +575,7 @@ struct ReSTIRParams
     uint32_t spatialRadius{30};
     uint32_t spatialNeighbors{5};
     uint32_t spatialMCap{500};
+    bool bEnableTemporal{true};
     uint32_t temporalMCap{20u * 17u};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{false};

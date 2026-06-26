@@ -45,6 +45,7 @@ struct VulkanContext
     // Optional Extensions
     bool bMaintenance9Enabled{false};
     bool bMeshShaderQueriesEnabled{false};
+    bool bPipelineExecutablePropertiesEnabled{false};
 
     VmaVulkanFunctions vulkanFunctions{};
 

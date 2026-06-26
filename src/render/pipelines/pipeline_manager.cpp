@@ -10,6 +10,8 @@
 
 #include "graphics_pipeline_builder.h"
 #include "core/containers/vector.h"
+#include "core/containers/string.h"
+#include "core/containers/inline_string.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "core/memory/tlsf_allocator.h"
 #include "engine/logging/engine_log.h"
@@ -423,10 +425,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReGIRFillPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_spatial"), src / "restir_di_spatial_compute.spv",
                             sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_di_combined_temporal"), src / "restir_di_combined_temporal_compute.spv",
-                            sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_di_combined_temporal_regir"), src / "restir_di_combined_temporal_regir_compute.spv",
-                            sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_base"), src / "restir_di_base_compute.spv",
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_base_regir"), src / "restir_di_base_regir_compute.spv",
@@ -972,4 +970,101 @@ void PipelineManager::ReloadModified()
         }
     }
 }
+
+#ifdef ENABLE_VULKAN_VALIDATION
+static void AppendPipelineExecutableStats(VkDevice device, VkPipeline pipeline, const char* label, Core::String& out)
+{
+    if (pipeline == VK_NULL_HANDLE) {
+        return;
+    }
+
+    VkPipelineInfoKHR pipelineInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_INFO_KHR};
+    pipelineInfo.pipeline = pipeline;
+
+    uint32_t execCount = 0;
+    vkGetPipelineExecutablePropertiesKHR(device, &pipelineInfo, &execCount, nullptr);
+    if (execCount == 0) {
+        return;
+    }
+    if (execCount > 8) {
+        execCount = 8;
+    }
+
+    Core::InlineVector<VkPipelineExecutablePropertiesKHR, 8> execProps;
+    for (uint32_t i = 0; i < execCount; ++i) {
+        execProps.PushBack(VkPipelineExecutablePropertiesKHR{.sType = VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_PROPERTIES_KHR});
+    }
+    vkGetPipelineExecutablePropertiesKHR(device, &pipelineInfo, &execCount, execProps.Data());
+
+    out.Append(Core::InlineString<512>::Format("\n=== %s ===\n", label).View());
+
+    for (uint32_t e = 0; e < execCount; ++e) {
+        const VkPipelineExecutablePropertiesKHR& ep = execProps[e];
+        out.Append(Core::InlineString<512>::Format("  [%s] subgroupSize=%u\n", ep.name, ep.subgroupSize).View());
+
+        VkPipelineExecutableInfoKHR execInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INFO_KHR};
+        execInfo.pipeline = pipeline;
+        execInfo.executableIndex = e;
+
+        uint32_t statCount = 0;
+        vkGetPipelineExecutableStatisticsKHR(device, &execInfo, &statCount, nullptr);
+        if (statCount == 0) {
+            continue;
+        }
+        if (statCount > 64) {
+            statCount = 64;
+        }
+
+        Core::InlineVector<VkPipelineExecutableStatisticKHR, 64> stats;
+        for (uint32_t i = 0; i < statCount; ++i) {
+            stats.PushBack(VkPipelineExecutableStatisticKHR{.sType = VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_STATISTIC_KHR});
+        }
+        vkGetPipelineExecutableStatisticsKHR(device, &execInfo, &statCount, stats.Data());
+
+        for (uint32_t s = 0; s < statCount; ++s) {
+            const VkPipelineExecutableStatisticKHR& st = stats[s];
+            switch (st.format) {
+            case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_BOOL32_KHR:
+                out.Append(Core::InlineString<512>::Format("    %-40s = %s\n", st.name, st.value.b32 ? "true" : "false").View());
+                break;
+            case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_INT64_KHR:
+                out.Append(Core::InlineString<512>::Format("    %-40s = %lld\n", st.name, static_cast<long long>(st.value.i64)).View());
+                break;
+            case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR:
+                out.Append(Core::InlineString<512>::Format("    %-40s = %llu\n", st.name, static_cast<unsigned long long>(st.value.u64)).View());
+                break;
+            case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_FLOAT64_KHR:
+                out.Append(Core::InlineString<512>::Format("    %-40s = %f\n", st.name, st.value.f64).View());
+                break;
+            default:
+                break;
+            }
+        }
+    }
+}
+
+void PipelineManager::DumpExecutableStats(const Core::Path& outputPath)
+{
+    if (!context->bPipelineExecutablePropertiesEnabled) {
+        LOG_WARN(Renderer, "DumpExecutableStats: VK_KHR_pipeline_executable_properties not enabled");
+        return;
+    }
+
+    Core::String report(renderAlloc, Core::AllocTag::Render, "Pipeline Executable Statistics\n");
+
+    for (auto [name, pipeline] : computePipelines) {
+        AppendPipelineExecutableStats(context->device, pipeline.activeEntry.pipeline, name.ToString(), report);
+    }
+    for (auto [name, pipeline] : graphicsPipelines) {
+        AppendPipelineExecutableStats(context->device, pipeline.activeEntry.pipeline, name.ToString(), report);
+    }
+
+    if (Platform::WriteFile(outputPath, report.View())) {
+        LOG_INFO(Renderer, "Pipeline executable stats written to {}", outputPath.c_str());
+    }
+    else {
+        LOG_ERROR(Renderer, "Failed to write pipeline executable stats to {}", outputPath.c_str());
+    }
+}
+#endif
 } // Render
