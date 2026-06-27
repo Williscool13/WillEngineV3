@@ -13,6 +13,13 @@ import restir_common;
 
 import bindless_declarations;
 
+float3 SanitizeRadiance(float3 c) {
+    c.x = (isnan(c.x) || isinf(c.x)) ? 0.0 : c.x;
+    c.y = (isnan(c.y) || isinf(c.y)) ? 0.0 : c.y;
+    c.z = (isnan(c.z) || isinf(c.z)) ? 0.0 : c.z;
+    return clamp(c, 0.0, 65504.0);
+}
+
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
@@ -85,7 +92,6 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
                 float3 specContribution = specularAl * commonTerm;
                 specularRadiance += specContribution;
 
-                // Representative hit distance for RELAX specular reprojection: the brightest specular contributor.
                 float specLum = dot(specContribution, float3(0.2126, 0.7152, 0.0722));
                 if (specLum > bestSpecLum)
                 {
@@ -96,15 +102,13 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
         }
     }
 
-    // Diffuse is demodulated by albedo; specular by the preintegrated env-BRDF reflectance.
-    // Emissive is intentionally excluded here and re-added during the remodulate/composite.
-    // Hit distance is packed into alpha for the RELAX specular reprojection path.
     float3 diffuseOut = diffuseRadiance / max(li.albedo.rgb, float3(0.01, 0.01, 0.01));
 
     float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
     float3 specReflectance = F0 * envBRDF.x + envBRDF.y;
     float3 specularOut = specularRadiance / max(specReflectance, float3(0.01, 0.01, 0.01));
 
-    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(diffuseOut, hitDistance);
-    rdgStorageFloat4[pc.secondaryOutputImageIndex][pixel] = float4(specularOut, hitDistance);
+    float hitT = (isnan(hitDistance) || isinf(hitDistance)) ? 0.0 : hitDistance;
+    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(SanitizeRadiance(diffuseOut), hitT);
+    rdgStorageFloat4[pc.secondaryOutputImageIndex][pixel] = float4(SanitizeRadiance(specularOut), hitT);
 }

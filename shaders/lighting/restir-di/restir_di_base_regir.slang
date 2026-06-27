@@ -17,7 +17,6 @@ import regir_hash;
 
 #include "restir_features_macros.slang"
 
-// ReGIR variant of ReSTIR DI candidate generation
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     uint2 pixel = threadID.xy;
@@ -52,7 +51,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
-    // Gate on roughness
     int mBrdf = (roughness <= RESTIR_BRDF_ROUGHNESS_MAX) ? RESTIR_M_BRDF : 0;
 
     int lightCount = pc.lightData->lightCount;
@@ -76,7 +74,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
         float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
 
-        // Jittered cell first, then the pixel's own un-jittered cell, before uniform
         [unroll]
         for (int attempt = 0; attempt < 2 && !useGrid; attempt++)
         {
@@ -104,7 +101,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             LightVS candVS = (LightVS)0;
             float w_i = 0.0;
 
-            // Grid tap source pdf
             int lightIdx = -1;
             float pSelect = 0.0;
             if (useGrid) {
@@ -131,7 +127,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                     float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                     float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-                    // Balance-heuristic MIS against the BRDF stream, using the grid selection pdf.
                     float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
                     float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
@@ -169,7 +164,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 int hitLightIdx = -1;
                 float hitT = 0.0;
 #if RESTIR_ENABLE_BRDF_RAY
-                // Closest-hit ray: nearest light proxy before scene geometry (mask 0xFF; occluder first -> miss).
                 float3 worldN = normalize(mul(float3x3(scene.invView), N));
                 RayDesc ray;
                 ray.Origin = worldPos + worldN * 0.05;
@@ -188,7 +182,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                     }
                 }
 #else
-                // Analytic nearest-light hit; occlusion deferred to the Phase 3 winner test, as for light-stream candidates.
                 float nearestT = 1e30;
                 for (int li2 = 0; li2 < lightCount; li2++) {
                     float t;
@@ -203,7 +196,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                     LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
                     Xi = viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                    // Light stream selects via the grid reservoir's targetPdf/totalWeight (S0)
                     float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(lightCount))) : (1.0 / float(lightCount));
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
@@ -225,7 +217,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         r_gen.M = 1u;
     }
 
-    // Finalise W (Talbot MIS: M already absorbed into each w_i, so M_total = 1) so the temporal pass streams w = p_hat*W*M directly.
     if (r_gen.lightIdx != ~0u) {
         LightVS vsGen = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
         float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
@@ -235,7 +226,6 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
 
 #if RESTIR_ENABLE_INITIAL_VISIBILITY
-        // Initial-candidate visibility baked into W: an occluded candidate streams to 0 in temporal but keeps its lightIdx as a dark anchor for spatial reuse.
         if (pc.bInitialVisibility != 0u) {
             float3 worldN = normalize(mul(float3x3(scene.invView), N));
             float3 worldyStar = mul(scene.invView, float4(yStarGen, 1.0)).xyz;

@@ -1,11 +1,3 @@
-/*
- * ReSTIR remodulate / composite.
- * Recombines the demodulated diffuse and specular intermediates back into final radiance:
- *   final = diffuse * albedo + specular * specReflectance + emissive
- * specReflectance is the same preintegrated env-BRDF term the resolve divided out.
- *
- * When pixelScale > 1 the diff/spec inputs are at half-res; a 3x3 bilateral upsample weights each tap by Gaussian spatial distance, depth similarity, and normal similarity to suppress cross-surface blending at edges.
- */
 import common_interop;
 import push_constant_interop;
 import constants_interop;
@@ -60,11 +52,9 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
 
     float3 diffuse, specular;
     if (pc.pixelScale == 1u) {
-        // Full res: inputs are already per-pixel, no filtering needed.
         diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb;
         specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb;
     } else {
-        // --- Bilateral upsampling (3x3) ---
         uint2 halfExtent = uint2(pc.width, pc.height) / pc.pixelScale;
 
         float2 hTexel = (float2(pixel) + 0.5) / float(pc.pixelScale) - 0.5;
@@ -93,7 +83,6 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
                 float wDepth = exp(-depthDiff / BILATERAL_DEPTH_SIGMA);
                 float wNormal = pow(max(0.0, dot(tapNormal, N)), BILATERAL_NORMAL_POWER);
 
-                // Material weight: rejects coplanar taps with very different PBR response (matters most for specular)
                 float tapRoughness;
                 float tapMetallic;
                 UnpackPBR(tapGt1.b, tapRoughness, tapMetallic);
@@ -112,7 +101,6 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
             diffuse = diffSum / totalW;
             specular = specSum / totalW;
         } else {
-            // All taps rejected; fall back to nearest half-res sample.
             int2 nearest = clamp(hCenter, int2(0, 0), int2(halfExtent) - 1);
             diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(nearest, 0)).rgb;
             specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(nearest, 0)).rgb;

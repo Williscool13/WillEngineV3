@@ -21,7 +21,6 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform ReGIRTouchPushConstan
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
-    // Must match the consume pass's reconstruction exactly, or the key won't resolve to the touched cell.
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
@@ -33,7 +32,6 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform ReGIRTouchPushConstan
     ReGIRHashKey key = ReGIRComputeKey(worldPos, cameraPos);
     uint cs = ReGIRChecksum(key);
 
-    // Peel one unique cell per wave iteration: the elected lane does the single CAS + append for the whole same-cell group, so a coherent tile costs one atomic per cell, not per pixel.
     bool done = false;
     while (WaveActiveAnyTrue(!done)) {
         uint activeCs = WaveActiveMin(done ? 0xFFFFFFFFu : cs);

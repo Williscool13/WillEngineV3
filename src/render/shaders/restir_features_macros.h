@@ -13,6 +13,9 @@
 // [temporal] RTXDI permutation sampling: reflect the history tap within a 4x4 block to decorrelate temporal reuse.
 #define RESTIR_ENABLE_PERMUTATION_SAMPLING 0
 
+// [temporal] Multi-tap reprojection search for a valid history surface (vs a single reprojected tap).
+#define RESTIR_ENABLE_TEMPORAL_SEARCH 1
+
 // [temporal] Moving-shadow antilag.
 #define RESTIR_ENABLE_ANTILAG 0
 

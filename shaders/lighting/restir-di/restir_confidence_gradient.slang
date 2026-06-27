@@ -1,12 +1,6 @@
 import push_constant_interop;
 import bindless_declarations;
 
-// Temporal-gradient antilag, stage 1. The producer (combined_temporal) already wrote a same-sample re-shade delta per
-// half-res pixel into restir_signal (RG16F: x = signed visibility-change * brightness, y = brightness normalizer), so
-// this is just a signed stratum-mean downsample. The signal is noise-free (the visibility change comes from tracing the
-// SAME winner sample against the current vs carried-previous TLAS), so no cross-frame reprojection is needed here.
-// Rectification of x happens only after the stage-2 blur.
-// GRAD_FACTOR must match SetupReSTIRPasses in restir_passes.cpp.
 static const uint GRAD_FACTOR = 3u;
 
 [numthreads(8, 8, 1)]

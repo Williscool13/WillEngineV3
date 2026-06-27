@@ -3,11 +3,6 @@ import bindless_declarations;
 import restir_common;
 import shader_functions;
 
-// Temporal-gradient antilag, stage 2. Adapted from RTXDI FilterGradientsPass + ConfidencePass:
-// blur the downsampled gradient, convert to confidence saturate(1 - |delta| / (max + darknessBias))^sensitivity,
-// scale by the master strength, then blend with the reprojected previous confidence in pow(.,0.25) space so confidence
-// drops fast on a real change and recovers slowly (gives ReSTIR time to re-converge before RELAX trusts history again).
-// GRAD_FACTOR must match SetupReSTIRPasses in restir_passes.cpp.
 static const uint GRAD_FACTOR = 3u;
 
 [numthreads(8, 8, 1)]
@@ -19,9 +14,6 @@ void ComputeMain(uniform ReSTIRConfidenceResolvePushConstant pc, uint3 threadID 
 
     int2 gcenter = int2(pixel / GRAD_FACTOR);
 
-    // Pyramid-weighted blur over the downsampled gradient. g.x is the SIGNED luminance delta, g.y the local brightness
-    // normalizer; both are blurred before g.x is rectified so the uncorrelated per-pixel noise cancels toward zero in
-    // static regions while a spatially-coherent shadow change (consistent sign) survives.
     float2 g = float2(0.0, 0.0);
     float wsum = 0.0;
     int r = int(pc.blurRadius);
@@ -40,14 +32,11 @@ void ComputeMain(uniform ReSTIRConfidenceResolvePushConstant pc, uint3 threadID 
         g /= wsum;
     }
 
-    // Relative gradient -> confidence. darknessBias keeps dark-region noise from producing a huge relative gradient; the max() guards 0/0 when darknessBias is 0.
     float conf = saturate(1.0 - abs(g.x) / max(g.y + pc.darknessBias, 1e-6));
     conf = saturate(pow(conf, pc.sensitivity));
 
-    // Master mix: strength 0 -> confidence forced to 1 (antilag off), strength 1 -> full effect.
     conf = 1.0 - pc.confidenceStrength * (1.0 - conf);
 
-    // Asymmetric temporal filter against reprojected previous confidence.
     if (pc.prevConfidenceIndex != ~0u && pc.blendFactor < 1.0) {
         uint2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixel, pc.pixelScale);
         uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));

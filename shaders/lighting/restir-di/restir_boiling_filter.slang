@@ -2,7 +2,6 @@ import push_constant_interop;
 import restir_interop;
 import restir_common;
 
-// RTXDI boiling filter: per 16x16 tile, discard reservoirs whose W is an extreme outlier vs the tile mean, removing temporal fireflies before the result is reused/carried.
 groupshared float2 gBoiling[256];
 
 [numthreads(16, 16, 1)]

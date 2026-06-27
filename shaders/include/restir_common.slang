@@ -8,34 +8,25 @@ import bindless_declarations;
 import constants_interop;
 import shader_functions;
 
-// Relative view-depth spread across a 2x2 full-res quad above which it is treated as a silhouette. Must match QUAD_UNIFORM_DEPTH_THRESHOLD in relax_utils.slang.
 public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
 
-// Minimum dot between a quad corner's normal and corner 0 below which the quad is treated as a normal crease (and the corner locks, like a silhouette). 0.85 ~= 32deg. -1.0 disables (reverts to depth-only). Must match relax_utils.slang.
 public static const float QUAD_UNIFORM_NORMAL_DOT_THRESHOLD = 0.85;
 
-/** Light (area or sphere) transformed into view space, with derived geometry and emission cached. For a sphere, halfWidth holds the radius and normal/right/up/halfHeight are unused. */
 public struct LightVS
 {
     public float3 center;
     public float3 normal;
     public float3 right;
     public float3 up;
-    public float halfWidth; // radius for spheres
+    public float halfWidth;
     public float halfHeight;
-    public float area; // 4*halfWidth*halfHeight (area) or 4*pi*r^2 (sphere)
+    public float area;
     public float range;
     public float intensity;
     public uint packedColor;
     public uint type;
 }
 
-/**
- * Transforms a LightInfo into view space, branching on light type.
- *
- * @param al World-space light.
- * @param view View matrix (float4x4).
- */
 public LightVS TransformLight(LightInfo al, float4x4 view)
 {
     LightVS vs;
@@ -47,7 +38,6 @@ public LightVS TransformLight(LightInfo al, float4x4 view)
     if (al.type == LIGHT_TYPE_SPHERE)
     {
         float radius = al.right.w;
-        // World axes carried into view space: a stable (camera-independent across frames) basis the sample offset is encoded in, so temporal reuse stays frame-coherent.
         vs.right = normalize(mul((float3x3)view, float3(1.0, 0.0, 0.0)));
         vs.up = normalize(mul((float3x3)view, float3(0.0, 1.0, 0.0)));
         vs.normal = normalize(mul((float3x3)view, float3(0.0, 0.0, 1.0)));
@@ -67,7 +57,6 @@ public LightVS TransformLight(LightInfo al, float4x4 view)
     return vs;
 }
 
-/** Packs a LightVS into the GPU buffer layout written by the transform-lights pass. */
 public LightVSData PackLightVS(LightVS vs)
 {
     LightVSData d;
@@ -82,7 +71,6 @@ public LightVSData PackLightVS(LightVS vs)
     return d;
 }
 
-/** Loads a pre-transformed view-space light from the buffer written by the transform-lights pass. */
 public LightVS UnpackLightVS(LightVSData d)
 {
     LightVS vs;
@@ -100,7 +88,6 @@ public LightVS UnpackLightVS(LightVSData d)
     return vs;
 }
 
-/** Geometric quantities for a point on a light as seen from a shading point. */
 public struct LightSample
 {
     public float3 samplePos;
@@ -111,15 +98,6 @@ public struct LightSample
     public float attenuation;
 }
 
-/**
- * Evaluates geometry for a specific sample position on a light.
- *
- * @param vs View-space light.
- * @param samplePos Point on the light surface (view space).
- * @param shadingPos Shading point (view space).
- * @param N Shading normal.
- * @param range Light range for attenuation falloff.
- */
 public LightSample EvalLightSample(LightVS vs, float3 samplePos, float3 shadingPos, float3 N, float range)
 {
     LightSample s;
@@ -142,13 +120,11 @@ public LightSample EvalLightSample(LightVS vs, float3 samplePos, float3 shadingP
     return s;
 }
 
-/** LightSample overload of pbr_functions::LightGeometryTerm. */
 public float LightGeometryTerm(LightSample s)
 {
     return LightGeometryTerm(s.cosLight, s.dist);
 }
 
-/** Uniformly samples a unit direction on the sphere. */
 public float3 UniformSampleSphere(float u1, float u2)
 {
     float z = 1.0 - 2.0 * u1;
@@ -157,13 +133,6 @@ public float3 UniformSampleSphere(float u1, float u2)
     return float3(r * cos(phi), r * sin(phi), z);
 }
 
-/**
- * Returns a random point on the light surface.
- *
- * @param vs View-space light.
- * @param uU Uniform random in [0, 1) along right axis (area) / sphere parameter.
- * @param uV Uniform random in [0, 1) along up axis (area) / sphere parameter.
- */
 public float3 SampleLightPos(LightVS vs, float uU, float uV)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
@@ -173,26 +142,12 @@ public float3 SampleLightPos(LightVS vs, float uU, float uV)
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
 
-/**
- * 1 - cosThetaMax of the cone a sphere subtends from shadingPos, computed without catastrophic cancellation.
- * The naive 1 - sqrt(1 - sin2) loses all precision for small/distant spheres (sqrt rounds to 1.0), which then
- * collides with the PDF floor and inflates sphere sample weights into persistent bright spots. This form is
- * algebraically identical but stable: the numerator sin2ThetaMax is exact and the denominator is ~2.
- * Shared by SampleLightSurface and LightSamplePdfArea so the sampled cone and the reported PDF use one value.
- *
- * @param d2 Squared distance from shadingPos to the sphere center.
- * @param radius Sphere radius.
- */
 public float SphereConeOneMinusCosThetaMax(float d2, float radius)
 {
     float sin2ThetaMax = clamp(radius * radius / d2, 0.0, 0.9999);
     return sin2ThetaMax / (1.0 + sqrt(max(1.0 - sin2ThetaMax, 0.0)));
 }
 
-/**
- * Samples a point on the light for shading. Spheres use cone (solid-angle) sampling toward the subtended visible cap
- * (no wasted back-hemisphere samples); rects use uniform area. Pair with LightSamplePdfArea for the source PDF.
- */
 public float3 SampleLightSurface(LightVS vs, float3 shadingPos, float uU, float uV)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
@@ -219,7 +174,6 @@ public float3 SampleLightSurface(LightVS vs, float3 shadingPos, float uU, float 
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
 
-/** Source PDF (area measure) of SampleLightSurface at a point: cone solid-angle (sphere) or uniform 1/area (rect). */
 public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
@@ -241,18 +195,6 @@ public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
 
 public float3 ReGIRCellSize() { return float3(REGIR_CELL_SIZE_X, REGIR_CELL_SIZE_Y, REGIR_CELL_SIZE_Z); }
 
-/**
- * Per-light ReGIR build target: a bounded, BRDF-free proxy for light vs's unshadowed contribution to a
- * point at the cell center. The grid reservoir selects a LIGHT proportional to this; the surface point is
- * sampled fresh at the shading point in the main pass, so the cone/area pdf cancels p_hat's cosLight/dist²
- * there instead of the cell-center geometry being baked into W (the near-field firefly source). Selection
- * error only costs variance, never bias, so a representative center-point estimate with the standard
- * distance floor is sufficient and is what keeps a light sitting inside the cell from spiking the target.
- *
- * @param vs View-space light.
- * @param cellCenter Cell center (view space).
- * @param lightColor Decoded linear light color.
- */
 public float EvalCellLightTarget(LightVS vs, float3 cellCenter, float3 lightColor)
 {
     float3 toCenter = vs.center - cellCenter;
@@ -266,7 +208,6 @@ public float EvalCellLightTarget(LightVS vs, float3 cellCenter, float3 lightColo
     return geom * vs.area * vs.intensity * colorMax * atten;
 }
 
-// Half-res pixel -> full-res pixel via the precomputed quad-selection texture (sel in [0,3]). Identity at full res.
 public uint2 FetchFullPixel(uint selectionIndex, uint2 pixel, uint pixelScale)
 {
     if (pixelScale == 1u) { return pixel; }
@@ -281,7 +222,6 @@ public int2 FetchFullPixel(uint selectionIndex, int2 pixel, uint pixelScale)
     return pixel * int(pixelScale) + int2(int(sel & 1u), int((sel >> 1u) & 1u));
 }
 
-// RTXDI permutation sampling: reflects the history pixel within a 4x4 block per frame to decorrelate temporal reuse. Permuted pixel must still pass disocclusion.
 public int2 ApplyPermutationSampling(int2 prevPixel, uint frameIndex)
 {
     uint seed = frameIndex * 0x9E3779B9u;
@@ -314,11 +254,6 @@ public ReGIRReservoir ReGIRReservoirEmpty()
     return r;
 }
 
-/**
- * Finalises a ReGIR grid reservoir into the (totalWeight, targetPdf) form (no pre-divided W).
- * totalWeight = wSum / M_total; targetPdf = the survivor's build target. The shading-side RIS
- * later forms sourcePdf = targetPdf / totalWeight (per-reservoir W computed at shading, not baked per slot).
- */
 public void FinalizeReservoirReGIR(inout ReGIRReservoir r, ReservoirAccum accum, float targetPdf, float M_total)
 {
     r.targetPdf = targetPdf;
@@ -329,22 +264,16 @@ public void FinalizeReservoirReGIR(inout ReGIRReservoir r, ReservoirAccum accum,
     }
 }
 
-/** Effective unbiased weight W = totalWeight / targetPdf of a grid reservoir; used when merging history grids. */
 public float ReGIRReservoirW(ReGIRReservoir r)
 {
     return (r.targetPdf > 0.0) ? (r.totalWeight / r.targetPdf) : 0.0;
 }
 
-/** Clamps the effective weight (totalWeight/targetPdf) to wClamp by capping totalWeight; wClamp <= 0 disables. */
 public void ReGIRClampW(inout ReGIRReservoir r, float wClamp)
 {
     if (wClamp > 0.0 && r.targetPdf > 0.0) { r.totalWeight = min(r.totalWeight, wClamp * r.targetPdf); }
 }
 
-/**
- * Encodes a view-space sample position into a uint. For an area light, stores snorm16x2 offsets
- * in the right/up basis; for a sphere, stores the oct16-packed outward unit direction from center.
- */
 public uint EncodeSampleOffset(float3 samplePos, LightVS vs)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
@@ -361,9 +290,6 @@ public uint EncodeSampleOffset(float3 samplePos, LightVS vs)
     return ux | (vy << 16);
 }
 
-/**
- * Reconstructs the view-space sample position from a packed sample offset.
- */
 public float3 DecodeSamplePos(uint sampleOffsetPacked, LightVS vs)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
@@ -384,12 +310,6 @@ public float3 DecodeSamplePos(Reservoir r, LightVS vs)
     return DecodeSamplePos(r.sampleOffsetPacked, vs);
 }
 
-/**
- * Transient accumulator used during candidate generation. Not written to the output buffer.
- *
- * @param wSum Running sum of candidate weights.
- * @param M Number of candidates seen so far.
- */
 public struct ReservoirAccum
 {
     public float wSum;
@@ -404,15 +324,6 @@ public ReservoirAccum ReservoirAccumEmpty()
     return a;
 }
 
-/**
- * Streaming WRS update for a single new candidate. Returns whether the candidate was selected; the
- * caller writes the survivor's fields into its reservoir on a true return.
- *
- * @param accum Running accumulator.
- * @param candidateWeight w_i = targetPdf(x) / sourcePdf(x).
- * @param u Uniform random float in [0, 1).
- * @return True if this candidate was selected.
- */
 public bool ReservoirAddSample(inout ReservoirAccum accum, float candidateWeight, float u)
 {
     accum.wSum += candidateWeight;
@@ -420,20 +331,6 @@ public bool ReservoirAddSample(inout ReservoirAccum accum, float candidateWeight
     return u < candidateWeight / accum.wSum;
 }
 
-/**
- * Finalises W after all candidates have been streamed.
- *
- * For the initial generation pass (Talbot MIS), M is already absorbed into each w_i = p_hat/denom,
- * so pass M_total = 1; W = wSum / p_hat(y*).
- *
- * For reuse combination passes (temporal/spatial), pass M_total = float(combined.M);
- * W = wSum / (M_total * p_hat(y*)).
- *
- * @param r Reservoir to finalise.
- * @param accum Completed accumulator.
- * @param p_hat_yStar p_hat evaluated at the selected sample y*.
- * @param M_total Total candidate count across all merged reservoirs.
- */
 public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_hat_yStar, float M_total)
 {
     if (p_hat_yStar <= 0.0 || M_total <= 0.0) {
@@ -443,22 +340,6 @@ public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_h
     }
 }
 
-/**
- * Cheap scalar target function for reservoir sampling: Lambert diffuse plus a GGX NDF specular approximation
- * (Smith G and Fresnel dropped, G / (4 NoV NoL) approximated as 0.25). Includes the area-light geometry term
- * (cosLight / dist²), attenuation, and light emission. p_hat only steers sampling; any mismatch with the
- * resolve BRDF costs variance, never bias. Returns 0 if cosShade, cosLight, or attenuation are non-positive.
- *
- * @param s Light sample (geometry terms, must have cosShade > 0, cosLight > 0, attenuation > 0).
- * @param V View direction (toward camera, view space).
- * @param N Shading normal (view space).
- * @param albedo Diffuse albedo.
- * @param F0 Specular F0.
- * @param metallic Metallic factor.
- * @param roughness Perceptual roughness (clamped before calling).
- * @param lightColor Decoded linear light color.
- * @param lightIntensity Light intensity scalar.
- */
 public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity)
 {
     if (s.cosShade <= 0.0 || s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
@@ -466,46 +347,14 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
     float3 H = normalize(V + s.L);
     float D = D_GGX(N, H, roughness);
     float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
-    // Uniform color weight, not luminance: a luminance-weighted target under-samples low-luminance hues (red vs yellow ~4x), which W must compensate with sparse high-energy spikes.
-    //return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * dot(lightColor, float3(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)) * s.attenuation;
     return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
-
-    // Full BRDF target (GGX + Smith + Fresnel), kept for reference:
-    // float3 H = normalize(V + s.L);
-    // float NDF = D_GGX(N, H, roughness);
-    // float G = G_SMITH_HEIGHT_CORRELATED(N, V, s.L, roughness);
-    // float3 F = F_SCHLICK(V, H, F0);
-    // float3 specular = (NDF * G * F) / max(4.0 * max(dot(N, V), 0.0) * s.cosShade, 0.001);
-    // float3 kD = (1.0 - F) * (1.0 - metallic);
-    // float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-    // float3 brdfCos = (kD * albedo / PI + specular) * s.cosShade * geomTerm * lightIntensity * lightColor * s.attenuation;
-    // return dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
 }
 
-/**
- * EvalPHat with a shadow ray visibility test. Returns 0 if the sample is occluded.
- * worldShadingPos and worldN must be in world space; worldyStar is the light sample in world space.
- * The caller is responsible for fetching the AS handle from the bindless array.
- *
- * @param tlas Top-level acceleration structure.
- * @param worldShadingPos Shading point in world space.
- * @param worldN Shading normal in world space (used for ray origin bias).
- * @param worldyStar Light sample position in world space.
- */
-/**
- * World-space size of one reservoir texel at the given view depth, used to scale the shadow-ray self-intersection bias.
- * Grows with depth and (via pixelScale) with half-res, where the depth-reconstructed shading position is coarser.
- */
 public float RestirWorldTexelSize(float viewZ, float2 ndcToViewMulXPixelSize, uint pixelScale)
 {
     return abs(viewZ) * max(ndcToViewMulXPixelSize.x, ndcToViewMulXPixelSize.y) * float(pixelScale);
 }
 
-/**
- * Binary shadow-ray test to a light sample. Returns true if the sample is visible from the shading point.
- * Mask 0x01 = scene geometry only (light proxy meshes are skipped). The origin offset scales with the reconstructed-position
- * uncertainty (worldTexelSize, grows with depth/half-res) over the grazing-light cosine, so a coarse far position can't self-shadow.
- */
 public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize)
 {
     float3 L = normalize(worldyStar - worldShadingPos);
@@ -532,16 +381,6 @@ public float EvalPHatVisibility(LightSample s, float3 V, float3 N, float3 albedo
     return EvalPHat(s, V, N, albedo, F0, metallic, roughness, lightColor, lightIntensity);
 }
 
-/**
- * Evaluates the GGX solid-angle PDF for a given light direction L.
- * Matches the distribution sampled by ImportanceSampleGGX.
- *
- * @param N Shading normal.
- * @param V View direction (toward camera).
- * @param L Light direction to evaluate.
- * @param roughness Perceptual roughness (squared internally).
- * @return pdf >= 0. Returns 0 if L is below the hemisphere or H is degenerate.
- */
 public float GGXPdf(float3 N, float3 V, float3 L, float roughness)
 {
     if (dot(N, L) <= 0.0) { return 0.0; }
@@ -554,16 +393,6 @@ public float GGXPdf(float3 N, float3 V, float3 L, float roughness)
     return D * NdotH / (4.0 * VdotH);
 }
 
-/**
- * GGX importance sampling. Samples a direction L from the specular lobe around N.
- *
- * @param xi Two uniform random floats in [0, 1).
- * @param N Shading normal (view space).
- * @param V View direction (view space, pointing toward camera).
- * @param roughness Perceptual roughness (squared internally).
- * @param pdf Output: solid-angle pdf of the returned L direction.
- * @return Sampled light direction L (view space). May be below the hemisphere; caller must check dot(N, L) > 0.
- */
 public float3 ImportanceSampleGGX(float2 xi, float3 N, float3 V, float roughness, out float pdf)
 {
     float a = roughness * roughness;
@@ -590,20 +419,6 @@ public float3 ImportanceSampleGGX(float2 xi, float3 N, float3 V, float roughness
     return L;
 }
 
-/**
- * Ray vs. axis-aligned quad intersection test.
- *
- * @param rayOrigin Ray origin.
- * @param rayDir Ray direction (need not be normalised).
- * @param center Quad center.
- * @param normal Quad normal (must face the side the ray comes from for a valid hit).
- * @param right Quad right axis (unit length).
- * @param up Quad up axis (unit length).
- * @param halfWidth Half-extent along right.
- * @param halfHeight Half-extent along up.
- * @param t Output: ray parameter at intersection. Negative if miss or behind origin.
- * @return True if the ray hits the quad at t > 0.
- */
 public bool RayIntersectQuad(float3 rayOrigin, float3 rayDir, float3 center, float3 normal, float3 right, float3 up, float halfWidth, float halfHeight, out float t)
 {
     float denom = dot(normal, rayDir);
@@ -615,16 +430,6 @@ public bool RayIntersectQuad(float3 rayOrigin, float3 rayDir, float3 center, flo
     return abs(dot(local, right)) <= halfWidth && abs(dot(local, up)) <= halfHeight;
 }
 
-/**
- * Ray vs. light intersection, branching on light type. Sphere returns the nearest positive root.
- * rayDir must be unit length for the sphere path.
- *
- * @param vs View-space light.
- * @param rayOrigin Ray origin (view space).
- * @param rayDir Ray direction (unit length).
- * @param t Output: ray parameter at the surface hit. Negative on miss.
- * @return True on a hit at t > 0.
- */
 public bool RayIntersectLight(LightVS vs, float3 rayOrigin, float3 rayDir, out float t)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)

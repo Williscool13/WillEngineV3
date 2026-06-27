@@ -40,7 +40,6 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
     float3 cellCenterWS = ReGIRCellCenterFromKey(key);
     float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
 
-    // Cell target sum S_cell = sum over all lights of the cell target. The shading pass divides each light's cell target by this to recover the analytic grid selection pdf p_grid(L) = target(L)/S_cell, used for balance-heuristic MIS.
     float localSum = 0.0;
     for (uint li = localID.x; li < uint(lightCount); li += 64u) {
         LightVS vsl = UnpackLightVS(pc.lightVS[li]);
@@ -78,7 +77,6 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
         ReGIRReservoir res = ReGIRReservoirEmpty();
         ReservoirAccum accum = ReservoirAccumEmpty();
         float winnerTarget = 0.0;
-        // Presampled-tile feeder
         uint tile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u);
         tile ^= tile >> 15u; tile *= 0x2c1b3c6du; tile ^= tile >> 12u;
         uint tileBase = (tile % REGIR_TILE_COUNT) * REGIR_TILE_SIZE;
@@ -100,7 +98,6 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
         FinalizeReservoirReGIR(res, accum, winnerTarget, float(REGIR_FILL_CANDIDATES));
         ReGIRClampW(res, pc.wClamp);
 
-        // Temporal: merge fresh with the previous frame's reservoir, renormalising to M=1 so confidence can't accumulate.
         if (hasPrev) {
             ReGIRReservoir prev = pc.reservoirsPrev[prevBase + r];
             if (prev.lightIdx != ~0u && prev.lightIdx < uint(lightCount)) {
@@ -140,7 +137,6 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
         if (res.lightIdx != ~0u) { localNonEmpty++; }
     }
 
-    // Per-cell occupancy = fraction of non-empty reservoirs. The shading pass mixes (1-occupancy) of uniform selection into the grid pdf so sparse cells (few in-range lights -> mostly-empty reservoirs) stay lit and correctly weighted.
     gCellOccupancyReduce[localID.x] = float(localNonEmpty);
     GroupMemoryBarrierWithGroupSync();
     for (uint stride = 32u; stride > 0u; stride >>= 1u) {

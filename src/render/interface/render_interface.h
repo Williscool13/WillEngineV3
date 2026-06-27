@@ -536,7 +536,7 @@ struct RELAXParams
     // A-Trous / edge stopping
     int32_t atrousIterations{3};
     float spatialVarianceEstimationHistoryThreshold{3.f};
-    float lobeAngleFraction{0.15f};
+    float lobeAngleFraction{0.5f};
     float roughnessFraction{0.15f};
     float specLobeAngleSlack{0.15f};
     float specPhiLuminance{2.f};
@@ -584,10 +584,11 @@ struct ReSTIRParams
     float antilagStrength{0.5f};
     float iblIntensity{1.0f};
     uint32_t spatialRadius{30};
-    uint32_t spatialNeighbors{5};
+    uint32_t spatialNeighbors{1};
     uint32_t spatialMCap{500};
     bool bEnableTemporal{true};
-    uint32_t temporalMCap{20u * 17u};
+    uint32_t temporalMCap{20u};
+    bool bTemporalSearch{true};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
     float regirWClamp{0.0f};

@@ -445,6 +445,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t quadSelectionIndex;
     SHADER_PUBLIC uint32_t quadSelectionHistoryIndex;
     SHADER_PUBLIC uint32_t bInitialVisibility;
+    SHADER_PUBLIC uint32_t bTemporalSearch;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant

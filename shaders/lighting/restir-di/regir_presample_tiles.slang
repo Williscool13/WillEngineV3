@@ -3,8 +3,6 @@ import restir_interop;
 
 import random_common;
 
-// Per-frame presample: fills REGIR_TILE_COUNT x REGIR_TILE_SIZE slots, one power-proportional alias draw each.
-// Stores { lightIdx, sourcePdf = power(L)/totalPower } so the fill RIS weight w_i = target/sourcePdf stays unbiased.
 [shader("compute")]
 [numthreads(256, 1, 1)]
 void ComputeMain(uniform ReGIRPresampleTilesPushConstant pc, uint3 globalID : SV_DispatchThreadID)
@@ -25,7 +23,6 @@ void ComputeMain(uniform ReGIRPresampleTilesPushConstant pc, uint3 globalID : SV
 
     uint h = SeedRng(uint2(slotIdx & 0xFFFFu, slotIdx >> 16u), pc.frameIndex, 0x9E3779B9u);
 
-    // Vose alias draw: uniform bin, split on its threshold. sourcePdf = power(selected)/totalPower straight from the entry.
     uint bin = min(uint(HashStep(h) * float(count)), count - 1u);
     LightAliasEntry e = pc.aliasEntries[bin];
     float u = HashStep(h);

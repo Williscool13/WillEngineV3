@@ -48,10 +48,8 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     if (isnan(center.W) || isinf(center.W)) { center = ReservoirEmpty(); }
     bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->lightCount);
 
-    // Canonical confidence; zero when the center carries no sample so it can't suppress neighbors.
     float Mc = validCenter ? float(center.M) : 0.0;
 
-    // Center sample and its target at the center.
     LightVS vsCenter;
     float3 yStarCenter = float3(0);
     float3 centerLightColor = float3(0);
@@ -66,11 +64,9 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
-    // Salted per pass so chained spatial passes draw different neighbor offsets
     uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u) ^ (0xF7B3D1u + pc.passIndex * 0x9E3779B9u);
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
-    // Canonical's MIS share summed across the k pairs. The shared 1/k is applied via the finalise divisor (neighborCount), uniformly across canonical and neighbor stream weights.
     float centerMisAccum = 0.0;
     uint neighborCount = 0;
     combined.M = validCenter ? center.M : 0u;
@@ -97,7 +93,6 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
         uint2 neighborFullPixel = FetchFullPixel(pc.quadSelectionIndex, uint2(neighborPixel), pc.pixelScale);
 
-        // Geometry rejection: plane distance (NRD style), so neighbors on the same plane seen at grazing angles are not falsely rejected by their depth delta.
         float neighborRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(neighborFullPixel, 0)).r;
         float neighborViewDepth = ScreenToViewSpaceDepth(neighborRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
         float2 neighborUV = (float2(neighborPixel) + 0.5f) / float2(pc.renderExtent);
@@ -106,7 +101,6 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             continue;
         }
 
-        // Geometry rejection: normal.
         float3 neighborN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(neighborFullPixel, 0)).r));
         if (dot(N, neighborN) < 0.906) {
             continue;
@@ -117,10 +111,18 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         if (neighbor.lightIdx == ~0u || neighbor.lightIdx >= uint(pc.lightData->lightCount)) {
             continue;
         }
+        if (validCenter && center.M >= 4u && neighbor.M < 2u) {
+            continue;
+        }
 
-        // Neighbor surface is required to evaluate targets in the neighbor's own domain.
         LightingInputs nli = ReconstructLightingInputs(neighborFullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
         if (!nli.valid) {
+            continue;
+        }
+        if (abs(nli.roughness - li.roughness) > 0.5) {
+            continue;
+        }
+        if (any(abs(nli.albedo.xyz - li.albedo.xyz) > float3(0.5))) {
             continue;
         }
 
@@ -132,20 +134,16 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         float3 neighborLightColor = UnpackUnorm4x8(vsNeighbor.packedColor).rgb;
         float3 yStarNeighbor = DecodeSamplePos(neighbor, vsNeighbor);
 
-        // Capped neighbor confidence for the MIS denominators (prevents stale history from suppressing the canonical). This is the MIS-weight M only; combined.M accumulates real M.
         float Mi = validCenter ? min(float(neighbor.M), 20.0 * float(center.M)) : float(neighbor.M);
 
-        // Neighbor sample evaluated at the neighbor (own domain) and at the center.
         LightSample sNeighbor_atNeighbor = EvalLightSample(vsNeighbor, yStarNeighbor, neighborViewPosition, neighborN, vsNeighbor.range);
         float p_hat_neighbor_atNeighbor = EvalPHat(sNeighbor_atNeighbor, neighborV, neighborN, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, neighborLightColor, vsNeighbor.intensity);
         LightSample sNeighbor_atCenter = EvalLightSample(vsNeighbor, yStarNeighbor, viewPosition, N, vsNeighbor.range);
         float p_hat_neighbor_atCenter = EvalPHat(sNeighbor_atCenter, V, N, li.albedo.xyz, F0, li.metallic, roughness, neighborLightColor, vsNeighbor.intensity);
 
-        // Pair (neighbor i, center): balance heuristic for the neighbor's sample.
         float denomNeighbor = Mi * p_hat_neighbor_atNeighbor + Mc * p_hat_neighbor_atCenter;
         float misNeighbor = (denomNeighbor > 0.0) ? (Mi * p_hat_neighbor_atNeighbor) / denomNeighbor : 0.0;
 
-        // Same pair, the canonical's share. Center sample evaluated at this neighbor.
         if (validCenter) {
             LightSample sCenter_atNeighbor = EvalLightSample(vsCenter, yStarCenter, neighborViewPosition, neighborN, vsCenter.range);
             float p_hat_center_atNeighbor = EvalPHat(sCenter_atNeighbor, neighborV, neighborN, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, centerLightColor, vsCenter.intensity);
@@ -155,17 +153,16 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             }
         }
 
-        // Stream toward the center target. The shared 1/k is applied in finalise.
         float w_neighbor = misNeighbor * p_hat_neighbor_atCenter * neighbor.W;
         if (ReservoirAddSample(accum, w_neighbor, HashStep(h))) {
             combined.lightIdx = neighbor.lightIdx;
             combined.sampleOffsetPacked = neighbor.sampleOffsetPacked;
         }
-        combined.M += neighbor.M;
+        float mFactor = (p_hat_neighbor_atNeighbor > 0.0) ? saturate(p_hat_neighbor_atCenter / p_hat_neighbor_atNeighbor) : 1.0;
+        combined.M += uint(float(neighbor.M) * mFactor + 0.5);
         neighborCount++;
     }
 
-    // No usable neighbor: passthrough with clamp/cap applied.
     if (neighborCount == 0u) {
         center.W = (pc.wClamp > 0.0) ? min(center.W, pc.wClamp) : center.W;
         center.M = min(center.M, pc.mCap);
@@ -173,7 +170,6 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         return;
     }
 
-    // Stream the canonical with its accumulated share.
     if (validCenter) {
         float w_center = centerMisAccum * p_hat_center_atCenter * center.W;
         if (ReservoirAddSample(accum, w_center, HashStep(h))) {
@@ -182,13 +178,11 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         }
     }
 
-    // M_total here is the pair count k (the shared 1/k). The per-pair MIS weights partition unity, so the only normalization left is the uniform 1/k across all k streamed weights.
     if (combined.lightIdx != ~0u) {
         LightVS vsFinal = UnpackLightVS(pc.lightVS[combined.lightIdx]);
         float3 yStarFinal = DecodeSamplePos(combined, vsFinal);
         LightSample sFinal = EvalLightSample(vsFinal, yStarFinal, viewPosition, N, vsFinal.range);
         float3 finalLightColor = UnpackUnorm4x8(vsFinal.packedColor).rgb;
-        // Only the last spatial pass traces; intermediate passes finalise unshadowed and the final pass validates the winner.
         float p_hat_final;
         if (pc.bValidateVisibility != 0u) {
             float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;

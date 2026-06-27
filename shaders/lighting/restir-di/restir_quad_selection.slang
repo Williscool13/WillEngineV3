@@ -1,4 +1,3 @@
-// Precomputes the half-res 2x2 quad-corner selection (sel in [0,3]) once per frame; consumers read it via FetchFullPixel.
 import common_interop;
 import push_constant_interop;
 import constants_interop;
@@ -33,11 +32,8 @@ void ComputeMain(uniform QuadSelectionPushConstant pc, uint3 dtid : SV_DispatchT
     }
     uint sel;
     if (quadUniform) {
-        // Interchangeable corners: rotate per frame so the temporal denoiser amortizes full-res coverage.
         sel = (pixel.x + pixel.y * 2u + pc.frameIndex) & 3u;
     } else {
-        // Silhouette/crease: lock to the nearest-depth corner so the half-res sample stays on one coherent (foreground) surface.
-        // Frame-stable so edges is at least a clean staircase instead of jagged/inconsistent
         sel = 3u;
         float best = zl.w;
         if (zl.z < best) { best = zl.z; sel = 2u; }
