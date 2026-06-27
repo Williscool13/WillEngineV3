@@ -501,10 +501,9 @@ struct ViewFamilyWatermarks
 enum class LightingMode : uint8_t
 {
     Default = 0,
-    ReSTIR,
+    ReSTIR, // (incl. ReGIR)
     GroundTruthReSTIR,
     PathTracing,
-    ReGIRReSTIR,
 };
 
 enum class ReSTIRDebugStop : uint8_t
@@ -590,11 +589,10 @@ struct ReSTIRParams
     bool bEnableTemporal{true};
     uint32_t temporalMCap{20u * 17u};
     float boilingFilterStrength{0.2f};
-    bool bInitialVisibility{false};
+    bool bInitialVisibility{true};
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};
-    bool bUseTileFeeder{false};
     // Temporal-gradient antilag confidence (RELAX only)
     bool bEnableConfidence{false};
     float confidenceStrength{0.75f};

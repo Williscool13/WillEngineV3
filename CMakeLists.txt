@@ -393,7 +393,6 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/procedural_texture_decla
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/random_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/restir_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/regir_hash.slang")
-add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/light_tree.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sobol_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/relax_utils.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sigma_utils.slang")
@@ -452,7 +451,6 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_transform_lights.slang compute ComputeMain restir_di_transform_lights
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_quad_selection.slang compute ComputeMain restir_quad_selection
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_spatial.slang compute ComputeMain restir_di_spatial
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_base.slang compute ComputeMain restir_di_base
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_base_regir.slang compute ComputeMain restir_di_base_regir
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_temporal.slang compute ComputeMain restir_di_temporal
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_remodulate.slang compute ReSTIRRemodulateMain restir_remodulate

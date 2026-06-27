@@ -8,7 +8,7 @@
 #define RESTIR_ENABLE_BRDF_RAY 1
 
 // [base, temporal] Shadow-test the fresh candidate in base and bake occlusion into W
-#define RESTIR_ENABLE_INITIAL_VISIBILITY 0
+#define RESTIR_ENABLE_INITIAL_VISIBILITY 1
 
 // [temporal] RTXDI permutation sampling: reflect the history tap within a 4x4 block to decorrelate temporal reuse.
 #define RESTIR_ENABLE_PERMUTATION_SAMPLING 0

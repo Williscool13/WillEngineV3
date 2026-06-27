@@ -107,7 +107,6 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"boilingFilterStrength", p.boilingFilterStrength},
         {"bInitialVisibility", p.bInitialVisibility},
         {"regirWClamp", p.regirWClamp},
-        {"bUseTileFeeder", p.bUseTileFeeder},
         {"restirWClamp", p.restirWClamp},
         {"bEnableConfidence", p.bEnableConfidence},
         {"confidenceStrength", p.confidenceStrength},
@@ -145,7 +144,6 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
-    p.bUseTileFeeder = getBool("bUseTileFeeder", p.bUseTileFeeder);
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
     p.bEnableConfidence = getBool("bEnableConfidence", p.bEnableConfidence);
     p.confidenceStrength = r.contains("confidenceStrength") && r["confidenceStrength"].is_number() ? r["confidenceStrength"].get<float>() : p.confidenceStrength;

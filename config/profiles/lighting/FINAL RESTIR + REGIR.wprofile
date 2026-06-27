@@ -12,7 +12,7 @@
     "stepsPerSlice": 3.0,
     "thinOccluderCompensation": 0.0
   },
-  "lightingMode": 4,
+  "lightingMode": 1,
   "lightingShaderOverride": 7554520945661456859,
   "restir": {
     "adaptiveSpatialBoost": 3.0,
@@ -30,14 +30,13 @@
     "bHalfRes": true,
     "bInitialVisibility": true,
     "bPermutationSampling": false,
-    "bUseTileFeeder": true,
-    "boilingFilterStrength": 0.30000001192092896,
+    "boilingFilterStrength": 0.20000000298023224,
     "confidenceBlurRadius": 2,
     "confidenceDarknessBias": 0.009999999776482582,
     "confidenceHistoryLength": 4.0,
     "confidenceSensitivity": 3.0,
     "confidenceStrength": 1.0,
-    "denoiserMode": 3,
+    "denoiserMode": 0,
     "iblIntensity": 0.0,
     "regirWClamp": 0.0,
     "relax": {
@@ -89,7 +88,7 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 320
+    "temporalMCap": 12
   },
   "shadingShaderOverride": 11262630175972558216
 }

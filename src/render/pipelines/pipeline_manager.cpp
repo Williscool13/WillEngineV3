@@ -427,8 +427,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReGIRFillPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_spatial"), src / "restir_di_spatial_compute.spv",
                             sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_di_base"), src / "restir_di_base_compute.spv",
-                            sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_base_regir"), src / "restir_di_base_regir_compute.spv",
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_temporal"), src / "restir_di_temporal_compute.spv",

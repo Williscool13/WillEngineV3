@@ -68,6 +68,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     bool validHistory = pc.historyBuffer != nullptr && all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
     uint2 historyPixel = uint2(0, 0);
     bool bHistoryUsable = false;
+    float3 historyN_cvs = N;
 
     if (validHistory) {
         historyPixel = clamp(uint2(historyUV * float2(pc.renderExtent)), uint2(0, 0), pc.renderExtent - uint2(1, 1));
@@ -86,6 +87,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));
         float3 currWorldN = normalize(mul(float3x3(scene.invView), N));
         float3 historyWorldN = normalize(mul(transpose(float3x3(scene.prevView)), historyN));
+        historyN_cvs = normalize(mul(float3x3(scene.view), historyWorldN));
         if (dot(currWorldN, historyWorldN) >= 0.906) {
             // Plane-distance disocclusion (NRD style)
             float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyFullPixel, 0)).r;
@@ -107,6 +109,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     // Fresh candidate from the base pass: W is finalised (Talbot MIS) and occlusion is baked in (W = 0 when initial-visibility occluded it).
     Reservoir r_gen = pc.genBuffer[pixelIdx];
+    if (isnan(r_gen.W) || isinf(r_gen.W)) { r_gen = ReservoirEmpty(); }
 
     // -------------------------------------------------------------------------
     // Phase 2: temporal combination. Stream generated winner + history winner
@@ -116,6 +119,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     if (bHistoryUsable) {
         Reservoir candidate = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
+        if (isnan(candidate.W) || isinf(candidate.W)) { candidate = ReservoirEmpty(); }
         if (candidate.lightIdx != ~0u && candidate.lightIdx < uint(pc.lightData->lightCount)) {
             history = candidate;
         }
@@ -130,15 +134,31 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
 
-    // Stream the generated reservoir; w = p_hat * W * M reproduces the fused genVisible ? wSum*M : 0 (p_hat cancels W's division, occlusion is the W = 0 factor). Only the combined winner is traced in Phase 3.
+    // Pairwise MIS
+    float Mc = (r_gen.lightIdx != ~0u) ? float(r_gen.M) : 0.0;
+    // Neighbour (history) confidence for the MIS denominators, preserving the temporal M cap.
+    clampedHistoryM = validHistoryReservoir ? min(history.M, pc.mCap) : 0u;
+    float Mi = float(clampedHistoryM);
+
+    // Stream the canonical (generated) sample. Its target is evaluated at the current domain (pGen_cur) and, for the
+    // pair's denominator, at the history domain (pGen_hist). Streamed unshadowed; W carries the initial-visibility
+    // occlusion (W = 0 streams 0 but still contributes Mc to history's denominator, exactly as the spatial canonical).
     if (r_gen.lightIdx != ~0u) {
         LightVS vsGen = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
         float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
-        LightSample sGen = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
         float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
-        float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
+        LightSample sGen_cur = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
+        float pGen_cur = EvalPHat(sGen_cur, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
+        float pGen_hist = 0.0;
+        if (validHistoryReservoir) {
+            LightSample sGen_hist = EvalLightSample(vsGen, yStarGen, viewPosition, historyN_cvs, vsGen.range);
+            pGen_hist = EvalPHat(sGen_hist, V, historyN_cvs, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
+        }
 
-        float w_gen = p_hat_gen * r_gen.W * float(r_gen.M);
+        // Canonical's balance-heuristic share for the (gen, history) pair.
+        float denomGen = Mc * pGen_cur + Mi * pGen_hist;
+        float misGen = (denomGen > 0.0) ? (Mc * pGen_cur) / denomGen : 0.0;
+        float w_gen = misGen * pGen_cur * r_gen.W;
         if (ReservoirAddSample(accum_combined, w_gen, uSelect0)) {
             combined.lightIdx = r_gen.lightIdx;
             combined.sampleOffsetPacked = r_gen.sampleOffsetPacked;
@@ -146,16 +166,20 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         }
     }
 
-    // Stream history winner: w = p_hat(y_hist at current shading point) * W_hist * clampedM
+    // Stream the neighbour (history) sample.
     if (validHistoryReservoir) {
         LightVS vsHistory = UnpackLightVS(pc.lightVS[history.lightIdx]);
         float3 yStarHistory = DecodeSamplePos(history, vsHistory);
-        LightSample sHistory = EvalLightSample(vsHistory, yStarHistory, viewPosition, N, vsHistory.range);
         float3 historyLightColor = UnpackUnorm4x8(vsHistory.packedColor).rgb;
-        float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, vsHistory.intensity);
+        LightSample sHist_cur = EvalLightSample(vsHistory, yStarHistory, viewPosition, N, vsHistory.range);
+        float pHist_cur = EvalPHat(sHist_cur, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, vsHistory.intensity);
+        LightSample sHist_hist = EvalLightSample(vsHistory, yStarHistory, viewPosition, historyN_cvs, vsHistory.range);
+        float pHist_hist = EvalPHat(sHist_hist, V, historyN_cvs, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, vsHistory.intensity);
 
-        clampedHistoryM = min(history.M, pc.mCap);
-        float w_history = p_hat_history * history.W * float(clampedHistoryM);
+        // Neighbour's balance-heuristic share for the same pair.
+        float denomHist = Mi * pHist_hist + Mc * pHist_cur;
+        float misHist = (denomHist > 0.0) ? (Mi * pHist_hist) / denomHist : 0.0;
+        float w_history = misHist * pHist_cur * history.W;
         if (ReservoirAddSample(accum_combined, w_history, uSelect1)) {
             combined.lightIdx = history.lightIdx;
             combined.sampleOffsetPacked = history.sampleOffsetPacked;
@@ -206,7 +230,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
         p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
                                              rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize);
 #endif
-        ReservoirFinalise(combined, accum_combined, p_hat_winner, float(combined.M));
+        ReservoirFinalise(combined, accum_combined, p_hat_winner, 1.0);
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
 
 #if RESTIR_ENABLE_CONFIDENCE

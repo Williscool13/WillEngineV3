@@ -9,7 +9,6 @@ import packing_functions;
 import restir_common;
 import random_common;
 import regir_hash;
-import light_tree;
 
 groupshared float gCellTargetReduce[64];
 groupshared float gCellOccupancyReduce[64];
@@ -67,49 +66,36 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
     }
 
     uint localNonEmpty = 0u;
+    float cellSize = ReGIRCellSizeAtLevel(key.level);
     for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += 64u) {
             uint h = (slot * 2654435761u) ^ ((r + 1u) * 0x9E3779B9u) ^ (pc.frameIndex * 0x85EBCA6Bu);
         h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
+        uint hj = h ^ 0x68bc21ebu; hj ^= hj >> 15u; hj *= 0x2c1b3c6du; hj ^= hj >> 12u;
+        float3 jitterWS = (float3(HashStep(hj), HashStep(hj), HashStep(hj)) - 0.5) * cellSize;
+        float3 sampleVS = mul(scene.view, float4(cellCenterWS + jitterWS, 1.0)).xyz;
+
         ReGIRReservoir res = ReGIRReservoirEmpty();
         ReservoirAccum accum = ReservoirAccumEmpty();
         float winnerTarget = 0.0;
-        if (pc.useTileFeeder != 0u) {
-            // Presampled-tile feeder
-            uint tile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u);
-            tile ^= tile >> 15u; tile *= 0x2c1b3c6du; tile ^= tile >> 12u;
-            uint tileBase = (tile % REGIR_TILE_COUNT) * REGIR_TILE_SIZE;
-            uint startSlot = h % REGIR_TILE_SIZE;
-            for (uint i = 0; i < REGIR_FILL_CANDIDATES; i++) {
-                uint slotInTile = (startSlot + i) % REGIR_TILE_SIZE;
-                ReGIRTileSlot cand = pc.tiles[tileBase + slotInTile];
-                float uSelect = HashStep(h);
-                if (cand.lightIdx == ~0u || cand.lightIdx >= uint(lightCount) || cand.sourcePdf <= 0.0) { continue; }
-
-                LightVS vs = UnpackLightVS(pc.lightVS[cand.lightIdx]);
-                float target = EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb);
-                float w_i = target / cand.sourcePdf;
-                if (ReservoirAddSample(accum, w_i, uSelect)) {
-                    res.lightIdx = cand.lightIdx;
-                    winnerTarget = target;
-                }
-            }
-        } else {
+        // Presampled-tile feeder
+        uint tile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u);
+        tile ^= tile >> 15u; tile *= 0x2c1b3c6du; tile ^= tile >> 12u;
+        uint tileBase = (tile % REGIR_TILE_COUNT) * REGIR_TILE_SIZE;
+        uint startSlot = h % REGIR_TILE_SIZE;
         for (uint i = 0; i < REGIR_FILL_CANDIDATES; i++) {
-            // Candidate selection via the world-space light BVH (analytic selection pdf).
-            LightTreeSample ts = SampleLightTree(pc.bvhNodes, pc.bvhNumLeaves, cellCenterWS, h);
+            uint slotInTile = (startSlot + i) % REGIR_TILE_SIZE;
+            ReGIRTileSlot cand = pc.tiles[tileBase + slotInTile];
             float uSelect = HashStep(h);
-            if (ts.lightIdx == ~0u || ts.lightIdx >= uint(lightCount) || ts.pdf <= 0.0) { continue; }
+            if (cand.lightIdx == ~0u || cand.lightIdx >= uint(lightCount) || cand.sourcePdf <= 0.0) { continue; }
 
-            int lightIdx = int(ts.lightIdx);
-            LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
-            float target = EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb);
-            float w_i = target / ts.pdf;
+            LightVS vs = UnpackLightVS(pc.lightVS[cand.lightIdx]);
+            float target = EvalCellLightTarget(vs, sampleVS, UnpackUnorm4x8(vs.packedColor).rgb);
+            float w_i = target / cand.sourcePdf;
             if (ReservoirAddSample(accum, w_i, uSelect)) {
-                res.lightIdx = uint(lightIdx);
+                res.lightIdx = cand.lightIdx;
                 winnerTarget = target;
             }
-        }
         }
         FinalizeReservoirReGIR(res, accum, winnerTarget, float(REGIR_FILL_CANDIDATES));
         ReGIRClampW(res, pc.wClamp);
@@ -124,7 +110,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
                 float mTotal = 0.0;
                 if (res.lightIdx != ~0u) {
                     LightVS vsCur = UnpackLightVS(pc.lightVS[res.lightIdx]);
-                    float pCur = EvalCellLightTarget(vsCur, cellCenterVS, UnpackUnorm4x8(vsCur.packedColor).rgb);
+                    float pCur = EvalCellLightTarget(vsCur, sampleVS, UnpackUnorm4x8(vsCur.packedColor).rgb);
                     float wCur = pCur * ReGIRReservoirW(res);
                     if (ReservoirAddSample(accumM, wCur, HashStep(h))) {
                         merged.lightIdx = res.lightIdx;
@@ -134,7 +120,7 @@ void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, u
                 }
                 {
                     LightVS vsH = UnpackLightVS(pc.lightVS[prev.lightIdx]);
-                    float pH = EvalCellLightTarget(vsH, cellCenterVS, UnpackUnorm4x8(vsH.packedColor).rgb);
+                    float pH = EvalCellLightTarget(vsH, sampleVS, UnpackUnorm4x8(vsH.packedColor).rgb);
                     float wH = pH * ReGIRReservoirW(prev);
                     if (ReservoirAddSample(accumM, wH, HashStep(h))) {
                         merged.lightIdx = prev.lightIdx;

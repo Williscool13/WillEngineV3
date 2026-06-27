@@ -491,7 +491,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::Separator();
 
-        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Ground-Truth ReSTIR", "Path Tracing", "ReGIR + ReSTIR"};
+        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Ground-Truth ReSTIR", "Path Tracing"};
         Core::LightingMode prevLightingMode = state->lighting.lightingMode;
         int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
         if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, IM_ARRAYSIZE(lightingModeLabels))) {
@@ -506,7 +506,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (ImGui::CollapsingHeader("ReSTIR DI Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
             Core::ReSTIRParams& restir = state->debug.restir;
-            const bool bReGIR = state->lighting.lightingMode == Core::LightingMode::ReGIRReSTIR;
+            const bool bReGIR = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
 
             // Sections compiled out via restir_features_macros.h are greyed: the runtime toggle has no effect until the macro is set to 1 and shaders are rebuilt.
             ImGui::SeparatorText("Base (Candidate Generation)");
@@ -593,9 +593,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (bReGIR) {
                 ImGui::SeparatorText("ReGIR");
                 if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
-                    changed = true;
-                }
-                if (ImGui::Checkbox("Tile Feeder (alias tiles vs BVH)", &restir.bUseTileFeeder)) {
                     changed = true;
                 }
                 if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }

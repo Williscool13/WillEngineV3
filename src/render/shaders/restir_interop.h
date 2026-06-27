@@ -69,22 +69,6 @@ SHADER_PUBLIC struct ReGIRReservoir
 };
 
 /**
- * Implicit complete binary tree, children of node i at 2i+1/2i+2, leaves at [numLeaves-1 .. 2*numLeaves-2].
- * Leaf nodes hold a single light; internal nodes and padding leaves carry lightIdx == ~0u. power is the subtree sum (leaf = intensity * area * max(colorRGB)).
- * coneAxis/coneThetaO/coneThetaE bound the subtree's emission orientation (Conty-Estevez): coneThetaO spreads the emitter axes, coneThetaE is the per-emitter emission half-angle (pi/2 one-sided area; spheres set coneThetaO = pi so they are never culled). 52 bytes.
- */
-SHADER_PUBLIC struct LightBVHNode
-{
-    SHADER_PUBLIC float3 bmin;
-    SHADER_PUBLIC float power;
-    SHADER_PUBLIC float3 bmax;
-    SHADER_PUBLIC uint lightIdx;
-    SHADER_PUBLIC float3 coneAxis;
-    SHADER_PUBLIC float coneThetaO;
-    SHADER_PUBLIC float coneThetaE;
-};
-
-/**
  * Vose alias-table entry
  */
 SHADER_PUBLIC struct LightAliasEntry
@@ -116,7 +100,7 @@ SHADER_PUBLIC SHADER_CONST uint REGIR_HASH_INVALID = 0xFFFFFFFFu;
 SHADER_PUBLIC SHADER_CONST float REGIR_LOD_BASE_DIST = 32.0;
 SHADER_PUBLIC SHADER_CONST uint REGIR_MAX_LEVEL = 8u;
 SHADER_PUBLIC SHADER_CONST float REGIR_MAX_DIST = 1024.0;
-SHADER_PUBLIC SHADER_CONST uint REGIR_FILL_CANDIDATES = 24u;
+SHADER_PUBLIC SHADER_CONST uint REGIR_FILL_CANDIDATES = 32u;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_X = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Y = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Z = 2.0;

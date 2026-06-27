@@ -31,7 +31,8 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
-              Reservoir passthrough = pc.inputBuffer[centerIdx];
+        Reservoir passthrough = pc.inputBuffer[centerIdx];
+        if (isnan(passthrough.W) || isinf(passthrough.W)) { passthrough = ReservoirEmpty(); }
         passthrough.W = (pc.wClamp > 0.0) ? min(passthrough.W, pc.wClamp) : passthrough.W;
         passthrough.M = min(passthrough.M, pc.mCap);
         pc.outputBuffer[centerIdx] = passthrough;
@@ -44,6 +45,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
     Reservoir center = pc.inputBuffer[centerIdx];
+    if (isnan(center.W) || isinf(center.W)) { center = ReservoirEmpty(); }
     bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->lightCount);
 
     // Canonical confidence; zero when the center carries no sample so it can't suppress neighbors.
@@ -111,6 +113,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         }
 
         Reservoir neighbor = pc.inputBuffer[neighborPixel.y * pc.renderExtent.x + neighborPixel.x];
+        if (isnan(neighbor.W) || isinf(neighbor.W)) { neighbor = ReservoirEmpty(); }
         if (neighbor.lightIdx == ~0u || neighbor.lightIdx >= uint(pc.lightData->lightCount)) {
             continue;
         }

@@ -131,7 +131,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                     float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                     float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
-                    // Balance-heuristic MIS against the BRDF stream, identical to the non-ReGIR path but with the grid selection pdf.
+                    // Balance-heuristic MIS against the BRDF stream, using the grid selection pdf.
                     float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
                     float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
@@ -203,7 +203,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                     LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
                     Xi = viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                    // Same occupancy-weighted selection pdf as the light stream.
+                    // Light stream selects via the grid reservoir's targetPdf/totalWeight (S0)
                     float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(lightCount))) : (1.0 / float(lightCount));
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
@@ -222,7 +222,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             }
         }
 
-        r_gen.M = uint(RESTIR_M_LIGHT + mBrdf);
+        r_gen.M = 1u;
     }
 
     // Finalise W (Talbot MIS: M already absorbed into each w_i, so M_total = 1) so the temporal pass streams w = p_hat*W*M directly.
