@@ -516,7 +516,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             const bool bRestirHalfRes = viewFamily.lightingMode == Core::LightingMode::ReSTIR && restir.bHalfRes;
             const bool bSunShadowHalfRes = viewFamily.directionalLight.bEnabled
-                && (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)
+                && viewFamily.lightingMode == Core::LightingMode::Default
                 && viewFamily.sigmaParams.bHalfRes;
             if (bRestirHalfRes || bSunShadowHalfRes) {
                 SetupQuadSelectionPass(*renderGraph, pipelineManager, Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2}, targets, 0, frameNumber);
@@ -558,7 +558,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
 
             if (viewFamily.directionalLight.bEnabled &&
-                (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)) {
+                viewFamily.lightingMode == Core::LightingMode::Default) {
                 const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
                 const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes
                     ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
@@ -1295,7 +1295,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     LightData lightData{}; {
         const glm::vec3& dir = viewFamily.directionalLight.direction;
         const glm::vec3& col = viewFamily.directionalLight.color;
-        lightData.directionalLight.directionIntensity = {dir, viewFamily.directionalLight.intensity};
+        lightData.directionalLight.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
         lightData.directionalLight.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
         lightData.directionalLight.packedColor =
                 (static_cast<uint32_t>(glm::clamp(col.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |

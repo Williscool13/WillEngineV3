@@ -122,7 +122,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     if (bHistoryUsable) {
         Reservoir candidate = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
         if (isnan(candidate.W) || isinf(candidate.W)) { candidate = ReservoirEmpty(); }
-        if (candidate.lightIdx != ~0u && candidate.lightIdx < uint(pc.lightData->lightCount)) {
+        if (candidate.lightIdx != ~0u && (candidate.lightIdx == LIGHT_IDX_SUN || candidate.lightIdx < uint(pc.lightData->lightCount))) {
             history = candidate;
         }
     }
@@ -142,15 +142,10 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     float mFactorHist = 1.0;
 
     if (r_gen.lightIdx != ~0u) {
-        LightVS vsGen = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
-        float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
-        float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
-        LightSample sGen_cur = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
-        float pGen_cur = EvalPHat(sGen_cur, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
+        float pGen_cur = EvalReservoirPHat(r_gen.lightIdx, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
         float pGen_hist = 0.0;
         if (validHistoryReservoir) {
-            LightSample sGen_hist = EvalLightSample(vsGen, yStarGen, viewPosition, historyN_cvs, vsGen.range);
-            pGen_hist = EvalPHat(sGen_hist, V, historyN_cvs, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
+            pGen_hist = EvalReservoirPHat(r_gen.lightIdx, r_gen.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
         }
 
         float denomGen = Mc * pGen_cur + Mi * pGen_hist;
@@ -164,13 +159,8 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     }
 
     if (validHistoryReservoir) {
-        LightVS vsHistory = UnpackLightVS(pc.lightVS[history.lightIdx]);
-        float3 yStarHistory = DecodeSamplePos(history, vsHistory);
-        float3 historyLightColor = UnpackUnorm4x8(vsHistory.packedColor).rgb;
-        LightSample sHist_cur = EvalLightSample(vsHistory, yStarHistory, viewPosition, N, vsHistory.range);
-        float pHist_cur = EvalPHat(sHist_cur, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, vsHistory.intensity);
-        LightSample sHist_hist = EvalLightSample(vsHistory, yStarHistory, viewPosition, historyN_cvs, vsHistory.range);
-        float pHist_hist = EvalPHat(sHist_hist, V, historyN_cvs, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, vsHistory.intensity);
+        float pHist_cur = EvalReservoirPHat(history.lightIdx, history.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
+        float pHist_hist = EvalReservoirPHat(history.lightIdx, history.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
         mFactorHist = (pHist_hist > 0.0) ? saturate(pHist_cur / pHist_hist) : 1.0;
 
         float denomHist = Mi * pHist_hist + Mc * pHist_cur;
@@ -198,36 +188,24 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 #endif
     float pHatUnshadowed = 0.0;
     if (combined.lightIdx != ~0u) {
-        LightVS vsWinner = UnpackLightVS(pc.lightVS[combined.lightIdx]);
-        float3 yStar = DecodeSamplePos(combined, vsWinner);
-        LightSample sWinner = EvalLightSample(vsWinner, yStar, viewPosition, N, vsWinner.range);
-        float3 winnerLightColor = UnpackUnorm4x8(vsWinner.packedColor).rgb;
-        pHatUnshadowed = EvalPHat(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity);
-
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
-        float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+        pHatUnshadowed = EvalReservoirPHat(combined.lightIdx, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
 
         float p_hat_winner;
 #if RESTIR_ENABLE_INITIAL_VISIBILITY
         if (pc.bInitialVisibility != 0u && winnerIsGen) {
             p_hat_winner = pHatUnshadowed;
         } else {
-            p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
-                                                 rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize);
+            p_hat_winner = EvalReservoirPHatVisibility(combined.lightIdx, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, scene.invView, pc.lightData->directionalLight, pc.lightVS, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize);
         }
 #else
-        p_hat_winner = EvalPHatVisibility(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, vsWinner.intensity,
-                                             rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize);
+        p_hat_winner = EvalReservoirPHatVisibility(combined.lightIdx, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, scene.invView, pc.lightData->directionalLight, pc.lightVS, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize);
 #endif
         ReservoirFinalise(combined, accum_combined, p_hat_winner, 1.0);
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
 
 #if RESTIR_ENABLE_CONFIDENCE
-        if (pc.prevTlasIndex != ~0u) {
-            visPrev = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? 1.0 : 0.0;
-        } else {
-            visPrev = winnerVisibility;
-        }
+        visPrev = winnerVisibility;
 #endif
     }
 

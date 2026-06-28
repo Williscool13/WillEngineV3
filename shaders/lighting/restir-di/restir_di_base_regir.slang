@@ -214,24 +214,34 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
             }
         }
 
-        r_gen.M = 1u;
     }
 
+    if (pc.lightData->directionalLight.directionIntensity.w > 0.0) {
+        DirectionalLightData sun = pc.lightData->directionalLight;
+        float su1 = HashStep(h);
+        float su2 = HashStep(h);
+        float p_cone;
+        float3 sunDirWorld = SampleSunConeDirection(SunDirectionWorld(sun), sun.angularRadius, su1, su2, p_cone);
+        float3 sunDirView = normalize(mul((float3x3)scene.view, sunDirWorld));
+        float p_hat_sun = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, SunRadiance(sun));
+        float w_sun = (p_cone > 0.0) ? (p_hat_sun / p_cone) : 0.0;
+        if (ReservoirAddSample(accum_gen, w_sun, HashStep(h))) {
+            r_gen.lightIdx = LIGHT_IDX_SUN;
+            r_gen.sampleOffsetPacked = PackNormalOct16(sunDirWorld);
+        }
+    }
+
+    if (accum_gen.M > 0) { r_gen.M = 1u; }
+
     if (r_gen.lightIdx != ~0u) {
-        LightVS vsGen = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
-        float3 yStarGen = DecodeSamplePos(r_gen, vsGen);
-        LightSample sGen = EvalLightSample(vsGen, yStarGen, viewPosition, N, vsGen.range);
-        float3 genLightColor = UnpackUnorm4x8(vsGen.packedColor).rgb;
-        float p_hat_gen = EvalPHat(sGen, V, N, li.albedo.xyz, F0, li.metallic, roughness, genLightColor, vsGen.intensity);
+        float p_hat_gen = EvalReservoirPHat(r_gen.lightIdx, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
         ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
 
 #if RESTIR_ENABLE_INITIAL_VISIBILITY
         if (pc.bInitialVisibility != 0u) {
             float3 worldN = normalize(mul(float3x3(scene.invView), N));
-            float3 worldyStar = mul(scene.invView, float4(yStarGen, 1.0)).xyz;
-            if (!RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize)) {
-                r_gen.W = 0.0;
-            }
+            float p_hat_vis = EvalReservoirPHatVisibility(r_gen.lightIdx, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, scene.invView, pc.lightData->directionalLight, pc.lightVS, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize);
+            if (p_hat_vis <= 0.0) { r_gen.W = 0.0; }
         }
 #endif
     }

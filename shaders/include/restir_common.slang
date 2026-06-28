@@ -7,6 +7,7 @@ import pbr_functions;
 import bindless_declarations;
 import constants_interop;
 import shader_functions;
+import packing_functions;
 
 public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
 
@@ -379,6 +380,99 @@ public float EvalPHatVisibility(LightSample s, float3 V, float3 N, float3 albedo
 {
     if (!RestirShadowVisible(tlas, worldShadingPos, worldN, worldyStar, worldTexelSize)) { return 0.0; }
     return EvalPHat(s, V, N, albedo, F0, metallic, roughness, lightColor, lightIntensity);
+}
+
+public float3 SunDirectionWorld(DirectionalLightData sun)
+{
+    return normalize(-sun.directionIntensity.xyz);
+}
+
+public float SunConeSolidAngle(float angularRadius)
+{
+    if (angularRadius <= 1e-4) { return 1.0; }
+    return 2.0 * PI * (1.0 - cos(angularRadius));
+}
+
+public float3 SunRadiance(DirectionalLightData sun)
+{
+    return UnpackUnorm4x8(sun.packedColor).rgb * sun.directionIntensity.w / SunConeSolidAngle(sun.angularRadius);
+}
+
+public float3 SampleSunConeDirection(float3 LsunWorld, float angularRadius, float u1, float u2, out float pdf)
+{
+    if (angularRadius <= 1e-4) {
+        pdf = 1.0;
+        return LsunWorld;
+    }
+    float cosThetaMax = cos(angularRadius);
+    float cosTheta = 1.0 - u1 * (1.0 - cosThetaMax);
+    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
+    float phi = 2.0 * PI * u2;
+    float3 localDir = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+    float3 up = abs(LsunWorld.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 tang = normalize(cross(up, LsunWorld));
+    float3 bitang = cross(LsunWorld, tang);
+    pdf = 1.0 / (2.0 * PI * (1.0 - cosThetaMax));
+    return normalize(localDir.x * tang + localDir.y * bitang + localDir.z * LsunWorld);
+}
+
+public float EvalSunPHat(float3 LsunView, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 sunRadiance)
+{
+    float cosShade = max(dot(N, LsunView), 0.0);
+    if (cosShade <= 0.0) { return 0.0; }
+    const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
+    float3 H = normalize(V + LsunView);
+    float D = D_GGX(N, H, roughness);
+    float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
+    return brdf * cosShade * dot(sunRadiance, lumWeights);
+}
+
+public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize)
+{
+    float bias = max(0.05, worldTexelSize * 2.0 / max(dot(worldN, worldLsun), 0.1));
+    float3 rayOrigin = worldShadingPos + worldN * bias;
+    RayDesc shadowRay;
+    shadowRay.Origin = rayOrigin;
+    shadowRay.Direction = worldLsun;
+    shadowRay.TMin = 0.0;
+    shadowRay.TMax = 1e30;
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    q.TraceRayInline(tlas, 0, 0x01, shadowRay);
+    q.Proceed();
+    return q.CommittedStatus() == COMMITTED_NOTHING;
+}
+
+public float EvalReservoirPHat(uint lightIdx, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
+                               float3 albedo, float3 F0, float metallic, float roughness,
+                               float4x4 view, DirectionalLightData sun, LightVSData* lightVS)
+{
+    if (lightIdx == LIGHT_IDX_SUN) {
+        float3 sunDirView = normalize(mul((float3x3)view, UnpackNormalOct16(sampleOffsetPacked)));
+        return EvalSunPHat(sunDirView, V, N, albedo, F0, metallic, roughness, SunRadiance(sun));
+    }
+    LightVS vs = UnpackLightVS(lightVS[lightIdx]);
+    float3 yStar = DecodeSamplePos(sampleOffsetPacked, vs);
+    LightSample s = EvalLightSample(vs, yStar, viewPos, N, vs.range);
+    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity);
+}
+
+public float EvalReservoirPHatVisibility(uint lightIdx, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
+                                         float3 albedo, float3 F0, float metallic, float roughness,
+                                         float4x4 view, float4x4 invView, DirectionalLightData sun, LightVSData* lightVS,
+                                         RaytracingAccelerationStructure tlas, float3 worldPos, float3 worldN, float worldTexelSize)
+{
+    if (lightIdx == LIGHT_IDX_SUN) {
+        float3 sunDirWorld = UnpackNormalOct16(sampleOffsetPacked);
+        if (!RestirSunShadowVisible(tlas, worldPos, worldN, sunDirWorld, worldTexelSize)) { return 0.0; }
+        float3 sunDirView = normalize(mul((float3x3)view, sunDirWorld));
+        return EvalSunPHat(sunDirView, V, N, albedo, F0, metallic, roughness, SunRadiance(sun));
+    }
+    LightVS vs = UnpackLightVS(lightVS[lightIdx]);
+    float3 yStar = DecodeSamplePos(sampleOffsetPacked, vs);
+    float3 worldyStar = mul(invView, float4(yStar, 1.0)).xyz;
+    if (!RestirShadowVisible(tlas, worldPos, worldN, worldyStar, worldTexelSize)) { return 0.0; }
+    LightSample s = EvalLightSample(vs, yStar, viewPos, N, vs.range);
+    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity);
 }
 
 public float GGXPdf(float3 N, float3 V, float3 L, float roughness)

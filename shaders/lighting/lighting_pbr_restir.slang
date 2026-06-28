@@ -64,7 +64,34 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
 
         Reservoir r = pc.reservoirBuffer[pixelIdx];
 
-        if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->lightCount))
+        if (r.lightIdx == LIGHT_IDX_SUN && r.W > 0.0)
+        {
+            float3 Lsun = normalize(mul((float3x3)scene.view, UnpackNormalOct16(r.sampleOffsetPacked)));
+            float nDotLsun = max(dot(N, Lsun), 0.0);
+            if (nDotLsun > 0.0)
+            {
+                float3 Hsun = normalize(V + Lsun);
+                float NDFsun = D_GGX(N, Hsun, roughness);
+                float Gsun = G_SMITH_HEIGHT_CORRELATED(N, V, Lsun, roughness);
+                float3 Fsun = F_SCHLICK(V, Hsun, F0);
+                float3 specularSun = (NDFsun * Gsun * Fsun) / max(4.0 * nDotV * nDotLsun, 0.001);
+                float3 kDsun = (1.0 - Fsun) * (1.0 - li.metallic);
+                float orenNayarSun = Diffuse_OrenNayar(nDotLsun, nDotV, Lsun, V, roughness);
+                float3 diffuseSun = kDsun * li.albedo.xyz * orenNayarSun;
+                float3 sunRad = SunRadiance(pc.lightData->directionalLight);
+                float3 commonTermSun = nDotLsun * sunRad * r.W;
+                diffuseRadiance += diffuseSun * commonTermSun;
+                float3 specContributionSun = specularSun * commonTermSun;
+                specularRadiance += specContributionSun;
+                float specLumSun = dot(specContributionSun, float3(0.2126, 0.7152, 0.0722));
+                if (specLumSun > bestSpecLum)
+                {
+                    bestSpecLum = specLumSun;
+                    hitDistance = 10000.0;
+                }
+            }
+        }
+        else if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->lightCount))
         {
             LightVS vs = UnpackLightVS(pc.lightVS[r.lightIdx]);
             float3 yStar = DecodeSamplePos(r, vs);

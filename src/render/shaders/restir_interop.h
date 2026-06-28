@@ -53,6 +53,8 @@ SHADER_PUBLIC struct Reservoir
     SHADER_PUBLIC uint M;
 };
 
+SHADER_PUBLIC SHADER_CONST uint LIGHT_IDX_SUN = 0xFFFFFFFEu;
+
 /**
  * Grid reservoir for ReGIR (RTG2 Ch.23). Stores raw RIS pieces from fill (not a pre-divided W):
  *   totalWeight = wSum / M_build  (running reservoir weight)

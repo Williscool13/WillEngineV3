@@ -46,20 +46,13 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     Reservoir center = pc.inputBuffer[centerIdx];
     if (isnan(center.W) || isinf(center.W)) { center = ReservoirEmpty(); }
-    bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->lightCount);
+    bool validCenter = center.lightIdx != ~0u && (center.lightIdx == LIGHT_IDX_SUN || center.lightIdx < uint(pc.lightData->lightCount));
 
     float Mc = validCenter ? float(center.M) : 0.0;
 
-    LightVS vsCenter;
-    float3 yStarCenter = float3(0);
-    float3 centerLightColor = float3(0);
     float p_hat_center_atCenter = 0.0;
     if (validCenter) {
-        vsCenter = UnpackLightVS(pc.lightVS[center.lightIdx]);
-        yStarCenter = DecodeSamplePos(center, vsCenter);
-        centerLightColor = UnpackUnorm4x8(vsCenter.packedColor).rgb;
-        LightSample sCenter = EvalLightSample(vsCenter, yStarCenter, viewPosition, N, vsCenter.range);
-        p_hat_center_atCenter = EvalPHat(sCenter, V, N, li.albedo.xyz, F0, li.metallic, roughness, centerLightColor, vsCenter.intensity);
+        p_hat_center_atCenter = EvalReservoirPHat(center.lightIdx, center.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
     }
 
     ReservoirAccum accum = ReservoirAccumEmpty();
@@ -108,7 +101,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
         Reservoir neighbor = pc.inputBuffer[neighborPixel.y * pc.renderExtent.x + neighborPixel.x];
         if (isnan(neighbor.W) || isinf(neighbor.W)) { neighbor = ReservoirEmpty(); }
-        if (neighbor.lightIdx == ~0u || neighbor.lightIdx >= uint(pc.lightData->lightCount)) {
+        if (neighbor.lightIdx == ~0u || (neighbor.lightIdx != LIGHT_IDX_SUN && neighbor.lightIdx >= uint(pc.lightData->lightCount))) {
             continue;
         }
         if (validCenter && center.M >= 4u && neighbor.M < 2u) {
@@ -130,23 +123,16 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         float neighborRoughness = max(nli.roughness, 0.045);
         float3 neighborF0 = lerp(float3(0.04, 0.04, 0.04), nli.albedo.xyz, nli.metallic);
 
-        LightVS vsNeighbor = UnpackLightVS(pc.lightVS[neighbor.lightIdx]);
-        float3 neighborLightColor = UnpackUnorm4x8(vsNeighbor.packedColor).rgb;
-        float3 yStarNeighbor = DecodeSamplePos(neighbor, vsNeighbor);
-
         float Mi = validCenter ? min(float(neighbor.M), 20.0 * float(center.M)) : float(neighbor.M);
 
-        LightSample sNeighbor_atNeighbor = EvalLightSample(vsNeighbor, yStarNeighbor, neighborViewPosition, neighborN, vsNeighbor.range);
-        float p_hat_neighbor_atNeighbor = EvalPHat(sNeighbor_atNeighbor, neighborV, neighborN, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, neighborLightColor, vsNeighbor.intensity);
-        LightSample sNeighbor_atCenter = EvalLightSample(vsNeighbor, yStarNeighbor, viewPosition, N, vsNeighbor.range);
-        float p_hat_neighbor_atCenter = EvalPHat(sNeighbor_atCenter, V, N, li.albedo.xyz, F0, li.metallic, roughness, neighborLightColor, vsNeighbor.intensity);
+        float p_hat_neighbor_atNeighbor = EvalReservoirPHat(neighbor.lightIdx, neighbor.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
+        float p_hat_neighbor_atCenter = EvalReservoirPHat(neighbor.lightIdx, neighbor.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
 
         float denomNeighbor = Mi * p_hat_neighbor_atNeighbor + Mc * p_hat_neighbor_atCenter;
         float misNeighbor = (denomNeighbor > 0.0) ? (Mi * p_hat_neighbor_atNeighbor) / denomNeighbor : 0.0;
 
         if (validCenter) {
-            LightSample sCenter_atNeighbor = EvalLightSample(vsCenter, yStarCenter, neighborViewPosition, neighborN, vsCenter.range);
-            float p_hat_center_atNeighbor = EvalPHat(sCenter_atNeighbor, neighborV, neighborN, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, centerLightColor, vsCenter.intensity);
+            float p_hat_center_atNeighbor = EvalReservoirPHat(center.lightIdx, center.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
             float denomCenter = Mi * p_hat_center_atNeighbor + Mc * p_hat_center_atCenter;
             if (denomCenter > 0.0) {
                 centerMisAccum += (Mc * p_hat_center_atCenter) / denomCenter;
@@ -179,20 +165,13 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     }
 
     if (combined.lightIdx != ~0u) {
-        LightVS vsFinal = UnpackLightVS(pc.lightVS[combined.lightIdx]);
-        float3 yStarFinal = DecodeSamplePos(combined, vsFinal);
-        LightSample sFinal = EvalLightSample(vsFinal, yStarFinal, viewPosition, N, vsFinal.range);
-        float3 finalLightColor = UnpackUnorm4x8(vsFinal.packedColor).rgb;
         float p_hat_final;
         if (pc.bValidateVisibility != 0u) {
             float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
             float3 worldN = normalize(mul(float3x3(scene.invView), N));
-            float3 worldyStarFinal = mul(scene.invView, float4(yStarFinal, 1.0)).xyz;
-            RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-            p_hat_final = EvalPHatVisibility(sFinal, V, N, li.albedo.xyz, F0, li.metallic, roughness, finalLightColor, vsFinal.intensity,
-                                             tlas, worldPos, worldN, worldyStarFinal, worldTexelSize);
+            p_hat_final = EvalReservoirPHatVisibility(combined.lightIdx, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, scene.invView, pc.lightData->directionalLight, pc.lightVS, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize);
         } else {
-            p_hat_final = EvalPHat(sFinal, V, N, li.albedo.xyz, F0, li.metallic, roughness, finalLightColor, vsFinal.intensity);
+            p_hat_final = EvalReservoirPHat(combined.lightIdx, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
         }
         ReservoirFinalise(combined, accum, p_hat_final, float(neighborCount));
     } else {
