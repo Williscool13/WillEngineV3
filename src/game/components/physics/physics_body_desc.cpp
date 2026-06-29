@@ -307,6 +307,16 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                         shapeJson["slices"] = p.slices;
                         shapeJson["segments"] = p.segments;
                     }
+                    else if constexpr (std::is_same_v<T, Engine::SpiralStaircaseParams>) {
+                        shapeJson["stepCount"] = p.stepCount;
+                        shapeJson["stepHeight"] = p.stepHeight;
+                        shapeJson["outerRadius"] = p.outerRadius;
+                        shapeJson["centerColumnRadius"] = p.centerColumnRadius;
+                        shapeJson["treadThickness"] = p.treadThickness;
+                        shapeJson["degreesPerStep"] = p.degreesPerStep;
+                        shapeJson["arcSegments"] = p.arcSegments;
+                        shapeJson["bShowCenterColumn"] = p.bShowCenterColumn;
+                    }
                 }, shape.proceduralParams);
                 break;
         }
@@ -535,6 +545,18 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                         p.segments = shapeJson["segments"].get<int32_t>();
                         shape.proceduralParams = p;
                     }
+                    else if (ptype == 23) {
+                        Engine::SpiralStaircaseParams p{};
+                        p.stepCount = shapeJson["stepCount"].get<int32_t>();
+                        p.stepHeight = shapeJson["stepHeight"].get<float>();
+                        p.outerRadius = shapeJson["outerRadius"].get<float>();
+                        p.centerColumnRadius = shapeJson["centerColumnRadius"].get<float>();
+                        p.treadThickness = shapeJson.value("treadThickness", 0.08f);
+                        p.degreesPerStep = shapeJson.value("degreesPerStep", 30.0f);
+                        p.arcSegments = shapeJson.value("arcSegments", 6);
+                        p.bShowCenterColumn = shapeJson.value("bShowCenterColumn", true);
+                        shape.proceduralParams = p;
+                    }
                 }
                 if (shapeJson.contains("splineParams")) {
                     const auto& sp = shapeJson["splineParams"];
@@ -726,11 +748,11 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 {
                     bool bHasAny = false;
                     const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
-                    static constexpr Core::Array<const char*, 23> kProceduralNames = {
+                    static constexpr Core::Array<const char*, 24> kProceduralNames = {
                         nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
                         "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
                         "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
-                        "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl",
+                        "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase",
                     };
                     const size_t idx = shape.proceduralParams.index();
 

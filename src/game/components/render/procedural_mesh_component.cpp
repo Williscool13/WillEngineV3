@@ -193,6 +193,16 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
             json["slices"] = p.slices;
             json["segments"] = p.segments;
         }
+        else if constexpr (std::is_same_v<T, Engine::SpiralStaircaseParams>) {
+            json["stepCount"] = p.stepCount;
+            json["stepHeight"] = p.stepHeight;
+            json["outerRadius"] = p.outerRadius;
+            json["centerColumnRadius"] = p.centerColumnRadius;
+            json["treadThickness"] = p.treadThickness;
+            json["degreesPerStep"] = p.degreesPerStep;
+            json["arcSegments"] = p.arcSegments;
+            json["bShowCenterColumn"] = p.bShowCenterColumn;
+        }
     }, comp.params);
 }
 
@@ -384,6 +394,18 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.segments = json["segments"].get<int32_t>();
         comp.params = p;
     }
+    else if (type == 23) {
+        Engine::SpiralStaircaseParams p{};
+        p.stepCount = json["stepCount"].get<int32_t>();
+        p.stepHeight = json["stepHeight"].get<float>();
+        p.outerRadius = json["outerRadius"].get<float>();
+        p.centerColumnRadius = json["centerColumnRadius"].get<float>();
+        p.treadThickness = json.value("treadThickness", 0.08f);
+        p.degreesPerStep = json.value("degreesPerStep", 30.0f);
+        p.arcSegments = json.value("arcSegments", 6);
+        p.bShowCenterColumn = json.value("bShowCenterColumn", true);
+        comp.params = p;
+    }
 }
 
 Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
@@ -448,13 +470,14 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 if (ImGui::Selectable("Trefoil Knot")) selectShape(Engine::TrefoilKnotParams{});
                 if (ImGui::Selectable("Curved Ramp")) selectShape(Engine::CurvedRampParams{});
                 if (ImGui::Selectable("Bowl")) selectShape(Engine::BowlParams{});
+                if (ImGui::Selectable("Spiral Staircase")) selectShape(Engine::SpiralStaircaseParams{});
                 ImGui::EndCombo();
             }
         }
         else {
             static constexpr const char* shapeNames[] = {
                 "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl"
+                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase"
             };
             ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
             ImGui::SameLine();
@@ -724,6 +747,23 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragInt("Segments", &p.segments, 1, 2, 64);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::SpiralStaircaseParams>) {
+                    ImGui::DragInt("Step Count", &p.stepCount, 1, 1, 256);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Step Height", &p.stepHeight, 0.01f, 0.01f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Degrees Per Step", &p.degreesPerStep, 0.5f, 1.0f, 180.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Outer Radius", &p.outerRadius, 0.01f, 0.05f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Center Column Radius", &p.centerColumnRadius, 0.01f, 0.0f, p.outerRadius - 0.01f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Tread Thickness", &p.treadThickness, 0.005f, 0.001f, p.stepHeight);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Arc Segments", &p.arcSegments, 1, 1, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Show Center Column", &p.bShowCenterColumn)) { dirty = true; }
                 }
             }, component.params);
 

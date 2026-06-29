@@ -216,6 +216,7 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
                    [&](const Engine::TrefoilKnotParams& p) { bSuccess = GenerateTrefoilKnot(p); },
                    [&](const Engine::CurvedRampParams& p) { bSuccess = GenerateCurvedRamp(p); },
                    [&](const Engine::BowlParams& p) { bSuccess = GenerateBowl(p); },
+                   [&](const Engine::SpiralStaircaseParams& p) { bSuccess = GenerateSpiralStaircase(p); },
                }, params);
     return bSuccess;
 }
@@ -2076,6 +2077,117 @@ bool ProceduralModelLoadSlot::GenerateBowl(const Engine::BowlParams& p)
     }
 
     return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateSpiralStaircase(const Engine::SpiralStaircaseParams& p)
+{
+    ZoneScopedN("GenerateSpiralStaircase");
+
+    if (p.stepCount <= 0) { return false; }
+
+    const int32_t steps = p.stepCount;
+    const int32_t seg = std::max(1, p.arcSegments);
+    const float ro = std::max(0.05f, p.outerRadius);
+    const float ri = glm::clamp(p.centerColumnRadius, 0.001f, ro - 0.01f);
+    const float stepH = std::max(0.001f, p.stepHeight);
+    const float thick = glm::clamp(p.treadThickness, 0.001f, stepH);
+    const float dStep = glm::radians(p.degreesPerStep);
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    vertices.Reserve(static_cast<size_t>(steps) * (seg + 1) * 24 + 256);
+    indices.Reserve(static_cast<size_t>(steps) * seg * 36 + 512);
+
+    auto pushV = [&](Vec3 pos, Vec3 n, Vec2 uv, Vec4 t) -> uint32_t {
+        Engine::FullVertex v{};
+        v.position = pos;
+        v.normal = n;
+        v.uv = uv;
+        v.tangent = t;
+        v.color = {1.0f, 1.0f, 1.0f, 1.0f};
+        const auto idx = static_cast<uint32_t>(vertices.Size());
+        vertices.PushBack(v);
+        return idx;
+    };
+
+    // Winding is chosen so the emitted triangle's geometric normal aligns with the supplied normal.
+    auto addTri = [&](Vec3 p0, Vec3 p1, Vec3 p2, Vec3 n, Vec4 t, Vec2 u0, Vec2 u1, Vec2 u2) {
+        const bool flip = glm::dot(glm::cross(p1 - p0, p2 - p0), n) < 0.0f;
+        const uint32_t i0 = pushV(p0, n, u0, t);
+        const uint32_t i1 = pushV(p1, n, u1, t);
+        const uint32_t i2 = pushV(p2, n, u2, t);
+        if (!flip) {
+            indices.PushBack(i0); indices.PushBack(i1); indices.PushBack(i2);
+        }
+        else {
+            indices.PushBack(i0); indices.PushBack(i2); indices.PushBack(i1);
+        }
+    };
+    auto addQuad = [&](Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, Vec3 n, Vec4 t, Vec2 u0, Vec2 u1, Vec2 u2, Vec2 u3) {
+        addTri(p0, p1, p2, n, t, u0, u1, u2);
+        addTri(p0, p2, p3, n, t, u0, u2, u3);
+    };
+
+    auto ringDir = [](float a) { return Vec3{cosf(a), 0.0f, sinf(a)}; };
+
+    // Each tread is a closed solid wedge (open-riser); the optional column fills the middle.
+    for (int32_t i = 0; i < steps; ++i) {
+        const float a0 = static_cast<float>(i) * dStep;
+        const float a1 = a0 + dStep;
+        const float yt = static_cast<float>(i + 1) * stepH;
+        const float yb = yt - thick;
+
+        for (int32_t s = 0; s < seg; ++s) {
+            const float as = a0 + (a1 - a0) * (static_cast<float>(s) / static_cast<float>(seg));
+            const float an = a0 + (a1 - a0) * (static_cast<float>(s + 1) / static_cast<float>(seg));
+            const Vec3 ds = ringDir(as), dn = ringDir(an);
+            const Vec3 top{0.0f, yt, 0.0f}, bot{0.0f, yb, 0.0f};
+
+            addQuad(ds * ri + top, ds * ro + top, dn * ro + top, dn * ri + top,
+                    Vec3{0, 1, 0}, Vec4{ds.z, 0, -ds.x, 1},
+                    Vec2{ri, as}, Vec2{ro, as}, Vec2{ro, an}, Vec2{ri, an});
+            addQuad(ds * ri + bot, ds * ro + bot, dn * ro + bot, dn * ri + bot,
+                    Vec3{0, -1, 0}, Vec4{ds.z, 0, -ds.x, 1},
+                    Vec2{ri, as}, Vec2{ro, as}, Vec2{ro, an}, Vec2{ri, an});
+            addQuad(ds * ro + bot, dn * ro + bot, dn * ro + top, ds * ro + top,
+                    glm::normalize(ds + dn), Vec4{-ds.z, 0, ds.x, 1},
+                    Vec2{as, yb}, Vec2{an, yb}, Vec2{an, yt}, Vec2{as, yt});
+            addQuad(ds * ri + bot, dn * ri + bot, dn * ri + top, ds * ri + top,
+                    -glm::normalize(ds + dn), Vec4{-ds.z, 0, ds.x, 1},
+                    Vec2{as, yb}, Vec2{an, yb}, Vec2{an, yt}, Vec2{as, yt});
+        }
+
+        const Vec3 d0 = ringDir(a0), d1 = ringDir(a1);
+        addQuad(d0 * ri + Vec3{0, yb, 0}, d0 * ro + Vec3{0, yb, 0}, d0 * ro + Vec3{0, yt, 0}, d0 * ri + Vec3{0, yt, 0},
+                Vec3{sinf(a0), 0, -cosf(a0)}, Vec4{d0.x, 0, d0.z, 1},
+                Vec2{ri, yb}, Vec2{ro, yb}, Vec2{ro, yt}, Vec2{ri, yt});
+        addQuad(d1 * ri + Vec3{0, yb, 0}, d1 * ro + Vec3{0, yb, 0}, d1 * ro + Vec3{0, yt, 0}, d1 * ri + Vec3{0, yt, 0},
+                Vec3{-sinf(a1), 0, cosf(a1)}, Vec4{d1.x, 0, d1.z, 1},
+                Vec2{ri, yb}, Vec2{ro, yb}, Vec2{ro, yt}, Vec2{ri, yt});
+    }
+
+    if (p.bShowCenterColumn) {
+        const float pi = glm::pi<float>();
+        const int32_t colSlices = std::max(16, seg * 4);
+        const float colTop = static_cast<float>(steps) * stepH;
+        const Vec3 capTop{0.0f, colTop, 0.0f}, capBot{0.0f, 0.0f, 0.0f};
+
+        for (int32_t s = 0; s < colSlices; ++s) {
+            const float as = static_cast<float>(s) / static_cast<float>(colSlices) * 2.0f * pi;
+            const float an = static_cast<float>(s + 1) / static_cast<float>(colSlices) * 2.0f * pi;
+            const Vec3 ds = ringDir(as), dn = ringDir(an);
+
+            addQuad(ds * ri + capBot, dn * ri + capBot, dn * ri + capTop, ds * ri + capTop,
+                    glm::normalize(ds + dn), Vec4{-ds.z, 0, ds.x, 1},
+                    Vec2{as, 0}, Vec2{an, 0}, Vec2{an, colTop}, Vec2{as, colTop});
+            addTri(capTop, ds * ri + capTop, dn * ri + capTop, Vec3{0, 1, 0}, Vec4{1, 0, 0, 1},
+                   Vec2{0, 0}, Vec2{ds.x * ri, ds.z * ri}, Vec2{dn.x * ri, dn.z * ri});
+            addTri(capBot, ds * ri + capBot, dn * ri + capBot, Vec3{0, -1, 0}, Vec4{1, 0, 0, 1},
+                   Vec2{0, 0}, Vec2{ds.x * ri, ds.z * ri}, Vec2{dn.x * ri, dn.z * ri});
+        }
+    }
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
