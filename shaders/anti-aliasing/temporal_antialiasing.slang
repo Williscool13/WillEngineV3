@@ -14,11 +14,13 @@ static const int APRON_TEXEL_COUNT = APRON_DIM * APRON_DIM;
 
 static const float VIEWZ_CLAMP = 1e6;
 
-bool IsFinite3(float3 c) {
+bool IsFinite3(float3 c)
+{
     return !any(isnan(c)) && !any(isinf(c));
 }
 
-float3 SanitizeColor(float3 c) {
+float3 SanitizeColor(float3 c)
+{
     return IsFinite3(c) ? c : float3(0.0);
 }
 
@@ -27,16 +29,19 @@ groupshared uint gsPackedVelocity[APRON_DIM][APRON_DIM];
 groupshared float gsDepth[APRON_DIM][APRON_DIM];
 
 // Karis-style weighting: blending happens in luma-compressed space so a single HDR firefly cannot dominate the average. Strength 0 is an exact identity (disabled)
-float3 KarisTonemap(float3 ycocg) {
+float3 KarisTonemap(float3 ycocg)
+{
     return ycocg / (1.0 + pc.karisStrength * max(ycocg.x, 0.0));
 }
 
-float3 KarisInverse(float3 ycocg) {
+float3 KarisInverse(float3 ycocg)
+{
     return ycocg / max(1.0 - pc.karisStrength * max(ycocg.x, 0.0), 1e-4);
 }
 
 // Clips history toward the box center instead of clamping per component; clamping moves colors to box corners and shifts hue
-float3 ClipToNeighborhood(float3 history, float3 minc, float3 maxc) {
+float3 ClipToNeighborhood(float3 history, float3 minc, float3 maxc)
+{
     float3 center = 0.5 * (maxc + minc);
     float3 extents = 0.5 * (maxc - minc) + 1e-6;
     float3 delta = history - center;
@@ -48,7 +53,8 @@ float3 ClipToNeighborhood(float3 history, float3 minc, float3 maxc) {
 }
 
 // https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/ and help from AI
-float3 SampleHistoryCatmullRom(float2 uv) {
+float3 SampleHistoryCatmullRom(float2 uv)
+{
     float2 texelSize = pc.sceneData.texelSize;
 
     float2 samplePos = uv / texelSize;
@@ -76,7 +82,7 @@ float3 SampleHistoryCatmullRom(float2 uv) {
     float3 color =
         rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
         rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
-        rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], tc12, 0).rgb                  * (w12.x * w12.y) +
+        rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], tc12, 0).rgb * (w12.x * w12.y) +
         rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
         rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
 
@@ -88,7 +94,8 @@ float3 SampleHistoryCatmullRom(float2 uv) {
 // Compares the surface's expected previous view depth (current viewZ + gbuffer viewZDelta) against a 3x3 footprint of the previous depth buffer, keeping the best match.
 // A single point tap hard-rejects subpixel geometry every frame: thin features only rasterize on some jitter phases, so the reprojected texel alternates between
 // feature and background depth even though a neighboring texel almost always holds the matching surface.
-float ComputeDepthDisocclusion(float2 historyUv, float expectedPrevViewZ) {
+float ComputeDepthDisocclusion(float2 historyUv, float expectedPrevViewZ)
+{
     int2 renderMax = int2(pc.sceneData.mainRenderTargetSize) - 1;
     int2 historyCoord = int2(historyUv * float2(pc.sceneData.mainRenderTargetSize));
     float tolerance = max(pc.disocclusionThreshold * abs(expectedPrevViewZ), 1e-6);
@@ -105,7 +112,6 @@ float ComputeDepthDisocclusion(float2 historyUv, float expectedPrevViewZ) {
 
     return saturate(bestDelta / tolerance - 1.0);
 }
-
 
 /*
 float ComputeVelocityDisocclusion(float2 uv, float2 currentVelocityUV) {
@@ -128,7 +134,8 @@ float ComputeVelocityDisocclusion(float2 uv, float2 currentVelocityUV) {
 */
 
 [numthreads(TILE_DIM, TILE_DIM, 1)]
-void ComputeMain(uint3 threadID : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID, uint groupIndex : SV_GroupIndex) {
+void ComputeMain(uint3 threadID: SV_DispatchThreadID, uint3 groupThreadID: SV_GroupThreadID, uint3 groupID: SV_GroupID, uint groupIndex: SV_GroupIndex)
+{
     int2 renderSize = int2(pc.sceneData.mainRenderTargetSize);
     int2 groupOrigin = int2(groupID.xy) * TILE_DIM - 1;
 

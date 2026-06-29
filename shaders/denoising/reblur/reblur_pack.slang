@@ -16,10 +16,12 @@ import shader_functions;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void ReblurPackMain(uniform ReblurPackPushConstant pc, int2 pixelPos : SV_DispatchThreadID)
+void ReblurPackMain(uniform ReblurPackPushConstant pc, int2 pixelPos: SV_DispatchThreadID)
 {
     ReblurDiffuseSpecularConstants* rc = pc.constants;
-    if (pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y) { return; }
+    if (pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y) {
+        return;
+    }
 
     float viewZ = RelaxLoadViewZ(pc.viewZIndex, pixelPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float roughness, metallic;
