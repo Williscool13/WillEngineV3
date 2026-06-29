@@ -57,7 +57,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
                        uint64_t frameNumber,
-                       const Core::ReSTIRParams& restirParams)
+                       const Core::ReSTIRParams& restirParams,
+                       bool bResolutionChanged)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const uint32_t pixelScale = restirParams.bHalfRes ? 2u : 1u;
@@ -234,7 +235,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             graph.CreateBuffer(SID("restir_reservoir_temporal"), reservoirBufferSize, true);
         }
 
-        const bool bHasHistory = graph.HasBuffer(SID("restir_reservoir_history"));
+        const bool bHasHistory = !bResolutionChanged && graph.HasBuffer(SID("restir_reservoir_history"));
         const bool bHasQuadHistory = restirParams.bHalfRes && graph.HasTexture(SID("quad_selection_history"));
         const bool bHasPrevVis = bShadowVis && graph.HasTexture(SID("restir_shadow_vis_prev"));
         if (bShadowVis) {

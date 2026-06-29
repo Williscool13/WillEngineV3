@@ -511,8 +511,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             const Core::ReSTIRParams& restir = frameBuffer.restir;
             Core::RELAXParams relax = restir.relax;
+            Core::ReBLURParams reblur = restir.reblur;
             const float renderFps = frameBuffer.timeFrame.renderFps;
-            relax.framerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.1f, 4.0f);
+            const float denoiserFramerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.1f, 4.0f);
+            relax.framerateScale = denoiserFramerateScale;
+            reblur.framerateScale = denoiserFramerateScale;
 
             const bool bRestirHalfRes = viewFamily.lightingMode == Core::LightingMode::ReSTIR && restir.bHalfRes;
             const bool bSunShadowHalfRes = viewFamily.directionalLight.bEnabled
@@ -531,12 +534,17 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 case Core::LightingMode::ReSTIR:
                 {
                     const uint32_t restirPixelScale = restir.bHalfRes ? 2u : 1u;
-                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restir);
+                    const bool bRestirResolutionChanged = restir.bHalfRes != lastRestirHalfRes;
+                    lastRestirHalfRes = restir.bHalfRes;
+                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restir, bRestirResolutionChanged);
                     SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, restirExtent, targets, 0, renderArena.Get(), frameNumber, restirPixelScale);
                     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
                         SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, renderExtent, targets, relax, frameNumber, remodulateOutputMode, restirPixelScale, viewFamily.iblIntensity);
+                    }
+                    else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
+                        SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, restirPixelScale, viewFamily.iblIntensity);
                     }
                     else {
                         SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, restirPixelScale, viewFamily.iblIntensity, frameNumber);

@@ -186,6 +186,7 @@ private:
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
     uint32_t rtGroundTruthDIAccumCount{0};
+    bool lastRestirHalfRes{false};
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};

@@ -12,6 +12,7 @@
     "stepsPerSlice": 3.0,
     "thinOccluderCompensation": 0.0
   },
+  "iblIntensity": 0.0,
   "lightingMode": 1,
   "lightingShaderOverride": 7554520945661456859,
   "restir": {
@@ -26,8 +27,8 @@
     "bAdaptiveSpatial": true,
     "bEnableAntilag": false,
     "bEnableConfidence": false,
-    "bEnableTemporal": true,
-    "bHalfRes": true,
+    "bEnableTemporal": false,
+    "bHalfRes": false,
     "bInitialVisibility": true,
     "bPermutationSampling": false,
     "boilingFilterStrength": 0.20000000298023224,
@@ -36,8 +37,43 @@
     "confidenceHistoryLength": 4.0,
     "confidenceSensitivity": 3.0,
     "confidenceStrength": 1.0,
-    "denoiserMode": 3,
-    "iblIntensity": 0.0,
+    "denoiserMode": 0,
+    "reblur": {
+      "antilagLuminanceSensitivity": 3.0,
+      "antilagLuminanceSigmaScale": 2.0,
+      "convergenceB": 0.20000000298023224,
+      "convergenceP": 0.800000011920929,
+      "convergenceS": 1.0,
+      "denoisingRange": 1000.0,
+      "diffusePrepassBlurRadius": 30.0,
+      "disocclusionThreshold": 0.009999999776482582,
+      "disocclusionThresholdAlternate": 0.05000000074505806,
+      "enableAntiFirefly": true,
+      "enablePrepass": true,
+      "enableTemporalStabilization": true,
+      "fastHistoryClampingSigmaScale": 2.0,
+      "fireflySuppressorMinRelativeScale": 2.0,
+      "historyFixBasePixelStride": 14.0,
+      "historyFixFrameNum": 3.0,
+      "hitDistA": 3.0,
+      "hitDistB": 0.10000000149011612,
+      "hitDistC": 20.0,
+      "hitDistD": -25.0,
+      "hitDistanceReconstructionMode": 0,
+      "lobeAngleFraction": 0.15000000596046448,
+      "maxAccumulatedFrameNum": 30.0,
+      "maxBlurRadius": 30.0,
+      "maxFastAccumulatedFrameNum": 6.0,
+      "maxStabilizedFrameNum": 30.0,
+      "minBlurRadius": 1.0,
+      "minHitDistanceWeight": 0.10000000149011612,
+      "planeDistanceSensitivity": 0.019999999552965164,
+      "roughnessFraction": 0.15000000596046448,
+      "specProbThresholdMvHigh": 0.8999999761581421,
+      "specProbThresholdMvLow": 0.5,
+      "specularPrepassBlurRadius": 50.0,
+      "stabilizationStrength": 1.0
+    },
     "regirWClamp": 0.0,
     "relax": {
       "atrousIterations": 5,
@@ -88,7 +124,7 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 6
+    "temporalMCap": 20
   },
   "shadingShaderOverride": 11262630175972558216
 }

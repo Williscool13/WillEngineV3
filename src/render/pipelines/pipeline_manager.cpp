@@ -542,6 +542,23 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("relax_antifirefly"), src / "relax_antifirefly_compute.spv",
                             sizeof(RelaxAntiFireflyPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("reblur_pack"), src / "reblur_pack_compute.spv",
+                            sizeof(ReblurPackPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("reblur_generate_viewz"), src / "reblur_generate_viewz_compute.spv",
+                            sizeof(ReblurGenerateViewZPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("reblur_classify_tiles"), src / "reblur_classify_tiles_compute.spv",
+                            sizeof(ReblurClassifyTilesPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("reblur_prepass"), src / "reblur_prepass_compute.spv",
+                            sizeof(ReblurPrepassPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("reblur_temporal_accumulation"), src / "reblur_temporal_accumulation_compute.spv",
+                            sizeof(ReblurTemporalAccumulationPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("reblur_history_fix"), src / "reblur_history_fix_compute.spv",
+                            sizeof(ReblurHistoryFixPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("reblur_blur"), src / "reblur_blur_compute.spv",
+                            sizeof(ReblurBlurPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("reblur_stabilization"), src / "reblur_stabilization_compute.spv",
+                            sizeof(ReblurStabilizationPushConstant), PipelineCategory::Critical);
+
 
     RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure_build_histogram_compute.spv",
                             sizeof(HistogramBuildPushConstant), PipelineCategory::Critical);

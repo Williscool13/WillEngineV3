@@ -495,6 +495,10 @@
         {
           "match": "\\b(?:true|false|nullptr|none)\\b",
           "name": "constant.language.slang"
+        },
+        {
+          "match": "\\b[A-Z][A-Z0-9_]+\\b",
+          "name": "constant.other.slang"
         }
       ]
     },
@@ -1770,7 +1774,7 @@
               "name": "punctuation.separator.semantic.slang"
             },
             "2": {
-              "name": "constant.other.semantic.slang"
+              "name": "constant.other.slang"
             }
           }
         },
@@ -1781,7 +1785,7 @@
               "name": "punctuation.separator.semantic.slang"
             },
             "2": {
-              "name": "constant.other.semantic.slang"
+              "name": "constant.other.slang"
             }
           }
         },

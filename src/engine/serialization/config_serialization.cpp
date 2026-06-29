@@ -88,6 +88,88 @@ static void RelaxFromJson(const nlohmann::json& r, Core::RELAXParams& p)
     p.enableAntiFirefly = getBool("enableAntiFirefly", p.enableAntiFirefly);
 }
 
+static nlohmann::json ReblurToJson(const Core::ReBLURParams& rb)
+{
+    return {
+        {"denoisingRange", rb.denoisingRange},
+        {"disocclusionThreshold", rb.disocclusionThreshold},
+        {"disocclusionThresholdAlternate", rb.disocclusionThresholdAlternate},
+        {"planeDistanceSensitivity", rb.planeDistanceSensitivity},
+        {"lobeAngleFraction", rb.lobeAngleFraction},
+        {"roughnessFraction", rb.roughnessFraction},
+        {"hitDistA", rb.hitDistA},
+        {"hitDistB", rb.hitDistB},
+        {"hitDistC", rb.hitDistC},
+        {"hitDistD", rb.hitDistD},
+        {"maxAccumulatedFrameNum", rb.maxAccumulatedFrameNum},
+        {"maxFastAccumulatedFrameNum", rb.maxFastAccumulatedFrameNum},
+        {"maxStabilizedFrameNum", rb.maxStabilizedFrameNum},
+        {"historyFixFrameNum", rb.historyFixFrameNum},
+        {"historyFixBasePixelStride", rb.historyFixBasePixelStride},
+        {"fastHistoryClampingSigmaScale", rb.fastHistoryClampingSigmaScale},
+        {"diffusePrepassBlurRadius", rb.diffusePrepassBlurRadius},
+        {"specularPrepassBlurRadius", rb.specularPrepassBlurRadius},
+        {"minBlurRadius", rb.minBlurRadius},
+        {"maxBlurRadius", rb.maxBlurRadius},
+        {"minHitDistanceWeight", rb.minHitDistanceWeight},
+        {"antilagLuminanceSigmaScale", rb.antilagLuminanceSigmaScale},
+        {"antilagLuminanceSensitivity", rb.antilagLuminanceSensitivity},
+        {"stabilizationStrength", rb.stabilizationStrength},
+        {"fireflySuppressorMinRelativeScale", rb.fireflySuppressorMinRelativeScale},
+        {"specProbThresholdMvLow", rb.specProbThresholdMvLow},
+        {"specProbThresholdMvHigh", rb.specProbThresholdMvHigh},
+        {"convergenceS", rb.convergenceS},
+        {"convergenceB", rb.convergenceB},
+        {"convergenceP", rb.convergenceP},
+        {"hitDistanceReconstructionMode", rb.hitDistanceReconstructionMode},
+        {"enablePrepass", rb.enablePrepass},
+        {"enableAntiFirefly", rb.enableAntiFirefly},
+        {"enableTemporalStabilization", rb.enableTemporalStabilization},
+    };
+}
+
+static void ReblurFromJson(const nlohmann::json& r, Core::ReBLURParams& p)
+{
+    auto getBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
+    auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
+    auto getFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
+
+    p.denoisingRange = getFloat("denoisingRange", p.denoisingRange);
+    p.disocclusionThreshold = getFloat("disocclusionThreshold", p.disocclusionThreshold);
+    p.disocclusionThresholdAlternate = getFloat("disocclusionThresholdAlternate", p.disocclusionThresholdAlternate);
+    p.planeDistanceSensitivity = getFloat("planeDistanceSensitivity", p.planeDistanceSensitivity);
+    p.lobeAngleFraction = getFloat("lobeAngleFraction", p.lobeAngleFraction);
+    p.roughnessFraction = getFloat("roughnessFraction", p.roughnessFraction);
+    p.hitDistA = getFloat("hitDistA", p.hitDistA);
+    p.hitDistB = getFloat("hitDistB", p.hitDistB);
+    p.hitDistC = getFloat("hitDistC", p.hitDistC);
+    p.hitDistD = getFloat("hitDistD", p.hitDistD);
+    p.maxAccumulatedFrameNum = getFloat("maxAccumulatedFrameNum", p.maxAccumulatedFrameNum);
+    p.maxFastAccumulatedFrameNum = getFloat("maxFastAccumulatedFrameNum", p.maxFastAccumulatedFrameNum);
+    p.maxStabilizedFrameNum = getFloat("maxStabilizedFrameNum", p.maxStabilizedFrameNum);
+    p.historyFixFrameNum = getFloat("historyFixFrameNum", p.historyFixFrameNum);
+    p.historyFixBasePixelStride = getFloat("historyFixBasePixelStride", p.historyFixBasePixelStride);
+    p.fastHistoryClampingSigmaScale = getFloat("fastHistoryClampingSigmaScale", p.fastHistoryClampingSigmaScale);
+    p.diffusePrepassBlurRadius = getFloat("diffusePrepassBlurRadius", p.diffusePrepassBlurRadius);
+    p.specularPrepassBlurRadius = getFloat("specularPrepassBlurRadius", p.specularPrepassBlurRadius);
+    p.minBlurRadius = getFloat("minBlurRadius", p.minBlurRadius);
+    p.maxBlurRadius = getFloat("maxBlurRadius", p.maxBlurRadius);
+    p.minHitDistanceWeight = getFloat("minHitDistanceWeight", p.minHitDistanceWeight);
+    p.antilagLuminanceSigmaScale = getFloat("antilagLuminanceSigmaScale", p.antilagLuminanceSigmaScale);
+    p.antilagLuminanceSensitivity = getFloat("antilagLuminanceSensitivity", p.antilagLuminanceSensitivity);
+    p.stabilizationStrength = getFloat("stabilizationStrength", p.stabilizationStrength);
+    p.fireflySuppressorMinRelativeScale = getFloat("fireflySuppressorMinRelativeScale", p.fireflySuppressorMinRelativeScale);
+    p.specProbThresholdMvLow = getFloat("specProbThresholdMvLow", p.specProbThresholdMvLow);
+    p.specProbThresholdMvHigh = getFloat("specProbThresholdMvHigh", p.specProbThresholdMvHigh);
+    p.convergenceS = getFloat("convergenceS", p.convergenceS);
+    p.convergenceB = getFloat("convergenceB", p.convergenceB);
+    p.convergenceP = getFloat("convergenceP", p.convergenceP);
+    p.hitDistanceReconstructionMode = getInt("hitDistanceReconstructionMode", p.hitDistanceReconstructionMode);
+    p.enablePrepass = getBool("enablePrepass", p.enablePrepass);
+    p.enableAntiFirefly = getBool("enableAntiFirefly", p.enableAntiFirefly);
+    p.enableTemporalStabilization = getBool("enableTemporalStabilization", p.enableTemporalStabilization);
+}
+
 nlohmann::json ToJson(const Core::ReSTIRParams& p)
 {
     return {
@@ -118,6 +200,7 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"atrous", nlohmann::json{{"iterations", p.atrous.iterations}, {"sigmaLuminance", p.atrous.sigmaLuminance}, {"sigmaNormal", p.atrous.sigmaNormal}, {"sigmaDepth", p.atrous.sigmaDepth}}},
         {"svgf", nlohmann::json{{"alphaMin", p.svgf.alphaMin}, {"gradientThreshold", p.svgf.gradientThreshold}, {"sigmaLuminance", p.svgf.sigmaLuminance}, {"sigmaNormal", p.svgf.sigmaNormal}, {"sigmaDepth", p.svgf.sigmaDepth}, {"atrousIterations", p.svgf.atrousIterations}}},
         {"relax", RelaxToJson(p.relax)},
+        {"reblur", ReblurToJson(p.reblur)},
     };
 }
 
@@ -173,6 +256,9 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     }
     if (r.contains("relax") && r["relax"].is_object()) {
         RelaxFromJson(r["relax"], p.relax);
+    }
+    if (r.contains("reblur") && r["reblur"].is_object()) {
+        ReblurFromJson(r["reblur"], p.reblur);
     }
 }
 

@@ -60,7 +60,7 @@ inline const StringID StringID::Invalid{};
 
 #ifdef WDEBUG
 inline StringID operator""_sid(const char* str, size_t len) {
-    return StringID(str, len);
+    return {str, len};
 }
 #else
 constexpr StringID operator""_sid(const char* str, size_t len) {

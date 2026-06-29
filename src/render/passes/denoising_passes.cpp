@@ -11,6 +11,7 @@
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_config.h"
 #include "render/shaders/relax_interop.h"
+#include "render/shaders/reblur_interop.h"
 
 namespace Render
 {
@@ -981,6 +982,543 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const StringID gbufferTwo = targets.gbufferTwo;
 
         auto& pass = graph.AddPass(SID("[ReLAX] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SCENE_DATA_BUFFER);
+        pass.ReadSampledImage(diffInput);
+        pass.ReadSampledImage(specInput);
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(gbufferTwo);
+        pass.ReadSampledImage(depth);
+        pass.WriteStorageImage(noisyInput);
+
+        const uint32_t fullWidth = fullRenderExtent[0];
+        const uint32_t fullHeight = fullRenderExtent[1];
+        const int32_t skyboxIndex = viewFamily.skyboxIndex;
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode, pixelScale, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            ReSTIRRemodulatePushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .sceneDataIndex = 0,
+                .diffuseIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
+                .specularIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(noisyInput),
+                .width = fullWidth,
+                .height = fullHeight,
+                .outputMode = remodulateOutputMode,
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+                .pixelScale = pixelScale,
+                .skyboxIndex = skyboxIndex,
+                .iblIntensity = iblIntensity,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (fullWidth + 7) / 8, (fullHeight + 7) / 8, 1);
+        });
+    }
+}
+
+void SetupReBLURDenoiser(RenderGraph& graph,
+                         PipelineManager* pipelineManager,
+                         const Core::ViewFamily& viewFamily,
+                         Core::Array<uint32_t, 2> renderExtent,
+                         Core::Array<uint32_t, 2> fullRenderExtent,
+                         const RenderTargets& targets,
+                         const Core::ReBLURParams& params,
+                         uint64_t frameNumber,
+                         uint32_t remodulateOutputMode,
+                         uint32_t pixelScale,
+                         float iblIntensity)
+{
+    const uint32_t width = renderExtent[0];
+    const uint32_t height = renderExtent[1];
+    const uint32_t tilesW = (width + 15) / 16;
+    const uint32_t tilesH = (height + 15) / 16;
+
+    const StringID gbufferOne = targets.gbufferOne;
+    const StringID depth = targets.depthCopy;
+    const StringID specInput = targets.intermediateTwo;
+    const StringID diffInput = targets.intermediateOne;
+    const StringID noisyInput = targets.colorOutput;
+
+    // Build ReblurDiffuseSpecularConstants (geometry block matches RELAX so relax_utils helpers are reused).
+    const glm::mat4& view = viewFamily.mainView.currentViewData.view;
+    const glm::mat4& proj = viewFamily.mainView.currentViewData.proj;
+    const glm::mat4& prevView = viewFamily.mainView.previousViewData.view;
+    const glm::mat4& prevProj = viewFamily.mainView.previousViewData.proj;
+
+    const glm::mat4 invView = glm::inverse(view);
+    const glm::mat4 invPrevView = glm::inverse(prevView);
+    const float tanHalfFovX = 1.0f / glm::abs(proj[0][0]);
+    const float tanHalfFovY = 1.0f / glm::abs(proj[1][1]);
+
+    const glm::mat4 rotView = glm::mat4(glm::mat3(view));
+
+    const glm::vec3 right = glm::vec3(invView[0]);
+    const glm::vec3 up = glm::vec3(invView[1]);
+    const glm::vec3 forward = -glm::vec3(invView[2]);
+    const glm::vec3 prevRight = glm::vec3(invPrevView[0]);
+    const glm::vec3 prevUp = glm::vec3(invPrevView[1]);
+    const glm::vec3 prevForward = -glm::vec3(invPrevView[2]);
+
+    const glm::vec3 camPos = glm::vec3(invView[3]);
+    const glm::vec3 prevCamPos = glm::vec3(invPrevView[3]);
+    const glm::vec3 translationDelta = prevCamPos - camPos;
+
+    glm::mat4 viewToWorldPrev = glm::mat4(glm::mat3(invPrevView));
+    viewToWorldPrev[3] = glm::vec4(translationDelta, 1.0f);
+    const glm::mat4 worldToViewPrev = glm::inverse(viewToWorldPrev);
+
+    glm::mat4 viewToWorld = glm::mat4(glm::mat3(invView));
+    viewToWorld[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+    const bool bFirstFrame = !graph.HasTexture(SID("reblur_spec_illum_history"));
+
+    ReblurDiffuseSpecularConstants rc{};
+
+    rc.gWorldToClip = proj * rotView;
+    rc.gWorldToClipPrev = prevProj * worldToViewPrev;
+
+    glm::mat4 worldToViewPrevPosZ = worldToViewPrev;
+    worldToViewPrevPosZ[0][2] = -worldToViewPrevPosZ[0][2];
+    worldToViewPrevPosZ[1][2] = -worldToViewPrevPosZ[1][2];
+    worldToViewPrevPosZ[2][2] = -worldToViewPrevPosZ[2][2];
+    worldToViewPrevPosZ[3][2] = -worldToViewPrevPosZ[3][2];
+    rc.gWorldToViewPrev = worldToViewPrevPosZ;
+    rc.gWorldPrevToWorld = glm::mat4(1.0f);
+    rc.gViewToWorld = viewToWorld;
+
+    rc.gRotatorPre = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+    rc.gFrustumForward = glm::vec4(forward, 0.0f);
+    rc.gFrustumRight = glm::vec4(right * tanHalfFovX, 0.0f);
+    rc.gFrustumUp = glm::vec4(up * tanHalfFovY, 0.0f);
+    rc.gPrevFrustumForward = glm::vec4(prevForward, 0.0f);
+    rc.gPrevFrustumRight = glm::vec4(prevRight * tanHalfFovX, 0.0f);
+    rc.gPrevFrustumUp = glm::vec4(prevUp * tanHalfFovY, 0.0f);
+    rc.gCameraDelta = glm::vec4(prevCamPos - camPos, 0.0f);
+    rc.gMvScale = glm::vec4(0.5f, 0.5f, 1.0f, 0.0f);
+
+    rc.gJitter = glm::vec2(0.0f);
+    rc.gResolutionScale = glm::vec2(1.0f);
+    rc.gRectOffset = glm::vec2(0.0f);
+    rc.gRectSizeInv = glm::vec2(1.0f / width, 1.0f / height);
+    rc.gRectSizePrev = glm::vec2(width, height);
+    rc.gResourceSizeInv = rc.gRectSizeInv;
+    rc.gResourceSizeInvPrev = rc.gRectSizeInv;
+    rc.gResourceSize = glm::vec2(width, height);
+    rc.gRectSize = glm::ivec2(width, height);
+
+    rc.depthLinearizeMult = -proj[3][2];
+    rc.depthLinearizeAdd = proj[2][2];
+    if (rc.depthLinearizeMult * rc.depthLinearizeAdd < 0.0f) { rc.depthLinearizeAdd = -rc.depthLinearizeAdd; }
+
+    rc.gHitDistParams = glm::vec4(params.hitDistA, params.hitDistB, params.hitDistC, params.hitDistD);
+    rc.gConvergenceSettings = glm::vec4(params.convergenceS, params.convergenceB, params.convergenceP, 0.0f);
+    rc.gAntilagSettings = glm::vec2(params.antilagLuminanceSigmaScale, params.antilagLuminanceSensitivity);
+    rc.gSpecProbabilityThresholdsForMvModification = glm::vec2(params.specProbThresholdMvLow, params.specProbThresholdMvHigh);
+
+    rc.gMaxAccumulatedFrameNum = params.maxAccumulatedFrameNum;
+    rc.gMaxFastAccumulatedFrameNum = params.maxFastAccumulatedFrameNum;
+    rc.gMaxStabilizedFrameNum = params.enableTemporalStabilization ? params.maxStabilizedFrameNum : 0.0f;
+    rc.gDisocclusionThreshold = params.disocclusionThreshold;
+    rc.gDisocclusionThresholdAlternate = params.disocclusionThresholdAlternate;
+    rc.gDenoisingRange = params.denoisingRange;
+    rc.gPlaneDistSensitivity = params.planeDistanceSensitivity;
+    rc.gFramerateScale = params.framerateScale;
+    rc.gMinBlurRadius = params.minBlurRadius;
+    rc.gMaxBlurRadius = params.maxBlurRadius;
+    rc.gDiffPrepassBlurRadius = params.diffusePrepassBlurRadius;
+    rc.gSpecPrepassBlurRadius = params.specularPrepassBlurRadius;
+    rc.gLobeAngleFraction = params.lobeAngleFraction;
+    rc.gRoughnessFraction = params.roughnessFraction;
+    rc.gHistoryFixFrameNum = params.historyFixFrameNum;
+    rc.gHistoryFixBasePixelStride = params.historyFixBasePixelStride;
+    rc.gFastHistoryClampingSigmaScale = params.fastHistoryClampingSigmaScale;
+    rc.gStabilizationStrength = params.stabilizationStrength;
+    rc.gFireflySuppressorMinRelativeScale = params.fireflySuppressorMinRelativeScale;
+    rc.gMinHitDistanceWeight = params.minHitDistanceWeight;
+    rc.gOrthoMode = 0.0f;
+    rc.gUnproject = tanHalfFovY * 2.0f / static_cast<float>(height);
+    rc.gFrameIndex = static_cast<uint32_t>(frameNumber);
+    rc.gResetHistory = bFirstFrame ? 1u : 0u;
+    rc.gAntiFirefly = params.enableAntiFirefly ? 1u : 0u;
+    rc.gHitDistanceReconstructionMode = static_cast<uint32_t>(params.hitDistanceReconstructionMode);
+
+    // Upload constants buffer
+    graph.CreateBuffer(SID("reblur_constants"), sizeof(ReblurDiffuseSpecularConstants));
+    UploadAllocation rcAlloc = graph.AllocateTransient(sizeof(ReblurDiffuseSpecularConstants));
+    memcpy(rcAlloc.ptr, &rc, sizeof(ReblurDiffuseSpecularConstants)); {
+        auto& pass = graph.AddPass(SID("[ReBLUR] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, ResourceCategory::Untagged);
+        pass.WriteTransferBuffer(SID("reblur_constants"));
+        pass.Execute([offset = rcAlloc.offset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            VkBufferCopy2 region{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = offset, .dstOffset = 0, .size = sizeof(ReblurDiffuseSpecularConstants)};
+            VkCopyBufferInfo2 info{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = graph.GetTransientUploadBuffer(),
+                .dstBuffer = graph.GetBufferHandle(SID("reblur_constants")),
+                .regionCount = 1,
+                .pRegions = &region
+            };
+            vkCmdCopyBuffer2(cmd, &info);
+        });
+    }
+
+    const TextureInfo colorInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1};
+    const TextureInfo histLenInfo{VK_FORMAT_R16_SFLOAT, width, height, 1};
+    const TextureInfo hitDistInfo{VK_FORMAT_R16_SFLOAT, width, height, 1};
+    const TextureInfo reprConfInfo{VK_FORMAT_R8_UNORM, width, height, 1};
+    const TextureInfo tilesInfo{VK_FORMAT_R8_UNORM, tilesW, tilesH, 1};
+    const TextureInfo viewZInfo{VK_FORMAT_R32_SFLOAT, width, height, 1};
+
+    // Pass 0: Generate viewZ
+    {
+        graph.CreateTexture(SID("reblur_viewz"), viewZInfo, {std::nullopt}, true);
+        graph.CarryTextureToNextFrame(SID("reblur_viewz"), SID("reblur_viewz_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+
+        auto& pass = graph.AddPass(SID("[ReBLUR] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SID("reblur_constants"));
+        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(gbufferOne);
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
+        pass.WriteStorageImage(SID("reblur_viewz"));
+        pass.Execute([pipelineManager, depth, gbufferOne, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            ReblurGenerateViewZPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_viewz")),
+                .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_generate_viewz"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
+    }
+
+    // Pass 1: Classify tiles
+    {
+        graph.CreateTexture(SID("reblur_tiles"), tilesInfo, {std::nullopt}, true);
+
+        auto& pass = graph.AddPass(SID("[ReBLUR] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SID("reblur_constants"));
+        pass.ReadSampledImage(depth);
+        pass.WriteStorageImage(SID("reblur_tiles"));
+        pass.Execute([pipelineManager, depth, tilesW, tilesH, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            ReblurClassifyTilesPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .tilesOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_tiles")),
+                .pixelScale = pixelScale,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_classify_tiles"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, tilesW, tilesH, 1);
+        });
+    }
+
+    // Pass 2: Front-end pack (raw RGB + hitDist -> YCoCg + hitDist)
+    graph.CreateTexture(SID("reblur_spec_packed"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_diff_packed"), colorInfo, {std::nullopt}, true);
+    {
+        auto& pass = graph.AddPass(SID("[ReBLUR] Pack"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SID("reblur_constants"));
+        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(specInput);
+        pass.ReadSampledImage(diffInput);
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
+        pass.WriteStorageImage(SID("reblur_spec_packed"));
+        pass.WriteStorageImage(SID("reblur_diff_packed"));
+        pass.Execute([pipelineManager, depth, gbufferOne, specInput, diffInput, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            ReblurPackPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .specInputIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
+                .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
+                .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_packed")),
+                .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_packed")),
+                .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_pack"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
+    }
+
+    // Pass 3: Prepass (optional)
+    if (params.enablePrepass) {
+        graph.CreateTexture(SID("reblur_spec_prepass"), colorInfo, {std::nullopt}, true);
+        graph.CreateTexture(SID("reblur_diff_prepass"), colorInfo, {std::nullopt}, true);
+
+        auto& pass = graph.AddPass(SID("[ReBLUR] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SID("reblur_constants"));
+        pass.ReadSampledImage(SID("reblur_tiles"));
+        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(SID("reblur_spec_packed"));
+        pass.ReadSampledImage(SID("reblur_diff_packed"));
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
+        pass.WriteStorageImage(SID("reblur_spec_prepass"));
+        pass.WriteStorageImage(SID("reblur_diff_prepass"));
+        pass.Execute([pipelineManager, depth, gbufferOne, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            ReblurPrepassPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .specInputIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_packed")),
+                .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_packed")),
+                .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_prepass")),
+                .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_prepass")),
+                .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_prepass"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
+        });
+    }
+
+    const StringID specIn = params.enablePrepass ? SID("reblur_spec_prepass") : SID("reblur_spec_packed");
+    const StringID diffIn = params.enablePrepass ? SID("reblur_diff_prepass") : SID("reblur_diff_packed");
+
+    graph.CreateTexture(SID("reblur_spec_accum"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_diff_accum"), colorInfo, {std::nullopt}, true);
+    // Fast (responsive) history is NRD-faithful single-channel luma (R16F), not RGBA.
+    graph.CreateTexture(SID("reblur_spec_fast"), histLenInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_diff_fast"), histLenInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_history_length"), histLenInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_spec_hit_dist"), hitDistInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_spec_reproj_conf"), reprConfInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_prev_nr"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_spec_hfix"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_diff_hfix"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_spec_blur"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_diff_blur"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_spec_hist"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_diff_hist"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_spec_stab"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture(SID("reblur_diff_stab"), colorInfo, {std::nullopt}, true);
+
+    graph.CarryTextureToNextFrame(SID("reblur_spec_hist"), SID("reblur_spec_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("reblur_diff_hist"), SID("reblur_diff_illum_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("reblur_spec_fast"), SID("reblur_spec_fast_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("reblur_diff_fast"), SID("reblur_diff_fast_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("reblur_history_length"), SID("reblur_history_length_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("reblur_spec_hit_dist"), SID("reblur_spec_hit_dist_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("reblur_prev_nr"), SID("reblur_prev_nr_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("reblur_spec_stab"), SID("reblur_spec_stab_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("reblur_diff_stab"), SID("reblur_diff_stab_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    // Pass 4: Temporal accumulation
+    {
+        auto& pass = graph.AddPass(SID("[ReBLUR] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SID("reblur_constants"));
+        pass.ReadSampledImage(SID("reblur_tiles"));
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(specIn);
+        pass.ReadSampledImage(diffIn);
+        if (graph.HasTexture(SID("reblur_spec_illum_history"))) { pass.ReadSampledImage(SID("reblur_spec_illum_history")); }
+        if (graph.HasTexture(SID("reblur_diff_illum_history"))) { pass.ReadSampledImage(SID("reblur_diff_illum_history")); }
+        if (graph.HasTexture(SID("reblur_spec_fast_history"))) { pass.ReadSampledImage(SID("reblur_spec_fast_history")); }
+        if (graph.HasTexture(SID("reblur_diff_fast_history"))) { pass.ReadSampledImage(SID("reblur_diff_fast_history")); }
+        if (graph.HasTexture(SID("reblur_history_length_history"))) { pass.ReadSampledImage(SID("reblur_history_length_history")); }
+        if (graph.HasTexture(SID("reblur_spec_hit_dist_history"))) { pass.ReadSampledImage(SID("reblur_spec_hit_dist_history")); }
+        if (graph.HasTexture(SID("reblur_prev_nr_history"))) { pass.ReadSampledImage(SID("reblur_prev_nr_history")); }
+        if (graph.HasTexture(SID("reblur_viewz_history"))) { pass.ReadSampledImage(SID("reblur_viewz_history")); }
+        else { pass.ReadSampledImage(SID("reblur_viewz")); }
+        if (graph.HasTexture(SID("restir_confidence"))) { pass.ReadSampledImage(SID("restir_confidence")); }
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
+        pass.WriteStorageImage(SID("reblur_spec_accum"));
+        pass.WriteStorageImage(SID("reblur_diff_accum"));
+        pass.WriteStorageImage(SID("reblur_spec_fast"));
+        pass.WriteStorageImage(SID("reblur_diff_fast"));
+        pass.WriteStorageImage(SID("reblur_history_length"));
+        pass.WriteStorageImage(SID("reblur_spec_hit_dist"));
+        pass.WriteStorageImage(SID("reblur_spec_reproj_conf"));
+        pass.WriteStorageImage(SID("reblur_prev_nr"));
+
+        pass.Execute([pipelineManager, gbufferOne, depth, specIn, diffIn, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const bool hasHistory = graph.HasTexture(SID("reblur_spec_illum_history"));
+            const StringID fallbackSpec = hasHistory ? SID("reblur_spec_illum_history") : specIn;
+            const StringID fallbackDiff = hasHistory ? SID("reblur_diff_illum_history") : diffIn;
+            // Fast history is R16F luma; first-frame fallback must be an R16F source (value is unused under reset), not the RGBA input.
+            const StringID fallbackSpecFast = graph.HasTexture(SID("reblur_spec_fast_history")) ? SID("reblur_spec_fast_history") : SID("reblur_history_length");
+            const StringID fallbackDiffFast = graph.HasTexture(SID("reblur_diff_fast_history")) ? SID("reblur_diff_fast_history") : SID("reblur_history_length");
+            const StringID fallbackHistLen = graph.HasTexture(SID("reblur_history_length_history")) ? SID("reblur_history_length_history") : SID("reblur_history_length");
+            const StringID fallbackSpecHitD = graph.HasTexture(SID("reblur_spec_hit_dist_history")) ? SID("reblur_spec_hit_dist_history") : SID("reblur_spec_hit_dist");
+            const StringID fallbackPrevNR = graph.HasTexture(SID("reblur_prev_nr_history")) ? SID("reblur_prev_nr_history") : SID("reblur_prev_nr");
+            const StringID fallbackViewZ = graph.HasTexture(SID("reblur_viewz_history")) ? SID("reblur_viewz_history") : SID("reblur_viewz");
+
+            ReblurTemporalAccumulationPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .prevNormalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(fallbackPrevNR),
+                .prevViewZIndex = graph.GetSampledImageViewDescriptorIndex(fallbackViewZ),
+                .prevHistoryLengthIndex = graph.GetSampledImageViewDescriptorIndex(fallbackHistLen),
+                .specInputIndex = graph.GetSampledImageViewDescriptorIndex(specIn),
+                .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
+                .historySpecFastIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpecFast),
+                .historyDiffFastIndex = graph.GetSampledImageViewDescriptorIndex(fallbackDiffFast),
+                .historySpecIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpec),
+                .historyDiffIndex = graph.GetSampledImageViewDescriptorIndex(fallbackDiff),
+                .prevSpecHitDistIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpecHitD),
+                .outHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_history_length")),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_accum")),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_accum")),
+                .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_fast")),
+                .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_fast")),
+                .outSpecHitDistIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_hit_dist")),
+                .outSpecReprojConfidenceIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_reproj_conf")),
+                .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_prev_nr")),
+                .pixelScale = pixelScale,
+                .confidenceIndex = graph.HasTexture(SID("restir_confidence")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_confidence")) : ~0u,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_temporal_accumulation"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 15) / 16, 1);
+        });
+    }
+
+    // Pass 5: History fix
+    {
+        auto& pass = graph.AddPass(SID("[ReBLUR] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SID("reblur_constants"));
+        pass.ReadSampledImage(SID("reblur_tiles"));
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(SID("reblur_history_length"));
+        pass.ReadSampledImage(SID("reblur_spec_accum"));
+        pass.ReadSampledImage(SID("reblur_diff_accum"));
+        pass.ReadSampledImage(SID("reblur_spec_fast"));
+        pass.ReadSampledImage(SID("reblur_diff_fast"));
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
+        pass.WriteStorageImage(SID("reblur_spec_hfix"));
+        pass.WriteStorageImage(SID("reblur_diff_hfix"));
+        pass.Execute([pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            ReblurHistoryFixPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_history_length")),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_accum")),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_accum")),
+                .specFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_fast")),
+                .diffFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_fast")),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_hfix")),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_hfix")),
+                .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_history_fix"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
+    }
+
+    // Passes 6 & 7: Blur and Post-Blur (one pipeline, isPostBlur toggles radius). Post-blur output is the carried slow history.
+    auto addBlur = [&](StringID passName, StringID specSrc, StringID diffSrc, StringID specDst, StringID diffDst, uint32_t isPostBlur) {
+        auto& pass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SID("reblur_constants"));
+        pass.ReadSampledImage(SID("reblur_tiles"));
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(SID("reblur_history_length"));
+        pass.ReadSampledImage(SID("reblur_spec_hit_dist"));
+        pass.ReadSampledImage(specSrc);
+        pass.ReadSampledImage(diffSrc);
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
+        pass.WriteStorageImage(specDst);
+        pass.WriteStorageImage(diffDst);
+        pass.Execute([pipelineManager, gbufferOne, depth, specSrc, diffSrc, specDst, diffDst, isPostBlur, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            ReblurBlurPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_history_length")),
+                .specHitDistIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_hit_dist")),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex(specSrc),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffSrc),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specDst),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffDst),
+                .isPostBlur = isPostBlur,
+                .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_blur"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
+    };
+    addBlur(SID("[ReBLUR] Blur"), SID("reblur_spec_hfix"), SID("reblur_diff_hfix"), SID("reblur_spec_blur"), SID("reblur_diff_blur"), 0u);
+    addBlur(SID("[ReBLUR] Post-Blur"), SID("reblur_spec_blur"), SID("reblur_diff_blur"), SID("reblur_spec_hist"), SID("reblur_diff_hist"), 1u);
+
+    // Pass 8: Temporal stabilization (writes stabilized history + final RGB into intermediates)
+    {
+        auto& pass = graph.AddPass(SID("[ReBLUR] Temporal Stabilization"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        pass.ReadBuffer(SID("reblur_constants"));
+        pass.ReadSampledImage(SID("reblur_tiles"));
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(SID("reblur_history_length"));
+        pass.ReadSampledImage(SID("reblur_spec_hist"));
+        pass.ReadSampledImage(SID("reblur_diff_hist"));
+        if (graph.HasTexture(SID("reblur_spec_stab_history"))) { pass.ReadSampledImage(SID("reblur_spec_stab_history")); }
+        if (graph.HasTexture(SID("reblur_diff_stab_history"))) { pass.ReadSampledImage(SID("reblur_diff_stab_history")); }
+        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
+        pass.WriteStorageImage(SID("reblur_spec_stab"));
+        pass.WriteStorageImage(SID("reblur_diff_stab"));
+        pass.WriteStorageImage(specInput);
+        pass.WriteStorageImage(diffInput);
+        pass.Execute([pipelineManager, gbufferOne, depth, specInput, diffInput, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const StringID fallbackSpecStab = graph.HasTexture(SID("reblur_spec_stab_history")) ? SID("reblur_spec_stab_history") : SID("reblur_spec_hist");
+            const StringID fallbackDiffStab = graph.HasTexture(SID("reblur_diff_stab_history")) ? SID("reblur_diff_stab_history") : SID("reblur_diff_hist");
+            ReblurStabilizationPushConstant pc{
+                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_history_length")),
+                .specHistIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_hist")),
+                .diffHistIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_hist")),
+                .prevSpecStabIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpecStab),
+                .prevDiffStabIndex = graph.GetSampledImageViewDescriptorIndex(fallbackDiffStab),
+                .outSpecStabIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_stab")),
+                .outDiffStabIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_stab")),
+                .outSpecFinalIndex = graph.GetStorageImageViewDescriptorIndex(specInput),
+                .outDiffFinalIndex = graph.GetStorageImageViewDescriptorIndex(diffInput),
+                .pixelScale = pixelScale,
+                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_stabilization"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
+    }
+
+    // Pass 9: Remodulate denoised diff/spec into final color (reuses the ReSTIR remodulate shader).
+    {
+        const StringID gbufferTwo = targets.gbufferTwo;
+
+        auto& pass = graph.AddPass(SID("[ReBLUR] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);

@@ -365,6 +365,10 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/relax_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/include/relax_interop.slang
 )
+preprocess_shader_interop(
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/reblur_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/include/reblur_interop.slang
+)
 
 copy_shader_macros(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/restir_features_macros.h
@@ -395,6 +399,8 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/restir_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/regir_hash.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sobol_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/relax_utils.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/reblur_utils.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/reblur_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sigma_utils.slang")
 
 compile_shaders(will-engine
@@ -521,6 +527,14 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_history_clamping.slang compute RelaxHistoryClampingMain relax_history_clamping
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_atrous.slang compute RelaxAtrousMain relax_atrous
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_antifirefly.slang compute RelaxAntiFireflyMain relax_antifirefly
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_pack.slang compute ReblurPackMain reblur_pack
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_generate_viewz.slang compute ReblurGenerateViewZMain reblur_generate_viewz
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_classify_tiles.slang compute ReblurClassifyTilesMain reblur_classify_tiles
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_prepass.slang compute ReblurPrepassMain reblur_prepass
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_temporal_accumulation.slang compute ReblurTemporalAccumulationMain reblur_temporal_accumulation
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_history_fix.slang compute ReblurHistoryFixMain reblur_history_fix
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_blur.slang compute ReblurBlurMain reblur_blur
+        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_stabilization.slang compute ReblurStabilizationMain reblur_stabilization
         ${CMAKE_SOURCE_DIR}/shaders/post-process/tonemapping.slang compute ComputeSDRTonemap tonemap_sdr
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeBuildHistogramExposure exposure_build_histogram
         ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeAverageExposure exposure_calculate_average
