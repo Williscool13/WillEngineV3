@@ -1,0 +1,40 @@
+# clang-format config for Slang shaders (*.slang).
+# Scoped to shaders/ on purpose: clang-format searches upward from the file, so this
+# never applies to C++ under src/. Slang is C/HLSL-like, so Language: Cpp is correct.
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+# Do not reflow lines: shader expressions/signatures are intentionally long.
+# clang-format acts as a brace/indent/spacing normalizer only.
+ColumnLimit: 0
+
+# Functions/structs open on their own line; control statements keep the brace attached
+# (matches the dominant style in shaders/ and the [shader(...)] entry points).
+BreakBeforeBraces: Linux
+
+# Respect "always use braces" - never collapse onto one line.
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+
+# No column-aligned padding.
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: false
+AlignTrailingComments: false
+AlignOperands: false
+AlignArrayOfStructures: None
+
+PointerAlignment: Left
+SpaceBeforeParens: ControlStatements
+IndentCaseLabels: true
+NamespaceIndentation: None
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+SortIncludes: false
+ReflowComments: false

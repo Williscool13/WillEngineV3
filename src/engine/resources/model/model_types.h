@@ -341,8 +341,23 @@ struct CurvedRampParams
     float lipHeight{0.02f};
 };
 
+/**
+ * centerColumnRadius insets the tread inner edge (and sizes the column). bShowCenterColumn only toggles the column mesh; the treads inset regardless.
+ */
+struct SpiralStaircaseParams
+{
+    int32_t stepCount{12};
+    float stepHeight{0.2f};
+    float outerRadius{1.5f};
+    float centerColumnRadius{0.25f};
+    float treadThickness{0.08f};
+    float degreesPerStep{30.0f};
+    int32_t arcSegments{6};
+    bool bShowCenterColumn{true};
+};
+
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
-    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams>;
+    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams>;
 
 /**
  * Input for an extruded 3D-text model.

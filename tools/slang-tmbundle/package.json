@@ -1,0 +1,22 @@
+{
+  "name": "slang",
+  "displayName": "Slang TextMate grammar",
+  "version": "1.0.0",
+  "engines": { "vscode": "*" },
+  "contributes": {
+    "languages": [
+      {
+        "id": "slang",
+        "aliases": ["Slang", "slang"],
+        "extensions": [".slang"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "slang",
+        "scopeName": "source.slang",
+        "path": "./slang.tmLanguage.json"
+      }
+    ]
+  }
+}
