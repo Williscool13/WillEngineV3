@@ -30,7 +30,7 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
     }
     Engine::WriteProjectConfig(cfg);
 }
@@ -54,7 +54,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride);
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -74,7 +74,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -504,6 +504,12 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::Separator();
 
+        if (ImGui::CollapsingHeader("Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (Widgets::SliderFloat("IBL Intensity##env", &state->lighting.iblIntensity, 0.0f, 2.0f)) {
+                changed = true;
+            }
+        }
+
         if (ImGui::CollapsingHeader("ReSTIR DI Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
             Core::ReSTIRParams& restir = state->debug.restir;
             const bool bReGIR = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
@@ -578,9 +584,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             ImGui::SeparatorText("Options");
             if (ImGui::Checkbox("Half Res", &restir.bHalfRes)) {
-                changed = true;
-            }
-            if (Widgets::SliderFloat("IBL Intensity##restir", &restir.iblIntensity, 0.0f, 2.0f)) {
                 changed = true;
             }
             const char* remodulateOutputModes[] = {"Both", "Diffuse Only", "Specular Only"};
@@ -701,7 +704,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             restir.denoiserMode = bRELAX ? Core::ReSTIRParams::DenoiserMode::RELAX : Core::ReSTIRParams::DenoiserMode::None;
         }
 
-        if (ImGui::CollapsingHeader("SIGMA Shadow Denoiser")) {
+        const bool bDefaultMode = state->lighting.lightingMode == Core::LightingMode::Default;
+
+        if (bDefaultMode && ImGui::CollapsingHeader("SIGMA Shadow Denoiser")) {
             Core::SIGMAParams& sigma = state->lighting.sigmaParams;
             static const Core::SIGMAParams sigmaDefaults{};
 
@@ -727,7 +732,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
-        if (ImGui::CollapsingHeader("Ground Truth Ambient Occlusion")) {
+        if (bDefaultMode && ImGui::CollapsingHeader("Ground Truth Ambient Occlusion")) {
             if (ImGui::Checkbox("Enable GTAO", &state->lighting.gtaoConfig.bEnabled)) { changed = true; }
         }
 

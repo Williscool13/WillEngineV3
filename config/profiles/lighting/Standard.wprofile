@@ -12,6 +12,8 @@
     "stepsPerSlice": 3.0,
     "thinOccluderCompensation": 0.0
   },
+  "lightingMode": 0,
+  "lightingShaderOverride": 12304496605836952073,
   "restir": {
     "adaptiveSpatialBoost": 3.0,
     "antilagStrength": 0.8999999761581421,
@@ -22,12 +24,21 @@
       "sigmaNormal": 128.0
     },
     "bAdaptiveSpatial": true,
+    "bEnableAntilag": false,
+    "bEnableConfidence": false,
+    "bEnableTemporal": true,
     "bHalfRes": true,
+    "bInitialVisibility": true,
     "bPermutationSampling": false,
+    "boilingFilterStrength": 0.20000000298023224,
+    "confidenceBlurRadius": 2,
+    "confidenceDarknessBias": 0.009999999776482582,
+    "confidenceHistoryLength": 4.0,
+    "confidenceSensitivity": 3.0,
     "confidenceStrength": 0.0,
     "denoiserMode": 3,
     "iblIntensity": 0.0,
-    "mode": 1,
+    "regirWClamp": 0.0,
     "relax": {
       "atrousIterations": 4,
       "denoisingRange": 1000.0,
@@ -64,6 +75,7 @@
       "specVarianceBoost": 1.0
     },
     "remodulateOutput": 0,
+    "restirWClamp": 0.0,
     "spatialMCap": 100,
     "spatialNeighbors": 3,
     "spatialPasses": 2,
@@ -77,5 +89,6 @@
       "sigmaNormal": 64.0
     },
     "temporalMCap": 200
-  }
+  },
+  "shadingShaderOverride": 11262630175972558216
 }

@@ -36,7 +36,7 @@
     "confidenceHistoryLength": 4.0,
     "confidenceSensitivity": 3.0,
     "confidenceStrength": 1.0,
-    "denoiserMode": 0,
+    "denoiserMode": 3,
     "iblIntensity": 0.0,
     "regirWClamp": 0.0,
     "relax": {
@@ -48,11 +48,11 @@
       "diffMaxFastAccumFrames": 6.0,
       "diffMaxLuminanceRelativeDifference": 3.0,
       "diffPhiLuminance": 2.0,
-      "disocclusionThreshold": 0.01,
+      "disocclusionThreshold": 0.009999999776482582,
       "enableAntiFirefly": true,
       "enablePrepass": false,
       "fastHistoryClampingSigmaScale": 2.0,
-      "historyAccelerationAmount": 0.3,
+      "historyAccelerationAmount": 0.30000001192092896,
       "historyFixBasePixelStride": 14.0,
       "historyFixEdgeStoppingNormalPower": 8.0,
       "historyFixFrameNum": 4.0,
@@ -61,13 +61,13 @@
       "historyResetTemporalSigmaScale": 0.5,
       "lobeAngleFraction": 0.5,
       "luminanceEdgeStoppingRelaxation": 1.0,
-      "minHitDistanceWeight": 0.2,
+      "minHitDistanceWeight": 0.20000000298023224,
       "normalEdgeStoppingRelaxation": 0.30000001192092896,
       "roughnessEdgeStoppingEnabled": true,
       "roughnessEdgeStoppingRelaxation": 1.0,
-      "roughnessFraction": 0.15,
+      "roughnessFraction": 0.15000000596046448,
       "specBlurRadius": 50.0,
-      "specLobeAngleSlack": 0.15,
+      "specLobeAngleSlack": 0.15000000596046448,
       "specMaxAccumFrames": 30.0,
       "specMaxFastAccumFrames": 6.0,
       "specMaxLuminanceRelativeDifference": 3.0,
@@ -88,7 +88,7 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 12
+    "temporalMCap": 6
   },
   "shadingShaderOverride": 11262630175972558216
 }

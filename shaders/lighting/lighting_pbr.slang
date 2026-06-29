@@ -89,7 +89,7 @@ void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_
         float3 irradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN);
         float3 reflectionDiffuse = irradiance * li.albedo.xyz;
         float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl);
-        ibl = (kD_ibl * reflectionDiffuse + reflectionSpecular) * gtao;
+        ibl = (kD_ibl * reflectionDiffuse + reflectionSpecular) * gtao * pc.iblIntensity;
     }
 
     float3 finalColor = directLight + ibl + li.emissiveRGB;

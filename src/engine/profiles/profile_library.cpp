@@ -60,7 +60,7 @@ uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames)
     return ListProfiles("lighting", outNames, maxNames);
 }
 
-bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::GTAOConfiguration& gtao, StringID& shadingOverride, StringID& lightingOverride)
+bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::GTAOConfiguration& gtao, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity)
 {
     const nlohmann::json j = ReadProfileJson("lighting", name);
     if (!j.is_object()) {
@@ -77,17 +77,25 @@ bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Cor
     if (j.contains("gtao") && j["gtao"].is_object()) {
         ConfigSerialization::FromJson(j["gtao"], gtao);
     }
+    // Migration: iblIntensity used to live inside the restir blob.
+    if (j.contains("iblIntensity") && j["iblIntensity"].is_number()) {
+        iblIntensity = j["iblIntensity"].get<float>();
+    }
+    else if (j.contains("restir") && j["restir"].is_object() && j["restir"].contains("iblIntensity") && j["restir"]["iblIntensity"].is_number()) {
+        iblIntensity = j["restir"]["iblIntensity"].get<float>();
+    }
     shadingOverride = j.contains("shadingShaderOverride") ? StringID(j["shadingShaderOverride"].get<uint64_t>()) : StringID{};
     lightingOverride = j.contains("lightingShaderOverride") ? StringID(j["lightingShaderOverride"].get<uint64_t>()) : StringID{};
     return true;
 }
 
-bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::GTAOConfiguration& gtao, StringID shadingOverride, StringID lightingOverride)
+bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::GTAOConfiguration& gtao, StringID shadingOverride, StringID lightingOverride, float iblIntensity)
 {
     nlohmann::json j;
     j["lightingMode"] = static_cast<uint32_t>(lightingMode);
     j["restir"] = ConfigSerialization::ToJson(restir);
     j["gtao"] = ConfigSerialization::ToJson(gtao);
+    j["iblIntensity"] = iblIntensity;
     if (shadingOverride) { j["shadingShaderOverride"] = shadingOverride.id; }
     if (lightingOverride) { j["lightingShaderOverride"] = lightingOverride.id; }
     return WriteProfileJson("lighting", name, j);

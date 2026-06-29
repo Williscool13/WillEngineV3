@@ -573,6 +573,64 @@ struct SIGMAParams
     float penumbraScale{1.f};
 };
 
+struct ReBLURParams
+{
+    // General
+    float denoisingRange{1000.f};
+    float disocclusionThreshold{0.01f};
+    float disocclusionThresholdAlternate{0.05f};
+    float planeDistanceSensitivity{0.02f};
+    float framerateScale{1.f};
+    float lobeAngleFraction{0.15f};
+    float roughnessFraction{0.15f};
+
+    // Hit distance normalization (ReblurHitDistanceParameters A/B/C/D)
+    float hitDistA{3.f};
+    float hitDistB{0.1f};
+    float hitDistC{20.f};
+    float hitDistD{-25.f};
+
+    // Accumulation (frames; 0 stabilized disables the stabilization pass)
+    float maxAccumulatedFrameNum{30.f};
+    float maxFastAccumulatedFrameNum{6.f};
+    float maxStabilizedFrameNum{30.f};
+
+    // History fix / clamping
+    float historyFixFrameNum{3.f};
+    float historyFixBasePixelStride{14.f};
+    float fastHistoryClampingSigmaScale{2.f};
+
+    // Prepass / blur radii (pixels)
+    float diffusePrepassBlurRadius{30.f};
+    float specularPrepassBlurRadius{50.f};
+    float minBlurRadius{1.f};
+    float maxBlurRadius{30.f};
+    float minHitDistanceWeight{0.1f};
+
+    // Antilag
+    float antilagLuminanceSigmaScale{2.f};
+    float antilagLuminanceSensitivity{3.f};
+
+    // Stabilization / firefly suppression
+    float stabilizationStrength{1.f};
+    float fireflySuppressorMinRelativeScale{2.f};
+
+    // Specular motion-vector modification thresholds (smoothstep over spec probability)
+    float specProbThresholdMvLow{0.5f};
+    float specProbThresholdMvHigh{0.9f};
+
+    // Convergence (REBLUR f = 1 / (1 + k*N))
+    float convergenceS{1.f};
+    float convergenceB{0.2f};
+    float convergenceP{0.8f};
+
+    // Feature toggles
+    int32_t hitDistanceReconstructionMode{0}; // 0 = off, 1 = AREA_3X3, 2 = AREA_5X5
+    bool enablePrepass{true};
+    bool enableAntiFirefly{true};
+    bool enableTemporalStabilization{true};
+};
+
 struct ReSTIRParams
 {
     bool bHalfRes{false};
@@ -582,7 +640,6 @@ struct ReSTIRParams
     float adaptiveSpatialBoost{1.0f};
     bool bEnableAntilag{false};
     float antilagStrength{0.5f};
-    float iblIntensity{1.0f};
     uint32_t spatialRadius{30};
     uint32_t spatialNeighbors{1};
     uint32_t spatialMCap{500};
@@ -603,7 +660,7 @@ struct ReSTIRParams
     uint32_t confidenceBlurRadius{2u};
 
     // todo: Disabled atrous and asvgf. Readd as needed
-    enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3 };
+    enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3, ReBLUR = 4 };
 
     DenoiserMode denoiserMode{DenoiserMode::None};
 
@@ -634,6 +691,8 @@ struct ReSTIRParams
     SVGFParams svgf{};
 
     RELAXParams relax{};
+
+    ReBLURParams reblur{};
 };
 
 struct ViewFamily
@@ -681,6 +740,7 @@ struct ViewFamily
     AntiAliasingConfiguration aaConfig{};
     PostProcessConfiguration postProcessConfig{};
     SIGMAParams sigmaParams{};
+    float iblIntensity{1.0f};
 
 
     // Debugging

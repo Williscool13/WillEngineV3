@@ -536,10 +536,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, renderExtent, targets, relax, frameNumber, remodulateOutputMode, restirPixelScale, restir.iblIntensity);
+                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, restirExtent, renderExtent, targets, relax, frameNumber, remodulateOutputMode, restirPixelScale, viewFamily.iblIntensity);
                     }
                     else {
-                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, restirPixelScale, restir.iblIntensity, frameNumber);
+                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, restirPixelScale, viewFamily.iblIntensity, frameNumber);
                     }
                     break;
                 }
@@ -557,11 +557,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 }
             }
 
-            if (viewFamily.directionalLight.bEnabled &&
-                viewFamily.lightingMode == Core::LightingMode::Default) {
+            if (viewFamily.directionalLight.bEnabled && viewFamily.lightingMode == Core::LightingMode::Default) {
                 const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
-                const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes
-                    ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
+                const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
                 SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, targets, 0, frameNumber, sunShadowPixelScale);
                 SetupSigmaShadowDenoise(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, targets, 0, frameNumber);
                 SetupSigmaShadowTemporal(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, targets, 0);

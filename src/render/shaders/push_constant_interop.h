@@ -534,6 +534,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t accumulationCount;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t quadSelectionIndex;
+    SHADER_PUBLIC float iblIntensity;
 };
 
 SHADER_PUBLIC struct SVGFRemodulatePushConstant
@@ -1271,6 +1272,135 @@ SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
     SHADER_PUBLIC uint32_t diffIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+};
+
+// ===================== ReBLUR =====================
+
+SHADER_PUBLIC struct ReblurPackPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t specInputIndex;
+    SHADER_PUBLIC uint32_t diffInputIndex;
+    SHADER_PUBLIC uint32_t specOutIndex;
+    SHADER_PUBLIC uint32_t diffOutIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+};
+
+SHADER_PUBLIC struct ReblurGenerateViewZPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t outViewZIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+};
+
+SHADER_PUBLIC struct ReblurClassifyTilesPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t tilesOutIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+};
+
+SHADER_PUBLIC struct ReblurPrepassPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t specInputIndex;
+    SHADER_PUBLIC uint32_t diffInputIndex;
+    SHADER_PUBLIC uint32_t specOutIndex;
+    SHADER_PUBLIC uint32_t diffOutIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+};
+
+SHADER_PUBLIC struct ReblurTemporalAccumulationPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t prevNormalRoughnessIndex;
+    SHADER_PUBLIC uint32_t prevViewZIndex;
+    SHADER_PUBLIC uint32_t prevHistoryLengthIndex;
+    SHADER_PUBLIC uint32_t specInputIndex;
+    SHADER_PUBLIC uint32_t diffInputIndex;
+    SHADER_PUBLIC uint32_t historySpecFastIndex;
+    SHADER_PUBLIC uint32_t historyDiffFastIndex;
+    SHADER_PUBLIC uint32_t historySpecIndex;
+    SHADER_PUBLIC uint32_t historyDiffIndex;
+    SHADER_PUBLIC uint32_t prevSpecHitDistIndex;
+    SHADER_PUBLIC uint32_t outHistoryLengthIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t outSpecFastIndex;
+    SHADER_PUBLIC uint32_t outDiffFastIndex;
+    SHADER_PUBLIC uint32_t outSpecHitDistIndex;
+    SHADER_PUBLIC uint32_t outSpecReprojConfidenceIndex;
+    SHADER_PUBLIC uint32_t outPrevNRIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t confidenceIndex;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+};
+
+SHADER_PUBLIC struct ReblurHistoryFixPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t historyLengthIndex;
+    SHADER_PUBLIC uint32_t specIndex;
+    SHADER_PUBLIC uint32_t diffIndex;
+    SHADER_PUBLIC uint32_t specFastIndex;
+    SHADER_PUBLIC uint32_t diffFastIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+};
+
+SHADER_PUBLIC struct ReblurBlurPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t historyLengthIndex;
+    SHADER_PUBLIC uint32_t specHitDistIndex;
+    SHADER_PUBLIC uint32_t specIndex;
+    SHADER_PUBLIC uint32_t diffIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t isPostBlur;
+    SHADER_PUBLIC uint32_t pixelScale;
+    SHADER_PUBLIC uint32_t quadSelectionIndex;
+};
+
+SHADER_PUBLIC struct ReblurStabilizationPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t historyLengthIndex;
+    SHADER_PUBLIC uint32_t specHistIndex;
+    SHADER_PUBLIC uint32_t diffHistIndex;
+    SHADER_PUBLIC uint32_t prevSpecStabIndex;
+    SHADER_PUBLIC uint32_t prevDiffStabIndex;
+    SHADER_PUBLIC uint32_t outSpecStabIndex;
+    SHADER_PUBLIC uint32_t outDiffStabIndex;
+    SHADER_PUBLIC uint32_t outSpecFinalIndex;
+    SHADER_PUBLIC uint32_t outDiffFinalIndex;
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t quadSelectionIndex;
 };
