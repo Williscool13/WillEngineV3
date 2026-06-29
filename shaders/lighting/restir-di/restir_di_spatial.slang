@@ -46,7 +46,13 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     Reservoir center = pc.inputBuffer[centerIdx];
     if (isnan(center.W) || isinf(center.W)) { center = ReservoirEmpty(); }
-    bool validCenter = center.lightIdx != ~0u && (center.lightIdx == LIGHT_IDX_SUN || center.lightIdx < uint(pc.lightData->lightCount));
+    if (center.lightIdx == LIGHT_IDX_SUN) {
+        center.W = (pc.wClamp > 0.0) ? min(center.W, pc.wClamp) : center.W;
+        center.M = min(center.M, pc.mCap);
+        pc.outputBuffer[centerIdx] = center;
+        return;
+    }
+    bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->lightCount);
 
     float Mc = validCenter ? float(center.M) : 0.0;
 
@@ -101,7 +107,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
         Reservoir neighbor = pc.inputBuffer[neighborPixel.y * pc.renderExtent.x + neighborPixel.x];
         if (isnan(neighbor.W) || isinf(neighbor.W)) { neighbor = ReservoirEmpty(); }
-        if (neighbor.lightIdx == ~0u || (neighbor.lightIdx != LIGHT_IDX_SUN && neighbor.lightIdx >= uint(pc.lightData->lightCount))) {
+        if (neighbor.lightIdx == ~0u || neighbor.lightIdx == LIGHT_IDX_SUN || neighbor.lightIdx >= uint(pc.lightData->lightCount)) {
             continue;
         }
         if (validCenter && center.M >= 4u && neighbor.M < 2u) {
