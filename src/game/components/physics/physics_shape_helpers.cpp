@@ -27,6 +27,7 @@ void FillSplineParams(Engine::SplineParams& out, const SplineMeshComponent& splm
     out.profile = splm.profile;
     out.crossPlankInterval = splm.crossPlankInterval;
     out.crossPlankHeight = splm.crossPlankHeight;
+    out.railing = splm.railing;
 }
 
 PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, const glm::vec3& scale)

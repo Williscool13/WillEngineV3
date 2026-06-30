@@ -26,7 +26,7 @@ inline const char* SplineModeNames[] = {
 
 struct Spline
 {
-    static constexpr size_t MaxPoints = 16;
+    static constexpr size_t MaxPoints = 64;
 
     Core::InlineVector<glm::vec3, MaxPoints> points;
     Core::InlineVector<float, MaxPoints> rolls; // per-point rotation around tangent (degrees)

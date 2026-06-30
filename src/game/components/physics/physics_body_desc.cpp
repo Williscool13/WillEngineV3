@@ -177,6 +177,19 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     sp["profileCornerRadius"] = shape.splineParams.profile.cornerRadius;
                     sp["profileCornerSegments"] = shape.splineParams.profile.cornerSegments;
                     sp["profileThickness"] = shape.splineParams.profile.thickness;
+                    sp["railingEnabled"] = shape.splineParams.railing.bEnabled;
+                    sp["railingPosts"] = shape.splineParams.railing.bPosts;
+                    sp["railingPostInterval"] = shape.splineParams.railing.postInterval;
+                    sp["railingPostBottom"] = shape.splineParams.railing.postBottom;
+                    sp["railingPostTop"] = shape.splineParams.railing.postTop;
+                    sp["railingPostSizeX"] = shape.splineParams.railing.postSize.x;
+                    sp["railingPostSizeY"] = shape.splineParams.railing.postSize.y;
+                    sp["railingPostLateral"] = shape.splineParams.railing.postLateral;
+                    sp["railingLateralOffset"] = shape.splineParams.railing.lateralOffset;
+                    auto& laneArr = sp["railingLanes"] = nlohmann::json::array();
+                    for (int li = 0; li < static_cast<int>(shape.splineParams.railing.lanes.Size()); li++) {
+                        laneArr.push_back({shape.splineParams.railing.lanes[li].x, shape.splineParams.railing.lanes[li].y});
+                    }
                     shapeJson["splineParams"] = sp;
                 }
                 if (shape.text3DSource.IsValid()) {
@@ -594,6 +607,22 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                     spline.profile.cornerRadius = sp.value("profileCornerRadius", 0.08f);
                     spline.profile.cornerSegments = sp.value("profileCornerSegments", 3);
                     spline.profile.thickness = sp.value("profileThickness", 0.05f);
+                    spline.railing.bEnabled = sp.value("railingEnabled", false);
+                    spline.railing.bPosts = sp.value("railingPosts", true);
+                    spline.railing.postInterval = sp.value("railingPostInterval", 4);
+                    spline.railing.postBottom = sp.value("railingPostBottom", 0.0f);
+                    spline.railing.postTop = sp.value("railingPostTop", 1.0f);
+                    spline.railing.postSize.x = sp.value("railingPostSizeX", 0.05f);
+                    spline.railing.postSize.y = sp.value("railingPostSizeY", 0.05f);
+                    spline.railing.postLateral = sp.value("railingPostLateral", 0.0f);
+                    spline.railing.lateralOffset = sp.value("railingLateralOffset", 0.0f);
+                    spline.railing.lanes.Clear();
+                    if (sp.contains("railingLanes")) {
+                        for (const auto& e : sp["railingLanes"]) {
+                            if (spline.railing.lanes.Size() >= 8) { break; }
+                            spline.railing.lanes.PushBack(Vec2{e[0].get<float>(), e[1].get<float>()});
+                        }
+                    }
                     shape.splineParams = spline;
                 }
                 if (shapeJson.contains("text3DSource")) {

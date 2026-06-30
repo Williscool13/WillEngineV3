@@ -327,6 +327,15 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerRadius), sizeof(params.profile.cornerRadius), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerSegments), sizeof(params.profile.cornerSegments), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.thickness), sizeof(params.profile.thickness), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.bEnabled), sizeof(params.railing.bEnabled), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.bPosts), sizeof(params.railing.bPosts), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postInterval), sizeof(params.railing.postInterval), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postBottom), sizeof(params.railing.postBottom), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postTop), sizeof(params.railing.postTop), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postSize), sizeof(params.railing.postSize), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postLateral), sizeof(params.railing.postLateral), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.lateralOffset), sizeof(params.railing.lateralOffset), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.railing.lanes.Data()), params.railing.lanes.Size() * sizeof(Vec2), hash);
 
     ModelID splineModelId{hash};
 

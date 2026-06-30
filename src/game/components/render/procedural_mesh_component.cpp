@@ -13,7 +13,10 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
+#include "game/components/common_components.h"
 #include "game/components/core_components.h"
+#include "game/editor/editor_systems.h"
+#include "game/systems/scene_system.h"
 
 namespace Game::Component
 {
@@ -418,6 +421,77 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
     }
 }
 
+/**
+ * Samples the staircase helix into a control-point spline at the given radius, railHeight above the (continuous) nosing line.
+ * Points are in stair-local space; capped at Spline::MaxPoints (subsamples evenly only past that many steps).
+ */
+static Engine::Spline BuildSpiralRailingSpline(const Engine::SpiralStaircaseParams& p, float radius, float railHeight)
+{
+    Engine::Spline spline;
+    spline.mode = Engine::SplineMode::CatmullRom;
+    spline.bClosed = false;
+
+    const int steps = std::max(1, p.stepCount);
+    const float stepH = p.bSpecifyStepHeight ? p.stepHeight : p.totalHeight / static_cast<float>(steps);
+    const float dStep = glm::radians(p.bSpecifyDegreesPerStep ? p.degreesPerStep : p.totalSweep / static_cast<float>(steps));
+    const float heightPerRad = (dStep > 1e-6f) ? stepH / dStep : 0.0f;
+    const float totalAngle = static_cast<float>(steps) * dStep;
+
+    // Sample by angular resolution (~1 control point per 6 deg of sweep) so the Catmull-Rom hugs the helix, at least one per step, capped at the spline budget.
+    const float totalDeg = glm::degrees(totalAngle);
+    const int desired = std::max(steps + 1, static_cast<int>(totalDeg / 6.0f) + 1);
+    const int count = std::min(desired, static_cast<int>(Engine::Spline::MaxPoints));
+    for (int k = 0; k < count; k++) {
+        const float f = (count <= 1) ? 0.0f : static_cast<float>(k) / static_cast<float>(count - 1);
+        const float a = f * totalAngle;
+        const float h = a * heightPerRad + railHeight;
+        spline.points.PushBack(glm::vec3{radius * cosf(a), h, radius * sinf(a)});
+        spline.rolls.PushBack(0.0f);
+    }
+    return spline;
+}
+
+/** Spawns a child entity (parented to the stair) carrying a railing-mode SplineMeshComponent that traces the helix at `radius`. */
+static void CreateSpiralRailingEntity(Engine::EngineState* state, entt::registry& registry, entt::entity stairEntity,
+                                      const Engine::SpiralStaircaseParams& p, float radius, float railHeight, const char* suffix)
+{
+    const entt::entity child = CreateSceneEntity(state);
+
+    if (auto* nm = registry.try_get<Component::NameComponent>(child)) {
+        Core::InlineString<256> base("Railing");
+        if (const auto* parentName = registry.try_get<Component::NameComponent>(stairEntity)) { base = parentName->name; }
+        nm->name = Core::InlineString<256>::Format("{} Railing ({})", base.c_str(), suffix);
+    }
+
+    SetParent(state, child, stairEntity);
+
+    // Child sits at the stair's local origin so the local-space railing spline aligns with the stair geometry.
+    auto& ct = registry.get<Component::TransformComponent>(child);
+    ct.translation = glm::vec3{0.0f};
+    ct.rotation = glm::quat{1.0f, 0.0f, 0.0f, 0.0f};
+    ct.scale = glm::vec3{1.0f};
+    registry.emplace_or_replace<Component::DirtyTransformTag>(child);
+
+    Component::SplineMeshComponent rc{};
+    rc.spline = BuildSpiralRailingSpline(p, radius, railHeight);
+    rc.radius = 0.04f;
+    rc.sides = 8;
+    rc.segmentsPerSpan = 8;
+    rc.bCaps = true;
+    rc.profile.type = Engine::SplineProfileType::Tube;
+    rc.railing.bEnabled = true;
+    rc.railing.lanes.Clear();
+    rc.railing.lanes.PushBack(glm::vec2{0.0f, 0.0f});
+    rc.railing.bPosts = true;
+    rc.railing.postBottom = -railHeight;
+    rc.railing.postTop = 0.0f;
+    rc.railing.postSize = glm::vec2{0.03f, 0.03f};
+    rc.railing.postInterval = rc.segmentsPerSpan;
+    registry.emplace<Component::SplineMeshComponent>(child, std::move(rc));
+
+    MarkSceneModified(state, state->currentSceneId);
+}
+
 Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                                               entt::entity entity, const char* name)
 {
@@ -499,8 +573,8 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             ImGui::PopStyleColor();
 
             bool dirty = false;
-            std::visit([&dirty](auto& p) {
-                using T = std::decay_t<decltype(p)>;
+            std::visit([&dirty, state, &registry, entity]<typename Shape>(Shape& p) {
+                using T = std::decay_t<Shape>;
                 if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
                     ImGui::DragFloat("Width", &p.width, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
@@ -840,6 +914,21 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::DragInt("Arc Segments", &p.arcSegments, 1, 1, 64);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::Checkbox("Show Center Column", &p.bShowCenterColumn)) { dirty = true; }
+
+                    ImGui::SeparatorText("Railing");
+                    static int railingSide = 0;
+                    static float railingHeight = 1.0f;
+                    const char* railingSideNames[] = {"Outer", "Inner", "Both"};
+                    ImGui::Combo("Railing Side", &railingSide, railingSideNames, 3);
+                    ImGui::DragFloat("Railing Height", &railingHeight, 0.01f, 0.1f, 5.0f);
+                    if (ImGui::Button("Create Railing (child entity)")) {
+                        if (railingSide == 0 || railingSide == 2) {
+                            CreateSpiralRailingEntity(state, registry, entity, p, p.outerRadius, railingHeight, "Outer");
+                        }
+                        if (railingSide == 1 || railingSide == 2) {
+                            CreateSpiralRailingEntity(state, registry, entity, p, std::max(0.02f, p.centerColumnRadius), railingHeight, "Inner");
+                        }
+                    }
                 }
             }, component.params);
 

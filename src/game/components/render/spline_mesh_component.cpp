@@ -38,6 +38,7 @@ Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
     params.crossPlankInterval = component.crossPlankInterval;
     params.crossPlankHeight = component.crossPlankHeight;
     params.profile = component.profile;
+    params.railing = component.railing;
     return params;
 }
 
@@ -102,6 +103,19 @@ void Component::SplineMeshComponent::Serialize(const SplineMeshComponent& comp, 
     json["profileCornerRadius"] = comp.profile.cornerRadius;
     json["profileCornerSegments"] = comp.profile.cornerSegments;
     json["profileThickness"] = comp.profile.thickness;
+    json["railingEnabled"] = comp.railing.bEnabled;
+    json["railingPosts"] = comp.railing.bPosts;
+    json["railingPostInterval"] = comp.railing.postInterval;
+    json["railingPostBottom"] = comp.railing.postBottom;
+    json["railingPostTop"] = comp.railing.postTop;
+    json["railingPostSizeX"] = comp.railing.postSize.x;
+    json["railingPostSizeY"] = comp.railing.postSize.y;
+    json["railingPostLateral"] = comp.railing.postLateral;
+    json["railingLateralOffset"] = comp.railing.lateralOffset;
+    auto& lanesJson = json["railingLanes"] = nlohmann::json::array();
+    for (int i = 0; i < static_cast<int>(comp.railing.lanes.Size()); i++) {
+        lanesJson.push_back({comp.railing.lanes[i].x, comp.railing.lanes[i].y});
+    }
     json["material"] = comp.material.id;
 }
 
@@ -127,6 +141,22 @@ void Component::SplineMeshComponent::Deserialize(SplineMeshComponent& comp, cons
     comp.profile.cornerRadius = json.value("profileCornerRadius", 0.08f);
     comp.profile.cornerSegments = json.value("profileCornerSegments", 3);
     comp.profile.thickness = json.value("profileThickness", 0.05f);
+    comp.railing.bEnabled = json.value("railingEnabled", false);
+    comp.railing.bPosts = json.value("railingPosts", true);
+    comp.railing.postInterval = json.value("railingPostInterval", 4);
+    comp.railing.postBottom = json.value("railingPostBottom", 0.0f);
+    comp.railing.postTop = json.value("railingPostTop", 1.0f);
+    comp.railing.postSize.x = json.value("railingPostSizeX", 0.05f);
+    comp.railing.postSize.y = json.value("railingPostSizeY", 0.05f);
+    comp.railing.postLateral = json.value("railingPostLateral", 0.0f);
+    comp.railing.lateralOffset = json.value("railingLateralOffset", 0.0f);
+    comp.railing.lanes.Clear();
+    if (json.contains("railingLanes")) {
+        for (const auto& e : json["railingLanes"]) {
+            if (comp.railing.lanes.Size() >= 8) { break; }
+            comp.railing.lanes.PushBack(Vec2{e[0].get<float>(), e[1].get<float>()});
+        }
+    }
     comp.material = Engine::MaterialID(json.value("material", uint64_t(0)));
 
     if (comp.spline.points.Size() < 2) {
@@ -242,6 +272,77 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             }
         }
 
+        if (ImGui::Checkbox("Railing", &component.railing.bEnabled)) { dirty = true; }
+        if (component.railing.bEnabled) {
+            auto& rail = component.railing;
+            ImGui::DragFloat("Lateral Offset", &rail.lateralOffset, 0.01f, -50.0f, 50.0f);
+            dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::SeparatorText("Lanes (lateral, vertical)");
+            if (ImGui::SmallButton("2-Rail")) {
+                rail.lanes.Clear();
+                rail.lanes.PushBack(Vec2{0.0f, 1.0f});
+                rail.lanes.PushBack(Vec2{0.0f, 0.5f});
+                dirty = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("3-Rail")) {
+                rail.lanes.Clear();
+                rail.lanes.PushBack(Vec2{0.0f, 1.0f});
+                rail.lanes.PushBack(Vec2{0.0f, 0.66f});
+                rail.lanes.PushBack(Vec2{0.0f, 0.33f});
+                dirty = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Dual")) {
+                rail.lanes.Clear();
+                rail.lanes.PushBack(Vec2{-0.5f, 0.0f});
+                rail.lanes.PushBack(Vec2{0.5f, 0.0f});
+                dirty = true;
+            }
+
+            int laneToRemove = -1;
+            for (int li = 0; li < static_cast<int>(rail.lanes.Size()); li++) {
+                ImGui::PushID(2000 + li);
+                float lane2[2] = {rail.lanes[li].x, rail.lanes[li].y};
+                if (ImGui::DragFloat2("##lane", lane2, 0.01f, -50.0f, 50.0f)) {
+                    rail.lanes[li] = Vec2{lane2[0], lane2[1]};
+                }
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                ImGui::SameLine();
+                if (ImGui::SmallButton("X")) { laneToRemove = li; }
+                ImGui::PopID();
+            }
+            if (laneToRemove >= 0) {
+                rail.lanes.RemoveAt(static_cast<size_t>(laneToRemove));
+                dirty = true;
+            }
+            if (rail.lanes.Size() < 8 && ImGui::SmallButton("Add Lane")) {
+                rail.lanes.PushBack(Vec2{0.0f, 0.0f});
+                dirty = true;
+            }
+
+            if (ImGui::Checkbox("Posts", &rail.bPosts)) { dirty = true; }
+            if (rail.bPosts) {
+                ImGui::DragInt("Post Interval", &rail.postInterval, 1, 1, 64);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                ImGui::DragFloat("Post Bottom", &rail.postBottom, 0.01f, -10.0f, 10.0f);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                ImGui::DragFloat("Post Top", &rail.postTop, 0.01f, -10.0f, 10.0f);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                // Cap post cross-section at the rail width so the post never pokes out from under the rail it meets.
+                const float railWidth = (component.profile.type == Engine::SplineProfileType::Tube)
+                                            ? 2.0f * component.radius
+                                            : std::max(component.profile.width, component.profile.height);
+                float postSize[2] = {std::min(rail.postSize.x, railWidth), std::min(rail.postSize.y, railWidth)};
+                if (ImGui::DragFloat2("Post Size", postSize, 0.005f, 0.001f, railWidth, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                    rail.postSize = Vec2{postSize[0], postSize[1]};
+                }
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                ImGui::DragFloat("Post Lateral", &rail.postLateral, 0.01f, -50.0f, 50.0f);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            }
+        }
+
         ImGui::SeparatorText("Control Points");
 
         int pointToRemove = -1;
@@ -330,8 +431,11 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
         }
         ImGui::EndDisabled();
 
+
+        const int liveCpCount = static_cast<int>(component.spline.points.Size());
+
         if (editPointIdx == -1) { hasGizmoClaim = false; }
-        if (hasGizmoClaim && editPointIdx < cpCount) {
+        if (hasGizmoClaim && editPointIdx < liveCpCount) {
             auto* transform = registry.try_get<TransformComponent>(entity);
             if (transform) {
                 const glm::mat4 view = viewFamily.mainView.currentViewData.view;
@@ -344,9 +448,9 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                 glm::vec3 worldPt = glm::vec3(entityMat * glm::vec4(cpPos, 1.0f));
 
                 glm::vec3 localTangent;
-                if (cpCount < 2) { localTangent = glm::vec3(0, 0, 1); }
+                if (liveCpCount < 2) { localTangent = glm::vec3(0, 0, 1); }
                 else if (idx == 0) { localTangent = glm::normalize(component.spline.points[1] - component.spline.points[0]); }
-                else if (idx == cpCount - 1) { localTangent = glm::normalize(component.spline.points[cpCount - 1] - component.spline.points[cpCount - 2]); }
+                else if (idx == liveCpCount - 1) { localTangent = glm::normalize(component.spline.points[liveCpCount - 1] - component.spline.points[liveCpCount - 2]); }
                 else { localTangent = glm::normalize(component.spline.points[idx + 1] - component.spline.points[idx - 1]); }
 
                 glm::vec3 worldTangent = glm::normalize(glm::vec3(entityMat * glm::vec4(localTangent, 0.0f)));
@@ -401,11 +505,11 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                                             ? glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation)
                                             : glm::mat4(1.0f);
 
-            for (int i = 0; i < cpCount; i++) {
+            for (int i = 0; i < liveCpCount; i++) {
                 glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.spline.points[i], 1.0f));
                 DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {wp, kPointRadius, (i == editPointIdx) ? kEditColor : kPointColor});
-                const int nextI = component.spline.bClosed ? (i + 1) % cpCount : i + 1;
-                if (nextI < cpCount || component.spline.bClosed) {
+                const int nextI = component.spline.bClosed ? (i + 1) % liveCpCount : i + 1;
+                if (nextI < liveCpCount || component.spline.bClosed) {
                     glm::vec3 wp2 = glm::vec3(entityMat * glm::vec4(component.spline.points[nextI], 1.0f));
                     DEBUG_ADD_LINE(viewFamily.debugLines, {wp, wp2, kLineColor});
                 }

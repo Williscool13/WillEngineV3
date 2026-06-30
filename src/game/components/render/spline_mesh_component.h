@@ -33,6 +33,7 @@ struct SplineMeshComponent
     int32_t crossPlankInterval{4};
     float crossPlankHeight{0.0f};
     Engine::SplineProfile profile{};
+    Engine::SplineRailing railing{};
 
     Engine::MaterialID material{};
     glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f};

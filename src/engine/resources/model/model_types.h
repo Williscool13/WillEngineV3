@@ -326,6 +326,19 @@ struct SplineProfile
     float thickness{0.05f};
 };
 
+struct SplineRailing
+{
+    bool bEnabled{false};
+    Core::InlineVector<Vec2, 8> lanes{};
+    bool bPosts{true};
+    int32_t postInterval{4};
+    float postBottom{0.0f};
+    float postTop{1.0f};
+    Vec2 postSize{0.05f, 0.05f};
+    float postLateral{0.0f};
+    float lateralOffset{0.0f};
+};
+
 struct SplineParams
 {
     Spline spline;
@@ -340,6 +353,7 @@ struct SplineParams
     int32_t crossPlankInterval{4};
     float crossPlankHeight{0.0f};
     SplineProfile profile{};
+    SplineRailing railing{};
 };
 
 struct BowlParams

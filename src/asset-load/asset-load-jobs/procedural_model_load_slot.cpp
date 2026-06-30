@@ -2128,13 +2128,32 @@ bool ProceduralModelLoadSlot::GenerateSpiralStaircase(const Engine::SpiralStairc
         addTri(p0, p2, p3, n, t, u0, u2, u3);
     };
 
+    auto addQuadN = [&](Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, Vec3 n0, Vec3 n1, Vec3 n2, Vec3 n3, Vec4 t, Vec2 u0, Vec2 u1, Vec2 u2, Vec2 u3) {
+        const bool flip = glm::dot(glm::cross(p1 - p0, p2 - p0), n0 + n1 + n2 + n3) < 0.0f;
+        const uint32_t i0 = pushV(p0, n0, u0, t);
+        const uint32_t i1 = pushV(p1, n1, u1, t);
+        const uint32_t i2 = pushV(p2, n2, u2, t);
+        const uint32_t i3 = pushV(p3, n3, u3, t);
+        if (!flip) {
+            indices.PushBack(i0); indices.PushBack(i1); indices.PushBack(i2);
+            indices.PushBack(i0); indices.PushBack(i2); indices.PushBack(i3);
+        }
+        else {
+            indices.PushBack(i0); indices.PushBack(i2); indices.PushBack(i1);
+            indices.PushBack(i0); indices.PushBack(i3); indices.PushBack(i2);
+        }
+    };
+
     auto ringDir = [](float a) { return Vec3{cosf(a), 0.0f, sinf(a)}; };
 
     // Stair mode emits flat treads (constant height per step); ramp mode replaces them with a continuous helicoid slab whose top tracks angle.
     const bool bRamp = p.bRamp;
     const float heightPerRad = stepH / std::max(dStep, 1e-6f);
-    const float rMid = 0.5f * (ri + ro);
     auto topAtAngle = [&](float a) { return a * heightPerRad; };
+
+    auto topNrm = [&](float a, float r) -> Vec3 {
+        return bRamp ? glm::normalize(Vec3{heightPerRad * sinf(a), r, -heightPerRad * cosf(a)}) : Vec3{0, 1, 0};
+    };
 
     for (int32_t i = 0; i < steps; ++i) {
         const float a0 = static_cast<float>(i) * dStep;
@@ -2151,21 +2170,23 @@ bool ProceduralModelLoadSlot::GenerateSpiralStaircase(const Engine::SpiralStairc
             const Vec3 topS{0.0f, yts, 0.0f}, topN{0.0f, ytn, 0.0f};
             const Vec3 botS{0.0f, yts - thick, 0.0f}, botN{0.0f, ytn - thick, 0.0f};
 
-            const float amid = 0.5f * (as + an);
-            const Vec3 topNormal = bRamp ? glm::normalize(Vec3{heightPerRad * sinf(amid), rMid, -heightPerRad * cosf(amid)}) : Vec3{0, 1, 0};
+            const Vec3 nSi = topNrm(as, ri), nSo = topNrm(as, ro), nNo = topNrm(an, ro), nNi = topNrm(an, ri);
 
-            addQuad(ds * ri + topS, ds * ro + topS, dn * ro + topN, dn * ri + topN,
-                    topNormal, Vec4{ds.z, 0, -ds.x, 1},
-                    Vec2{ri, as}, Vec2{ro, as}, Vec2{ro, an}, Vec2{ri, an});
-            addQuad(ds * ri + botS, ds * ro + botS, dn * ro + botN, dn * ri + botN,
-                    -topNormal, Vec4{ds.z, 0, -ds.x, 1},
-                    Vec2{ri, as}, Vec2{ro, as}, Vec2{ro, an}, Vec2{ri, an});
-            addQuad(ds * ro + botS, dn * ro + botN, dn * ro + topN, ds * ro + topS,
-                    glm::normalize(ds + dn), Vec4{-ds.z, 0, ds.x, 1},
-                    Vec2{as, yts - thick}, Vec2{an, ytn - thick}, Vec2{an, ytn}, Vec2{as, yts});
-            addQuad(ds * ri + botS, dn * ri + botN, dn * ri + topN, ds * ri + topS,
-                    -glm::normalize(ds + dn), Vec4{-ds.z, 0, ds.x, 1},
-                    Vec2{as, yts - thick}, Vec2{an, ytn - thick}, Vec2{an, ytn}, Vec2{as, yts});
+            addQuadN(ds * ri + topS, ds * ro + topS, dn * ro + topN, dn * ri + topN,
+                     nSi, nSo, nNo, nNi, Vec4{ds.z, 0, -ds.x, 1},
+                     Vec2{ri, as}, Vec2{ro, as}, Vec2{ro, an}, Vec2{ri, an});
+            addQuadN(ds * ri + botS, ds * ro + botS, dn * ro + botN, dn * ri + botN,
+                     -nSi, -nSo, -nNo, -nNi, Vec4{ds.z, 0, -ds.x, 1},
+                     Vec2{ri, as}, Vec2{ro, as}, Vec2{ro, an}, Vec2{ri, an});
+            // Walls: per-vertex radial normals in ramp mode so the helical band shades smoothly; stair mode keeps the original per-face normal.
+            const Vec3 woS = bRamp ? ds : glm::normalize(ds + dn);
+            const Vec3 woN = bRamp ? dn : glm::normalize(ds + dn);
+            addQuadN(ds * ro + botS, dn * ro + botN, dn * ro + topN, ds * ro + topS,
+                     woS, woN, woN, woS, Vec4{-ds.z, 0, ds.x, 1},
+                     Vec2{as, yts - thick}, Vec2{an, ytn - thick}, Vec2{an, ytn}, Vec2{as, yts});
+            addQuadN(ds * ri + botS, dn * ri + botN, dn * ri + topN, ds * ri + topS,
+                     -woS, -woN, -woN, -woS, Vec4{-ds.z, 0, ds.x, 1},
+                     Vec2{as, yts - thick}, Vec2{an, ytn - thick}, Vec2{an, ytn}, Vec2{as, yts});
         }
 
         // Radial faces are the per-step risers in stair mode; in ramp mode only the bottom lip (first step) and top lip (last step) remain.
@@ -2519,16 +2540,46 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         TriangulateProfileCap(capOutline, capTris);
     }
 
-    const int railCount = p.bDualPath ? 2 : 1;
     const float halfSpacing = p.dualPathSpacing * 0.5f;
 
-    for (int rail = 0; rail < railCount; rail++) {
-        const float offsetSign = (railCount == 1) ? 0.0f : (rail == 0 ? -1.0f : 1.0f);
+    Core::Vector<Vec2> laneOffsets(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    if (p.railing.bEnabled) {
+        for (int li = 0; li < static_cast<int>(p.railing.lanes.Size()); li++) { laneOffsets.PushBack(p.railing.lanes[li]); }
+    }
+    else if (p.bDualPath) {
+        laneOffsets.PushBack(Vec2{-halfSpacing, 0.0f});
+        laneOffsets.PushBack(Vec2{halfSpacing, 0.0f});
+    }
+    else {
+        laneOffsets.PushBack(Vec2{0.0f, 0.0f});
+    }
+
+    const Vec3 worldUp{0.0f, 1.0f, 0.0f};
+    // Horizontal frame from the twist-free tangent (fwd = horizontalized tangent, across = perpendicular), so railing rails/posts stay square to the path without picking up the parallel-transport roll.
+    auto horizAxes = [&](const Frame& f, Vec3& across, Vec3& fwd) {
+        fwd = f.tangent - worldUp * glm::dot(f.tangent, worldUp);
+        if (glm::length(fwd) < 1e-4f) { fwd = f.rRight - worldUp * glm::dot(f.rRight, worldUp); }
+        fwd = (glm::length(fwd) < 1e-4f) ? Vec3{0.0f, 0.0f, 1.0f} : glm::normalize(fwd);
+        across = glm::normalize(glm::cross(worldUp, fwd));
+    };
+
+    for (int rail = 0; rail < static_cast<int>(laneOffsets.Size()); rail++) {
+        const Vec2 laneOff = laneOffsets[rail];
         const auto baseVertex = static_cast<uint32_t>(vertices.Size());
+
+        // Railing lanes offset in world space (vertical = world up, lateral = tangent-derived across) so stacked rails stay parallel and untwisted; other modes stay frame-relative.
+        auto laneCenter = [&](const Frame& f) -> Vec3 {
+            if (p.railing.bEnabled) {
+                Vec3 across, fwd;
+                horizAxes(f, across, fwd);
+                return f.pos + (laneOff.x + p.railing.lateralOffset) * across + laneOff.y * worldUp;
+            }
+            return f.pos + laneOff.x * f.rRight + laneOff.y * f.rUp;
+        };
 
         for (int i = 0; i < totalRings; i++) {
             const Frame& f = frames[i];
-            const Vec3 center = f.pos + offsetSign * halfSpacing * f.rRight;
+            const Vec3 center = laneCenter(f);
             const float vCoord = (totalRings > 1) ? static_cast<float>(i) / static_cast<float>(totalRings - 1) : 0.0f;
             for (int j = 0; j < ringSize; j++) {
                 const SplineProfilePoint& pp = ring[j];
@@ -2563,7 +2614,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             const int outlineSize = static_cast<int>(capOutline.Size());
             auto addCap = [&](int ringIdx, Vec3 capNormal, bool reverse) {
                 const Frame& f = frames[ringIdx];
-                const Vec3 center = f.pos + offsetSign * halfSpacing * f.rRight;
+                const Vec3 center = laneCenter(f);
                 const auto capBase = static_cast<uint32_t>(vertices.Size());
                 for (int k = 0; k < outlineSize; k++) {
                     const Vec2& o = capOutline[k];
@@ -2596,7 +2647,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         }
     }
 
-    if (p.bDualPath && p.bCrossPlanks) {
+    if (!p.railing.bEnabled && p.bDualPath && p.bCrossPlanks) {
         constexpr float plankThickness = 0.1f;
         const int plankInterval = std::max(1, p.crossPlankInterval);
 
@@ -2681,6 +2732,67 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
                     indices.PushBack(b + 2);
                 }
             }
+        }
+    }
+
+    // Vertical posts (balusters) at ring intervals, centered on the path, extruded postBottom->postTop along world up (plumb, independent of path slope/roll).
+    if (p.railing.bEnabled && p.railing.bPosts) {
+        const int postInterval = std::max(1, p.railing.postInterval);
+        const float pb = p.railing.postBottom;
+        const float pt = p.railing.postTop;
+        // Clamp the post cross-section to the rail width so a post never pokes out from under the rail (authoritative; the editor mirrors this).
+        const float railWidth = (p.profile.type == Engine::SplineProfileType::Tube) ? 2.0f * p.radius : std::max(p.profile.width, p.profile.height);
+        const float hw = std::max(0.001f, std::min(p.railing.postSize.x, railWidth)) * 0.5f;
+        const float hd = std::max(0.001f, std::min(p.railing.postSize.y, railWidth)) * 0.5f;
+
+        auto postVert = [](Vec3 pos, Vec3 normal, Vec3 tan, float u, float v) {
+            Engine::FullVertex vert{};
+            vert.position = pos;
+            vert.normal = normal;
+            vert.uv = {u, v};
+            vert.tangent = {tan.x, tan.y, tan.z, 1.0f};
+            vert.color = {1, 1, 1, 1};
+            return vert;
+        };
+        auto addFace = [&](Vec3 a, Vec3 b, Vec3 c, Vec3 d, Vec3 n, Vec3 tan) {
+            const bool flip = glm::dot(glm::cross(b - a, c - a), n) < 0.0f;
+            const auto fb = static_cast<uint32_t>(vertices.Size());
+            vertices.PushBack(postVert(a, n, tan, 0, 0));
+            vertices.PushBack(postVert(b, n, tan, 1, 0));
+            vertices.PushBack(postVert(c, n, tan, 1, 1));
+            vertices.PushBack(postVert(d, n, tan, 0, 1));
+            if (!flip) {
+                indices.PushBack(fb); indices.PushBack(fb + 1); indices.PushBack(fb + 2);
+                indices.PushBack(fb); indices.PushBack(fb + 2); indices.PushBack(fb + 3);
+            }
+            else {
+                indices.PushBack(fb); indices.PushBack(fb + 2); indices.PushBack(fb + 1);
+                indices.PushBack(fb); indices.PushBack(fb + 3); indices.PushBack(fb + 2);
+            }
+        };
+
+        for (int i = 0; i < totalRings; i += postInterval) {
+            const Frame& f = frames[i];
+            // Plumb baluster: extrude along world up; cross-section axes come from the tangent so the prism stays vertical and square to the path (no parallel-transport twist).
+            Vec3 u, w;
+            horizAxes(f, u, w);
+            Vec3 postBase = f.pos + (p.railing.lateralOffset + p.railing.postLateral) * u;
+            // Tuck end posts inward by half their depth so they sit flush with the open rail's end caps instead of straddling them.
+            if (!bClosed && totalRings > 1) {
+                if (i == 0) { postBase += hd * glm::normalize(frames[1].pos - frames[0].pos); }
+                else if (i == totalRings - 1) { postBase += hd * glm::normalize(frames[totalRings - 2].pos - frames[totalRings - 1].pos); }
+            }
+            const Vec3 cBot = postBase + pb * worldUp;
+            const Vec3 cTop = postBase + pt * worldUp;
+            const Vec3 b00 = cBot - hw * u - hd * w, b10 = cBot + hw * u - hd * w, b11 = cBot + hw * u + hd * w, b01 = cBot - hw * u + hd * w;
+            const Vec3 t00 = cTop - hw * u - hd * w, t10 = cTop + hw * u - hd * w, t11 = cTop + hw * u + hd * w, t01 = cTop - hw * u + hd * w;
+
+            addFace(t00, t10, t11, t01, worldUp, u);
+            addFace(b00, b10, b11, b01, -worldUp, u);
+            addFace(b00, b10, t10, t00, -w, u);
+            addFace(b01, b11, t11, t01, w, u);
+            addFace(b00, b01, t01, t00, -u, w);
+            addFace(b10, b11, t11, t10, u, w);
         }
     }
 
