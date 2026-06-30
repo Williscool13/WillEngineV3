@@ -304,6 +304,28 @@ struct TrefoilKnotParams
     int32_t stacks{128};
 };
 
+enum class SplineProfileType : uint8_t
+{
+    Tube = 0,
+    Rectangle = 1,
+    RoundedRect = 2,
+    IBeam = 3,
+    UChannel = 4,
+    LAngle = 5,
+    RailHead = 6,
+    Handrail = 7,
+};
+
+struct SplineProfile
+{
+    SplineProfileType type{SplineProfileType::Tube};
+    float width{0.4f};
+    float height{0.4f};
+    float cornerRadius{0.08f};
+    int32_t cornerSegments{3};
+    float thickness{0.05f};
+};
+
 struct SplineParams
 {
     Spline spline;
@@ -317,6 +339,7 @@ struct SplineParams
     bool bCrossPlanks{false};
     int32_t crossPlankInterval{4};
     float crossPlankHeight{0.0f};
+    SplineProfile profile{};
 };
 
 struct BowlParams
@@ -343,17 +366,24 @@ struct CurvedRampParams
 
 /**
  * centerColumnRadius insets the tread inner edge (and sizes the column). bShowCenterColumn only toggles the column mesh; the treads inset regardless.
+ * bSpecifyStepHeight=false derives riser from totalHeight/stepCount (fix the rise); true uses stepHeight literally and totalHeight is informational.
+ * bSpecifyDegreesPerStep=false derives per-step rotation from totalSweep/stepCount (fix the turn); true uses degreesPerStep literally and totalSweep is informational. Rotation never drives stepCount (height owns it).
  */
 struct SpiralStaircaseParams
 {
     int32_t stepCount{12};
     float stepHeight{0.2f};
+    float totalHeight{2.4f};
+    bool bSpecifyStepHeight{false};
     float outerRadius{1.5f};
     float centerColumnRadius{0.25f};
     float treadThickness{0.08f};
     float degreesPerStep{30.0f};
+    float totalSweep{360.0f};
+    bool bSpecifyDegreesPerStep{false};
     int32_t arcSegments{6};
     bool bShowCenterColumn{true};
+    bool bRamp{false};
 };
 
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams

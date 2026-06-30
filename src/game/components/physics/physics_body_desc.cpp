@@ -171,6 +171,12 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     sp["bCrossPlanks"] = shape.splineParams.bCrossPlanks;
                     sp["crossPlankInterval"] = shape.splineParams.crossPlankInterval;
                     sp["crossPlankHeight"] = shape.splineParams.crossPlankHeight;
+                    sp["profileType"] = static_cast<int32_t>(shape.splineParams.profile.type);
+                    sp["profileWidth"] = shape.splineParams.profile.width;
+                    sp["profileHeight"] = shape.splineParams.profile.height;
+                    sp["profileCornerRadius"] = shape.splineParams.profile.cornerRadius;
+                    sp["profileCornerSegments"] = shape.splineParams.profile.cornerSegments;
+                    sp["profileThickness"] = shape.splineParams.profile.thickness;
                     shapeJson["splineParams"] = sp;
                 }
                 if (shape.text3DSource.IsValid()) {
@@ -310,12 +316,17 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     else if constexpr (std::is_same_v<T, Engine::SpiralStaircaseParams>) {
                         shapeJson["stepCount"] = p.stepCount;
                         shapeJson["stepHeight"] = p.stepHeight;
+                        shapeJson["totalHeight"] = p.totalHeight;
+                        shapeJson["bSpecifyStepHeight"] = p.bSpecifyStepHeight;
                         shapeJson["outerRadius"] = p.outerRadius;
                         shapeJson["centerColumnRadius"] = p.centerColumnRadius;
                         shapeJson["treadThickness"] = p.treadThickness;
                         shapeJson["degreesPerStep"] = p.degreesPerStep;
+                        shapeJson["totalSweep"] = p.totalSweep;
+                        shapeJson["bSpecifyDegreesPerStep"] = p.bSpecifyDegreesPerStep;
                         shapeJson["arcSegments"] = p.arcSegments;
                         shapeJson["bShowCenterColumn"] = p.bShowCenterColumn;
+                        shapeJson["bRamp"] = p.bRamp;
                     }
                 }, shape.proceduralParams);
                 break;
@@ -549,12 +560,17 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                         Engine::SpiralStaircaseParams p{};
                         p.stepCount = shapeJson["stepCount"].get<int32_t>();
                         p.stepHeight = shapeJson["stepHeight"].get<float>();
+                        p.totalHeight = shapeJson.value("totalHeight", p.stepHeight * static_cast<float>(std::max(p.stepCount, 1)));
+                        p.bSpecifyStepHeight = shapeJson.value("bSpecifyStepHeight", false);
                         p.outerRadius = shapeJson["outerRadius"].get<float>();
                         p.centerColumnRadius = shapeJson["centerColumnRadius"].get<float>();
                         p.treadThickness = shapeJson.value("treadThickness", 0.08f);
                         p.degreesPerStep = shapeJson.value("degreesPerStep", 30.0f);
+                        p.totalSweep = shapeJson.value("totalSweep", p.degreesPerStep * static_cast<float>(std::max(p.stepCount, 1)));
+                        p.bSpecifyDegreesPerStep = shapeJson.value("bSpecifyDegreesPerStep", false);
                         p.arcSegments = shapeJson.value("arcSegments", 6);
                         p.bShowCenterColumn = shapeJson.value("bShowCenterColumn", true);
+                        p.bRamp = shapeJson.value("bRamp", false);
                         shape.proceduralParams = p;
                     }
                 }
@@ -572,6 +588,12 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                     spline.bCrossPlanks = sp.value("bCrossPlanks", false);
                     spline.crossPlankInterval = sp.value("crossPlankInterval", 4);
                     spline.crossPlankHeight = sp.value("crossPlankHeight", 0.0f);
+                    spline.profile.type = static_cast<Engine::SplineProfileType>(sp.value("profileType", 0));
+                    spline.profile.width = sp.value("profileWidth", 0.4f);
+                    spline.profile.height = sp.value("profileHeight", 0.4f);
+                    spline.profile.cornerRadius = sp.value("profileCornerRadius", 0.08f);
+                    spline.profile.cornerSegments = sp.value("profileCornerSegments", 3);
+                    spline.profile.thickness = sp.value("profileThickness", 0.05f);
                     shape.splineParams = spline;
                 }
                 if (shapeJson.contains("text3DSource")) {

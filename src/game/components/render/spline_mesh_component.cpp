@@ -37,6 +37,7 @@ Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
     params.bCrossPlanks = component.bCrossPlanks;
     params.crossPlankInterval = component.crossPlankInterval;
     params.crossPlankHeight = component.crossPlankHeight;
+    params.profile = component.profile;
     return params;
 }
 
@@ -95,6 +96,12 @@ void Component::SplineMeshComponent::Serialize(const SplineMeshComponent& comp, 
     json["bCrossPlanks"] = comp.bCrossPlanks;
     json["crossPlankInterval"] = comp.crossPlankInterval;
     json["crossPlankHeight"] = comp.crossPlankHeight;
+    json["profileType"] = static_cast<int32_t>(comp.profile.type);
+    json["profileWidth"] = comp.profile.width;
+    json["profileHeight"] = comp.profile.height;
+    json["profileCornerRadius"] = comp.profile.cornerRadius;
+    json["profileCornerSegments"] = comp.profile.cornerSegments;
+    json["profileThickness"] = comp.profile.thickness;
     json["material"] = comp.material.id;
 }
 
@@ -114,6 +121,12 @@ void Component::SplineMeshComponent::Deserialize(SplineMeshComponent& comp, cons
     comp.bCrossPlanks = json.value("bCrossPlanks", false);
     comp.crossPlankInterval = json.value("crossPlankInterval", 4);
     comp.crossPlankHeight = json.value("crossPlankHeight", 0.0f);
+    comp.profile.type = static_cast<Engine::SplineProfileType>(json.value("profileType", 0));
+    comp.profile.width = json.value("profileWidth", 0.4f);
+    comp.profile.height = json.value("profileHeight", 0.4f);
+    comp.profile.cornerRadius = json.value("profileCornerRadius", 0.08f);
+    comp.profile.cornerSegments = json.value("profileCornerSegments", 3);
+    comp.profile.thickness = json.value("profileThickness", 0.05f);
     comp.material = Engine::MaterialID(json.value("material", uint64_t(0)));
 
     if (comp.spline.points.Size() < 2) {
@@ -171,11 +184,42 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             dirty = true;
         }
 
-        ImGui::DragFloat("Radius", &component.radius, 0.01f, 0.001f, 50.0f);
-        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+        const char* splineProfileNames[] = {"Tube", "Rectangle", "Rounded Rect", "I-Beam", "U-Channel", "L-Angle", "Rail Head", "Handrail"};
+        int profileTypeInt = static_cast<int>(component.profile.type);
+        ImGui::SetNextItemWidth(140.0f);
+        if (ImGui::Combo("Profile##sm", &profileTypeInt, splineProfileNames, IM_ARRAYSIZE(splineProfileNames))) {
+            component.profile.type = static_cast<Engine::SplineProfileType>(profileTypeInt);
+            dirty = true;
+        }
+
+        const Engine::SplineProfileType pt = component.profile.type;
+        if (pt == Engine::SplineProfileType::Tube) {
+            ImGui::DragFloat("Radius", &component.radius, 0.01f, 0.001f, 50.0f);
+            dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::DragInt("Sides", &component.sides, 1, 3, 64);
+            dirty |= ImGui::IsItemDeactivatedAfterEdit();
+        }
+        else {
+            ImGui::DragFloat("Width", &component.profile.width, 0.01f, 0.001f, 50.0f);
+            dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::DragFloat("Height", &component.profile.height, 0.01f, 0.001f, 50.0f);
+            dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            if (pt == Engine::SplineProfileType::RoundedRect) {
+                ImGui::DragFloat("Corner Radius", &component.profile.cornerRadius, 0.005f, 0.0f, 25.0f);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            }
+            if (pt == Engine::SplineProfileType::RoundedRect || pt == Engine::SplineProfileType::Handrail) {
+                ImGui::DragInt("Corner Segments", &component.profile.cornerSegments, 1, 1, 16);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            }
+            if (pt == Engine::SplineProfileType::IBeam || pt == Engine::SplineProfileType::UChannel
+                || pt == Engine::SplineProfileType::LAngle || pt == Engine::SplineProfileType::RailHead) {
+                ImGui::DragFloat("Thickness", &component.profile.thickness, 0.005f, 0.001f, 25.0f);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            }
+        }
+
         ImGui::DragFloat("Roll Angle", &component.rollAngle, 1.0f, -180.0f, 180.0f, "%.1f deg");
-        dirty |= ImGui::IsItemDeactivatedAfterEdit();
-        ImGui::DragInt("Sides", &component.sides, 1, 3, 64);
         dirty |= ImGui::IsItemDeactivatedAfterEdit();
         ImGui::DragInt("Segments/Span", &component.segmentsPerSpan, 1, 1, 32);
         dirty |= ImGui::IsItemDeactivatedAfterEdit();

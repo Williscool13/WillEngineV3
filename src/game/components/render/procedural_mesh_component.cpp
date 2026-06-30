@@ -196,12 +196,17 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
         else if constexpr (std::is_same_v<T, Engine::SpiralStaircaseParams>) {
             json["stepCount"] = p.stepCount;
             json["stepHeight"] = p.stepHeight;
+            json["totalHeight"] = p.totalHeight;
+            json["bSpecifyStepHeight"] = p.bSpecifyStepHeight;
             json["outerRadius"] = p.outerRadius;
             json["centerColumnRadius"] = p.centerColumnRadius;
             json["treadThickness"] = p.treadThickness;
             json["degreesPerStep"] = p.degreesPerStep;
+            json["totalSweep"] = p.totalSweep;
+            json["bSpecifyDegreesPerStep"] = p.bSpecifyDegreesPerStep;
             json["arcSegments"] = p.arcSegments;
             json["bShowCenterColumn"] = p.bShowCenterColumn;
+            json["bRamp"] = p.bRamp;
         }
     }, comp.params);
 }
@@ -398,12 +403,17 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         Engine::SpiralStaircaseParams p{};
         p.stepCount = json["stepCount"].get<int32_t>();
         p.stepHeight = json["stepHeight"].get<float>();
+        p.totalHeight = json.value("totalHeight", p.stepHeight * static_cast<float>(std::max(p.stepCount, 1)));
+        p.bSpecifyStepHeight = json.value("bSpecifyStepHeight", false);
         p.outerRadius = json["outerRadius"].get<float>();
         p.centerColumnRadius = json["centerColumnRadius"].get<float>();
         p.treadThickness = json.value("treadThickness", 0.08f);
         p.degreesPerStep = json.value("degreesPerStep", 30.0f);
+        p.totalSweep = json.value("totalSweep", p.degreesPerStep * static_cast<float>(std::max(p.stepCount, 1)));
+        p.bSpecifyDegreesPerStep = json.value("bSpecifyDegreesPerStep", false);
         p.arcSegments = json.value("arcSegments", 6);
         p.bShowCenterColumn = json.value("bShowCenterColumn", true);
+        p.bRamp = json.value("bRamp", false);
         comp.params = p;
     }
 }
@@ -749,17 +759,83 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if constexpr (std::is_same_v<T, Engine::SpiralStaircaseParams>) {
-                    ImGui::DragInt("Step Count", &p.stepCount, 1, 1, 256);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Step Height", &p.stepHeight, 0.01f, 0.01f, 10.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Degrees Per Step", &p.degreesPerStep, 0.5f, 1.0f, 180.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Ramp (continuous helix)", &p.bRamp)) { dirty = true; }
+
+                    // Total Height — always editable; drives stepCount when bSpecifyStepHeight
+                    ImGui::DragFloat("Total Height", &p.totalHeight, 0.01f, 0.01f, 100.0f);
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        if (p.bSpecifyStepHeight) {
+                            p.stepCount = std::max(1, (int32_t) std::ceil(p.totalHeight / std::max(p.stepHeight, 0.001f)));
+                        }
+                        dirty = true;
+                    }
+
+                    if (ImGui::Checkbox("Specify Step Height", &p.bSpecifyStepHeight)) {
+                        if (p.bSpecifyStepHeight) {
+                            p.stepHeight = p.totalHeight / static_cast<float>(std::max(p.stepCount, 1));
+                        }
+                        dirty = true;
+                    }
+
+                    if (p.bSpecifyStepHeight) {
+                        float derivedCount = p.totalHeight / std::max(p.stepHeight, 0.001f);
+                        ImGui::BeginDisabled(true);
+                        ImGui::DragFloat("Step Count", &derivedCount, 1.0f, 1.0f, 256.0f, "%.2f");
+                        ImGui::EndDisabled();
+                    }
+                    else {
+                        ImGui::DragInt("Step Count", &p.stepCount, 1, 1, 256);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    }
+
+                    if (p.bSpecifyStepHeight) {
+                        ImGui::DragFloat("Step Height", &p.stepHeight, 0.001f, 0.001f, 10.0f);
+                        if (ImGui::IsItemDeactivatedAfterEdit()) {
+                            p.stepCount = std::max(1, (int32_t) std::ceil(p.totalHeight / std::max(p.stepHeight, 0.001f)));
+                            dirty = true;
+                        }
+                    }
+                    else {
+                        float derivedHeight = p.totalHeight / static_cast<float>(std::max(p.stepCount, 1));
+                        ImGui::BeginDisabled(true);
+                        ImGui::DragFloat("Step Height", &derivedHeight, 0.001f, 0.001f, 10.0f);
+                        ImGui::EndDisabled();
+                    }
+
+                    const float effStepH = p.bSpecifyStepHeight ? p.stepHeight : p.totalHeight / static_cast<float>(std::max(p.stepCount, 1));
+
+                    // Rotation: Total Sweep vs Degrees Per Step. stepCount is owned by the height section, so the toggle only swaps which one is typed.
+                    if (ImGui::Checkbox("Specify Degrees Per Step", &p.bSpecifyDegreesPerStep)) {
+                        if (p.bSpecifyDegreesPerStep) {
+                            p.degreesPerStep = p.totalSweep / static_cast<float>(std::max(p.stepCount, 1));
+                        }
+                        else {
+                            p.totalSweep = p.degreesPerStep * static_cast<float>(std::max(p.stepCount, 1));
+                        }
+                        dirty = true;
+                    }
+                    if (p.bSpecifyDegreesPerStep) {
+                        ImGui::DragFloat("Degrees Per Step", &p.degreesPerStep, 0.5f, 1.0f, 180.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        float derivedSweep = p.degreesPerStep * static_cast<float>(std::max(p.stepCount, 1));
+                        ImGui::BeginDisabled(true);
+                        ImGui::DragFloat("Total Sweep (deg)", &derivedSweep, 1.0f, 1.0f, 100000.0f, "%.1f");
+                        ImGui::EndDisabled();
+                    }
+                    else {
+                        ImGui::DragFloat("Total Sweep (deg)", &p.totalSweep, 1.0f, 1.0f, 100000.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        float derivedDeg = p.totalSweep / static_cast<float>(std::max(p.stepCount, 1));
+                        ImGui::BeginDisabled(true);
+                        ImGui::DragFloat("Degrees Per Step", &derivedDeg, 0.5f, 1.0f, 180.0f, "%.2f");
+                        ImGui::EndDisabled();
+                    }
+
                     ImGui::DragFloat("Outer Radius", &p.outerRadius, 0.01f, 0.05f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Center Column Radius", &p.centerColumnRadius, 0.01f, 0.0f, p.outerRadius - 0.01f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Tread Thickness", &p.treadThickness, 0.005f, 0.001f, p.stepHeight);
+                    ImGui::DragFloat("Tread Thickness", &p.treadThickness, 0.005f, 0.001f, effStepH);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragInt("Arc Segments", &p.arcSegments, 1, 1, 64);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();

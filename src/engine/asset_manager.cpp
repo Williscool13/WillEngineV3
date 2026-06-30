@@ -321,6 +321,12 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.dualPathSpacing), sizeof(params.dualPathSpacing), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCrossPlanks), sizeof(params.bCrossPlanks), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankInterval), sizeof(params.crossPlankInterval), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.type), sizeof(params.profile.type), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.width), sizeof(params.profile.width), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.height), sizeof(params.profile.height), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerRadius), sizeof(params.profile.cornerRadius), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerSegments), sizeof(params.profile.cornerSegments), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.thickness), sizeof(params.profile.thickness), hash);
 
     ModelID splineModelId{hash};
 

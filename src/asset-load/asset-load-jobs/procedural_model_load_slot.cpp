@@ -2089,9 +2089,9 @@ bool ProceduralModelLoadSlot::GenerateSpiralStaircase(const Engine::SpiralStairc
     const int32_t seg = std::max(1, p.arcSegments);
     const float ro = std::max(0.05f, p.outerRadius);
     const float ri = glm::clamp(p.centerColumnRadius, 0.001f, ro - 0.01f);
-    const float stepH = std::max(0.001f, p.stepHeight);
+    const float stepH = std::max(0.001f, p.bSpecifyStepHeight ? p.stepHeight : p.totalHeight / static_cast<float>(steps));
     const float thick = glm::clamp(p.treadThickness, 0.001f, stepH);
-    const float dStep = glm::radians(p.degreesPerStep);
+    const float dStep = glm::radians(p.bSpecifyDegreesPerStep ? p.degreesPerStep : p.totalSweep / static_cast<float>(steps));
 
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -2130,40 +2130,58 @@ bool ProceduralModelLoadSlot::GenerateSpiralStaircase(const Engine::SpiralStairc
 
     auto ringDir = [](float a) { return Vec3{cosf(a), 0.0f, sinf(a)}; };
 
-    // Each tread is a closed solid wedge (open-riser); the optional column fills the middle.
+    // Stair mode emits flat treads (constant height per step); ramp mode replaces them with a continuous helicoid slab whose top tracks angle.
+    const bool bRamp = p.bRamp;
+    const float heightPerRad = stepH / std::max(dStep, 1e-6f);
+    const float rMid = 0.5f * (ri + ro);
+    auto topAtAngle = [&](float a) { return a * heightPerRad; };
+
     for (int32_t i = 0; i < steps; ++i) {
         const float a0 = static_cast<float>(i) * dStep;
         const float a1 = a0 + dStep;
-        const float yt = static_cast<float>(i + 1) * stepH;
-        const float yb = yt - thick;
+        const float ytStep = static_cast<float>(i + 1) * stepH;
 
         for (int32_t s = 0; s < seg; ++s) {
             const float as = a0 + (a1 - a0) * (static_cast<float>(s) / static_cast<float>(seg));
             const float an = a0 + (a1 - a0) * (static_cast<float>(s + 1) / static_cast<float>(seg));
             const Vec3 ds = ringDir(as), dn = ringDir(an);
-            const Vec3 top{0.0f, yt, 0.0f}, bot{0.0f, yb, 0.0f};
 
-            addQuad(ds * ri + top, ds * ro + top, dn * ro + top, dn * ri + top,
-                    Vec3{0, 1, 0}, Vec4{ds.z, 0, -ds.x, 1},
+            const float yts = bRamp ? topAtAngle(as) : ytStep;
+            const float ytn = bRamp ? topAtAngle(an) : ytStep;
+            const Vec3 topS{0.0f, yts, 0.0f}, topN{0.0f, ytn, 0.0f};
+            const Vec3 botS{0.0f, yts - thick, 0.0f}, botN{0.0f, ytn - thick, 0.0f};
+
+            const float amid = 0.5f * (as + an);
+            const Vec3 topNormal = bRamp ? glm::normalize(Vec3{heightPerRad * sinf(amid), rMid, -heightPerRad * cosf(amid)}) : Vec3{0, 1, 0};
+
+            addQuad(ds * ri + topS, ds * ro + topS, dn * ro + topN, dn * ri + topN,
+                    topNormal, Vec4{ds.z, 0, -ds.x, 1},
                     Vec2{ri, as}, Vec2{ro, as}, Vec2{ro, an}, Vec2{ri, an});
-            addQuad(ds * ri + bot, ds * ro + bot, dn * ro + bot, dn * ri + bot,
-                    Vec3{0, -1, 0}, Vec4{ds.z, 0, -ds.x, 1},
+            addQuad(ds * ri + botS, ds * ro + botS, dn * ro + botN, dn * ri + botN,
+                    -topNormal, Vec4{ds.z, 0, -ds.x, 1},
                     Vec2{ri, as}, Vec2{ro, as}, Vec2{ro, an}, Vec2{ri, an});
-            addQuad(ds * ro + bot, dn * ro + bot, dn * ro + top, ds * ro + top,
+            addQuad(ds * ro + botS, dn * ro + botN, dn * ro + topN, ds * ro + topS,
                     glm::normalize(ds + dn), Vec4{-ds.z, 0, ds.x, 1},
-                    Vec2{as, yb}, Vec2{an, yb}, Vec2{an, yt}, Vec2{as, yt});
-            addQuad(ds * ri + bot, dn * ri + bot, dn * ri + top, ds * ri + top,
+                    Vec2{as, yts - thick}, Vec2{an, ytn - thick}, Vec2{an, ytn}, Vec2{as, yts});
+            addQuad(ds * ri + botS, dn * ri + botN, dn * ri + topN, ds * ri + topS,
                     -glm::normalize(ds + dn), Vec4{-ds.z, 0, ds.x, 1},
-                    Vec2{as, yb}, Vec2{an, yb}, Vec2{an, yt}, Vec2{as, yt});
+                    Vec2{as, yts - thick}, Vec2{an, ytn - thick}, Vec2{an, ytn}, Vec2{as, yts});
         }
 
+        // Radial faces are the per-step risers in stair mode; in ramp mode only the bottom lip (first step) and top lip (last step) remain.
         const Vec3 d0 = ringDir(a0), d1 = ringDir(a1);
-        addQuad(d0 * ri + Vec3{0, yb, 0}, d0 * ro + Vec3{0, yb, 0}, d0 * ro + Vec3{0, yt, 0}, d0 * ri + Vec3{0, yt, 0},
-                Vec3{sinf(a0), 0, -cosf(a0)}, Vec4{d0.x, 0, d0.z, 1},
-                Vec2{ri, yb}, Vec2{ro, yb}, Vec2{ro, yt}, Vec2{ri, yt});
-        addQuad(d1 * ri + Vec3{0, yb, 0}, d1 * ro + Vec3{0, yb, 0}, d1 * ro + Vec3{0, yt, 0}, d1 * ri + Vec3{0, yt, 0},
-                Vec3{-sinf(a1), 0, cosf(a1)}, Vec4{d1.x, 0, d1.z, 1},
-                Vec2{ri, yb}, Vec2{ro, yb}, Vec2{ro, yt}, Vec2{ri, yt});
+        const float yt0 = bRamp ? topAtAngle(a0) : ytStep;
+        const float yt1 = bRamp ? topAtAngle(a1) : ytStep;
+        if (!bRamp || i == 0) {
+            addQuad(d0 * ri + Vec3{0, yt0 - thick, 0}, d0 * ro + Vec3{0, yt0 - thick, 0}, d0 * ro + Vec3{0, yt0, 0}, d0 * ri + Vec3{0, yt0, 0},
+                    Vec3{sinf(a0), 0, -cosf(a0)}, Vec4{d0.x, 0, d0.z, 1},
+                    Vec2{ri, yt0 - thick}, Vec2{ro, yt0 - thick}, Vec2{ro, yt0}, Vec2{ri, yt0});
+        }
+        if (!bRamp || i == steps - 1) {
+            addQuad(d1 * ri + Vec3{0, yt1 - thick, 0}, d1 * ro + Vec3{0, yt1 - thick, 0}, d1 * ro + Vec3{0, yt1, 0}, d1 * ri + Vec3{0, yt1, 0},
+                    Vec3{-sinf(a1), 0, cosf(a1)}, Vec4{d1.x, 0, d1.z, 1},
+                    Vec2{ri, yt1 - thick}, Vec2{ro, yt1 - thick}, Vec2{ro, yt1}, Vec2{ri, yt1});
+        }
     }
 
     if (p.bShowCenterColumn) {
@@ -2190,6 +2208,210 @@ bool ProceduralModelLoadSlot::GenerateSpiralStaircase(const Engine::SpiralStairc
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
+struct SplineProfilePoint
+{
+    Vec2 pos;
+    Vec2 normal;
+};
+
+static float ProfileCross2(Vec2 a, Vec2 b, Vec2 c)
+{
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+static bool ProfilePointInTri(Vec2 p, Vec2 a, Vec2 b, Vec2 c)
+{
+    const float d1 = ProfileCross2(p, a, b);
+    const float d2 = ProfileCross2(p, b, c);
+    const float d3 = ProfileCross2(p, c, a);
+    const bool hasNeg = (d1 < 0.0f) || (d2 < 0.0f) || (d3 < 0.0f);
+    const bool hasPos = (d1 > 0.0f) || (d2 > 0.0f) || (d3 > 0.0f);
+    return !(hasNeg && hasPos);
+}
+
+// Consecutive (and wrap) duplicate-free CCW outline of the swept ring, used for cap triangulation.
+static void ProfileOutline(const Core::Vector<SplineProfilePoint>& ring, Core::Vector<Vec2>& outline)
+{
+    const int n = static_cast<int>(ring.Size());
+    for (int i = 0; i < n; i++) {
+        const Vec2 cur = ring[i].pos;
+        if (!outline.IsEmpty() && glm::distance(cur, outline.Back()) < 1e-6f) { continue; }
+        outline.PushBack(cur);
+    }
+    while (outline.Size() >= 2 && glm::distance(outline.Back(), outline[0]) < 1e-6f) {
+        outline.RemoveAt(outline.Size() - 1);
+    }
+}
+
+// Ear-clip a simple CCW polygon into triangle indices (handles concave profiles like I-beam/U-channel).
+static void TriangulateProfileCap(const Core::Vector<Vec2>& poly, Core::Vector<uint32_t>& outTris)
+{
+    const int n = static_cast<int>(poly.Size());
+    if (n < 3 || n > 256) { return; }
+    int remaining[256];
+    int m = n;
+    for (int i = 0; i < n; i++) { remaining[i] = i; }
+
+    int guard = n * n + 1;
+    while (m > 3 && guard-- > 0) {
+        bool clipped = false;
+        for (int i = 0; i < m; i++) {
+            const int i0 = remaining[(i + m - 1) % m];
+            const int i1 = remaining[i];
+            const int i2 = remaining[(i + 1) % m];
+            const Vec2 a = poly[i0], b = poly[i1], c = poly[i2];
+            if (ProfileCross2(a, b, c) <= 0.0f) { continue; }
+            bool ear = true;
+            for (int k = 0; k < m; k++) {
+                const int ik = remaining[k];
+                if (ik == i0 || ik == i1 || ik == i2) { continue; }
+                if (ProfilePointInTri(poly[ik], a, b, c)) { ear = false; break; }
+            }
+            if (!ear) { continue; }
+            outTris.PushBack(static_cast<uint32_t>(i0));
+            outTris.PushBack(static_cast<uint32_t>(i1));
+            outTris.PushBack(static_cast<uint32_t>(i2));
+            for (int k = i; k < m - 1; k++) { remaining[k] = remaining[k + 1]; }
+            m--;
+            clipped = true;
+            break;
+        }
+        if (!clipped) { break; }
+    }
+    if (m == 3) {
+        outTris.PushBack(static_cast<uint32_t>(remaining[0]));
+        outTris.PushBack(static_cast<uint32_t>(remaining[1]));
+        outTris.PushBack(static_cast<uint32_t>(remaining[2]));
+    }
+}
+
+static void BuildSplineProfile(const Engine::SplineParams& p, Core::Vector<SplineProfilePoint>& ring)
+{
+    auto push = [&](Vec2 pos, Vec2 n) { ring.PushBack({pos, glm::normalize(n)}); };
+    // Expand a CCW corner list into hard-edged ring points (one outward normal per edge).
+    auto hardEdges = [&](const Vec2* corners, int n) {
+        for (int i = 0; i < n; i++) {
+            const Vec2 a = corners[i];
+            const Vec2 b = corners[(i + 1) % n];
+            Vec2 dir = b - a;
+            const float len = glm::length(dir);
+            if (len < 1e-8f) { continue; }
+            dir /= len;
+            push(a, {dir.y, -dir.x});
+            push(b, {dir.y, -dir.x});
+        }
+    };
+
+    const float hw = p.profile.width * 0.5f;
+    const float hh = p.profile.height * 0.5f;
+    const float t = glm::clamp(p.profile.thickness, 0.001f, glm::min(hw, hh));
+
+    switch (p.profile.type) {
+        case Engine::SplineProfileType::Rectangle:
+        {
+            const Vec2 c[4] = {{-hw, -hh}, {hw, -hh}, {hw, hh}, {-hw, hh}};
+            hardEdges(c, 4);
+            break;
+        }
+        case Engine::SplineProfileType::RoundedRect:
+        {
+            const float cr = glm::clamp(p.profile.cornerRadius, 0.0f, std::min(hw, hh));
+            const int cs = std::max(1, p.profile.cornerSegments);
+            const float halfPi = glm::half_pi<float>();
+            const float pi = glm::pi<float>();
+            auto arc = [&](Vec2 ctr, float a0, float a1) {
+                for (int k = 0; k <= cs; k++) {
+                    const float a = glm::mix(a0, a1, static_cast<float>(k) / static_cast<float>(cs));
+                    const Vec2 dir{cosf(a), sinf(a)};
+                    push(ctr + cr * dir, dir);
+                }
+            };
+            push({-hw + cr, -hh}, {0, -1}); push({hw - cr, -hh}, {0, -1});
+            arc({hw - cr, -hh + cr}, -halfPi, 0.0f);
+            push({hw, -hh + cr}, {1, 0}); push({hw, hh - cr}, {1, 0});
+            arc({hw - cr, hh - cr}, 0.0f, halfPi);
+            push({hw - cr, hh}, {0, 1}); push({-hw + cr, hh}, {0, 1});
+            arc({-hw + cr, hh - cr}, halfPi, pi);
+            push({-hw, hh - cr}, {-1, 0}); push({-hw, -hh + cr}, {-1, 0});
+            arc({-hw + cr, -hh + cr}, pi, 1.5f * pi);
+            break;
+        }
+        case Engine::SplineProfileType::IBeam:
+        {
+            const float web = t * 0.5f;
+            const Vec2 c[12] = {
+                {-hw, -hh}, {hw, -hh}, {hw, -hh + t}, {web, -hh + t},
+                {web, hh - t}, {hw, hh - t}, {hw, hh}, {-hw, hh},
+                {-hw, hh - t}, {-web, hh - t}, {-web, -hh + t}, {-hw, -hh + t}
+            };
+            hardEdges(c, 12);
+            break;
+        }
+        case Engine::SplineProfileType::UChannel:
+        {
+            const Vec2 c[8] = {
+                {-hw, -hh}, {hw, -hh}, {hw, hh}, {hw - t, hh},
+                {hw - t, -hh + t}, {-hw + t, -hh + t}, {-hw + t, hh}, {-hw, hh}
+            };
+            hardEdges(c, 8);
+            break;
+        }
+        case Engine::SplineProfileType::LAngle:
+        {
+            const Vec2 c[6] = {
+                {-hw, -hh}, {hw, -hh}, {hw, -hh + t}, {-hw + t, -hh + t}, {-hw + t, hh}, {-hw, hh}
+            };
+            hardEdges(c, 6);
+            break;
+        }
+        case Engine::SplineProfileType::RailHead:
+        {
+            const float web = t * 0.5f;
+            const float headHW = hw * 0.5f;
+            const float headT = glm::min(hh * 0.5f, t * 1.5f);
+            const Vec2 c[12] = {
+                {-hw, -hh}, {hw, -hh}, {hw, -hh + t}, {web, -hh + t},
+                {web, hh - headT}, {headHW, hh - headT}, {headHW, hh}, {-headHW, hh},
+                {-headHW, hh - headT}, {-web, hh - headT}, {-web, -hh + t}, {-hw, -hh + t}
+            };
+            hardEdges(c, 12);
+            break;
+        }
+        case Engine::SplineProfileType::Handrail:
+        {
+            // Vertical stadium / rounded grip: straight sides + semicircular top and bottom.
+            const int cs = std::max(2, p.profile.cornerSegments);
+            const float r = glm::min(hw, hh);
+            const float pi = glm::pi<float>();
+            const float straight = glm::max(0.0f, hh - r);
+            auto arc = [&](Vec2 ctr, float a0, float a1) {
+                for (int k = 0; k <= cs; k++) {
+                    const float a = glm::mix(a0, a1, static_cast<float>(k) / static_cast<float>(cs));
+                    const Vec2 dir{cosf(a), sinf(a)};
+                    push(ctr + r * dir, dir);
+                }
+            };
+            push({r, -straight}, {1, 0}); push({r, straight}, {1, 0});
+            arc({0, straight}, 0.0f, pi);
+            push({-r, straight}, {-1, 0}); push({-r, -straight}, {-1, 0});
+            arc({0, -straight}, pi, 2.0f * pi);
+            break;
+        }
+        case Engine::SplineProfileType::Tube:
+        default:
+        {
+            const int n = std::max(3, p.sides);
+            const float r = p.radius;
+            for (int j = 0; j < n; j++) {
+                const float a = glm::two_pi<float>() * static_cast<float>(j) / static_cast<float>(n);
+                const Vec2 dir{cosf(a), sinf(a)};
+                push(r * dir, dir);
+            }
+            break;
+        }
+    }
+}
+
 bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 {
     const int N = static_cast<int>(p.spline.points.Size());
@@ -2197,7 +2419,6 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 
     const bool bClosed = p.spline.bClosed;
     const int segs = std::max(1, p.segmentsPerSpan);
-    const int sides = std::max(3, p.sides);
     const int totalSpans = bClosed ? N : N - 1;
     const int totalRings = bClosed ? totalSpans * segs : totalSpans * segs + 1;
 
@@ -2284,6 +2505,20 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
 
+    // Cross-section profile (closed loop of pos+normal in the frame plane), swept along the path.
+    Core::Vector<SplineProfilePoint> ring(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    BuildSplineProfile(p, ring);
+    const int ringSize = static_cast<int>(ring.Size());
+    if (ringSize < 3) { return false; }
+
+    // Cap polygon + triangulation (ear-clipped so concave profiles cap correctly). Built once, reused per rail/end.
+    Core::Vector<Vec2> capOutline(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> capTris(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    if (p.bCaps && !bClosed) {
+        ProfileOutline(ring, capOutline);
+        TriangulateProfileCap(capOutline, capTris);
+    }
+
     const int railCount = p.bDualPath ? 2 : 1;
     const float halfSpacing = p.dualPathSpacing * 0.5f;
 
@@ -2295,13 +2530,12 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             const Frame& f = frames[i];
             const Vec3 center = f.pos + offsetSign * halfSpacing * f.rRight;
             const float vCoord = (totalRings > 1) ? static_cast<float>(i) / static_cast<float>(totalRings - 1) : 0.0f;
-            for (int j = 0; j < sides; j++) {
-                const float angle = glm::two_pi<float>() * static_cast<float>(j) / sides;
-                const Vec3 radial = glm::cos(angle) * f.rRight + glm::sin(angle) * f.rUp;
+            for (int j = 0; j < ringSize; j++) {
+                const SplineProfilePoint& pp = ring[j];
                 Engine::FullVertex v{};
-                v.position = center + p.radius * radial;
-                v.normal = radial;
-                v.uv = {static_cast<float>(j) / static_cast<float>(sides), vCoord};
+                v.position = center + pp.pos.x * f.rRight + pp.pos.y * f.rUp;
+                v.normal = glm::normalize(pp.normal.x * f.rRight + pp.normal.y * f.rUp);
+                v.uv = {static_cast<float>(j) / static_cast<float>(ringSize), vCoord};
                 v.tangent = {f.rRight.x, f.rRight.y, f.rRight.z, 1.0f};
                 v.color = {1, 1, 1, 1};
                 vertices.PushBack(v);
@@ -2311,9 +2545,10 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         const int stitchCount = bClosed ? totalRings : totalRings - 1;
         for (int i = 0; i < stitchCount; i++) {
             const int nextRing = bClosed ? (i + 1) % totalRings : i + 1;
-            for (int j = 0; j < sides; j++) {
-                uint32_t a0 = baseVertex + i * sides + j, a1 = baseVertex + i * sides + (j + 1) % sides;
-                uint32_t b0 = baseVertex + nextRing * sides + j, b1 = baseVertex + nextRing * sides + (j + 1) % sides;
+            for (int j = 0; j < ringSize; j++) {
+                const int jn = (j + 1) % ringSize;
+                uint32_t a0 = baseVertex + i * ringSize + j, a1 = baseVertex + i * ringSize + jn;
+                uint32_t b0 = baseVertex + nextRing * ringSize + j, b1 = baseVertex + nextRing * ringSize + jn;
                 indices.PushBack(a0);
                 indices.PushBack(a1);
                 indices.PushBack(b0);
@@ -2323,41 +2558,41 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             }
         }
 
-        if (p.bCaps && !bClosed) {
-            {
-                auto cIdx = static_cast<uint32_t>(vertices.Size());
-                const Frame& f = frames[0];
+        // Flat end caps. CCW outline triangles face +tangent, so the front cap reverses winding.
+        if (p.bCaps && !bClosed && !capTris.IsEmpty()) {
+            const int outlineSize = static_cast<int>(capOutline.Size());
+            auto addCap = [&](int ringIdx, Vec3 capNormal, bool reverse) {
+                const Frame& f = frames[ringIdx];
                 const Vec3 center = f.pos + offsetSign * halfSpacing * f.rRight;
-                Engine::FullVertex vc{};
-                vc.position = center;
-                vc.normal = -f.tangent;
-                vc.uv = {0.5f, 0.0f};
-                vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f};
-                vc.color = {1, 1, 1, 1};
-                vertices.PushBack(vc);
-                for (int j = 0; j < sides; j++) {
-                    indices.PushBack(cIdx);
-                    indices.PushBack(baseVertex + (j + 1) % sides);
-                    indices.PushBack(baseVertex + j);
+                const auto capBase = static_cast<uint32_t>(vertices.Size());
+                for (int k = 0; k < outlineSize; k++) {
+                    const Vec2& o = capOutline[k];
+                    Engine::FullVertex v{};
+                    v.position = center + o.x * f.rRight + o.y * f.rUp;
+                    v.normal = capNormal;
+                    v.uv = {o.x, o.y};
+                    v.tangent = {f.rRight.x, f.rRight.y, f.rRight.z, 1.0f};
+                    v.color = {1, 1, 1, 1};
+                    vertices.PushBack(v);
                 }
-            } {
-                auto cIdx = static_cast<uint32_t>(vertices.Size());
-                const Frame& f = frames[totalRings - 1];
-                uint32_t rStart = baseVertex + static_cast<uint32_t>((totalRings - 1) * sides);
-                const Vec3 center = f.pos + offsetSign * halfSpacing * f.rRight;
-                Engine::FullVertex vc{};
-                vc.position = center;
-                vc.normal = f.tangent;
-                vc.uv = {0.5f, 1.0f};
-                vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f};
-                vc.color = {1, 1, 1, 1};
-                vertices.PushBack(vc);
-                for (int j = 0; j < sides; j++) {
-                    indices.PushBack(cIdx);
-                    indices.PushBack(rStart + j);
-                    indices.PushBack(rStart + (j + 1) % sides);
+                for (size_t ti = 0; ti + 3 <= capTris.Size(); ti += 3) {
+                    const uint32_t a = capBase + capTris[ti];
+                    const uint32_t b = capBase + capTris[ti + 1];
+                    const uint32_t c = capBase + capTris[ti + 2];
+                    if (reverse) {
+                        indices.PushBack(a);
+                        indices.PushBack(c);
+                        indices.PushBack(b);
+                    }
+                    else {
+                        indices.PushBack(a);
+                        indices.PushBack(b);
+                        indices.PushBack(c);
+                    }
                 }
-            }
+            };
+            addCap(0, -frames[0].tangent, true);
+            addCap(totalRings - 1, frames[totalRings - 1].tangent, false);
         }
     }
 
