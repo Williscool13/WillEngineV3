@@ -407,7 +407,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                 .useCatmullRom = donutConfig.bUseCatmullRom ? 1u : 0u,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("donut_taa"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("taa_donut"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DonutTaaPushConstant), &pushData);
 

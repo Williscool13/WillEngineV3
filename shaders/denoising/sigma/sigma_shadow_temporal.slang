@@ -26,7 +26,7 @@ static float UnpackHistoryLength(uint p) { return float(p & 7u); }
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void ComputeMain(uniform SigmaTemporalPushConstant pc, uint3 tid : SV_DispatchThreadID)
+void ComputeSigmaShadowTemporal(uniform SigmaTemporalPushConstant pc, uint3 tid : SV_DispatchThreadID)
 {
     uint2 pixel = tid.xy;
     if (any(pixel >= pc.renderExtent)) {

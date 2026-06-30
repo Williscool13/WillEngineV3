@@ -23,6 +23,7 @@ float3 ApplyThreshold(float3 color, float threshold, float softThreshold) {
     return color * contribution;
 }
 
+[shader("compute")]
 [numthreads(POST_PROCESS_BLOOM_DISPATCH_X, POST_PROCESS_BLOOM_DISPATCH_Y, 1)]
 void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
@@ -37,6 +38,7 @@ void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : S
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(thresholded, 1.0);
 }
 
+[shader("compute")]
 [numthreads(POST_PROCESS_BLOOM_DISPATCH_X, POST_PROCESS_BLOOM_DISPATCH_Y, 1)]
 void ComputeBloomDownsample(uniform BloomDownsamplePushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
@@ -84,6 +86,7 @@ void ComputeBloomDownsample(uniform BloomDownsamplePushConstant pc, uint3 dtid :
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(result, 1.0);
 }
 
+[shader("compute")]
 [numthreads(POST_PROCESS_BLOOM_DISPATCH_X, POST_PROCESS_BLOOM_DISPATCH_Y, 1)]
 void ComputeBloomUpsample(uniform BloomUpsamplePushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;

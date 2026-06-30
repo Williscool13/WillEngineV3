@@ -28,7 +28,7 @@ groupshared uint gs_visibleQuadIndices[QUADS_PER_GROUP];
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(32, 1, 1)]
-void MeshMain(
+void MeshTextDefault(
     OutputVertices<VertexOutput, VERTS_PER_GROUP> vertices,
     OutputIndices<uint3, TRIS_PER_GROUP> triangles,
     uint3 gid  : SV_GroupID,
@@ -132,7 +132,7 @@ struct FragmentOutput
 };
 
 [shader("fragment")]
-FragmentOutput FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc)
+FragmentOutput FragmentTextDefault(VertexOutput input, uniform TextRenderPushConstant pc)
 {
     TextInstanceData inst = pc.textInstanceData[input.drawCallIndex];
     TextRenderMaterial mat = pc.textMaterialBuffer[pc.textMaterialIndex];

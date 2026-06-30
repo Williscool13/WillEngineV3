@@ -133,8 +133,9 @@ float ComputeVelocityDisocclusion(float2 uv, float2 currentVelocityUV) {
 }
 */
 
+[shader("compute")]
 [numthreads(TILE_DIM, TILE_DIM, 1)]
-void ComputeMain(uint3 threadID: SV_DispatchThreadID, uint3 groupThreadID: SV_GroupThreadID, uint3 groupID: SV_GroupID, uint groupIndex: SV_GroupIndex)
+void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 groupThreadID: SV_GroupThreadID, uint3 groupID: SV_GroupID, uint groupIndex: SV_GroupIndex)
 {
     int2 renderSize = int2(pc.sceneData.mainRenderTargetSize);
     int2 groupOrigin = int2(groupID.xy) * TILE_DIM - 1;

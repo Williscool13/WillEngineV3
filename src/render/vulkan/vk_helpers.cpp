@@ -303,14 +303,14 @@ bool VkHelpers::LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::
     return true;
 }
 
-VkPipelineShaderStageCreateInfo VkHelpers::PipelineShaderStageCreateInfo(VkShaderModule shader, VkShaderStageFlagBits shaderStage)
+VkPipelineShaderStageCreateInfo VkHelpers::PipelineShaderStageCreateInfo(VkShaderModule shader, VkShaderStageFlagBits shaderStage, const char* entryPoint)
 {
     return {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .pNext = nullptr,
         .stage = shaderStage,
         .module = shader,
-        .pName = "main",
+        .pName = entryPoint,
     };
 }
 

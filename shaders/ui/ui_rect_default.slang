@@ -9,7 +9,7 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput VertexMain(uint vid : SV_VertexID, uniform UIRectRenderPushConstant pc)
+VertexOutput VertexUIRectDefault(uint vid : SV_VertexID, uniform UIRectRenderPushConstant pc)
 {
     float px = (vid & 1u) != 0u ? pc.ndcMax.x : pc.ndcMin.x;
     float py = (vid & 2u) != 0u ? pc.ndcMax.y : pc.ndcMin.y;
@@ -23,7 +23,7 @@ VertexOutput VertexMain(uint vid : SV_VertexID, uniform UIRectRenderPushConstant
 }
 
 [shader("fragment")]
-float4 FragmentMain(VertexOutput input, uniform UIRectRenderPushConstant pc) : SV_Target0
+float4 FragmentUIRectDefault(VertexOutput input, uniform UIRectRenderPushConstant pc) : SV_Target0
 {
     float2 center = (pc.pxMin + pc.pxMax) * 0.5;
     float2 halfSize = (pc.pxMax - pc.pxMin) * 0.5;

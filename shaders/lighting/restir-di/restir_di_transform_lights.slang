@@ -3,8 +3,9 @@ import push_constant_interop;
 import lights_interop;
 import restir_common;
 
+[shader("compute")]
 [numthreads(64, 1, 1)]
-void ComputeMain(uniform ReSTIRTransformLightsPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeReSTIRDITransformLights(uniform ReSTIRTransformLightsPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     uint lightIdx = threadID.x;
     if (lightIdx >= uint(pc.lightData->lightCount)) {
         return;

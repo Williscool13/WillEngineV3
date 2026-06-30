@@ -13,8 +13,9 @@ import regir_hash;
 groupshared float gCellTargetReduce[64];
 groupshared float gCellOccupancyReduce[64];
 
+[shader("compute")]
 [numthreads(64, 1, 1)]
-void ComputeMain(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID) {
+void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID) {
     uint cellIdx = groupID.x;
     if (cellIdx >= pc.activeCount[0]) {
         return;

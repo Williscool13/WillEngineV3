@@ -49,9 +49,9 @@ public:
 
     PipelineManager& operator=(const PipelineManager&) = delete;
 
-    void RegisterComputePipeline(StringID pipelineId, Core::Path shaderPath, uint32_t pushConstantSize, PipelineCategory category);
+    void RegisterComputePipeline(StringID pipelineId, Core::Path shaderPath, const char* entryPoint, uint32_t pushConstantSize, PipelineCategory category);
 
-    void RegisterComputePipelineCustomLayout(StringID pipelineId, Core::Path shaderPath, uint32_t pushConstantSize, PipelineCategory category,
+    void RegisterComputePipelineCustomLayout(StringID pipelineId, Core::Path shaderPath, const char* entryPoint, uint32_t pushConstantSize, PipelineCategory category,
                                              Core::Span<const VkDescriptorSetLayout> customLayouts);
 
     void RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category);

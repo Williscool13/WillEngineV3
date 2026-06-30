@@ -8,16 +8,17 @@
 
 namespace Render
 {
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddShaderStage(Core::Path shaderPath, VkShaderStageFlagBits stage)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddShaderStage(Core::Path shaderPath, VkShaderStageFlagBits stage, const char* entryPoint)
 {
     assert(!shaderStages.IsFull() && "Too many shader stages");
 
     shaderPaths.PushBack(shaderPath);
+    entryPoints.PushBack(Core::InlineString<64>(entryPoint));
     shaderStages.PushBack({
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = stage,
         .module = VK_NULL_HANDLE, // Filled in creation
-        .pName = "main",
+        .pName = nullptr, // Set from entryPoints at pipeline creation
     });
 
     return *this;
@@ -165,6 +166,7 @@ void GraphicsPipelineBuilder::Clear()
 {
     shaderPaths.Clear();
     shaderStages.Clear();
+    entryPoints.Clear();
     vertexBindings.Clear();
     vertexAttributes.Clear();
     colorAttachmentFormats.Clear();

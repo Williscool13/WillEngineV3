@@ -8,8 +8,9 @@ import shader_functions;
 [[vk::push_constant]]
 DebugVisualizePushConstant pc;
 
+[shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
+void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.dstExtent.x || threadID.y >= pc.dstExtent.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.dstExtent);

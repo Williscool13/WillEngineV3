@@ -3,7 +3,7 @@ import bindless_declarations;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform DepthCopyPushConstant pc)
+void ComputeDepthCopy(uint3 dtid : SV_DispatchThreadID, uniform DepthCopyPushConstant pc)
 {
     uint2 pixel = dtid.xy;
     if (any(pixel >= pc.extents)) {

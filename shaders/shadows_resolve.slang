@@ -1,8 +1,9 @@
 import push_constant_interop;
 import bindless_declarations;
 
+[shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeMain(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeShadowsResolve(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.sceneData->mainRenderTargetSize.x || threadID.y >= pc.sceneData->mainRenderTargetSize.y) return;
 
     float gtao = 1.0f;

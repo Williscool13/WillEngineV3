@@ -4,8 +4,9 @@ import restir_common;
 
 groupshared float2 gBoiling[256];
 
+[shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeMain(uniform ReSTIRBoilingFilterPushConstant pc, uint3 threadID : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
+void ComputeReSTIRBoilingFilter(uniform ReSTIRBoilingFilterPushConstant pc, uint3 threadID : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
     uint2 pixel = threadID.xy;
     bool oob = any(pixel >= pc.renderExtent);
     uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;

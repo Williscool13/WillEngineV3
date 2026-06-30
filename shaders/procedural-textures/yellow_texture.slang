@@ -2,8 +2,9 @@ import constants_interop;
 import push_constant_interop;
 import procedural_texture_declarations;
 
+[shader("compute")]
 [numthreads(PROCEDURAL_TEXTURE_DISPATCH_X, PROCEDURAL_TEXTURE_DISPATCH_Y, 1)]
-void ComputeMain(uniform ProceduralTextureBasePushConstant pc, uint3 tid : SV_DispatchThreadID)
+void ComputeYellowTexture(uniform ProceduralTextureBasePushConstant pc, uint3 tid : SV_DispatchThreadID)
 {
     uint2 size;
     proceduralOutputTextures[pc.outputIndex].GetDimensions(size.x, size.y);

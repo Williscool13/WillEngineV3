@@ -16,7 +16,7 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput VertexMain(uint vid : SV_VertexID, uint iid : SV_InstanceID, uniform UITextRenderPushConstant pc)
+VertexOutput VertexUITextDefault(uint vid : SV_VertexID, uint iid : SV_InstanceID, uniform UITextRenderPushConstant pc)
 {
     uint glyphIdx = pc.quadOffset + iid;
     uint corner = vid;
@@ -43,7 +43,7 @@ float MSDFMedian(float r, float g, float b)
 }
 
 [shader("fragment")]
-float4 FragmentMain(VertexOutput input, uniform UITextRenderPushConstant pc) : SV_Target0
+float4 FragmentUITextDefault(VertexOutput input, uniform UITextRenderPushConstant pc) : SV_Target0
 {
     Texture2D atlas = assetTextures[pc.atlasBindlessIndex];
     SamplerState smp = assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX];

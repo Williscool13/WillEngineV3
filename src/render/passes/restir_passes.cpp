@@ -51,7 +51,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     transformPass.ReadBuffer(SID("light_data"));
     transformPass.WriteBuffer(SID("restir_lights_vs"));
     transformPass.Execute([&, pipelineManager, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_transform_lights"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_transform_lights"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
         ReSTIRTransformLightsPushConstant pc{

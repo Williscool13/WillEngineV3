@@ -18,7 +18,7 @@ struct VertexOutput
 
 // =============== Fragment Shader ===============
 [shader("fragment")]
-float4 FragmentMain(VertexOutput input) : SV_Target0
+float4 FragmentDebugRender(VertexOutput input) : SV_Target0
 {
     return input.color;
 }
@@ -26,7 +26,7 @@ float4 FragmentMain(VertexOutput input) : SV_Target0
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(32, 1, 1)]
-void MeshMain(
+void MeshDebugRender(
     out indices uint3 triangles[64], out vertices VertexOutput vertices[128],
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID,
     uniform DebugDrawPushConstant pc)

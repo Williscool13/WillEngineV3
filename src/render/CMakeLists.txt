@@ -136,79 +136,31 @@ endif()
 
 find_program(SLANGC slangc REQUIRED)
 
-function(preprocess_shader_interop INPUT_HEADER OUTPUT_SLANG)
-    find_program(GCC_COMPILER gcc)
-    if(GCC_COMPILER)
-        add_custom_command(
-                OUTPUT ${OUTPUT_SLANG}
-                COMMAND ${GCC_COMPILER} -E -P -D__SLANG__ -x c++ ${INPUT_HEADER} -o ${OUTPUT_SLANG}
-                DEPENDS ${INPUT_HEADER}
-                COMMENT "Preprocessing ${OUTPUT_SLANG}"
-        )
-    elseif(MSVC)
-        add_custom_command(
-                OUTPUT ${OUTPUT_SLANG}
-                COMMAND ${CMAKE_CXX_COMPILER} /P /EP /D__SLANG__ /TP ${INPUT_HEADER} /Fi${OUTPUT_SLANG}
-                DEPENDS ${INPUT_HEADER}
-                COMMENT "Preprocessing ${OUTPUT_SLANG}"
-        )
-    else()
-        add_custom_command(
-                OUTPUT ${OUTPUT_SLANG}
-                COMMAND ${CMAKE_CXX_COMPILER} -E -P -D__SLANG__ -x c++ ${INPUT_HEADER} -o ${OUTPUT_SLANG}
-                DEPENDS ${INPUT_HEADER}
-                COMMENT "Preprocessing ${OUTPUT_SLANG}"
-        )
-    endif()
-
-    set_property(GLOBAL APPEND PROPERTY SHADER_INTEROP_FILES ${OUTPUT_SLANG})
-endfunction()
-
-# Macro-only header (a plain copy)
-function(copy_shader_macros INPUT_HEADER OUTPUT_SLANG)
-    add_custom_command(
-            OUTPUT ${OUTPUT_SLANG}
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${INPUT_HEADER} ${OUTPUT_SLANG}
-            DEPENDS ${INPUT_HEADER}
-            COMMENT "Copying ${OUTPUT_SLANG}"
-    )
-    set_property(GLOBAL APPEND PROPERTY SHADER_INTEROP_FILES ${OUTPUT_SLANG})
-endfunction()
-
-function(compile_shader TARGET SHADER_SOURCE STAGE ENTRY)
-    # Parse optional OUTPUT_NAME argument
-    set(options "")
-    set(oneValueArgs OUTPUT_NAME)
-    set(multiValueArgs "")
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    # Use custom output name if provided, otherwise generate from source filename
-    if(ARG_OUTPUT_NAME)
-        set(SHADER_NAME ${ARG_OUTPUT_NAME})
-    else()
-        get_filename_component(SHADER_NAME ${SHADER_SOURCE} NAME_WE)
-    endif()
-
+function(compile_shader TARGET SHADER_SOURCE)
+    get_filename_component(SHADER_NAME ${SHADER_SOURCE} NAME_WE)
     get_filename_component(SHADER_SOURCE_ABS ${SHADER_SOURCE} ABSOLUTE)
     get_filename_component(SHADER_INCLUDE_DIR ${SHADER_SOURCE_ABS} DIRECTORY)
 
-    set(SHADER_OUTPUT ${CMAKE_BINARY_DIR}/shaders/${SHADER_NAME}_${STAGE}.spv)
-    get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
+    set(SHADER_OUTPUT ${CMAKE_BINARY_DIR}/shaders/${SHADER_NAME}.spv)
     get_property(INCLUDE_FILES GLOBAL PROPERTY SHADER_INCLUDE_FILES)
+
+    get_property(INCLUDE_DIRS GLOBAL PROPERTY SHADER_INCLUDE_DIRS)
+    set(SLANG_INCLUDE_FLAGS "")
+    foreach(dir ${INCLUDE_DIRS})
+        list(APPEND SLANG_INCLUDE_FLAGS -I ${dir})
+    endforeach()
 
     add_custom_command(
             OUTPUT ${SHADER_OUTPUT}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
             COMMAND ${SLANGC} ${SHADER_SOURCE_ABS}
             -target spirv
-            -entry ${ENTRY}
-            -stage ${STAGE}
+            -fvk-use-entrypoint-name
             -I ${SHADER_INCLUDE_DIR}
-            -I ${CMAKE_SOURCE_DIR}/shaders
-            -I ${CMAKE_SOURCE_DIR}/shaders/include
+            ${SLANG_INCLUDE_FLAGS}
             -o ${SHADER_OUTPUT}
-            DEPENDS ${SHADER_SOURCE_ABS} ${INTEROP_FILES} ${INCLUDE_FILES}
-            COMMENT "Compiling ${STAGE} shader: ${SHADER_NAME}_${STAGE}.spv"
+            DEPENDS ${SHADER_SOURCE_ABS} ${INCLUDE_FILES}
+            COMMENT "Compiling shader: ${SHADER_NAME}.spv"
             VERBATIM
     )
 
@@ -217,36 +169,12 @@ endfunction()
 
 
 function(compile_shaders TARGET)
-    set(ARGS ${ARGN})
-    list(LENGTH ARGS NUM_ARGS)
-
-    set(i 0)
-    while(i LESS NUM_ARGS)
-        list(GET ARGS ${i} SHADER_SOURCE)
-        math(EXPR i "${i} + 1")
-        list(GET ARGS ${i} STAGE)
-        math(EXPR i "${i} + 1")
-        list(GET ARGS ${i} ENTRY)
-        math(EXPR i "${i} + 1")
-
-        # Check if next arg exists and is not a path (i.e., it's an output name)
-        if(i LESS NUM_ARGS)
-            list(GET ARGS ${i} NEXT_ARG)
-            # If it doesn't end in .slang, treat as OUTPUT_NAME
-            if(NOT NEXT_ARG MATCHES "\\.(slang|hlsl)$")
-                compile_shader(${TARGET} ${SHADER_SOURCE} ${STAGE} ${ENTRY} OUTPUT_NAME ${NEXT_ARG})
-                math(EXPR i "${i} + 1")
-            else()
-                compile_shader(${TARGET} ${SHADER_SOURCE} ${STAGE} ${ENTRY})
-            endif()
-        else()
-            compile_shader(${TARGET} ${SHADER_SOURCE} ${STAGE} ${ENTRY})
-        endif()
-    endwhile()
+    foreach(SHADER_SOURCE ${ARGN})
+        compile_shader(${TARGET} ${SHADER_SOURCE})
+    endforeach()
 
     # Create single custom target for all shaders
     get_property(SHADER_OUTPUTS TARGET ${TARGET} PROPERTY SHADER_OUTPUTS)
     add_custom_target(${TARGET}_shaders ALL DEPENDS ${SHADER_OUTPUTS})
-    add_dependencies(${TARGET}_shaders shader_interop)
     add_dependencies(${TARGET} ${TARGET}_shaders)
 endfunction()

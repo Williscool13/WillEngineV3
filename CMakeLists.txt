@@ -324,60 +324,14 @@ target_include_directories(tracy PUBLIC
 )
 
 # Shaders =====================================
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/common_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/common_interop.slang
-)
-
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/model_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/model_interop.slang
-)
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/instancing_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/instancing_interop.slang
-)
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/lights_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/lights_interop.slang
-)
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/constants_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/constants_interop.slang
-)
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/push_constant_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/push_constant_interop.slang
-)
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/text_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/text_interop.slang
-)
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/ui_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/ui_interop.slang
-)
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/restir_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/restir_interop.slang
-)
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/relax_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/relax_interop.slang
-)
-preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/reblur_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/reblur_interop.slang
-)
-
-copy_shader_macros(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/restir_features_macros.h
-        ${CMAKE_SOURCE_DIR}/shaders/include/restir_features_macros.slang
-)
-
-
-get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
-add_custom_target(shader_interop DEPENDS ${INTEROP_FILES})
+set_property(GLOBAL PROPERTY SHADER_INCLUDE_DIRS "")
+function(add_shader_include_directory DIR)
+    get_filename_component(DIR_ABS ${DIR} ABSOLUTE)
+    set_property(GLOBAL APPEND PROPERTY SHADER_INCLUDE_DIRS ${DIR_ABS})
+endfunction()
+add_shader_include_directory("${CMAKE_SOURCE_DIR}/shaders")
+add_shader_include_directory("${CMAKE_SOURCE_DIR}/shaders/include")
+add_shader_include_directory("${CMAKE_SOURCE_DIR}/src/render/shaders")
 
 # Used to define dependencies for building (not actually the includes)
 set_property(GLOBAL PROPERTY SHADER_INCLUDE_FILES "")
@@ -403,159 +357,24 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/reblur_utils.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/reblur_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sigma_utils.slang")
 
-compile_shaders(will-engine
-        ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
-        ${CMAKE_SOURCE_DIR}/shaders/depth_copy.slang compute ComputeMain depth_copy
+file(GLOB INTEROP_DEP_FILES CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/src/render/shaders/*.h"
+        "${CMAKE_SOURCE_DIR}/src/render/shaders/*.slang")
+foreach(f ${INTEROP_DEP_FILES})
+    add_shader_include(${f})
+endforeach()
 
-        # Instancing (Either 1->2->scan->1->2 or 1->scan->2)
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeInstanceLOD instancing_instance_lod
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumUpsweep1 instancing_prefix_sum_up_1
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumUpsweep2 instancing_prefix_sum_up_2
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumScanBlocks instancing_scan_blocks
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumDownsweep1 instancing_prefix_sum_down_1
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumDownsweep2 instancing_prefix_sum_down_2
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeTotalMeshletCount instancing_total_meshlet_count
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeExpandInstancesToMeshlets instancing_expand_instance_to_meshlet
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMeshletVisibilityPrefixSumUpsweep1 instancing_meshlet_visibility_prefix_sum_up_1
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMeshletVisibilityPrefixSumDownsweep2 instancing_meshlet_visibility_prefix_sum_down_2
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactedMeshletDispatch instancing_compacted_meshlet_dispatch
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMaxMeshletCount instancing_max_meshlet_count
+file(GLOB_RECURSE WILL_ENGINE_SHADER_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/shaders/*.slang")
 
-        # Visibility Buffer
-        #   Geometry
-        ${CMAKE_SOURCE_DIR}/shaders/geometry/geometry_visibility_buffer.slang mesh MeshMain visibility_buffer
-        ${CMAKE_SOURCE_DIR}/shaders/geometry/geometry_visibility_buffer.slang fragment FragmentMain visibility_buffer
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute VisibilityBufferBarycentricDerivative visibility_buffer_barycentric_derivative
-        #   Shade Dispatch Bucketing
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute ComputeShadeDispatchBucketing visibility_bucketing_bounds_calculation
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute ComputeShadeDispatchBucketingResolve visibility_shading_bucketing_resolve
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute ComputeLightDispatchBucketingResolve visibility_lighting_bucketing_resolve
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute ComputeBucketDispatchCount bucketing_dispatch_count
-        #   "Fragment Shaders"
-        ${CMAKE_SOURCE_DIR}/shaders/shading/shading_bucket_visualize.slang compute ComputeMain shading_bucket_visualize
-        ${CMAKE_SOURCE_DIR}/shaders/shading/lighting_bucket_visualize.slang compute ComputeMain lighting_bucket_visualize
-        ${CMAKE_SOURCE_DIR}/shaders/shading/shading_default_lit.slang compute ComputeMain shading_default_lit
-        ${CMAKE_SOURCE_DIR}/shaders/shading/shading_error_unlit.slang compute ComputeMain shading_error_unlit
-        #   "Lighting Shaders"
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr.slang compute ComputeMain lighting_pbr
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr_restir.slang compute ComputeMain lighting_pbr_restir
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_ground_truth.slang compute ComputeMain lighting_ground_truth
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_toon.slang compute ComputeMain lighting_toon
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeMain lighting_unlit
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/directional_light.slang compute ComputeMain directional_light
-
-        ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_shadow_test.slang compute ComputeMain rt_shadow_test
-        ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_ground_truth_di.slang compute ComputeMain rt_ground_truth_di
-        ${CMAKE_SOURCE_DIR}/shaders/raytracing/rt_sun_shadow.slang compute ComputeMain rt_sun_shadow
-
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/sigma/sigma_classify_tiles.slang compute ComputeMain sigma_classify_tiles
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/sigma/sigma_smooth_tiles.slang compute ComputeMain sigma_smooth_tiles
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/sigma/sigma_shadow_blur.slang compute ComputeMain sigma_shadow_blur
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/sigma/sigma_shadow_temporal.slang compute ComputeMain sigma_shadow_temporal
-
-        # ReSTIR
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_transform_lights.slang compute ComputeMain restir_di_transform_lights
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_spatial.slang compute ComputeMain restir_di_spatial
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_base_regir.slang compute ComputeMain restir_di_base_regir
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_temporal.slang compute ComputeMain restir_di_temporal
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_remodulate.slang compute ReSTIRRemodulateMain restir_remodulate
-
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_touch.slang compute ComputeMain regir_touch
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_build_indirect.slang compute ComputeMain regir_build_indirect
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_presample_tiles.slang compute ComputeMain regir_presample_tiles
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/regir_fill.slang compute ComputeMain regir_fill
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_boiling_filter.slang compute ComputeMain restir_boiling_filter
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_confidence_gradient.slang compute ComputeMain restir_confidence_gradient
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_confidence_resolve.slang compute ComputeMain restir_confidence_resolve
-
-        ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
-
-        # Sprite Rendering
-        ${CMAKE_SOURCE_DIR}/shaders/sprites.slang mesh MeshMain sprites
-        ${CMAKE_SOURCE_DIR}/shaders/sprites.slang fragment FragmentMain sprites
-
-        # Text Rendering
-        ${CMAKE_SOURCE_DIR}/shaders/text/text_default.slang mesh MeshMain default_text
-        ${CMAKE_SOURCE_DIR}/shaders/text/text_default.slang fragment FragmentMain default_text
-
-        # UI Rendering
-        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_text_default.slang vertex VertexMain ui_text_default
-        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_text_default.slang fragment FragmentMain ui_text_default
-        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_image_default.slang vertex VertexMain ui_image_default
-        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_image_default.slang fragment FragmentMain ui_image_default
-        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_rect_default.slang vertex VertexMain ui_rect_default
-        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_rect_default.slang fragment FragmentMain ui_rect_default
-        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_border_default.slang vertex VertexMain ui_border_default
-        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_border_default.slang fragment FragmentMain ui_border_default
-
-        # Debug / Editor Rendering
-        ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render
-        ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang mesh MeshMain debug_render
-        ${CMAKE_SOURCE_DIR}/shaders/selection_outline.slang compute ComputeMain selection_outline
-
-
-        # Deprecated
-        ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentPortalComposite portal_composite
-
-
-
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/temporal_antialiasing.slang compute ComputeMain temporal_antialiasing
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/naive_temporal_antialiasing.slang compute ComputeMain naive_temporal_antialiasing
-        ${CMAKE_SOURCE_DIR}/shaders/donut_taa.slang compute ComputeMain donut_taa
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute LumaEdgeDetectionMain smaa_luma_edge_detection
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute ColorEdgeDetectionMain smaa_color_edge_detection
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute DepthEdgeDetectionMain smaa_depth_edge_detection
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_blend_weight.slang compute BlendWeightMain smaa_blend_weight
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_neighborhood_blend.slang compute NeighborhoodBlendMain smaa_neighborhood_blend
-        ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtao_depth_prepass
-        ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtao_main
-        ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtao_denoise
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_generate_viewz.slang compute RelaxGenerateViewZMain relax_generate_viewz
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_classify_tiles.slang compute RelaxClassifyTilesMain relax_classify_tiles
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_prepass.slang compute RelaxPrepassMain relax_prepass
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_temporal_accumulation.slang compute RelaxTemporalAccumulationMain relax_temporal_accumulation
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_history_fix.slang compute RelaxHistoryFixMain relax_history_fix
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_history_clamping.slang compute RelaxHistoryClampingMain relax_history_clamping
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_atrous.slang compute RelaxAtrousMain relax_atrous
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_antifirefly.slang compute RelaxAntiFireflyMain relax_antifirefly
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_pack.slang compute ReblurPackMain reblur_pack
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_generate_viewz.slang compute ReblurGenerateViewZMain reblur_generate_viewz
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_classify_tiles.slang compute ReblurClassifyTilesMain reblur_classify_tiles
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_prepass.slang compute ReblurPrepassMain reblur_prepass
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_temporal_accumulation.slang compute ReblurTemporalAccumulationMain reblur_temporal_accumulation
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_history_fix.slang compute ReblurHistoryFixMain reblur_history_fix
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_blur.slang compute ReblurBlurMain reblur_blur
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/reblur/reblur_stabilization.slang compute ReblurStabilizationMain reblur_stabilization
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/tonemapping.slang compute ComputeSDRTonemap tonemap_sdr
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeBuildHistogramExposure exposure_build_histogram
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeAverageExposure exposure_calculate_average
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/motion_blur.slang compute ComputeMotionBlurTileMax motion_blur_tile_max
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/motion_blur.slang compute ComputeMotionBlurNeighborMax motion_blur_neighbor_max
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/motion_blur.slang compute ComputeMotionBlurReconstruction motion_blur_reconstruction
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/bloom.slang compute ComputeBloomThreshold bloom_threshold
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/bloom.slang compute ComputeBloomDownsample bloom_downsample
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/bloom.slang compute ComputeBloomUpsample bloom_upsample
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/vignette_aberration.slang compute ComputeVignetteAberration vignette_aberration
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/film_grain.slang compute ComputeFilmGrain film_grain
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/sharpening.slang compute ComputeSharpening sharpening
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/color_grading.slang compute ComputeColorGrading color_grading
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/panini_projection.slang compute ComputePaniniProjection panini_projection
-        ${CMAKE_SOURCE_DIR}/shaders/post-process/dither.slang compute ComputeDither dither
-
-        ${CMAKE_SOURCE_DIR}/shaders/common_shaders.slang vertex FullscreenPassVertexMain fullscreen_pass
-
-        ${CMAKE_SOURCE_DIR}/shaders/environment_map_generation.slang compute ComputeEquirectToCubemap ibl_equirect_to_cubemap
-        ${CMAKE_SOURCE_DIR}/shaders/environment_map_generation.slang compute ComputeConvolveDiffuse ibl_convolve_diffuse
-        ${CMAKE_SOURCE_DIR}/shaders/environment_map_generation.slang compute ComputePrefilterSpecular ibl_prefilter_specular
-        ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang fragment FragmentSkybox environment_map_skybox
-
-        ${CMAKE_SOURCE_DIR}/shaders/brdf_lut.slang compute ComputeBRDFLUT brdf_lut_generate
-
-        ${CMAKE_SOURCE_DIR}/shaders/procedural-textures/yellow_texture.slang compute ComputeMain yellow_texture
-        ${CMAKE_SOURCE_DIR}/shaders/procedural-textures/domain_warp.slang compute ComputeMain domain_warp
-
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_temporal_resolve.slang compute TemporalResolveMain smaa_temporal_resolve
-)
+set(WILL_ENGINE_SHADER_FILES "")
+foreach(shader ${WILL_ENGINE_SHADER_SOURCES})
+    string(FIND "${shader}" "/shaders/include/" _shader_is_include)
+    if(NOT _shader_is_include EQUAL -1)
+        continue()
+    endif()
+    list(APPEND WILL_ENGINE_SHADER_FILES ${shader})
+endforeach()
+compile_shaders(will-engine ${WILL_ENGINE_SHADER_FILES})
 
 # Post-Build Commands =========================
 add_custom_command(TARGET will-engine POST_BUILD

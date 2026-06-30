@@ -20,8 +20,9 @@ float3 SanitizeRadiance(float3 c) {
     return clamp(c, 0.0, 65504.0);
 }
 
+[shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
     uint2 pixel = threadID.xy + uint2(lightParams.minX, lightParams.minY);
     if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {

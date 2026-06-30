@@ -30,7 +30,7 @@ static float LoadShadow(uint passIndex, uint shadowIndex, int2 pos)
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void ComputeMain(uniform SigmaBlurPushConstant pc, uint3 tid : SV_DispatchThreadID)
+void ComputeSigmaShadowBlur(uniform SigmaBlurPushConstant pc, uint3 tid : SV_DispatchThreadID)
 {
     uint2 pixel = tid.xy;
     if (any(pixel >= pc.renderExtent)) {

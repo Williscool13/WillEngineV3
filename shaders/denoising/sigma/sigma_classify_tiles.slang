@@ -16,7 +16,7 @@ groupshared uint s_Radius;
 
 [shader("compute")]
 [numthreads(8, 4, 1)]
-void ComputeMain(uniform SigmaClassifyPushConstant pc, uint2 threadPos : SV_GroupThreadID, uint2 tilePos : SV_GroupID, uint threadIndex : SV_GroupIndex)
+void ComputeSigmaClassifyTiles(uniform SigmaClassifyPushConstant pc, uint2 threadPos : SV_GroupThreadID, uint2 tilePos : SV_GroupID, uint threadIndex : SV_GroupIndex)
 {
     if (threadIndex == 0) {
         s_Mask = 0;

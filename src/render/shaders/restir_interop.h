@@ -6,7 +6,6 @@
 #define WILL_ENGINE_RETIR_INTEROP_H
 
 #ifdef __SLANG__
-module restir_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST static const
 #else

@@ -87,6 +87,7 @@ float2 IntegrateBRDF(float NdotV, float roughness)
 
 [[vk::binding(0, 0)]] public RWTexture2D<half2> storageBuffer[];
 
+[shader("compute")]
 [numthreads(BRDF_LUT_GENERATION_DISPATCH_X, BRDF_LUT_GENERATION_DISPATCH_Y, 1)]
 void ComputeBRDFLUT(uniform BRDFLUTPushConstant pc, uint3 tid : SV_DispatchThreadID)
 {

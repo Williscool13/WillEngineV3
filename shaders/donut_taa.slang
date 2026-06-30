@@ -140,8 +140,9 @@ float2 OutputToInput(int2 pixelPos, float2 inputPixelOffset)
     return float2(pixelPos) + inputPixelOffset;
 }
 
+[shader("compute")]
 [numthreads(GROUP_X, GROUP_Y, 1)]
-void ComputeMain(
+void ComputeDonutTaa(
     uint3 i_groupIdx  : SV_GroupID,
     uint3 i_threadIdx : SV_GroupThreadID,
     uint3 i_globalIdx : SV_DispatchThreadID)

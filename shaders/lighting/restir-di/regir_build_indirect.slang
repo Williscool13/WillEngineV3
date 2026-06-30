@@ -3,7 +3,7 @@ import restir_interop;
 
 [shader("compute")]
 [numthreads(1, 1, 1)]
-void ComputeMain(uniform ReGIRBuildIndirectPushConstant pc)
+void ComputeReGIRBuildIndirect(uniform ReGIRBuildIndirectPushConstant pc)
 {
     pc.indirectArgs[0] = min(pc.activeCount[0], REGIR_HASH_CAPACITY);
     pc.indirectArgs[1] = 1u;

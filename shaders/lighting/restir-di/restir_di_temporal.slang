@@ -14,10 +14,11 @@ import bindless_declarations;
 import restir_common;
 import random_common;
 
-#include "restir_features_macros.slang"
+#include "restir_features_macros.h"
 
+[shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     uint2 pixel = threadID.xy;
     if (any(pixel >= pc.renderExtent)) {
         return;

@@ -7,7 +7,7 @@ import regir_hash;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform ReGIRTouchPushConstant pc)
+void ComputeReGIRTouch(uint3 dtid : SV_DispatchThreadID, uniform ReGIRTouchPushConstant pc)
 {
     uint2 pixel = dtid.xy;
     if (any(pixel >= pc.renderExtent)) {

@@ -3,8 +3,9 @@ import bindless_declarations;
 
 static const uint GRAD_FACTOR = 3u;
 
+[shader("compute")]
 [numthreads(8, 8, 1)]
-void ComputeMain(uniform ReSTIRConfidenceGradientPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeReSTIRConfidenceGradient(uniform ReSTIRConfidenceGradientPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     uint2 gpix = threadID.xy;
     if (any(gpix >= pc.gradientExtent)) {
         return;

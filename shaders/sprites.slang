@@ -19,7 +19,7 @@ struct FragmentOutput
 };
 
 [shader("fragment")]
-FragmentOutput FragmentMain(VertexOutput input, uniform SpritePushConstant pc)
+FragmentOutput FragmentSprites(VertexOutput input, uniform SpritePushConstant pc)
 {
     float4 texSample = assetTextures[pc.textureIndex].Sample(assetSamplers[pc.samplerIndex], input.uv);
     float4 color = texSample * input.color;
@@ -33,7 +33,7 @@ FragmentOutput FragmentMain(VertexOutput input, uniform SpritePushConstant pc)
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(32, 1, 1)]
-void MeshMain(
+void MeshSprites(
     out indices uint3 triangles[64], out vertices VertexOutput vertices[128],
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
     uniform SpritePushConstant pc)

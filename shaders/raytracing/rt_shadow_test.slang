@@ -6,7 +6,7 @@ import shader_functions;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTShadowTestPushConstant pc)
+void ComputeRTShadowTest(uint3 dtid : SV_DispatchThreadID, uniform RTShadowTestPushConstant pc)
 {
     uint2 pixel = dtid.xy;
     if (any(pixel >= pc.renderExtent)) {

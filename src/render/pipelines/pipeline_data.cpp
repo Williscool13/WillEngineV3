@@ -28,7 +28,7 @@ bool ComputePipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMan
     }
 
 
-    VkPipelineShaderStageCreateInfo shaderStage = VkHelpers::PipelineShaderStageCreateInfo(shaderModule, VK_SHADER_STAGE_COMPUTE_BIT);
+    VkPipelineShaderStageCreateInfo shaderStage = VkHelpers::PipelineShaderStageCreateInfo(shaderModule, VK_SHADER_STAGE_COMPUTE_BIT, entryPoint.c_str());
     Core::Array<uint32_t, 6> specConstantData{
         VulkanContext::deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0],
         VulkanContext::deviceInfo.meshShaderProps.maxTaskWorkGroupCount[1],
@@ -88,6 +88,7 @@ bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMa
             return false;
         }
         shaderStages[i].module = shaderModules[i];
+        shaderStages[i].pName = entryPoints[i].c_str();
     }
 
     VkResult layoutResult = vkCreatePipelineLayout(context->device, &layoutCreateInfo, nullptr, &loadingEntry.layout);

@@ -13,8 +13,9 @@ import restir_common;
 
 import bindless_declarations;
 
+[shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeMain(uniform VisibilityLightingPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+void ComputeLightingGroundTruth(uniform VisibilityLightingPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixel = dtid.xy;
     if (any(pixel >= pc.renderExtent)) {
         return;

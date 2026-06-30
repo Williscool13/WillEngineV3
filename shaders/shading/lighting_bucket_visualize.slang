@@ -7,7 +7,7 @@ import shader_functions;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform LightingBucketVisualizePushConstant pc)
+void ComputeLightingBucketVisualize(uint3 dtid : SV_DispatchThreadID, uniform LightingBucketVisualizePushConstant pc)
 {
     LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
     uint2 pixel = dtid.xy + uint2(lightParams.minX, lightParams.minY);

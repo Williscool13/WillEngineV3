@@ -64,7 +64,7 @@ void SetupTextForwardPass(RenderGraph& graph,
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
     if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER)) { return; }
 
-    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("default_text"));
+    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("text_default"));
     if (!pipelineEntry) { return; }
 
     RenderPass& textPass = graph.AddPass(SID("Text Forward"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::ResourceCategory::Scene);

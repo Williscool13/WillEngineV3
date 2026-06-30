@@ -45,7 +45,7 @@ struct PrimitiveOutput
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
-void MeshMain(
+void MeshGeometryVisibilityBuffer(
     OutputVertices<VertexOutput, MESHLET_MAX_VERTICES> vertices,
     OutputIndices<uint3, MESHLET_MAX_TRIANGLES> triangles,
     OutputPrimitives<PrimitiveOutput, MESHLET_MAX_TRIANGLES> primitives,
@@ -113,7 +113,7 @@ struct FragmentOutput {
 };
 
 [shader("fragment")]
-FragmentOutput FragmentMain(VertexOutput vertexInput, PrimitiveOutput primitiveInput) //, uint primitiveId : SV_PrimitiveID)
+FragmentOutput FragmentGeometryVisibilityBuffer(VertexOutput vertexInput, PrimitiveOutput primitiveInput) //, uint primitiveId : SV_PrimitiveID)
 {
     FragmentOutput output;
     output.visibilityBuffer = uint2((vertexInput.visibility.x << 8) | primitiveInput.primitiveID & 0xFF, vertexInput.visibility.y);

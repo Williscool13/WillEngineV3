@@ -55,6 +55,7 @@ public:
     bool CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache) override;
 
     Core::Path shaderPath{};
+    Core::InlineString<64> entryPoint{"main"};
 };
 
 class GraphicsPipelineData : public PipelineData
@@ -71,6 +72,7 @@ public:
 
     Core::InlineVector<Core::Path, MAX_SHADER_STAGES> shaderPaths{};
     Core::InlineVector<VkPipelineShaderStageCreateInfo, MAX_SHADER_STAGES> shaderStages{};
+    Core::InlineVector<Core::InlineString<64>, MAX_SHADER_STAGES> entryPoints{};
 
     Core::InlineVector<VkVertexInputBindingDescription, MAX_VERTEX_BINDINGS> vertexBindings{};
     Core::InlineVector<VkVertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES> vertexAttributes{};

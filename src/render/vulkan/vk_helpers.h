@@ -57,7 +57,7 @@ VkImageViewCreateInfo ImageViewCreateInfo(VkImage image, VkFormat format, VkFlag
 
 bool LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::Path& filePath, VkDevice device, VkShaderModule* outShaderModule);
 
-VkPipelineShaderStageCreateInfo PipelineShaderStageCreateInfo(VkShaderModule shader, VkShaderStageFlagBits shaderStage);
+VkPipelineShaderStageCreateInfo PipelineShaderStageCreateInfo(VkShaderModule shader, VkShaderStageFlagBits shaderStage, const char* entryPoint = "main");
 
 VkComputePipelineCreateInfo ComputePipelineCreateInfo(VkPipelineLayout pipelineLayout, const VkPipelineShaderStageCreateInfo& pipelineStageCreateInfo);
 

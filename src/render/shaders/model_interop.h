@@ -7,7 +7,6 @@
 #define WILLENGINEV3_MODEL_INTEROP_H
 
 #ifdef __SLANG__
-module model_interop;
 import constants_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static

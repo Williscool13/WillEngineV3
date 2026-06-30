@@ -6,7 +6,6 @@
 #define WILL_ENGINE_CONSTANTS_INTEROP_H
 
 #ifdef __SLANG__
-module constants_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
 #else

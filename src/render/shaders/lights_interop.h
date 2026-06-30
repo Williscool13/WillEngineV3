@@ -6,7 +6,6 @@
 #define WILL_ENGINE_LIGHTS_INTEROP_H
 
 #ifdef __SLANG__
-module SHADOWS_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
 #define SHADER_PTR(T) T*

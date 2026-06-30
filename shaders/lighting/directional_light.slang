@@ -9,8 +9,9 @@ import packing_functions;
 
 import bindless_declarations;
 
+[shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeMain(uniform DirectionalLightPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeDirectionalLight(uniform DirectionalLightPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     uint2 pixel = threadID.xy;
     if (any(pixel >= pc.renderExtent)) {
         return;

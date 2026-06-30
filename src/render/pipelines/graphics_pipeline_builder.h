@@ -8,6 +8,7 @@
 #include <volk.h>
 
 #include "core/containers/inline_path.h"
+#include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
 
 namespace Render
@@ -28,7 +29,7 @@ public:
     static constexpr uint32_t MAX_COLOR_ATTACHMENTS = 8;
     static constexpr uint32_t MAX_DYNAMIC_STATES = 16;
 
-    GraphicsPipelineBuilder& AddShaderStage(Core::Path shaderPath, VkShaderStageFlagBits stage);
+    GraphicsPipelineBuilder& AddShaderStage(Core::Path shaderPath, VkShaderStageFlagBits stage, const char* entryPoint = "main");
 
     GraphicsPipelineBuilder& SetupVertexInput(const VkVertexInputBindingDescription* bindings, uint32_t bindingCount,
                                               const VkVertexInputAttributeDescription* attributes, uint32_t attributeCount);
@@ -79,6 +80,7 @@ public:
 
     Core::InlineVector<Core::Path, MAX_SHADER_STAGES> shaderPaths{};
     Core::InlineVector<VkPipelineShaderStageCreateInfo, MAX_SHADER_STAGES> shaderStages{};
+    Core::InlineVector<Core::InlineString<64>, MAX_SHADER_STAGES> entryPoints{};
 
     Core::InlineVector<VkVertexInputBindingDescription, MAX_VERTEX_BINDINGS> vertexBindings{};
     Core::InlineVector<VkVertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES> vertexAttributes{};

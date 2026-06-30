@@ -3,7 +3,7 @@ import bindless_declarations;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform SelectionOutlinePushConstant pc)
+void ComputeSelectionOutline(uint3 dtid : SV_DispatchThreadID, uniform SelectionOutlinePushConstant pc)
 {
     uint2 pixel = dtid.xy;
     if (any(pixel >= pc.extents)) {

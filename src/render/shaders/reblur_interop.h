@@ -8,7 +8,6 @@
 #define WILL_ENGINE_REBLUR_INTEROP_H
 
 #ifdef __SLANG__
-module reblur_interop;
 #define SHADER_PUBLIC public
 #else
 #include <glm/glm.hpp>

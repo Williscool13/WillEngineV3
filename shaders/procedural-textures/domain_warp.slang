@@ -46,8 +46,9 @@ float3 palette(float t)
     return a + b * cos(2.0f * PI * (c * t + d));
 }
 
+[shader("compute")]
 [numthreads(PROCEDURAL_TEXTURE_DISPATCH_X, PROCEDURAL_TEXTURE_DISPATCH_Y, 1)]
-void ComputeMain(uniform ProceduralTextureBasePushConstant pc, uint3 tid : SV_DispatchThreadID)
+void ComputeDomainWarp(uniform ProceduralTextureBasePushConstant pc, uint3 tid : SV_DispatchThreadID)
 {
     uint2 size;
     proceduralOutputTextures[pc.outputIndex].GetDimensions(size.x, size.y);

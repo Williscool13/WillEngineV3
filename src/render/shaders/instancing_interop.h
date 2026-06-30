@@ -6,7 +6,6 @@
 #define WILL_ENGINE_INSTANCING_INTEROP_H
 
 #ifdef __SLANG__
-module instancing_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
 #define SHADER_PTR(T) T*

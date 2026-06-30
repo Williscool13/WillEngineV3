@@ -6,7 +6,6 @@
 #define WILLENGINEV3_SHADER_INTEROP_H
 
 #ifdef __SLANG__
-module common_interop;
 #define SHADER_PUBLIC public
 #define SHADER_ENUM enum
 #define SHADER_CONST const static

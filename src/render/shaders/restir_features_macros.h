@@ -1,6 +1,4 @@
-// Source of truth for the ReSTIR compile-time feature gates. Included directly by C++ (editor) and copied verbatim to
-// shaders/include/restir_features_macros.slang by copy_shader_macros (a plain copy, NOT the -E interop preprocess, so the raw
-// #defines survive for the shader-side #if). Pure preprocessor: valid in both C++ and Slang. Edit here, never the generated copy.
+// ReSTIR compile-time feature gates. Shared #defines, #included directly by both C++ and the shaders.
 #ifndef WILL_ENGINE_RESTIR_FEATURES
 #define WILL_ENGINE_RESTIR_FEATURES
 

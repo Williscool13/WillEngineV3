@@ -6,7 +6,6 @@
 #define WILL_ENGINE_TEXT_INTEROP_H
 
 #ifdef __SLANG__
-module text_interop;
 import common_interop;
 #define SHADER_PUBLIC public
 #else

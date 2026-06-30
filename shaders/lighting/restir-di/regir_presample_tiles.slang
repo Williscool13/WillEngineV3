@@ -5,7 +5,7 @@ import random_common;
 
 [shader("compute")]
 [numthreads(256, 1, 1)]
-void ComputeMain(uniform ReGIRPresampleTilesPushConstant pc, uint3 globalID : SV_DispatchThreadID)
+void ComputeReGIRPresampleTiles(uniform ReGIRPresampleTilesPushConstant pc, uint3 globalID : SV_DispatchThreadID)
 {
     uint slotIdx = globalID.x;
     uint totalSlots = REGIR_TILE_COUNT * REGIR_TILE_SIZE;

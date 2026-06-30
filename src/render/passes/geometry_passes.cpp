@@ -622,7 +622,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                 .materialCount = materialCount,
                 .lightingCount = lightingCount,
             };
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("bucketing_dispatch_count"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_bucketing_dispatch_count"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);

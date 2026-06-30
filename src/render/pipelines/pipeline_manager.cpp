@@ -115,7 +115,7 @@ PipelineManager::~PipelineManager()
     }
 }
 
-void PipelineManager::RegisterComputePipeline(StringID pipelineId, Core::Path shaderPath, uint32_t pushConstantSize, PipelineCategory category)
+void PipelineManager::RegisterComputePipeline(StringID pipelineId, Core::Path shaderPath, const char* entryPoint, uint32_t pushConstantSize, PipelineCategory category)
 {
     if (computePipelines.Contains(pipelineId)) {
         LOG_WARN(Renderer, "Pipeline '{}' already registered, skipping", pipelineId.ToString());
@@ -126,6 +126,7 @@ void PipelineManager::RegisterComputePipeline(StringID pipelineId, Core::Path sh
     data.pipelineId = pipelineId;
     data.category = category;
     data.shaderPath = shaderPath;
+    data.entryPoint = Core::InlineString<64>(entryPoint);
     data.retirementFrame = 0;
     data.pushConstantRange.offset = 0;
     data.pushConstantRange.size = pushConstantSize;
@@ -145,7 +146,7 @@ void PipelineManager::RegisterComputePipeline(StringID pipelineId, Core::Path sh
     }
 }
 
-void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, Core::Path shaderPath, uint32_t pushConstantSize, PipelineCategory category,
+void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, Core::Path shaderPath, const char* entryPoint, uint32_t pushConstantSize, PipelineCategory category,
                                                           Core::Span<const VkDescriptorSetLayout> customLayouts)
 {
     if (computePipelines.Contains(pipelineId)) {
@@ -157,6 +158,7 @@ void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, C
     data.pipelineId = pipelineId;
     data.category = category;
     data.shaderPath = shaderPath;
+    data.entryPoint = Core::InlineString<64>(entryPoint);
     data.retirementFrame = 0;
     data.pushConstantRange.offset = 0;
     data.pushConstantRange.size = pushConstantSize;
@@ -194,6 +196,7 @@ void PipelineManager::RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipe
     for (uint32_t i = 0; i < builder.shaderStages.Size(); ++i) {
         data.shaderPaths.PushBack(builder.shaderPaths[i]);
         data.shaderStages.PushBack(builder.shaderStages[i]);
+        data.entryPoints.PushBack(builder.entryPoints[i]);
     }
     for (const auto& b : builder.vertexBindings) { data.vertexBindings.PushBack(b); }
     for (const auto& a : builder.vertexAttributes) { data.vertexAttributes.PushBack(a); }
@@ -363,49 +366,49 @@ void PipelineManager::RegisterPipelines()
 
     auto src = Platform::GetShaderPath();
 
-    RegisterComputePipeline(SID("instancing_instance_lod"), src / "instancing_instance_lod_compute.spv",
+    RegisterComputePipeline(SID("instancing_instance_lod"), src / "instancing.spv", "ComputeInstanceLOD",
                             sizeof(InstanceLODPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_prefix_sum_up_1"), src / "instancing_prefix_sum_up_1_compute.spv",
+    RegisterComputePipeline(SID("instancing_prefix_sum_up_1"), src / "instancing.spv", "ComputePrefixSumUpsweep1",
                             sizeof(PrefixSumUpsweep1PushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_prefix_sum_up_2"), src / "instancing_prefix_sum_up_2_compute.spv",
+    RegisterComputePipeline(SID("instancing_prefix_sum_up_2"), src / "instancing.spv", "ComputePrefixSumUpsweep2",
                             sizeof(PrefixSumUpsweep2PushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_scan_blocks"), src / "instancing_scan_blocks_compute.spv",
+    RegisterComputePipeline(SID("instancing_scan_blocks"), src / "instancing.spv", "ComputePrefixSumScanBlocks",
                             sizeof(PrefixSumScanBlocksPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_prefix_sum_down_1"), src / "instancing_prefix_sum_down_1_compute.spv",
+    RegisterComputePipeline(SID("instancing_prefix_sum_down_1"), src / "instancing.spv", "ComputePrefixSumDownsweep1",
                             sizeof(PrefixSumDownsweep1PushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_prefix_sum_down_2"), src / "instancing_prefix_sum_down_2_compute.spv",
+    RegisterComputePipeline(SID("instancing_prefix_sum_down_2"), src / "instancing.spv", "ComputePrefixSumDownsweep2",
                             sizeof(PrefixSumDownsweep2PushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_total_meshlet_count"), src / "instancing_total_meshlet_count_compute.spv",
+    RegisterComputePipeline(SID("instancing_total_meshlet_count"), src / "instancing.spv", "ComputeTotalMeshletCount",
                             sizeof(TotalMeshletCountPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet"), src / "instancing_expand_instance_to_meshlet_compute.spv",
+    RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet"), src / "instancing.spv", "ComputeExpandInstancesToMeshlets",
                             sizeof(ExpandMeshletsPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_up_1"), src / "instancing_meshlet_visibility_prefix_sum_up_1_compute.spv",
+    RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_up_1"), src / "instancing.spv", "ComputeMeshletVisibilityPrefixSumUpsweep1",
                             sizeof(MeshletVisibilityPrefixSumUpsweep1PushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_down_2"), src / "instancing_meshlet_visibility_prefix_sum_down_2_compute.spv",
+    RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_down_2"), src / "instancing.spv", "ComputeMeshletVisibilityPrefixSumDownsweep2",
                             sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_compacted_meshlet_dispatch"), src / "instancing_compacted_meshlet_dispatch_compute.spv",
+    RegisterComputePipeline(SID("instancing_compacted_meshlet_dispatch"), src / "instancing.spv", "ComputeCompactedMeshletDispatch",
                             sizeof(CompactedMeshletDispatchPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_max_meshlet_count"), src / "instancing_max_meshlet_count_compute.spv",
+    RegisterComputePipeline(SID("instancing_max_meshlet_count"), src / "instancing.spv", "ComputeMaxMeshletCount",
                             sizeof(MaxMeshletCountPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline("visibility_buffer_barycentric_derivative"_sid, src / "visibility_buffer_barycentric_derivative_compute.spv",
+    RegisterComputePipeline("visibility_buffer_barycentric_derivative"_sid, src / "visibility_bucketing.spv", "VisibilityBufferBarycentricDerivative",
                             sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("visibility_bucketing_bounds_calculation"_sid, src / "visibility_bucketing_bounds_calculation_compute.spv",
+    RegisterComputePipeline("visibility_bucketing_bounds_calculation"_sid, src / "visibility_bucketing.spv", "ComputeShadeDispatchBucketing",
                             sizeof(ShadeBucketingPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("visibility_shading_bucketing_resolve"_sid, src / "visibility_shading_bucketing_resolve_compute.spv",
+    RegisterComputePipeline("visibility_shading_bucketing_resolve"_sid, src / "visibility_bucketing.spv", "ComputeShadeDispatchBucketingResolve",
                             sizeof(ShadeBucketingResolvePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("visibility_lighting_bucketing_resolve"_sid, src / "visibility_lighting_bucketing_resolve_compute.spv",
+    RegisterComputePipeline("visibility_lighting_bucketing_resolve"_sid, src / "visibility_bucketing.spv", "ComputeLightDispatchBucketingResolve",
                             sizeof(LightingBucketingResolvePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("bucketing_dispatch_count"_sid, src / "bucketing_dispatch_count_compute.spv",
+    RegisterComputePipeline("visibility_bucketing_dispatch_count"_sid, src / "visibility_bucketing.spv", "ComputeBucketDispatchCount",
                             sizeof(BucketDispatchCountPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline("shading_bucket_visualize"_sid, src / "shading_bucket_visualize_compute.spv",
+    RegisterComputePipeline("shading_bucket_visualize"_sid, src / "shading_bucket_visualize.spv", "ComputeShadingBucketVisualize",
                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("lighting_bucket_visualize"_sid, src / "lighting_bucket_visualize_compute.spv",
+    RegisterComputePipeline("lighting_bucket_visualize"_sid, src / "lighting_bucket_visualize.spv", "ComputeLightingBucketVisualize",
                             sizeof(LightingBucketVisualizePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("default_lit"_sid, src / "shading_default_lit_compute.spv",
+    RegisterComputePipeline("default_lit"_sid, src / "shading_default_lit.spv", "ComputeShadingDefaultLit",
                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("error_unlit"_sid, src / "shading_error_unlit_compute.spv",
+    RegisterComputePipeline("error_unlit"_sid, src / "shading_error_unlit.spv", "ComputeShadingErrorUnlit",
                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
 
     shadingPipelines.PushBack("shading_bucket_visualize"_sid);
@@ -413,188 +416,188 @@ void PipelineManager::RegisterPipelines()
     shadingPipelines.PushBack("error_unlit"_sid);
 
 
-    RegisterComputePipeline(SID("restir_transform_lights"), src / "restir_di_transform_lights_compute.spv",
+    RegisterComputePipeline(SID("restir_di_transform_lights"), src / "restir_di_transform_lights.spv", "ComputeReSTIRDITransformLights",
                             sizeof(ReSTIRTransformLightsPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("regir_touch"), src / "regir_touch_compute.spv",
+    RegisterComputePipeline(SID("regir_touch"), src / "regir_touch.spv", "ComputeReGIRTouch",
                             sizeof(ReGIRTouchPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("regir_build_indirect"), src / "regir_build_indirect_compute.spv",
+    RegisterComputePipeline(SID("regir_build_indirect"), src / "regir_build_indirect.spv", "ComputeReGIRBuildIndirect",
                             sizeof(ReGIRBuildIndirectPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("regir_presample_tiles"), src / "regir_presample_tiles_compute.spv",
+    RegisterComputePipeline(SID("regir_presample_tiles"), src / "regir_presample_tiles.spv", "ComputeReGIRPresampleTiles",
                             sizeof(ReGIRPresampleTilesPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("regir_fill"), src / "regir_fill_compute.spv",
+    RegisterComputePipeline(SID("regir_fill"), src / "regir_fill.spv", "ComputeReGIRFill",
                             sizeof(ReGIRFillPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_di_spatial"), src / "restir_di_spatial_compute.spv",
+    RegisterComputePipeline(SID("restir_di_spatial"), src / "restir_di_spatial.spv", "ComputeReSTIRDISpatial",
                             sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_di_base_regir"), src / "restir_di_base_regir_compute.spv",
+    RegisterComputePipeline(SID("restir_di_base_regir"), src / "restir_di_base_regir.spv", "ComputeReSTIRDIBaseReGIR",
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_di_temporal"), src / "restir_di_temporal_compute.spv",
+    RegisterComputePipeline(SID("restir_di_temporal"), src / "restir_di_temporal.spv", "ComputeReSTIRDITemporal",
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_boiling_filter"), src / "restir_boiling_filter_compute.spv",
+    RegisterComputePipeline(SID("restir_boiling_filter"), src / "restir_boiling_filter.spv", "ComputeReSTIRBoilingFilter",
                             sizeof(ReSTIRBoilingFilterPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_confidence_gradient"), src / "restir_confidence_gradient_compute.spv",
+    RegisterComputePipeline(SID("restir_confidence_gradient"), src / "restir_confidence_gradient.spv", "ComputeReSTIRConfidenceGradient",
                             sizeof(ReSTIRConfidenceGradientPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_confidence_resolve"), src / "restir_confidence_resolve_compute.spv",
+    RegisterComputePipeline(SID("restir_confidence_resolve"), src / "restir_confidence_resolve.spv", "ComputeReSTIRConfidenceResolve",
                             sizeof(ReSTIRConfidenceResolvePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate_compute.spv",
+    RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate.spv", "ReSTIRRemodulateMain",
                             sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr_compute.spv",
+    RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr.spv", "ComputeLightingPBR",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_pbr"_sid);
-    RegisterComputePipeline("default_pbr_restir"_sid, src / "lighting_pbr_restir_compute.spv",
+    RegisterComputePipeline("default_pbr_restir"_sid, src / "lighting_pbr_restir.spv", "ComputeLightingPbrRestir",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_pbr_restir"_sid);
-    RegisterComputePipeline("default_toon"_sid, src / "lighting_toon_compute.spv",
+    RegisterComputePipeline("default_toon"_sid, src / "lighting_toon.spv", "ComputeLightingToon",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_toon"_sid);
-    RegisterComputePipeline("default_unlit"_sid, src / "lighting_unlit_compute.spv",
+    RegisterComputePipeline("default_unlit"_sid, src / "lighting_unlit.spv", "ComputeLightingUnlit",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_unlit"_sid);
-    RegisterComputePipeline(SID("lighting_ground_truth"), src / "lighting_ground_truth_compute.spv",
+    RegisterComputePipeline(SID("lighting_ground_truth"), src / "lighting_ground_truth.spv", "ComputeLightingGroundTruth",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline(SID("directional_light"), src / "directional_light_compute.spv",
+    RegisterComputePipeline(SID("directional_light"), src / "directional_light.spv", "ComputeDirectionalLight",
                             sizeof(DirectionalLightPushConstant), PipelineCategory::Critical);
 
 
-    RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test_compute.spv",
+    RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test.spv", "ComputeRTShadowTest",
                             sizeof(RTShadowTestPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("rt_ground_truth_di"), src / "rt_ground_truth_di_compute.spv",
+    RegisterComputePipeline(SID("rt_ground_truth_di"), src / "rt_ground_truth_di.spv", "ComputeRTGroundTruthDI",
                             sizeof(RTGroundTruthDIPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("rt_sun_shadow"), src / "rt_sun_shadow_compute.spv",
+    RegisterComputePipeline(SID("rt_sun_shadow"), src / "rt_sun_shadow.spv", "ComputeRTSunShadow",
                             sizeof(RTSunShadowPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("sigma_classify_tiles"), src / "sigma_classify_tiles_compute.spv",
+    RegisterComputePipeline(SID("sigma_classify_tiles"), src / "sigma_classify_tiles.spv", "ComputeSigmaClassifyTiles",
                             sizeof(SigmaClassifyPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("sigma_smooth_tiles"), src / "sigma_smooth_tiles_compute.spv",
+    RegisterComputePipeline(SID("sigma_smooth_tiles"), src / "sigma_smooth_tiles.spv", "ComputeSigmaSmoothTiles",
                             sizeof(SigmaSmoothTilesPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("sigma_shadow_blur"), src / "sigma_shadow_blur_compute.spv",
+    RegisterComputePipeline(SID("sigma_shadow_blur"), src / "sigma_shadow_blur.spv", "ComputeSigmaShadowBlur",
                             sizeof(SigmaBlurPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("sigma_shadow_temporal"), src / "sigma_shadow_temporal_compute.spv",
+    RegisterComputePipeline(SID("sigma_shadow_temporal"), src / "sigma_shadow_temporal.spv", "ComputeSigmaShadowTemporal",
                             sizeof(SigmaTemporalPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline(SID("shadows_resolve"), src / "shadows_resolve_compute.spv",
+    RegisterComputePipeline(SID("shadows_resolve"), src / "shadows_resolve.spv", "ComputeShadowsResolve",
                             sizeof(ShadowsResolvePushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline(SID("temporal_antialiasing"), src / "temporal_antialiasing_compute.spv",
+    RegisterComputePipeline(SID("taa_main"), src / "temporal_antialiasing.spv", "ComputeTemporalAntialiasing",
                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
-    RegisterComputePipeline(SID("naive_temporal_antialiasing"), src / "naive_temporal_antialiasing_compute.spv",
+    RegisterComputePipeline(SID("taa_naive"), src / "naive_temporal_antialiasing.spv", "ComputeNaiveTemporalAntialiasing",
                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
-    RegisterComputePipeline(SID("donut_taa"), src / "donut_taa_compute.spv",
+    RegisterComputePipeline(SID("taa_donut"), src / "donut_taa.spv", "ComputeDonutTaa",
                             sizeof(DonutTaaPushConstant), PipelineCategory::Legacy);
 
-    RegisterComputePipeline(SID("smaa_luma_edge_detection"), src / "smaa_luma_edge_detection_compute.spv",
+    RegisterComputePipeline(SID("smaa_luma_edge_detection"), src / "subpixel_morphological_anti_aliasing_edge_detection.spv", "LumaEdgeDetectionMain",
                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("smaa_color_edge_detection"), src / "smaa_color_edge_detection_compute.spv",
+    RegisterComputePipeline(SID("smaa_color_edge_detection"), src / "subpixel_morphological_anti_aliasing_edge_detection.spv", "ColorEdgeDetectionMain",
                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("smaa_depth_edge_detection"), src / "smaa_depth_edge_detection_compute.spv",
+    RegisterComputePipeline(SID("smaa_depth_edge_detection"), src / "subpixel_morphological_anti_aliasing_edge_detection.spv", "DepthEdgeDetectionMain",
                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("smaa_blend_weight"), src / "smaa_blend_weight_compute.spv",
+    RegisterComputePipeline(SID("smaa_blend_weight"), src / "subpixel_morphological_anti_aliasing_blend_weight.spv", "BlendWeightMain",
                             sizeof(SmaaBlendWeightPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("smaa_neighborhood_blend"), src / "smaa_neighborhood_blend_compute.spv",
+    RegisterComputePipeline(SID("smaa_neighborhood_blend"), src / "subpixel_morphological_anti_aliasing_neighborhood_blend.spv", "NeighborhoodBlendMain",
                             sizeof(SmaaNeighborhoodBlendPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("smaa_temporal_resolve"), src / "smaa_temporal_resolve_compute.spv",
+    RegisterComputePipeline(SID("smaa_temporal_resolve"), src / "subpixel_morphological_anti_aliasing_temporal_resolve.spv", "TemporalResolveMain",
                             sizeof(SmaaTemporalResolvePushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline(SID("depth_copy"), src / "depth_copy_compute.spv",
+    RegisterComputePipeline(SID("depth_copy"), src / "depth_copy.spv", "ComputeDepthCopy",
                             sizeof(DepthCopyPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline(SID("gtao_depth_prepass"), src / "gtao_depth_prepass_compute.spv",
+    RegisterComputePipeline(SID("gtao_depth_prepass"), src / "ground_truth_ambient_occlusion.spv", "ComputeGTAODepthPrepass",
                             sizeof(GTAODepthPrepassPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("gtao_main"), src / "gtao_main_compute.spv",
+    RegisterComputePipeline(SID("gtao_main"), src / "ground_truth_ambient_occlusion.spv", "ComputeGTAOMain",
                             sizeof(GTAOMainPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("gtao_denoise"), src / "gtao_denoise_compute.spv",
+    RegisterComputePipeline(SID("gtao_denoise"), src / "ground_truth_ambient_occlusion.spv", "ComputeGTAODenoise",
                             sizeof(GTAODenoisePushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline(SID("relax_generate_viewz"), src / "relax_generate_viewz_compute.spv",
+    RegisterComputePipeline(SID("relax_generate_viewz"), src / "relax_generate_viewz.spv", "RelaxGenerateViewZMain",
                             sizeof(RelaxGenerateViewZPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("relax_classify_tiles"), src / "relax_classify_tiles_compute.spv",
+    RegisterComputePipeline(SID("relax_classify_tiles"), src / "relax_classify_tiles.spv", "RelaxClassifyTilesMain",
                             sizeof(RelaxClassifyTilesPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("relax_prepass"), src / "relax_prepass_compute.spv",
+    RegisterComputePipeline(SID("relax_prepass"), src / "relax_prepass.spv", "RelaxPrepassMain",
                             sizeof(RelaxPrepassPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("relax_temporal_accumulation"), src / "relax_temporal_accumulation_compute.spv",
+    RegisterComputePipeline(SID("relax_temporal_accumulation"), src / "relax_temporal_accumulation.spv", "RelaxTemporalAccumulationMain",
                             sizeof(RelaxTemporalAccumulationPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("relax_history_fix"), src / "relax_history_fix_compute.spv",
+    RegisterComputePipeline(SID("relax_history_fix"), src / "relax_history_fix.spv", "RelaxHistoryFixMain",
                             sizeof(RelaxHistoryFixPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("relax_history_clamping"), src / "relax_history_clamping_compute.spv",
+    RegisterComputePipeline(SID("relax_history_clamping"), src / "relax_history_clamping.spv", "RelaxHistoryClampingMain",
                             sizeof(RelaxHistoryClampingPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("relax_atrous"), src / "relax_atrous_compute.spv",
+    RegisterComputePipeline(SID("relax_atrous"), src / "relax_atrous.spv", "RelaxAtrousMain",
                             sizeof(RelaxAtrousPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("relax_antifirefly"), src / "relax_antifirefly_compute.spv",
+    RegisterComputePipeline(SID("relax_antifirefly"), src / "relax_antifirefly.spv", "RelaxAntiFireflyMain",
                             sizeof(RelaxAntiFireflyPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline(SID("reblur_pack"), src / "reblur_pack_compute.spv",
+    RegisterComputePipeline(SID("reblur_pack"), src / "reblur_pack.spv", "ReblurPackMain",
                             sizeof(ReblurPackPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("reblur_generate_viewz"), src / "reblur_generate_viewz_compute.spv",
+    RegisterComputePipeline(SID("reblur_generate_viewz"), src / "reblur_generate_viewz.spv", "ReblurGenerateViewZMain",
                             sizeof(ReblurGenerateViewZPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("reblur_classify_tiles"), src / "reblur_classify_tiles_compute.spv",
+    RegisterComputePipeline(SID("reblur_classify_tiles"), src / "reblur_classify_tiles.spv", "ReblurClassifyTilesMain",
                             sizeof(ReblurClassifyTilesPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("reblur_prepass"), src / "reblur_prepass_compute.spv",
+    RegisterComputePipeline(SID("reblur_prepass"), src / "reblur_prepass.spv", "ReblurPrepassMain",
                             sizeof(ReblurPrepassPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("reblur_temporal_accumulation"), src / "reblur_temporal_accumulation_compute.spv",
+    RegisterComputePipeline(SID("reblur_temporal_accumulation"), src / "reblur_temporal_accumulation.spv", "ReblurTemporalAccumulationMain",
                             sizeof(ReblurTemporalAccumulationPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("reblur_history_fix"), src / "reblur_history_fix_compute.spv",
+    RegisterComputePipeline(SID("reblur_history_fix"), src / "reblur_history_fix.spv", "ReblurHistoryFixMain",
                             sizeof(ReblurHistoryFixPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("reblur_blur"), src / "reblur_blur_compute.spv",
+    RegisterComputePipeline(SID("reblur_blur"), src / "reblur_blur.spv", "ReblurBlurMain",
                             sizeof(ReblurBlurPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("reblur_stabilization"), src / "reblur_stabilization_compute.spv",
+    RegisterComputePipeline(SID("reblur_stabilization"), src / "reblur_stabilization.spv", "ReblurStabilizationMain",
                             sizeof(ReblurStabilizationPushConstant), PipelineCategory::Critical);
 
 
-    RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure_build_histogram_compute.spv",
+    RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure.spv", "ComputeBuildHistogramExposure",
                             sizeof(HistogramBuildPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("exposure_calculate_average"), src / "exposure_calculate_average_compute.spv",
+    RegisterComputePipeline(SID("exposure_calculate_average"), src / "exposure.spv", "ComputeAverageExposure",
                             sizeof(ExposureCalculatePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("tonemap_sdr"), src / "tonemap_sdr_compute.spv",
+    RegisterComputePipeline(SID("tonemap_sdr"), src / "tonemapping.spv", "ComputeSDRTonemap",
                             sizeof(TonemapSDRPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("motion_blur_tile_max"), src / "motion_blur_tile_max_compute.spv",
+    RegisterComputePipeline(SID("motion_blur_tile_max"), src / "motion_blur.spv", "ComputeMotionBlurTileMax",
                             sizeof(MotionBlurTileVelocityPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("motion_blur_neighbor_max"), src / "motion_blur_neighbor_max_compute.spv",
+    RegisterComputePipeline(SID("motion_blur_neighbor_max"), src / "motion_blur.spv", "ComputeMotionBlurNeighborMax",
                             sizeof(MotionBlurNeighborMaxPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("motion_blur_reconstruction"), src / "motion_blur_reconstruction_compute.spv",
+    RegisterComputePipeline(SID("motion_blur_reconstruction"), src / "motion_blur.spv", "ComputeMotionBlurReconstruction",
                             sizeof(MotionBlurReconstructionPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("bloom_threshold"), src / "bloom_threshold_compute.spv",
+    RegisterComputePipeline(SID("bloom_threshold"), src / "bloom.spv", "ComputeBloomThreshold",
                             sizeof(BloomThresholdPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("bloom_downsample"), src / "bloom_downsample_compute.spv",
+    RegisterComputePipeline(SID("bloom_downsample"), src / "bloom.spv", "ComputeBloomDownsample",
                             sizeof(BloomDownsamplePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("bloom_upsample"), src / "bloom_upsample_compute.spv",
+    RegisterComputePipeline(SID("bloom_upsample"), src / "bloom.spv", "ComputeBloomUpsample",
                             sizeof(BloomUpsamplePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("vignette_aberration"), src / "vignette_aberration_compute.spv",
+    RegisterComputePipeline(SID("vignette_aberration"), src / "vignette_aberration.spv", "ComputeVignetteAberration",
                             sizeof(VignetteChromaticAberrationPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("film_grain"), src / "film_grain_compute.spv",
+    RegisterComputePipeline(SID("film_grain"), src / "film_grain.spv", "ComputeFilmGrain",
                             sizeof(FilmGrainPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("sharpening"), src / "sharpening_compute.spv",
+    RegisterComputePipeline(SID("sharpening"), src / "sharpening.spv", "ComputeSharpening",
                             sizeof(SharpeningPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("color_grading"), src / "color_grading_compute.spv",
+    RegisterComputePipeline(SID("color_grading"), src / "color_grading.spv", "ComputeColorGrading",
                             sizeof(ColorGradingPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("panini_projection"), src / "panini_projection_compute.spv",
+    RegisterComputePipeline(SID("panini_projection"), src / "panini_projection.spv", "ComputePaniniProjection",
                             sizeof(PaniniProjectionPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("dither"), src / "dither_compute.spv",
+    RegisterComputePipeline(SID("dither"), src / "dither.spv", "ComputeDither",
                             sizeof(DitherPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline("selection_outline"_sid, src / "selection_outline_compute.spv",
+    RegisterComputePipeline("selection_outline"_sid, src / "selection_outline.spv", "ComputeSelectionOutline",
                             sizeof(SelectionOutlinePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("debug_visualize"), src / "debug_visualize_compute.spv",
+    RegisterComputePipeline(SID("debug_visualize"), src / "debug_visualize.spv", "ComputeDebugVisualize",
                             sizeof(DebugVisualizePushConstant), PipelineCategory::Critical);
 
     VkDescriptorSetLayout proceduralTexLayout = resourceManager->proceduralTextureGenerateResources.descriptorSetLayout.handle;
-    RegisterComputePipelineCustomLayout("yellow_texture"_sid, src / "yellow_texture_compute.spv",
+    RegisterComputePipelineCustomLayout("yellow_texture"_sid, src / "yellow_texture.spv", "ComputeYellowTexture",
                                         sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
-    RegisterComputePipelineCustomLayout("domain_warp"_sid, src / "domain_warp_compute.spv",
+    RegisterComputePipelineCustomLayout("domain_warp"_sid, src / "domain_warp.spv", "ComputeDomainWarp",
                                         sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
 
 #if WILL_EDITOR
     VkDescriptorSetLayout emapLayout = resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle;
-    RegisterComputePipelineCustomLayout(SID("ibl_equirect_to_cubemap"), src / "ibl_equirect_to_cubemap_compute.spv",
+    RegisterComputePipelineCustomLayout(SID("ibl_equirect_to_cubemap"), src / "environment_map_generation.spv", "ComputeEquirectToCubemap",
                                         sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
 
-    RegisterComputePipelineCustomLayout(SID("ibl_convolve_diffuse"), src / "ibl_convolve_diffuse_compute.spv",
+    RegisterComputePipelineCustomLayout(SID("ibl_convolve_diffuse"), src / "environment_map_generation.spv", "ComputeConvolveDiffuse",
                                         sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
 
-    RegisterComputePipelineCustomLayout(SID("ibl_prefilter_specular"), src / "ibl_prefilter_specular_compute.spv",
+    RegisterComputePipelineCustomLayout(SID("ibl_prefilter_specular"), src / "environment_map_generation.spv", "ComputePrefilterSpecular",
                                         sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
 
     VkDescriptorSetLayout brdfLutLayout = resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle;
-    RegisterComputePipelineCustomLayout(SID("ibl_brdf_lut"), src / "brdf_lut_generate_compute.spv",
+    RegisterComputePipelineCustomLayout(SID("ibl_brdf_lut"), src / "brdf_lut.spv", "ComputeBRDFLUT",
                                         sizeof(BRDFLUTPushConstant), PipelineCategory::AssetGeneration, Core::Span(&brdfLutLayout, 1));
 #endif
 
@@ -607,8 +610,8 @@ void PipelineManager::RegisterPipelines()
 
     // Visibility Buffer
     {
-        builder.AddShaderStage(src / "visibility_buffer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage(src / "visibility_buffer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "geometry_visibility_buffer.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshGeometryVisibilityBuffer");
+        builder.AddShaderStage(src / "geometry_visibility_buffer.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentGeometryVisibilityBuffer");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -628,8 +631,8 @@ void PipelineManager::RegisterPipelines()
 
     // Portal Graphics Pipeline
     {
-        builder.AddShaderStage(src / "visibility_buffer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage(src / "visibility_buffer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "geometry_visibility_buffer.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshGeometryVisibilityBuffer");
+        builder.AddShaderStage(src / "geometry_visibility_buffer.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentGeometryVisibilityBuffer");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -649,8 +652,8 @@ void PipelineManager::RegisterPipelines()
 
     // Portal Composite
     {
-        builder.AddShaderStage(src / "fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
-        builder.AddShaderStage(src / "portal_composite_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "common_shaders.spv", VK_SHADER_STAGE_VERTEX_BIT, "FullscreenPassVertexMain");
+        builder.AddShaderStage(src / "portal_rendering.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentPortalComposite");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_ALWAYS);
@@ -675,8 +678,8 @@ void PipelineManager::RegisterPipelines()
 
     // Skybox Rendering
     {
-        builder.AddShaderStage(src / "fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
-        builder.AddShaderStage(src / "environment_map_skybox_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "common_shaders.spv", VK_SHADER_STAGE_VERTEX_BIT, "FullscreenPassVertexMain");
+        builder.AddShaderStage(src / "environment_map.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentSkybox");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -698,8 +701,8 @@ void PipelineManager::RegisterPipelines()
 
     // Sprites
     {
-        builder.AddShaderStage(src / "sprites_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage(src / "sprites_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "sprites.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshSprites");
+        builder.AddShaderStage(src / "sprites.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentSprites");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -730,8 +733,8 @@ void PipelineManager::RegisterPipelines()
 
     // Default Text
     {
-        builder.AddShaderStage(src / "default_text_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage(src / "default_text_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "text_default.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshTextDefault");
+        builder.AddShaderStage(src / "text_default.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentTextDefault");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -762,7 +765,7 @@ void PipelineManager::RegisterPipelines()
         builder.SetupRenderer(colorFormats, 2, DEPTH_ATTACHMENT_FORMAT);
 
         RegisterGraphicsPipeline(
-            SID("default_text"),
+            SID("text_default"),
             builder,
             sizeof(TextRenderPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -773,8 +776,8 @@ void PipelineManager::RegisterPipelines()
 
     // UI Rect
     {
-        builder.AddShaderStage(src / "ui_rect_default_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
-        builder.AddShaderStage(src / "ui_rect_default_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "ui_rect_default.spv", VK_SHADER_STAGE_VERTEX_BIT, "VertexUIRectDefault");
+        builder.AddShaderStage(src / "ui_rect_default.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentUIRectDefault");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_FALSE, VK_FALSE, VK_COMPARE_OP_ALWAYS);
@@ -804,8 +807,8 @@ void PipelineManager::RegisterPipelines()
 
     // UI Image
     {
-        builder.AddShaderStage(src / "ui_image_default_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
-        builder.AddShaderStage(src / "ui_image_default_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "ui_image_default.spv", VK_SHADER_STAGE_VERTEX_BIT, "VertexUIImageDefault");
+        builder.AddShaderStage(src / "ui_image_default.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentUIImageDefault");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_FALSE, VK_FALSE, VK_COMPARE_OP_ALWAYS);
@@ -837,8 +840,8 @@ void PipelineManager::RegisterPipelines()
 
     // UI Text
     {
-        builder.AddShaderStage(src / "ui_text_default_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
-        builder.AddShaderStage(src / "ui_text_default_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "ui_text_default.spv", VK_SHADER_STAGE_VERTEX_BIT, "VertexUITextDefault");
+        builder.AddShaderStage(src / "ui_text_default.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentUITextDefault");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_FALSE, VK_FALSE, VK_COMPARE_OP_ALWAYS);
@@ -870,8 +873,8 @@ void PipelineManager::RegisterPipelines()
 
     // UI Border
     {
-        builder.AddShaderStage(src / "ui_border_default_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
-        builder.AddShaderStage(src / "ui_border_default_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "ui_border_default.spv", VK_SHADER_STAGE_VERTEX_BIT, "VertexUIBorderDefault");
+        builder.AddShaderStage(src / "ui_border_default.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentUIBorderDefault");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_FALSE, VK_FALSE, VK_COMPARE_OP_ALWAYS);
@@ -901,8 +904,8 @@ void PipelineManager::RegisterPipelines()
 
     // Debug Render
     {
-        builder.AddShaderStage(src / "debug_render_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage(src / "debug_render_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(src / "debug_render.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshDebugRender");
+        builder.AddShaderStage(src / "debug_render.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentDebugRender");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);

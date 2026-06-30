@@ -10,7 +10,7 @@ import bindless_declarations;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void ComputeMain(uniform SigmaSmoothTilesPushConstant pc, uint3 tid : SV_DispatchThreadID)
+void ComputeSigmaSmoothTiles(uniform SigmaSmoothTilesPushConstant pc, uint3 tid : SV_DispatchThreadID)
 {
     int2 tile = int2(tid.xy);
     if (any(tid.xy >= pc.tilesExtent)) {

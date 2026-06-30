@@ -11,7 +11,7 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput VertexMain(uint vid : SV_VertexID, uniform UIImagePushConstant pc)
+VertexOutput VertexUIImageDefault(uint vid : SV_VertexID, uniform UIImagePushConstant pc)
 {
     float px = (vid & 1u) != 0u ? pc.ndcMax.x : pc.ndcMin.x;
     float py = (vid & 2u) != 0u ? pc.ndcMax.y : pc.ndcMin.y;
@@ -27,7 +27,7 @@ VertexOutput VertexMain(uint vid : SV_VertexID, uniform UIImagePushConstant pc)
 }
 
 [shader("fragment")]
-float4 FragmentMain(VertexOutput input, uniform UIImagePushConstant pc) : SV_Target0
+float4 FragmentUIImageDefault(VertexOutput input, uniform UIImagePushConstant pc) : SV_Target0
 {
     Texture2D img = assetTextures[pc.imageBindlessIndex];
     SamplerState smp = assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX];

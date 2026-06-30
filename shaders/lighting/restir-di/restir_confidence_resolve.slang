@@ -5,8 +5,9 @@ import shader_functions;
 
 static const uint GRAD_FACTOR = 3u;
 
+[shader("compute")]
 [numthreads(8, 8, 1)]
-void ComputeMain(uniform ReSTIRConfidenceResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeReSTIRConfidenceResolve(uniform ReSTIRConfidenceResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     uint2 pixel = threadID.xy;
     if (any(pixel >= pc.renderExtent)) {
         return;

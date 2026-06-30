@@ -29,6 +29,7 @@ float2 SampleSphericalMap(float3 v) {
 }
 
 
+[shader("compute")]
 [numthreads(ENVIRONMENT_MAP_GENERATION_DISPATCH_X, ENVIRONMENT_MAP_GENERATION_DISPATCH_Y, 1)]
 void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 tid : SV_DispatchThreadID) {
     if (tid.x >= pc.cubemapWidth || tid.y >= pc.cubemapHeight) return;
@@ -60,6 +61,7 @@ void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 ti
 }
 
 // ==================== Irradiance Convolution ====================
+[shader("compute")]
 [numthreads(ENVIRONMENT_MAP_GENERATION_DISPATCH_X, ENVIRONMENT_MAP_GENERATION_DISPATCH_Y, 1)]
 void ComputeConvolveDiffuse(uniform ConvolveDiffusePushConstant pc, uint3 tid : SV_DispatchThreadID) {
     if (tid.x >= pc.targetWidth || tid.y >= pc.targetHeight) return;
@@ -150,6 +152,7 @@ float DistributionGGX(float NdotH, float roughness) {
     return nom / denom;
 }
 
+[shader("compute")]
 [numthreads(ENVIRONMENT_MAP_GENERATION_DISPATCH_X, ENVIRONMENT_MAP_GENERATION_DISPATCH_Y, 1)]
 void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 tid : SV_DispatchThreadID) {
     if (tid.x >= pc.width || tid.y >= pc.height) return;
