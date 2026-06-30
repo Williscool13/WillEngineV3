@@ -75,7 +75,7 @@ inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_SIZE = sizeof(MaterialProperti
 inline constexpr int32_t MEGA_VERTEX_POSITION_BUFFER_SIZE = sizeof(VertexPosition) * 4194302; // 4M verts
 inline constexpr int32_t MEGA_VERTEX_ATTRIBUTE_BUFFER_SIZE = sizeof(VertexAttribute) * 4194302; // 4M verts
 inline constexpr int32_t MEGA_INDEX_BUFFER_SIZE = sizeof(uint32_t) * 16777216; // 16M indices (64MB)
-inline constexpr int32_t MEGA_BLAS_BUFFER_SIZE = 1 << 28; // 256MB for BLAS storage
+inline constexpr int32_t MEGA_BLAS_BUFFER_SIZE = 1 << 29; // 512MB for BLAS storage
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_COUNT = 65536; // Important for instancing - it's 256x256
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE = sizeof(Primitive) * MEGA_PRIMITIVE_BUFFER_COUNT;
 

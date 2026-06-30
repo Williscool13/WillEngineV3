@@ -26,14 +26,14 @@
       "varianceGammaLuma": 1.0
     }
   },
-  "activeLightingProfile": "FINAL RESTIR + REGIR",
+  "activeLightingProfile": "Standard",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,
   "bAutoSaveProjectConfig": false,
-  "bLimitFps": true,
+  "bLimitFps": false,
   "defaultScene": "Lighting 2",
-  "editorCameraFovDegrees": 70.0,
+  "editorCameraFovDegrees": 70.343505859375,
   "editorCameraNearPlane": 0.10000000149011612,
   "frameLimitTarget": 60,
   "gameCameraAspect": [
