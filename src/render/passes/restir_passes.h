@@ -19,14 +19,6 @@ namespace Render
 {
 class PipelineManager;
 
-// Precompute the half-res quad-corner selection once; ReSTIR DI, the RELAX DI denoiser, and the sun-shadow pass read it via FetchFullPixel. Runs whenever any of those is half-res.
-void SetupQuadSelectionPass(RenderGraph& graph,
-                           PipelineManager* pipelineManager,
-                           Core::Array<uint32_t, 2> renderExtent,
-                           const RenderTargets& targets,
-                           uint32_t sceneIndex,
-                           uint64_t frameNumber);
-
 void SetupReSTIRPasses(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
@@ -35,8 +27,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
                        uint64_t frameNumber,
-                       const Core::ReSTIRParams& restirParams,
-                       bool bResolutionChanged);
+                       const Core::ReSTIRParams& restirParams);
 
 void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     PipelineManager* pipelineManager,
@@ -45,8 +36,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     const RenderTargets& targets,
                                     uint32_t sceneIndex,
                                     Core::Arena& arena,
-                                    uint64_t frameNumber,
-                                    uint32_t pixelScale);
+                                    uint64_t frameNumber);
 
 void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                PipelineManager* pipelineManager,
@@ -55,7 +45,6 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                const RenderTargets& targets,
                                uint32_t sceneIndex,
                                uint32_t outputMode,
-                               uint32_t pixelScale,
                                float iblIntensity,
                                uint64_t frameNumber);
 } // Render

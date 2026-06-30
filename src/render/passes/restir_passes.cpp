@@ -16,39 +16,6 @@
 
 namespace Render
 {
-void SetupQuadSelectionPass(RenderGraph& graph,
-                            PipelineManager* pipelineManager,
-                            Core::Array<uint32_t, 2> renderExtent,
-                            const RenderTargets& targets,
-                            uint32_t sceneIndex,
-                            uint64_t frameNumber)
-{
-    graph.CreateTexture(SID("quad_selection"), TextureInfo{VK_FORMAT_R32_UINT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-
-    RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Quad Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
-    pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadSampledImage(targets.depthCopy);
-    pass.ReadSampledImage(targets.gbufferOne);
-    pass.WriteStorageImage(SID("quad_selection"));
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, depth = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_quad_selection"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-
-        QuadSelectionPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .renderExtent = {renderExtent[0], renderExtent[1]},
-            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-            .normalIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-            .outIndex = graph.GetStorageImageViewDescriptorIndex(SID("quad_selection")),
-            .sceneDataIndex = sceneIndex,
-            .frameIndex = static_cast<uint32_t>(frameNumber),
-            .pixelScale = 2u,
-        };
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, (renderExtent[0] + 7) / 8, (renderExtent[1] + 7) / 8, 1);
-    });
-}
-
 void SetupReSTIRPasses(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
@@ -57,11 +24,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
                        uint64_t frameNumber,
-                       const Core::ReSTIRParams& restirParams,
-                       bool bResolutionChanged)
+                       const Core::ReSTIRParams& restirParams)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
-    const uint32_t pixelScale = restirParams.bHalfRes ? 2u : 1u;
     const uint32_t reservoirBufferSize = pixelCount * static_cast<uint32_t>(sizeof(Reservoir));
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
@@ -100,8 +65,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
     });
 
     {
-        const uint32_t fullW = renderExtent[0] * pixelScale;
-        const uint32_t fullH = renderExtent[1] * pixelScale;
+        const uint32_t fullW = renderExtent[0];
+        const uint32_t fullH = renderExtent[1];
         const uint32_t entriesSize = REGIR_HASH_CAPACITY * static_cast<uint32_t>(sizeof(uint32_t));
         const uint32_t reservoirsSize = REGIR_HASH_CAPACITY * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir));
         const uint32_t activeCellsSize = REGIR_HASH_CAPACITY * 4u * static_cast<uint32_t>(sizeof(int32_t));
@@ -235,8 +200,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             graph.CreateBuffer(SID("restir_reservoir_temporal"), reservoirBufferSize, true);
         }
 
-        const bool bHasHistory = !bResolutionChanged && graph.HasBuffer(SID("restir_reservoir_history"));
-        const bool bHasQuadHistory = restirParams.bHalfRes && graph.HasTexture(SID("quad_selection_history"));
+        const bool bHasHistory = graph.HasBuffer(SID("restir_reservoir_history"));
         const bool bHasPrevVis = bShadowVis && graph.HasTexture(SID("restir_shadow_vis_prev"));
         if (bShadowVis) {
             graph.CreateTexture(SID("restir_shadow_vis"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
@@ -265,10 +229,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
         basePass.ReadSampledImage(targets.gbufferOne);
         basePass.ReadSampledImage(targets.gbufferTwo);
         basePass.ReadSampledImage(targets.depthCopy);
-        if (restirParams.bHalfRes) { basePass.ReadSampledImage(SID("quad_selection")); }
         if (bHasTLAS) { basePass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         basePass.WriteBuffer(SID("restir_reservoir_base"));
-        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, bHasTLAS, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_base_regir"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -295,7 +258,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .mCap = 0u,
-                .pixelScale = pixelScale,
                 .tlasIndex = tlasIndex,
                 .prevTlasIndex = ~0u,
                 .prevShadowVisIndex = ~0u,
@@ -305,8 +267,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .confidenceStrength = 0.0f,
                 .bPermutationSampling = 0u,
                 .antilagStrength = 0.0f,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
-                .quadSelectionHistoryIndex = ~0u,
                 .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -331,14 +291,12 @@ void SetupReSTIRPasses(RenderGraph& graph,
             if (bHasHistory) { temporalPass.ReadSampledImage(SID("gbuffer_one_history")); }
             if (bHasHistory) { temporalPass.ReadSampledImage(SID("depth_history")); }
             if (bHasPrevVis) { temporalPass.ReadSampledImage(SID("restir_shadow_vis_prev")); }
-            if (restirParams.bHalfRes) { temporalPass.ReadSampledImage(SID("quad_selection")); }
-            if (bHasQuadHistory) { temporalPass.ReadSampledImage(SID("quad_selection_history")); }
             if (bHasTLAS) { temporalPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
             if (bHasPrevTlas) { temporalPass.ReadTLASBuffer(SID("rt_tlas_history")); }
             temporalPass.WriteBuffer(SID("restir_reservoir_temporal"));
             if (bShadowVis) { temporalPass.WriteStorageImage(SID("restir_shadow_vis")); }
             if (bConfidence) { temporalPass.WriteStorageImage(SID("restir_signal")); }
-            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, bHasTLAS, bHasPrevTlas, bHasHistory, bHasQuadHistory, bConfidence, bShadowVis, bHasPrevVis, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasPrevTlas, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -366,7 +324,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .sceneDataIndex = sceneIndex,
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                     .mCap = restirParams.temporalMCap,
-                    .pixelScale = pixelScale,
                     .tlasIndex = tlasIndex,
                     .prevTlasIndex = prevTlasIndex,
                     .prevShadowVisIndex = bHasPrevVis ? graph.GetSampledImageViewDescriptorIndex(SID("restir_shadow_vis_prev")) : ~0u,
@@ -376,8 +333,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .confidenceStrength = restirParams.confidenceStrength,
                     .bPermutationSampling = restirParams.bPermutationSampling ? 1u : 0u,
                     .antilagStrength = restirParams.antilagStrength,
-                    .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
-                    .quadSelectionHistoryIndex = (pixelScale == 2u) ? (bHasQuadHistory ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection_history")) : graph.GetSampledImageViewDescriptorIndex(SID("quad_selection"))) : ~0u,
                     .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
                     .bTemporalSearch = restirParams.bTemporalSearch ? 1u : 0u,
                 };
@@ -415,9 +370,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
         resolvePass.ReadSampledImage(SID("restir_gradient"));
         if (bHasPrevConfidence) { resolvePass.ReadSampledImage(SID("restir_confidence_prev")); }
         resolvePass.ReadSampledImage(targets.gbufferOne);
-        if (restirParams.bHalfRes) { resolvePass.ReadSampledImage(SID("quad_selection")); }
         resolvePass.WriteStorageImage(SID("restir_confidence"));
-        resolvePass.Execute([&, pipelineManager, renderExtent, gradientExtent, pixelScale, bHasPrevConfidence, gbufferOne = targets.gbufferOne,
+        resolvePass.Execute([&, pipelineManager, renderExtent, gradientExtent, bHasPrevConfidence, gbufferOne = targets.gbufferOne,
                 confStrength = restirParams.confidenceStrength, sensitivity = restirParams.confidenceSensitivity, darknessBias = restirParams.confidenceDarknessBias,
                 blendFactor = 1.0f / (restirParams.confidenceHistoryLength + 1.0f), blurRadius = restirParams.confidenceBlurRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_confidence_resolve"));
@@ -429,9 +383,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .gradientIndex = graph.GetSampledImageViewDescriptorIndex(SID("restir_gradient")),
                     .prevConfidenceIndex = bHasPrevConfidence ? graph.GetSampledImageViewDescriptorIndex(SID("restir_confidence_prev")) : ~0u,
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                    .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
                     .confidenceIndex = graph.GetStorageImageViewDescriptorIndex(SID("restir_confidence")),
-                    .pixelScale = pixelScale,
                     .confidenceStrength = confStrength,
                     .sensitivity = sensitivity,
                     .darknessBias = darknessBias,
@@ -507,10 +459,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
         spatialPass.ReadSampledImage(targets.gbufferOne);
         spatialPass.ReadSampledImage(targets.gbufferTwo);
         spatialPass.ReadSampledImage(targets.depthCopy);
-        if (restirParams.bHalfRes) { spatialPass.ReadSampledImage(SID("quad_selection")); }
         if (bHasTLAS) { spatialPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         spatialPass.WriteBuffer(outputName);
-        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, pixelScale, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -533,13 +484,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .spatialRadius = restirParams.spatialRadius,
                 .spatialNeighbors = restirParams.spatialNeighbors,
                 .mCap = restirParams.spatialMCap,
-                .pixelScale = pixelScale,
                 .tlasIndex = tlasIndex,
                 .passIndex = passIndex,
                 .bAdaptiveSpatial = restirParams.bAdaptiveSpatial ? 1u : 0u,
                 .adaptiveSpatialBoost = restirParams.adaptiveSpatialBoost,
                 .adaptiveMReference = restirParams.temporalMCap,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
                 .bValidateVisibility = bLastPass ? 1u : 0u,
                 .wClamp = restirParams.restirWClamp,
             };
@@ -561,8 +510,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     const RenderTargets& targets,
                                     uint32_t sceneIndex,
                                     Core::Arena& arena,
-                                    uint64_t frameNumber,
-                                    uint32_t pixelScale)
+                                    uint64_t frameNumber)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -592,13 +540,12 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     lightingResolve.ReadSampledImage(targets.gbufferOne);
     lightingResolve.ReadSampledImage(targets.gbufferTwo);
     lightingResolve.ReadSampledImage(targets.depthCopy);
-    if (pixelScale == 2u) { lightingResolve.ReadSampledImage(SID("quad_selection")); }
     if (targets.shadows != StringID{}) {
         lightingResolve.ReadSampledImage(targets.shadows);
     }
     lightingResolve.WriteStorageImage(targets.intermediateOne);
     lightingResolve.WriteStorageImage(targets.intermediateTwo);
-    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, pixelScale,
+    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
@@ -633,8 +580,6 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .lightingIndex = entry.bucketIndex,
                     .renderExtent = {renderExtent[0], renderExtent[1]},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
-                    .pixelScale = pixelScale,
-                    .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
@@ -650,7 +595,6 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                const RenderTargets& targets,
                                uint32_t sceneIndex,
                                uint32_t outputMode,
-                               uint32_t pixelScale,
                                float iblIntensity,
                                uint64_t frameNumber)
 {
@@ -664,10 +608,9 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(targets.depthCopy);
-    if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, pixelScale, width, height, skyboxIndex, iblIntensity, frameNumber,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -684,10 +627,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .height = height,
                 .outputMode = outputMode,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
-                .pixelScale = pixelScale,
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

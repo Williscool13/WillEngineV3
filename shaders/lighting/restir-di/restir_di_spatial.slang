@@ -24,10 +24,10 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
-    uint2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixel, pc.pixelScale);
+    uint2 fullPixel = pixel;
     float viewSpaceDepth = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
-    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, pc.pixelScale);
+    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize);
 
     LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
@@ -90,7 +90,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             continue;
         }
 
-        uint2 neighborFullPixel = FetchFullPixel(pc.quadSelectionIndex, uint2(neighborPixel), pc.pixelScale);
+        uint2 neighborFullPixel = uint2(neighborPixel);
 
         float neighborRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(neighborFullPixel, 0)).r;
         float neighborViewDepth = ScreenToViewSpaceDepth(neighborRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);

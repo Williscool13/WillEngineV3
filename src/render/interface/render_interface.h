@@ -633,7 +633,6 @@ struct ReBLURParams
 
 struct ReSTIRParams
 {
-    bool bHalfRes{false};
     uint32_t spatialPasses{1};
     bool bPermutationSampling{true};
     bool bAdaptiveSpatial{true};

@@ -31,7 +31,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 #endif
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    uint2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixel, pc.pixelScale);
+    uint2 fullPixel = pixel;
 
     uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
 
@@ -53,7 +53,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
-    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, pc.pixelScale);
+    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize);
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
@@ -99,7 +99,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
                 if (any(p < int2(0, 0)) || any(p >= int2(pc.renderExtent))) { continue; }
                 tapPixel = uint2(p);
             }
-            uint2 historyFullPixel = FetchFullPixel(pc.quadSelectionHistoryIndex, tapPixel, pc.pixelScale);
+            uint2 historyFullPixel = tapPixel;
             float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));
             float3 historyWorldN = normalize(mul(transpose(float3x3(scene.prevView)), historyN));
             if (dot(currWorldN, historyWorldN) < 0.906) { continue; }

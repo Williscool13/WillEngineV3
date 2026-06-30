@@ -26,7 +26,6 @@
     "bAdaptiveSpatial": true,
     "bEnableAntilag": false,
     "bEnableConfidence": false,
-    "bHalfRes": true,
     "bInitialVisibility": false,
     "bPermutationSampling": false,
     "boilingFilterStrength": 0.20000000298023224,

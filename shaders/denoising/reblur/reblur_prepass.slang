@@ -23,7 +23,7 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y) { return; }
 
-    int2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixelPos, pc.pixelScale);
+    int2 fullPixel = pixelPos;
     float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange)) { return; }
 
@@ -57,7 +57,7 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
             if (RelaxIsInScreenNearest(uv) == 0.0) { continue; }
 
             int2 samplePos = int2(samplePosF);
-            int2 sampleFullPos = FetchFullPixel(pc.quadSelectionIndex, samplePos, pc.pixelScale);
+            int2 sampleFullPos = samplePos;
             float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
             if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange)) { continue; }
 
@@ -116,7 +116,7 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
             if (RelaxIsInScreenNearest(uv) == 0.0) { continue; }
 
             int2 samplePos = int2(samplePosF);
-            int2 sampleFullPos = FetchFullPixel(pc.quadSelectionIndex, samplePos, pc.pixelScale);
+            int2 sampleFullPos = samplePos;
             float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
             if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange)) { continue; }
 

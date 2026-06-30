@@ -583,9 +583,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
 
             ImGui::SeparatorText("Options");
-            if (ImGui::Checkbox("Half Res", &restir.bHalfRes)) {
-                changed = true;
-            }
             const char* remodulateOutputModes[] = {"Both", "Diffuse Only", "Specular Only"};
             int currentRemodulateOutput = static_cast<int>(restir.remodulateOutput);
             if (ImGui::Combo("Remodulate Output##restir", &currentRemodulateOutput, remodulateOutputModes, IM_ARRAYSIZE(remodulateOutputModes))) {

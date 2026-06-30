@@ -23,7 +23,6 @@
     },
     "bAdaptiveSpatial": true,
     "bBoilingFilter": true,
-    "bHalfRes": true,
     "bPermutationSampling": true,
     "boilingFilterStrength": 0.20000000298023224,
     "confidenceStrength": 0.0,

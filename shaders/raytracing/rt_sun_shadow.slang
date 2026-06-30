@@ -8,6 +8,7 @@
  * Output R16G16: .r = binary visibility (1 lit / 0 occluded), .g = packed penumbra.
  */
 import common_interop;
+import constants_interop;
 import push_constant_interop;
 import lights_interop;
 import bindless_declarations;
@@ -44,8 +45,36 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPushConsta
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
 
-    // Map this (possibly half-res) output pixel to a silhouette-correct full-res source pixel, then read the full-res depth/gbuffer there. At full res this is the identity.
-    int2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, int2(pixel), pc.pixelScale);
+    // Map this (possibly half-res) output pixel to a silhouette-correct full-res source pixel (inlined quad selection). At full res this is the identity.
+    int2 fullPixel;
+    if (pc.pixelScale == 1u) {
+        fullPixel = int2(pixel);
+    } else {
+        uint2 quadBase = pixel * pc.pixelScale;
+        float2 quadUV = (float2(quadBase) + 1.0) / float2(scene.mainRenderTargetSize);
+        float4 quadZ = rdgTexturesFloat[pc.depthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUV);
+        float4 quadZL = scene.depthLinearizeMult / (scene.depthLinearizeAdd - quadZ);
+        float quadZMin = min(min(quadZL.x, quadZL.y), min(quadZL.z, quadZL.w));
+        float quadZMax = max(max(quadZL.x, quadZL.y), max(quadZL.z, quadZL.w));
+        bool quadUniform = (quadZMax - quadZMin) <= QUAD_UNIFORM_DEPTH_THRESHOLD * max(quadZMax, 1e-4);
+        if (quadUniform) {
+            uint4 quadN = rdgTexturesUInt4[pc.gbufferOneIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUV);
+            float3 quadN0 = UnpackNormalOct16(quadN.x);
+            float quadMinDot = min(min(dot(quadN0, UnpackNormalOct16(quadN.y)), dot(quadN0, UnpackNormalOct16(quadN.z))), dot(quadN0, UnpackNormalOct16(quadN.w)));
+            quadUniform = quadMinDot >= QUAD_UNIFORM_NORMAL_DOT_THRESHOLD;
+        }
+        uint quadSel;
+        if (quadUniform) {
+            quadSel = (pixel.x + pixel.y * 2u + pc.frameIndex) & 3u;
+        } else {
+            quadSel = 3u;
+            float quadBest = quadZL.w;
+            if (quadZL.z < quadBest) { quadBest = quadZL.z; quadSel = 2u; }
+            if (quadZL.x < quadBest) { quadBest = quadZL.x; quadSel = 1u; }
+            if (quadZL.y < quadBest) { quadBest = quadZL.y; quadSel = 0u; }
+        }
+        fullPixel = int2(quadBase + uint2(quadSel & 1u, (quadSel >> 1u) & 1u));
+    }
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));

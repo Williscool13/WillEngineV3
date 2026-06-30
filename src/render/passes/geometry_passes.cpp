@@ -555,8 +555,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
                                   const RenderTargets& targets,
-                                  uint32_t sceneIndex,
-                                  bool bHalfResLighting)
+                                  uint32_t sceneIndex)
 {
     if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
@@ -597,11 +596,10 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
 
     RenderPass& lightResolvePass = graph.AddPass(SID("Light Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
     lightResolvePass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-    lightResolvePass.Execute([&, pipelineManager, bHalfResLighting, lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    lightResolvePass.Execute([&, pipelineManager, lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         LightingBucketingResolvePushConstant pc{
             .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
             .lightingCount = lightingCount,
-            .bHalfRes = bHalfResLighting ? 1u : 0u,
         };
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_lighting_bucketing_resolve"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -786,14 +784,13 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                      const Core::ViewFamily& viewFamily,
                                      Core::Array<uint32_t, 2> renderExtent,
                                      const RenderTargets& targets,
-                                     uint32_t sceneIndex,
-                                     uint32_t pixelScale)
+                                     uint32_t sceneIndex)
 {
     RenderPass& lightBucketVisualizePass = graph.AddPass(SID("Light Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
     lightBucketVisualizePass.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferOne);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferTwo);
-    lightBucketVisualizePass.Execute([&, pipelineManager, sceneIndex, pixelScale,
+    lightBucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("lighting_bucket_visualize"));
@@ -804,7 +801,6 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                 LightingBucketVisualizePushConstant pc{
                     .lightDispatchBuffer = lightDispatchAddress,
                     .lightingIndex = i,
-                    .pixelScale = pixelScale,
                     .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
                 };

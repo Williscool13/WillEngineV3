@@ -15,425 +15,15 @@
 
 namespace Render
 {
-void SetupATrousWaveletDenoiser(RenderGraph& graph,
-                                PipelineManager* pipelineManager,
-                                Core::Array<uint32_t, 2> renderExtent,
-                                const RenderTargets& targets,
-                                const Core::ReSTIRParams::ATrousParams& params)
-{
-    const StringID gbufferOne = targets.gbufferOne;
-    const StringID depthStencil = targets.depthCopy;
-    const StringID lightingOutput = targets.colorOutput;
-
-    constexpr int32_t ATROUS_PASS_COUNT = 4;
-    const int32_t ATROUS_ITERATIONS = params.iterations;
-
-    const uint32_t width = renderExtent[0];
-    const uint32_t height = renderExtent[1];
-    const TextureInfo texInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1};
-
-    graph.CreateTexture(SID("atrous_0"), texInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("atrous_1"), texInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("atrous_2"), texInfo, {std::nullopt}, true);
-
-    const StringID inputs[ATROUS_PASS_COUNT] = {lightingOutput, SID("atrous_0"), SID("atrous_1"), SID("atrous_2")};
-    const StringID outputs[ATROUS_PASS_COUNT] = {SID("atrous_0"), SID("atrous_1"), SID("atrous_2"), lightingOutput};
-    const char* passNames[ATROUS_PASS_COUNT] = {"[ATrous] Iteration 0", "[ATrous] Iteration 1", "[ATrous] Iteration 2", "[ATrous] Iteration 3"};
-
-    for (int32_t i = 0; i < ATROUS_ITERATIONS; i++) {
-        const bool isLast = (i == ATROUS_ITERATIONS - 1);
-        const StringID inputTex = inputs[i];
-        const StringID outputTex = isLast ? outputs[ATROUS_PASS_COUNT - 1] : outputs[i];
-        const uint32_t stepSize = 1u << static_cast<uint32_t>(i);
-
-        auto& pass = graph.AddPass(SID(passNames[i]), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
-        pass.ReadBuffer(SCENE_DATA_BUFFER);
-        pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depthStencil);
-        if (inputTex == outputTex) {
-            pass.ReadWriteImage(inputTex);
-        }
-        else {
-            pass.ReadSampledImage(inputTex);
-            pass.WriteStorageImage(outputTex);
-        }
-        pass.Execute([pipelineManager, inputTex, outputTex, gbufferOne, depthStencil,
-                width, height, stepSize, params](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                ATrousWaveletPushConstant pc{
-                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                    .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(inputTex),
-                    .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(outputTex),
-                    .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                    .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
-                    .stepSize = stepSize,
-                    .width = width,
-                    .height = height,
-                    .sigmaLuminance = params.sigmaLuminance,
-                    .sigmaNormal = params.sigmaNormal,
-                    .sigmaDepth = params.sigmaDepth,
-                };
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("atrous_wavelet"));
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                const uint32_t groupsX = (width + 7) / 8;
-                const uint32_t groupsY = (height + 7) / 8;
-                vkCmdDispatch(cmd, groupsX, groupsY, 1);
-            });
-    }
-}
-
-void SetupASVGFDenoiser(RenderGraph& graph,
-                        PipelineManager* pipelineManager,
-                        Core::Array<uint32_t, 2> renderExtent,
-                        const RenderTargets& targets,
-                        const Core::ReSTIRParams::SVGFParams& params)
-{
-    const uint32_t width = renderExtent[0];
-    const uint32_t height = renderExtent[1];
-    constexpr uint32_t GRADIENT_STRIDE = 3u;
-    const uint32_t gradW = (width + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE;
-    const uint32_t gradH = (height + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE;
-
-    const StringID gbufferOne = targets.gbufferOne;
-    const StringID gbufferTwo = targets.gbufferTwo;
-    const StringID depth = targets.depthCopy;
-    const StringID lightingOutput = targets.colorOutput;
-
-    const TextureInfo colorHistInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1};
-    const TextureInfo histLenInfo{VK_FORMAT_R16_SFLOAT, width, height, 1};
-
-    graph.CreateTexture(SID("svgf_color_accum"), colorHistInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_moments"), TextureInfo{VK_FORMAT_R32G32_SFLOAT, width, height, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_history_length"), histLenInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_variance"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_gradient_samples"), TextureInfo{VK_FORMAT_R16_SFLOAT, gradW, gradH, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_gradient"), TextureInfo{VK_FORMAT_R16_SFLOAT, gradW, gradH, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_gradient_full"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_gradient_spread_0"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_atrous_0"), colorHistInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_atrous_1"), colorHistInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_atrous_2"), colorHistInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_denoised"), colorHistInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_atrous_variance_0"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_atrous_variance_1"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_atrous_variance_2"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_atrous_variance_last"), TextureInfo{VK_FORMAT_R32_SFLOAT, width, height, 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("svgf_variance_estimated"), TextureInfo{VK_FORMAT_R16_SFLOAT, width, height, 1}, {std::nullopt}, true);
-
-    graph.CarryTextureToNextFrame(SID("svgf_color_accum"), SID("svgf_color_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("svgf_moments"), SID("svgf_moments_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("svgf_history_length"), SID("svgf_history_length_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("svgf_gradient"), SID("svgf_gradient_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-
-    // Pass 1: Gradient Samples
-    {
-        auto& pass = graph.AddPass(SID("[SVGF] Gradient Samples"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
-        pass.ReadSampledImage(lightingOutput);
-        pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depth);
-        if (graph.HasTexture(SID("svgf_color_history"))) {
-            pass.ReadSampledImage(SID("svgf_color_history"));
-        }
-        pass.WriteStorageImage(SID("svgf_gradient_samples"));
-        pass.Execute([pipelineManager, lightingOutput, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const bool hasHistory = graph.HasTexture(SID("svgf_color_history"));
-            SVGFGradientSamplesPushConstant pc{
-                .colorIndex = graph.GetSampledImageViewDescriptorIndex(lightingOutput),
-                .colorHistoryIndex = hasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("svgf_color_history")) : graph.GetSampledImageViewDescriptorIndex(lightingOutput),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .outputGradientIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_gradient_samples")),
-                .width = width,
-                .height = height,
-                .stride = GRADIENT_STRIDE,
-            };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_gradient_samples"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            const uint32_t gx = ((width + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
-            const uint32_t gy = ((height + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
-            vkCmdDispatch(cmd, gx, gy, 1);
-        });
-    }
-
-    // Pass 2: Gradient Temporal Filter
-    {
-        auto& pass = graph.AddPass(SID("[SVGF] Gradient Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
-        pass.ReadBuffer(SCENE_DATA_BUFFER);
-        pass.ReadSampledImage(SID("svgf_gradient_samples"));
-        pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depth);
-        if (graph.HasTexture(SID("svgf_gradient_history"))) {
-            pass.ReadSampledImage(SID("svgf_gradient_history"));
-        }
-        if (graph.HasTexture(SID("gbuffer_one_history"))) {
-            pass.ReadSampledImage(SID("gbuffer_one_history"));
-        }
-        if (graph.HasTexture(SID("depth_history"))) {
-            pass.ReadSampledImage(SID("depth_history"));
-        }
-        pass.WriteStorageImage(SID("svgf_gradient"));
-        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const bool hasHistory = graph.HasTexture(SID("svgf_gradient_history"));
-            SVGFGradientTemporalPushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .gradientSamplesIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_samples")),
-                .gradientHistoryIndex = hasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_history")) : graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_samples")),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .gbufferOneHistoryIndex = graph.HasTexture(SID("gbuffer_one_history")) ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .depthHistoryIndex = graph.HasTexture(SID("depth_history")) ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : graph.GetSampledImageViewDescriptorIndex(depth),
-                .outputGradientIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_gradient")),
-                .width = width,
-                .height = height,
-                .stride = GRADIENT_STRIDE,
-            };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_gradient_temporal"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            const uint32_t gx = ((width + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
-            const uint32_t gy = ((height + GRADIENT_STRIDE - 1) / GRADIENT_STRIDE + 7) / 8;
-            vkCmdDispatch(cmd, gx, gy, 1);
-        });
-    }
-
-    // Pass 3: Gradient Upsample + Spread
-    {
-        auto& pass = graph.AddPass(SID("[SVGF] Gradient Upsample"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
-        pass.ReadSampledImage(SID("svgf_gradient"));
-        pass.WriteStorageImage(SID("svgf_gradient_full"));
-        pass.Execute([pipelineManager, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            SVGFGradientAtrousPushConstant pc{
-                .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient")),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_gradient_full")),
-                .width = width,
-                .height = height,
-                .stepSize = GRADIENT_STRIDE,
-            };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_gradient_atrous"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
-        });
-    } {
-        auto& pass = graph.AddPass(SID("[SVGF] Gradient Spread"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
-        pass.ReadSampledImage(SID("svgf_gradient_full"));
-        pass.WriteStorageImage(SID("svgf_gradient_spread_0"));
-        pass.Execute([pipelineManager, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            SVGFGradientAtrousPushConstant pc{
-                .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_full")),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_gradient_spread_0")),
-                .width = width,
-                .height = height,
-                .stepSize = 2u,
-            };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_gradient_atrous"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
-        });
-    }
-
-    // Pass 4: Temporal Accumulation
-    {
-        auto& pass = graph.AddPass(SID("[SVGF] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
-        pass.ReadBuffer(SCENE_DATA_BUFFER);
-        pass.ReadSampledImage(lightingOutput);
-        pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depth);
-        pass.ReadSampledImage(SID("svgf_gradient_spread_0"));
-        if (graph.HasTexture(SID("svgf_color_history"))) {
-            pass.ReadSampledImage(SID("svgf_color_history"));
-        }
-        if (graph.HasTexture(SID("svgf_moments_history"))) {
-            pass.ReadSampledImage(SID("svgf_moments_history"));
-        }
-        if (graph.HasTexture(SID("svgf_history_length_history"))) {
-            pass.ReadSampledImage(SID("svgf_history_length_history"));
-        }
-        if (graph.HasTexture(SID("gbuffer_one_history"))) {
-            pass.ReadSampledImage(SID("gbuffer_one_history"));
-        }
-        if (graph.HasTexture(SID("depth_history"))) {
-            pass.ReadSampledImage(SID("depth_history"));
-        }
-        pass.WriteStorageImage(SID("svgf_color_accum"));
-        pass.WriteStorageImage(SID("svgf_moments"));
-        pass.WriteStorageImage(SID("svgf_history_length"));
-        pass.WriteStorageImage(SID("svgf_variance"));
-        pass.Execute([pipelineManager, lightingOutput, gbufferOne, depth, width, height, params](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const bool hasColorHist = graph.HasTexture(SID("svgf_color_history"));
-            const bool hasMomentsHist = graph.HasTexture(SID("svgf_moments_history"));
-            const bool hasLenHist = graph.HasTexture(SID("svgf_history_length_history"));
-            SVGFTemporalAccumulationPushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .colorIndex = graph.GetSampledImageViewDescriptorIndex(lightingOutput),
-                .colorHistoryIndex = hasColorHist ? graph.GetSampledImageViewDescriptorIndex(SID("svgf_color_history")) : graph.GetSampledImageViewDescriptorIndex(lightingOutput),
-                .momentsHistoryIndex = hasMomentsHist ? graph.GetSampledImageViewDescriptorIndex(SID("svgf_moments_history")) : graph.GetSampledImageViewDescriptorIndex(SID("svgf_moments")),
-                .historyLengthIndex = hasLenHist ? graph.GetSampledImageViewDescriptorIndex(SID("svgf_history_length_history")) : graph.GetSampledImageViewDescriptorIndex(SID("svgf_history_length")),
-                .gradientIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_gradient_spread_0")),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .gbufferOneHistoryIndex = graph.HasTexture(SID("gbuffer_one_history")) ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .depthHistoryIndex = graph.HasTexture(SID("depth_history")) ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : graph.GetSampledImageViewDescriptorIndex(depth),
-                .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_color_accum")),
-                .outputMomentsIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_moments")),
-                .outputHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_history_length")),
-                .outputVarianceIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_variance")),
-                .width = width,
-                .height = height,
-                .alphaMin = params.alphaMin,
-                .gradientThreshold = params.gradientThreshold,
-            };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_temporal_accumulation"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
-        });
-    }
-
-    // Pass 5: Spatial Variance Estimate
-    if (params.atrousIterations > 0) {
-        auto& pass = graph.AddPass(SID("[SVGF] Variance Estimate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
-        pass.ReadSampledImage(SID("svgf_moments"));
-        pass.ReadSampledImage(SID("svgf_history_length"));
-        pass.ReadSampledImage(SID("svgf_variance"));
-        pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depth);
-        pass.WriteStorageImage(SID("svgf_variance_estimated"));
-        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            SVGFVarianceEstimatePushConstant pc{
-                .momentsIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_moments")),
-                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_history_length")),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .inputVarianceIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_variance")),
-                .outputVarianceIndex = graph.GetStorageImageViewDescriptorIndex(SID("svgf_variance_estimated")),
-                .width = width,
-                .height = height,
-            };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_variance_estimate"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
-        });
-    }
-
-    // Pass 6: Variance-Guided Atrous
-    if (params.atrousIterations == 0) {
-        auto& pass = graph.AddPass(SID("[SVGF] ATrous Bypass"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Denoising);
-        pass.ReadCopyImage(SID("svgf_color_accum"));
-        pass.WriteCopyImage(SID("svgf_denoised"));
-        pass.Execute([width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkImage src = graph.GetImageHandle(SID("svgf_color_accum"));
-            VkImage dst = graph.GetImageHandle(SID("svgf_denoised"));
-            VkOffset3D extent = {static_cast<int32_t>(width), static_cast<int32_t>(height), 1};
-            VkImageCopy2 region{};
-            region.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
-            region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            region.srcOffset = {};
-            region.dstOffset = {};
-            region.extent = {static_cast<uint32_t>(extent.x), static_cast<uint32_t>(extent.y), 1};
-            VkCopyImageInfo2 copyInfo{};
-            copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
-            copyInfo.srcImage = src;
-            copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            copyInfo.dstImage = dst;
-            copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            copyInfo.regionCount = 1;
-            copyInfo.pRegions = &region;
-            vkCmdCopyImage2(cmd, &copyInfo);
-        });
-    }
-    else {
-        constexpr int32_t ATROUS_PASS_COUNT = 4;
-        const StringID atrousColorIn[ATROUS_PASS_COUNT] = {SID("svgf_color_accum"), SID("svgf_atrous_0"), SID("svgf_atrous_1"), SID("svgf_atrous_2")};
-        const StringID atrousColorOut[ATROUS_PASS_COUNT] = {SID("svgf_atrous_0"), SID("svgf_atrous_1"), SID("svgf_atrous_2"), SID("svgf_denoised")};
-        const StringID atrousVarIn[ATROUS_PASS_COUNT] = {SID("svgf_variance_estimated"), SID("svgf_atrous_variance_0"), SID("svgf_atrous_variance_1"), SID("svgf_atrous_variance_2")};
-        const StringID atrousVarOut[ATROUS_PASS_COUNT] = {SID("svgf_atrous_variance_0"), SID("svgf_atrous_variance_1"), SID("svgf_atrous_variance_2"), SID("svgf_atrous_variance_last")};
-        const char* atrousNames[ATROUS_PASS_COUNT] = {"[SVGF] ATrous 0", "[SVGF] ATrous 1", "[SVGF] ATrous 2", "[SVGF] ATrous 3"};
-
-        for (int32_t i = 0; i < params.atrousIterations; i++) {
-            const bool isLast = (i == params.atrousIterations - 1);
-            const StringID colorIn = atrousColorIn[i];
-            const StringID colorOut = isLast ? atrousColorOut[ATROUS_PASS_COUNT - 1] : atrousColorOut[i];
-            const StringID varIn = atrousVarIn[i];
-            const StringID varOut = isLast ? atrousVarOut[ATROUS_PASS_COUNT - 1] : atrousVarOut[i];
-            const uint32_t stepSize = 1u << static_cast<uint32_t>(i);
-
-            auto& pass = graph.AddPass(SID(atrousNames[i]), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
-            pass.ReadBuffer(SCENE_DATA_BUFFER);
-            pass.ReadSampledImage(gbufferOne);
-            pass.ReadSampledImage(depth);
-            if (colorIn == colorOut) {
-                pass.ReadWriteImage(colorIn);
-            }
-            else {
-                pass.ReadSampledImage(colorIn);
-                pass.WriteStorageImage(colorOut);
-            }
-            pass.ReadSampledImage(varIn);
-            pass.WriteStorageImage(varOut);
-            pass.Execute([pipelineManager, colorIn, colorOut, varIn, varOut, gbufferOne, depth,
-                    width, height, stepSize, params](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                    SVGFAtrousWaveletPushConstant pc{
-                        .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                        .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(colorIn),
-                        .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(colorOut),
-                        .inputVarianceIndex = graph.GetSampledImageViewDescriptorIndex(varIn),
-                        .outputVarianceIndex = graph.GetStorageImageViewDescriptorIndex(varOut),
-                        .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                        .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                        .stepSize = stepSize,
-                        .width = width,
-                        .height = height,
-                        .sigmaLuminance = params.sigmaLuminance,
-                        .sigmaNormal = params.sigmaNormal,
-                        .sigmaDepth = params.sigmaDepth,
-                    };
-                    const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_atrous_wavelet"));
-                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-                    vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                    vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
-                });
-        }
-    }
-
-    // Remodulate: multiply denoised irradiance by albedo from gbuffer
-    {
-        auto& pass = graph.AddPass(SID("[SVGF] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Denoising);
-        pass.ReadSampledImage(SID("svgf_denoised"));
-        pass.ReadSampledImage(gbufferTwo);
-        pass.ReadSampledImage(depth);
-        pass.WriteStorageImage(lightingOutput);
-        pass.Execute([pipelineManager, gbufferTwo, depth, lightingOutput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            SVGFRemodulatePushConstant pc{
-                .irradianceIndex = graph.GetSampledImageViewDescriptorIndex(SID("svgf_denoised")),
-                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex(lightingOutput),
-                .width = width,
-                .height = height,
-            };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("svgf_remodulate"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
-        });
-    }
-}
 
 void SetupRELAXDenoiser(RenderGraph& graph,
                         PipelineManager* pipelineManager,
                         const Core::ViewFamily& viewFamily,
                         Core::Array<uint32_t, 2> renderExtent,
-                        Core::Array<uint32_t, 2> fullRenderExtent,
                         const RenderTargets& targets,
                         const Core::RELAXParams& params,
                         uint64_t frameNumber,
                         uint32_t remodulateOutputMode,
-                        uint32_t pixelScale,
                         float iblIntensity)
 {
     const uint32_t width = renderExtent[0];
@@ -599,16 +189,13 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("relax_viewz"));
-        pass.Execute([pipelineManager, depth, gbufferOne, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, depth, gbufferOne, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxGenerateViewZPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_viewz")),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_generate_viewz"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -625,12 +212,11 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(SID("relax_tiles"));
-        pass.Execute([pipelineManager, depth, tilesW, tilesH, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, depth, tilesW, tilesH](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxClassifyTilesPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .tilesOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_tiles")),
-                .pixelScale = pixelScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_classify_tiles"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -652,10 +238,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(diffInput);
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("relax_spec_prepass"));
         pass.WriteStorageImage(SID("relax_diff_prepass"));
-        pass.Execute([pipelineManager, depth, gbufferOne, specInput, diffInput, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, depth, gbufferOne, specInput, diffInput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxPrepassPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -665,8 +250,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
                 .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_prepass")),
                 .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_prepass")),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_prepass"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -725,7 +308,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(SID("relax_viewz"));
         }
         if (graph.HasTexture(SID("restir_confidence"))) { pass.ReadSampledImage(SID("restir_confidence")); }
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("relax_spec_illum"));
         pass.WriteStorageImage(SID("relax_diff_illum"));
         pass.WriteStorageImage(SID("relax_spec_fast"));
@@ -735,7 +317,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(SID("relax_spec_reproj_confidence"));
         pass.WriteStorageImage(SID("relax_prev_nr"));
 
-        pass.Execute([pipelineManager, gbufferOne, depth, specIn, diffIn, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, gbufferOne, depth, specIn, diffIn, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const bool hasHistory = graph.HasTexture(SID("relax_spec_illum_history"));
             const StringID fallbackSpec = hasHistory ? SID("relax_spec_illum_history") : specIn;
             const StringID fallbackDiff = hasHistory ? SID("relax_diff_illum_history") : diffIn;
@@ -769,9 +351,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outSpecHitDistIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_hit_dist")),
                 .outSpecReprojConfidenceIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_reproj_confidence")),
                 .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_prev_nr")),
-                .pixelScale = pixelScale,
                 .confidenceIndex = graph.HasTexture(SID("restir_confidence")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_confidence")) : ~0u,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_temporal_accumulation"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -796,10 +376,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("relax_history_length"));
         pass.ReadSampledImage(SID("relax_spec_illum"));
         pass.ReadSampledImage(SID("relax_diff_illum"));
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("relax_atrous_spec_0"));
         pass.WriteStorageImage(SID("relax_atrous_diff_0"));
-        pass.Execute([pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxHistoryFixPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -810,8 +389,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_illum")),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_spec_0")),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_atrous_diff_0")),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_history_fix"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -852,10 +429,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         }
         pass.ReadSampledImage(specNoisy); // noisy preblur reference
         pass.ReadSampledImage(diffNoisy);
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("relax_spec_fast_hist"));
         pass.WriteStorageImage(SID("relax_diff_fast_hist"));
-        pass.Execute([pipelineManager, depth, gbufferOne, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, depth, gbufferOne, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxHistoryClampingPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -873,8 +449,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_fast_hist")),
                 .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_fast_hist")),
                 .outHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_history_length")),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_history_clamping"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -895,9 +469,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("relax_atrous_diff_0"));
         pass.WriteStorageImage(SID("relax_spec_hist"));
         pass.WriteStorageImage(SID("relax_diff_hist"));
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
 
-        pass.Execute([pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxAntiFireflyPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -907,8 +480,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_atrous_diff_0")),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_hist")),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_hist")),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_antifirefly"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -945,12 +516,11 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(SID("relax_spec_reproj_confidence"));
             pass.ReadSampledImage(specIn);
             pass.ReadSampledImage(diffIn);
-            if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
             pass.WriteStorageImage(specOut);
             pass.WriteStorageImage(diffOut);
 
             pass.Execute([pipelineManager, gbufferOne, depth,
-                    specIn, diffIn, specOut, diffOut, stepSize, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                    specIn, diffIn, specOut, diffOut, stepSize, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     RelaxAtrousPushConstant pc{
                         .constants = graph.GetBufferAddress(SID("relax_constants")),
                         .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -965,8 +535,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specOut),
                         .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
                         .stepSize = stepSize,
-                        .pixelScale = pixelScale,
-                        .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
                     };
                     const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_atrous"));
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -990,10 +558,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(noisyInput);
 
-        const uint32_t fullWidth = fullRenderExtent[0];
-        const uint32_t fullHeight = fullRenderExtent[1];
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode, pixelScale, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -1003,18 +569,17 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(noisyInput),
-                .width = fullWidth,
-                .height = fullHeight,
+                .width = width,
+                .height = height,
                 .outputMode = remodulateOutputMode,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
-                .pixelScale = pixelScale,
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (fullWidth + 7) / 8, (fullHeight + 7) / 8, 1);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
         });
     }
 }
@@ -1023,12 +588,10 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          PipelineManager* pipelineManager,
                          const Core::ViewFamily& viewFamily,
                          Core::Array<uint32_t, 2> renderExtent,
-                         Core::Array<uint32_t, 2> fullRenderExtent,
                          const RenderTargets& targets,
                          const Core::ReBLURParams& params,
                          uint64_t frameNumber,
                          uint32_t remodulateOutputMode,
-                         uint32_t pixelScale,
                          float iblIntensity)
 {
     const uint32_t width = renderExtent[0];
@@ -1180,16 +743,13 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("reblur_viewz"));
-        pass.Execute([pipelineManager, depth, gbufferOne, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, depth, gbufferOne, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurGenerateViewZPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("reblur_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_viewz")),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_generate_viewz"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1206,12 +766,11 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(SID("reblur_tiles"));
-        pass.Execute([pipelineManager, depth, tilesW, tilesH, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, depth, tilesW, tilesH](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurClassifyTilesPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("reblur_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .tilesOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_tiles")),
-                .pixelScale = pixelScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_classify_tiles"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1230,10 +789,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(diffInput);
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("reblur_spec_packed"));
         pass.WriteStorageImage(SID("reblur_diff_packed"));
-        pass.Execute([pipelineManager, depth, gbufferOne, specInput, diffInput, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, depth, gbufferOne, specInput, diffInput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurPackPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("reblur_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -1242,8 +800,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
                 .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_packed")),
                 .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_packed")),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_pack"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1264,10 +820,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(SID("reblur_spec_packed"));
         pass.ReadSampledImage(SID("reblur_diff_packed"));
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("reblur_spec_prepass"));
         pass.WriteStorageImage(SID("reblur_diff_prepass"));
-        pass.Execute([pipelineManager, depth, gbufferOne, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, depth, gbufferOne, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurPrepassPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("reblur_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
@@ -1277,8 +832,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_packed")),
                 .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_prepass")),
                 .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_prepass")),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_prepass"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1337,7 +890,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         if (graph.HasTexture(SID("reblur_viewz_history"))) { pass.ReadSampledImage(SID("reblur_viewz_history")); }
         else { pass.ReadSampledImage(SID("reblur_viewz")); }
         if (graph.HasTexture(SID("restir_confidence"))) { pass.ReadSampledImage(SID("restir_confidence")); }
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("reblur_spec_accum"));
         pass.WriteStorageImage(SID("reblur_diff_accum"));
         pass.WriteStorageImage(SID("reblur_spec_fast"));
@@ -1347,7 +899,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(SID("reblur_spec_reproj_conf"));
         pass.WriteStorageImage(SID("reblur_prev_nr"));
 
-        pass.Execute([pipelineManager, gbufferOne, depth, specIn, diffIn, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, gbufferOne, depth, specIn, diffIn, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const bool hasHistory = graph.HasTexture(SID("reblur_spec_illum_history"));
             const StringID fallbackSpec = hasHistory ? SID("reblur_spec_illum_history") : specIn;
             const StringID fallbackDiff = hasHistory ? SID("reblur_diff_illum_history") : diffIn;
@@ -1382,9 +934,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .outSpecHitDistIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_hit_dist")),
                 .outSpecReprojConfidenceIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_reproj_conf")),
                 .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_prev_nr")),
-                .pixelScale = pixelScale,
                 .confidenceIndex = graph.HasTexture(SID("restir_confidence")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_confidence")) : ~0u,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_temporal_accumulation"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1405,10 +955,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("reblur_diff_accum"));
         pass.ReadSampledImage(SID("reblur_spec_fast"));
         pass.ReadSampledImage(SID("reblur_diff_fast"));
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("reblur_spec_hfix"));
         pass.WriteStorageImage(SID("reblur_diff_hfix"));
-        pass.Execute([pipelineManager, gbufferOne, depth, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurHistoryFixPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("reblur_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
@@ -1421,8 +970,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .diffFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_fast")),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_hfix")),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_hfix")),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_history_fix"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1442,10 +989,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("reblur_spec_hit_dist"));
         pass.ReadSampledImage(specSrc);
         pass.ReadSampledImage(diffSrc);
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(specDst);
         pass.WriteStorageImage(diffDst);
-        pass.Execute([pipelineManager, gbufferOne, depth, specSrc, diffSrc, specDst, diffDst, isPostBlur, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, gbufferOne, depth, specSrc, diffSrc, specDst, diffDst, isPostBlur, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurBlurPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("reblur_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
@@ -1458,8 +1004,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specDst),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffDst),
                 .isPostBlur = isPostBlur,
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_blur"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1482,12 +1026,11 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(SID("reblur_diff_hist"));
         if (graph.HasTexture(SID("reblur_spec_stab_history"))) { pass.ReadSampledImage(SID("reblur_spec_stab_history")); }
         if (graph.HasTexture(SID("reblur_diff_stab_history"))) { pass.ReadSampledImage(SID("reblur_diff_stab_history")); }
-        if (pixelScale == 2u) { pass.ReadSampledImage(SID("quad_selection")); }
         pass.WriteStorageImage(SID("reblur_spec_stab"));
         pass.WriteStorageImage(SID("reblur_diff_stab"));
         pass.WriteStorageImage(specInput);
         pass.WriteStorageImage(diffInput);
-        pass.Execute([pipelineManager, gbufferOne, depth, specInput, diffInput, width, height, pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, gbufferOne, depth, specInput, diffInput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const StringID fallbackSpecStab = graph.HasTexture(SID("reblur_spec_stab_history")) ? SID("reblur_spec_stab_history") : SID("reblur_spec_hist");
             const StringID fallbackDiffStab = graph.HasTexture(SID("reblur_diff_stab_history")) ? SID("reblur_diff_stab_history") : SID("reblur_diff_hist");
             ReblurStabilizationPushConstant pc{
@@ -1504,8 +1047,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .outDiffStabIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_stab")),
                 .outSpecFinalIndex = graph.GetStorageImageViewDescriptorIndex(specInput),
                 .outDiffFinalIndex = graph.GetStorageImageViewDescriptorIndex(diffInput),
-                .pixelScale = pixelScale,
-                .quadSelectionIndex = (pixelScale == 2u) ? graph.GetSampledImageViewDescriptorIndex(SID("quad_selection")) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_stabilization"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1527,10 +1068,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(noisyInput);
 
-        const uint32_t fullWidth = fullRenderExtent[0];
-        const uint32_t fullHeight = fullRenderExtent[1];
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, fullWidth, fullHeight, remodulateOutputMode, pixelScale, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -1540,18 +1079,17 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(noisyInput),
-                .width = fullWidth,
-                .height = fullHeight,
+                .width = width,
+                .height = height,
                 .outputMode = remodulateOutputMode,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
-                .pixelScale = pixelScale,
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (fullWidth + 7) / 8, (fullHeight + 7) / 8, 1);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
         });
     }
 }

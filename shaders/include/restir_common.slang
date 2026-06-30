@@ -209,20 +209,6 @@ public float EvalCellLightTarget(LightVS vs, float3 cellCenter, float3 lightColo
     return geom * vs.area * vs.intensity * colorMax * atten;
 }
 
-public uint2 FetchFullPixel(uint selectionIndex, uint2 pixel, uint pixelScale)
-{
-    if (pixelScale == 1u) { return pixel; }
-    uint sel = rdgTexturesUInt[selectionIndex].Load(int3(int2(pixel), 0)).r;
-    return pixel * pixelScale + uint2(sel & 1u, (sel >> 1u) & 1u);
-}
-
-public int2 FetchFullPixel(uint selectionIndex, int2 pixel, uint pixelScale)
-{
-    if (pixelScale == 1u) { return pixel; }
-    uint sel = rdgTexturesUInt[selectionIndex].Load(int3(pixel, 0)).r;
-    return pixel * int(pixelScale) + int2(int(sel & 1u), int((sel >> 1u) & 1u));
-}
-
 public int2 ApplyPermutationSampling(int2 prevPixel, uint frameIndex)
 {
     uint seed = frameIndex * 0x9E3779B9u;
@@ -351,9 +337,9 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
     return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
 }
 
-public float RestirWorldTexelSize(float viewZ, float2 ndcToViewMulXPixelSize, uint pixelScale)
+public float RestirWorldTexelSize(float viewZ, float2 ndcToViewMulXPixelSize)
 {
-    return abs(viewZ) * max(ndcToViewMulXPixelSize.x, ndcToViewMulXPixelSize.y) * float(pixelScale);
+    return abs(viewZ) * max(ndcToViewMulXPixelSize.x, ndcToViewMulXPixelSize.y);
 }
 
 public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize)

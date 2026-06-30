@@ -25,7 +25,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    uint2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixel, pc.pixelScale);
+    uint2 fullPixel = pixel;
 
     uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
 
@@ -47,7 +47,7 @@ void ComputeMain(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
-    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, pc.pixelScale);
+    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize);
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 

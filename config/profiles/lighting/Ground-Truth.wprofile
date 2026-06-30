@@ -23,7 +23,6 @@
       "sigmaNormal": 128.0
     },
     "bAdaptiveSpatial": true,
-    "bHalfRes": true,
     "bPermutationSampling": false,
     "confidenceStrength": 0.0,
     "denoiserMode": 3,

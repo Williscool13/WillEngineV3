@@ -173,7 +173,6 @@ static void ReblurFromJson(const nlohmann::json& r, Core::ReBLURParams& p)
 nlohmann::json ToJson(const Core::ReSTIRParams& p)
 {
     return {
-        {"bHalfRes", p.bHalfRes},
         {"spatialPasses", p.spatialPasses},
         {"bPermutationSampling", p.bPermutationSampling},
         {"bAdaptiveSpatial", p.bAdaptiveSpatial},
@@ -210,7 +209,6 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     auto getUint = [&](const char* k, uint32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<uint32_t>() : def; };
     auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
 
-    p.bHalfRes = getBool("bHalfRes", p.bHalfRes);
     p.spatialPasses = getUint("spatialPasses", getBool("bSpatial2", false) ? 2u : p.spatialPasses);
     p.bPermutationSampling = getBool("bPermutationSampling", p.bPermutationSampling);
     p.bAdaptiveSpatial = getBool("bAdaptiveSpatial", p.bAdaptiveSpatial);

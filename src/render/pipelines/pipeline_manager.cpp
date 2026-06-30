@@ -415,8 +415,6 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline(SID("restir_transform_lights"), src / "restir_di_transform_lights_compute.spv",
                             sizeof(ReSTIRTransformLightsPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_quad_selection"), src / "restir_quad_selection_compute.spv",
-                            sizeof(QuadSelectionPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("regir_touch"), src / "regir_touch_compute.spv",
                             sizeof(ReGIRTouchPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("regir_build_indirect"), src / "regir_build_indirect_compute.spv",
@@ -506,24 +504,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(GTAOMainPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gtao_denoise"), src / "gtao_denoise_compute.spv",
                             sizeof(GTAODenoisePushConstant), PipelineCategory::Critical);
-
-    RegisterComputePipeline(SID("atrous_wavelet"), src / "atrous_wavelet_compute.spv",
-                            sizeof(ATrousWaveletPushConstant), PipelineCategory::Critical);
-
-    RegisterComputePipeline(SID("svgf_gradient_samples"), src / "svgf_gradient_samples_compute.spv",
-                            sizeof(SVGFGradientSamplesPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("svgf_gradient_temporal"), src / "svgf_gradient_temporal_compute.spv",
-                            sizeof(SVGFGradientTemporalPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("svgf_gradient_atrous"), src / "svgf_gradient_atrous_compute.spv",
-                            sizeof(SVGFGradientAtrousPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("svgf_temporal_accumulation"), src / "svgf_temporal_accumulation_compute.spv",
-                            sizeof(SVGFTemporalAccumulationPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("svgf_variance_estimate"), src / "svgf_variance_estimate_compute.spv",
-                            sizeof(SVGFVarianceEstimatePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("svgf_atrous_wavelet"), src / "svgf_atrous_wavelet_compute.spv",
-                            sizeof(SVGFAtrousWaveletPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("svgf_remodulate"), src / "svgf_remodulate_compute.spv",
-                            sizeof(SVGFRemodulatePushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("relax_generate_viewz"), src / "relax_generate_viewz_compute.spv",
                             sizeof(RelaxGenerateViewZPushConstant), PipelineCategory::Critical);

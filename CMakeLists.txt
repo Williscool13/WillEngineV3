@@ -455,7 +455,6 @@ compile_shaders(will-engine
 
         # ReSTIR
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_transform_lights.slang compute ComputeMain restir_di_transform_lights
-        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_quad_selection.slang compute ComputeMain restir_quad_selection
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_spatial.slang compute ComputeMain restir_di_spatial
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_base_regir.slang compute ComputeMain restir_di_base_regir
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_temporal.slang compute ComputeMain restir_di_temporal
@@ -511,14 +510,6 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtao_depth_prepass
         ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtao_main
         ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtao_denoise
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/atrous_wavelet.slang compute ATrousWaveletMain atrous_wavelet
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_gradient_samples.slang compute SVGFGradientSamplesMain svgf_gradient_samples
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_gradient_temporal.slang compute SVGFGradientTemporalMain svgf_gradient_temporal
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_gradient_atrous.slang compute SVGFGradientAtrousMain svgf_gradient_atrous
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_temporal_accumulation.slang compute SVGFTemporalAccumulationMain svgf_temporal_accumulation
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_variance_estimate.slang compute SVGFVarianceEstimateMain svgf_variance_estimate
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_atrous_wavelet.slang compute SVGFAtrousWaveletMain svgf_atrous_wavelet
-        ${CMAKE_SOURCE_DIR}/shaders/denoising/svgf/svgf_remodulate.slang compute SVGFRemodulateMain svgf_remodulate
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_generate_viewz.slang compute RelaxGenerateViewZMain relax_generate_viewz
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_classify_tiles.slang compute RelaxClassifyTilesMain relax_classify_tiles
         ${CMAKE_SOURCE_DIR}/shaders/denoising/relax/relax_prepass.slang compute RelaxPrepassMain relax_prepass

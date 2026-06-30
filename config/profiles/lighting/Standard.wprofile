@@ -27,7 +27,6 @@
     "bEnableAntilag": false,
     "bEnableConfidence": false,
     "bEnableTemporal": true,
-    "bHalfRes": true,
     "bInitialVisibility": true,
     "bPermutationSampling": false,
     "boilingFilterStrength": 0.20000000298023224,

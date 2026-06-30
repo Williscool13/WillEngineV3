@@ -33,8 +33,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
                                   const RenderTargets& targets,
-                                  uint32_t sceneIndex,
-                                  bool bHalfResLighting);
+                                  uint32_t sceneIndex);
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
@@ -57,8 +56,7 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                      const Core::ViewFamily& viewFamily,
                                      Core::Array<uint32_t, 2> renderExtent,
                                      const RenderTargets& targets,
-                                     uint32_t sceneIndex,
-                                     uint32_t pixelScale);
+                                     uint32_t sceneIndex);
 } // Render
 
 #endif //WILL_ENGINE_GEOMETRY_PASSES_H

@@ -5,7 +5,7 @@
  * (ReblurMixHistoryAndCurrent), a firefly suppressor clamps slow + fast luma, and the responsive ("fast")
  * history is single-channel luma. Signal is YCoCg radiance in .xyz + NORMALIZED hit distance [0,1] in .w;
  * reprojection/curvature math works in WORLD hit distance (de-normalized on the fly, re-normalized to store).
- * Operates full-res (indexes by pixelPos; pixelScale/quadSelectionIndex unused).
+ * Operates full-res (indexes by pixelPos).
  * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
  * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */

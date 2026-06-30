@@ -38,7 +38,7 @@ void ComputeMain(uniform ReSTIRConfidenceResolvePushConstant pc, uint3 threadID 
     conf = 1.0 - pc.confidenceStrength * (1.0 - conf);
 
     if (pc.prevConfidenceIndex != ~0u && pc.blendFactor < 1.0) {
-        uint2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixel, pc.pixelScale);
+        uint2 fullPixel = pixel;
         uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
         float2 velocityNDC = UnpackMotionVectors(g1.g);
         float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);

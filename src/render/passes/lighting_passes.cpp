@@ -85,7 +85,6 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .lightingIndex = entry.bucketIndex,
                     .renderExtent = {renderExtent[0], renderExtent[1]},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
-                    .pixelScale = 1,
                     .iblIntensity = iblIntensity,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -162,7 +161,6 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .accumulationCount = accumulationCount,
-                .pixelScale = 1,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

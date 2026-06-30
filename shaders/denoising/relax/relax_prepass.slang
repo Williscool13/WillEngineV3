@@ -36,7 +36,7 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
         return;
     }
 
-    int2 fullPixel = FetchFullPixel(pc.quadSelectionIndex, pixelPos, pc.pixelScale);
+    int2 fullPixel = pixelPos;
     float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
     {
@@ -84,7 +84,7 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
             }
 
             int2 samplePos = int2(samplePosF);
-            int2 sampleFullPos = FetchFullPixel(pc.quadSelectionIndex, samplePos, pc.pixelScale);
+            int2 sampleFullPos = samplePos;
             float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
             if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange))
             {
@@ -156,7 +156,7 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
             }
 
             int2 samplePos = int2(samplePosF);
-            int2 sampleFullPos = FetchFullPixel(pc.quadSelectionIndex, samplePos, pc.pixelScale);
+            int2 sampleFullPos = samplePos;
             float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
             if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange))
             {
