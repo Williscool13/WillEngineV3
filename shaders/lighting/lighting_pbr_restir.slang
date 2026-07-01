@@ -29,6 +29,12 @@ void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 t
         return;
     }
 
+    uint field = pc.activeCheckerboardField;
+    if (field != 0u && !IsActiveCheckerboardPixel(int2(pixel), false, field)) {
+        return;
+    }
+    uint2 rcoord = PixelPosToReservoirPos(pixel, field);
+
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     uint2 fullPixel = pixel;
 
@@ -60,7 +66,8 @@ void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     bool bAnyLight = pc.reservoirBuffer != 0;
     if (bAnyLight)
     {
-        uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
+        uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
+        uint pixelIdx = rcoord.y * stride + rcoord.x;
         float bestSpecLum = -1.0;
 
         Reservoir r = pc.reservoirBuffer[pixelIdx];
@@ -137,6 +144,18 @@ void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     float3 specularOut = specularRadiance / max(specReflectance, float3(0.01, 0.01, 0.01));
 
     float hitT = (isnan(hitDistance) || isinf(hitDistance)) ? 0.0 : hitDistance;
-    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(SanitizeRadiance(diffuseOut), hitT);
-    rdgStorageFloat4[pc.secondaryOutputImageIndex][pixel] = float4(SanitizeRadiance(specularOut), hitT);
+    float4 diffPacked = float4(SanitizeRadiance(diffuseOut), hitT);
+    float4 specPacked = float4(SanitizeRadiance(specularOut), hitT);
+
+    uint2 writeCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? rcoord : pixel;
+    rdgStorageFloat4[pc.primaryOutputImageIndex][writeCoord] = diffPacked;
+    rdgStorageFloat4[pc.secondaryOutputImageIndex][writeCoord] = specPacked;
+
+    if (field != 0u && pc.bCheckerboardPacked == 0u) {
+        int2 o = OtherFieldPixel(pixel, field);
+        if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
+            rdgStorageFloat4[pc.primaryOutputImageIndex][uint2(o)] = float4(diffPacked.rgb, 0.0);
+            rdgStorageFloat4[pc.secondaryOutputImageIndex][uint2(o)] = float4(specPacked.rgb, 0.0);
+        }
+    }
 }

@@ -114,6 +114,19 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
     return sceneData;
 }
 
+float ComputeCheckerboardResolveAccumSpeed(Core::AntiAliasingMode aaMode, uint64_t frameNumber, float renderFps)
+{
+    float jitterDelta = 0.0f;
+    if (aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA || aaMode == Core::AntiAliasingMode::DonutTAA) {
+        const HaltonSample& curr = HALTON_SEQUENCE[(frameNumber + 1) % HALTON_SEQUENCE_COUNT];
+        const HaltonSample& prev = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
+        jitterDelta = glm::clamp(glm::max(glm::abs(curr.x - prev.x), glm::abs(curr.y - prev.y)), 0.0f, 1.0f);
+    }
+    const float fps = glm::max(renderFps, 30.0f);
+    const float nonLinearAccumSpeed = fps * 0.25f / (1.0f + fps * 0.25f);
+    return glm::mix(nonLinearAccumSpeed, 0.5f, jitterDelta);
+}
+
 void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineManager, Core::Arena* arena)
 {
     // Verify that shading and lighting shaders exist. If not use the default error unlit

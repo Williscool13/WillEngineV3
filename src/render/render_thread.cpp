@@ -522,12 +522,16 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 }
                 case Core::LightingMode::ReSTIR:
                 {
-                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir);
-                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber);
+                    const uint32_t restirCheckerboardField = restir.bCheckerboard ? ((static_cast<uint32_t>(frameNumber) & 1u) ? 1u : 2u) : 0u;
+                    const uint32_t restirCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) ? 1u : 0u;
+                    const float restirCheckerboardResolveSpeed = ComputeCheckerboardResolveAccumSpeed(viewFamily.aaConfig.mode, frameNumber, renderFps);
+
+                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField);
+                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
                     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity);
+                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed);
                     }
                     else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
                         SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity);

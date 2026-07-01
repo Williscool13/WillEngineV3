@@ -645,6 +645,7 @@ struct ReSTIRParams
     bool bEnableTemporal{true};
     uint32_t temporalMCap{20u};
     bool bTemporalSearch{true};
+    bool bCheckerboard{false};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
     float regirWClamp{0.0f};

@@ -27,7 +27,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
                        uint64_t frameNumber,
-                       const Core::ReSTIRParams& restirParams);
+                       const Core::ReSTIRParams& restirParams,
+                       uint32_t activeCheckerboardField);
 
 void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     PipelineManager* pipelineManager,
@@ -36,7 +37,9 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     const RenderTargets& targets,
                                     uint32_t sceneIndex,
                                     Core::Arena& arena,
-                                    uint64_t frameNumber);
+                                    uint64_t frameNumber,
+                                    uint32_t activeCheckerboardField,
+                                    uint32_t bCheckerboardPacked);
 
 void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                PipelineManager* pipelineManager,

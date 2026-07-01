@@ -27,6 +27,12 @@ struct FrameResourceLimits;
 SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode aaMode, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime);
 
 /**
+ * NRD's checkerboard resolve accumulation speed (InstanceImpl.cpp): lerp(nonLinearAccumSpeed, 0.5, jitterDelta),
+ * where nonLinearAccumSpeed is FPS-driven and jitterDelta is the per-frame camera-jitter movement in pixels (0 when not jittering).
+ */
+float ComputeCheckerboardResolveAccumSpeed(Core::AntiAliasingMode aaMode, uint64_t frameNumber, float renderFps);
+
+/**
  * Clean up some invalid fields in the view family. E.g. materials w/out compiled shaders (at the time of draw)
  * @param viewFamily
  * @param pipelineManager used to validate shader pipeline existence

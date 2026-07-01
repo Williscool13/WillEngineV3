@@ -24,8 +24,13 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         const Core::RELAXParams& params,
                         uint64_t frameNumber,
                         uint32_t remodulateOutputMode,
-                        float iblIntensity)
+                        float iblIntensity,
+                        uint32_t activeCheckerboardField,
+                        float checkerboardResolveAccumSpeed)
 {
+    const bool bCheckerboard = activeCheckerboardField != 0u;
+    // NRD RELAX resolves checkerboard inside the prepass
+    const bool bPrepass = params.enablePrepass || bCheckerboard;
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const uint32_t tilesW = (width + 15) / 16;
@@ -152,6 +157,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gRoughnessEdgeStoppingEnabled = params.roughnessEdgeStoppingEnabled ? 1u : 0u;
     rc.gFrameIndex = static_cast<uint32_t>(frameNumber);
     rc.gResetHistory = bFirstFrame ? 1u : 0u;
+    rc.gDiffCheckerboard = bCheckerboard ? 0u : 2u;
+    rc.gSpecCheckerboard = bCheckerboard ? 1u : 2u;
+    rc.gCheckerboardResolveAccumSpeed = bCheckerboard ? checkerboardResolveAccumSpeed : 0.0f;
 
     // Upload constants buffer
     graph.CreateBuffer(SID("relax_constants"), sizeof(RelaxDiffuseSpecularConstants));
@@ -227,7 +235,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
 
     // Pass 2: Prepass (optional spatial prefilter)
-    if (params.enablePrepass) {
+    if (bPrepass) {
         graph.CreateTexture(SID("relax_spec_prepass"), colorInfo, {std::nullopt}, true);
         graph.CreateTexture(SID("relax_diff_prepass"), colorInfo, {std::nullopt}, true);
 
@@ -284,8 +292,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     // Pass 3: Temporal Accumulation
     {
-        const StringID specIn = params.enablePrepass ? SID("relax_spec_prepass") : specInput;
-        const StringID diffIn = params.enablePrepass ? SID("relax_diff_prepass") : diffInput;
+        const StringID specIn = bPrepass ? SID("relax_spec_prepass") : specInput;
+        const StringID diffIn = bPrepass ? SID("relax_diff_prepass") : diffInput;
 
         auto& pass = graph.AddPass(SID("[ReLAX] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SID("relax_constants"));
@@ -402,8 +410,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     // Pass 5: History Clamping
     // ----------------------------------------------------------------
     {
-        const StringID specNoisy = params.enablePrepass ? SID("relax_spec_prepass") : specInput;
-        const StringID diffNoisy = params.enablePrepass ? SID("relax_diff_prepass") : diffInput;
+        const StringID specNoisy = bPrepass ? SID("relax_spec_prepass") : specInput;
+        const StringID diffNoisy = bPrepass ? SID("relax_diff_prepass") : diffInput;
 
         // With anti-firefly enabled the slow output goes back into the history-fix scratch (the shader reads it center-pixel only, so in-place is safe) and anti-firefly produces relax_*_hist.
         // Without it, the clamping output is the carried slow history directly.

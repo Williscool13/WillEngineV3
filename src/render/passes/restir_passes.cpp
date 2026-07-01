@@ -24,7 +24,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
                        uint64_t frameNumber,
-                       const Core::ReSTIRParams& restirParams)
+                       const Core::ReSTIRParams& restirParams,
+                       uint32_t activeCheckerboardField)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const uint32_t reservoirBufferSize = pixelCount * static_cast<uint32_t>(sizeof(Reservoir));
@@ -231,7 +232,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         basePass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { basePass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         basePass.WriteBuffer(SID("restir_reservoir_base"));
-        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_base_regir"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -268,10 +269,12 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .bPermutationSampling = 0u,
                 .antilagStrength = 0.0f,
                 .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
+                .activeCheckerboardField = field,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+            const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+            const uint32_t groupsX = (strideX + 15) / 16;
             const uint32_t groupsY = (renderExtent[1] + 15) / 16;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
@@ -296,7 +299,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             temporalPass.WriteBuffer(SID("restir_reservoir_temporal"));
             if (bShadowVis) { temporalPass.WriteStorageImage(SID("restir_shadow_vis")); }
             if (bConfidence) { temporalPass.WriteStorageImage(SID("restir_signal")); }
-            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasPrevTlas, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasPrevTlas, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -335,10 +338,12 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .antilagStrength = restirParams.antilagStrength,
                     .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
                     .bTemporalSearch = restirParams.bTemporalSearch ? 1u : 0u,
+                    .activeCheckerboardField = field,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-                const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+                const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+                const uint32_t groupsX = (strideX + 15) / 16;
                 const uint32_t groupsY = (renderExtent[1] + 15) / 16;
                 vkCmdDispatch(cmd, groupsX, groupsY, 1);
             });
@@ -403,7 +408,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         RenderPass& boilingPass = graph.AddPass(SID("[ReSTIR DI] Boiling Filter"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         boilingPass.ReadBuffer(reuseBuffer);
         boilingPass.WriteBuffer(SID("restir_reservoir_boiled"));
-        boilingPass.Execute([&, pipelineManager, renderExtent, inBuffer = reuseBuffer, strength = restirParams.boilingFilterStrength](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        boilingPass.Execute([&, pipelineManager, renderExtent, inBuffer = reuseBuffer, strength = restirParams.boilingFilterStrength, field = activeCheckerboardField](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_boiling_filter"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -412,10 +417,12 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_boiled")),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .strength = strength,
+                .activeCheckerboardField = field,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+            const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+            const uint32_t groupsX = (strideX + 15) / 16;
             const uint32_t groupsY = (renderExtent[1] + 15) / 16;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
@@ -461,7 +468,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         spatialPass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { spatialPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         spatialPass.WriteBuffer(outputName);
-        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -491,10 +498,12 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .adaptiveMReference = restirParams.temporalMCap,
                 .bValidateVisibility = bLastPass ? 1u : 0u,
                 .wClamp = restirParams.restirWClamp,
+                .activeCheckerboardField = field,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+            const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+            const uint32_t groupsX = (strideX + 15) / 16;
             const uint32_t groupsY = (renderExtent[1] + 15) / 16;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
@@ -510,7 +519,9 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     const RenderTargets& targets,
                                     uint32_t sceneIndex,
                                     Core::Arena& arena,
-                                    uint64_t frameNumber)
+                                    uint64_t frameNumber,
+                                    uint32_t activeCheckerboardField,
+                                    uint32_t bCheckerboardPacked)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -549,6 +560,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
+            field = activeCheckerboardField, packed = bCheckerboardPacked,
             buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -580,6 +592,8 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .lightingIndex = entry.bucketIndex,
                     .renderExtent = {renderExtent[0], renderExtent[1]},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
+                    .activeCheckerboardField = field,
+                    .bCheckerboardPacked = packed,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

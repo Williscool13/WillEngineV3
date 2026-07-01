@@ -531,6 +531,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
                 changed = true;
             }
+            if (ImGui::Checkbox("Checkerboard Rendering", &restir.bCheckerboard)) {
+                changed = true;
+            }
             ImGui::BeginDisabled(!RESTIR_ENABLE_PERMUTATION_SAMPLING);
             if (ImGui::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
                 changed = true;

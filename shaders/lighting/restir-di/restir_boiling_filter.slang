@@ -7,9 +7,11 @@ groupshared float2 gBoiling[256];
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeReSTIRBoilingFilter(uniform ReSTIRBoilingFilterPushConstant pc, uint3 threadID : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
-    uint2 pixel = threadID.xy;
-    bool oob = any(pixel >= pc.renderExtent);
-    uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
+    uint field = pc.activeCheckerboardField;
+    uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
+    uint2 reservoirCoord = threadID.xy;
+    bool oob = reservoirCoord.x >= stride || reservoirCoord.y >= pc.renderExtent.y;
+    uint pixelIdx = reservoirCoord.y * stride + reservoirCoord.x;
 
     Reservoir r = oob ? ReservoirEmpty() : pc.inputBuffer[pixelIdx];
     float w = (r.lightIdx != ~0u) ? r.W : 0.0;

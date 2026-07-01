@@ -16,12 +16,18 @@ import random_common;
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    uint2 pixel = threadID.xy;
-    if (any(pixel >= pc.renderExtent)) {
+    uint field = pc.activeCheckerboardField;
+    uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
+    uint2 reservoirCoord = threadID.xy;
+    if (reservoirCoord.x >= stride || reservoirCoord.y >= pc.renderExtent.y) {
+        return;
+    }
+    uint2 pixel = ReservoirPosToPixelPos(reservoirCoord, field);
+    if (pixel.x >= pc.renderExtent.x) {
         return;
     }
 
-    uint centerIdx = pixel.y * pc.renderExtent.x + pixel.x;
+    uint centerIdx = reservoirCoord.y * stride + reservoirCoord.x;
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
@@ -47,7 +53,8 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
     Reservoir center = pc.inputBuffer[centerIdx];
     if (isnan(center.W) || isinf(center.W)) { center = ReservoirEmpty(); }
-    if (center.lightIdx == LIGHT_IDX_SUN) {
+    // A LIVE sun (W>0, genuinely brightest here) is protected from local-light spatial reuse. A DEAD sun (W==0, shadowed) falls through so local neighbours can tag in — else shadowed sun-facing pixels stay stuck on the occluded sun.
+    if (center.lightIdx == LIGHT_IDX_SUN && center.W > 0.0) {
         center.W = (pc.wClamp > 0.0) ? min(center.W, pc.wClamp) : center.W;
         center.M = min(center.M, pc.mCap);
         pc.outputBuffer[centerIdx] = center;
@@ -91,6 +98,13 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
             continue;
         }
 
+        if (field != 0u) {
+            neighborPixel = ActivateCheckerboardPixel(neighborPixel, false, field);
+            if (any(neighborPixel < int2(0, 0)) || any(neighborPixel >= int2(pc.renderExtent)) || all(neighborPixel == int2(pixel))) {
+                continue;
+            }
+        }
+
         uint2 neighborFullPixel = uint2(neighborPixel);
 
         float neighborRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(neighborFullPixel, 0)).r;
@@ -106,7 +120,8 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
             continue;
         }
 
-        Reservoir neighbor = pc.inputBuffer[neighborPixel.y * pc.renderExtent.x + neighborPixel.x];
+        uint2 nrPos = PixelPosToReservoirPos(uint2(neighborPixel), field);
+        Reservoir neighbor = pc.inputBuffer[nrPos.y * stride + nrPos.x];
         if (isnan(neighbor.W) || isinf(neighbor.W)) { neighbor = ReservoirEmpty(); }
         if (neighbor.lightIdx == ~0u || neighbor.lightIdx == LIGHT_IDX_SUN || neighbor.lightIdx >= uint(pc.lightData->lightCount)) {
             continue;

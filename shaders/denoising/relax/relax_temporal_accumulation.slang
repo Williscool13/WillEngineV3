@@ -353,6 +353,12 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float diffAlpha = (SMBReprojectionFound > 0) ? max(1.0 / (diffMaxAccumFrameNum + 1.0), 1.0 / diffHistoryLength) : 1.0;
     float diffAlphaResponsive = (SMBReprojectionFound > 0) ? max(1.0 / (diffMaxFastAccumFrameNum + 1.0), 1.0 / diffHistoryLength) : 1.0;
 
+    if (rc.gDiffCheckerboard != 2u && diffHistoryLength > 1.0 && (((uint(pixelPos.x) ^ uint(pixelPos.y)) ^ rc.gFrameIndex) & 1u) != rc.gDiffCheckerboard)
+    {
+        diffAlpha *= 1.0 - rc.gCheckerboardResolveAccumSpeed;
+        diffAlphaResponsive *= 1.0 - rc.gCheckerboardResolveAccumSpeed;
+    }
+
     float4 accDiffIllum = lerp(prevDiffIllumSMB, float4(diffuseIllumination.rgb, diff2ndMoment), diffAlpha);
     float3 accDiffResponsive = lerp(prevDiffResponsiveSMB, diffuseIllumination.rgb, diffAlphaResponsive);
 
@@ -523,6 +529,11 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float specSMBAlpha = max(1.0 - specSMBConfidence, 1.0 / (1.0 + specHistoryFrames));
     float specSMBResponsiveAlpha = max(specSMBAlpha, 1.0 / (1.0 + specHistoryResponsiveFrames));
 
+    bool specHole = rc.gSpecCheckerboard != 2u && (((uint(pixelPos.x) ^ uint(pixelPos.y)) ^ rc.gFrameIndex) & 1u) != rc.gSpecCheckerboard;
+    float specSMBCb = (specHole && smbParallaxInPixelsMax < 0.5) ? (1.0 - rc.gCheckerboardResolveAccumSpeed * (SMBReprojectionFound > 0 ? 1.0 : 0.0)) : 1.0;
+    specSMBAlpha *= specSMBCb;
+    specSMBResponsiveAlpha *= specSMBCb;
+
     // SMB accumulation
     float4 accSpecSMB;
     accSpecSMB.rgb = lerp(prevSpecIllumSMB.rgb, specularIllumination.rgb, specSMBAlpha);
@@ -534,6 +545,10 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float specVMBAlpha = max(1.0 - specVMBConfidence, 1.0 / (1.0 + specHistoryFrames));
     float specVMBResponsiveAlpha = max(1.0 - specVMBConfidence * hitDistConfidence, 1.0 / (1.0 + specHistoryResponsiveFrames));
     float specVMBHitTAlpha = max(1.0 - specVMBConfidence * hitDistConfidence, 1.0 / (1.0 + specHistoryFrames));
+    float specVMBCb = (specHole && smbParallaxInPixelsMax < 0.5) ? (1.0 - rc.gCheckerboardResolveAccumSpeed * (VMBReprojectionFound > 0 ? 1.0 : 0.0)) : 1.0;
+    specVMBAlpha *= specVMBCb;
+    specVMBResponsiveAlpha *= specVMBCb;
+    specVMBHitTAlpha *= specVMBCb;
 
     float4 accSpecVMB;
     accSpecVMB.rgb = lerp(prevSpecIllumVMB.rgb, specularIllumination.rgb, specVMBAlpha);

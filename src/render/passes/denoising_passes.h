@@ -23,7 +23,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         const Core::RELAXParams& params,
                         uint64_t frameNumber,
                         uint32_t remodulateOutputMode,
-                        float iblIntensity);
+                        float iblIntensity,
+                        uint32_t activeCheckerboardField,
+                        float checkerboardResolveAccumSpeed);
 
 void SetupReBLURDenoiser(RenderGraph& graph,
                          PipelineManager* pipelineManager,

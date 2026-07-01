@@ -19,8 +19,14 @@ import random_common;
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    uint2 pixel = threadID.xy;
-    if (any(pixel >= pc.renderExtent)) {
+    uint field = pc.activeCheckerboardField;
+    uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
+    uint2 reservoirCoord = threadID.xy;
+    if (reservoirCoord.x >= stride || reservoirCoord.y >= pc.renderExtent.y) {
+        return;
+    }
+    uint2 pixel = ReservoirPosToPixelPos(reservoirCoord, field);
+    if (pixel.x >= pc.renderExtent.x) {
         return;
     }
 
@@ -34,7 +40,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     uint2 fullPixel = pixel;
 
-    uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
+    uint pixelIdx = reservoirCoord.y * stride + reservoirCoord.x;
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {
@@ -100,6 +106,11 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
                 if (any(p < int2(0, 0)) || any(p >= int2(pc.renderExtent))) { continue; }
                 tapPixel = uint2(p);
             }
+            if (field != 0u) {
+                int2 snapped = ActivateCheckerboardPixel(int2(tapPixel), true, field);
+                if (any(snapped < int2(0, 0)) || any(snapped >= int2(pc.renderExtent))) { continue; }
+                tapPixel = uint2(snapped);
+            }
             uint2 historyFullPixel = tapPixel;
             float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));
             float3 historyWorldN = normalize(mul(transpose(float3x3(scene.prevView)), historyN));
@@ -121,7 +132,8 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     Reservoir history = ReservoirEmpty();
 
     if (bHistoryUsable) {
-        Reservoir candidate = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
+        uint2 histRPos = PixelPosToReservoirPos(historyPixel, field);
+        Reservoir candidate = pc.historyBuffer[histRPos.y * stride + histRPos.x];
         if (isnan(candidate.W) || isinf(candidate.W)) { candidate = ReservoirEmpty(); }
         if (candidate.lightIdx != ~0u && (candidate.lightIdx == LIGHT_IDX_SUN || candidate.lightIdx < uint(pc.lightData->lightCount))) {
             history = candidate;
@@ -225,11 +237,22 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     pc.outputBuffer[pixelIdx] = combined;
 
 #if RESTIR_ENABLE_ANTILAG
-    if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][pixel] = winnerVisibility; }
+    if (pc.shadowVisIndex != ~0u) {
+        rdgStorageFloat[pc.shadowVisIndex][pixel] = winnerVisibility;
+        if (field != 0u) {
+            int2 o = OtherFieldPixel(pixel, field);
+            if (o.x >= 0 && o.x < int(pc.renderExtent.x)) { rdgStorageFloat[pc.shadowVisIndex][uint2(o)] = winnerVisibility; }
+        }
+    }
 #endif
 #if RESTIR_ENABLE_CONFIDENCE
     if (pc.signalIndex != ~0u) {
-        rdgStorageFloat2[pc.signalIndex][pixel] = float2(pHatUnshadowed * (winnerVisibility - visPrev), pHatUnshadowed * max(winnerVisibility, visPrev));
+        float2 sig = float2(pHatUnshadowed * (winnerVisibility - visPrev), pHatUnshadowed * max(winnerVisibility, visPrev));
+        rdgStorageFloat2[pc.signalIndex][pixel] = sig;
+        if (field != 0u) {
+            int2 o = OtherFieldPixel(pixel, field);
+            if (o.x >= 0 && o.x < int(pc.renderExtent.x)) { rdgStorageFloat2[pc.signalIndex][uint2(o)] = sig; }
+        }
     }
 #endif
 }

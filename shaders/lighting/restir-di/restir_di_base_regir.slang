@@ -20,15 +20,21 @@ import regir_hash;
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    uint2 pixel = threadID.xy;
-    if (any(pixel >= pc.renderExtent)) {
+    uint field = pc.activeCheckerboardField;
+    uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
+    uint2 reservoirCoord = threadID.xy;
+    if (reservoirCoord.x >= stride || reservoirCoord.y >= pc.renderExtent.y) {
+        return;
+    }
+    uint2 pixel = ReservoirPosToPixelPos(reservoirCoord, field);
+    if (pixel.x >= pc.renderExtent.x) {
         return;
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     uint2 fullPixel = pixel;
 
-    uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
+    uint pixelIdx = reservoirCoord.y * stride + reservoirCoord.x;
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
     if (depth <= 0.0) {

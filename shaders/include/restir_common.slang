@@ -13,6 +13,49 @@ public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
 
 public static const float QUAD_UNIFORM_NORMAL_DOT_THRESHOLD = 0.85;
 
+public uint RestirCheckerboardStride(uint width, uint field)
+{
+    return (field != 0u) ? ((width + 1u) >> 1u) : width;
+}
+
+public uint2 ReservoirPosToPixelPos(uint2 reservoirPos, uint field)
+{
+    if (field == 0u) { return reservoirPos; }
+    return uint2((reservoirPos.x << 1u) + ((reservoirPos.y + field) & 1u), reservoirPos.y);
+}
+
+public uint2 PixelPosToReservoirPos(uint2 pixel, uint field)
+{
+    if (field == 0u) { return pixel; }
+    return uint2(pixel.x >> 1u, pixel.y);
+}
+
+public uint ReservoirIndex(uint2 reservoirPos, uint width, uint field)
+{
+    return reservoirPos.y * RestirCheckerboardStride(width, field) + reservoirPos.x;
+}
+
+public bool IsActiveCheckerboardPixel(int2 pixel, bool previousFrame, uint field)
+{
+    if (field == 0u) { return true; }
+    return ((pixel.x + pixel.y + (previousFrame ? 1 : 0)) & 1) == int(field & 1u);
+}
+
+public int2 ActivateCheckerboardPixel(int2 pixel, bool previousFrame, uint field)
+{
+    if (field == 0u || IsActiveCheckerboardPixel(pixel, previousFrame, field)) { return pixel; }
+    if (previousFrame) { pixel.x += int(field) * 2 - 3; }
+    else { pixel.x += ((pixel.y & 1) != 0) ? 1 : -1; }
+    return pixel;
+}
+
+public int2 OtherFieldPixel(uint2 pixel, uint field)
+{
+    int2 p = int2(pixel);
+    p.x += ((field == 1u) == ((pixel.y & 1u) != 0u)) ? 1 : -1;
+    return p;
+}
+
 public struct LightVS
 {
     public float3 center;
