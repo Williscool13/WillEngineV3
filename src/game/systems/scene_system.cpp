@@ -332,50 +332,24 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
         return {};
     }
 
-    const auto& nodes = cached->nodes;
     auto& registry = state->registry;
+    auto spawned = Core::ArenaVector<entt::entity>(&ctx->gameplayArena.Get(), 1);
 
-    // One entity per node (including non-mesh group nodes
-    auto nodeEntity = Core::ArenaArray<entt::entity>(&ctx->gameplayArena.Get(), nodes.Size());
-    auto spawned = Core::ArenaVector<entt::entity>(&ctx->gameplayArena.Get(), nodes.Size());
+    entt::entity entity = CreateSceneEntity(state);
 
-    for (size_t i = 0; i < nodes.Size(); ++i) {
-        const auto& node = nodes[i];
-        entt::entity entity = CreateSceneEntity(state);
-
-        if (node.name.Size() > 0) {
-            registry.get<Component::NameComponent>(entity).name = Core::InlineString<256>(node.name.c_str());
-        }
-
-        auto& transform = registry.get<Component::TransformComponent>(entity);
-        transform.translation = node.localTranslation;
-        transform.rotation = node.localRotation;
-        transform.scale = node.localScale;
-        if (node.parent == ~0u) {
-            transform.translation += offset;
-        }
-
-        if (node.meshIndex != ~0u) {
-            Component::StaticMeshComponent meshComp{};
-            meshComp.modelId = modelId;
-            meshComp.meshIndex = static_cast<int32_t>(node.meshIndex);
-            meshComp.modelFlags = {1.0f, 1.0f, 0.0f, 0.0f};
-            registry.emplace<Component::StaticMeshComponent>(entity, std::move(meshComp));
-        }
-
-        nodeEntity[i] = entity;
-        spawned.PushBack(entity);
+    if (cached->name.Size() > 0) {
+        registry.get<Component::NameComponent>(entity).name = Core::InlineString<256>(cached->name.c_str());
     }
 
-    for (size_t i = 0; i < nodes.Size(); ++i) {
-        const auto& node = nodes[i];
-        if (node.parent == ~0u) { continue; }
-        entt::entity parentEntity = nodeEntity[node.parent];
-        auto& hierarchy = registry.emplace<Component::HierarchyComponent>(nodeEntity[i]);
-        hierarchy.parent = parentEntity;
-        hierarchy.parentStableId = registry.get<Component::StableIdComponent>(parentEntity).id;
-    }
+    auto& transform = registry.get<Component::TransformComponent>(entity);
+    transform.translation = offset;
 
+    Component::StaticMeshComponent meshComp{};
+    meshComp.modelId = modelId;
+    meshComp.modelFlags = {1.0f, 1.0f, 0.0f, 0.0f};
+    registry.emplace<Component::StaticMeshComponent>(entity, std::move(meshComp));
+
+    spawned.PushBack(entity);
     state->bHierarchyOrderDirty = true;
     return spawned;
 }

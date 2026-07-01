@@ -26,7 +26,7 @@
       "varianceGammaLuma": 1.0
     }
   },
-  "activeLightingProfile": "FINAL RESTIR + REGIR",
+  "activeLightingProfile": "Standard",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,

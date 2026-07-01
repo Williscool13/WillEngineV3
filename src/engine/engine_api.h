@@ -31,6 +31,7 @@
 #include "core/containers/arena_fixed_map.h"
 #include "engine/asset_manager.h"
 #include "engine/builtin_assets.h"
+#include "engine/resources/model/static_primitive_store.h"
 
 struct ResolvedCollisionEvent
 {
@@ -271,6 +272,8 @@ struct EngineState
     Clay_Arena clayArena{};
     // todo: remove
     FontHandle uiFont{FontHandle::INVALID};
+
+    StaticPrimitiveStore staticPrimitiveStore{};
 
     // Asset Loading
     bool bPendingModelResolve{false};

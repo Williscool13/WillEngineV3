@@ -109,6 +109,8 @@ EngineState::EngineState(Core::TlsfAllocator* allocator)
       physics(allocator),
       editor(allocator)
 {
+    staticPrimitiveStore.Init(MAX_STATIC_PRIMITIVE_INSTANCES, allocator, Core::AllocTag::RenderMesh);
+
     const uint64_t clayMemorySize = Clay_MinMemorySize();
     void* clayMemory = allocator->Alloc(clayMemorySize, Core::AllocTag::Clay);
     clayArena = Clay_CreateArenaWithCapacityAndMemory(clayMemorySize, clayMemory);

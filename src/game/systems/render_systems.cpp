@@ -39,6 +39,7 @@ void ConnectRenderObservers(entt::registry& registry)
     registry.on_destroy<Component::TransformComponent>().connect<&Component::TransformComponent::OnDestroy>();
 
     registry.on_destroy<Component::MeshRuntime>().connect<&Component::MeshRuntime::OnDestroy>();
+    registry.on_destroy<Component::StaticMeshRuntime>().connect<&Component::StaticMeshRuntime::OnDestroy>();
 
     registry.on_construct<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnConstruct>();
     registry.on_destroy<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnDestroy>();
@@ -68,6 +69,7 @@ void DisconnectRenderObservers(entt::registry& registry)
     registry.on_destroy<Component::TransformComponent>().disconnect<&Component::TransformComponent::OnDestroy>();
 
     registry.on_destroy<Component::MeshRuntime>().disconnect<&Component::MeshRuntime::OnDestroy>();
+    registry.on_destroy<Component::StaticMeshRuntime>().disconnect<&Component::StaticMeshRuntime::OnDestroy>();
 
     registry.on_construct<Component::StaticMeshComponent>().disconnect<&Component::StaticMeshComponent::OnConstruct>();
     registry.on_destroy<Component::StaticMeshComponent>().disconnect<&Component::StaticMeshComponent::OnDestroy>();
@@ -111,7 +113,7 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    auto view = state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>();
+    auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshRuntime>();
     Core::ArenaVector<entt::entity> entitiesToRestart{&ctx->gameplayArena.Get(), view.size_hint()};
 
     for (const auto& [entity, smc, runtime] : view.each()) {
@@ -240,7 +242,7 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
     for (const auto& [entity, meshComponent] : view.each()) {
         if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; } // stay pending while frozen
-        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
+        auto& runtime = state->registry.get_or_emplace<Component::StaticMeshRuntime>(entity);
         runtime.modelHandle = ctx->assetManager->LoadModel(meshComponent.modelId);
         if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
     }
@@ -248,6 +250,20 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         state->registry.remove<Component::StaticMeshLoadPendingTag>(entity);
         state->registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
     }
+}
+
+static glm::mat4 ComposeNodeModelSpace(const Core::HeapArray<Engine::Node>& nodes, uint32_t nodeIndex)
+{
+    auto local = [](const Engine::Node& n) -> glm::mat4 {
+        return glm::translate(glm::mat4(1.0f), n.localTranslation) * glm::mat4_cast(n.localRotation) * glm::scale(glm::mat4(1.0f), n.localScale);
+    };
+    glm::mat4 m = local(nodes[nodeIndex]);
+    uint32_t parent = nodes[nodeIndex].parent;
+    while (parent != ~0u) {
+        m = local(nodes[parent]) * m;
+        parent = nodes[parent].parent;
+    }
+    return m;
 }
 
 void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -261,15 +277,19 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
 
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
     for (const auto& [entity, meshComponent] : view.each()) {
-        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        auto* runtime = state->registry.try_get<Component::StaticMeshRuntime>(entity);
         if (!runtime) continue;
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
-        // Cleanup
-        for (size_t i = 0; i < runtime->primitives.Size(); ++i) {
-            materialManager->ReleaseMaterial(runtime->primitives[i].materialID);
+        Engine::StaticPrimitiveStore& store = state->staticPrimitiveStore;
+
+        if (runtime->range.IsValid()) {
+            for (uint32_t i = 0; i < runtime->range.count; ++i) {
+                materialManager->ReleaseMaterial(store[runtime->range.offset + i].materialID);
+            }
+            store.Free(runtime->range);
+            runtime->range = {};
         }
-        runtime->primitives.Clear();
 
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
@@ -282,13 +302,27 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             continue;
         }
 
-        Engine::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
+        const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
+        Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
 
-        if (mesh.primitiveProperties.Size() > Component::MeshRuntime::MaxPrimitives) {
-            LOG_WARN(Game, "Model ({}) has {} primitives, limiting to {}", model->name.c_str(), mesh.primitiveProperties.Size(), Component::MeshRuntime::MaxPrimitives);
+        uint32_t totalPrimitives = 0;
+        for (size_t n = 0; n < nodes.Size(); ++n) {
+            const uint32_t mi = nodes[n].meshIndex;
+            if (mi == ~0u || mi >= meshes.Size()) { continue; }
+            totalPrimitives += static_cast<uint32_t>(meshes[mi].primitiveProperties.Size());
         }
 
-        size_t primCount = std::min(mesh.primitiveProperties.Size(), Component::MeshRuntime::MaxPrimitives);
+        if (totalPrimitives == 0) {
+            resolved.PushBack(entity);
+            continue;
+        }
+
+        Engine::StaticPrimitiveStore::Range range = store.Allocate(totalPrimitives);
+        if (!range.IsValid()) {
+            LOG_ERROR(Game, "Static primitive store full; cannot flatten model ({}) needing {} primitives", model->name.c_str(), totalPrimitives);
+            resolved.PushBack(entity);
+            continue;
+        }
 
         auto applyShaderOverrides = [&](Engine::Material mat) -> Engine::Material {
             if (meshComponent.shadingShaderOverride) { mat.fragmentShader = meshComponent.shadingShaderOverride; }
@@ -296,37 +330,51 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             return mat;
         };
 
-        for (size_t j = 0; j < primCount; ++j) {
-            Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
+        uint32_t writeIndex = range.offset;
+        for (uint32_t n = 0; n < nodes.Size(); ++n) {
+            const uint32_t mi = nodes[n].meshIndex;
+            if (mi == ~0u || mi >= meshes.Size()) { continue; }
 
-            Engine::MaterialID matID;
-            if (primitive.materialIndex == -1) {
-                matID = materialManager->GetDefaultMaterialID();
-            }
-            else {
-                Engine::MaterialID materialOverride = meshComponent.materialOverrides[primitive.materialIndex];
-                if (materialOverride.IsValid()) {
-                    if (materialManager->DoesMutableMaterialExist(materialOverride)) {
-                        matID = materialOverride;
+            const glm::mat4 nodeModelSpace = ComposeNodeModelSpace(nodes, n);
+            Engine::MeshInformation& mesh = meshes[mi];
+
+            for (size_t j = 0; j < mesh.primitiveProperties.Size(); ++j) {
+                Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
+
+                Engine::MaterialID matID;
+                if (primitive.materialIndex == -1) {
+                    matID = materialManager->GetDefaultMaterialID();
+                }
+                else {
+                    Engine::MaterialID materialOverride = meshComponent.materialOverrides[primitive.materialIndex];
+                    if (materialOverride.IsValid()) {
+                        if (materialManager->DoesMutableMaterialExist(materialOverride)) {
+                            matID = materialOverride;
+                        }
+                        else {
+                            matID = materialManager->CreateImmutableMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
+                            LOG_WARN(Engine, "Mesh was resolved with a material override that does not exist in the registry.");
+                        }
                     }
                     else {
                         matID = materialManager->CreateImmutableMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
-                        LOG_WARN(Engine, "Mesh was resolved with a material override that does not exist in the registry.");
                     }
                 }
-                else {
-                    matID = materialManager->CreateImmutableMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
-                }
-            }
 
-            runtime->primitives.PushBack({
-                .primitiveIndex = primitive.index,
-                .originalMaterialIndex = primitive.materialIndex,
-                .materialID = matID
-            });
-            materialManager->AcquireMaterial(matID);
+                store[writeIndex] = {
+                    .primitiveIndex = primitive.index,
+                    .originalMaterialIndex = primitive.materialIndex,
+                    .sourceNodeIndex = n,
+                    .materialID = matID,
+                    .blasDeviceAddress = primitive.blasDeviceAddress,
+                    .modelSpaceTransform = nodeModelSpace,
+                };
+                materialManager->AcquireMaterial(matID);
+                ++writeIndex;
+            }
         }
 
+        runtime->range = range;
         resolved.PushBack(entity);
     }
 
@@ -725,7 +773,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     // Gather regular renderables
     {
         ZoneScopedN("MainSceneStaticMeshes");
-        auto view = state->registry.view<Component::MeshRuntime, Component::StaticMeshComponent, Component::RenderTransformComponent>(
+        auto view = state->registry.view<Component::StaticMeshRuntime, Component::StaticMeshComponent, Component::RenderTransformComponent>(
             entt::exclude<
                 Component::PortalPlaneTag,
                 Component::CubemapVisualizeTag,
@@ -733,30 +781,34 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 Component::StaticMeshLoadingTag
             >);
 
-        for (auto [entity, runtime, renderable, renderTransform] : view.each()) {
-            if (runtime.primitives.IsEmpty()) { continue; }
+        Engine::StaticPrimitiveStore& store = state->staticPrimitiveStore;
+
+        for (const auto& [entity, runtime, renderable, renderTransform] : view.each()) {
+            if (!runtime.range.IsValid()) { continue; }
             if (renderable.modelFlags.x == 0.0f) { continue; }
-            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
-            frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
 
             uint64_t stableId = 1234567890;
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 stableId = stable->id.id;
             }
 
-            Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
-            ENGINE_ASSERT(Game, model, "Loaded entity references a model that is not in the asset manager");
-            const Engine::MeshInformation& mesh = model->modelData.meshes[renderable.meshIndex];
-
-            const uint32_t primitiveInstanceBase = static_cast<uint32_t>(frameBuffer->mainViewFamily.primitiveInstances.Size());
-            for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
-                const auto& prim = runtime.primitives[i];
+            uint32_t modelIndex = 0;
+            uint32_t lastNode = ~0u;
+            const uint32_t base = runtime.range.offset;
+            const uint32_t count = runtime.range.count;
+            for (uint32_t i = 0; i < count; ++i) {
+                const Engine::StaticPrimitiveInstance& inst = store[base + i];
+                if (inst.sourceNodeIndex != lastNode) {
+                    modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+                    frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform);
+                    lastNode = inst.sourceNodeIndex;
+                }
                 frameBuffer->mainViewFamily.primitiveInstances.PushBack({
-                    .primitiveIndex = prim.primitiveIndex,
-                    .materialID = prim.materialID,
+                    .primitiveIndex = inst.primitiveIndex,
+                    .materialID = inst.materialID,
                     .modelIndex = modelIndex,
                     .stableId = stableId,
-                    .blasDeviceAddress = mesh.primitiveProperties[i].blasDeviceAddress,
+                    .blasDeviceAddress = inst.blasDeviceAddress,
                 });
             }
         }

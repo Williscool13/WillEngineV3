@@ -489,6 +489,9 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                         if (const auto* rt = state->registry.try_get<Component::MeshRuntime>(target)) {
                             modelHandle = rt->modelHandle;
                         }
+                        else if (const auto* srt = state->registry.try_get<Component::StaticMeshRuntime>(target)) {
+                            modelHandle = srt->modelHandle;
+                        }
 
                         if (modelHandle.IsValid()) {
                             if (const Engine::StaticModel* model = ctx->assetManager->GetModel(modelHandle)) {

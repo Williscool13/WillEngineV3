@@ -14,6 +14,7 @@
 #include "engine/material_manager.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
+#include "engine/resources/model/static_primitive_store.h"
 
 namespace Game::Component
 {
@@ -56,6 +57,14 @@ struct MeshRuntime
 {
     static constexpr size_t MaxPrimitives = 128;
     Core::InlineVector<PrimitiveData, MaxPrimitives> primitives{};
+    Engine::StaticModelHandle modelHandle{};
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
+};
+
+struct StaticMeshRuntime
+{
+    Engine::StaticPrimitiveStore::Range range{};
     Engine::StaticModelHandle modelHandle{};
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);

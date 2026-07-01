@@ -34,6 +34,8 @@ add_library(core STATIC
         memory/memory_manager.cpp
         memory/tlsf_allocator.cpp
         memory/tlsf_allocator.h
+        memory/range_allocator.cpp
+        memory/range_allocator.h
 
         types/math.h
         types/transform.h

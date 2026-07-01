@@ -724,6 +724,9 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             if (auto* rt = registry.try_get<MeshRuntime>(entity)) {
                 fitHandle = rt->modelHandle;
             }
+            else if (auto* srt = registry.try_get<StaticMeshRuntime>(entity)) {
+                fitHandle = srt->modelHandle;
+            }
             Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;
             const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
 
