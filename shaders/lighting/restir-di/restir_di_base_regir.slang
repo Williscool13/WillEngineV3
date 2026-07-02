@@ -28,6 +28,8 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
     }
     uint2 pixel = ReservoirPosToPixelPos(reservoirCoord, field);
     if (pixel.x >= pc.renderExtent.x) {
+        // Odd-width phantom column: past extent but still in the aliased buffer; keep initialized.
+        pc.outputBuffer[reservoirCoord.y * stride + reservoirCoord.x] = ReservoirEmpty();
         return;
     }
 
@@ -54,7 +56,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
-    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize);
+    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
@@ -111,7 +113,9 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             int lightIdx = -1;
             float pSelect = 0.0;
             if (useGrid) {
-                uint slotInCell = min(uint(HashStep(h) * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
+                // Stratified over the candidate loop so the taps hit distinct cell regions (RTXDI parity).
+                float uStrat = (float(i) + HashStep(h)) / float(RESTIR_M_LIGHT);
+                uint slotInCell = min(uint(uStrat * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
                 ReGIRReservoir gr = pc.reservoirs[gridBase + slotInCell];
                 if (gr.lightIdx != ~0u && gr.lightIdx < uint(lightCount) && gr.totalWeight > 0.0) {
                     lightIdx = int(gr.lightIdx);
@@ -136,7 +140,8 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                     float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
                     float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
-                    float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                    // Same d2 floor as LightGeometryTerm so the MIS denominator stays consistent with p_hat at contact distances.
+                    float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, LIGHT_GEOM_MIN_DIST2)) : 0.0;
                     float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdf) * p_brdf_area;
                     w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
                     candLightIdx = uint(lightIdx);
@@ -205,7 +210,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                     float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(lightCount))) : (1.0 / float(lightCount));
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
-                    p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+                    p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, LIGHT_GEOM_MIN_DIST2)) : 0.0;
                     float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
                     p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity);
                     bestLightIdx = hitLightIdx;
@@ -232,6 +237,14 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
         float3 sunDirView = normalize(mul((float3x3)scene.view, sunDirWorld));
         float p_hat_sun = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, SunRadiance(sun));
         float w_sun = (p_cone > 0.0) ? (p_hat_sun / p_cone) : 0.0;
+        // Shadow-test at candidate selection: unshadowed sun otherwise dominates RIS then dies at the winner
+        // trace, starving disoccluded pixels. Unbiased since the sun is a disjoint single-candidate technique.
+        if (pc.bSunCandidateVisibility != 0u && w_sun > 0.0) {
+            float3 worldNSun = normalize(mul(float3x3(scene.invView), N));
+            if (!RestirSunShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldNSun, sunDirWorld, worldTexelSize)) {
+                w_sun = 0.0;
+            }
+        }
         if (ReservoirAddSample(accum_gen, w_sun, HashStep(h))) {
             r_gen.lightIdx = LIGHT_IDX_SUN;
             r_gen.sampleOffsetPacked = PackNormalOct16(sunDirWorld);

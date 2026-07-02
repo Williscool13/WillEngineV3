@@ -23,17 +23,19 @@ static const float3 POISSON8[8] = {
     float3( 0.1564120, -0.8198990, 0.8346850),
 };
 
-int2 CheckerboardShiftFull(int2 samplePos, uint cbField, uint counter, uint frameIndex)
+int2 CheckerboardShiftFull(int2 samplePos, uint cbField, uint counter, uint frameIndex, int rectSizeX)
 {
     if (cbField == 2u) { return samplePos; }
     uint sc = ((uint(samplePos.x) ^ uint(samplePos.y)) ^ frameIndex) & 1u;
     if (sc != cbField) { samplePos.x += ((counter & 1u) == 0u) ? -1 : 1; }
+    // The shift can step 1px off-screen (NRD clamps the shifted uv to the viewport).
+    samplePos.x = clamp(samplePos.x, 0, rectSizeX - 1);
     return samplePos;
 }
 
-int2 CheckerboardSignalPos(int2 samplePos, uint cbField, uint counter, uint frameIndex)
+int2 CheckerboardSignalPos(int2 samplePos, uint cbField, uint counter, uint frameIndex, int rectSizeX)
 {
-    int2 p = CheckerboardShiftFull(samplePos, cbField, counter, frameIndex);
+    int2 p = CheckerboardShiftFull(samplePos, cbField, counter, frameIndex, rectSizeX);
     if (cbField != 2u) { p.x >>= 1; }
     return p;
 }
@@ -93,8 +95,12 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
         float2 wc = cbWeights * (1.0 / max(cbWeights.x + cbWeights.y, 1e-5));
         float4 d0 = rdgTexturesFloat4[pc.diffInputIndex].Load(int3(cbPosL, 0));
         float4 d1 = rdgTexturesFloat4[pc.diffInputIndex].Load(int3(cbPosR, 0));
+        // Denanify: zero-weight neighbors can be unwritten aliased texels; NaN * 0 still poisons the blend.
+        d0 = wc.x > 0.0 ? d0 : float4(0.0);
+        d1 = wc.y > 0.0 ? d1 : float4(0.0);
         diffSum = d0 * wc.x + d1 * wc.y;
     }
+    if (rc.gDiffBlurRadius > 0.0)
     {
         float hitDist = diffSum.a == 0.0 ? 1.0 : diffSum.a;
         float blurRadius = rc.gDiffBlurRadius * RelaxGetHitDistFactor(hitDist, frustumSize);
@@ -120,7 +126,7 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
             }
 
             int2 samplePos = int2(samplePosF);
-            int2 sampleFullPos = CheckerboardShiftFull(samplePos, rc.gDiffCheckerboard, uint(i), rc.gFrameIndex);
+            int2 sampleFullPos = CheckerboardShiftFull(samplePos, rc.gDiffCheckerboard, uint(i), rc.gFrameIndex, int(rc.gRectSize.x));
             float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
             if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange))
             {
@@ -135,7 +141,7 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
             w *= RelaxComputeWeight(normalAngle, normalWeightParam, 0.0);
             if (w > 1e-4)
             {
-                float4 sample = rdgTexturesFloat4[pc.diffInputIndex].Load(int3(CheckerboardSignalPos(samplePos, rc.gDiffCheckerboard, uint(i), rc.gFrameIndex), 0));
+                float4 sample = rdgTexturesFloat4[pc.diffInputIndex].Load(int3(CheckerboardSignalPos(samplePos, rc.gDiffCheckerboard, uint(i), rc.gFrameIndex, int(rc.gRectSize.x)), 0));
                 w *= lerp(rc.gMinHitDistanceWeight, 1.0, RelaxComputeExponentialWeight(sample.a, hitDistanceWeightParams.x, hitDistanceWeightParams.y));
                 w *= RelaxGetGaussianWeight(offset.z);
                 diffSum += sample * w;
@@ -156,9 +162,12 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
         float2 wc = cbWeights * (1.0 / max(cbWeights.x + cbWeights.y, 1e-5));
         float4 s0 = rdgTexturesFloat4[pc.specInputIndex].Load(int3(cbPosL, 0));
         float4 s1 = rdgTexturesFloat4[pc.specInputIndex].Load(int3(cbPosR, 0));
+        s0 = wc.x > 0.0 ? s0 : float4(0.0);
+        s1 = wc.y > 0.0 ? s1 : float4(0.0);
         specSum = s0 * wc.x + s1 * wc.y;
     }
     specSum.a = clamp(specSum.a, 0.0, rc.gDenoisingRange);
+    if (rc.gSpecBlurRadius > 0.0)
     {
         float3 viewVector = rc.gOrthoMode == 0 ? normalize(-centerWorldPos) : rc.gFrustumForward.xyz;
         float4 D = MLGetSpecularDominantDirection(centerNormal, viewVector, centerRoughness);
@@ -200,7 +209,7 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
             }
 
             int2 samplePos = int2(samplePosF);
-            int2 sampleFullPos = CheckerboardShiftFull(samplePos, rc.gSpecCheckerboard, uint(i), rc.gFrameIndex);
+            int2 sampleFullPos = CheckerboardShiftFull(samplePos, rc.gSpecCheckerboard, uint(i), rc.gFrameIndex, int(rc.gRectSize.x));
             float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
             if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange))
             {
@@ -215,7 +224,7 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
             w *= RelaxComputeWeight(normalAngle, normalWeightParam, 0.0);
             w *= RelaxGetPlaneDistanceWeight(centerWorldPos, centerNormal, planeDistanceCenterZ, sampleWorldPos, rc.gDepthThreshold);
 
-            float4 sample = rdgTexturesFloat4[pc.specInputIndex].Load(int3(CheckerboardSignalPos(samplePos, rc.gSpecCheckerboard, uint(i), rc.gFrameIndex), 0));
+            float4 sample = rdgTexturesFloat4[pc.specInputIndex].Load(int3(CheckerboardSignalPos(samplePos, rc.gSpecCheckerboard, uint(i), rc.gFrameIndex, int(rc.gRectSize.x)), 0));
 
             rngState = MLSequenceHash(rngState);
             if (float(rngState >> 8) * (1.0 / 16777216.0) < w * NoV)

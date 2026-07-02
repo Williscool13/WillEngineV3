@@ -34,10 +34,11 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
         return;
 
+    // NRD topology: the outputs are the RESPONSIVE (fast) textures, written in place ONLY at short-history
+    // pixels; elsewhere they keep TA's responsive value (early-out without writing, like NRD RELAX_HistoryFix).
+    // History clamping then promotes the fixed responsive value into the slow output at short-history pixels.
     if (historyLength > rc.gHistoryFixFrameNum || rc.gHistoryFixFrameNum == 1.0)
     {
-        rdgStorageFloat4[pc.outSpecIndex][pixelPos] = rdgTexturesFloat4[pc.specIndex].Load(int3(pixelPos, 0));
-        rdgStorageFloat4[pc.outDiffIndex][pixelPos] = rdgTexturesFloat4[pc.diffIndex].Load(int3(pixelPos, 0));
         return;
     }
 
@@ -100,6 +101,9 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
         }
     }
 
-    rdgStorageFloat4[pc.outDiffIndex][pixelPos] = diffSum / diffWSum;
-    rdgStorageFloat4[pc.outSpecIndex][pixelPos] = specSum / specWSum;
+    // Keep the fast .a (spec = hitT for tracking; deliberate improvement over NRD 4.17, which leaks a 2nd moment here).
+    float4 fastSpec = rdgStorageFloat4[pc.outSpecIndex][pixelPos];
+    float4 fastDiff = rdgStorageFloat4[pc.outDiffIndex][pixelPos];
+    rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(diffSum.rgb / diffWSum, fastDiff.a);
+    rdgStorageFloat4[pc.outSpecIndex][pixelPos] = float4(specSum.rgb / specWSum, fastSpec.a);
 }

@@ -56,9 +56,10 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
     float3 cameraPos = MLAffineTransform(rc.gViewToWorld, float3(0.0, 0.0, 0.0));
     float3 V = rc.gOrthoMode == 0.0 ? normalize(cameraPos - centerWorldPos) : -normalize(rc.gFrustumForward.xyz);
 
-    // Engine DATA1 substitute: a single accumulated frame count (reblur_history_length) serves diff and spec.
-    float frames = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
-    float nonLinearAccumSpeed = 1.0 / (1.0 + frames);
+    // Per-lobe accum frames from DATA1; radius decays slower than 1/(1+N) so blur outlasts noise.
+    float2 frameNums = ReblurUnpackData1(rdgTexturesFloat2[pc.data1Index].Load(int3(pixelPos, 0)));
+    float diffNonLinearAccumSpeed = ReblurGetAdvancedNonLinearAccumSpeed(frameNums.x, rc.gMaxAccumulatedFrameNum, rc.gConvergenceSettings.xyz);
+    float specNonLinearAccumSpeed = ReblurGetAdvancedNonLinearAccumSpeed(frameNums.y, rc.gMaxAccumulatedFrameNum, rc.gConvergenceSettings.xyz);
 
     float frustumSize = RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, min(float(rc.gRectSize.x), float(rc.gRectSize.y)), centerViewZ);
 
@@ -75,12 +76,20 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
     {
         float worldHitDist = ReblurDenormHitDist(diffCenter.w, centerViewZ, rc.gHitDistParams, 1.0);
         float hitDistFactor = RelaxGetHitDistFactor(worldHitDist, frustumSize);
-        float areaFactor = hitDistFactor * nonLinearAccumSpeed;
+        float areaFactor = hitDistFactor * diffNonLinearAccumSpeed;
         float blurRadius = ReblurGetBlurRadius(rc.gMaxBlurRadius, rc.gMinBlurRadius, areaFactor, radiusScale);
 
         float2 geometryWeightParams = RelaxGetGeometryWeightParams(rc.gPlaneDistSensitivity, frustumSize, centerWorldPos, centerNormal);
-        float normalWeightParam = RelaxGetNormalWeightParam2(1.0, 0.5 * rc.gLobeAngleFraction) / fractionScale;
-        float2 hitDistanceWeightParams = RelaxGetHitDistanceWeightParams(diffCenter.w, nonLinearAccumSpeed);
+        float normalWeightParam = ReblurGetNormalWeightParam(diffNonLinearAccumSpeed, rc.gLobeAngleFraction, 1.0) / fractionScale;
+        float2 hitDistanceWeightParams = ReblurGetHitDistanceWeightParams(diffCenter.w, diffNonLinearAccumSpeed, 1.0);
+        // Hit-dist floor decays with convergence to preserve contact details; applied additively.
+        float minHitDistWeight = rc.gMinHitDistanceWeight * fractionScale * diffNonLinearAccumSpeed;
+
+        // Shrink the disk along the projected normal at grazing angles.
+        float3 Nv = mul(transpose(viewToWorld), centerNormal);
+        float NoV = abs(dot(centerNormal, V));
+        float2 skew = lerp(1.0 - abs(Nv.xy), float2(1.0, 1.0), NoV);
+        skew /= max(skew.x, skew.y);
 
         float4 sum = diffCenter;
         float weightSum = 1.0;
@@ -88,26 +97,30 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
         [unroll]
         for (int i = 0; i < 8; i++) {
             float3 offset = REBLUR_POISSON8[i];
-            float2 rotated = MLRotateVector(rotator, offset.xy);
+            float2 rotated = MLRotateVector(rotator, offset.xy) * skew;
             float2 samplePosF = floor(float2(pixelPos) + 0.5 + rotated * blurRadius) + 0.5;
             float2 uv = samplePosF * rc.gRectSizeInv;
-            if (RelaxIsInScreenNearest(uv) == 0.0) { continue; }
+            float w = RelaxGetGaussianWeight(offset.z);
+            if (RelaxIsInScreenNearest(uv) == 0.0) {
+                // Mirror instead of dropping the tap; Gaussian weight is invalid after mirroring.
+                uv = RelaxMirrorUv(uv);
+                w = 1.0;
+            }
 
-            int2 samplePos = int2(samplePosF);
+            int2 samplePos = int2(uv * float2(rc.gRectSize));
             float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, samplePos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
             if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange)) { continue; }
 
             float3 sampleNormal = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(samplePos, 0)), viewToWorld).xyz;
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(samplePos, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
-            float w = RelaxGetGaussianWeight(offset.z);
             float NoX = dot(centerNormal, sampleWorldPos);
             w = RelaxApplyGeometryWeightLast(w, sampleViewZ, NoX, geometryWeightParams, rc.gDenoisingRange);
             float normalAngle = MLAcosApproxPositive(dot(centerNormal, sampleNormal));
             w *= RelaxComputeWeight(normalAngle, normalWeightParam, 0.0);
 
             float4 s = rdgTexturesFloat4[pc.diffIndex].Load(int3(samplePos, 0));
-            w *= lerp(rc.gMinHitDistanceWeight, 1.0, RelaxComputeExponentialWeight(s.w, hitDistanceWeightParams.x, hitDistanceWeightParams.y));
+            w *= minHitDistWeight + RelaxComputeExponentialWeight(s.w, hitDistanceWeightParams.x, hitDistanceWeightParams.y);
 
             if (w > 1e-4) {
                 sum += s * w;
@@ -124,10 +137,9 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
     {
         float smc = RelaxGetSpecMagicCurve(centerRoughness);
 
-        float specNormHitDist = rdgTexturesFloat[pc.specHitDistIndex].Load(int3(pixelPos, 0)).r;
-        float worldHitDist = ReblurDenormHitDist(specNormHitDist, centerViewZ, rc.gHitDistParams, centerRoughness);
+        float worldHitDist = ReblurDenormHitDist(specCenter.w, centerViewZ, rc.gHitDistParams, centerRoughness);
         float hitDistFactor = RelaxGetHitDistFactor(worldHitDist, frustumSize);
-        float areaFactor = centerRoughness * hitDistFactor * nonLinearAccumSpeed;
+        float areaFactor = centerRoughness * hitDistFactor * specNonLinearAccumSpeed;
         float blurRadius = ReblurGetBlurRadius(rc.gMaxBlurRadius, rc.gMinBlurRadius * smc, areaFactor, radiusScale);
 
         // Anisotropic basis: skew the kernel along the bent reflection direction. Stretch T (worldRadius * skew),
@@ -137,7 +149,7 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
         float NoD = abs(dot(centerNormal, Dv.xyz));
         float bentFactor = sqrt(saturate(hitDistFactor));
         float skewFactor = lerp(0.25 + 0.75 * centerRoughness, 1.0, NoD);
-        skewFactor = lerp(skewFactor, 1.0, nonLinearAccumSpeed);
+        skewFactor = lerp(skewFactor, 1.0, specNonLinearAccumSpeed);
         skewFactor = lerp(1.0, skewFactor, bentFactor);
         float3 bentD = normalize(lerp(centerNormal, Dv.xyz, bentFactor));
         float2x3 TB = ReblurGetKernelBasis(bentD, centerNormal);
@@ -146,9 +158,10 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
         float3 B = TB[1] * (worldRadius / skewFactor);
 
         float2 geometryWeightParams = RelaxGetGeometryWeightParams(rc.gPlaneDistSensitivity, frustumSize, centerWorldPos, centerNormal);
-        float normalWeightParam = RelaxGetNormalWeightParam2(centerRoughness, 0.5 * rc.gLobeAngleFraction) / fractionScale;
+        float normalWeightParam = ReblurGetNormalWeightParam(specNonLinearAccumSpeed, rc.gLobeAngleFraction, centerRoughness) / fractionScale;
         float2 roughnessWeightParams = RelaxGetRoughnessWeightParams(centerRoughness, saturate(rc.gRoughnessFraction * fractionScale));
-        float2 hitDistanceWeightParams = RelaxGetHitDistanceWeightParams(specCenter.w, nonLinearAccumSpeed);
+        float2 hitDistanceWeightParams = ReblurGetHitDistanceWeightParams(specCenter.w, specNonLinearAccumSpeed, centerRoughness);
+        float minHitDistWeight = rc.gMinHitDistanceWeight * fractionScale * smc * specNonLinearAccumSpeed;
 
         float4 sum = specCenter;
         float weightSum = 1.0;
@@ -159,7 +172,11 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
             float2 rotated = MLRotateVector(rotator, offset.xy);
             float3 worldOffset = T * rotated.x + B * rotated.y;
             float2 uv = MLGetScreenUv(rc.gWorldToClip, centerWorldPos + worldOffset);
-            if (RelaxIsInScreenNearest(uv) == 0.0) { continue; }
+            float w = RelaxGetGaussianWeight(offset.z);
+            if (RelaxIsInScreenNearest(uv) == 0.0) {
+                uv = RelaxMirrorUv(uv);
+                w = 1.0;
+            }
 
             int2 samplePos = int2(uv * float2(rc.gRectSize));
             float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, samplePos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
@@ -168,7 +185,6 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
             float4 sampleNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(samplePos, 0)), viewToWorld);
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(samplePos, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
-            float w = RelaxGetGaussianWeight(offset.z);
             float NoX = dot(centerNormal, sampleWorldPos);
             w = RelaxApplyGeometryWeightLast(w, sampleViewZ, NoX, geometryWeightParams, rc.gDenoisingRange);
             float normalAngle = MLAcosApproxPositive(dot(centerNormal, sampleNR.xyz));
@@ -176,7 +192,7 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
             w *= RelaxComputeWeight(sampleNR.w, roughnessWeightParams.x, roughnessWeightParams.y);
 
             float4 s = rdgTexturesFloat4[pc.specIndex].Load(int3(samplePos, 0));
-            w *= lerp(rc.gMinHitDistanceWeight, 1.0, RelaxComputeExponentialWeight(s.w, hitDistanceWeightParams.x, hitDistanceWeightParams.y));
+            w *= minHitDistWeight + RelaxComputeExponentialWeight(s.w, hitDistanceWeightParams.x, hitDistanceWeightParams.y);
 
             if (w > 1e-4) {
                 sum += s * w;

@@ -27,14 +27,24 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     }
     uint2 pixel = ReservoirPosToPixelPos(reservoirCoord, field);
     if (pixel.x >= pc.renderExtent.x) {
+        // Odd-width phantom column: past extent but still in the aliased buffer; keep initialized.
+        pc.outputBuffer[reservoirCoord.y * stride + reservoirCoord.x] = ReservoirEmpty();
         return;
     }
 
+    int2 partner = (field != 0u) ? OtherFieldPixel(pixel, field) : int2(-1, -1);
+    bool partnerValid = partner.x >= 0 && partner.x < int(pc.renderExtent.x);
 #if RESTIR_ENABLE_ANTILAG
-    if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][pixel] = 1.0; }
+    if (pc.shadowVisIndex != ~0u) {
+        rdgStorageFloat[pc.shadowVisIndex][pixel] = 1.0;
+        if (partnerValid) { rdgStorageFloat[pc.shadowVisIndex][uint2(partner)] = 1.0; }
+    }
 #endif
 #if RESTIR_ENABLE_CONFIDENCE
-    if (pc.signalIndex != ~0u) { rdgStorageFloat2[pc.signalIndex][pixel] = float2(0.0, 0.0); }
+    if (pc.signalIndex != ~0u) {
+        rdgStorageFloat2[pc.signalIndex][pixel] = float2(0.0, 0.0);
+        if (partnerValid) { rdgStorageFloat2[pc.signalIndex][uint2(partner)] = float2(0.0, 0.0); }
+    }
 #endif
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
@@ -60,7 +70,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
-    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize);
+    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
@@ -218,7 +228,19 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
 
 #if RESTIR_ENABLE_CONFIDENCE
-        visPrev = winnerVisibility;
+        // Re-shade the same winner against the previous frame's TLAS: occluder motion flips the pair and drives the gradient.
+        if (pc.prevTlasIndex != ~0u) {
+            if (combined.lightIdx == LIGHT_IDX_SUN) {
+                float3 worldLsun = normalize(UnpackNormalOct16(combined.sampleOffsetPacked));
+                visPrev = RestirSunShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, worldLsun, worldTexelSize) ? 1.0 : 0.0;
+            } else {
+                LightVS vsWinner = UnpackLightVS(pc.lightVS[combined.lightIdx]);
+                float3 worldyStar = mul(scene.invView, float4(DecodeSamplePos(combined.sampleOffsetPacked, vsWinner), 1.0)).xyz;
+                visPrev = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? 1.0 : 0.0;
+            }
+        } else {
+            visPrev = winnerVisibility;
+        }
 #endif
     }
 

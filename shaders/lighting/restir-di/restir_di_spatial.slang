@@ -24,6 +24,8 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
     }
     uint2 pixel = ReservoirPosToPixelPos(reservoirCoord, field);
     if (pixel.x >= pc.renderExtent.x) {
+        // Odd-width phantom column: past extent but still in the aliased buffer; keep initialized.
+        pc.outputBuffer[reservoirCoord.y * stride + reservoirCoord.x] = ReservoirEmpty();
         return;
     }
 
@@ -34,7 +36,6 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
     uint2 fullPixel = pixel;
     float viewSpaceDepth = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
-    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize);
 
     LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
@@ -48,6 +49,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
+    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 

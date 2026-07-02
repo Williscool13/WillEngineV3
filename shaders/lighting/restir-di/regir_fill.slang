@@ -78,7 +78,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
         ReGIRReservoir res = ReGIRReservoirEmpty();
         ReservoirAccum accum = ReservoirAccumEmpty();
         float winnerTarget = 0.0;
-        uint tile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u);
+        uint tile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u) ^ (pc.frameIndex * 0xB5297A4Du);
         tile ^= tile >> 15u; tile *= 0x2c1b3c6du; tile ^= tile >> 12u;
         uint tileBase = (tile % REGIR_TILE_COUNT) * REGIR_TILE_SIZE;
         uint startSlot = h % REGIR_TILE_SIZE;
@@ -101,11 +101,13 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
 
         if (hasPrev) {
             ReGIRReservoir prev = pc.reservoirsPrev[prevBase + r];
-            if (prev.lightIdx != ~0u && prev.lightIdx < uint(lightCount)) {
+            // Empty input still counts toward merge M (else surviving side inflates un-halved); only an
+            // externally invalidated prev index (light list shrank) drops out entirely.
+            bool prevInvalidated = (prev.lightIdx != ~0u && prev.lightIdx >= uint(lightCount));
+            if (!prevInvalidated) {
                 ReservoirAccum accumM = ReservoirAccumEmpty();
                 ReGIRReservoir merged = ReGIRReservoirEmpty();
                 float mergedWinnerTarget = 0.0;
-                float mTotal = 0.0;
                 if (res.lightIdx != ~0u) {
                     LightVS vsCur = UnpackLightVS(pc.lightVS[res.lightIdx]);
                     float pCur = EvalCellLightTarget(vsCur, sampleVS, UnpackUnorm4x8(vsCur.packedColor).rgb);
@@ -114,9 +116,8 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
                         merged.lightIdx = res.lightIdx;
                         mergedWinnerTarget = pCur;
                     }
-                    mTotal += 1.0;
                 }
-                {
+                if (prev.lightIdx != ~0u) {
                     LightVS vsH = UnpackLightVS(pc.lightVS[prev.lightIdx]);
                     float pH = EvalCellLightTarget(vsH, sampleVS, UnpackUnorm4x8(vsH.packedColor).rgb);
                     float wH = pH * ReGIRReservoirW(prev);
@@ -124,13 +125,10 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
                         merged.lightIdx = prev.lightIdx;
                         mergedWinnerTarget = pH;
                     }
-                    mTotal += 1.0;
                 }
-                if (merged.lightIdx != ~0u) {
-                    FinalizeReservoirReGIR(merged, accumM, mergedWinnerTarget, mTotal);
-                    ReGIRClampW(merged, pc.wClamp);
-                    res = merged;
-                }
+                FinalizeReservoirReGIR(merged, accumM, mergedWinnerTarget, 2.0);
+                ReGIRClampW(merged, pc.wClamp);
+                res = merged;
             }
         }
 

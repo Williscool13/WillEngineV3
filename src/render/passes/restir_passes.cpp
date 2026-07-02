@@ -72,9 +72,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const uint32_t reservoirsSize = REGIR_HASH_CAPACITY * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir));
         const uint32_t activeCellsSize = REGIR_HASH_CAPACITY * 4u * static_cast<uint32_t>(sizeof(int32_t));
 
-        graph.CreateBuffer(SID("regir_hash_entries"), entriesSize, true);
-        graph.CreateBuffer(SID("regir_hash_reservoirs"), reservoirsSize, true);
-        graph.CreateBuffer(SID("regir_cell_data"), REGIR_HASH_CAPACITY * 2u * static_cast<uint32_t>(sizeof(float)), true);
+        graph.CreateBuffer(SID("regir_hash_entries"), entriesSize, false);
+        graph.CreateBuffer(SID("regir_hash_reservoirs"), reservoirsSize, false);
+        graph.CreateBuffer(SID("regir_cell_data"), REGIR_HASH_CAPACITY * 2u * static_cast<uint32_t>(sizeof(float)), false);
         graph.CreateBuffer(SID("regir_active_cells"), activeCellsSize, false);
         graph.CreateBuffer(SID("regir_active_count"), sizeof(uint32_t), false);
         graph.CreateBuffer(SID("regir_fill_indirect"), 3u * static_cast<uint32_t>(sizeof(uint32_t)), false);
@@ -270,6 +270,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .antilagStrength = 0.0f,
                 .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
                 .activeCheckerboardField = field,
+                .bSunCandidateVisibility = (tlasIndex != ~0u && restirParams.bSunCandidateVisibility) ? 1u : 0u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

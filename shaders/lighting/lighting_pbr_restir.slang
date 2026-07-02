@@ -154,8 +154,10 @@ void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     if (field != 0u && pc.bCheckerboardPacked == 0u) {
         int2 o = OtherFieldPixel(pixel, field);
         if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
-            rdgStorageFloat4[pc.primaryOutputImageIndex][uint2(o)] = float4(diffPacked.rgb, 0.0);
-            rdgStorageFloat4[pc.secondaryOutputImageIndex][uint2(o)] = float4(specPacked.rgb, 0.0);
+            // Keep hitT in the duplicated field: a zeroed .w oscillates the accumulated hit distance toward
+            // half its value and trips the miss paths in the ReBLUR prepass.
+            rdgStorageFloat4[pc.primaryOutputImageIndex][uint2(o)] = diffPacked;
+            rdgStorageFloat4[pc.secondaryOutputImageIndex][uint2(o)] = specPacked;
         }
     }
 }

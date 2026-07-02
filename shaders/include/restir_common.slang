@@ -377,18 +377,22 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
     float3 H = normalize(V + s.L);
     float D = D_GGX(N, H, roughness);
     float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
-    return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * dot(lightColor, lumWeights) * s.attenuation;
+    // Max-channel (not luminance): must match EvalCellLightTarget, avoids chromatic fireflies from saturated colors.
+    float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
+    return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * colorMax * s.attenuation;
 }
 
-public float RestirWorldTexelSize(float viewZ, float2 ndcToViewMulXPixelSize)
+public float RestirWorldTexelSize(float viewZ, float2 ndcToViewMulXPixelSize, float NoV)
 {
-    return abs(viewZ) * max(ndcToViewMulXPixelSize.x, ndcToViewMulXPixelSize.y);
+    // 1/NoV (capped 10x): grazing surfaces need more than a flat 1-texel bias to clear plane-distance error.
+    return abs(viewZ) * max(ndcToViewMulXPixelSize.x, ndcToViewMulXPixelSize.y) / max(NoV, 0.1);
 }
 
 public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize)
 {
-    float3 L = normalize(worldyStar - worldShadingPos);
-    float bias = max(0.05, worldTexelSize * 2.0 / max(dot(worldN, L), 0.1));
+    // Normal-direction offset scaled by distance (slope-scaled by caller); no NoL division (that's for
+    // along-the-ray offsets, not this case).
+    float bias = max(0.05, worldTexelSize);
     float3 rayOrigin = worldShadingPos + worldN * bias;
     float3 toLight = worldyStar - rayOrigin;
     float lightDist = length(toLight);
@@ -453,12 +457,15 @@ public float EvalSunPHat(float3 LsunView, float3 V, float3 N, float3 albedo, flo
     float3 H = normalize(V + LsunView);
     float D = D_GGX(N, H, roughness);
     float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
-    return brdf * cosShade * dot(sunRadiance, lumWeights);
+    // Max-channel to match EvalPHat: a tinted sun (sunset) must not inflate W into chromatic fireflies.
+    float sunMax = max(sunRadiance.r, max(sunRadiance.g, sunRadiance.b));
+    return brdf * cosShade * sunMax;
 }
 
 public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize)
 {
-    float bias = max(0.05, worldTexelSize * 2.0 / max(dot(worldN, worldLsun), 0.1));
+    // Matches the SIGMA sun trace: distance-scaled normal offset, no NoL division.
+    float bias = max(0.05, worldTexelSize);
     float3 rayOrigin = worldShadingPos + worldN * bias;
     RayDesc shadowRay;
     shadowRay.Origin = rayOrigin;

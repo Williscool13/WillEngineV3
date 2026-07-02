@@ -98,7 +98,7 @@ SHADER_PUBLIC struct ReblurDiffuseSpecularConstants
     SHADER_PUBLIC float gDebug;
     SHADER_PUBLIC float _padF0;
 
-    // Uint parameters (32 bytes, even count)
+    // Uint parameters (40 bytes, even count)
     SHADER_PUBLIC uint gFrameIndex;
     SHADER_PUBLIC uint gResetHistory;
     SHADER_PUBLIC uint gAntiFirefly;
@@ -106,7 +106,9 @@ SHADER_PUBLIC struct ReblurDiffuseSpecularConstants
     SHADER_PUBLIC uint gHasHistoryConfidence;
     SHADER_PUBLIC uint gHasDisocclusionThresholdMix;
     SHADER_PUBLIC uint gResponsiveAccumulationMinAccumulatedFrameNum;
-    SHADER_PUBLIC uint gReturnHistoryLengthInsteadOfOcclusion;
+    SHADER_PUBLIC uint gCheckerboard; // 0 = both signals on field 0, 2 = checkerboard off
+    SHADER_PUBLIC uint gStabilizationFireflyCleanup;
+    SHADER_PUBLIC uint _padU0;
 };
 
 #endif // WILL_ENGINE_REBLUR_INTEROP_H

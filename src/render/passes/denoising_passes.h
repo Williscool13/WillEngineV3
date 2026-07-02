@@ -35,7 +35,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          const Core::ReBLURParams& params,
                          uint64_t frameNumber,
                          uint32_t remodulateOutputMode,
-                         float iblIntensity);
+                         float iblIntensity,
+                         uint32_t activeCheckerboardField,
+                         float checkerboardResolveAccumSpeed);
 } // Render
 
 #endif //WILL_ENGINE_DENOISING_PASSES_H

@@ -9,16 +9,16 @@ module reblur_utils;
 
 import relax_utils;
 
-// Poisson disk 8 samples (NRD g_Poisson8); z is the sample radius normalized to 1, used for the Gaussian weight.
+// NRD g_Special8: structured cross + diagonal ring; z = sample radius normalized to 1 (Gaussian weight).
 public static const float3 REBLUR_POISSON8[8] = {
-    float3(-0.4706069, -0.4427112, 0.6461146),
-    float3(-0.9057375,  0.3003471, 0.9542373),
-    float3(-0.3487388,  0.4037880, 0.5335386),
-    float3( 0.1023042,  0.6439373, 0.6520134),
-    float3( 0.5699277,  0.3513750, 0.6695386),
-    float3( 0.2939128, -0.1131226, 0.3149309),
-    float3( 0.7836658, -0.4208784, 0.8895339),
-    float3( 0.1564120, -0.8198990, 0.8346850),
+    float3(-1.0, 0.0, 1.0),
+    float3( 0.0, 1.0, 1.0),
+    float3( 1.0, 0.0, 1.0),
+    float3( 0.0, -1.0, 1.0),
+    float3(-0.35355339, 0.35355339, 0.5),
+    float3( 0.35355339, 0.35355339, 0.5),
+    float3( 0.35355339, -0.35355339, 0.5),
+    float3(-0.35355339, -0.35355339, 0.5),
 };
 
 /** @brief NRD hit-distance normalization curve: (A + |viewZ|*B) * lerp(1, C, exp2(D*roughness^2)). */
@@ -65,4 +65,23 @@ public float ReblurGetBlurRadius(float maxBlurRadius, float minBlurRadius, float
 {
     float r = maxBlurRadius * sqrt(saturate(areaFactor)) * radiusScale;
     return max(r, minBlurRadius);
+}
+
+/** @brief Lobe tolerance tightens as history accumulates. 1.5/255 = normal-encoding error floor (oct16). */
+public float ReblurGetNormalWeightParam(float nonLinearAccumSpeed, float lobeAngleFraction, float roughness)
+{
+    float percentOfVolume = 0.75 * lerp(lobeAngleFraction, 1.0, nonLinearAccumSpeed);
+    float tanHalfAngle = MLGetSpecularLobeTanHalfAngle(roughness, percentOfVolume);
+    float angle = max(atan(tanHalfAngle), 1.5 / 255.0);
+    return 1.0 / angle;
+}
+
+/** @brief Exponential weight sharpens toward 0.0005 as history converges (clamped by the spec magic
+ *  curve so smooth specular stays strict). Normalized domain. */
+public float2 ReblurGetHitDistanceWeightParams(float hitDist, float nonLinearAccumSpeed, float roughness)
+{
+    float smc = RelaxGetSpecMagicCurve(roughness);
+    float norm = lerp(0.0005, 1.0, min(nonLinearAccumSpeed, smc));
+    float a = 1.0 / norm;
+    return float2(a, -hitDist * a);
 }

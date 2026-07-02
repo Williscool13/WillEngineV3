@@ -799,11 +799,10 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
         auto& local = registry.get<Component::TransformComponent>(entity);
         auto& world = registry.get<Component::WorldTransformComponent>(entity);
 
-        // Missing parent (invalid state)
         if (node.parent == entt::null || !registry.valid(node.parent) || !registry.all_of<Component::WorldTransformComponent>(node.parent)) {
-            world.translation = local.translation;
-            world.rotation = local.rotation;
-            world.scale = local.scale;
+            local.translation = world.translation;
+            local.rotation = world.rotation;
+            local.scale = world.scale;
             registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
             orphans.PushBack(entity);
             continue;

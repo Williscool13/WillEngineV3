@@ -75,6 +75,9 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     SunShadowPenumbra = 29,
     SunShadowTiles = 30,
     SunShadowTileValue = 31,
+    YCoCgSignal = 32,
+    ReblurInternalData = 33,
+    ReblurData2 = 34,
 };
 
 SHADER_PUBLIC struct Frustum

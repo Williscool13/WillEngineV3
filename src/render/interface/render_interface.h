@@ -628,6 +628,7 @@ struct ReBLURParams
     int32_t hitDistanceReconstructionMode{0}; // 0 = off, 1 = AREA_3X3, 2 = AREA_5X5
     bool enablePrepass{true};
     bool enableAntiFirefly{true};
+    bool enableStabilizationFireflyCleanup{false};
     bool enableTemporalStabilization{true};
 };
 
@@ -648,6 +649,9 @@ struct ReSTIRParams
     bool bCheckerboard{false};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
+    /** Trace the sun candidate's shadow ray BEFORE it enters the fresh RIS: an occluded sun must not win
+     *  and starve the pixel of signal (slow convergence at disocclusions in sun shadow). */
+    bool bSunCandidateVisibility{true};
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};

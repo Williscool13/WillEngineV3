@@ -4,6 +4,7 @@ import restir_interop;
 
 import bindless_declarations;
 import shader_functions;
+import relax_utils;
 
 [[vk::push_constant]]
 DebugVisualizePushConstant pc;
@@ -256,6 +257,20 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
         }
         case 31: { // SunShadowTileValue - sigma_tiles_smoothed.y dilated filter mask (the tileValue the blur uses to scale its kernel)
             srcPixel.xyz = float3(srcPixel.y);
+            break;
+        }
+        case 32: { // YCoCgSignal
+            srcPixel.xyz = max(MLYCoCgToRgb(srcPixel.xyz), 0.0);
+            break;
+        }
+        case 33: { // ReblurInternalData: r = diff accum frames/63, g = spec/63 (raw uint, float() is lossy)
+            uint p = rdgTexturesUInt[pc.textureIndexInArray].Load(sampleTexCoord).r;
+            srcPixel.xyz = float3(float(p & 0x3Fu), float((p >> 6) & 0x3Fu), 0.0) / 63.0;
+            break;
+        }
+        case 34: { // ReblurData2: r = smb taps/4, g = vmb taps/4, b = virtualHistoryAmount
+            uint p = rdgTexturesUInt[pc.textureIndexInArray].Load(sampleTexCoord).r;
+            srcPixel.xyz = float3(float(countbits(p & 0xFu)) / 4.0, float(countbits((p >> 4) & 0xFu)) / 4.0, float((p >> 8) & 0x7Fu) / 127.0);
             break;
         }
     }

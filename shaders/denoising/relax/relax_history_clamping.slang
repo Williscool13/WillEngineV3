@@ -144,12 +144,13 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
         ? clamp(diffYCoCg, diffColorMin, diffColorMax) : diffYCoCg;
     float3 clampedDiff = MLYCoCgToRgb(clampedDiffYCoCg);
 
-    // If history length <= gHistoryFixFrameNum, copy from responsive history
+    // If history length <= gHistoryFixFrameNum, copy from responsive history (rgb only: the responsive .a is a
+    // hitT, not a 2nd moment; the moment correction below retargets the slow .a to the new rgb).
     float4 outSpec = float4(clampedSpec, specHistory.a);
     float3 specResponsiveCenter = MLYCoCgToRgb(specCenterYCoCg.rgb);
     float4 outSpecResponsive = float4(specResponsiveCenter, specCenterYCoCg.a);
     if (historyLength <= rc.gHistoryFixFrameNum)
-        outSpec = outSpecResponsive;
+        outSpec.rgb = outSpecResponsive.rgb;
 
     float4 outDiff = float4(clampedDiff, diffHistory.a);
     float3 diffResponsiveCenter = MLYCoCgToRgb(diffCenterYCoCg.rgb);

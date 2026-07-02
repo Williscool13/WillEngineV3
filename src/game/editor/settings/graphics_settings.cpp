@@ -340,6 +340,44 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Stabilized Penumbra")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowPenumbra, Core::DebugViewAspect::None);
         }
 
+        if (ImGui::CollapsingHeader("ReBLUR")) {
+            if (ImGui::Button("Frames (DATA1)")) setDebugTarget("reblur_data1", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Carried Frames")) setDebugTarget("reblur_internal_data", DebugTransformationType::ReblurInternalData, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Occlusion+VHA")) setDebugTarget("reblur_data2", DebugTransformationType::ReblurData2, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Packed Diff")) setDebugTarget("reblur_diff_packed", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Packed Spec")) setDebugTarget("reblur_spec_packed", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Accum Diff")) setDebugTarget("reblur_diff_accum", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Accum Spec")) setDebugTarget("reblur_spec_accum", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("HistoryFix Diff")) setDebugTarget("reblur_diff_hfix", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("HistoryFix Spec")) setDebugTarget("reblur_spec_hfix", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Blur Diff")) setDebugTarget("reblur_diff_blur", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Blur Spec")) setDebugTarget("reblur_spec_blur", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("PostBlur Diff")) setDebugTarget("reblur_diff_hist", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("PostBlur Spec")) setDebugTarget("reblur_spec_hist", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Fast Diff")) setDebugTarget("reblur_diff_fast_fixed", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Fast Spec")) setDebugTarget("reblur_spec_fast_fixed", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Spec HitDist")) setDebugTarget("reblur_spec_hit_dist", DebugTransformationType::None, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("Luma Stab Diff")) setDebugTarget("reblur_diff_luma_stab", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Luma Stab Spec")) setDebugTarget("reblur_spec_luma_stab", DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+
         if (ImGui::CollapsingHeader("Anti-Aliasing")) {
             if (ImGui::Button("TAA Current")) setDebugTarget("taa_current", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("TAA Output")) setDebugTarget("taa_output", DebugTransformationType::None, Core::DebugViewAspect::None);
@@ -521,6 +559,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 changed = true;
             }
             ImGui::EndDisabled();
+            if (ImGui::Checkbox("Sun Candidate Visibility", &restir.bSunCandidateVisibility)) {
+                changed = true;
+            }
 
             ImGui::SeparatorText("Temporal");
             if (ImGui::Checkbox("Temporal Reuse", &restir.bEnableTemporal)) {
@@ -716,6 +757,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ImGui::SameLine();
                 if (ImGui::Checkbox("Anti-Firefly##reblur", &reblur.enableAntiFirefly)) { changed = true; }
                 if (ImGui::Checkbox("Temporal Stabilization##reblur", &reblur.enableTemporalStabilization)) { changed = true; }
+                ImGui::SameLine();
+                if (ImGui::Checkbox("Stab. Firefly Cleanup##reblur", &reblur.enableStabilizationFireflyCleanup)) { changed = true; }
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("NRD short-history luma cap. Eats sparse disoccluded-pixel energy (black band on fast camera motion); keep OFF."); }
 
                 ImGui::SeparatorText("General");
                 reblurF("Denoising Range", &reblur.denoisingRange, reblurDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through. Default 1000.");

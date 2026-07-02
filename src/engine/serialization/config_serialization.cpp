@@ -124,6 +124,7 @@ static nlohmann::json ReblurToJson(const Core::ReBLURParams& rb)
         {"hitDistanceReconstructionMode", rb.hitDistanceReconstructionMode},
         {"enablePrepass", rb.enablePrepass},
         {"enableAntiFirefly", rb.enableAntiFirefly},
+        {"enableStabilizationFireflyCleanup", rb.enableStabilizationFireflyCleanup},
         {"enableTemporalStabilization", rb.enableTemporalStabilization},
     };
 }
@@ -167,6 +168,7 @@ static void ReblurFromJson(const nlohmann::json& r, Core::ReBLURParams& p)
     p.hitDistanceReconstructionMode = getInt("hitDistanceReconstructionMode", p.hitDistanceReconstructionMode);
     p.enablePrepass = getBool("enablePrepass", p.enablePrepass);
     p.enableAntiFirefly = getBool("enableAntiFirefly", p.enableAntiFirefly);
+    p.enableStabilizationFireflyCleanup = getBool("enableStabilizationFireflyCleanup", p.enableStabilizationFireflyCleanup);
     p.enableTemporalStabilization = getBool("enableTemporalStabilization", p.enableTemporalStabilization);
 }
 
@@ -187,6 +189,7 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bCheckerboard", p.bCheckerboard},
         {"boilingFilterStrength", p.boilingFilterStrength},
         {"bInitialVisibility", p.bInitialVisibility},
+        {"bSunCandidateVisibility", p.bSunCandidateVisibility},
         {"regirWClamp", p.regirWClamp},
         {"restirWClamp", p.restirWClamp},
         {"bEnableConfidence", p.bEnableConfidence},
@@ -224,6 +227,7 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bCheckerboard = getBool("bCheckerboard", p.bCheckerboard);
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
+    p.bSunCandidateVisibility = getBool("bSunCandidateVisibility", p.bSunCandidateVisibility);
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
     p.bEnableConfidence = getBool("bEnableConfidence", p.bEnableConfidence);

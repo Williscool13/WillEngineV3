@@ -523,7 +523,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 case Core::LightingMode::ReSTIR:
                 {
                     const uint32_t restirCheckerboardField = restir.bCheckerboard ? ((static_cast<uint32_t>(frameNumber) & 1u) ? 1u : 2u) : 0u;
-                    const uint32_t restirCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) ? 1u : 0u;
+                    const uint32_t restirCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) ? 1u : 0u;
                     const float restirCheckerboardResolveSpeed = ComputeCheckerboardResolveAccumSpeed(viewFamily.aaConfig.mode, frameNumber, renderFps);
 
                     SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField);
@@ -534,7 +534,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed);
                     }
                     else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                        SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity);
+                        SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed);
                     }
                     else {
                         SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber);

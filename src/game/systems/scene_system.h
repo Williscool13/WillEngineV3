@@ -103,6 +103,9 @@ entt::entity CreateSceneEntity(Engine::EngineState* state);
 /** Highest sortOrder value among entities in the given scene (0 if none). */
 uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId);
 
+/** Base name of sourceName with the highest matching trailing index in the scene incremented by 1. */
+Core::InlineString<256> GenerateIncrementedName(entt::registry& registry, StringID sceneId, const Core::InlineString<256>& sourceName);
+
 /**
  * Copies all registered components from src to a new entity.
  * Signals (on_construct) fire during emplace, handling initialization.
