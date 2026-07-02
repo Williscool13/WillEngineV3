@@ -18,23 +18,11 @@ namespace Game::Component
 void MeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto& runtime = registry.get<MeshRuntime>(entity);
-    for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
-        ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
-    }
-    if (runtime.modelHandle.IsValid()) {
-        ctx->assetManager->UnloadModel(runtime.modelHandle);
-    }
-}
-
-void StaticMeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
-{
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& runtime = registry.get<StaticMeshRuntime>(entity);
+    auto& runtime = registry.get<MeshRuntime>(entity);
 
     if (runtime.range.IsValid()) {
-        Engine::StaticPrimitiveStore& store = state->staticPrimitiveStore;
+        Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
         for (uint32_t i = 0; i < runtime.range.count; ++i) {
             ctx->materialManager->ReleaseMaterial(store[runtime.range.offset + i].materialID);
         }

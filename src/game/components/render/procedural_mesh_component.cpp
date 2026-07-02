@@ -945,14 +945,9 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     currentLabel = m->name.c_str();
                 }
             }
-            auto* runtime = registry.try_get<MeshRuntime>(entity);
             if (ImGui::BeginCombo("Material", currentLabel)) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     if (component.material.IsValid()) {
-                        if (runtime && !runtime->primitives.IsEmpty()) {
-                            ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
-                            runtime->primitives.Clear();
-                        }
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
                         state->bPendingModelResolve |= true;
@@ -962,10 +957,6 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     if (mat.immutable) continue;
                     if (ImGui::Selectable(mat.name.c_str(), matId == component.material)) {
                         if (matId != component.material) {
-                            if (runtime && !runtime->primitives.IsEmpty()) {
-                                ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
-                                runtime->primitives.Clear();
-                            }
                             component.material = matId;
                             registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
                             state->bPendingModelResolve |= true;

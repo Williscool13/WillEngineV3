@@ -21,16 +21,23 @@ namespace Game::Component
 {
 struct StaticMeshComponent
 {
-    static constexpr size_t MaxMaterialOverrides = 512;
+    static constexpr size_t MaxMaterialOverrides = 32;
+    static constexpr size_t MaxBlacklist = 64;
+
+    struct MaterialOverride { uint32_t slot; Engine::MaterialID id; };
 
     Vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, zw: reserved
 
     Engine::ModelID modelId{};
-    Core::Array<Engine::MaterialID, MaxMaterialOverrides> materialOverrides{};
+    Core::InlineVector<MaterialOverride, MaxMaterialOverrides> materialOverrides{};
+    Core::InlineVector<uint32_t, MaxBlacklist> primitiveBlacklist{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
     Vec3 renderOffset{0.0f};
     Quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
+
+    [[nodiscard]] Engine::MaterialID GetMaterialOverride(uint32_t slot) const;
+    void SetMaterialOverride(uint32_t slot, Engine::MaterialID id);
 
     static void Serialize(const StaticMeshComponent& comp, nlohmann::json& json);
     static void Deserialize(StaticMeshComponent& comp, const nlohmann::json& json);

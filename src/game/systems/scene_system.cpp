@@ -11,6 +11,7 @@
 #include <limits>
 
 #include <json/nlohmann/json.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 
 #include "core/containers/arena_array.h"
 #include "engine/asset_manager.h"
@@ -26,6 +27,7 @@
 #include "game/components/editor_components.h"
 #include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render/static_mesh_component.h"
+#include "game/components/render/static_mesh_primitive_component.h"
 #include "game/components/scene_components.h"
 #include "game/components/physics/physics_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
@@ -352,6 +354,41 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
     spawned.PushBack(entity);
     state->bHierarchyOrderDirty = true;
     return spawned;
+}
+
+entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity parent, uint32_t primitiveOrdinal, const glm::mat4& nodeModelSpace)
+{
+    auto& registry = state->registry;
+    auto& parentComp = registry.get<Component::StaticMeshComponent>(parent);
+
+    entt::entity child = CreateSceneEntity(state);
+    registry.get<Component::NameComponent>(child).name = Core::InlineString<256>::Format("Primitive %u", primitiveOrdinal);
+
+    glm::vec3 scale, translation, skew;
+    glm::quat rotation;
+    glm::vec4 perspective;
+    glm::decompose(nodeModelSpace, scale, rotation, translation, skew, perspective);
+    auto& childTransform = registry.get<Component::TransformComponent>(child);
+    childTransform.translation = translation;
+    childTransform.rotation = rotation;
+    childTransform.scale = scale;
+
+    auto& hierarchy = registry.emplace<Component::HierarchyComponent>(child);
+    hierarchy.parent = parent;
+    hierarchy.parentStableId = registry.get<Component::StableIdComponent>(parent).id;
+
+    Component::StaticMeshPrimitiveComponent childMesh{};
+    childMesh.modelId = parentComp.modelId;
+    childMesh.modelFlags = parentComp.modelFlags;
+    childMesh.primitiveOrdinal = primitiveOrdinal;
+    registry.emplace<Component::StaticMeshPrimitiveComponent>(child, childMesh);
+
+    if (!parentComp.primitiveBlacklist.Contains(primitiveOrdinal)) { parentComp.primitiveBlacklist.PushBack(primitiveOrdinal); }
+    registry.emplace_or_replace<Component::StaticMeshLoadingTag>(parent);
+    state->bPendingModelResolve = true;
+
+    state->bHierarchyOrderDirty = true;
+    return child;
 }
 
 uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId)

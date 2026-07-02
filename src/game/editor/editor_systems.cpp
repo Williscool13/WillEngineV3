@@ -33,6 +33,7 @@
 #include "game/components/editor_components.h"
 #include "game/components/scene_components.h"
 #include "game/components/render/light_components.h"
+#include "game/components/render/static_mesh_primitive_component.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/text3d_component.h"
@@ -489,14 +490,28 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                         if (const auto* rt = state->registry.try_get<Component::MeshRuntime>(target)) {
                             modelHandle = rt->modelHandle;
                         }
-                        else if (const auto* srt = state->registry.try_get<Component::StaticMeshRuntime>(target)) {
-                            modelHandle = srt->modelHandle;
-                        }
 
                         if (modelHandle.IsValid()) {
                             if (const Engine::StaticModel* model = ctx->assetManager->GetModel(modelHandle)) {
                                 if (model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
-                                    const Engine::AABB& aabb = model->bounds.aabb;
+                                    Engine::AABB aabb = model->bounds.aabb;
+                                    // Single primitive instead of whole model
+                                    if (const auto* prim = state->registry.try_get<Component::StaticMeshPrimitiveComponent>(target)) {
+                                        uint32_t ordinal = 0;
+                                        const auto& nodes = model->modelData.nodes;
+                                        const auto& meshes = model->modelData.meshes;
+                                        for (uint32_t n = 0; n < nodes.Size(); ++n) {
+                                            const uint32_t mi = nodes[n].meshIndex;
+                                            if (mi == ~0u || mi >= meshes.Size()) { continue; }
+                                            const auto& props = meshes[mi].primitiveProperties;
+                                            if (prim->primitiveOrdinal >= ordinal && prim->primitiveOrdinal < ordinal + props.Size()) {
+                                                const Engine::PrimitiveProperty& p = props[prim->primitiveOrdinal - ordinal];
+                                                aabb = Engine::AABB{p.boundingBoxMin, p.boundingBoxMax};
+                                                break;
+                                            }
+                                            ordinal += static_cast<uint32_t>(props.Size());
+                                        }
+                                    }
                                     const glm::vec3 localCenter = aabb.Center();
                                     const glm::vec3 localHalf = aabb.HalfExtents();
 

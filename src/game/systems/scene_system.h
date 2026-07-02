@@ -65,6 +65,11 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
 
 Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset = {});
 
+/**
+ * Splits one flattened primitive out of a whole-model static-mesh entity into a new child entity that renders only that primitive (its own material/transform).
+ */
+entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity parent, uint32_t primitiveOrdinal, const glm::mat4& nodeModelSpace);
+
 
 /**
  * Resolves every HierarchyComponent's runtime parent handle from its serialized parentStableId. Call after loading entities.

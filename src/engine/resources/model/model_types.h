@@ -37,6 +37,10 @@ struct PrimitiveProperty
     uint32_t index;
     int32_t materialIndex;
 
+    Vec3 boundingBoxMin{};
+    Vec3 boundingBoxMax{};
+    Vec4 boundingSphere{};
+
     // Raytracing
     uint64_t blasHandle{0};
     uint64_t blasDeviceAddress{0};

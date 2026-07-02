@@ -7,7 +7,26 @@
 # Header: WStaticModelHeader in model_format.h
 
 ================================================================================
-VERSION 3  (current)
+VERSION 6  (current)
+================================================================================
+- Added per-primitive bounds to `PrimitiveProperty`: `boundingBoxMin`/`boundingBoxMax`
+  (Vec3) and `boundingSphere` (Vec4, xyz center + w radius). `primitiveProperties` is
+  raw-dumped (WriteVector/ReadDynamicVector at sizeof(T)), so the struct growth shifts the
+  on-disk layout, hence breaking. Repopulated at load from the geometry `Primitive` array;
+  used for per-primitive framing/zoom.
+
+================================================================================
+VERSION 5
+================================================================================
+- Undocumented; see git history.
+
+================================================================================
+VERSION 4
+================================================================================
+- Undocumented; see git history.
+
+================================================================================
+VERSION 3
 ================================================================================
 - Merged major/minor version fields into a single `version` field.
 - Added `lightingShader` field to `Material` (default: "default_pbr"). Written

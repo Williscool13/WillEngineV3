@@ -196,13 +196,8 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
                 currentLabel = m->name.c_str();
             }
         }
-        auto* runtime = registry.try_get<MeshRuntime>(entity);
         if (ImGui::BeginCombo("Material", currentLabel)) {
             if (ImGui::Selectable("(none)", !comp.material.IsValid()) && comp.material.IsValid()) {
-                if (runtime && !runtime->primitives.IsEmpty()) {
-                    ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
-                    runtime->primitives.Clear();
-                }
                 comp.material = Engine::MaterialID{};
                 registry.emplace_or_replace<Text3DLoadingTag>(entity);
                 state->bPendingModelResolve |= true;
@@ -210,10 +205,6 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
             for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
                 if (mat.immutable) { continue; }
                 if (ImGui::Selectable(mat.name.c_str(), matId == comp.material) && matId != comp.material) {
-                    if (runtime && !runtime->primitives.IsEmpty()) {
-                        ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
-                        runtime->primitives.Clear();
-                    }
                     comp.material = matId;
                     registry.emplace_or_replace<Text3DLoadingTag>(entity);
                     state->bPendingModelResolve |= true;

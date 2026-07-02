@@ -50,8 +50,8 @@ add_library(engine STATIC
         resources/model/model_types.h
         resources/model/static_model.h
         resources/model/model_format.cpp
-        resources/model/static_primitive_store.h
-        resources/model/static_primitive_store.cpp
+        resources/model/mesh_primitive_store.h
+        resources/model/mesh_primitive_store.cpp
         serialization/serialization.h
         serialization/config_serialization.cpp
         serialization/config_serialization.h

@@ -524,14 +524,9 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                     currentLabel = m->name.c_str();
                 }
             }
-            auto* runtime = registry.try_get<MeshRuntime>(entity);
             if (ImGui::BeginCombo("Material##spline", currentLabel)) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     if (component.material.IsValid()) {
-                        if (runtime && !runtime->primitives.IsEmpty()) {
-                            ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
-                            runtime->primitives.Clear();
-                        }
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
                         state->bPendingModelResolve = true;
@@ -541,10 +536,6 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                     if (mat.immutable) { continue; }
                     if (ImGui::Selectable(mat.name.c_str(), matId == component.material)) {
                         if (matId != component.material) {
-                            if (runtime && !runtime->primitives.IsEmpty()) {
-                                ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
-                                runtime->primitives.Clear();
-                            }
                             component.material = matId;
                             registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
                             state->bPendingModelResolve = true;
@@ -556,15 +547,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
         }
 
         if (dirty) {
-            auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
-            if (runtime.modelHandle.IsValid()) {
-                ctx->assetManager->UnloadModel(runtime.modelHandle);
-                runtime.modelHandle = {};
-            }
-            for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
-                ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
-            }
-            runtime.primitives.Clear();
+            registry.remove<MeshRuntime>(entity);
             registry.remove<SplineMeshLoadingTag>(entity);
             registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
             state->bPendingModelResolve = true;

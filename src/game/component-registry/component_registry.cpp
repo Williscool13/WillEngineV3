@@ -23,6 +23,7 @@
 #include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render/light_components.h"
 #include "game/components/render/static_mesh_component.h"
+#include "game/components/render/static_mesh_primitive_component.h"
 #include "game/components/render/text_component.h"
 #include "game/components/render/text3d_component.h"
 
@@ -42,6 +43,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::HierarchyComponent>(componentRegistry, "HierarchyComponent", true, true);
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent", false, false);
     RegisterComponent<Component::StaticMeshComponent>(componentRegistry, "StaticMeshComponent", false, false);
+    RegisterComponent<Component::StaticMeshPrimitiveComponent>(componentRegistry, "StaticMeshPrimitiveComponent", false, false);
     RegisterComponent<Component::TextComponent>(componentRegistry, "TextComponent", false, false);
     RegisterComponent<Component::PointLightComponent>(componentRegistry, "PointLightComponent", false, false);
     RegisterComponent<Component::AreaLightComponent>(componentRegistry, "AreaLightComponent", false, false);

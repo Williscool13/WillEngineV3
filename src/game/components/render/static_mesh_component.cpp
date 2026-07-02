@@ -20,6 +20,7 @@
 
 #include "core/containers/arena_array.h"
 #include "game/components/core_components.h"
+#include "game/systems/scene_system.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/text3d_component.h"
@@ -28,7 +29,7 @@ namespace Game::Component
 {
 void UnloadStaticMesh(entt::registry& registry, entt::entity entity)
 {
-    registry.remove<StaticMeshRuntime>(entity);
+    registry.remove<MeshRuntime>(entity);
     registry.remove<StaticMeshLoadPendingTag>(entity);
     registry.remove<StaticMeshLoadingTag>(entity);
 }
@@ -49,6 +50,28 @@ void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, en
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
     registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+}
+
+Engine::MaterialID StaticMeshComponent::GetMaterialOverride(uint32_t slot) const
+{
+    for (const auto& ov : materialOverrides) {
+        if (ov.slot == slot) { return ov.id; }
+    }
+    return Engine::MaterialID::INVALID;
+}
+
+void StaticMeshComponent::SetMaterialOverride(uint32_t slot, Engine::MaterialID id)
+{
+    for (size_t i = 0; i < materialOverrides.Size(); ++i) {
+        if (materialOverrides[i].slot == slot) {
+            if (id.IsValid()) { materialOverrides[i].id = id; }
+            else { materialOverrides.SwapRemove(i); }
+            return;
+        }
+    }
+    if (id.IsValid() && materialOverrides.Size() < MaxMaterialOverrides) {
+        materialOverrides.PushBack({slot, id});
+    }
 }
 
 void StaticMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -81,14 +104,17 @@ void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, 
     json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
 
     nlohmann::json overrides = nlohmann::json::object();
-    for (int32_t i = 0; i < 128; ++i) {
-        if (comp.materialOverrides[i].IsValid()) {
-            auto s = Core::ShortString::Format("%d", i);
-            overrides[s.c_str()] = comp.materialOverrides[i].id;
-        }
+    for (const auto& ov : comp.materialOverrides) {
+        auto s = Core::ShortString::Format("%u", ov.slot);
+        overrides[s.c_str()] = ov.id.id;
     }
     if (!overrides.empty()) {
         json["materialOverrides"] = std::move(overrides);
+    }
+    if (!comp.primitiveBlacklist.IsEmpty()) {
+        nlohmann::json blacklist = nlohmann::json::array();
+        for (uint32_t ord : comp.primitiveBlacklist) { blacklist.push_back(ord); }
+        json["primitiveBlacklist"] = std::move(blacklist);
     }
     if (comp.shadingShaderOverride) { json["shadingShaderOverride"] = comp.shadingShaderOverride.id; }
     if (comp.lightingShaderOverride) { json["lightingShaderOverride"] = comp.lightingShaderOverride.id; }
@@ -106,10 +132,12 @@ void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, cons
 
     if (json.contains("materialOverrides")) {
         for (const auto& [key, val] : json["materialOverrides"].items()) {
-            int32_t idx = std::stoi(key);
-            if (idx >= 0 && idx < 128) {
-                comp.materialOverrides[idx] = Engine::MaterialID(val.get<uint64_t>());
-            }
+            comp.SetMaterialOverride(static_cast<uint32_t>(std::stoul(key)), Engine::MaterialID(val.get<uint64_t>()));
+        }
+    }
+    if (json.contains("primitiveBlacklist")) {
+        for (const auto& v : json["primitiveBlacklist"]) {
+            if (comp.primitiveBlacklist.Size() < StaticMeshComponent::MaxBlacklist) { comp.primitiveBlacklist.PushBack(v.get<uint32_t>()); }
         }
     }
     if (json.contains("shadingShaderOverride")) { comp.shadingShaderOverride = StringID(json["shadingShaderOverride"].get<uint64_t>()); }
@@ -158,7 +186,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
         }
 
-        auto* runtime = registry.try_get<StaticMeshRuntime>(entity);
+        auto* runtime = registry.try_get<MeshRuntime>(entity);
 
         if (!component.modelId.IsValid()) {
             if (ImGui::BeginCombo("Select Model", "")) {
@@ -200,10 +228,23 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             return {.requestRemoval = remove};
         }
 
-        Engine::StaticPrimitiveStore& store = state->staticPrimitiveStore;
+        Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
         const uint32_t primCount = runtime->range.count;
         ImGui::Text("Primitive Count: %u", primCount);
 
+        if (!component.primitiveBlacklist.IsEmpty()) {
+            ImGui::Text("Split off: %u", static_cast<uint32_t>(component.primitiveBlacklist.Size()));
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Restore##hidden")) {
+                component.primitiveBlacklist.Clear();
+                registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
+                state->bPendingModelResolve |= true;
+                return {.requestRemoval = remove};
+            }
+        }
+
+        uint32_t pendingSplitOrdinal = ~0u;
+        glm::mat4 pendingSplitTransform{1.0f};
         if (primCount > 0 && ImGui::TreeNode("Primitives")) {
             for (uint32_t i = 0; i < primCount; ++i) {
                 ImGui::PushID(static_cast<int>(i));
@@ -212,11 +253,19 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     ImGui::Text("Primitive Index: %u", prim.primitiveIndex);
                     ImGui::Text("Node: %u", prim.sourceNodeIndex);
                     ImGui::Text("Material ID: %llu", prim.materialID.id);
+                    if (ImGui::SmallButton("Split Off")) {
+                        pendingSplitOrdinal = prim.modelPrimitiveOrdinal;
+                        pendingSplitTransform = prim.modelSpaceTransform;
+                    }
                     ImGui::TreePop();
                 }
                 ImGui::PopID();
             }
             ImGui::TreePop();
+        }
+        if (pendingSplitOrdinal != ~0u) {
+            SplitOffMeshPrimitive(state, entity, pendingSplitOrdinal, pendingSplitTransform);
+            return {.requestRemoval = remove};
         }
 
         if (primCount > 0) {
@@ -250,7 +299,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 for (const auto& slot : slots) {
                     ImGui::PushID(slot.origIdx);
 
-                    Engine::MaterialID current = component.materialOverrides[slot.origIdx];
+                    Engine::MaterialID current = component.GetMaterialOverride(static_cast<uint32_t>(slot.origIdx));
                     const char* currentLabel = "(original)";
                     if (current.IsValid()) {
                         if (const Engine::Material* m = ctx->materialManager->GetMaterial(current)) {
@@ -284,7 +333,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 }
 
                 if (pendingChangeIdx >= 0) {
-                    component.materialOverrides[pendingChangeIdx] = pendingChangeMat;
+                    component.SetMaterialOverride(static_cast<uint32_t>(pendingChangeIdx), pendingChangeMat);
                     registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
                     state->bPendingModelResolve |= true;
                 }

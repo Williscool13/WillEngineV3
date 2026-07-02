@@ -100,6 +100,7 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build Shared Libraries" FORCE)
 
 add_compile_definitions(NOMINMAX)
 add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
+add_compile_definitions(GLM_ENABLE_EXPERIMENTAL)
 # EnTT Debug-build perf on Windows: https://github.com/skypjack/entt/wiki/Frequently-Asked-Questions#why-is-my-debug-build-on-windows-so-slow
 add_compile_definitions(ENTT_DISABLE_ASSERT)
 if (MSVC)

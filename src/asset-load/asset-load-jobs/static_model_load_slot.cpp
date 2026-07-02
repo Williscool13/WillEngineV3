@@ -392,6 +392,10 @@ void StaticModelLoadSlot::PrepareUploadData()
     uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(Primitive);
     for (auto& mesh : rawData.allMeshes) {
         for (auto& primitiveIndex : mesh.primitiveProperties) {
+            const Primitive& prim = rawData.primitives[primitiveIndex.index];
+            primitiveIndex.boundingBoxMin = prim.boundingBoxMin;
+            primitiveIndex.boundingBoxMax = prim.boundingBoxMax;
+            primitiveIndex.boundingSphere = prim.boundingSphere;
             primitiveIndex.index += primitiveOffsetCount;
         }
     }

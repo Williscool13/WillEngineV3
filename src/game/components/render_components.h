@@ -14,7 +14,7 @@
 #include "engine/material_manager.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
-#include "engine/resources/model/static_primitive_store.h"
+#include "engine/resources/model/mesh_primitive_store.h"
 
 namespace Game::Component
 {
@@ -46,26 +46,14 @@ struct SphereLightTransformComponent
     glm::mat4 previousMatrix{1.0f};
 };
 
-struct PrimitiveData
-{
-    uint32_t primitiveIndex;
-    int32_t originalMaterialIndex;
-    Engine::MaterialID materialID;
-};
-
 struct MeshRuntime
 {
-    static constexpr size_t MaxPrimitives = 128;
-    Core::InlineVector<PrimitiveData, MaxPrimitives> primitives{};
+    /**
+     * Entity's contiguous run in EngineState::meshPrimitiveStore
+     */
+    Engine::MeshPrimitiveStore::Range range{};
     Engine::StaticModelHandle modelHandle{};
-
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
-};
-
-struct StaticMeshRuntime
-{
-    Engine::StaticPrimitiveStore::Range range{};
-    Engine::StaticModelHandle modelHandle{};
+    bool visible{true};
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };

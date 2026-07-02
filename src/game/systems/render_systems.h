@@ -34,10 +34,12 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
 void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);

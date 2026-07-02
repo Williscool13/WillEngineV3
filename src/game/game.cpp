@@ -266,6 +266,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 #endif
 
     Game::StaticMeshPendingKickoff(ctx, state);
+    Game::StaticMeshPrimitivePendingKickoff(ctx, state);
     Game::ProceduralMeshPendingKickoff(ctx, state);
     Game::SplineMeshPendingKickoff(ctx, state);
     Game::TextFontPendingKickoff(ctx, state);
@@ -274,6 +275,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     if (ctx->bAssetsChangedThisFrame || state->bPendingModelResolve) {
         Game::StaticMeshLoadResolve(ctx, state);
+        Game::StaticMeshPrimitiveLoadResolve(ctx, state);
         Game::ProceduralMeshLoadResolve(ctx, state);
         Game::SplineMeshLoadResolve(ctx, state);
         Game::Text3DLoadResolve(ctx, state);
