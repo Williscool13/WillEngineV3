@@ -403,6 +403,44 @@ uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId)
     return maxSortOrder;
 }
 
+Core::InlineString<256> GenerateIncrementedName(entt::registry& registry, StringID sceneId, const Core::InlineString<256>& sourceName)
+{
+    const std::string_view src = sourceName.View();
+
+    size_t digitsStart = src.size();
+    while (digitsStart > 0 && std::isdigit(static_cast<unsigned char>(src[digitsStart - 1]))) {
+        --digitsStart;
+    }
+    const std::string_view base = src.substr(0, digitsStart);
+
+    uint32_t highest = 0;
+    auto view = registry.view<Component::SceneComponent, Component::NameComponent>();
+    for (auto entity : view) {
+        if (view.get<Component::SceneComponent>(entity).sceneId != sceneId) { continue; }
+
+        std::string_view name = view.get<Component::NameComponent>(entity).name.View();
+        if (name.size() < base.size() || name.substr(0, base.size()) != base) { continue; }
+
+        std::string_view rest = name.substr(base.size());
+        if (rest.empty()) { continue; }
+
+        bool allDigits = true;
+        for (const char c : rest) {
+            if (!std::isdigit(static_cast<unsigned char>(c))) {
+                allDigits = false;
+                break;
+            }
+        }
+        if (!allDigits) { continue; }
+
+        uint32_t index = 0;
+        for (const char c : rest) { index = index * 10 + static_cast<uint32_t>(c - '0'); }
+        highest = std::max(highest, index);
+    }
+
+    return Core::InlineString<256>::Format("%.*s%u", static_cast<int>(base.size()), base.data(), highest + 1);
+}
+
 entt::entity CreateSceneEntity(Engine::EngineState* state)
 {
     entt::entity newEntity = state->registry.create();

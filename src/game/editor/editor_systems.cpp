@@ -431,6 +431,9 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 for (entt::entity entity : state->editor.selectedEntities) {
                     if (!state->registry.valid(entity)) continue;
                     entt::entity copy = CopySceneEntity(state, entity, state->currentSceneId);
+                    if (auto* nameComp = state->registry.try_get<Component::NameComponent>(copy)) {
+                        nameComp->name = GenerateIncrementedName(state->registry, state->currentSceneId, nameComp->name);
+                    }
                     state->registry.get<Component::StableIdComponent>(copy).sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
                     copies.PushBack(copy);
                 }

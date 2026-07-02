@@ -460,7 +460,7 @@ static void CreateSpiralRailingEntity(Engine::EngineState* state, entt::registry
     if (auto* nm = registry.try_get<Component::NameComponent>(child)) {
         Core::InlineString<256> base("Railing");
         if (const auto* parentName = registry.try_get<Component::NameComponent>(stairEntity)) { base = parentName->name; }
-        nm->name = Core::InlineString<256>::Format("{} Railing ({})", base.c_str(), suffix);
+        nm->name = Core::InlineString<256>::Format("%s Railing (%s)", base.c_str(), suffix);
     }
 
     SetParent(state, child, stairEntity);

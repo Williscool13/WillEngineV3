@@ -120,7 +120,45 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
 
         const auto* modelMeta = ctx->assetManager->GetModelMetadata(component.modelId);
         ImGui::Text("Model: %s", modelMeta ? modelMeta->name.c_str() : "(invalid)");
-        ImGui::Text("Primitive Ordinal: %u", component.primitiveOrdinal);
+
+        auto* meshRuntime = registry.try_get<MeshRuntime>(entity);
+        Engine::StaticModel* model = meshRuntime ? ctx->assetManager->GetModel(meshRuntime->modelHandle) : nullptr;
+        if (model && model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
+            const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
+            const Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
+
+            uint32_t totalPrimitives = 0;
+            for (uint32_t n = 0; n < nodes.Size(); ++n) {
+                const uint32_t mi = nodes[n].meshIndex;
+                if (mi == ~0u || mi >= meshes.Size()) { continue; }
+                totalPrimitives += static_cast<uint32_t>(meshes[mi].primitiveProperties.Size());
+            }
+
+            if (totalPrimitives > 0) {
+                const Core::InlineString<32> currentLabel = component.primitiveOrdinal < totalPrimitives
+                    ? Core::InlineString<32>::Format("Primitive %u", component.primitiveOrdinal)
+                    : Core::InlineString<32>("(none)");
+
+                uint32_t pendingOrdinal = ~0u;
+                if (ImGui::BeginCombo("Primitive", currentLabel.c_str())) {
+                    for (uint32_t ord = 0; ord < totalPrimitives; ++ord) {
+                        const Core::InlineString<32> label = Core::InlineString<32>::Format("Primitive %u", ord);
+                        if (ImGui::Selectable(label.c_str(), ord == component.primitiveOrdinal)) {
+                            if (ord != component.primitiveOrdinal) { pendingOrdinal = ord; }
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                if (pendingOrdinal != ~0u) {
+                    component.primitiveOrdinal = pendingOrdinal;
+                    registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
+                    state->bPendingModelResolve |= true;
+                }
+            }
+        }
+        else {
+            ImGui::Text("Primitive Ordinal: %u", component.primitiveOrdinal);
+        }
 
         const char* currentLabel = "(original)";
         if (component.materialOverride.IsValid()) {

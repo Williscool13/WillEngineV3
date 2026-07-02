@@ -2216,9 +2216,9 @@ bool ProceduralModelLoadSlot::GenerateSpiralStaircase(const Engine::SpiralStairc
             const float an = static_cast<float>(s + 1) / static_cast<float>(colSlices) * 2.0f * pi;
             const Vec3 ds = ringDir(as), dn = ringDir(an);
 
-            addQuad(ds * ri + capBot, dn * ri + capBot, dn * ri + capTop, ds * ri + capTop,
-                    glm::normalize(ds + dn), Vec4{-ds.z, 0, ds.x, 1},
-                    Vec2{as, 0}, Vec2{an, 0}, Vec2{an, colTop}, Vec2{as, colTop});
+            addQuadN(ds * ri + capBot, dn * ri + capBot, dn * ri + capTop, ds * ri + capTop,
+                     ds, dn, dn, ds, Vec4{-ds.z, 0, ds.x, 1},
+                     Vec2{as, 0}, Vec2{an, 0}, Vec2{an, colTop}, Vec2{as, colTop});
             addTri(capTop, ds * ri + capTop, dn * ri + capTop, Vec3{0, 1, 0}, Vec4{1, 0, 0, 1},
                    Vec2{0, 0}, Vec2{ds.x * ri, ds.z * ri}, Vec2{dn.x * ri, dn.z * ri});
             addTri(capBot, ds * ri + capBot, dn * ri + capBot, Vec3{0, -1, 0}, Vec4{1, 0, 0, 1},
