@@ -23,7 +23,9 @@
 #include "Jolt/Physics/Collision/Shape/ConvexHullShape.h"
 #include "Jolt/Physics/Collision/Shape/MeshShape.h"
 #include "Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h"
+#include "Jolt/Physics/Collision/Shape/CylinderShape.h"
 #include "engine/resources/physics/physics_collider_asset.h"
+#include "engine/resources/physics/collider_generation.h"
 
 namespace Game
 {
@@ -213,149 +215,41 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
     using PhysicsDebugMode = Engine::PhysicsDebugMode;
     if (state->editor.physicsDebugMode == PhysicsDebugMode::Off) { return; }
 
-    if (state->bIsPlaying) {
-        auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
-        filter.Clear();
+    auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
+    filter.Clear();
 
-        if (state->editor.physicsDebugMode == PhysicsDebugMode::On) {
-            auto view = state->registry.view<Component::PhysicsBodyComponent>();
-            for (const auto& [entity, physicsBody] : view.each()) {
-                filter.AddBody(physicsBody.bodyID);
-            }
+    if (state->editor.physicsDebugMode == PhysicsDebugMode::On) {
+        auto view = state->registry.view<Component::PhysicsBodyComponent>();
+        for (const auto& [entity, physicsBody] : view.each()) {
+            filter.AddBody(physicsBody.bodyID);
         }
-        else if (state->editor.physicsDebugMode == PhysicsDebugMode::SensorOnly) {
-            auto view = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
-            for (const auto& [entity, physicsBody, bodyDesc] : view.each()) {
-                if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
-            }
-        }
-        else if (state->editor.physicsDebugMode == PhysicsDebugMode::Selected) {
-            for (entt::entity entity : state->editor.selectedEntities) {
-                if (auto* physicsBody = state->registry.try_get<Component::PhysicsBodyComponent>(entity)) {
-                    filter.AddBody(physicsBody->bodyID);
-                }
-            }
-        }
-        else {
-            // SensorAndTag
-            auto sensorView = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
-            for (const auto& [entity, physicsBody, bodyDesc] : sensorView.each()) {
-                if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
-            }
-            auto tagView = state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyComponent>();
-            for (const auto& [entity, physicsBody] : tagView.each()) {
-                filter.AddBody(physicsBody.bodyID);
-            }
-        }
-
-        ctx->physicsSystem->DrawDebug(&frameBuffer->mainViewFamily);
     }
-    else {
-        constexpr glm::vec4 kDebugColor{0.2f, 0.8f, 1.0f, 1.0f};
-        constexpr glm::vec4 kSensorColor{1.0f, 0.85f, 0.0f, 1.0f};
-        auto& vf = frameBuffer->mainViewFamily;
-
-        // World-space so child entities draw correctly (WorldTransformComponent may lag one frame; acceptable for debug).
-        auto drawEntity = [&](const Component::PhysicsBodyDesc& bodyDesc, const Component::WorldTransformComponent& transform) {
-            const glm::vec4 color = bodyDesc.bIsSensor ? kSensorColor : kDebugColor;
-            const glm::mat4 entityMat = glm::translate(glm::mat4(1.0f), transform.translation) * glm::mat4_cast(transform.rotation);
-            for (const auto& shape : bodyDesc.shapes) {
-                const glm::vec3 shapeCenter = glm::vec3(entityMat * glm::vec4(shape.offset, 1.0f));
-                switch (shape.type) {
-                    case Component::PhysicsShapeType::Box:
-                        DEBUG_ADD_BOX(vf.debugBoxes, {shapeCenter, shape.box.halfExtents, transform.rotation * shape.rotation, color});
-                        break;
-                    case Component::PhysicsShapeType::Sphere:
-                        DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, shape.sphere.radius, color});
-                        break;
-                    case Component::PhysicsShapeType::Capsule:
-                    {
-                        const glm::vec3 top = shapeCenter + glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
-                        const glm::vec3 bot = shapeCenter - glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
-                        DEBUG_ADD_SPHERE(vf.debugSpheres, {top, shape.capsule.radius, color});
-                        DEBUG_ADD_SPHERE(vf.debugSpheres, {bot, shape.capsule.radius, color});
-                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3( shape.capsule.radius, 0, 0), bot + glm::vec3( shape.capsule.radius, 0, 0), color});
-                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3(-shape.capsule.radius, 0, 0), bot + glm::vec3(-shape.capsule.radius, 0, 0), color});
-                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3(0, 0, shape.capsule.radius), bot + glm::vec3(0, 0, shape.capsule.radius), color});
-                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3(0, 0, -shape.capsule.radius), bot + glm::vec3(0, 0, -shape.capsule.radius), color});
-                        break;
-                    }
-                    case Component::PhysicsShapeType::ConvexHull:
-                    case Component::PhysicsShapeType::TriangleMesh:
-                    {
-                        const Engine::StaticModel* model = ctx->assetManager->GetModel(shape.meshSourceHandle);
-                        if (model && model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded && model->physicsCache && !model->physicsCache->indices.IsEmpty()) {
-                            const auto& pos = model->physicsCache->positions;
-                            const auto& idx = model->physicsCache->indices;
-                            for (size_t i = 0; i + 2 < idx.Size(); i += 3) {
-                                const glm::vec3 a = glm::vec3(entityMat * glm::vec4(pos[idx[i + 0]] * shape.bakedScale + shape.offset, 1.0f));
-                                const glm::vec3 b = glm::vec3(entityMat * glm::vec4(pos[idx[i + 1]] * shape.bakedScale + shape.offset, 1.0f));
-                                const glm::vec3 c = glm::vec3(entityMat * glm::vec4(pos[idx[i + 2]] * shape.bakedScale + shape.offset, 1.0f));
-                                DEBUG_ADD_LINE(vf.debugLines, {a, b, color});
-                                DEBUG_ADD_LINE(vf.debugLines, {b, c, color});
-                                DEBUG_ADD_LINE(vf.debugLines, {c, a, color});
-                            }
-                        }
-                        else {
-                            DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, 0.25f, color});
-                        }
-                        break;
-                    }
-                    case Component::PhysicsShapeType::Compound:
-                    {
-                        const Engine::PhysicsColliderAsset* collider = ctx->assetManager->GetCollider(shape.colliderHandle);
-                        if (collider && collider->loadState == Engine::PhysicsColliderAsset::LoadState::Loaded) {
-                            for (const auto& prim : collider->primitives) {
-                                const glm::quat worldRot = transform.rotation * shape.rotation * prim.rotation;
-                                const glm::vec3 c = glm::vec3(entityMat * glm::vec4(prim.position * shape.bakedScale + shape.offset, 1.0f));
-                                glm::vec3 halfExtents;
-                                if (prim.type == Engine::SplineColliderPrimitiveType::Capsule) {
-                                    // Draw each capsule as its bounding box (local Y is the axis) for a readable, low-clutter view.
-                                    const float hh = prim.halfHeight * shape.bakedScale.y;
-                                    const float r = prim.radius * glm::max(shape.bakedScale.x, shape.bakedScale.z);
-                                    halfExtents = glm::vec3(r, hh + r, r);
-                                }
-                                else {
-                                    halfExtents = prim.halfExtents * shape.bakedScale;
-                                }
-                                DEBUG_ADD_BOX(vf.debugBoxes, {c, halfExtents, worldRot, color});
-                            }
-                        }
-                        else {
-                            DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, 0.25f, color});
-                        }
-                        break;
-                    }
-                }
-            }
-        };
-
-        if (state->editor.physicsDebugMode == PhysicsDebugMode::On) {
-            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::WorldTransformComponent>().each()) {
-                drawEntity(bodyDesc, transform);
-            }
+    else if (state->editor.physicsDebugMode == PhysicsDebugMode::SensorOnly) {
+        auto view = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
+        for (const auto& [entity, physicsBody, bodyDesc] : view.each()) {
+            if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
         }
-        else if (state->editor.physicsDebugMode == PhysicsDebugMode::SensorOnly) {
-            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::WorldTransformComponent>().each()) {
-                if (bodyDesc.bIsSensor) { drawEntity(bodyDesc, transform); }
-            }
-        }
-        else if (state->editor.physicsDebugMode == PhysicsDebugMode::Selected) {
-            for (entt::entity entity : state->editor.selectedEntities) {
-                const auto* bodyDesc = state->registry.try_get<Component::PhysicsBodyDesc>(entity);
-                const auto* transform = state->registry.try_get<Component::WorldTransformComponent>(entity);
-                if (bodyDesc && transform) { drawEntity(*bodyDesc, *transform); }
-            }
-        }
-        else {
-            // SensorAndTag
-            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::WorldTransformComponent>().each()) {
-                if (bodyDesc.bIsSensor || state->registry.all_of<Component::DrawPhysicsDebugTag>(entity)) {
-                    drawEntity(bodyDesc, transform);
-                }
+    }
+    else if (state->editor.physicsDebugMode == PhysicsDebugMode::Selected) {
+        for (entt::entity entity : state->editor.selectedEntities) {
+            if (auto* physicsBody = state->registry.try_get<Component::PhysicsBodyComponent>(entity)) {
+                filter.AddBody(physicsBody->bodyID);
             }
         }
     }
+    else {
+        // SensorAndTag
+        auto sensorView = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
+        for (const auto& [entity, physicsBody, bodyDesc] : sensorView.each()) {
+            if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
+        }
+        auto tagView = state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyComponent>();
+        for (const auto& [entity, physicsBody] : tagView.each()) {
+            filter.AddBody(physicsBody.bodyID);
+        }
+    }
+
+    ctx->physicsSystem->DrawDebug(&frameBuffer->mainViewFamily);
 #endif
 }
 
@@ -396,9 +290,142 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
     return bodyInterface.CreateAndAddBody(settings, activation);
 }
 
+static JPH::ShapeRefC CreateShapeFromCollider(const Engine::PhysicsColliderAsset& collider, const glm::vec3& sc)
+{
+    switch (collider.kind) {
+        case Engine::PhysicsColliderKind::Compound:
+        {
+            const auto& prims = collider.primitives;
+            if (prims.Size() == 0) { return nullptr; }
+
+            auto makeSub = [&](const Engine::SplineColliderPrimitive& prim) -> JPH::ShapeRefC {
+                switch (prim.type) {
+                    case Engine::SplineColliderPrimitiveType::Capsule:
+                    {
+                        const float radius = prim.radius * glm::max(sc.x, sc.z);
+                        const float halfHeight = prim.halfHeight * sc.y;
+                        JPH::CapsuleShapeSettings s(glm::max(0.001f, halfHeight), glm::max(0.001f, radius));
+                        auto r = s.Create();
+                        return r.HasError() ? JPH::ShapeRefC{} : r.Get();
+                    }
+                    case Engine::SplineColliderPrimitiveType::Sphere:
+                    {
+                        const float radius = prim.radius * glm::max(sc.x, glm::max(sc.y, sc.z));
+                        JPH::SphereShapeSettings s(glm::max(0.001f, radius));
+                        auto r = s.Create();
+                        return r.HasError() ? JPH::ShapeRefC{} : r.Get();
+                    }
+                    case Engine::SplineColliderPrimitiveType::Cylinder:
+                    {
+                        const float radius = prim.radius * glm::max(sc.x, sc.z);
+                        const float halfHeight = prim.halfHeight * sc.y;
+                        JPH::CylinderShapeSettings s(glm::max(0.001f, halfHeight), glm::max(0.001f, radius));
+                        auto r = s.Create();
+                        return r.HasError() ? JPH::ShapeRefC{} : r.Get();
+                    }
+                    case Engine::SplineColliderPrimitiveType::ConvexHull:
+                    {
+                        // Vertices are absolute in the collider's local space (child transform is identity).
+                        JPH::Array<JPH::Vec3> pts;
+                        pts.reserve(prim.hullCount);
+                        for (uint32_t i = 0; i < prim.hullCount; ++i) {
+                            const glm::vec3 v = collider.positions[prim.hullOffset + i] * sc;
+                            pts.push_back({v.x, v.y, v.z});
+                        }
+                        // Small convex radius: tread slabs are thin, so the default (0.05m) would exceed the half-thickness and fail Create.
+                        JPH::ConvexHullShapeSettings s(pts, 0.001f);
+                        auto r = s.Create();
+                        return r.HasError() ? JPH::ShapeRefC{} : r.Get();
+                    }
+                    default:
+                        break;
+                }
+                const glm::vec3 he = prim.halfExtents * sc;
+                const float minHE = glm::min(he.x, glm::min(he.y, he.z));
+                const float convexRadius = glm::min(0.05f, glm::max(0.0f, minHE * 0.9f));
+                JPH::BoxShapeSettings s(JPH::Vec3(he.x, he.y, he.z), convexRadius);
+                auto r = s.Create();
+                return r.HasError() ? JPH::ShapeRefC{} : r.Get();
+            };
+
+            if (prims.Size() == 1) {
+                JPH::ShapeRefC sub = makeSub(prims[0]);
+                if (!sub) { return nullptr; }
+                const glm::vec3 pos = prims[0].position * sc;
+                JPH::RotatedTranslatedShapeSettings rt(
+                    JPH::Vec3(pos.x, pos.y, pos.z),
+                    JPH::Quat(prims[0].rotation.x, prims[0].rotation.y, prims[0].rotation.z, prims[0].rotation.w),
+                    sub);
+                auto r = rt.Create();
+                return r.HasError() ? nullptr : r.Get();
+            }
+
+            JPH::StaticCompoundShapeSettings compound;
+            for (const auto& prim : prims) {
+                JPH::ShapeRefC sub = makeSub(prim);
+                if (!sub) { return nullptr; }
+                const glm::vec3 pos = prim.position * sc;
+                compound.AddShape(
+                    JPH::Vec3(pos.x, pos.y, pos.z),
+                    JPH::Quat(prim.rotation.x, prim.rotation.y, prim.rotation.z, prim.rotation.w),
+                    sub);
+            }
+            auto result = compound.Create();
+            if (result.HasError()) {
+                LOG_WARN(Game, "Compound shape creation failed: {}", result.GetError().c_str());
+                return nullptr;
+            }
+            return result.Get();
+        }
+        case Engine::PhysicsColliderKind::ConvexHull:
+        {
+            JPH::Array<JPH::Vec3> pts;
+            pts.reserve(collider.positions.Size());
+            for (const auto& p : collider.positions) {
+                const glm::vec3 sp = p * sc;
+                pts.push_back({sp.x, sp.y, sp.z});
+            }
+            JPH::ConvexHullShapeSettings s(pts);
+            auto result = s.Create();
+            if (result.HasError()) {
+                LOG_WARN(Game, "ConvexHull collider creation failed: {}", result.GetError().c_str());
+                return nullptr;
+            }
+            return result.Get();
+        }
+        case Engine::PhysicsColliderKind::TriangleMesh:
+        {
+            const auto& pos = collider.positions;
+            const auto& idx = collider.indices;
+            JPH::TriangleList tris;
+            tris.reserve(idx.Size() / 3);
+            for (size_t i = 0; i + 2 < idx.Size(); i += 3) {
+                const glm::vec3 a = pos[idx[i]] * sc, b = pos[idx[i + 1]] * sc, c = pos[idx[i + 2]] * sc;
+                tris.push_back(JPH::Triangle(
+                    JPH::Float3(a.x, a.y, a.z),
+                    JPH::Float3(b.x, b.y, b.z),
+                    JPH::Float3(c.x, c.y, c.z)));
+            }
+            JPH::MeshShapeSettings s(tris);
+            auto result = s.Create();
+            if (result.HasError()) {
+                LOG_WARN(Game, "TriangleMesh collider creation failed: {}", result.GetError().c_str());
+                return nullptr;
+            }
+            return result.Get();
+        }
+    }
+    return nullptr;
+}
+
 JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager)
 {
-    // todo hash dedupe
+    if (desc.colliderHandle.IsValid() && assetManager) {
+        auto* collider = assetManager->GetCollider(desc.colliderHandle);
+        if (!collider || collider->loadState != Engine::PhysicsColliderAsset::LoadState::Loaded) { return nullptr; }
+        return CreateShapeFromCollider(*collider, desc.bakedScale);
+    }
+
     switch (desc.type) {
         case Component::PhysicsShapeType::Box:
         {
@@ -460,59 +487,8 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
             return result.Get();
         }
         case Component::PhysicsShapeType::Compound:
-        {
-            if (!assetManager) { return nullptr; }
-            auto* collider = assetManager->GetCollider(desc.colliderHandle);
-            if (!collider || collider->loadState != Engine::PhysicsColliderAsset::LoadState::Loaded) { return nullptr; }
-            const auto& prims = collider->primitives;
-            if (prims.Size() == 0) { return nullptr; }
-
-            const glm::vec3 sc = desc.bakedScale;
-            auto makeSub = [&](const Engine::SplineColliderPrimitive& prim) -> JPH::ShapeRefC {
-                if (prim.type == Engine::SplineColliderPrimitiveType::Capsule) {
-                    const float radius = prim.radius * glm::max(sc.x, sc.z);
-                    const float halfHeight = prim.halfHeight * sc.y;
-                    JPH::CapsuleShapeSettings s(glm::max(0.001f, halfHeight), glm::max(0.001f, radius));
-                    auto r = s.Create();
-                    return r.HasError() ? JPH::ShapeRefC{} : r.Get();
-                }
-                const glm::vec3 he = prim.halfExtents * sc;
-                const float minHE = glm::min(he.x, glm::min(he.y, he.z));
-                const float convexRadius = glm::min(0.05f, glm::max(0.0f, minHE * 0.9f));
-                JPH::BoxShapeSettings s(JPH::Vec3(he.x, he.y, he.z), convexRadius);
-                auto r = s.Create();
-                return r.HasError() ? JPH::ShapeRefC{} : r.Get();
-            };
-
-            if (prims.Size() == 1) {
-                JPH::ShapeRefC sub = makeSub(prims[0]);
-                if (!sub) { return nullptr; }
-                const glm::vec3 pos = prims[0].position * sc;
-                JPH::RotatedTranslatedShapeSettings rt(
-                    JPH::Vec3(pos.x, pos.y, pos.z),
-                    JPH::Quat(prims[0].rotation.x, prims[0].rotation.y, prims[0].rotation.z, prims[0].rotation.w),
-                    sub);
-                auto r = rt.Create();
-                return r.HasError() ? nullptr : r.Get();
-            }
-
-            JPH::StaticCompoundShapeSettings compound;
-            for (const auto& prim : prims) {
-                JPH::ShapeRefC sub = makeSub(prim);
-                if (!sub) { return nullptr; }
-                const glm::vec3 pos = prim.position * sc;
-                compound.AddShape(
-                    JPH::Vec3(pos.x, pos.y, pos.z),
-                    JPH::Quat(prim.rotation.x, prim.rotation.y, prim.rotation.z, prim.rotation.w),
-                    sub);
-            }
-            auto result = compound.Create();
-            if (result.HasError()) {
-                LOG_WARN(Game, "Compound shape creation failed: {}", result.GetError().c_str());
-                return nullptr;
-            }
-            return result.Get();
-        }
+            // Compound shapes always source from a collider asset (handled at the top via colliderHandle).
+            return nullptr;
     }
     return nullptr;
 }
@@ -537,6 +513,9 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
                 if (!shapeDesc.splineParams.spline.points.IsEmpty()) {
                     shapeDesc.colliderHandle = ctx->assetManager->LoadSplineCollider(shapeDesc.splineParams);
                 }
+                else if (!std::holds_alternative<std::monostate>(shapeDesc.proceduralParams) && Engine::CanBuildProceduralCollider(shapeDesc.proceduralParams)) {
+                    shapeDesc.colliderHandle = ctx->assetManager->LoadProceduralCollider(shapeDesc.proceduralParams);
+                }
                 if (!shapeDesc.colliderHandle.IsValid()) {
                     LOG_WARN(Game, "Physics compound collider could not be loaded. Removing pending tag.");
                     shouldAbandon = true;
@@ -545,14 +524,20 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
                 continue;
             }
             if (shapeDesc.type != Component::PhysicsShapeType::ConvexHull && shapeDesc.type != Component::PhysicsShapeType::TriangleMesh) { continue; }
-            if (shapeDesc.meshSourceHandle.IsValid()) { continue; }
+            if (shapeDesc.meshSourceHandle.IsValid() || shapeDesc.colliderHandle.IsValid()) { continue; }
 
             if (shapeDesc.meshSourceModelId.IsValid()) {
                 if (ctx->assetManager->IsModelFrozen(shapeDesc.meshSourceModelId)) { allArmed = false; break; }
                 shapeDesc.meshSourceHandle = ctx->assetManager->LoadModel(shapeDesc.meshSourceModelId);
             }
             else if (!std::holds_alternative<std::monostate>(shapeDesc.proceduralParams)) {
-                shapeDesc.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shapeDesc.proceduralParams);
+                // Analytic collider where available; otherwise the render-mesh physics path.
+                if (Engine::CanBuildProceduralCollider(shapeDesc.proceduralParams)) {
+                    shapeDesc.colliderHandle = ctx->assetManager->LoadProceduralCollider(shapeDesc.proceduralParams);
+                }
+                if (!shapeDesc.colliderHandle.IsValid()) {
+                    shapeDesc.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shapeDesc.proceduralParams);
+                }
             }
             else if (!shapeDesc.splineParams.spline.points.IsEmpty()) {
                 shapeDesc.meshSourceHandle = ctx->assetManager->LoadSplineModel(shapeDesc.splineParams);
@@ -562,7 +547,7 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
                 if (ctx->assetManager->IsFontFrozen(t.fontId)) { allArmed = false; break; }
                 shapeDesc.meshSourceHandle = ctx->assetManager->LoadText3DModel(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals);
             }
-            if (!shapeDesc.meshSourceHandle.IsValid()) {
+            if (!shapeDesc.meshSourceHandle.IsValid() && !shapeDesc.colliderHandle.IsValid()) {
                 LOG_WARN(Game, "Physics mesh source could not be loaded. Removing pending tag.");
                 shouldAbandon = true;
                 break;
@@ -604,15 +589,15 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
         bool shouldAbandon = false;
 
         for (const auto& shapeDesc : bodyDesc.shapes) {
-            if (shapeDesc.type == Component::PhysicsShapeType::Compound) {
+            if (shapeDesc.colliderHandle.IsValid()) {
                 auto* collider = ctx->assetManager->GetCollider(shapeDesc.colliderHandle);
                 if (!collider) {
-                    LOG_WARN(Game, "Physics compound collider not found. Removing loading tag.");
+                    LOG_WARN(Game, "Physics collider not found. Removing loading tag.");
                     shouldAbandon = true;
                     break;
                 }
                 if (collider->loadState == Engine::PhysicsColliderAsset::LoadState::FailedToLoad) {
-                    LOG_WARN(Game, "Physics compound collider failed to load. Removing loading tag.");
+                    LOG_WARN(Game, "Physics collider failed to load. Removing loading tag.");
                     shouldAbandon = true;
                     break;
                 }
@@ -677,8 +662,9 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
         bool bDegenerate = false;
         for (const auto& shape : bodyDesc.shapes) {
             if (shape.type == Component::PhysicsShapeType::Compound) {
-                if (shape.splineParams.spline.points.IsEmpty()) {
-                    LOG_WARN(Game, "PhysicsBodyDesc has compound shape with no spline source, skipping shape creation");
+                const bool bHasProcedural = !std::holds_alternative<std::monostate>(shape.proceduralParams) && Engine::CanBuildProceduralCollider(shape.proceduralParams);
+                if (shape.splineParams.spline.points.IsEmpty() && !bHasProcedural) {
+                    LOG_WARN(Game, "PhysicsBodyDesc has compound shape with no analytic source, skipping shape creation");
                     bDegenerate = true;
                     break;
                 }

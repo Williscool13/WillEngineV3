@@ -692,6 +692,10 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                             ctx->assetManager->UnloadModel(shape.meshSourceHandle);
                             shape.meshSourceHandle = {};
                         }
+                        if (shape.colliderHandle.IsValid()) {
+                            ctx->assetManager->UnloadCollider(shape.colliderHandle);
+                            shape.colliderHandle = {};
+                        }
                         shape.meshSourceModelId = Engine::ModelID::INVALID;
                         shape.proceduralParams = std::monostate{};
                         shape.splineParams.spline.points.Clear();

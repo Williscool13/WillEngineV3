@@ -574,6 +574,53 @@ PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& param
     return handle;
 }
 
+PhysicsColliderHandle AssetManager::LoadProceduralCollider(const ProceduralParams& params)
+{
+    const size_t idx = params.index();
+    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&idx), sizeof(idx));
+    std::visit([&hash]<typename T0>(const T0& v) {
+        if constexpr (!std::is_same_v<std::decay_t<T0>, std::monostate>) {
+            hash = fnv1a64(reinterpret_cast<const uint8_t*>(&v), sizeof(v), hash);
+        }
+    }, params);
+    constexpr uint8_t domain = 1;
+    hash = fnv1a64(&domain, sizeof(domain), hash);
+
+    PhysicsColliderID colliderId{hash};
+
+    PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
+    if (existingPtr != nullptr) {
+        PhysicsColliderHandle existingHandle = *existingPtr;
+        if (colliderAllocator.IsValid(existingHandle)) {
+            PhysicsColliderAsset& collider = colliders[existingHandle.index];
+            collider.refCount++;
+            collider.retireFrame = 0;
+            return existingHandle;
+        }
+        colliderIdToHandle.Remove(colliderId);
+    }
+
+    PhysicsColliderHandle handle = colliderAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate collider slot for procedural shape");
+        return PhysicsColliderHandle::INVALID;
+    }
+
+    static int32_t proceduralColliderCounter = 0;
+    PhysicsColliderAsset& collider = colliders[handle.index];
+    collider.selfHandle = handle;
+    collider.name = Core::InlineString<128>::Format("Procedural Collider %d", proceduralColliderCounter++);
+    collider.colliderId = colliderId;
+    collider.proceduralParams = params;
+    collider.refCount = 1;
+    collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
+
+    colliderIdToHandle[colliderId] = handle;
+
+    assetLoadManager->RequestPhysicsColliderLoad(&collider);
+    return handle;
+}
+
 PhysicsColliderAsset* AssetManager::GetCollider(PhysicsColliderHandle handle)
 {
     if (!colliderAllocator.IsValid(handle)) {

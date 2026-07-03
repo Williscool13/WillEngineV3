@@ -327,18 +327,44 @@ struct DebugArrow
     float width{0.03f};
 };
 
+/** Axis = local Y. `halfHeight` is the cylindrical body half-length (excludes the hemispherical caps). */
+struct DebugCapsule
+{
+    glm::vec3 center;
+    float radius;
+    float halfHeight;
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec4 color{0.0f, 1.0f, 0.0f, 1.0f};
+    float width{0.05f};
+};
+
+/** Axis = local Y. `halfHeight` is half the total height. */
+struct DebugCylinder
+{
+    glm::vec3 center;
+    float radius;
+    float halfHeight;
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec4 color{0.0f, 1.0f, 0.0f, 1.0f};
+    float width{0.05f};
+};
+
 #ifdef WDEBUG
 #define DEBUG_ADD_LINE(container, ...) container.PushBack(__VA_ARGS__)
 #define DEBUG_ADD_BOX(container, ...) container.PushBack(__VA_ARGS__)
 #define DEBUG_ADD_SPHERE(container, ...) container.PushBack(__VA_ARGS__)
 #define DEBUG_ADD_RECT(container, ...) container.PushBack(__VA_ARGS__)
 #define DEBUG_ADD_ARROW(container, ...) container.PushBack(__VA_ARGS__)
+#define DEBUG_ADD_CAPSULE(container, ...) container.PushBack(__VA_ARGS__)
+#define DEBUG_ADD_CYLINDER(container, ...) container.PushBack(__VA_ARGS__)
 #else
 #define DEBUG_ADD_LINE(container, ...) ((void)0)
 #define DEBUG_ADD_BOX(container, ...) ((void)0)
 #define DEBUG_ADD_SPHERE(container, ...) ((void)0)
 #define DEBUG_ADD_RECT(container, ...) ((void)0)
 #define DEBUG_ADD_ARROW(container, ...) ((void)0)
+#define DEBUG_ADD_CAPSULE(container, ...) ((void)0)
+#define DEBUG_ADD_CYLINDER(container, ...) ((void)0)
 #endif
 
 
@@ -491,6 +517,8 @@ struct ViewFamilyWatermarks
     size_t debugSpheres{256};
     size_t debugRects{256};
     size_t debugArrows{256};
+    size_t debugCapsules{256};
+    size_t debugCylinders{256};
     size_t uiDrawCommands{64};
     size_t uiGlyphQuads{512};
     size_t textDrawCalls{256};
@@ -758,6 +786,8 @@ struct ViewFamily
     ArenaVector<DebugSphere> debugSpheres{};
     ArenaVector<DebugRect> debugRects{};
     ArenaVector<DebugArrow> debugArrows{};
+    ArenaVector<DebugCapsule> debugCapsules{};
+    ArenaVector<DebugCylinder> debugCylinders{};
 
     // UI: ordered draw list mirrors Clay's command sequence for correct scissor interleaving
     ArenaVector<UIDrawCommand> uiDrawList{};

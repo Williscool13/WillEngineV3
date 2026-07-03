@@ -1814,6 +1814,8 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     totalSegments += viewFamily.debugSpheres.Size() * 96; // 32 segs * 3 circles (max LOD)
     totalSegments += viewFamily.debugRects.Size() * 4; // 4 edges per rect
     totalSegments += viewFamily.debugArrows.Size() * 20; // 4 head lines + 4 head base + 4 shaft edges + 4 start ring + 4 front ring
+    totalSegments += viewFamily.debugCylinders.Size() * 52; // 24 top + 24 bottom ring + 4 verticals
+    totalSegments += viewFamily.debugCapsules.Size() * 100; // 24 top + 24 bottom ring + 4 verticals + 4 cap arcs * 12
 
     if (totalSegments == 0) {
         return;
@@ -1855,6 +1857,68 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
             segments[segmentOffset++] = {
                 .a = s + glm::vec3(0.0f, glm::cos(a0), glm::sin(a0)) * r, .width = sphere.width, .b = s + glm::vec3(0.0f, glm::cos(a1), glm::sin(a1)) * r, .pad = 0.0f, .color = sphere.color
             };
+        }
+    }
+
+    for (const auto& cyl : viewFamily.debugCylinders) {
+        const float bound = std::sqrt(cyl.radius * cyl.radius + cyl.halfHeight * cyl.halfHeight);
+        if (!IntersectsSphere(mainViewFrustum, cyl.center, bound)) {
+            continue;
+        }
+        const glm::mat3 rot = glm::mat3_cast(cyl.rotation);
+        const glm::vec3 ax = rot * glm::vec3(0.0f, 1.0f, 0.0f);
+        const glm::vec3 ex = rot * glm::vec3(1.0f, 0.0f, 0.0f);
+        const glm::vec3 ez = rot * glm::vec3(0.0f, 0.0f, 1.0f);
+        const glm::vec3 top = cyl.center + ax * cyl.halfHeight;
+        const glm::vec3 bot = cyl.center - ax * cyl.halfHeight;
+        constexpr int N = 24;
+        for (int i = 0; i < N; ++i) {
+            const float a0 = static_cast<float>(i) / N * 2.0f * glm::pi<float>();
+            const float a1 = static_cast<float>(i + 1) / N * 2.0f * glm::pi<float>();
+            const glm::vec3 d0 = (glm::cos(a0) * ex + glm::sin(a0) * ez) * cyl.radius;
+            const glm::vec3 d1 = (glm::cos(a1) * ex + glm::sin(a1) * ez) * cyl.radius;
+            segments[segmentOffset++] = {.a = top + d0, .width = cyl.width, .b = top + d1, .pad = 0.0f, .color = cyl.color};
+            segments[segmentOffset++] = {.a = bot + d0, .width = cyl.width, .b = bot + d1, .pad = 0.0f, .color = cyl.color};
+            if (i % (N / 4) == 0) {
+                segments[segmentOffset++] = {.a = top + d0, .width = cyl.width, .b = bot + d0, .pad = 0.0f, .color = cyl.color};
+            }
+        }
+    }
+
+    for (const auto& cap : viewFamily.debugCapsules) {
+        const float bound = cap.halfHeight + cap.radius;
+        if (!IntersectsSphere(mainViewFrustum, cap.center, bound)) {
+            continue;
+        }
+        const glm::mat3 rot = glm::mat3_cast(cap.rotation);
+        const glm::vec3 ax = rot * glm::vec3(0.0f, 1.0f, 0.0f);
+        const glm::vec3 ex = rot * glm::vec3(1.0f, 0.0f, 0.0f);
+        const glm::vec3 ez = rot * glm::vec3(0.0f, 0.0f, 1.0f);
+        const glm::vec3 top = cap.center + ax * cap.halfHeight;
+        const glm::vec3 bot = cap.center - ax * cap.halfHeight;
+        constexpr int N = 24;
+        for (int i = 0; i < N; ++i) {
+            const float a0 = static_cast<float>(i) / N * 2.0f * glm::pi<float>();
+            const float a1 = static_cast<float>(i + 1) / N * 2.0f * glm::pi<float>();
+            const glm::vec3 d0 = (glm::cos(a0) * ex + glm::sin(a0) * ez) * cap.radius;
+            const glm::vec3 d1 = (glm::cos(a1) * ex + glm::sin(a1) * ez) * cap.radius;
+            segments[segmentOffset++] = {.a = top + d0, .width = cap.width, .b = top + d1, .pad = 0.0f, .color = cap.color};
+            segments[segmentOffset++] = {.a = bot + d0, .width = cap.width, .b = bot + d1, .pad = 0.0f, .color = cap.color};
+            if (i % (N / 4) == 0) {
+                segments[segmentOffset++] = {.a = top + d0, .width = cap.width, .b = bot + d0, .pad = 0.0f, .color = cap.color};
+            }
+        }
+        // Hemispherical caps: a great-circle half-arc in each of the ex/ez planes, per end.
+        constexpr int H = 12;
+        for (int i = 0; i < H; ++i) {
+            const float t0 = static_cast<float>(i) / H * glm::pi<float>();
+            const float t1 = static_cast<float>(i + 1) / H * glm::pi<float>();
+            const float c0 = glm::cos(t0), s0 = glm::sin(t0), c1 = glm::cos(t1), s1 = glm::sin(t1);
+            const glm::vec3 exr = ex * cap.radius, ezr = ez * cap.radius, axr = ax * cap.radius;
+            segments[segmentOffset++] = {.a = top + c0 * exr + s0 * axr, .width = cap.width, .b = top + c1 * exr + s1 * axr, .pad = 0.0f, .color = cap.color};
+            segments[segmentOffset++] = {.a = top + c0 * ezr + s0 * axr, .width = cap.width, .b = top + c1 * ezr + s1 * axr, .pad = 0.0f, .color = cap.color};
+            segments[segmentOffset++] = {.a = bot + c0 * exr - s0 * axr, .width = cap.width, .b = bot + c1 * exr - s1 * axr, .pad = 0.0f, .color = cap.color};
+            segments[segmentOffset++] = {.a = bot + c0 * ezr - s0 * axr, .width = cap.width, .b = bot + c1 * ezr - s1 * axr, .pad = 0.0f, .color = cap.color};
         }
     }
 

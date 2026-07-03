@@ -73,7 +73,50 @@ bool PhysicsColliderLoadSlot::Build()
         return true;
     }
 
-    // todo: procedural / imported model / text3D collider generation.
+    if (c->proceduralParams.has_value()) {
+        Core::Vector<Engine::SplineColliderPrimitive> prims(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
+        Core::Vector<Vec3> positions(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
+        Engine::PhysicsColliderKind kind{};
+        if (!Engine::BuildProceduralCollider(c->proceduralParams.value(), kind, prims, positions)) { return false; }
+
+        c->kind = kind;
+        if (kind == Engine::PhysicsColliderKind::Compound) {
+            if (prims.IsEmpty()) { return false; }
+            c->primitives = Core::HeapArray<Engine::SplineColliderPrimitive>(&memoryManager->Assets(), Core::AllocTag::Physics, prims.Size());
+            for (size_t i = 0; i < prims.Size(); ++i) { c->primitives[i] = prims[i]; }
+
+            // Compound may carry ConvexHull children whose vertices live in the shared positions pool.
+            if (!positions.IsEmpty()) {
+                c->positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::Physics, positions.Size());
+                for (size_t i = 0; i < positions.Size(); ++i) { c->positions[i] = positions[i]; }
+            }
+
+            Core::Vector<Vec3> boundsPts(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
+            for (const Engine::SplineColliderPrimitive& prim : prims) {
+                if (prim.type == Engine::SplineColliderPrimitiveType::ConvexHull) { continue; } // verts folded in via the positions pool below
+                Vec3 ext;
+                switch (prim.type) {
+                    case Engine::SplineColliderPrimitiveType::Capsule: ext = Vec3(prim.radius, prim.halfHeight + prim.radius, prim.radius); break;
+                    case Engine::SplineColliderPrimitiveType::Sphere: ext = Vec3(prim.radius); break;
+                    case Engine::SplineColliderPrimitiveType::Cylinder: ext = Vec3(prim.radius, prim.halfHeight, prim.radius); break;
+                    default: ext = prim.halfExtents; break;
+                }
+                boundsPts.PushBack(prim.position - ext);
+                boundsPts.PushBack(prim.position + ext);
+            }
+            for (size_t i = 0; i < positions.Size(); ++i) { boundsPts.PushBack(positions[i]); }
+            c->bounds = ComputeBounds(Core::Span<Vec3>(boundsPts.Data(), boundsPts.Size()));
+        }
+        else {
+            if (positions.IsEmpty()) { return false; }
+            c->positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::Physics, positions.Size());
+            for (size_t i = 0; i < positions.Size(); ++i) { c->positions[i] = positions[i]; }
+            c->bounds = ComputeBounds(Core::Span<Vec3>(c->positions.Data(), c->positions.Size()));
+        }
+        return true;
+    }
+
+    // todo: imported model / text3D collider generation.
     return false;
 }
 

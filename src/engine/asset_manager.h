@@ -122,6 +122,14 @@ public: // Physics colliders (CPU-only, analytic)
      */
     PhysicsColliderHandle LoadSplineCollider(const SplineParams& params);
 
+
+    /**
+     * Loads (or dedups) an analytic collider for a procedural shape. The kind (ConvexHull/Compound) is chosen by the analyzer. Keyed by hash(procedural params).
+     * @param params
+     * @return
+     */
+    PhysicsColliderHandle LoadProceduralCollider(const ProceduralParams& params);
+
     PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle);
 
     void UnloadCollider(PhysicsColliderHandle handle);

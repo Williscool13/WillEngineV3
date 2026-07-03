@@ -30,6 +30,8 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     debugSpheres = ArenaVector<DebugSphere>(&arena, wm.debugSpheres);
     debugRects = ArenaVector<DebugRect>(&arena, wm.debugRects);
     debugArrows = ArenaVector<DebugArrow>(&arena, wm.debugArrows);
+    debugCapsules = ArenaVector<DebugCapsule>(&arena, wm.debugCapsules);
+    debugCylinders = ArenaVector<DebugCylinder>(&arena, wm.debugCylinders);
 
     uiDrawList = ArenaVector<UIDrawCommand>(&arena, wm.uiDrawCommands);
     uiGlyphQuads = ArenaVector<UIGlyphQuad>(&arena, wm.uiGlyphQuads);
@@ -62,6 +64,8 @@ void FrameBuffer::Reinitialize()
     viewFamilyWatermarks.debugSpheres = std::max(viewFamilyWatermarks.debugSpheres, vf.debugSpheres.Size());
     viewFamilyWatermarks.debugRects = std::max(viewFamilyWatermarks.debugRects, vf.debugRects.Size());
     viewFamilyWatermarks.debugArrows = std::max(viewFamilyWatermarks.debugArrows, vf.debugArrows.Size());
+    viewFamilyWatermarks.debugCapsules = std::max(viewFamilyWatermarks.debugCapsules, vf.debugCapsules.Size());
+    viewFamilyWatermarks.debugCylinders = std::max(viewFamilyWatermarks.debugCylinders, vf.debugCylinders.Size());
     viewFamilyWatermarks.uiDrawCommands = std::max(viewFamilyWatermarks.uiDrawCommands, vf.uiDrawList.Size());
     viewFamilyWatermarks.uiGlyphQuads = std::max(viewFamilyWatermarks.uiGlyphQuads, vf.uiGlyphQuads.Size());
     viewFamilyWatermarks.textDrawCalls = std::max(viewFamilyWatermarks.textDrawCalls, vf.textDrawCalls.Size());

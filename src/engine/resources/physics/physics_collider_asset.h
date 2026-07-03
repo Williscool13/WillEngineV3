@@ -32,17 +32,25 @@ enum class SplineColliderPrimitiveType : uint8_t
 {
     Box,
     Capsule,
+    Sphere,
+    Cylinder,
+    ConvexHull,
 };
 
-/** One sub-shape of a Compound collider, in the collider's local space. Capsule axis is local Y (Jolt convention). */
+/**
+ * One sub-shape of a Compound collider, in the collider's local space. Capsule/Cylinder axis is local Y (Jolt convention).
+ * ConvexHull sub-shapes carry their vertices absolute (already positioned); position/rotation are identity and the verts live in the asset's `positions` pool at [hullOffset, hullOffset+hullCount).
+ */
 struct SplineColliderPrimitive
 {
     SplineColliderPrimitiveType type{SplineColliderPrimitiveType::Box};
     Vec3 position{0.0f};
     Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     Vec3 halfExtents{0.0f}; // Box
-    float radius{0.0f}; // Capsule
-    float halfHeight{0.0f}; // Capsule
+    float radius{0.0f}; // Capsule / Sphere / Cylinder
+    float halfHeight{0.0f}; // Capsule / Cylinder
+    uint32_t hullOffset{0}; // ConvexHull: first vertex index into the asset's positions pool
+    uint32_t hullCount{0}; // ConvexHull: vertex count
 };
 
 /**
