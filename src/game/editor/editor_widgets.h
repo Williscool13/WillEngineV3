@@ -9,10 +9,11 @@ namespace Game::Widgets
 {
 struct SliderOpts
 {
-    const char* format = "%.3f"; // printf format for the value shown in the input field
-    const char* tooltip = nullptr; // hover tooltip over the slider, input, and name; null for none
-    bool reset = false; // draw a reset button (before the name) that writes resetTo
-    double resetTo = 0.0; // value applied when the reset button is pressed
+    const char* format = "%.3f";
+    const char* tooltip = nullptr;
+    bool reset = false;
+    double resetTo = 0.0;
+    bool commitOnRelease = false;
 };
 
 /**
@@ -20,6 +21,7 @@ struct SliderOpts
  * The name follows the ImGui label convention so text after "##" is id-only and not shown, letting labels repeat across sections.
  */
 bool SliderFloat(const char* name, float* v, float vMin, float vMax, const SliderOpts& opts = {});
+
 bool SliderInt(const char* name, int* v, int vMin, int vMax, const SliderOpts& opts = {});
 
 /**

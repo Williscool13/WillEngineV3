@@ -33,11 +33,11 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    const RenderTargets& targets,
                                    StringID pipelineSID);
 
-// Donut-ported native-res TAA resolve (shaders/donut_taa.slang).
 StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
-                                        Core::Array<uint32_t, 2> renderExtent,
+                                        Core::Array<uint32_t, 2> inputExtent,
+                                        Core::Array<uint32_t, 2> outputExtent,
                                         const RenderTargets& targets);
 } // Render
 

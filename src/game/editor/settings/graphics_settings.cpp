@@ -149,6 +149,8 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
 
         ImGui::Spacing();
         ImGui::Separator();
+        if (Widgets::SliderFloat("Render Resolution##graphics", &state->projectConfig.resolutionScale, 0.5f, 1.0f, {.format = "%.3f", .commitOnRelease = true})) { changed = true; }
+
 
         const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
         int currentAA = static_cast<int>(state->lighting.aaConfig.mode);

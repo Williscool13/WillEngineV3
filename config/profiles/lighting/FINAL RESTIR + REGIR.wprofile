@@ -38,7 +38,7 @@
     "confidenceHistoryLength": 4.0,
     "confidenceSensitivity": 3.0,
     "confidenceStrength": 0.75,
-    "denoiserMode": 3,
+    "denoiserMode": 4,
     "reblur": {
       "antilagLuminanceSensitivity": 3.0,
       "antilagLuminanceSigmaScale": 2.0,
@@ -51,6 +51,7 @@
       "disocclusionThresholdAlternate": 0.05000000074505806,
       "enableAntiFirefly": true,
       "enablePrepass": true,
+      "enableStabilizationFireflyCleanup": false,
       "enableTemporalStabilization": true,
       "fastHistoryClampingSigmaScale": 2.0,
       "fireflySuppressorMinRelativeScale": 2.0,

@@ -112,7 +112,6 @@ struct HaltonSample
     float x, y;
 };
 
-// Halton(2,3) radical inverses for i = 1..16, minus the window means (0.470703125, 0.462962963) so the sequence sums to exactly zero and carries no DC image shift.
 // Units are pixels; one pixel is 2/extent in NDC, so the projection offset is sample * 2 / renderExtent.
 inline constexpr Core::Array<HaltonSample, HALTON_SEQUENCE_COUNT> HALTON_SEQUENCE{
     HaltonSample{0.02929688f, -0.12962963f},

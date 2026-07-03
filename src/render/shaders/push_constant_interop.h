@@ -575,6 +575,13 @@ SHADER_PUBLIC struct DonutTaaPushConstant
     SHADER_PUBLIC float invPqC;
     SHADER_PUBLIC uint32_t useHistoryClampRelax;
     SHADER_PUBLIC uint32_t useCatmullRom;
+    SHADER_PUBLIC float2 inputViewOrigin;
+    SHADER_PUBLIC float2 inputViewSize;
+    SHADER_PUBLIC float2 outputViewOrigin;
+    SHADER_PUBLIC float2 outputViewSize;
+    SHADER_PUBLIC float2 outputTextureSizeInv;
+    SHADER_PUBLIC float2 inputOverOutputViewSize;
+    SHADER_PUBLIC float2 outputOverInputViewSize;
 };
 
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant
@@ -1294,7 +1301,7 @@ SHADER_PUBLIC struct RTSunShadowPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint2 fullExtent;
     SHADER_PUBLIC uint32_t pixelScale;
-    SHADER_PUBLIC uint32_t outputDepthIndex;   // for half res
+    SHADER_PUBLIC uint32_t outputDepthIndex; // for half res
     SHADER_PUBLIC uint32_t outputGbufferIndex; // for half res
 };
 
@@ -1311,7 +1318,7 @@ SHADER_PUBLIC struct DirectionalLightPushConstant
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint2 shadowExtent;
     SHADER_PUBLIC uint32_t pixelScale;
-    SHADER_PUBLIC uint32_t shadowDepthIndex;  // for half res
+    SHADER_PUBLIC uint32_t shadowDepthIndex; // for half res
     SHADER_PUBLIC uint32_t shadowNormalIndex; // for half res
 };
 
@@ -1355,7 +1362,7 @@ SHADER_PUBLIC struct SigmaTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t shadowIndex;
-    SHADER_PUBLIC uint32_t historyIndex;       // ~0u when no history this frame
+    SHADER_PUBLIC uint32_t historyIndex; // ~0u when no history this frame
     SHADER_PUBLIC uint32_t historyLengthIndex; // ~0u when no history this frame
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t depthIndex;

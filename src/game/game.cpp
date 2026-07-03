@@ -347,6 +347,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
     frameBuffer->mainViewFamily.sigmaParams = state->lighting.sigmaParams;
     frameBuffer->mainViewFamily.iblIntensity = state->lighting.iblIntensity;
+    frameBuffer->mainViewFamily.resolutionScale = state->projectConfig.resolutionScale;
     if (state->debug.bEnablePortal) {
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }

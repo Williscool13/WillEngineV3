@@ -29,6 +29,8 @@ struct ProjectConfig
     /** Anti-aliasing is project-level (not bundled in any profile). */
     Core::AntiAliasingConfiguration aaConfig{};
 
+    float resolutionScale{1.0f};
+
     /** Camera projection. Aspect is viewport-derived, far is infinite (reverse-Z). */
     float gameCameraFovDegrees{70.0f};
     float gameCameraNearPlane{0.1f};

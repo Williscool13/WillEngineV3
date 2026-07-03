@@ -745,6 +745,7 @@ struct ViewFamily
     PostProcessConfiguration postProcessConfig{};
     SIGMAParams sigmaParams{};
     float iblIntensity{1.0f};
+    float resolutionScale{1.0f};
 
 
     // Debugging

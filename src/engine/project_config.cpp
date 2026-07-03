@@ -64,6 +64,10 @@ ProjectConfig ReadProjectConfig()
         ConfigSerialization::FromJson(j["aa"], config.aaConfig);
     }
 
+    if (j.contains("resolutionScale") && j["resolutionScale"].is_number()) {
+        config.resolutionScale = j["resolutionScale"].get<float>();
+    }
+
     if (j.contains("gameCameraFovDegrees") && j["gameCameraFovDegrees"].is_number()) {
         config.gameCameraFovDegrees = j["gameCameraFovDegrees"].get<float>();
     }
@@ -104,6 +108,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
     j["activeLightingProfile"] = std::string_view(config.activeLightingProfile.c_str(), config.activeLightingProfile.Size());
     j["activePostProcessProfile"] = std::string_view(config.activePostProcessProfile.c_str(), config.activePostProcessProfile.Size());
     j["aa"] = ConfigSerialization::ToJson(config.aaConfig);
+    j["resolutionScale"] = config.resolutionScale;
     j["gameCameraFovDegrees"] = config.gameCameraFovDegrees;
     j["gameCameraNearPlane"] = config.gameCameraNearPlane;
     j["editorCameraFovDegrees"] = config.editorCameraFovDegrees;

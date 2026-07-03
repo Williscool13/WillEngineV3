@@ -334,85 +334,69 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
 StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
-                                        Core::Array<uint32_t, 2> renderExtent,
+                                        Core::Array<uint32_t, 2> inputExtent,
+                                        Core::Array<uint32_t, 2> outputExtent,
                                         const RenderTargets& targets)
 {
-    // PQ history accumulation (RGBA16F == COLOR_ATTACHMENT_FORMAT), carried to nextframe as read-side history
-    graph.CreateTexture(SID("donut_taa_feedback"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture(SID("donut_taa_feedback"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CarryTextureToNextFrame(SID("donut_taa_feedback"), SID("donut_taa_feedback_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateTexture(SID("donut_taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-    // First frame (no history yet)
-    if (!graph.HasTexture(SID("donut_taa_feedback_history"))) {
-        RenderPass& seedPass = graph.AddPass(SID("Donut TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::AntiAliasing);
-        seedPass.ReadCopyImage(targets.colorOutput);
-        seedPass.WriteCopyImage(SID("donut_taa_feedback"));
-        seedPass.Execute([&, width = renderExtent[0], height = renderExtent[1], outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkImage drawImage = graph.GetImageHandle(outputColor);
-            VkImage feedbackImage = graph.GetImageHandle(SID("donut_taa_feedback"));
-
-            VkImageCopy2 copyRegion{};
-            copyRegion.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
-            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.srcSubresource.layerCount = 1;
-            copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.dstSubresource.layerCount = 1;
-            copyRegion.extent = {width, height, 1};
-
-            VkCopyImageInfo2 copyInfo{};
-            copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
-            copyInfo.srcImage = drawImage;
-            copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            copyInfo.dstImage = feedbackImage;
-            copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            copyInfo.regionCount = 1;
-            copyInfo.pRegions = &copyRegion;
-
-            vkCmdCopyImage2(cmd, &copyInfo);
-        });
-        return targets.colorOutput;
-    }
-
-    graph.CreateTexture(SID("donut_taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-
+    const bool bHasHistory = graph.HasTexture(SID("donut_taa_feedback_history"));
     const Core::DonutTAAConfiguration& donutConfig = viewFamily.aaConfig.donutTaa;
 
     RenderPass& taaPass = graph.AddPass(SID("Donut TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
     taaPass.ReadBuffer(SID("scene_data"));
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.gbufferOne);
-    taaPass.ReadSampledImage(SID("donut_taa_feedback_history"));
+    if (bHasHistory) {
+        taaPass.ReadSampledImage(SID("donut_taa_feedback_history"));
+    }
     taaPass.WriteStorageImage(SID("donut_taa_feedback"));
     taaPass.WriteStorageImage(SID("donut_taa_output"));
-    taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+    taaPass.Execute([&, pipelineManager, bHasHistory,
+            inWidth = static_cast<float>(inputExtent[0]), inHeight = static_cast<float>(inputExtent[1]),
+            outWidth = static_cast<float>(outputExtent[0]), outHeight = static_cast<float>(outputExtent[1]),
+            dispatchW = outputExtent[0], dispatchH = outputExtent[1],
             outputColor = targets.colorOutput, gbufferOne = targets.gbufferOne, donutConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             float pqC = donutConfig.maxRadiance;
             if (pqC < 1e-4f) { pqC = 1e-4f; }
             if (pqC > 1e8f) { pqC = 1e8f; }
 
             const uint32_t colorInputIdx = graph.GetSampledImageViewDescriptorIndex(outputColor);
+
+            const float newFrameWeight = bHasHistory ? donutConfig.newFrameWeight : 1.0f;
+            const uint32_t feedbackInputIdx = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("donut_taa_feedback_history")) : colorInputIdx;
+
             DonutTaaPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorInputIndex = colorInputIdx,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .feedbackInputIndex = graph.GetSampledImageViewDescriptorIndex(SID("donut_taa_feedback_history")),
-                // Relax mask is disabled (useHistoryClampRelax == 0) so this index is never sampled bound to a valid sampled index to satisfy descriptor validation.
+                .feedbackInputIndex = feedbackInputIdx,
                 .historyClampRelaxIndex = colorInputIdx,
                 .colorOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("donut_taa_output")),
                 .feedbackOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("donut_taa_feedback")),
                 .clampingFactor = donutConfig.clampingFactor,
-                .newFrameWeight = donutConfig.newFrameWeight,
+                .newFrameWeight = newFrameWeight,
                 .pqC = pqC,
                 .invPqC = 1.0f / pqC,
                 .useHistoryClampRelax = donutConfig.bUseHistoryClampRelax ? 1u : 0u,
                 .useCatmullRom = donutConfig.bUseCatmullRom ? 1u : 0u,
+                .inputViewOrigin = {0.0f, 0.0f},
+                .inputViewSize = {inWidth, inHeight},
+                .outputViewOrigin = {0.0f, 0.0f},
+                .outputViewSize = {outWidth, outHeight},
+                .outputTextureSizeInv = {1.0f / outWidth, 1.0f / outHeight},
+                .inputOverOutputViewSize = {inWidth / outWidth, inHeight / outHeight},
+                .outputOverInputViewSize = {outWidth / inWidth, outHeight / inHeight},
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("taa_donut"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DonutTaaPushConstant), &pushData);
 
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
+            uint32_t xDispatch = (dispatchW + 15) / 16;
+            uint32_t yDispatch = (dispatchH + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 

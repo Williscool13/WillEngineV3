@@ -168,6 +168,7 @@ private:
     ImguiWrapper* imgui{};
     ResourceManager* resourceManager{};
     RenderExtents* renderExtents{};
+    float lastResolutionScale{1.0f};
     PipelineManager* pipelineManager{};
 
     Core::ManagedArena renderArena{};

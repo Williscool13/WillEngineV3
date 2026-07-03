@@ -193,6 +193,13 @@ void RenderThread::ThreadMain()
                     renderGraph->InvalidateAllViewportAssociated();
                 }
 
+                if (frameBuffer.mainViewFamily.resolutionScale != lastResolutionScale) {
+                    vkQueueWaitIdle(context->graphicsQueue);
+                    renderExtents->UpdateScale(frameBuffer.mainViewFamily.resolutionScale);
+                    lastResolutionScale = frameBuffer.mainViewFamily.resolutionScale;
+                    renderGraph->InvalidateAllViewportAssociated();
+                }
+
                 // Wait for the frame N - 3 to finish using resources
                 RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
                 RenderFrame(currentFrameInFlight, currentRenderSynchronization, frameBuffer, imguiSnapshot);
@@ -346,11 +353,16 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     renderGraph->Reset(frameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
 
+    Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily;
+
     Core::Array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
+    Core::Array<uint32_t, 2> outputExtent = renderExtents->GetViewportExtent();
+
+    // For non-TAAU AA passes
+    Core::Array<uint32_t, 2> postAaExtent = renderExtent;
+
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
-
-    Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily;
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
     frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
     statisticsManager.scratch.visibleMeshletCount = readbackData->meshletCount;
@@ -598,6 +610,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupSelectionOutlinePass(*renderGraph, pipelineManager, renderExtent, targets, frameBuffer.selectedStableId);
         }
 
+        SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, targets.colorOutput, frameResourceLimits);
+
         switch (viewFamily.aaConfig.mode) {
             case Core::AntiAliasingMode::SMAA:
                 targets.colorOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
@@ -609,7 +623,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, SID("taa_naive"));
                 break;
             case Core::AntiAliasingMode::DonutTAA:
-                targets.colorOutput = SetupDonutTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
+                targets.colorOutput = SetupDonutTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets);
+                postAaExtent = outputExtent;
                 break;
             case Core::AntiAliasingMode::SMAAT2X:
                 targets.colorOutput = SetupSMAA_T2X(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
@@ -617,11 +632,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             default: break;
         }
 
-        targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
+        targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
 
-        SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, targets.colorOutput, frameResourceLimits);
-
-        SetupUIRender(*renderGraph, pipelineManager, viewFamily, renderExtent, targets.colorOutput);
+        SetupUIRender(*renderGraph, pipelineManager, viewFamily, postAaExtent, targets.colorOutput);
 
 
 #if WILL_EDITOR
@@ -722,7 +735,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_spatial")),
                         .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_history")),
                         .srcExtent = {dims.width, dims.height},
-                        .dstExtent = {renderExtent[0], renderExtent[1]},
+                        .dstExtent = {postAaExtent[0], postAaExtent[1]},
                         .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
                         .textureArrayIndex = textureArrayIndex,
                         .textureIndexInArray = textureIndexInArray,
@@ -733,8 +746,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(_cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                    uint32_t xDispatch = (renderExtent[0] + 15) / 16;
-                    uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+                    uint32_t xDispatch = (postAaExtent[0] + 15) / 16;
+                    uint32_t yDispatch = (postAaExtent[1] + 15) / 16;
                     vkCmdDispatch(_cmd, xDispatch, yDispatch, 1);
                 });
             }
@@ -752,7 +765,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     blitPass.Execute([&, colorOutput = targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
         VkImage drawImage = renderGraph->GetImageHandle(colorOutput);
 
-        Core::Array<uint32_t, 2> scaledExtent = renderExtents->GetScaledExtent();
         Core::Array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
         Core::Array<uint32_t, 2> vpExtent = renderExtents->GetViewportExtent();
 
@@ -763,7 +775,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blitRegion.dstSubresource.layerCount = 1;
         blitRegion.srcOffsets[0] = {0, 0, 0};
-        blitRegion.srcOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+        blitRegion.srcOffsets[1] = {static_cast<int32_t>(postAaExtent[0]), static_cast<int32_t>(postAaExtent[1]), 1};
         blitRegion.dstOffsets[0] = {static_cast<int32_t>(vpOffset[0]), static_cast<int32_t>(vpOffset[1] + vpExtent[1]), 0};
         blitRegion.dstOffsets[1] = {static_cast<int32_t>(vpOffset[0] + vpExtent[0]), static_cast<int32_t>(vpOffset[1]), 1};
 
@@ -799,8 +811,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     }
 
     if (frameBuffer.bTakeScreenshot && screenCapture->CanScreenshot()) {
-        screenCapture->PrepareScreenshotResources(renderExtent[0], renderExtent[1]);
-        renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+        screenCapture->PrepareScreenshotResources(postAaExtent[0], postAaExtent[1]);
+        renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, postAaExtent[0], postAaExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
         auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::ResourceCategory::Untagged);
         screenshotBlitPass.ReadBlitImage(targets.colorOutput);
@@ -811,9 +823,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             blitRegion.srcOffsets[0] = {0, 0, 0};
-            blitRegion.srcOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+            blitRegion.srcOffsets[1] = {static_cast<int32_t>(postAaExtent[0]), static_cast<int32_t>(postAaExtent[1]), 1};
             blitRegion.dstOffsets[0] = {0, 0, 0};
-            blitRegion.dstOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+            blitRegion.dstOffsets[1] = {static_cast<int32_t>(postAaExtent[0]), static_cast<int32_t>(postAaExtent[1]), 1};
 
             VkBlitImageInfo2 blitInfo{};
             blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
@@ -904,8 +916,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     // For Hi-Z, ReSTIR-DI, SVGF
     renderGraph->CarryTextureToNextFrame(targets.depthCopy, SID("depth_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    renderGraph->CarryTextureToNextFrame(targets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    {
+    renderGraph->CarryTextureToNextFrame(targets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT); {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
 #ifdef ENABLE_VULKAN_VALIDATION
