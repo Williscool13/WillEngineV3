@@ -23,6 +23,7 @@ add_library(engine STATIC
         core/texture_id.h
         core/sampler_id.h
         core/model_id.h
+        core/physics_collider_id.h
         include/frame_sync.h
         include/game_interface.cpp
         include/game_interface.h
@@ -52,6 +53,9 @@ add_library(engine STATIC
         resources/model/model_format.cpp
         resources/model/mesh_primitive_store.h
         resources/model/mesh_primitive_store.cpp
+        resources/physics/physics_collider_asset.h
+        resources/physics/collider_generation.h
+        resources/physics/collider_generation.cpp
         serialization/serialization.h
         serialization/config_serialization.cpp
         serialization/config_serialization.h
@@ -60,6 +64,8 @@ add_library(engine STATIC
         compression/compression.cpp
         compression/compression.h
         spline/spline.cpp
+        spline/spline_frames.cpp
+        spline/spline_frames.h
         core/hash.h
         include/frame_sync.cpp
         logging/engine_assert.h

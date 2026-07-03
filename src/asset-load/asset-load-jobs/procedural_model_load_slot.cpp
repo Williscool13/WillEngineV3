@@ -7,6 +7,7 @@
 #include "asset-load/asset_load_config.h"
 #include "core/overloaded.h"
 #include "engine/resources/model/static_model.h"
+#include "engine/spline/spline_frames.h"
 #include "render/resource_manager.h"
 #include "render/shaders/constants_interop.h"
 #include "render/vulkan/vk_utils.h"
@@ -2443,85 +2444,9 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     const int totalSpans = bClosed ? N : N - 1;
     const int totalRings = bClosed ? totalSpans * segs : totalSpans * segs + 1;
 
-    auto catmullScalar = [](float v0, float v1, float v2, float v3, float t) -> float {
-        return 0.5f * ((2.0f * v1) + (-v0 + v2) * t + (2.0f * v0 - 5.0f * v1 + 4.0f * v2 - v3) * (t * t) + (-v0 + 3.0f * v1 - 3.0f * v2 + v3) * (t * t * t));
-    };
-
-    auto getRollCP = [&](int i) -> float {
-        const int nR = static_cast<int>(p.spline.rolls.Size());
-        if (nR == 0) { return 0.0f; }
-        if (bClosed) { return p.spline.rolls[((i % nR) + nR) % nR]; }
-        return p.spline.rolls[std::clamp(i, 0, nR - 1)];
-    };
-
-    struct Frame
-    {
-        Vec3 pos;
-        Vec3 tangent;
-        Vec3 right;
-        Vec3 up;
-        Vec3 rRight;
-        Vec3 rUp;
-    };
-    Core::HeapArray<Frame> frames(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(totalRings));
-    Core::HeapArray<float> perRingRoll(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(totalRings));
-    int frameCount = 0;
-
-    for (int i = 0; i < totalRings; i++) {
-        int span;
-        float t;
-        if (!bClosed && i == totalRings - 1) {
-            span = N - 2;
-            t = 1.0f;
-        }
-        else {
-            span = i / segs;
-            t = static_cast<float>(i % segs) / static_cast<float>(segs);
-        }
-
-        const int nextSpan = bClosed ? (span + 1) % N : span + 1;
-        Vec3 tang = p.spline.EvaluateTangent(span, nextSpan, t);
-        if (glm::length(tang) < 1e-6f) { tang = frameCount == 0 ? Vec3{0, 0, 1} : frames[frameCount - 1].tangent; }
-        float roll;
-        if (p.spline.mode == Engine::SplineMode::Linear) {
-            roll = glm::mix(getRollCP(span), getRollCP(nextSpan), t);
-        }
-        else {
-            roll = catmullScalar(getRollCP(span - 1), getRollCP(span), getRollCP(nextSpan), getRollCP(nextSpan + 1), t);
-        }
-        perRingRoll[i] = roll;
-        frames[i] = {p.spline.EvaluatePosition(span, nextSpan, t), glm::normalize(tang), {}, {}, {}, {}};
-        frameCount++;
-    }
-
-    // Parallel transport frames
-    {
-        Vec3 worldUp = {0, 1, 0};
-        if (glm::abs(glm::dot(frames[0].tangent, worldUp)) > 0.99f) worldUp = {1, 0, 0};
-        frames[0].right = glm::normalize(glm::cross(worldUp, frames[0].tangent));
-        frames[0].up = glm::normalize(glm::cross(frames[0].tangent, frames[0].right));
-        for (int i = 1; i < totalRings; i++) {
-            Vec3 axis = glm::cross(frames[i - 1].tangent, frames[i].tangent);
-            float axisLen = glm::length(axis);
-            if (axisLen < 1e-6f) {
-                frames[i].right = frames[i - 1].right;
-            }
-            else {
-                float cosA = glm::clamp(glm::dot(frames[i - 1].tangent, frames[i].tangent), -1.0f, 1.0f);
-                glm::mat4 rot = glm::rotate(glm::mat4(1.0f), glm::acos(cosA), axis / axisLen);
-                frames[i].right = glm::normalize(Vec3(rot * glm::vec4(frames[i - 1].right, 0.0f)));
-            }
-            frames[i].up = glm::normalize(glm::cross(frames[i].tangent, frames[i].right));
-        }
-    }
-
-    // Apply per-ring roll (base rollAngle + interpolated per-point roll)
-    for (int i = 0; i < totalRings; i++) {
-        float totalRoll = glm::radians(p.rollAngle + perRingRoll[i]);
-        float cr = glm::cos(totalRoll), sr = glm::sin(totalRoll);
-        frames[i].rRight = cr * frames[i].right + sr * frames[i].up;
-        frames[i].rUp = -sr * frames[i].right + cr * frames[i].up;
-    }
+    using Frame = Engine::SplineFrame;
+    Core::Vector<Frame> frames(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Engine::SampleSplineFrames(p.spline, p.segmentsPerSpan, p.rollAngle, frames);
 
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -2540,15 +2465,9 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         TriangulateProfileCap(capOutline, capTris);
     }
 
-    const float halfSpacing = p.dualPathSpacing * 0.5f;
-
     Core::Vector<Vec2> laneOffsets(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     if (p.railing.bEnabled) {
         for (int li = 0; li < static_cast<int>(p.railing.lanes.Size()); li++) { laneOffsets.PushBack(p.railing.lanes[li]); }
-    }
-    else if (p.bDualPath) {
-        laneOffsets.PushBack(Vec2{-halfSpacing, 0.0f});
-        laneOffsets.PushBack(Vec2{halfSpacing, 0.0f});
     }
     else {
         laneOffsets.PushBack(Vec2{0.0f, 0.0f});
@@ -2563,23 +2482,23 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         across = glm::normalize(glm::cross(worldUp, fwd));
     };
 
+    // Railing lanes offset in world space (vertical = world up, lateral = tangent-derived across) so stacked rails stay parallel and untwisted; other modes stay frame-relative.
+    auto laneCenter = [&](const Frame& f, Vec2 off) -> Vec3 {
+        if (p.railing.bEnabled) {
+            Vec3 across, fwd;
+            horizAxes(f, across, fwd);
+            return f.pos + (off.x + p.railing.lateralOffset) * across + off.y * worldUp;
+        }
+        return f.pos + off.x * f.rRight + off.y * f.rUp;
+    };
+
     for (int rail = 0; rail < static_cast<int>(laneOffsets.Size()); rail++) {
         const Vec2 laneOff = laneOffsets[rail];
         const auto baseVertex = static_cast<uint32_t>(vertices.Size());
 
-        // Railing lanes offset in world space (vertical = world up, lateral = tangent-derived across) so stacked rails stay parallel and untwisted; other modes stay frame-relative.
-        auto laneCenter = [&](const Frame& f) -> Vec3 {
-            if (p.railing.bEnabled) {
-                Vec3 across, fwd;
-                horizAxes(f, across, fwd);
-                return f.pos + (laneOff.x + p.railing.lateralOffset) * across + laneOff.y * worldUp;
-            }
-            return f.pos + laneOff.x * f.rRight + laneOff.y * f.rUp;
-        };
-
         for (int i = 0; i < totalRings; i++) {
             const Frame& f = frames[i];
-            const Vec3 center = laneCenter(f);
+            const Vec3 center = laneCenter(f, laneOff);
             const float vCoord = (totalRings > 1) ? static_cast<float>(i) / static_cast<float>(totalRings - 1) : 0.0f;
             for (int j = 0; j < ringSize; j++) {
                 const SplineProfilePoint& pp = ring[j];
@@ -2614,7 +2533,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             const int outlineSize = static_cast<int>(capOutline.Size());
             auto addCap = [&](int ringIdx, Vec3 capNormal, bool reverse) {
                 const Frame& f = frames[ringIdx];
-                const Vec3 center = laneCenter(f);
+                const Vec3 center = laneCenter(f, laneOff);
                 const auto capBase = static_cast<uint32_t>(vertices.Size());
                 for (int k = 0; k < outlineSize; k++) {
                     const Vec2& o = capOutline[k];
@@ -2647,11 +2566,15 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         }
     }
 
-    if (!p.railing.bEnabled && p.bDualPath && p.bCrossPlanks) {
-        constexpr float plankThickness = 0.1f;
+    // Cross planks bridge exactly two lanes (deck boards/sleepers); 3+ lanes have no unambiguous pairing.
+    if (p.railing.bEnabled && p.railing.lanes.Size() == 2 && p.bCrossPlanks) {
+        const float plankThickness = std::max(0.001f, p.crossPlankThickness);
+        const float halfLength = std::max(0.001f, p.crossPlankLength) * 0.5f;
         const int plankInterval = std::max(1, p.crossPlankInterval);
+        const Vec2 laneA = p.railing.lanes[0];
+        const Vec2 laneB = p.railing.lanes[1];
 
-        auto makeVert = [](Vec3 pos, Vec3 normal, Vec3 tan, float u, float v) {
+        auto plankVert = [](Vec3 pos, Vec3 normal, Vec3 tan, float u, float v) {
             Engine::FullVertex vert{};
             vert.position = pos;
             vert.normal = normal;
@@ -2660,78 +2583,44 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             vert.color = {1, 1, 1, 1};
             return vert;
         };
+        auto addPlankFace = [&](Vec3 a, Vec3 b, Vec3 c, Vec3 d, Vec3 n, Vec3 tan) {
+            const bool flip = glm::dot(glm::cross(b - a, c - a), n) < 0.0f;
+            const auto fb = static_cast<uint32_t>(vertices.Size());
+            vertices.PushBack(plankVert(a, n, tan, 0, 0));
+            vertices.PushBack(plankVert(b, n, tan, 1, 0));
+            vertices.PushBack(plankVert(c, n, tan, 1, 1));
+            vertices.PushBack(plankVert(d, n, tan, 0, 1));
+            if (!flip) {
+                indices.PushBack(fb); indices.PushBack(fb + 1); indices.PushBack(fb + 2);
+                indices.PushBack(fb); indices.PushBack(fb + 2); indices.PushBack(fb + 3);
+            }
+            else {
+                indices.PushBack(fb); indices.PushBack(fb + 2); indices.PushBack(fb + 1);
+                indices.PushBack(fb); indices.PushBack(fb + 3); indices.PushBack(fb + 2);
+            }
+        };
 
+        // Plank length is an explicit world-space span centered on the ring, independent of segmentsPerSpan tessellation.
         const int plankMaxRing = bClosed ? totalRings : totalRings - 1;
         for (int i = 0; i < plankMaxRing; i += plankInterval) {
-            const Frame& f0 = frames[i];
-            const Frame& f1 = frames[bClosed ? (i + 1) % totalRings : i + 1];
+            const Frame& f = frames[i];
+            Vec3 across, fwd;
+            horizAxes(f, across, fwd);
 
-            // 8 corners of the plank box
-            const float plankTop = p.radius + p.crossPlankHeight;
-            const float plankBot = plankTop - plankThickness;
-            const Vec3 tl0 = f0.pos - halfSpacing * f0.rRight + plankTop * f0.rUp;
-            const Vec3 tr0 = f0.pos + halfSpacing * f0.rRight + plankTop * f0.rUp;
-            const Vec3 bl0 = f0.pos - halfSpacing * f0.rRight + plankBot * f0.rUp;
-            const Vec3 br0 = f0.pos + halfSpacing * f0.rRight + plankBot * f0.rUp;
-            const Vec3 tl1 = f1.pos - halfSpacing * f1.rRight + plankTop * f1.rUp;
-            const Vec3 tr1 = f1.pos + halfSpacing * f1.rRight + plankTop * f1.rUp;
-            const Vec3 bl1 = f1.pos - halfSpacing * f1.rRight + plankBot * f1.rUp;
-            const Vec3 br1 = f1.pos + halfSpacing * f1.rRight + plankBot * f1.rUp;
+            const Vec3 centerA = laneCenter(f, laneA) + p.crossPlankHeight * worldUp;
+            const Vec3 centerB = laneCenter(f, laneB) + p.crossPlankHeight * worldUp;
 
-            auto base = static_cast<uint32_t>(vertices.Size());
+            const Vec3 topA0 = centerA - halfLength * fwd, topA1 = centerA + halfLength * fwd;
+            const Vec3 topB0 = centerB - halfLength * fwd, topB1 = centerB + halfLength * fwd;
+            const Vec3 botA0 = topA0 - plankThickness * worldUp, botA1 = topA1 - plankThickness * worldUp;
+            const Vec3 botB0 = topB0 - plankThickness * worldUp, botB1 = topB1 - plankThickness * worldUp;
 
-            // Top face (normal = rUp)
-            vertices.PushBack(makeVert(tl0, f0.rUp, f0.rRight, 0, 0));
-            vertices.PushBack(makeVert(tr0, f0.rUp, f0.rRight, 1, 0));
-            vertices.PushBack(makeVert(tl1, f1.rUp, f1.rRight, 0, 1));
-            vertices.PushBack(makeVert(tr1, f1.rUp, f1.rRight, 1, 1));
-            // Bottom face (normal = -rUp)
-            vertices.PushBack(makeVert(bl0, -f0.rUp, f0.rRight, 0, 0));
-            vertices.PushBack(makeVert(br0, -f0.rUp, f0.rRight, 1, 0));
-            vertices.PushBack(makeVert(bl1, -f1.rUp, f1.rRight, 0, 1));
-            vertices.PushBack(makeVert(br1, -f1.rUp, f1.rRight, 1, 1));
-            // Front face (normal = -tangent)
-            vertices.PushBack(makeVert(tl0, -f0.tangent, f0.rRight, 0, 1));
-            vertices.PushBack(makeVert(tr0, -f0.tangent, f0.rRight, 1, 1));
-            vertices.PushBack(makeVert(bl0, -f0.tangent, f0.rRight, 0, 0));
-            vertices.PushBack(makeVert(br0, -f0.tangent, f0.rRight, 1, 0));
-            // Back face (normal = +tangent)
-            vertices.PushBack(makeVert(tl1, f1.tangent, f1.rRight, 0, 1));
-            vertices.PushBack(makeVert(tr1, f1.tangent, f1.rRight, 1, 1));
-            vertices.PushBack(makeVert(bl1, f1.tangent, f1.rRight, 0, 0));
-            vertices.PushBack(makeVert(br1, f1.tangent, f1.rRight, 1, 0));
-            // Left face (normal = -rRight)
-            vertices.PushBack(makeVert(tl0, -f0.rRight, f0.tangent, 0, 1));
-            vertices.PushBack(makeVert(tl1, -f1.rRight, f1.tangent, 1, 1));
-            vertices.PushBack(makeVert(bl0, -f0.rRight, f0.tangent, 0, 0));
-            vertices.PushBack(makeVert(bl1, -f1.rRight, f1.tangent, 1, 0));
-            // Right face (normal = +rRight)
-            vertices.PushBack(makeVert(tr0, f0.rRight, f0.tangent, 0, 1));
-            vertices.PushBack(makeVert(tr1, f1.rRight, f1.tangent, 1, 1));
-            vertices.PushBack(makeVert(br0, f0.rRight, f0.tangent, 0, 0));
-            vertices.PushBack(makeVert(br1, f1.rRight, f1.tangent, 1, 0));
-
-            // 6 faces x 2 triangles each
-            // Faces 0 (top), 3 (back), 4 (left) need flipped winding
-            for (int face = 0; face < 6; face++) {
-                uint32_t b = base + face * 4;
-                if (face == 0 || face == 3 || face == 4) {
-                    indices.PushBack(b);
-                    indices.PushBack(b + 2);
-                    indices.PushBack(b + 1);
-                    indices.PushBack(b + 1);
-                    indices.PushBack(b + 2);
-                    indices.PushBack(b + 3);
-                }
-                else {
-                    indices.PushBack(b);
-                    indices.PushBack(b + 1);
-                    indices.PushBack(b + 2);
-                    indices.PushBack(b + 1);
-                    indices.PushBack(b + 3);
-                    indices.PushBack(b + 2);
-                }
-            }
+            addPlankFace(topA0, topB0, topB1, topA1, worldUp, across);
+            addPlankFace(botA0, botB0, botB1, botA1, -worldUp, across);
+            addPlankFace(botA0, botB0, topB0, topA0, -fwd, across);
+            addPlankFace(botA1, botB1, topB1, topA1, fwd, across);
+            addPlankFace(botA0, botA1, topA1, topA0, -across, fwd);
+            addPlankFace(botB0, botB1, topB1, topB0, across, fwd);
         }
     }
 

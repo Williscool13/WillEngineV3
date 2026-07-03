@@ -18,6 +18,8 @@ add_library(asset-load STATIC
         asset-load-jobs/cubemap_load_slot.h
         asset-load-jobs/procedural_model_load_slot.cpp
         asset-load-jobs/procedural_model_load_slot.h
+        asset-load-jobs/physics_collider_load_slot.cpp
+        asset-load-jobs/physics_collider_load_slot.h
         asset-load-jobs/par_shapes_impl.cpp
         asset_load_utils.cpp
         asset_load_utils.h

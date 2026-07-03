@@ -16,6 +16,7 @@
 #include "asset-load-jobs/pipeline_load_slot.h"
 #include "asset-load-jobs/static_model_load_slot.h"
 #include "asset-load-jobs/procedural_model_load_slot.h"
+#include "asset-load-jobs/physics_collider_load_slot.h"
 #include "asset-load-jobs/texture_load_slot.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "asset-load-jobs/procedural_texture_load_slot.h"
@@ -70,6 +71,11 @@ public:
     void RequestProceduralModelLoad(Engine::StaticModel* model);
 
     bool TryDequeueProceduralModelComplete(StaticModelLoadComplete& outResult);
+
+    // Physics collider loading (CPU-only)
+    void RequestPhysicsColliderLoad(Engine::PhysicsColliderAsset* collider);
+
+    bool TryDequeuePhysicsColliderComplete(PhysicsColliderLoadComplete& outResult);
 
 
     // Texture loading
@@ -163,6 +169,12 @@ private:
     moodycamel::ConcurrentQueue<StaticModelLoadRequest> proceduralModelRequestQueue;
     moodycamel::ConcurrentQueue<StaticModelLoadComplete> proceduralModelLoadCompleteQueue;
 
+    // Physics Collider Loading (CPU-only)
+    Core::LockFreeHandleAllocator<PhysicsColliderLoadSlot, PHYSICS_COLLIDER_JOB_COUNT> physicsColliderLoadAllocator;
+    Core::Array<PhysicsColliderLoadSlot, PHYSICS_COLLIDER_JOB_COUNT> physicsColliderLoadSlots;
+    moodycamel::ConcurrentQueue<PhysicsColliderLoadRequest> physicsColliderRequestQueue;
+    moodycamel::ConcurrentQueue<PhysicsColliderLoadComplete> physicsColliderLoadCompleteQueue;
+
     // Texture Loading
     Core::LockFreeHandleAllocator<TextureLoadSlot, TEXTURE_JOB_COUNT> textureLoadAllocator;
     Core::Array<TextureLoadSlot, TEXTURE_JOB_COUNT> textureLoadSlots;
@@ -197,6 +209,8 @@ private:
     void OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
 
     void OnProceduralModelLoadComplete(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
+
+    void OnPhysicsColliderLoadComplete(bool success, PhysicsColliderSlotHandle slotHandle);
 
     void OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
 

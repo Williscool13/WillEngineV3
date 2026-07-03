@@ -498,6 +498,105 @@ bool AssetManager::IsModelFrozen(ModelID modelId) const
     return false;
 }
 
+static uint64_t HashSplineParams(const SplineParams& params)
+{
+    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.spline.points.Data()), params.spline.points.Size() * sizeof(Vec3));
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.spline.mode), sizeof(params.spline.mode), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.spline.bClosed), sizeof(params.spline.bClosed), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.spline.rolls.Data()), params.spline.rolls.Size() * sizeof(float), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.radius), sizeof(params.radius), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.rollAngle), sizeof(params.rollAngle), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides), sizeof(params.sides), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.segmentsPerSpan), sizeof(params.segmentsPerSpan), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCaps), sizeof(params.bCaps), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCrossPlanks), sizeof(params.bCrossPlanks), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankInterval), sizeof(params.crossPlankInterval), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankHeight), sizeof(params.crossPlankHeight), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankThickness), sizeof(params.crossPlankThickness), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankLength), sizeof(params.crossPlankLength), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.type), sizeof(params.profile.type), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.width), sizeof(params.profile.width), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.height), sizeof(params.profile.height), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerRadius), sizeof(params.profile.cornerRadius), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerSegments), sizeof(params.profile.cornerSegments), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.thickness), sizeof(params.profile.thickness), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.bEnabled), sizeof(params.railing.bEnabled), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.bPosts), sizeof(params.railing.bPosts), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postInterval), sizeof(params.railing.postInterval), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postBottom), sizeof(params.railing.postBottom), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postTop), sizeof(params.railing.postTop), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postSize), sizeof(params.railing.postSize), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postLateral), sizeof(params.railing.postLateral), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.lateralOffset), sizeof(params.railing.lateralOffset), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.railing.lanes.Data()), params.railing.lanes.Size() * sizeof(Vec2), hash);
+    return hash;
+}
+
+PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& params)
+{
+    uint64_t hash = HashSplineParams(params);
+    const uint8_t kind = static_cast<uint8_t>(PhysicsColliderKind::Compound);
+    hash = fnv1a64(&kind, sizeof(kind), hash);
+
+    PhysicsColliderID colliderId{hash};
+
+    PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
+    if (existingPtr != nullptr) {
+        PhysicsColliderHandle existingHandle = *existingPtr;
+        if (colliderAllocator.IsValid(existingHandle)) {
+            PhysicsColliderAsset& collider = colliders[existingHandle.index];
+            collider.refCount++;
+            collider.retireFrame = 0;
+            return existingHandle;
+        }
+        colliderIdToHandle.Remove(colliderId);
+    }
+
+    PhysicsColliderHandle handle = colliderAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate collider slot for spline");
+        return PhysicsColliderHandle::INVALID;
+    }
+
+    static int32_t splineColliderCounter = 0;
+    PhysicsColliderAsset& collider = colliders[handle.index];
+    collider.selfHandle = handle;
+    collider.name = Core::InlineString<128>::Format("Spline Collider %d", splineColliderCounter++);
+    collider.colliderId = colliderId;
+    collider.kind = PhysicsColliderKind::Compound;
+    collider.splineParams = params;
+    collider.refCount = 1;
+    collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
+
+    colliderIdToHandle[colliderId] = handle;
+
+    assetLoadManager->RequestPhysicsColliderLoad(&collider);
+    return handle;
+}
+
+PhysicsColliderAsset* AssetManager::GetCollider(PhysicsColliderHandle handle)
+{
+    if (!colliderAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &colliders[handle.index];
+}
+
+void AssetManager::UnloadCollider(PhysicsColliderHandle handle)
+{
+    if (!colliderAllocator.IsValid(handle)) {
+        LOG_WARN(Asset, "Attempted to unload invalid collider handle");
+        return;
+    }
+
+    PhysicsColliderAsset& collider = colliders[handle.index];
+    collider.refCount--;
+
+    if (collider.refCount == 0) {
+        collider.retireFrame = COLLIDER_RETIRE_PENDING;
+    }
+}
+
 ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer)
 {
     ResolveLoadResult loadCounts{};
@@ -558,6 +657,21 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         if (proceduralComplete.model->text3DFontHandle.IsValid()) {
             UnloadFont(proceduralComplete.model->text3DFontHandle);
             proceduralComplete.model->text3DFontHandle = {};
+        }
+    }
+
+    AssetLoad::PhysicsColliderLoadComplete colliderComplete{};
+    while (assetLoadManager->TryDequeuePhysicsColliderComplete(colliderComplete)) {
+        if (colliderComplete.bSuccess) {
+            colliderComplete.collider->loadState = PhysicsColliderAsset::LoadState::Loaded;
+            colliderComplete.collider->acquireFrame = ctx->currentRenderFrame;
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Physics collider generation succeeded: {}", colliderComplete.collider->name.c_str());
+            }
+        }
+        else {
+            colliderComplete.collider->loadState = PhysicsColliderAsset::LoadState::FailedToLoad;
+            LOG_ERROR(Asset, "Physics collider generation failed: {}", colliderComplete.collider->name.c_str());
         }
     }
 
@@ -732,6 +846,13 @@ void AssetManager::KickOffRetires()
             font.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
         }
     }
+    for (auto& collider : colliders) {
+        if (!colliderAllocator.IsValid(collider.selfHandle)) { continue; }
+        if (collider.refCount > 0 || collider.retireFrame != COLLIDER_RETIRE_PENDING) { continue; }
+        if (collider.loadState == PhysicsColliderAsset::LoadState::Loaded || collider.loadState == PhysicsColliderAsset::LoadState::FailedToLoad) {
+            collider.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+        }
+    }
 }
 
 bool AssetManager::ResolveUnloads()
@@ -767,6 +888,19 @@ bool AssetManager::ResolveUnloads()
     if (pendingModelUnloadLogCount > 0 && modelsUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - modelUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
         LOG_INFO(Asset, "{} model(s) unloaded", pendingModelUnloadLogCount);
         pendingModelUnloadLogCount = 0;
+    }
+
+    for (auto& collider : colliders) {
+        if (!colliderAllocator.IsValid(collider.selfHandle)) { continue; }
+        if (collider.refCount > 0 || collider.retireFrame == 0 || collider.retireFrame == COLLIDER_RETIRE_PENDING || currentFrame < collider.retireFrame) { continue; }
+
+        if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Collider unloaded: {}", collider.name.c_str()); }
+        PhysicsColliderHandle* stored = colliderIdToHandle.Find(collider.colliderId);
+        if (stored && *stored == collider.selfHandle) {
+            colliderIdToHandle.Remove(collider.colliderId);
+        }
+        colliderAllocator.Remove(collider.selfHandle);
+        collider = {};
     }
 
     int32_t texturesUnloadedThisTick{0};

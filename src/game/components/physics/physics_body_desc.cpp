@@ -60,7 +60,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
         }
         else if (auto* splm = registry.try_get<SplineMeshComponent>(entity); splm && !splm->spline.points.IsEmpty()) {
             PhysicsShapeDesc s{};
-            s.type = PhysicsShapeType::TriangleMesh;
+            s.type = PhysicsShapeType::Compound;
             s.bakedScale = scale;
             FillSplineParams(s.splineParams, *splm);
             component.shapes.PushBack(s);
@@ -76,7 +76,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
     // Source loaded (freeze-gated) in PhysicsMeshPendingKickoff so a model hot-reload can release this body's ref and re-acquire after the drain.
     bool bHasMeshShape = false;
     for (const auto& shape : component.shapes) {
-        if (shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh) {
+        if (shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh || shape.type == PhysicsShapeType::Compound) {
             bHasMeshShape = true;
             break;
         }
@@ -100,6 +100,10 @@ void PhysicsBodyDesc::OnUpdate(entt::registry& registry, entt::entity entity)
             ctx->assetManager->UnloadModel(shape.meshSourceHandle);
             shape.meshSourceHandle = {};
         }
+        if (shape.colliderHandle.IsValid()) {
+            ctx->assetManager->UnloadCollider(shape.colliderHandle);
+            shape.colliderHandle = {};
+        }
     }
     OnConstruct(registry, entity);
 }
@@ -112,6 +116,10 @@ void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
         if (shape.meshSourceHandle.IsValid()) {
             ctx->assetManager->UnloadModel(shape.meshSourceHandle);
             shape.meshSourceHandle = {};
+        }
+        if (shape.colliderHandle.IsValid()) {
+            ctx->assetManager->UnloadCollider(shape.colliderHandle);
+            shape.colliderHandle = {};
         }
     }
     registry.remove<PhysicsBodyComponent>(entity);
@@ -156,6 +164,7 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                 break;
             case Component::PhysicsShapeType::ConvexHull:
             case Component::PhysicsShapeType::TriangleMesh:
+            case Component::PhysicsShapeType::Compound:
                 shapeJson["meshSourceModelId"] = shape.meshSourceModelId.id;
                 shapeJson["proceduralType"] = shape.proceduralParams.index();
                 if (!shape.splineParams.spline.points.IsEmpty()) {
@@ -393,6 +402,7 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                 break;
             case PhysicsShapeType::ConvexHull:
             case PhysicsShapeType::TriangleMesh:
+            case PhysicsShapeType::Compound:
                 if (shapeJson.contains("meshSourceModelId")) {
                     shape.meshSourceModelId = Engine::ModelID(shapeJson["meshSourceModelId"].get<uint64_t>());
                 }
@@ -727,18 +737,24 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;
             const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
 
-            static constexpr const char* kShapeTypes[] = {"Box", "Sphere", "Capsule", "ConvexHull", "TriangleMesh"};
+            static constexpr const char* kShapeTypes[] = {"Box", "Sphere", "Capsule", "ConvexHull", "TriangleMesh", "Compound"};
             if (ImGui::BeginCombo("Shape Type", kShapeTypes[static_cast<int>(shape.type)])) {
                 for (int s = 0; s < IM_ARRAYSIZE(kShapeTypes); ++s) {
                     const bool bDisabled = bIsDynamic && s == static_cast<int>(PhysicsShapeType::TriangleMesh);
                     ImGui::BeginDisabled(bDisabled);
                     if (ImGui::Selectable(kShapeTypes[s], static_cast<int>(shape.type) == s)) {
                         auto newType = static_cast<PhysicsShapeType>(s);
-                        bool wasMesh = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh;
-                        bool isMesh = newType == PhysicsShapeType::ConvexHull || newType == PhysicsShapeType::TriangleMesh;
-                        if (wasMesh && !isMesh && shape.meshSourceHandle.IsValid()) {
-                            ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-                            shape.meshSourceHandle = {};
+                        bool wasMesh = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh || shape.type == PhysicsShapeType::Compound;
+                        bool isMesh = newType == PhysicsShapeType::ConvexHull || newType == PhysicsShapeType::TriangleMesh || newType == PhysicsShapeType::Compound;
+                        if (wasMesh && !isMesh) {
+                            if (shape.meshSourceHandle.IsValid()) {
+                                ctx->assetManager->UnloadModel(shape.meshSourceHandle);
+                                shape.meshSourceHandle = {};
+                            }
+                            if (shape.colliderHandle.IsValid()) {
+                                ctx->assetManager->UnloadCollider(shape.colliderHandle);
+                                shape.colliderHandle = {};
+                            }
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.splineParams.spline.points.Clear();
                             shape.text3DSource = {};
@@ -796,6 +812,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     break;
                 case PhysicsShapeType::ConvexHull:
                 case PhysicsShapeType::TriangleMesh:
+                case PhysicsShapeType::Compound:
                 {
                     bool bHasAny = false;
                     const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
@@ -838,6 +855,10 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                                 ctx->assetManager->UnloadModel(shape.meshSourceHandle);
                                 shape.meshSourceHandle = {};
                             }
+                            if (shape.colliderHandle.IsValid()) {
+                                ctx->assetManager->UnloadCollider(shape.colliderHandle);
+                                shape.colliderHandle = {};
+                            }
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
                             shape.splineParams.spline.points.Clear();
@@ -854,7 +875,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
             //
             {
-                const bool isMeshType = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh;
+                const bool isMeshType = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh || shape.type == PhysicsShapeType::Compound;
 
                 ImGui::BeginDisabled(!bModelLoaded && !isMeshType);
                 if (ImGui::Button("Auto-Fit")) {

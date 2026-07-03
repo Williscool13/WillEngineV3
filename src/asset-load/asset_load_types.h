@@ -17,6 +17,11 @@
 #include "engine/resources/model/model_types.h"
 
 
+namespace Engine
+{
+struct PhysicsColliderAsset;
+}
+
 namespace AssetLoad
 {
 class CubemapLoadSlot;
@@ -24,6 +29,7 @@ class TextureLoadSlot;
 class ProceduralTextureLoadSlot;
 class StaticModelLoadSlot;
 class ProceduralModelLoadSlot;
+class PhysicsColliderLoadSlot;
 class AudioLoadSlot;
 class PipelineLoadSlot;
 }
@@ -84,6 +90,7 @@ using AudioSlotHandle = Core::Handle<AudioLoadSlot>;
 using PipelineSlotHandle = Core::Handle<PipelineLoadSlot>;
 using ModelSlotHandle = Core::Handle<StaticModelLoadSlot>;
 using ProceduralModelSlotHandle = Core::Handle<ProceduralModelLoadSlot>;
+using PhysicsColliderSlotHandle = Core::Handle<PhysicsColliderLoadSlot>;
 using TextureSlotHandle = Core::Handle<TextureLoadSlot>;
 using CubemapSlotHandle = Core::Handle<CubemapLoadSlot>;
 using ProceduralTextureSlotHandle = Core::Handle<ProceduralTextureLoadSlot>;
@@ -126,6 +133,17 @@ struct StaticModelLoadRequest
 struct StaticModelLoadComplete
 {
     Engine::StaticModel* model;
+    bool bSuccess;
+};
+
+struct PhysicsColliderLoadRequest
+{
+    Engine::PhysicsColliderAsset* collider;
+};
+
+struct PhysicsColliderLoadComplete
+{
+    Engine::PhysicsColliderAsset* collider;
     bool bSuccess;
 };
 

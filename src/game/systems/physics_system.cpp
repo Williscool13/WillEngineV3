@@ -22,6 +22,8 @@
 #include "Jolt/Physics/Collision/Shape/SphereShape.h"
 #include "Jolt/Physics/Collision/Shape/ConvexHullShape.h"
 #include "Jolt/Physics/Collision/Shape/MeshShape.h"
+#include "Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h"
+#include "engine/resources/physics/physics_collider_asset.h"
 
 namespace Game
 {
@@ -253,7 +255,8 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
         constexpr glm::vec4 kSensorColor{1.0f, 0.85f, 0.0f, 1.0f};
         auto& vf = frameBuffer->mainViewFamily;
 
-        auto drawEntity = [&](const Component::PhysicsBodyDesc& bodyDesc, const Component::TransformComponent& transform) {
+        // World-space so child entities draw correctly (WorldTransformComponent may lag one frame; acceptable for debug).
+        auto drawEntity = [&](const Component::PhysicsBodyDesc& bodyDesc, const Component::WorldTransformComponent& transform) {
             const glm::vec4 color = bodyDesc.bIsSensor ? kSensorColor : kDebugColor;
             const glm::mat4 entityMat = glm::translate(glm::mat4(1.0f), transform.translation) * glm::mat4_cast(transform.rotation);
             for (const auto& shape : bodyDesc.shapes) {
@@ -298,30 +301,55 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
                         }
                         break;
                     }
+                    case Component::PhysicsShapeType::Compound:
+                    {
+                        const Engine::PhysicsColliderAsset* collider = ctx->assetManager->GetCollider(shape.colliderHandle);
+                        if (collider && collider->loadState == Engine::PhysicsColliderAsset::LoadState::Loaded) {
+                            for (const auto& prim : collider->primitives) {
+                                const glm::quat worldRot = transform.rotation * shape.rotation * prim.rotation;
+                                const glm::vec3 c = glm::vec3(entityMat * glm::vec4(prim.position * shape.bakedScale + shape.offset, 1.0f));
+                                glm::vec3 halfExtents;
+                                if (prim.type == Engine::SplineColliderPrimitiveType::Capsule) {
+                                    // Draw each capsule as its bounding box (local Y is the axis) for a readable, low-clutter view.
+                                    const float hh = prim.halfHeight * shape.bakedScale.y;
+                                    const float r = prim.radius * glm::max(shape.bakedScale.x, shape.bakedScale.z);
+                                    halfExtents = glm::vec3(r, hh + r, r);
+                                }
+                                else {
+                                    halfExtents = prim.halfExtents * shape.bakedScale;
+                                }
+                                DEBUG_ADD_BOX(vf.debugBoxes, {c, halfExtents, worldRot, color});
+                            }
+                        }
+                        else {
+                            DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, 0.25f, color});
+                        }
+                        break;
+                    }
                 }
             }
         };
 
         if (state->editor.physicsDebugMode == PhysicsDebugMode::On) {
-            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::TransformComponent>().each()) {
+            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::WorldTransformComponent>().each()) {
                 drawEntity(bodyDesc, transform);
             }
         }
         else if (state->editor.physicsDebugMode == PhysicsDebugMode::SensorOnly) {
-            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::TransformComponent>().each()) {
+            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::WorldTransformComponent>().each()) {
                 if (bodyDesc.bIsSensor) { drawEntity(bodyDesc, transform); }
             }
         }
         else if (state->editor.physicsDebugMode == PhysicsDebugMode::Selected) {
             for (entt::entity entity : state->editor.selectedEntities) {
                 const auto* bodyDesc = state->registry.try_get<Component::PhysicsBodyDesc>(entity);
-                const auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
+                const auto* transform = state->registry.try_get<Component::WorldTransformComponent>(entity);
                 if (bodyDesc && transform) { drawEntity(*bodyDesc, *transform); }
             }
         }
         else {
             // SensorAndTag
-            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::TransformComponent>().each()) {
+            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::WorldTransformComponent>().each()) {
                 if (bodyDesc.bIsSensor || state->registry.all_of<Component::DrawPhysicsDebugTag>(entity)) {
                     drawEntity(bodyDesc, transform);
                 }
@@ -431,6 +459,60 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
             }
             return result.Get();
         }
+        case Component::PhysicsShapeType::Compound:
+        {
+            if (!assetManager) { return nullptr; }
+            auto* collider = assetManager->GetCollider(desc.colliderHandle);
+            if (!collider || collider->loadState != Engine::PhysicsColliderAsset::LoadState::Loaded) { return nullptr; }
+            const auto& prims = collider->primitives;
+            if (prims.Size() == 0) { return nullptr; }
+
+            const glm::vec3 sc = desc.bakedScale;
+            auto makeSub = [&](const Engine::SplineColliderPrimitive& prim) -> JPH::ShapeRefC {
+                if (prim.type == Engine::SplineColliderPrimitiveType::Capsule) {
+                    const float radius = prim.radius * glm::max(sc.x, sc.z);
+                    const float halfHeight = prim.halfHeight * sc.y;
+                    JPH::CapsuleShapeSettings s(glm::max(0.001f, halfHeight), glm::max(0.001f, radius));
+                    auto r = s.Create();
+                    return r.HasError() ? JPH::ShapeRefC{} : r.Get();
+                }
+                const glm::vec3 he = prim.halfExtents * sc;
+                const float minHE = glm::min(he.x, glm::min(he.y, he.z));
+                const float convexRadius = glm::min(0.05f, glm::max(0.0f, minHE * 0.9f));
+                JPH::BoxShapeSettings s(JPH::Vec3(he.x, he.y, he.z), convexRadius);
+                auto r = s.Create();
+                return r.HasError() ? JPH::ShapeRefC{} : r.Get();
+            };
+
+            if (prims.Size() == 1) {
+                JPH::ShapeRefC sub = makeSub(prims[0]);
+                if (!sub) { return nullptr; }
+                const glm::vec3 pos = prims[0].position * sc;
+                JPH::RotatedTranslatedShapeSettings rt(
+                    JPH::Vec3(pos.x, pos.y, pos.z),
+                    JPH::Quat(prims[0].rotation.x, prims[0].rotation.y, prims[0].rotation.z, prims[0].rotation.w),
+                    sub);
+                auto r = rt.Create();
+                return r.HasError() ? nullptr : r.Get();
+            }
+
+            JPH::StaticCompoundShapeSettings compound;
+            for (const auto& prim : prims) {
+                JPH::ShapeRefC sub = makeSub(prim);
+                if (!sub) { return nullptr; }
+                const glm::vec3 pos = prim.position * sc;
+                compound.AddShape(
+                    JPH::Vec3(pos.x, pos.y, pos.z),
+                    JPH::Quat(prim.rotation.x, prim.rotation.y, prim.rotation.z, prim.rotation.w),
+                    sub);
+            }
+            auto result = compound.Create();
+            if (result.HasError()) {
+                LOG_WARN(Game, "Compound shape creation failed: {}", result.GetError().c_str());
+                return nullptr;
+            }
+            return result.Get();
+        }
     }
     return nullptr;
 }
@@ -450,6 +532,18 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
         bool shouldAbandon = false;
 
         for (auto& shapeDesc : bodyDesc.shapes) {
+            if (shapeDesc.type == Component::PhysicsShapeType::Compound) {
+                if (shapeDesc.colliderHandle.IsValid()) { continue; }
+                if (!shapeDesc.splineParams.spline.points.IsEmpty()) {
+                    shapeDesc.colliderHandle = ctx->assetManager->LoadSplineCollider(shapeDesc.splineParams);
+                }
+                if (!shapeDesc.colliderHandle.IsValid()) {
+                    LOG_WARN(Game, "Physics compound collider could not be loaded. Removing pending tag.");
+                    shouldAbandon = true;
+                    break;
+                }
+                continue;
+            }
             if (shapeDesc.type != Component::PhysicsShapeType::ConvexHull && shapeDesc.type != Component::PhysicsShapeType::TriangleMesh) { continue; }
             if (shapeDesc.meshSourceHandle.IsValid()) { continue; }
 
@@ -510,6 +604,24 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
         bool shouldAbandon = false;
 
         for (const auto& shapeDesc : bodyDesc.shapes) {
+            if (shapeDesc.type == Component::PhysicsShapeType::Compound) {
+                auto* collider = ctx->assetManager->GetCollider(shapeDesc.colliderHandle);
+                if (!collider) {
+                    LOG_WARN(Game, "Physics compound collider not found. Removing loading tag.");
+                    shouldAbandon = true;
+                    break;
+                }
+                if (collider->loadState == Engine::PhysicsColliderAsset::LoadState::FailedToLoad) {
+                    LOG_WARN(Game, "Physics compound collider failed to load. Removing loading tag.");
+                    shouldAbandon = true;
+                    break;
+                }
+                if (collider->loadState != Engine::PhysicsColliderAsset::LoadState::Loaded) {
+                    allReady = false;
+                    break;
+                }
+                continue;
+            }
             if (shapeDesc.type != Component::PhysicsShapeType::ConvexHull && shapeDesc.type != Component::PhysicsShapeType::TriangleMesh) { continue; }
 
             auto* model = ctx->assetManager->GetModel(shapeDesc.meshSourceHandle);
@@ -564,6 +676,14 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
     for (const auto& [entity, bodyDesc] : view.each()) {
         bool bDegenerate = false;
         for (const auto& shape : bodyDesc.shapes) {
+            if (shape.type == Component::PhysicsShapeType::Compound) {
+                if (shape.splineParams.spline.points.IsEmpty()) {
+                    LOG_WARN(Game, "PhysicsBodyDesc has compound shape with no spline source, skipping shape creation");
+                    bDegenerate = true;
+                    break;
+                }
+                continue;
+            }
             // Only these 2 need to verify source mesh
             if (shape.type != Component::PhysicsShapeType::ConvexHull && shape.type != Component::PhysicsShapeType::TriangleMesh) {
                 continue;

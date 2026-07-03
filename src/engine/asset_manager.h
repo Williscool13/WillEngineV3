@@ -10,6 +10,7 @@
 #include "engine/core/environment_map_id.h"
 #include "engine/core/font_id.h"
 #include "engine/core/model_id.h"
+#include "engine/core/physics_collider_id.h"
 #include "core/sampler_id.h"
 #include "engine/include/engine_context.h"
 #include "core/memory/handle_allocator.h"
@@ -27,6 +28,7 @@
 #include "engine/resources/font/font.h"
 #include "engine/resources/texture/texture.h"
 #include "engine/resources/model/static_model.h"
+#include "engine/resources/physics/physics_collider_asset.h"
 #include "game/components/render_components.h"
 
 namespace AssetLoad
@@ -111,6 +113,20 @@ public: // Models
     };
 
     const Core::FixedMap<ModelID, CachedModelMetadata>& GetModelCache() { return modelCache; }
+
+public: // Physics colliders (CPU-only, analytic)
+    /**
+     * Loads (or dedups) a Compound collider built analytically from a spline. Keyed by hash(spline) x kind.
+     * @param params
+     * @return
+     */
+    PhysicsColliderHandle LoadSplineCollider(const SplineParams& params);
+
+    PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle);
+
+    void UnloadCollider(PhysicsColliderHandle handle);
+
+    [[nodiscard]] uint32_t GetActiveColliderCount() const { return colliderAllocator.GetCount(); }
 
     [[nodiscard]] const CachedModelMetadata* GetModelMetadata(ModelID modelID) const
     {
@@ -303,6 +319,10 @@ private:
     Core::InlineMap<ModelID, StaticModelHandle, 4096> modelIdToHandle;
     Core::HandleAllocator<StaticModel, MAX_LOADED_MODELS> modelAllocator;
     Core::Array<StaticModel, MAX_LOADED_MODELS> models;
+
+    Core::InlineMap<PhysicsColliderID, PhysicsColliderHandle, 4096> colliderIdToHandle;
+    Core::HandleAllocator<PhysicsColliderAsset, MAX_LOADED_COLLIDERS> colliderAllocator;
+    Core::Array<PhysicsColliderAsset, MAX_LOADED_COLLIDERS> colliders;
 
     Core::HandleAllocator<Texture, MAX_LOADED_TEXTURES> textureAllocator;
     Core::Array<Texture, MAX_LOADED_TEXTURES> textures{};

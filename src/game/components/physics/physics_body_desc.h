@@ -33,6 +33,7 @@ enum class PhysicsShapeType : uint8_t
     Capsule,
     ConvexHull,
     TriangleMesh,
+    Compound,
 };
 
 enum class PhysicsMotionType : uint8_t
@@ -71,6 +72,7 @@ struct PhysicsShapeDesc
 
     // Transient
     Engine::StaticModelHandle meshSourceHandle{};
+    Engine::PhysicsColliderHandle colliderHandle{};
 
     union
     {

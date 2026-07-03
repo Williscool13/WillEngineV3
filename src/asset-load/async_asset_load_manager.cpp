@@ -13,6 +13,7 @@
 #include "core/memory/memory_manager.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/model/static_model.h"
+#include "engine/resources/physics/physics_collider_asset.h"
 #include "engine/resources/sampler/sampler.h"
 #include "engine/resources/texture/texture.h"
 #include "render/resource_manager.h"
@@ -85,6 +86,16 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             },
             [this](bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnProceduralModelLoadComplete(success, slotHandle, uploadStagingSlotHandle);
+            }
+        );
+    }
+
+    for (uint32_t i = 0; i < PHYSICS_COLLIDER_JOB_COUNT; ++i) {
+        physicsColliderLoadSlots[i].Initialize(
+            scheduler,
+            &memoryManager,
+            [this](bool success, PhysicsColliderSlotHandle slotHandle) {
+                OnPhysicsColliderLoadComplete(success, slotHandle);
             }
         );
     }
@@ -228,6 +239,21 @@ void AsyncAssetLoadManager::ThreadMain()
                 }
                 else {
                     proceduralModelRequestQueue.enqueue(proceduralReq);
+                }
+            }
+        }
+        //
+        {
+            ZoneScopedN("Process Physics Collider Requests");
+            PhysicsColliderLoadRequest colliderReq{};
+            if (physicsColliderRequestQueue.try_dequeue(colliderReq)) {
+                Core::Handle<PhysicsColliderLoadSlot> slotHandle = physicsColliderLoadAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    PhysicsColliderLoadSlot& slot = physicsColliderLoadSlots[slotHandle.index];
+                    slot.Launch(slotHandle, colliderReq.collider);
+                }
+                else {
+                    physicsColliderRequestQueue.enqueue(colliderReq);
                 }
             }
         }
@@ -463,6 +489,25 @@ bool AsyncAssetLoadManager::TryDequeueProceduralModelComplete(StaticModelLoadCom
     return proceduralModelLoadCompleteQueue.try_dequeue(outResult);
 }
 
+void AsyncAssetLoadManager::RequestPhysicsColliderLoad(Engine::PhysicsColliderAsset* collider)
+{
+    ZoneScoped;
+
+    if (!collider) {
+        LOG_ERROR(Asset, "RequestPhysicsColliderLoad called with null collider");
+        return;
+    }
+
+    physicsColliderRequestQueue.enqueue({collider});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+bool AsyncAssetLoadManager::TryDequeuePhysicsColliderComplete(PhysicsColliderLoadComplete& outResult)
+{
+    return physicsColliderLoadCompleteQueue.try_dequeue(outResult);
+}
+
 void AsyncAssetLoadManager::RequestTextureLoad(Engine::Texture* texture)
 {
     ZoneScoped;
@@ -672,6 +717,29 @@ void AsyncAssetLoadManager::OnProceduralModelLoadComplete(bool success, Procedur
     if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
         uploadStagingAllocator.Remove(uploadStagingSlotHandle);
     }
+
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+void AsyncAssetLoadManager::OnPhysicsColliderLoadComplete(bool success, PhysicsColliderSlotHandle slotHandle)
+{
+    ZoneScoped;
+
+    if (!physicsColliderLoadAllocator.IsValid(slotHandle)) {
+        LOG_ERROR(Asset, "OnPhysicsColliderLoadComplete called with invalid slot handle");
+        return;
+    }
+
+    PhysicsColliderLoadSlot& slot = physicsColliderLoadSlots[slotHandle.index];
+    physicsColliderLoadCompleteQueue.enqueue({slot.collider, success});
+
+    if (!success && slot.collider) {
+        LOG_ERROR(Asset, "Failed to generate physics collider: {}", slot.collider->name.c_str());
+    }
+
+    slot.Clear();
+    physicsColliderLoadAllocator.Remove(slotHandle);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();

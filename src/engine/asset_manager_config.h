@@ -14,6 +14,7 @@ inline constexpr uint32_t MAX_LOADED_SAMPLERS = 128;
 inline constexpr uint32_t MAX_LOADED_CUBEMAPS = 256;
 inline constexpr uint32_t MAX_LOADED_AUDIO = 128;
 inline constexpr uint32_t MAX_LOADED_FONTS = 64;
+inline constexpr uint32_t MAX_LOADED_COLLIDERS = 2048;
 
 inline constexpr uint32_t MAX_CACHED_MODELS = 4096;
 inline constexpr uint32_t MAX_CACHED_TEXTURES = 4096;
@@ -34,6 +35,7 @@ inline constexpr uint32_t ASSET_LOG_IDLE_SECONDS = 1;
 inline constexpr uint64_t TEXTURE_RETIRE_PENDING = UINT64_MAX;
 inline constexpr uint64_t MODEL_RETIRE_PENDING = UINT64_MAX;
 inline constexpr uint64_t FONT_RETIRE_PENDING = UINT64_MAX;
+inline constexpr uint64_t COLLIDER_RETIRE_PENDING = UINT64_MAX;
 
 }
 
