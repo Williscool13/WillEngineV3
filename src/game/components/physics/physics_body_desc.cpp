@@ -166,11 +166,11 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     sp["sides"] = shape.splineParams.sides;
                     sp["segmentsPerSpan"] = shape.splineParams.segmentsPerSpan;
                     sp["bCaps"] = shape.splineParams.bCaps;
-                    sp["bDualPath"] = shape.splineParams.bDualPath;
-                    sp["dualPathSpacing"] = shape.splineParams.dualPathSpacing;
                     sp["bCrossPlanks"] = shape.splineParams.bCrossPlanks;
                     sp["crossPlankInterval"] = shape.splineParams.crossPlankInterval;
                     sp["crossPlankHeight"] = shape.splineParams.crossPlankHeight;
+                    sp["crossPlankThickness"] = shape.splineParams.crossPlankThickness;
+                    sp["crossPlankLength"] = shape.splineParams.crossPlankLength;
                     sp["profileType"] = static_cast<int32_t>(shape.splineParams.profile.type);
                     sp["profileWidth"] = shape.splineParams.profile.width;
                     sp["profileHeight"] = shape.splineParams.profile.height;
@@ -596,11 +596,11 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                     spline.sides = sp.value("sides", 8);
                     spline.segmentsPerSpan = sp.value("segmentsPerSpan", 8);
                     spline.bCaps = sp.value("bCaps", true);
-                    spline.bDualPath = sp.value("bDualPath", false);
-                    spline.dualPathSpacing = sp.value("dualPathSpacing", 1.0f);
                     spline.bCrossPlanks = sp.value("bCrossPlanks", false);
                     spline.crossPlankInterval = sp.value("crossPlankInterval", 4);
                     spline.crossPlankHeight = sp.value("crossPlankHeight", 0.0f);
+                    spline.crossPlankThickness = sp.value("crossPlankThickness", 0.1f);
+                    spline.crossPlankLength = sp.value("crossPlankLength", 0.3f);
                     spline.profile.type = static_cast<Engine::SplineProfileType>(sp.value("profileType", 0));
                     spline.profile.width = sp.value("profileWidth", 0.4f);
                     spline.profile.height = sp.value("profileHeight", 0.4f);
@@ -873,12 +873,13 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
         auto renderGizmo = [&](int i, PhysicsShapeDesc& shape) {
             if (editShapeIdx != i || !transform || !hasGizmoClaim) return;
 
-            const Mat4 entityMat = glm::translate(Mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation);
+            const auto& world = registry.get<WorldTransformComponent>(entity);
+            const Mat4 entityMat = glm::translate(Mat4(1.0f), world.translation) * glm::mat4_cast(world.rotation);
             const Mat4 entityMatInv = glm::inverse(entityMat);
             const Vec3 shapeCenter = Vec3(entityMat * Vec4(shape.offset, 1.0f));
-            const Vec3 entityRight = transform->rotation * Vec3(1.0f, 0.0f, 0.0f);
-            const Vec3 entityUp = transform->rotation * Vec3(0.0f, 1.0f, 0.0f);
-            const Vec3 entityForward = transform->rotation * Vec3(0.0f, 0.0f, 1.0f);
+            const Vec3 entityRight = world.rotation * Vec3(1.0f, 0.0f, 0.0f);
+            const Vec3 entityUp = world.rotation * Vec3(0.0f, 1.0f, 0.0f);
+            const Vec3 entityForward = world.rotation * Vec3(0.0f, 0.0f, 1.0f);
             const auto& vd = viewFamily.mainView.currentViewData;
 
             auto* ctx = registry.ctx().get<Engine::EngineContext*>();

@@ -118,8 +118,31 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         ImGui::SameLine();
         if (ImGui::Checkbox("Shadow Caster", &shadowCaster)) { component.modelFlags.y = shadowCaster ? 1.0f : 0.0f; }
 
+        if (!component.modelId.IsValid()) {
+            if (ImGui::BeginCombo("Select Model", "")) {
+                const auto& modelCache = ctx->assetManager->GetModelCache();
+                for (const auto& [key, meta] : modelCache) {
+                    if (ImGui::Selectable(meta.name.c_str(), false)) {
+                        component.modelId = key;
+                        LoadStaticMeshPrimitive(component, registry, entity);
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            return {.requestRemoval = remove};
+        }
+
         const auto* modelMeta = ctx->assetManager->GetModelMetadata(component.modelId);
         ImGui::Text("Model: %s", modelMeta ? modelMeta->name.c_str() : "(invalid)");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("X##deselect_model")) {
+            UnloadStaticMeshPrimitive(registry, entity);
+            component.modelId = Engine::ModelID::INVALID;
+            component.primitiveOrdinal = ~0u;
+            registry.remove<RenderTransformComponent>(entity);
+            registry.remove<MultiframeDirtyTransformComponent>(entity);
+            return {.requestRemoval = remove};
+        }
 
         auto* meshRuntime = registry.try_get<MeshRuntime>(entity);
         Engine::StaticModel* model = meshRuntime ? ctx->assetManager->GetModel(meshRuntime->modelHandle) : nullptr;

@@ -459,7 +459,8 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
     if (bEditingOffset) {
         auto* transform = registry.try_get<TransformComponent>(entity);
         if (transform) {
-            const Mat4 entityMat = GetMatrix(*transform);
+            const auto& world = registry.get<WorldTransformComponent>(entity);
+            const Mat4 entityMat = GetMatrix(world);
             const Mat4 entityMatInv = glm::inverse(entityMat);
             const Vec3 pivotWorld = Vec3(entityMat * Vec4(component.renderOffset, 1.0f));
 
@@ -481,11 +482,11 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
             ImGuizmo::SetGizmoSizeClipSpace(0.10f);
             ImGuizmo::PushID(9900);
-            const Quat worldRenderRot = transform->rotation * component.renderRotation;
+            const Quat worldRenderRot = world.rotation * component.renderRotation;
             Mat4 gizmoMat = glm::translate(Mat4(1.0f), pivotWorld) * glm::mat4_cast(worldRenderRot);
             if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), state->editor.currentGizmoOperation, state->editor.currentGizmoMode, glm::value_ptr(gizmoMat), nullptr, snap)) {
                 component.renderOffset = Vec3(entityMatInv * Vec4(Vec3(gizmoMat[3]), 1.0f));
-                component.renderRotation = glm::inverse(transform->rotation) * glm::quat_cast(Mat3(gizmoMat));
+                component.renderRotation = glm::inverse(world.rotation) * glm::quat_cast(Mat3(gizmoMat));
                 auto* rt = registry.try_get<RenderTransformComponent>(entity);
                 if (rt) {
                     rt->renderOffset = component.renderOffset;

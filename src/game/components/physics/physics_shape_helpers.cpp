@@ -21,12 +21,12 @@ void FillSplineParams(Engine::SplineParams& out, const SplineMeshComponent& splm
     out.sides = splm.sides;
     out.segmentsPerSpan = splm.segmentsPerSpan;
     out.bCaps = splm.bCaps;
-    out.bDualPath = splm.bDualPath;
-    out.dualPathSpacing = splm.dualPathSpacing;
     out.bCrossPlanks = splm.bCrossPlanks;
     out.profile = splm.profile;
     out.crossPlankInterval = splm.crossPlankInterval;
     out.crossPlankHeight = splm.crossPlankHeight;
+    out.crossPlankThickness = splm.crossPlankThickness;
+    out.crossPlankLength = splm.crossPlankLength;
     out.railing = splm.railing;
 }
 

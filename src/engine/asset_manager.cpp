@@ -317,10 +317,11 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides), sizeof(params.sides), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.segmentsPerSpan), sizeof(params.segmentsPerSpan), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCaps), sizeof(params.bCaps), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bDualPath), sizeof(params.bDualPath), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.dualPathSpacing), sizeof(params.dualPathSpacing), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCrossPlanks), sizeof(params.bCrossPlanks), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankInterval), sizeof(params.crossPlankInterval), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankHeight), sizeof(params.crossPlankHeight), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankThickness), sizeof(params.crossPlankThickness), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankLength), sizeof(params.crossPlankLength), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.type), sizeof(params.profile.type), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.width), sizeof(params.profile.width), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.height), sizeof(params.profile.height), hash);

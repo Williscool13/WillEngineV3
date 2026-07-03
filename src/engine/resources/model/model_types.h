@@ -351,11 +351,11 @@ struct SplineParams
     int32_t sides{8};
     int32_t segmentsPerSpan{8};
     bool bCaps{true};
-    bool bDualPath{false};
-    float dualPathSpacing{1.0f};
     bool bCrossPlanks{false};
     int32_t crossPlankInterval{4};
     float crossPlankHeight{0.0f};
+    float crossPlankThickness{0.1f};
+    float crossPlankLength{0.3f};
     SplineProfile profile{};
     SplineRailing railing{};
 };

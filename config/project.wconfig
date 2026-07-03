@@ -26,13 +26,13 @@
       "varianceGammaLuma": 1.0
     }
   },
-  "activeLightingProfile": "FINAL RESTIR + REGIR",
+  "activeLightingProfile": "Standard",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,
   "bAutoSaveProjectConfig": false,
   "bLimitFps": true,
-  "defaultScene": "Lighting 2",
+  "defaultScene": "New Scene",
   "editorCameraFovDegrees": 70.0,
   "editorCameraNearPlane": 0.10000000149011612,
   "frameLimitTarget": 60,
