@@ -137,10 +137,18 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
     for (auto [entity, bodyDesc] : physicsView.each()) {
         bool affected = false;
         for (auto& shape : bodyDesc.shapes) {
-            if (shape.meshSourceModelId.IsValid() && isHot(shape.meshSourceModelId) && shape.meshSourceHandle.IsValid()) {
-                ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-                shape.meshSourceHandle = {};
-                affected = true;
+            if (shape.meshSourceModelId.IsValid() && isHot(shape.meshSourceModelId)) {
+                if (shape.meshSourceHandle.IsValid()) {
+                    ctx->assetManager->UnloadModel(shape.meshSourceHandle);
+                    shape.meshSourceHandle = {};
+                    affected = true;
+                }
+
+                if (shape.colliderHandle.IsValid()) {
+                    ctx->assetManager->UnloadCollider(shape.colliderHandle);
+                    shape.colliderHandle = {};
+                    affected = true;
+                }
             }
         }
         if (affected) { physicsToRestart.PushBack(entity); }
@@ -211,10 +219,18 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
     for (auto [entity, bodyDesc] : physicsView.each()) {
         bool affected = false;
         for (auto& shape : bodyDesc.shapes) {
-            if (shape.text3DSource.IsValid() && isHot(shape.text3DSource.fontId) && shape.meshSourceHandle.IsValid()) {
-                ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-                shape.meshSourceHandle = {};
-                affected = true;
+            if (shape.text3DSource.IsValid() && isHot(shape.text3DSource.fontId)) {
+                if (shape.meshSourceHandle.IsValid()) {
+                    ctx->assetManager->UnloadModel(shape.meshSourceHandle);
+                    shape.meshSourceHandle = {};
+                    affected = true;
+                }
+
+                if (shape.colliderHandle.IsValid()) {
+                    ctx->assetManager->UnloadCollider(shape.colliderHandle);
+                    shape.colliderHandle = {};
+                    affected = true;
+                }
             }
         }
         if (affected) { physicsToRestart.PushBack(entity); }

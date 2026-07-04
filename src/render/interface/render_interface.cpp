@@ -42,7 +42,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
 
 void FrameBuffer::Initialize(ArenaSuballocator& pool, AllocTag tag)
 {
-    frameArena = ManagedArena(pool, 16ull * 1024 * 1024, tag);
+    frameArena = ManagedArena(pool, 32ull * 1024 * 1024, tag);
     mainViewFamily = ViewFamily(frameArena.Get());
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);

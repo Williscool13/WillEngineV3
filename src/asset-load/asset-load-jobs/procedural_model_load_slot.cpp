@@ -26,6 +26,7 @@
 #include "par/par_shapes_ext.h"
 #include "meshoptimizer/src/meshoptimizer.h"
 #include "text3d_geometry.h"
+#include "procedural_geometry.h"
 
 namespace AssetLoad
 {
@@ -394,58 +395,13 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(Core::Span<const Engine::FullVert
     // Procedural models strictly do not come with a material.
     // rawData.materials = Core::HeapArray<Primitive>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, materials.size());
 
+    // Calculate procedural model bounds from full fidelity buffers
     {
-        outputModel->physicsCache = PhysicsCache{};
-        auto& physicsCache = outputModel->physicsCache.value();
-
-        // Positions are available directly from remappedVertices
         Core::HeapArray<Vec3> allPositions(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, remappedVertices.Size());
         for (size_t i = 0; i < remappedVertices.Size(); ++i) {
             allPositions[i] = remappedVertices[i].position;
         }
-
-        Core::HeapArray<uint32_t> allIndices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, remappedIndices.Size());
-        for (size_t i = 0; i < remappedIndices.Size(); ++i) {
-            allIndices[i] = remappedIndices[i];
-        }
-
-        // Always need to compute bounds here for procedural; compute with full fidelity index buffer
         outputModel->bounds = ComputeBounds(allPositions);
-
-        // todo parameterize
-        constexpr size_t kSimplifyThreshold = 1500;
-        constexpr size_t kSimplifyFloor = 1500;
-        constexpr float kSimplifyRatio = 0.15f;
-        constexpr float kSimplifyError = 0.01f;
-        if (allIndices.Size() > kSimplifyThreshold) {
-            const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(allIndices.Size() * kSimplifyRatio));
-            Core::HeapArray<uint32_t> simplified(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, allIndices.Size());
-            const size_t simplifiedCount = meshopt_simplify(
-                simplified.Data(),
-                allIndices.Data(), allIndices.Size(),
-                &allPositions[0].x, allPositions.Size(), sizeof(Vec3),
-                target, kSimplifyError
-            );
-
-            Core::HeapArray<uint32_t> remap(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, allPositions.Size());
-            const size_t uniqueVerts = meshopt_generateVertexRemap(remap.Data(), simplified.Data(), simplifiedCount, allPositions.Data(), allPositions.Size(), sizeof(Vec3));
-
-            physicsCache.positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, uniqueVerts);
-            meshopt_remapVertexBuffer(physicsCache.positions.Data(), allPositions.Data(), allPositions.Size(), sizeof(Vec3), remap.Data());
-
-            physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, simplifiedCount);
-            meshopt_remapIndexBuffer(physicsCache.indices.Data(), simplified.Data(), simplifiedCount, remap.Data());
-        } else {
-            physicsCache.positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, allPositions.Size());
-            for (size_t i = 0; i < allPositions.Size(); ++i) {
-                physicsCache.positions[i] = allPositions[i];
-            }
-
-            physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, allIndices.Size());
-            for (size_t i = 0; i < allIndices.Size(); ++i) {
-                physicsCache.indices[i] = allIndices[i];
-            }
-        }
     }
 
     return true;
@@ -1705,379 +1661,40 @@ bool ProceduralModelLoadSlot::GenerateKleinBottle(const Engine::KleinBottleParam
 {
     ZoneScopedN("GenerateKleinBottle");
 
-    par_shapes_mesh* m = par_shapes_create_klein_bottle(std::max(3, p.slices), std::max(3, p.stacks));
-    if (!m) return false;
-
-    Core::HeapArray<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(m->npoints));
-    for (int i = 0; i < m->npoints; ++i) {
-        vertices[i].position = Vec3{m->points[i * 3], m->points[i * 3 + 1], m->points[i * 3 + 2]} * p.scale;
-        vertices[i].normal = m->normals ? glm::normalize(Vec3{m->normals[i * 3], m->normals[i * 3 + 1], m->normals[i * 3 + 2]}) : Vec3{0, 1, 0};
-        vertices[i].uv = {m->tcoords ? m->tcoords[i * 2] : 0.0f, m->tcoords ? m->tcoords[i * 2 + 1] : 0.0f};
-        vertices[i].tangent = {1, 0, 0, 1};
-        vertices[i].color = {1, 1, 1, 1};
-    }
-    Core::HeapArray<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(m->ntriangles) * 3);
-    for (int i = 0; i < m->ntriangles * 3; ++i) { indices[i] = static_cast<uint32_t>(m->triangles[i]); }
-    par_shapes_free_mesh(m);
-    return FinalizeGeometry(vertices, indices);
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    if (!GenerateKleinBottleGeometry(p, memoryManager->AssetsScratch(), vertices, indices)) { return false; }
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateTrefoilKnot(const Engine::TrefoilKnotParams& p)
 {
     ZoneScopedN("GenerateTrefoilKnot");
 
-    const float tubeRadius = glm::clamp(p.tubeRadius, 0.5f, 3.0f);
-    par_shapes_mesh* m = par_shapes_create_trefoil_knot(std::max(3, p.slices), std::max(3, p.stacks), tubeRadius);
-    if (!m) return false;
-
-    Core::HeapArray<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(m->npoints));
-    for (int i = 0; i < m->npoints; ++i) {
-        vertices[i].position = Vec3{m->points[i * 3], m->points[i * 3 + 1], m->points[i * 3 + 2]} * p.scale;
-        vertices[i].normal = m->normals ? glm::normalize(Vec3{m->normals[i * 3], m->normals[i * 3 + 1], m->normals[i * 3 + 2]}) : Vec3{0, 1, 0};
-        vertices[i].uv = {m->tcoords ? m->tcoords[i * 2] : 0.0f, m->tcoords ? m->tcoords[i * 2 + 1] : 0.0f};
-        vertices[i].tangent = {1, 0, 0, 1};
-        vertices[i].color = {1, 1, 1, 1};
-    }
-    Core::HeapArray<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(m->ntriangles) * 3);
-    for (int i = 0; i < m->ntriangles * 3; ++i) { indices[i] = static_cast<uint32_t>(m->triangles[i]); }
-    par_shapes_free_mesh(m);
-    return FinalizeGeometry(vertices, indices);
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    if (!GenerateTrefoilKnotGeometry(p, memoryManager->AssetsScratch(), vertices, indices)) { return false; }
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateCurvedRamp(const Engine::CurvedRampParams& p)
 {
     ZoneScopedN("GenerateCurvedRamp");
 
-    const float w = std::max(0.01f, p.width);
-    const float h = std::max(0.01f, p.height);
-    const float R = glm::clamp(p.radius, 0.01f, h);
-    const int seg = std::max(2, p.segments);
-    const float pi = glm::pi<float>();
-    const float hw = w * 0.5f;
-    const float fl = p.bHalfPipe ? std::max(0.0f, p.flatLength) : 0.0f;
-    const float lip = std::max(0.0f, p.lipHeight);
-
-    // Profile in YZ plane. Normals point toward the concave (rider) side.
-    // Curve 1 center: (Z=R, Y=R). Angle PI (top) to 3PI/2 (bottom).
-    // Curve 2 center: (Z=R+fl, Y=R). Angle -PI/2 (bottom) to 0 (top).
-    const int profCapacity = (h > R ? 2 : 0) + (seg + 1)
-        + (p.bHalfPipe ? (fl > 0.0f ? 1 : 0) + (seg + 1) + (h > R ? 2 : 0) : 0);
-    Core::HeapArray<Vec3> profile(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(profCapacity));
-    Core::HeapArray<Vec3> profileN(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(profCapacity));
-    int pi_ = 0;
-
-    if (h > R) {
-        profile[pi_] = {0.0f, lip + h, 0.0f};
-        profileN[pi_] = {0.0f, 0.0f, 1.0f};
-        pi_++;
-        profile[pi_] = {0.0f, lip + R, 0.0f};
-        profileN[pi_] = {0.0f, 0.0f, 1.0f};
-        pi_++;
-    }
-
-    for (int i = 0; i <= seg; i++) {
-        const float t = static_cast<float>(i) / seg;
-        const float angle = pi + t * (pi * 0.5f);
-        const float z = R + R * cosf(angle);
-        const float y = lip + R + R * sinf(angle);
-        profile[pi_] = {0.0f, y, z};
-        profileN[pi_] = glm::normalize(Vec3{0.0f, -sinf(angle), -cosf(angle)});
-        pi_++;
-    }
-
-    if (p.bHalfPipe) {
-        if (fl > 0.0f) {
-            profile[pi_] = {0.0f, lip, R + fl};
-            profileN[pi_] = {0.0f, 1.0f, 0.0f};
-            pi_++;
-        }
-
-        const float zCenter2 = R + fl;
-        for (int i = 0; i <= seg; i++) {
-            const float t = static_cast<float>(i) / seg;
-            const float angle = -pi * 0.5f + t * (pi * 0.5f);
-            const float z = zCenter2 + R * cosf(angle);
-            const float y = lip + R + R * sinf(angle);
-            profile[pi_] = {0.0f, y, z};
-            profileN[pi_] = glm::normalize(Vec3{0.0f, -sinf(angle), -cosf(angle)});
-            pi_++;
-        }
-
-        if (h > R) {
-            const float zBack = 2.0f * R + fl;
-            profile[pi_] = {0.0f, lip + R, zBack};
-            profileN[pi_] = {0.0f, 0.0f, -1.0f};
-            pi_++;
-            profile[pi_] = {0.0f, lip + h, zBack};
-            profileN[pi_] = {0.0f, 0.0f, -1.0f};
-            pi_++;
-        }
-    }
-
-    const int profCount = profCapacity;
-    const float totalDepth = p.bHalfPipe ? 2.0f * R + fl : R;
-
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
-
-    auto pushVert = [&](Vec3 pos, Vec3 n, float u, float v) {
-        Engine::FullVertex vtx{};
-        vtx.position = pos;
-        vtx.normal = n;
-        vtx.uv = {u, v};
-        vtx.tangent = {1, 0, 0, 1};
-        vtx.color = {1, 1, 1, 1};
-        vertices.PushBack(vtx);
-    };
-
-    // Riding surface: extrude profile along X
-    uint32_t surfBase = static_cast<uint32_t>(vertices.Size());
-    for (int side = 0; side < 2; side++) {
-        const float x = side == 0 ? -hw : hw;
-        const float u = side == 0 ? 0.0f : 1.0f;
-        for (int i = 0; i < profCount; i++) {
-            const float v = static_cast<float>(i) / (profCount - 1);
-            pushVert({x, profile[i].y, profile[i].z}, profileN[i], u, v);
-        }
-    }
-    for (int i = 0; i < profCount - 1; i++) {
-        uint32_t a0 = surfBase + i;
-        uint32_t a1 = surfBase + i + 1;
-        uint32_t b0 = surfBase + profCount + i;
-        uint32_t b1 = surfBase + profCount + i + 1;
-        const uint32_t tri[6] = {a0, a1, b0, b0, a1, b1};
-        indices.Append(tri, tri + 6);
-    }
-
-    // Back wall at Z=0
-    {
-        uint32_t base = static_cast<uint32_t>(vertices.Size());
-        Vec3 n = {0, 0, -1};
-        pushVert({-hw, 0, 0}, n, 0, 0);
-        pushVert({hw, 0, 0}, n, 1, 0);
-        pushVert({hw, lip + h, 0}, n, 1, 1);
-        pushVert({-hw, lip + h, 0}, n, 0, 1);
-        const uint32_t tri[6] = {base, base + 2, base + 1, base, base + 3, base + 2};
-        indices.Append(tri, tri + 6);
-    }
-
-    // Far wall (half-pipe only)
-    if (p.bHalfPipe) {
-        uint32_t base = static_cast<uint32_t>(vertices.Size());
-        Vec3 n = {0, 0, 1};
-        pushVert({-hw, 0, totalDepth}, n, 0, 0);
-        pushVert({hw, 0, totalDepth}, n, 1, 0);
-        pushVert({hw, lip + h, totalDepth}, n, 1, 1);
-        pushVert({-hw, lip + h, totalDepth}, n, 0, 1);
-        const uint32_t tri[6] = {base, base + 1, base + 2, base, base + 2, base + 3};
-        indices.Append(tri, tri + 6);
-    }
-
-    // Bottom
-    {
-        uint32_t base = static_cast<uint32_t>(vertices.Size());
-        Vec3 n = {0, -1, 0};
-        pushVert({-hw, 0, 0}, n, 0, 0);
-        pushVert({hw, 0, 0}, n, 1, 0);
-        pushVert({hw, 0, totalDepth}, n, 1, 1);
-        pushVert({-hw, 0, totalDepth}, n, 0, 1);
-        const uint32_t tri[6] = {base, base + 1, base + 2, base, base + 2, base + 3};
-        indices.Append(tri, tri + 6);
-    }
-
-    // Side walls
-    auto emitFan = [&](uint32_t base, int count, int side) {
-        for (int i = 1; i < count - 1; i++) {
-            if (side == 0) {
-                const uint32_t tri[3] = {base, base + (uint32_t)(i + 1), base + (uint32_t)i};
-                indices.Append(tri, tri + 3);
-            }
-            else {
-                const uint32_t tri[3] = {base, base + (uint32_t)i, base + (uint32_t)(i + 1)};
-                indices.Append(tri, tri + 3);
-            }
-        }
-    };
-
-    auto sideUV = [&](int i) -> Vec2 {
-        return {profile[i].z / std::max(totalDepth, 0.01f), profile[i].y / std::max(h, 0.01f)};
-    };
-
-    // Profile split index: end of curve 1 + flat section (where Y=0 before curve 2)
-    const int splitIdx = (h > R ? 2 : 0) + (seg + 1) + (fl > 0.0f ? 1 : 0);
-
-    for (int side = 0; side < 2; side++) {
-        const float x = side == 0 ? -hw : hw;
-        const Vec3 n = side == 0 ? Vec3{-1, 0, 0} : Vec3{1, 0, 0};
-
-        if (!p.bHalfPipe) {
-            uint32_t base = static_cast<uint32_t>(vertices.Size());
-            pushVert({x, 0, 0}, n, 0, 0);
-            pushVert({x, lip + h, 0}, n, 0, 1);
-            for (int i = 0; i < profCount; i++) {
-                auto uv = sideUV(i);
-                pushVert({x, profile[i].y, profile[i].z}, n, uv.x, uv.y);
-            }
-            pushVert({x, 0, totalDepth}, n, 1, 0);
-            emitFan(base, 2 + profCount + 1, side);
-        }
-        else {
-            // Near fan: bottom-near corner, wall 1, curve 1, flat
-            {
-                uint32_t base = static_cast<uint32_t>(vertices.Size());
-                pushVert({x, 0, 0}, n, 0, 0);
-                pushVert({x, lip + h, 0}, n, 0, 1);
-                for (int i = 0; i < splitIdx; i++) {
-                    auto uv = sideUV(i);
-                    pushVert({x, profile[i].y, profile[i].z}, n, uv.x, uv.y);
-                }
-                emitFan(base, 2 + splitIdx, side);
-            }
-            // Far fan: bottom-far corner, curve 2, wall 2
-            {
-                uint32_t base = static_cast<uint32_t>(vertices.Size());
-                pushVert({x, 0, totalDepth}, n, 1, 0);
-                for (int i = splitIdx; i < profCount; i++) {
-                    auto uv = sideUV(i);
-                    pushVert({x, profile[i].y, profile[i].z}, n, uv.x, uv.y);
-                }
-                pushVert({x, lip + h, totalDepth}, n, 1, 1);
-                emitFan(base, 1 + (profCount - splitIdx) + 1, side);
-            }
-        }
-    }
-
-    return FinalizeGeometry(vertices, indices);
+    if (!GenerateCurvedRampGeometry(p, memoryManager->AssetsScratch(), vertices, indices)) { return false; }
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateBowl(const Engine::BowlParams& p)
 {
     ZoneScopedN("GenerateBowl");
 
-    const float outerR = std::max(0.01f, p.radius);
-    const float h = std::max(0.01f, p.height);
-    const float cR = glm::clamp(p.curveRadius, 0.01f, h);
-    const float flatR = glm::clamp(p.flatRadius, 0.0f, outerR - cR);
-    const float lip = std::max(0.0f, p.lipHeight);
-    const int N = std::max(3, p.slices);
-    const int seg = std::max(2, p.segments);
-    const float pi = glm::pi<float>();
-
-    // Profile in YR plane (R = radial distance from center, Y = height).
-    // Revolved around Y axis. Normals point inward (toward bowl center).
-    // Curve center: (R = flatR, Y = cR). Angle 0 (wall) to -PI/2 (floor).
-    const int profCapacity = (h > cR ? 2 : 0) + (seg + 1) + (flatR > 0.0f ? 1 : 0);
-    Core::HeapArray<float> profR(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(profCapacity));
-    Core::HeapArray<float> profY(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(profCapacity));
-    Core::HeapArray<Vec2> profN(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, static_cast<size_t>(profCapacity));
-    int pci = 0;
-
-    // Vertical wall above the curve (if h > cR)
-    if (h > cR) {
-        profR[pci] = flatR + cR; profY[pci] = lip + h; profN[pci] = {-1.0f, 0.0f}; pci++;
-        profR[pci] = flatR + cR; profY[pci] = lip + cR; profN[pci] = {-1.0f, 0.0f}; pci++;
-    }
-
-    // Quarter-circle from wall down to floor
-    for (int i = 0; i <= seg; i++) {
-        const float t = static_cast<float>(i) / seg;
-        const float angle = -t * (pi * 0.5f); // 0 to -PI/2
-        profR[pci] = flatR + cR * cosf(angle);
-        profY[pci] = lip + cR + cR * sinf(angle);
-        profN[pci] = {-cosf(angle), -sinf(angle)};
-        pci++;
-    }
-
-    // Flat floor (if flatR > 0)
-    if (flatR > 0.0f) {
-        profR[pci] = 0.0f; profY[pci] = lip; profN[pci] = {0.0f, 1.0f}; pci++;
-    }
-
-    const int profCount = profCapacity;
-
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
-
-    // Revolve profile around Y axis
-    for (int j = 0; j <= N; j++) {
-        const float theta = static_cast<float>(j) / N * 2.0f * pi;
-        const float cx = cosf(theta), cz = sinf(theta);
-        for (int i = 0; i < profCount; i++) {
-            Engine::FullVertex v{};
-            v.position = {cx * profR[i], profY[i], cz * profR[i]};
-            v.normal = {cx * profN[i].x, profN[i].y, cz * profN[i].x};
-            v.uv = {static_cast<float>(j) / N, static_cast<float>(i) / (profCount - 1)};
-            v.tangent = {-cz, 0, cx, 1.0f};
-            v.color = {1, 1, 1, 1};
-            vertices.PushBack(v);
-        }
-    }
-
-    for (int j = 0; j < N; j++) {
-        for (int i = 0; i < profCount - 1; i++) {
-            uint32_t a0 = j * profCount + i;
-            uint32_t a1 = j * profCount + i + 1;
-            uint32_t b0 = (j + 1) * profCount + i;
-            uint32_t b1 = (j + 1) * profCount + i + 1;
-            const uint32_t tri[6] = {a0, a1, b0, b0, a1, b1};
-            indices.Append(tri, tri + 6);
-        }
-    }
-
-    // Bottom face at Y=0 (pivot point)
-    {
-        uint32_t base = static_cast<uint32_t>(vertices.Size());
-        Engine::FullVertex cv{};
-        cv.position = {0, 0, 0};
-        cv.normal = {0, -1, 0};
-        cv.uv = {0.5f, 0.5f};
-        cv.tangent = {1, 0, 0, 1};
-        cv.color = {1, 1, 1, 1};
-        vertices.PushBack(cv);
-
-        const float rimR = flatR + cR;
-        for (int j = 0; j < N; j++) {
-            const float theta = static_cast<float>(j) / N * 2.0f * pi;
-            Engine::FullVertex v{};
-            v.position = {cosf(theta) * rimR, 0.0f, sinf(theta) * rimR};
-            v.normal = {0, -1, 0};
-            v.uv = {cosf(theta) * 0.5f + 0.5f, sinf(theta) * 0.5f + 0.5f};
-            v.tangent = {1, 0, 0, 1};
-            v.color = {1, 1, 1, 1};
-            vertices.PushBack(v);
-        }
-        for (int j = 0; j < N; j++) {
-            const uint32_t tri[3] = {base, base + 1 + (uint32_t)j, base + 1 + (uint32_t)((j + 1) % N)};
-            indices.Append(tri, tri + 3);
-        }
-    }
-
-    // Outer wall (vertical cylinder at R = flatR + cR, from Y=0 to Y=lip+h)
-    {
-        const float wallR = flatR + cR;
-        uint32_t base = static_cast<uint32_t>(vertices.Size());
-        for (int j = 0; j <= N; j++) {
-            const float theta = static_cast<float>(j) / N * 2.0f * pi;
-            const float cx = cosf(theta), cz = sinf(theta);
-            for (int k = 0; k < 2; k++) {
-                Engine::FullVertex v{};
-                v.position = {cx * wallR, k == 0 ? 0.0f : lip + h, cz * wallR};
-                v.normal = {cx, 0, cz};
-                v.uv = {static_cast<float>(j) / N, static_cast<float>(k)};
-                v.tangent = {-cz, 0, cx, 1.0f};
-                v.color = {1, 1, 1, 1};
-                vertices.PushBack(v);
-            }
-        }
-        for (int j = 0; j < N; j++) {
-            uint32_t a0 = base + j * 2, a1 = base + j * 2 + 1;
-            uint32_t b0 = base + (j + 1) * 2, b1 = base + (j + 1) * 2 + 1;
-            const uint32_t tri[6] = {a0, a1, b0, a1, b1, b0};
-            indices.Append(tri, tri + 6);
-        }
-    }
-
-    return FinalizeGeometry(vertices, indices);
+    if (!GenerateBowlGeometry(p, memoryManager->AssetsScratch(), vertices, indices)) { return false; }
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateSpiralStaircase(const Engine::SpiralStaircaseParams& p)

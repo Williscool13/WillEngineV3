@@ -9,6 +9,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "core/containers/inline_vector.h"
+#include "engine/resources/font/font.h"
 
 namespace Engine
 {
@@ -627,5 +628,46 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
         return true;
     }
     return false;
+}
+
+static int32_t FindGlyphIndex(const Font& font, uint32_t codepoint)
+{
+    const uint32_t count = std::min(static_cast<uint32_t>(font.glyphs.Size()), static_cast<uint32_t>(font.glyphContourRanges.Size()));
+    for (uint32_t i = 0; i < count; ++i) {
+        if (font.glyphs[i].codepoint == codepoint) { return static_cast<int32_t>(i); }
+    }
+    return -1;
+}
+
+bool BuildText3DColliderPrimitives(const Font& font, const Text3DParams& params, Core::Vector<SplineColliderPrimitive>& out)
+{
+    const float scale = params.scale;
+    const float halfDepth = params.depth * 0.5f;
+
+    float penX = 0.0f;
+    for (size_t i = 0; i < params.text.Size(); ++i) {
+        const uint32_t cp = static_cast<uint8_t>(params.text.c_str()[i]);
+        const int32_t gi = FindGlyphIndex(font, cp);
+        if (gi < 0) { continue; }
+
+        const WGlyphInfo& g = font.glyphs[gi];
+        const WGlyphContourRange& gcr = font.glyphContourRanges[gi];
+        if (gcr.contourCount > 0) {
+            // Plane bounds are the glyph's outline box in the same EM space BuildText3DGeometry extrudes; the pen offset bakes into x before scaling.
+            const float x0 = (penX + g.planeLeft) * scale;
+            const float x1 = (penX + g.planeRight) * scale;
+            const float y0 = g.planeBottom * scale;
+            const float y1 = g.planeTop * scale;
+            const Vec3 he((x1 - x0) * 0.5f, (y1 - y0) * 0.5f, halfDepth);
+            if (he.x > 1e-5f && he.y > 1e-5f && he.z > 1e-5f) {
+                const Vec3 center((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, 0.0f);
+                PushBoxPrim(center, he, Quat(1.0f, 0.0f, 0.0f, 0.0f), out);
+            }
+        }
+
+        penX += g.advance + params.tracking;
+    }
+
+    return !out.IsEmpty();
 }
 } // Engine

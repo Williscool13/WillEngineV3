@@ -31,9 +31,7 @@ enum class PhysicsShapeType : uint8_t
     Box,
     Sphere,
     Capsule,
-    ConvexHull,
-    TriangleMesh,
-    Compound,
+    Collider,
 };
 
 enum class PhysicsMotionType : uint8_t
@@ -64,7 +62,7 @@ struct PhysicsShapeDesc
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 bakedScale{1.0f};
 
-    // Only used for ConvexHull / TriangleMesh (mutually exclusive; modelId has priority, then procedural, spline, text3D).
+    // Only used for Collider (mutually exclusive: modelId has priority, then procedural, spline, text3D).
     Engine::ModelID meshSourceModelId{};
     Engine::ProceduralParams proceduralParams{};
     Engine::SplineParams splineParams{};

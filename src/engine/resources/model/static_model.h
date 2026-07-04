@@ -110,8 +110,6 @@ public:
     Core::InlineVector<Core::BufferAcquireOperation, 8> bufferAcquireOps{};
     Core::InlineVector<Core::ImageAcquireOperation, 4> imageAcquireOps{};
 
-    std::optional<AssetLoad::PhysicsCache> physicsCache;
-
     // Populated by AssetManager, Only for spline models
     std::optional<SplineParams> splineParams{};
 

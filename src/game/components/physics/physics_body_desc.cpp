@@ -15,6 +15,7 @@
 
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
+#include "engine/resources/physics/collider_generation.h"
 #include "engine/engine_api.h"
 #include "game/components/core_components.h"
 #include "game/components/render/procedural_mesh_component.h"
@@ -28,6 +29,27 @@ static void ApplyRenderTransform(PhysicsShapeDesc& shape, const glm::vec3& scale
 {
     shape.offset = scale * renderOffset + renderRotation * shape.offset;
     shape.rotation = renderRotation * shape.rotation;
+}
+
+static bool IsMeshShapeType(PhysicsShapeType type)
+{
+    return type == PhysicsShapeType::Collider;
+}
+
+// A concave, non-analytic procedural (Klein Bottle, Trefoil Knot, Bowl, Curved Ramp): its only collider is a triangle mesh, so it cannot back a dynamic body.
+static bool ShapeIsConcaveExotic(const PhysicsShapeDesc& shape)
+{
+    if (!IsMeshShapeType(shape.type)) { return false; }
+    if (std::holds_alternative<std::monostate>(shape.proceduralParams)) { return false; }
+    return !Engine::CanBuildProceduralCollider(shape.proceduralParams);
+}
+
+static bool BodyHasConcaveExotic(const PhysicsBodyDesc& component)
+{
+    for (const auto& shape : component.shapes) {
+        if (ShapeIsConcaveExotic(shape)) { return true; }
+    }
+    return false;
 }
 
 void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -60,7 +82,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
         }
         else if (auto* splm = registry.try_get<SplineMeshComponent>(entity); splm && !splm->spline.points.IsEmpty()) {
             PhysicsShapeDesc s{};
-            s.type = PhysicsShapeType::Compound;
+            s.type = PhysicsShapeType::Collider;
             s.bakedScale = scale;
             FillSplineParams(s.splineParams, *splm);
             component.shapes.PushBack(s);
@@ -76,7 +98,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
     // Source loaded (freeze-gated) in PhysicsMeshPendingKickoff so a model hot-reload can release this body's ref and re-acquire after the drain.
     bool bHasMeshShape = false;
     for (const auto& shape : component.shapes) {
-        if (shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh || shape.type == PhysicsShapeType::Compound) {
+        if (shape.type == PhysicsShapeType::Collider) {
             bHasMeshShape = true;
             break;
         }
@@ -162,9 +184,7 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                 shapeJson["radius"] = shape.capsule.radius;
                 shapeJson["halfHeight"] = shape.capsule.halfHeight;
                 break;
-            case Component::PhysicsShapeType::ConvexHull:
-            case Component::PhysicsShapeType::TriangleMesh:
-            case Component::PhysicsShapeType::Compound:
+            case Component::PhysicsShapeType::Collider:
                 shapeJson["meshSourceModelId"] = shape.meshSourceModelId.id;
                 shapeJson["proceduralType"] = shape.proceduralParams.index();
                 if (!shape.splineParams.spline.points.IsEmpty()) {
@@ -372,7 +392,9 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
 
     for (const auto& shapeJson : json["shapes"]) {
         PhysicsShapeDesc shape{};
-        shape.type = static_cast<PhysicsShapeType>(shapeJson["type"].get<uint8_t>());
+        // Legacy migration: ConvexHull(3)/TriangleMesh(4)/Compound(5) collapsed into Collider(3)
+        const uint8_t rawType = shapeJson["type"].get<uint8_t>();
+        shape.type = rawType >= static_cast<uint8_t>(PhysicsShapeType::Collider) ? PhysicsShapeType::Collider : static_cast<PhysicsShapeType>(rawType);
 
         auto& o = shapeJson["offset"];
         shape.offset = {o[0].get<float>(), o[1].get<float>(), o[2].get<float>()};
@@ -400,9 +422,7 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                 shape.capsule.radius = shapeJson["radius"].get<float>();
                 shape.capsule.halfHeight = shapeJson["halfHeight"].get<float>();
                 break;
-            case PhysicsShapeType::ConvexHull:
-            case PhysicsShapeType::TriangleMesh:
-            case PhysicsShapeType::Compound:
+            case PhysicsShapeType::Collider:
                 if (shapeJson.contains("meshSourceModelId")) {
                     shape.meshSourceModelId = Engine::ModelID(shapeJson["meshSourceModelId"].get<uint64_t>());
                 }
@@ -681,30 +701,26 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
     ImGui::PopStyleColor();
 
     if (open) {
+        const bool bForbidDynamic = BodyHasConcaveExotic(component);
         const char* motionTypes[] = {"Static", "Kinematic", "Dynamic"};
         int currentMotion = static_cast<int>(component.motionType);
-        if (ImGui::Combo("Motion Type", &currentMotion, motionTypes, IM_ARRAYSIZE(motionTypes))) {
-            auto newMotion = static_cast<PhysicsMotionType>(currentMotion);
-            if (newMotion == PhysicsMotionType::Dynamic) {
-                for (auto& shape : component.shapes) {
-                    if (shape.type == PhysicsShapeType::TriangleMesh) {
-                        if (shape.meshSourceHandle.IsValid()) {
-                            ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-                            shape.meshSourceHandle = {};
-                        }
-                        if (shape.colliderHandle.IsValid()) {
-                            ctx->assetManager->UnloadCollider(shape.colliderHandle);
-                            shape.colliderHandle = {};
-                        }
-                        shape.meshSourceModelId = Engine::ModelID::INVALID;
-                        shape.proceduralParams = std::monostate{};
-                        shape.splineParams.spline.points.Clear();
-                        shape.text3DSource = {};
-                        shape.type = PhysicsShapeType::Box;
+        if (ImGui::BeginCombo("Motion Type", motionTypes[currentMotion])) {
+            for (int m = 0; m < IM_ARRAYSIZE(motionTypes); ++m) {
+                const bool bDisabled = bForbidDynamic && m == static_cast<int>(PhysicsMotionType::Dynamic);
+                ImGui::BeginDisabled(bDisabled);
+                if (ImGui::Selectable(motionTypes[m], currentMotion == m)) {
+                    const auto newMotion = static_cast<PhysicsMotionType>(m);
+                    if (newMotion != component.motionType) {
+                        component.motionType = newMotion;
+                        registry.patch<PhysicsBodyDesc>(entity);
                     }
                 }
+                if (bDisabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                    ImGui::SetTooltip("Concave procedural shapes (Klein Bottle, Trefoil Knot, Bowl, Curved Ramp) can only be Static or Kinematic.");
+                }
+                ImGui::EndDisabled();
             }
-            component.motionType = newMotion;
+            ImGui::EndCombo();
         }
 
         ImGui::DragFloat("Mass", &component.mass, 0.1f, 0.001f, 10000.0f);
@@ -734,6 +750,11 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             const bool bIsDynamic = component.motionType == PhysicsMotionType::Dynamic;
             const glm::vec3 scale = transform ? transform->scale : glm::vec3(1.0f);
 
+            bool bRenderSourceExotic = false;
+            if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
+                bRenderSourceExotic = !std::holds_alternative<std::monostate>(pm->params) && !Engine::CanBuildProceduralCollider(pm->params);
+            }
+
             Engine::StaticModelHandle fitHandle{};
             if (auto* rt = registry.try_get<MeshRuntime>(entity)) {
                 fitHandle = rt->modelHandle;
@@ -741,15 +762,17 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;
             const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
 
-            static constexpr const char* kShapeTypes[] = {"Box", "Sphere", "Capsule", "ConvexHull", "TriangleMesh", "Compound"};
+            static constexpr const char* kShapeTypes[] = {"Box", "Sphere", "Capsule", "Collider"};
             if (ImGui::BeginCombo("Shape Type", kShapeTypes[static_cast<int>(shape.type)])) {
                 for (int s = 0; s < IM_ARRAYSIZE(kShapeTypes); ++s) {
-                    const bool bDisabled = bIsDynamic && s == static_cast<int>(PhysicsShapeType::TriangleMesh);
+                    const auto candidate = static_cast<PhysicsShapeType>(s);
+                    // Exotics are concave and cannot be dynamic
+                    const bool bDisabled = bIsDynamic && candidate == PhysicsShapeType::Collider && bRenderSourceExotic;
                     ImGui::BeginDisabled(bDisabled);
                     if (ImGui::Selectable(kShapeTypes[s], static_cast<int>(shape.type) == s)) {
-                        auto newType = static_cast<PhysicsShapeType>(s);
-                        bool wasMesh = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh || shape.type == PhysicsShapeType::Compound;
-                        bool isMesh = newType == PhysicsShapeType::ConvexHull || newType == PhysicsShapeType::TriangleMesh || newType == PhysicsShapeType::Compound;
+                        auto newType = candidate;
+                        bool wasMesh = IsMeshShapeType(shape.type);
+                        bool isMesh = IsMeshShapeType(newType);
                         if (wasMesh && !isMesh) {
                             if (shape.meshSourceHandle.IsValid()) {
                                 ctx->assetManager->UnloadModel(shape.meshSourceHandle);
@@ -794,6 +817,9 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         }
                         registry.patch<PhysicsBodyDesc>(entity);
                     }
+                    if (bDisabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::SetTooltip("This concave procedural source only has a triangle-mesh collider; switch the body to Static or Kinematic to use it.");
+                    }
                     ImGui::EndDisabled();
                 }
                 ImGui::EndCombo();
@@ -814,9 +840,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     bAnyChange |= ImGui::DragFloat("Radius", &shape.capsule.radius, 0.01f, 0.001f, 100.0f);
                     bAnyChange |= ImGui::DragFloat("Half Height", &shape.capsule.halfHeight, 0.01f, 0.001f, 100.0f);
                     break;
-                case PhysicsShapeType::ConvexHull:
-                case PhysicsShapeType::TriangleMesh:
-                case PhysicsShapeType::Compound:
+                case PhysicsShapeType::Collider:
                 {
                     bool bHasAny = false;
                     const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
@@ -879,7 +903,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
             //
             {
-                const bool isMeshType = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh || shape.type == PhysicsShapeType::Compound;
+                const bool isMeshType = IsMeshShapeType(shape.type);
 
                 ImGui::BeginDisabled(!bModelLoaded && !isMeshType);
                 if (ImGui::Button("Auto-Fit")) {

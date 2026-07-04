@@ -59,7 +59,7 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
                            || std::is_same_v<T, Engine::HemisphereParams> || std::is_same_v<T, Engine::TetrahedronParams>
                            || std::is_same_v<T, Engine::OctahedronParams> || std::is_same_v<T, Engine::IcosahedronParams>
                            || std::is_same_v<T, Engine::DodecahedronParams>) {
-            shape.type = PhysicsShapeType::ConvexHull;
+            shape.type = PhysicsShapeType::Collider;
             shape.proceduralParams = params;
             shape.bakedScale = scale;
         }
@@ -68,7 +68,7 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
             shape.box.halfExtents = glm::vec3(0.5f) * scale;
         }
         else {
-            shape.type = PhysicsShapeType::TriangleMesh;
+            shape.type = PhysicsShapeType::Collider;
             shape.proceduralParams = params;
             shape.bakedScale = scale;
         }

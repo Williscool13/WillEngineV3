@@ -400,12 +400,8 @@ void StaticModelLoadSlot::PrepareUploadData()
         }
     }
 
-    //
-    {
-        outputModel->physicsCache = PhysicsCache{};
-        auto& physicsCache = outputModel->physicsCache.value();
-
-        // Decode packed positions
+    // Fallback bounds
+    if (outputModel->bounds.sphere.radius == 0.f) {
         Core::HeapArray<Vec3> allPositions(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, rawData.vertices.Size());
         for (size_t pi = 0; pi < rawData.primitives.Size(); ++pi) {
             const Primitive& prim = rawData.primitives[pi];
@@ -430,53 +426,7 @@ void StaticModelLoadSlot::PrepareUploadData()
                 };
             }
         }
-
-        Core::HeapArray<uint32_t> allIndices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, rawData.indices.Size());
-        for (size_t i = 0; i < rawData.indices.Size(); ++i) {
-            allIndices[i] = rawData.indices[i];
-        }
-
-        // If no bounds from model generation, compute them here (strictly worse)
-        // Compute with full fidelity vertex positions
-        if (outputModel->bounds.sphere.radius == 0.f) {
-            outputModel->bounds = ComputeBounds(allPositions);
-        }
-
-        // todo parameterize
-        constexpr size_t kSimplifyThreshold = 1500;
-        constexpr size_t kSimplifyFloor = 1500;
-        constexpr float kSimplifyRatio = 0.15f;
-        constexpr float kSimplifyError = 0.01f;
-        if (allIndices.Size() > kSimplifyThreshold) {
-            const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(allIndices.Size() * kSimplifyRatio));
-            Core::HeapArray<uint32_t> simplified(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, allIndices.Size());
-            const size_t simplifiedCount = meshopt_simplify(
-                simplified.Data(),
-                allIndices.Data(), allIndices.Size(),
-                &allPositions[0].x, allPositions.Size(), sizeof(Vec3),
-                target, kSimplifyError
-            );
-
-            Core::HeapArray<uint32_t> remap(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, allPositions.Size());
-            const size_t uniqueVerts = meshopt_generateVertexRemap(remap.Data(), simplified.Data(), simplifiedCount, allPositions.Data(), allPositions.Size(), sizeof(Vec3));
-
-            physicsCache.positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, uniqueVerts);
-            meshopt_remapVertexBuffer(physicsCache.positions.Data(), allPositions.Data(), allPositions.Size(), sizeof(Vec3), remap.Data());
-
-            physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, simplifiedCount);
-            meshopt_remapIndexBuffer(physicsCache.indices.Data(), simplified.Data(), simplifiedCount, remap.Data());
-        }
-        else {
-            physicsCache.positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, allPositions.Size());
-            for (size_t i = 0; i < allPositions.Size(); ++i) {
-                physicsCache.positions[i] = allPositions[i];
-            }
-
-            physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, allIndices.Size());
-            for (size_t i = 0; i < allIndices.Size(); ++i) {
-                physicsCache.indices[i] = allIndices[i];
-            }
-        }
+        outputModel->bounds = ComputeBounds(allPositions);
     }
 
     //
@@ -748,8 +698,7 @@ void StaticModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunct
             VkAccelerationStructureBuildSizesInfoKHR sizeInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
             vkGetAccelerationStructureBuildSizesKHR(context->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primCount, &sizeInfo);
 
-            const VkDeviceSize alignedASSize = (sizeInfo.accelerationStructureSize + 255ull) & ~255ull;
-            {
+            const VkDeviceSize alignedASSize = (sizeInfo.accelerationStructureSize + 255ull) & ~255ull; {
                 std::lock_guard lock(resourceManager->blasBufferAllocatorMutex);
                 props.blasAllocation = resourceManager->blasBufferAllocator.allocate(alignedASSize);
             }

@@ -80,12 +80,6 @@ struct UnpackedStaticModel
     Core::HeapArray<Engine::Node> nodes{};
 };
 
-struct PhysicsCache
-{
-    Core::HeapArray<Vec3> positions;
-    Core::HeapArray<uint32_t> indices;
-};
-
 using AudioSlotHandle = Core::Handle<AudioLoadSlot>;
 using PipelineSlotHandle = Core::Handle<PipelineLoadSlot>;
 using ModelSlotHandle = Core::Handle<StaticModelLoadSlot>;

@@ -442,52 +442,8 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
             JPH::CapsuleShapeSettings s(desc.capsule.halfHeight, desc.capsule.radius);
             return s.Create().Get();
         }
-        case Component::PhysicsShapeType::ConvexHull:
-        {
-            if (!assetManager) { return nullptr; }
-            auto* model = assetManager->GetModel(desc.meshSourceHandle);
-            if (!model || !model->physicsCache) { return nullptr; }
-            JPH::Array<JPH::Vec3> pts;
-            pts.reserve(model->physicsCache->positions.Size());
-            for (const auto& p : model->physicsCache->positions) {
-                const glm::vec3 sp = p * desc.bakedScale;
-                pts.push_back({sp.x, sp.y, sp.z});
-            }
-            JPH::ConvexHullShapeSettings s(pts);
-            auto result = s.Create();
-            if (result.HasError()) {
-                LOG_WARN(Game, "ConvexHull shape creation failed: {}", result.GetError().c_str());
-                return nullptr;
-            }
-            return result.Get();
-        }
-        case Component::PhysicsShapeType::TriangleMesh:
-        {
-            if (!assetManager) { return nullptr; }
-            auto* model = assetManager->GetModel(desc.meshSourceHandle);
-            if (!model || !model->physicsCache) { return nullptr; }
-            const auto& pos = model->physicsCache->positions;
-            const auto& idx = model->physicsCache->indices;
-            JPH::TriangleList tris;
-            tris.reserve(idx.Size() / 3);
-            const glm::vec3 sc = desc.bakedScale;
-            for (size_t i = 0; i + 2 < idx.Size(); i += 3) {
-                const glm::vec3 a = pos[idx[i]] * sc, b = pos[idx[i + 1]] * sc, c = pos[idx[i + 2]] * sc;
-                tris.push_back(JPH::Triangle(
-                    JPH::Float3(a.x, a.y, a.z),
-                    JPH::Float3(b.x, b.y, b.z),
-                    JPH::Float3(c.x, c.y, c.z)));
-            }
-            JPH::MeshShapeSettings s(tris);
-            auto result = s.Create();
-            if (result.HasError()) {
-                LOG_WARN(Game, "TriangleMesh shape creation failed: {}", result.GetError().c_str());
-                return nullptr;
-            }
-            return result.Get();
-        }
-        case Component::PhysicsShapeType::Compound:
-            // Compound shapes always source from a collider asset (handled at the top via colliderHandle).
+        case Component::PhysicsShapeType::Collider:
+            // Resolved above via colliderHandle; a Collider with no valid handle has nothing to build.
             return nullptr;
     }
     return nullptr;
@@ -508,47 +464,29 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
         bool shouldAbandon = false;
 
         for (auto& shapeDesc : bodyDesc.shapes) {
-            if (shapeDesc.type == Component::PhysicsShapeType::Compound) {
-                if (shapeDesc.colliderHandle.IsValid()) { continue; }
-                if (!shapeDesc.splineParams.spline.points.IsEmpty()) {
-                    shapeDesc.colliderHandle = ctx->assetManager->LoadSplineCollider(shapeDesc.splineParams);
-                }
-                else if (!std::holds_alternative<std::monostate>(shapeDesc.proceduralParams) && Engine::CanBuildProceduralCollider(shapeDesc.proceduralParams)) {
-                    shapeDesc.colliderHandle = ctx->assetManager->LoadProceduralCollider(shapeDesc.proceduralParams);
-                }
-                if (!shapeDesc.colliderHandle.IsValid()) {
-                    LOG_WARN(Game, "Physics compound collider could not be loaded. Removing pending tag.");
-                    shouldAbandon = true;
-                    break;
-                }
-                continue;
-            }
-            if (shapeDesc.type != Component::PhysicsShapeType::ConvexHull && shapeDesc.type != Component::PhysicsShapeType::TriangleMesh) { continue; }
-            if (shapeDesc.meshSourceHandle.IsValid() || shapeDesc.colliderHandle.IsValid()) { continue; }
+            if (shapeDesc.type != Component::PhysicsShapeType::Collider) { continue; }
+            if (shapeDesc.colliderHandle.IsValid()) { continue; }
 
             if (shapeDesc.meshSourceModelId.IsValid()) {
                 if (ctx->assetManager->IsModelFrozen(shapeDesc.meshSourceModelId)) { allArmed = false; break; }
-                shapeDesc.meshSourceHandle = ctx->assetManager->LoadModel(shapeDesc.meshSourceModelId);
+
+                const Engine::PhysicsColliderKind kind = bodyDesc.motionType == Component::PhysicsMotionType::Dynamic ? Engine::PhysicsColliderKind::ConvexHull : Engine::PhysicsColliderKind::TriangleMesh;
+                shapeDesc.colliderHandle = ctx->assetManager->LoadModelCollider(shapeDesc.meshSourceModelId, kind);
             }
             else if (!std::holds_alternative<std::monostate>(shapeDesc.proceduralParams)) {
-                // Analytic collider where available; otherwise the render-mesh physics path.
-                if (Engine::CanBuildProceduralCollider(shapeDesc.proceduralParams)) {
-                    shapeDesc.colliderHandle = ctx->assetManager->LoadProceduralCollider(shapeDesc.proceduralParams);
-                }
-                if (!shapeDesc.colliderHandle.IsValid()) {
-                    shapeDesc.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shapeDesc.proceduralParams);
-                }
+                shapeDesc.colliderHandle = ctx->assetManager->LoadProceduralCollider(shapeDesc.proceduralParams);
             }
             else if (!shapeDesc.splineParams.spline.points.IsEmpty()) {
-                shapeDesc.meshSourceHandle = ctx->assetManager->LoadSplineModel(shapeDesc.splineParams);
+                shapeDesc.colliderHandle = ctx->assetManager->LoadSplineCollider(shapeDesc.splineParams);
             }
             else if (shapeDesc.text3DSource.IsValid()) {
                 const Component::Text3DShapeSource& t = shapeDesc.text3DSource;
                 if (ctx->assetManager->IsFontFrozen(t.fontId)) { allArmed = false; break; }
-                shapeDesc.meshSourceHandle = ctx->assetManager->LoadText3DModel(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals);
+                shapeDesc.colliderHandle = ctx->assetManager->LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals);
             }
-            if (!shapeDesc.meshSourceHandle.IsValid() && !shapeDesc.colliderHandle.IsValid()) {
-                LOG_WARN(Game, "Physics mesh source could not be loaded. Removing pending tag.");
+
+            if (!shapeDesc.colliderHandle.IsValid()) {
+                LOG_WARN(Game, "Physics collider source could not be loaded. Removing pending tag.");
                 shouldAbandon = true;
                 break;
             }
@@ -589,44 +527,21 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
         bool shouldAbandon = false;
 
         for (const auto& shapeDesc : bodyDesc.shapes) {
-            if (shapeDesc.colliderHandle.IsValid()) {
-                auto* collider = ctx->assetManager->GetCollider(shapeDesc.colliderHandle);
-                if (!collider) {
-                    LOG_WARN(Game, "Physics collider not found. Removing loading tag.");
-                    shouldAbandon = true;
-                    break;
-                }
-                if (collider->loadState == Engine::PhysicsColliderAsset::LoadState::FailedToLoad) {
-                    LOG_WARN(Game, "Physics collider failed to load. Removing loading tag.");
-                    shouldAbandon = true;
-                    break;
-                }
-                if (collider->loadState != Engine::PhysicsColliderAsset::LoadState::Loaded) {
-                    allReady = false;
-                    break;
-                }
-                continue;
-            }
-            if (shapeDesc.type != Component::PhysicsShapeType::ConvexHull && shapeDesc.type != Component::PhysicsShapeType::TriangleMesh) { continue; }
+            if (!shapeDesc.colliderHandle.IsValid()) { continue; }
 
-            auto* model = ctx->assetManager->GetModel(shapeDesc.meshSourceHandle);
-            if (!model) {
-                LOG_WARN(Game, "Physics mesh source model not found. Removing loading tag.");
+            auto* collider = ctx->assetManager->GetCollider(shapeDesc.colliderHandle);
+            if (!collider) {
+                LOG_WARN(Game, "Physics collider not found. Removing loading tag.");
                 shouldAbandon = true;
                 break;
             }
-            if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-                LOG_WARN(Game, "Physics mesh source model failed to load. Removing loading tag.");
+            if (collider->loadState == Engine::PhysicsColliderAsset::LoadState::FailedToLoad) {
+                LOG_WARN(Game, "Physics collider failed to load. Removing loading tag.");
                 shouldAbandon = true;
                 break;
             }
-            if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+            if (collider->loadState != Engine::PhysicsColliderAsset::LoadState::Loaded) {
                 allReady = false;
-                break;
-            }
-            if (!model->physicsCache) {
-                LOG_WARN(Game, "Physics mesh cache unavailable. Removing loading tag.");
-                shouldAbandon = true;
                 break;
             }
         }
@@ -661,22 +576,14 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
     for (const auto& [entity, bodyDesc] : view.each()) {
         bool bDegenerate = false;
         for (const auto& shape : bodyDesc.shapes) {
-            if (shape.type == Component::PhysicsShapeType::Compound) {
-                const bool bHasProcedural = !std::holds_alternative<std::monostate>(shape.proceduralParams) && Engine::CanBuildProceduralCollider(shape.proceduralParams);
-                if (shape.splineParams.spline.points.IsEmpty() && !bHasProcedural) {
-                    LOG_WARN(Game, "PhysicsBodyDesc has compound shape with no analytic source, skipping shape creation");
-                    bDegenerate = true;
-                    break;
-                }
-                continue;
-            }
-            // Only these 2 need to verify source mesh
-            if (shape.type != Component::PhysicsShapeType::ConvexHull && shape.type != Component::PhysicsShapeType::TriangleMesh) {
-                continue;
-            }
+            if (shape.type != Component::PhysicsShapeType::Collider) { continue; }
 
-            if (!shape.meshSourceModelId.IsValid() && std::holds_alternative<std::monostate>(shape.proceduralParams) && shape.splineParams.spline.points.IsEmpty()) {
-                LOG_WARN(Game, "PhysicsBodyDesc has mesh shape with no mesh source, skipping shape creation");
+            const bool bHasSource = shape.meshSourceModelId.IsValid()
+                                    || !std::holds_alternative<std::monostate>(shape.proceduralParams)
+                                    || !shape.splineParams.spline.points.IsEmpty()
+                                    || shape.text3DSource.IsValid();
+            if (!bHasSource) {
+                LOG_WARN(Game, "PhysicsBodyDesc has a Collider shape with no source, skipping shape creation");
                 bDegenerate = true;
                 break;
             }

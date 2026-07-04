@@ -20,12 +20,12 @@ void FillSplineParams(Engine::SplineParams& out, const SplineMeshComponent& splm
 
 /**
  * Builds the default collider for a procedural mesh: a matching primitive (box/sphere/capsule) where one fits exactly,
- * otherwise a ConvexHull/TriangleMesh reusing the procedural mesh. Primitive dimensions are pre-scaled by `scale`.
+ * otherwise a Collider reusing the procedural params (kind resolved later by the analyzer). Primitive dimensions are pre-scaled by `scale`.
  */
 PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, const glm::vec3& scale);
 
 /**
- * Populates a mesh shape (ConvexHull/TriangleMesh) from the entity's attached mesh, resolving the source and baked
+ * Populates a Collider shape from the entity's attached mesh, resolving the source and baked
  * transform in StaticMesh > Procedural > Spline > Text3D priority. Clears the source and bakes an identity transform
  * when no mesh component is attached.
  */

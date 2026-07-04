@@ -18,6 +18,7 @@
 #include "platform/paths.h"
 #include "render/resource_manager.h"
 #include "resources/model/model_format.h"
+#include "resources/physics/collider_generation.h"
 
 namespace Engine
 {
@@ -612,6 +613,132 @@ PhysicsColliderHandle AssetManager::LoadProceduralCollider(const ProceduralParam
     collider.name = Core::InlineString<128>::Format("Procedural Collider %d", proceduralColliderCounter++);
     collider.colliderId = colliderId;
     collider.proceduralParams = params;
+
+    // Analytics are either Compound or Convex Hull (determined in the load slot). Exotics are concave and must use triangle mesh (not allowed to be dynamic)
+    const bool bAnalytic = CanBuildProceduralCollider(params);
+    collider.kind = bAnalytic ? PhysicsColliderKind::Compound : PhysicsColliderKind::TriangleMesh;
+    collider.refCount = 1;
+    collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
+
+    colliderIdToHandle[colliderId] = handle;
+
+    assetLoadManager->RequestPhysicsColliderLoad(&collider);
+    return handle;
+}
+
+PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceModelId, PhysicsColliderKind kind)
+{
+    if (!modelCache.Contains(sourceModelId)) {
+        LOG_ERROR(Asset, "Model '{}' not found in registry for collider", sourceModelId.id);
+        return PhysicsColliderHandle::INVALID;
+    }
+
+    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&sourceModelId.id), sizeof(sourceModelId.id));
+    const uint8_t kindByte = static_cast<uint8_t>(kind);
+    hash = fnv1a64(&kindByte, sizeof(kindByte), hash);
+    constexpr uint8_t domain = 2;
+    hash = fnv1a64(&domain, sizeof(domain), hash);
+
+    PhysicsColliderID colliderId{hash};
+
+    PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
+    if (existingPtr != nullptr) {
+        PhysicsColliderHandle existingHandle = *existingPtr;
+        if (colliderAllocator.IsValid(existingHandle)) {
+            PhysicsColliderAsset& collider = colliders[existingHandle.index];
+            collider.refCount++;
+            collider.retireFrame = 0;
+            return existingHandle;
+        }
+        colliderIdToHandle.Remove(colliderId);
+    }
+
+    PhysicsColliderHandle handle = colliderAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate collider slot for model");
+        return PhysicsColliderHandle::INVALID;
+    }
+
+    static int32_t modelColliderCounter = 0;
+    PhysicsColliderAsset& collider = colliders[handle.index];
+    collider.selfHandle = handle;
+    collider.name = Core::InlineString<128>::Format("Model Collider %d", modelColliderCounter++);
+    collider.colliderId = colliderId;
+    collider.kind = kind;
+    collider.sourceModelId = sourceModelId;
+    collider.source = modelCache[sourceModelId].source;
+    collider.refCount = 1;
+    collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
+
+    colliderIdToHandle[colliderId] = handle;
+
+    assetLoadManager->RequestPhysicsColliderLoad(&collider);
+    return handle;
+}
+
+PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals)
+{
+    assert(!IsFontFrozen(fontId) && "LoadText3DCollider called with a frozen font. Freeze-gate (IsFontFrozen) before generating");
+
+    const uint64_t fontIdValue = fontId.id;
+    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&fontIdValue), sizeof(fontIdValue));
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(text.c_str()), text.Size(), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&depth), sizeof(depth), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&flatness), sizeof(flatness), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&tracking), sizeof(tracking), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&scale), sizeof(scale), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bSmoothNormals), sizeof(bSmoothNormals), hash);
+    const uint8_t kindByte = static_cast<uint8_t>(PhysicsColliderKind::Compound);
+    hash = fnv1a64(&kindByte, sizeof(kindByte), hash);
+    constexpr uint8_t domain = 3;
+    hash = fnv1a64(&domain, sizeof(domain), hash);
+
+    PhysicsColliderID colliderId{hash};
+
+    PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
+    if (existingPtr != nullptr) {
+        PhysicsColliderHandle existingHandle = *existingPtr;
+        if (colliderAllocator.IsValid(existingHandle)) {
+            PhysicsColliderAsset& collider = colliders[existingHandle.index];
+            collider.refCount++;
+            collider.retireFrame = 0;
+            return existingHandle;
+        }
+        colliderIdToHandle.Remove(colliderId);
+    }
+
+    FontHandle fontHandle = LoadFont(fontId);
+    if (!fontHandle.IsValid()) {
+        LOG_ERROR(Asset, "LoadText3DCollider: font {} could not be loaded", fontId.id);
+        return PhysicsColliderHandle::INVALID;
+    }
+
+    PhysicsColliderHandle handle = colliderAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate collider slot for 3D text");
+        UnloadFont(fontHandle);
+        return PhysicsColliderHandle::INVALID;
+    }
+
+    Text3DParams params{};
+    params.fontId = fontIdValue;
+    params.text = text;
+    params.depth = depth;
+    params.flatness = flatness;
+    params.tracking = tracking;
+    params.scale = scale;
+    params.bSmoothNormals = bSmoothNormals;
+    params.font = GetFont(fontHandle);
+
+    static int32_t text3DColliderCounter = 0;
+    PhysicsColliderAsset& collider = colliders[handle.index];
+    collider.selfHandle = handle;
+    collider.name = Core::InlineString<128>::Format("Text3D Collider %d", text3DColliderCounter++);
+    collider.colliderId = colliderId;
+    collider.kind = PhysicsColliderKind::Compound;
+    collider.text3DParams = std::move(params);
+    // Generation-scoped font ref: the worker reads glyph plane bounds; released when the collider finalizes (ResolveLoads).
+    collider.text3DFontHandle = fontHandle;
     collider.refCount = 1;
     collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
 
@@ -719,6 +846,11 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         else {
             colliderComplete.collider->loadState = PhysicsColliderAsset::LoadState::FailedToLoad;
             LOG_ERROR(Asset, "Physics collider generation failed: {}", colliderComplete.collider->name.c_str());
+        }
+
+        if (colliderComplete.collider->text3DFontHandle.IsValid()) {
+            UnloadFont(colliderComplete.collider->text3DFontHandle);
+            colliderComplete.collider->text3DFontHandle = {};
         }
     }
 

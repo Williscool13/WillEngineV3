@@ -124,11 +124,22 @@ public: // Physics colliders (CPU-only, analytic)
 
 
     /**
-     * Loads (or dedups) an analytic collider for a procedural shape. The kind (ConvexHull/Compound) is chosen by the analyzer. Keyed by hash(procedural params).
-     * @param params
-     * @return
+     * Loads (or dedups) a collider for a procedural shape. Analytic types (primitive/compound) pick their own kind; the non-analytic "exotic" types (Bowl/CurvedRamp/Klein/Trefoil) generate + simplify geometry into a concave TriangleMesh (they are Static/Kinematic-only, never dynamic). Keyed by hash(params).
      */
     PhysicsColliderHandle LoadProceduralCollider(const ProceduralParams& params);
+
+    /**
+     * Loads (or dedups) a collider read from an imported model's .wsmesh geometry (CPU-only, simplified). ConvexHull for dynamic bodies, TriangleMesh for static. Keyed by hash(modelId) x kind; freeze-gate on the source ModelID at the call site.
+     * @param sourceModelId
+     * @param kind
+     * @return
+     */
+    PhysicsColliderHandle LoadModelCollider(Engine::ModelID sourceModelId, PhysicsColliderKind kind);
+
+    /**
+     * Loads (or dedups) a Compound collider for extruded 3D text: one Box per glyph from the glyph plane bounds. Takes a generation-scoped font ref (released when the collider finalizes); freeze-gate on the FontID at the call site.
+     */
+    PhysicsColliderHandle LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals);
 
     PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle);
 

@@ -18,6 +18,16 @@ DebugRenderer::DebugRenderer()
 
 DebugRenderer::~DebugRenderer() = default;
 
+void DebugRenderer::SetViewFamily(Core::ViewFamily* _viewFamily)
+{
+    viewFamily = _viewFamily;
+    if (viewFamily != nullptr) {
+        const glm::vec3& cp = viewFamily->mainView.currentViewData.cameraPos;
+        cameraPos = JPH::RVec3(cp.x, cp.y, cp.z);
+        cameraPosSet = true;
+    }
+}
+
 void DebugRenderer::DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, const JPH::ColorArg inColor)
 {
     if (!viewFamily) return;
@@ -78,13 +88,17 @@ void DebugRenderer::DrawGeometry(JPH::RMat44Arg inModelMatrix, const JPH::AABox&
                                  float inLODScaleSq, JPH::ColorArg inModelColor, const GeometryRef& inGeometry,
                                  ECullMode inCullMode, ECastShadow inCastShadow, EDrawMode inDrawMode)
 {
-    // Figure out which LOD to use (default to LOD 0)
     const LOD* lod = inGeometry->mLODs.data();
-    if (cameraPosSet)
+    if (cameraPosSet) {
         lod = &inGeometry->GetLOD(JPH::Vec3(cameraPos), inWorldSpaceBounds, inLODScaleSq);
+    }
 
-    // Draw the batch
-    const BatchImpl* batch = static_cast<const BatchImpl*>(lod->mTriangleBatch.GetPtr());
+    // Never draw LOD 0 if we can help it (too many lines)
+    if (inGeometry->mLODs.size() > 1 && lod == inGeometry->mLODs.data()) {
+        lod = &inGeometry->mLODs[1];
+    }
+
+    const auto* batch = dynamic_cast<const BatchImpl*>(lod->mTriangleBatch.GetPtr());
     for (const Triangle& triangle : batch->triangles) {
         const JPH::RVec3 v0 = inModelMatrix * JPH::Vec3(triangle.mV[0].mPosition);
         const JPH::RVec3 v1 = inModelMatrix * JPH::Vec3(triangle.mV[1].mPosition);

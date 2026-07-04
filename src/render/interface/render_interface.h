@@ -512,7 +512,7 @@ struct ViewFamilyWatermarks
     size_t materials{256};
     size_t activeTextMaterials{32};
     size_t textMaterials{256};
-    size_t debugLines{256};
+    size_t debugLines{131072};
     size_t debugBoxes{256};
     size_t debugSpheres{256};
     size_t debugRects{256};

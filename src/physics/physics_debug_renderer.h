@@ -23,7 +23,7 @@ public:
     DebugRenderer();
     ~DebugRenderer() override;
 
-    void SetViewFamily(Core::ViewFamily* _viewFamily) { this->viewFamily = _viewFamily; }
+    void SetViewFamily(Core::ViewFamily* _viewFamily);
 
     void DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, JPH::ColorArg inColor) override;
 
