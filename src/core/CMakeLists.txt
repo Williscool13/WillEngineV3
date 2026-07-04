@@ -7,6 +7,7 @@ add_library(core STATIC
         memory/handle.cpp
         memory/handle.h
         input/input_frame.h
+        input/action_state.h
         input/input_utils.cpp
         input/input_utils.h
         input/input_manager.cpp

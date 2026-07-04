@@ -19,6 +19,7 @@
 #include "core/containers/vector.h"
 #include "core/types/math.h"
 #include "engine/core/hash.h"
+#include "engine/core/action_handle.h"
 #include "engine/core/environment_map_id.h"
 #include "engine/core/font_id.h"
 #include "engine/core/model_id.h"
@@ -28,6 +29,7 @@
 #include "resources/scene/scene.h"
 #include "project_config.h"
 #include "core/input/input_frame.h"
+#include "core/input/action_state.h"
 #include "core/containers/arena_fixed_map.h"
 #include "engine/asset_manager.h"
 #include "engine/builtin_assets.h"
@@ -125,6 +127,7 @@ struct ComponentRegistry
 
 enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On, Selected };
 enum class LightDebugDrawMode : uint8_t { None, Selected, All };
+enum class InputContext : uint8_t { Editor, Menu, Gameplay };
 
 struct RuntimeSceneMetadata
 {
@@ -144,6 +147,103 @@ struct PhysicsState
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedAddedEvents;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedPersistedEvents;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;
+};
+
+enum class BindingSourceType : uint8_t { Key, MouseButton };
+
+struct BindingSource
+{
+    BindingSourceType type{BindingSourceType::Key};
+    union
+    {
+        Core::Key key;
+        Core::MouseButton mouseButton;
+    };
+
+    constexpr BindingSource() : key(Key::UNKNOWN) {}
+
+    static constexpr BindingSource FromKey(Core::Key k)
+    {
+        BindingSource b;
+        b.type = BindingSourceType::Key;
+        b.key = k;
+        return b;
+    }
+
+    static constexpr BindingSource FromMouse(Core::MouseButton m)
+    {
+        BindingSource b;
+        b.type = BindingSourceType::MouseButton;
+        b.mouseButton = m;
+        return b;
+    }
+};
+
+struct AxisComposite2D
+{
+    BindingSource up;
+    BindingSource down;
+    BindingSource left;
+    BindingSource right;
+};
+
+enum class BindingShape : uint8_t { Discrete, Axis2DComposite };
+
+struct ActionBinding
+{
+    ActionHandle action;
+    InputContext context{InputContext::Gameplay};
+    BindingShape shape{BindingShape::Discrete};
+    union
+    {
+        BindingSource source;
+        AxisComposite2D composite;
+    };
+
+    constexpr ActionBinding() : source() {}
+
+    static constexpr ActionBinding Discrete(ActionHandle action, InputContext context, BindingSource source)
+    {
+        ActionBinding b;
+        b.action = action;
+        b.context = context;
+        b.shape = BindingShape::Discrete;
+        b.source = source;
+        return b;
+    }
+
+    static constexpr ActionBinding Composite(ActionHandle action, InputContext context, AxisComposite2D composite)
+    {
+        ActionBinding b;
+        b.action = action;
+        b.context = context;
+        b.shape = BindingShape::Axis2DComposite;
+        b.composite = composite;
+        return b;
+    }
+};
+
+struct InputState
+{
+    InputState() = default;
+    explicit InputState(Core::TlsfAllocator* allocator);
+    ~InputState() = default;
+
+    Core::Vector<ActionBinding> bindings{};
+    Core::Vector<ActionBinding> defaultBindings{};
+    Core::Map<ActionHandle, size_t> actionIndex{};
+    Core::Vector<Core::ActionState> actionStates{};
+
+    bool bCaptureActive{false};
+    size_t captureTargetBindingRow{~size_t{0}};
+    bool bBindingsDirty{false};
+
+    [[nodiscard]] const Core::ActionState& GetActionState(ActionHandle action) const
+    {
+        static constexpr Core::ActionState ACTION_STATE_EMPTY{};
+        const size_t* idx = actionIndex.Find(action);
+        return idx ? actionStates[*idx] : ACTION_STATE_EMPTY;
+    }
 };
 
 struct LightingState
@@ -249,8 +349,7 @@ struct EngineState
 
     ~EngineState() = default;
 
-    bool bIsPlaying{false};
-    bool bGameCursorCaptured{false};
+    InputContext inputContext{InputContext::Editor};
     bool bWantsScreenshot{false};
 
     const Core::InputFrame* inputFrame{nullptr};
@@ -301,6 +400,7 @@ struct EngineState
     LightingState lighting;
     EditorState editor;
     DebugState debug;
+    InputState input;
     ProjectConfig projectConfig{};
 };
 

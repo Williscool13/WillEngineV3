@@ -19,6 +19,7 @@
 
 #include "fwd_components.h"
 #include "component-registry/component_registry.h"
+#include "input/input_action_registry.h"
 #include "components/common_components.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
@@ -118,6 +119,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     Audio::AudioManager::RegisterAudio();
     Game::RegisterComponents(state->componentRegistry);
+    Game::RegisterInputActions(state->input);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
     Game::ConnectRenderObservers(state->registry);
@@ -144,7 +146,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->bIsPlaying) {
+    if (state->inputContext != Engine::InputContext::Editor) {
         Game::PlayStop(ctx, state);
     }
 
@@ -193,6 +195,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 #endif
 
     Game::RegisterComponents(state->componentRegistry);
+    Game::RegisterInputActions(state->input);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
     Game::ConnectRenderObservers(state->registry);
@@ -225,7 +228,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::FunctionKeyUpdate(ctx, state);
 
     // Gameplay simulation runs only while playing AND game-focused
-    if (state->bIsPlaying && state->bGameCursorCaptured) {
+    if (state->inputContext == Engine::InputContext::Gameplay) {
         if (state->physics.bEnabled) {
             Game::PhysicsUpdate(ctx, state);
         }
@@ -244,14 +247,14 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 #if WILL_EDITOR
-    if (!state->bIsPlaying) {
+    if (state->inputContext == Engine::InputContext::Editor) {
         Game::UpdatePhysicsEditor(ctx, state);
     }
-    if (!state->bGameCursorCaptured) {
+    if (state->inputContext != Engine::InputContext::Gameplay) {
         Game::UpdateEditorCamera(ctx, state);
     }
 #else
-    if (!state->bIsPlaying) {
+    if (state->inputContext == Engine::InputContext::Editor) {
         Game::PlayStart(ctx, state);
     }
 #endif
@@ -287,7 +290,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     // Dirty carry-over to next frame
     Game::MarkRenderTransformsDirty(ctx, state);
-    if (state->bIsPlaying) {
+    if (state->inputContext != Engine::InputContext::Editor) {
         Game::MarkPhysicsTransformsDirty(state);
     }
 

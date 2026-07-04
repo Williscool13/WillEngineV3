@@ -18,6 +18,7 @@
 #include "engine_api.h"
 #include "engine/include/game_interface.h"
 #include "core/input/input_manager.h"
+#include "input/input_resolve.h"
 #include "core/time/time_manager.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
@@ -1385,6 +1386,7 @@ void WillEngine::Run()
             ZoneScopedN("GameFrame");
             const Core::InputFrame& currentInput = inputManager->GetCurrentInput();
             engineState->inputFrame = &currentInput;
+            ResolveInputActions(currentInput, engineState->inputContext, engineState->input);
             engineState->timeFrame = &timeManager->GetTime();
             gameFunctions.gameUpdate(engineContext, engineState);
 

@@ -284,11 +284,11 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    if (state->bIsPlaying) {
+    if (state->inputContext != Engine::InputContext::Editor) {
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
         if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
-            if (state->bGameCursorCaptured) {
-                state->bGameCursorCaptured = false;
+            if (state->inputContext == Engine::InputContext::Gameplay) {
+                state->inputContext = Engine::InputContext::Menu;
                 ctx->setCursorHiddenFn(false);
 
                 // Snap the editor camera to the game camera
@@ -372,7 +372,7 @@ static bool HandleViewportSelection(Engine::EngineContext* ctx, Engine::EngineSt
     bool bJustSelected = false;
 
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
-    if (!state->bGameCursorCaptured && !ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
+    if (state->inputContext != Engine::InputContext::Gameplay && !ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
         auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
         if (it != nullptr) {
             bJustSelected = true;
@@ -405,7 +405,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
 {
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
 
-    if (!state->bIsPlaying && !ctx->bImGuiWantsTextInput) {
+    if (state->inputContext == Engine::InputContext::Editor && !ctx->bImGuiWantsTextInput) {
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
         const bool rmbHeld = state->inputFrame->GetMouse(MouseButton::RMB).down;
         const bool multiSelectActive = state->editor.selectedEntities.Size() > 1;
@@ -555,7 +555,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
 static void DrawGameplayWindow(Engine::EngineState* state)
 {
     if (ImGui::Begin("Gameplay")) {
-        if (state->bIsPlaying) {
+        if (state->inputContext != Engine::InputContext::Editor) {
             ImGui::Text("Checkpoint ID:       %llu", state->currentCheckpointId.id);
             ImGui::Text("Checkpoint Priority: %d", state->currentCheckpointPriority);
         }
@@ -708,14 +708,14 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
-        if (state->bIsPlaying) {
+        if (state->inputContext != Engine::InputContext::Editor) {
             if (ImGui::Button("Stop")) {
                 PlayStop(ctx, state);
             }
-            if (!state->bGameCursorCaptured) {
+            if (state->inputContext != Engine::InputContext::Gameplay) {
                 ImGui::SameLine();
                 if (ImGui::Button("Enter Game")) {
-                    state->bGameCursorCaptured = true;
+                    state->inputContext = Engine::InputContext::Gameplay;
                     ctx->setCursorHiddenFn(true);
                     state->editor.selectedEntities.Clear();
                 }
@@ -963,7 +963,7 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                     transform->rotation = local.rotation;
 
                     state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
-                    if (state->bIsPlaying) {
+                    if (state->inputContext != Engine::InputContext::Editor) {
                         state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
                     }
                 }

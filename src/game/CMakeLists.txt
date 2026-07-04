@@ -111,6 +111,10 @@ set(GAME_SOURCES
         editor/editor_widgets.h
         components/render/text3d_component.cpp
         components/render/text3d_component.h
+
+        input/game_actions.h
+        input/input_action_registry.cpp
+        input/input_action_registry.h
 )
 
 set(GAME_INCLUDE_DIRS

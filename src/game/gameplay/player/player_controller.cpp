@@ -29,7 +29,7 @@ void PlayerController::Update(Engine::EngineContext* ctx, Engine::EngineState* s
     glm::vec3 moveInput{0.0f};
     bool jumpRequested = false;
 
-    if (state->bGameCursorCaptured) {
+    if (state->inputContext == Engine::InputContext::Gameplay) {
         lookYaw += glm::radians(-input->mouseXDelta * lookSpeed);
         lookPitch += glm::radians(-input->mouseYDelta * lookSpeed);
         lookPitch = glm::clamp(lookPitch, glm::radians(-89.9f), glm::radians(89.9f));

@@ -729,8 +729,7 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    state->bIsPlaying = true;
-    state->bGameCursorCaptured = true;
+    state->inputContext = Engine::InputContext::Gameplay;
     ctx->setCursorHiddenFn(true);
     state->editor.selectedEntities.Clear();
 
@@ -765,8 +764,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
     DeserializeAll(state, state->editor.pieSnapshot);
     state->editor.pieSnapshot.Clear();
 
-    state->bIsPlaying = false;
-    state->bGameCursorCaptured = false;
+    state->inputContext = Engine::InputContext::Editor;
     ctx->setCursorHiddenFn(false); {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
         auto camEntity = camView.front();

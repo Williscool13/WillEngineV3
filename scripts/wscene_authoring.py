@@ -1,0 +1,343 @@
+#!/usr/bin/env python3
+"""
+Helper library for hand-authoring .wscene files without parsing an existing
+scene's JSON by hand each time. Component-type keys and field schemas below
+are compile-time TypeSID hashes (Game::TypeSID<T>(), from __FUNCSIG__) copied
+out of an existing scene file (assets/scenes/new_scene.wscene) -- they cannot
+be invented, only copied. If they ever stop matching (component renamed /
+hash scheme changed), re-derive by grepping src/game/components/**/*.cpp for
+the Serialize() field names shown per key below and cross-referencing an
+up-to-date example scene.
+
+Usage: import this file, call the helpers to build entity dicts, append to a
+list, then call write_scene(path, entities, scene_id, scene_name).
+
+See also: memory note "wscene format cheat sheet" (project_wscene_cheatsheet.md)
+for the narrative version of everything below.
+"""
+import json
+import math
+
+# ---- component-type keys (decimal-string TypeSID hashes) ----
+TRANSFORM = "1884906092559237059"   # TransformComponent: translation/rotation(wxyz)/scale
+NAME = "3048324656540157766"        # NameComponent: name
+STABLEID = "7294468376066398399"    # StableIdComponent: id, sortOrder
+FOLDER = "5210556776496121574"      # EntityFolderComponent: folderId (0 = root/no folder, always safe)
+HIERARCHY = "4784584514156000932"   # HierarchyComponent: parentStableId (StringID of parent's StableIdComponent.id)
+SCENE_FOLDER = "17650859514759584199"  # SceneFolderComponent (folder metadata pseudo-entities): folderId, name, parentFolder
+PROCEDURAL = "1254610073680810491"  # ProceduralMeshComponent (render): flattened shape params + material/modelFlags/renderOffset/renderRotation/type
+PHYSICS = "5740098829229280260"     # PhysicsBodyDesc: motionType/mass/friction/restitution/motionQuality/layerOverride/.../shapes[]
+TEXT3D = "11498742042741893857"     # Text3DComponent (render): fontId/text/depth/flatness/tracking/scale/smoothNormals/material/modelFlags/renderOffset/renderRotation
+SPLINE = "7578841921361002753"      # SplineMeshComponent (render): profile/railing/spline fields, flattened (see spline_fields())
+STATIC_MESH = "6701167194273300414"     # StaticMeshComponent: modelId, modelFlags, renderOffset, renderRotation
+STATIC_MESH_PRIMITIVE = "9501467225504619303"  # StaticMeshPrimitiveComponent: modelId, primitiveOrdinal, modelFlags, renderOffset, renderRotation
+SPAWN = "7249683205650136767"       # PlayerSpawnComponent: offset, priority
+LIGHT_DIRECTIONAL = "10824031899279087785"  # DirectionalLightComponent: color, intensity, priority, angularRadiusDegrees
+LIGHT_POINT = None       # not yet captured from a template scene -- grep light_components.cpp PointLightComponent::Serialize + a scene using one
+LIGHT_AREA = None        # same -- AreaLightComponent
+LIGHT_SPHERE = None      # same -- SphereLightComponent
+GIZMO = "9701894349906914118"       # DebugGizmoComponent: color, extents, lineWidth, shape (0=Box?,2=Sphere confirmed)
+
+# NOT yet keyed (no example scene exists with these -- do NOT guess the hash,
+# re-derive from a scene that actually uses them, or accept the runtime risk):
+#   CheckpointComponent (checkpointId, priority, spawnOffset, spawnRotation)
+#   PrefabInstanceComponent
+
+# =============================================================================
+# .wscene file structure
+# =============================================================================
+# Text header, then a JSON body:
+#   wscene
+#   version 1 0
+#   id <uint64 scene id>
+#   name <scene name>
+#   entity_count <n>
+#   end_header
+#   { "editor_camera": {"rotation":[x,y,z,w OR w,x,y,z? -- CHECK, camera may differ from entity convention],
+#                        "translation":[x,y,z]},
+#     "entities": [ {<entity object>}, ... ],
+#     "scene_id": <same uint64 as header id>,
+#     "scene_name": <same as header name> }
+#
+# Each entity is a JSON object keyed by the decimal-string component keys above.
+# Quaternions on TransformComponent/shape rotations are stored [w,x,y,z].
+
+# =============================================================================
+# Procedural shape params -- variant index ("type" on the render component,
+# "proceduralType" on the physics shape) + required field names, confirmed
+# against physics_body_desc.cpp Serialize()/Deserialize() and template scene
+# instances. Pivot conventions (from src/engine/resources/physics/collider_generation.cpp
+# comments, "mirrors Generate*") noted per shape -- IMPORTANT when positioning:
+#
+#   Box, Wedge, Staircase        : CORNER pivot, (0,0,0)..(size), local Y up
+#   Plane                         : centered XZ, y=0
+#   Cone                          : base at y=0, apex at y=height
+#   Cylinder                      : CENTERED on Y (y in [-h/2, h/2])
+#   SpiralStaircase               : CENTER pivot, helix around local Y axis (see spiral_math() below)
+#   Pipe                          : centered Y
+#   Torus                         : main ring in local XY plane (i.e. stands up like a wheel
+#                                   facing +Z by default); lowest point ~ -(ringRadius+tubeRadius)
+#   Arch, Door                    : assumed base-at-y=0, XZ centered (matches gate-like usage
+#                                   in template scene; NOT explicitly commented in source)
+#   Capsule, Sphere, SubdividedSphere, Hemisphere, Tetrahedron, Octahedron,
+#   Icosahedron, Dodecahedron, KleinBottle, TrefoilKnot, Bowl, CurvedRamp
+#                                  : NOT explicitly commented in collider_generation.cpp.
+#                                    Best-guess assumed CENTERED at origin (sphere-like) or
+#                                    base-at-0 (dome-like, Hemisphere) -- verify before relying
+#                                    on exact placement for anything load-bearing/on-path.
+# =============================================================================
+
+def box_params(sx, sy, sz): return {"sizeX": sx, "sizeY": sy, "sizeZ": sz}, 2
+def cylinder_params(radius, height, slices=16, capped=True): return {"radius": radius, "height": height, "slices": slices, "bCapped": capped}, 3
+def capsule_params(radius, height, slices=16, rings=8): return {"radius": radius, "height": height, "slices": slices, "rings": rings}, 4
+def torus_params(ring, tube, slices=32, stacks=32): return {"ringRadius": ring, "tubeRadius": tube, "slices": slices, "stacks": stacks}, 5
+def arch_params(width, height, depth, thickness, sides=64, fill=True): return {"width": width, "height": height, "depth": depth, "thickness": thickness, "sides": sides, "bFillCorners": fill}, 6
+def wedge_params(sx, sy, sz): return {"sizeX": sx, "sizeY": sy, "sizeZ": sz}, 7
+def cone_params(radius, height, slices=16, capped=True): return {"radius": radius, "height": height, "slices": slices, "bCapped": capped}, 8
+def door_params(width, height, depth, archHeight=0.5, gap=0.0, sides=8, half=False, flip=False): return {"width": width, "height": height, "depth": depth, "archHeight": archHeight, "gap": gap, "sides": sides, "bHalf": half, "bFlip": flip}, 9
+def plane_params(sx, sz, tx=1, tz=1): return {"sizeX": sx, "sizeZ": sz, "tilesX": tx, "tilesZ": tz}, 10
+def sphere_params(radius, slices=16, stacks=16): return {"radius": radius, "slices": slices, "stacks": stacks}, 11
+def subsphere_params(radius, subdiv=3): return {"radius": radius, "subdivisions": subdiv}, 12
+def hemisphere_params(radius, slices=16, stacks=8): return {"radius": radius, "slices": slices, "stacks": stacks}, 13
+def pipe_params(outer, inner, height, slices=16): return {"outerRadius": outer, "innerRadius": inner, "height": height, "slices": slices}, 14
+def tetra_params(radius): return {"radius": radius}, 15
+def octa_params(radius): return {"radius": radius}, 16
+def icosa_params(radius): return {"radius": radius}, 17
+def dodeca_params(radius): return {"radius": radius}, 18
+def klein_params(scale, slices=8, stacks=8): return {"scale": scale, "slices": slices, "stacks": stacks}, 19
+def trefoil_params(scale, tube, slices=16, stacks=128): return {"scale": scale, "tubeRadius": tube, "slices": slices, "stacks": stacks}, 20
+def curvedramp_params(width, height, radius, segments=16, halfpipe=False, flat=1.0, lip=0.2): return {"width": width, "height": height, "radius": radius, "segments": segments, "bHalfPipe": halfpipe, "flatLength": flat, "lipHeight": lip}, 21
+def bowl_params(radius, height, curveRadius, flatRadius=0.0, segments=8, slices=16, lip=0.02): return {"radius": radius, "height": height, "curveRadius": curveRadius, "flatRadius": flatRadius, "segments": segments, "slices": slices, "lipHeight": lip}, 22
+def staircase_params(stepCount, width, totalDepth, totalHeight, specifyStepHeight=False, stepHeight=0.2, closed=True):
+    return {"stepCount": stepCount, "width": width, "totalDepth": totalDepth, "totalHeight": totalHeight, "bSpecifyStepHeight": specifyStepHeight, "stepHeight": stepHeight, "bIsClosed": closed}, 1
+def spiral_params(stepCount, totalHeight, outerRadius, centerColumnRadius, treadThickness, totalSweep, arcSegments, showColumn, ramp, stepHeight=0.2, specifyStepHeight=False, degreesPerStep=30.0, specifyDegrees=False):
+    return {"stepCount": stepCount, "stepHeight": stepHeight, "totalHeight": totalHeight, "bSpecifyStepHeight": specifyStepHeight,
+            "outerRadius": outerRadius, "centerColumnRadius": centerColumnRadius, "treadThickness": treadThickness,
+            "degreesPerStep": degreesPerStep, "totalSweep": totalSweep, "bSpecifyDegreesPerStep": specifyDegrees,
+            "arcSegments": arcSegments, "bShowCenterColumn": showColumn, "bRamp": ramp}, 23
+
+# proceduralType index -> variant name, for reference / error messages
+PROC_TYPE_NAMES = ["monostate", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door",
+                    "Plane", "Sphere", "SubdividedSphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
+                    "Icosahedron", "Dodecahedron", "KleinBottle", "TrefoilKnot", "CurvedRamp", "Bowl", "SpiralStaircase"]
+
+# =============================================================================
+# Spiral staircase ramp-mode geometry (ported from CompoundSpiralStaircase in
+# collider_generation.cpp) -- lets you compute the exact world-space entry
+# (top) / exit (bottom) points of a bRamp=True spiral so connecting platforms
+# line up without guesswork.
+# =============================================================================
+def spiral_math(outer_radius, total_height, total_sweep_deg, sample_radius=None):
+    """Returns (local_point_at_angle_fn, entry_local, exit_local). Identity-rotation
+    spiral: local (x,y,z) == world offset from the entity's translation. Ball
+    travels TOP (angle=sweep, y=total_height) -> BOTTOM (angle=0, y=0).
+
+    sample_radius controls where on the tread the entry/exit anchor point sits --
+    default is outer_radius, but the tread is an ANNULUS from centerColumnRadius to
+    outer_radius (~outer_radius-centerColumnRadius wide), so anchoring connecting
+    platforms to the outer edge leaves most of the tread uncovered on one side and
+    overhangs empty space on the other. Pass sample_radius=(center_column_radius +
+    outer_radius) / 2 to anchor at the middle of the tread instead (bit us once
+    already: 2026-07-04, see project_ballance_level.md)."""
+    r = outer_radius if sample_radius is None else sample_radius
+    sweep_rad = math.radians(total_sweep_deg)
+    def local_at(angle_rad):
+        h = (angle_rad / sweep_rad) * total_height
+        return (math.cos(angle_rad) * r, h, math.sin(angle_rad) * r)
+    return local_at, local_at(sweep_rad), local_at(0.0)
+
+# =============================================================================
+# id / entity assembly
+# =============================================================================
+_ctr = [0x1234567890ABCDEF]
+def next_id():
+    """splitmix64-style unique id -- no true randomness needed, just uniqueness."""
+    _ctr[0] = (_ctr[0] + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+    z = _ctr[0]
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+    z = z ^ (z >> 31)
+    return z & 0x7FFFFFFFFFFFFFFF
+
+_sort = [0]
+def next_sort():
+    _sort[0] += 1
+    return _sort[0]
+
+RENDER_DEFAULTS = {"material": 0, "modelFlags": [1.0, 1.0, 0.0, 0.0], "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
+
+def base_entity(name, pos, rot=(1.0, 0.0, 0.0, 0.0), scale=(1.0, 1.0, 1.0), folder_id=0):
+    return {
+        TRANSFORM: {"translation": list(pos), "rotation": list(rot), "scale": list(scale)},
+        NAME: {"name": name},
+        STABLEID: {"id": next_id(), "sortOrder": next_sort()},
+        FOLDER: {"folderId": folder_id},
+    }
+
+def add_procedural(entity, ptype_idx, fields, motion=0, friction=0.5, restitution=0.0):
+    """motion: 0=Static, 1=Kinematic, 2=Dynamic (Game::Component::PhysicsMotionType order)."""
+    entity[PROCEDURAL] = {**fields, **RENDER_DEFAULTS, "type": ptype_idx}
+    shape = {
+        **fields, "type": 3,  # PhysicsShapeType::Collider (the only mesh-backed shape type post Stage-4b)
+        "offset": [0.0, 0.0, 0.0], "rotation": [1.0, 0.0, 0.0, 0.0],
+        "bakedScaleX": 1.0, "bakedScaleY": 1.0, "bakedScaleZ": 1.0,
+        "meshSourceModelId": 0, "proceduralType": ptype_idx,
+    }
+    entity[PHYSICS] = {
+        "motionType": motion, "mass": 1.0, "friction": friction, "restitution": restitution,
+        "motionQuality": 0, "layerOverride": 65535,
+        "enhancedInternalEdgeRemoval": False, "isSensor": False, "shapes": [shape],
+    }
+    return entity
+
+def add_text3d(entity, text, font_id, depth=0.2, flatness=0.0005, tracking=0.05, scale=1.0, smooth=True, precise=False, motion=0):
+    """Physics shape for Text3D is a box-per-glyph Compound unless precise=True (concave
+    TriangleMesh, Static/Kinematic only). font_id must come from an existing scene/asset."""
+    entity[TEXT3D] = {"depth": depth, "flatness": flatness, "fontId": font_id, **RENDER_DEFAULTS,
+                       "scale": scale, "smoothNormals": smooth, "text": text, "tracking": tracking}
+    shape = {"type": 3, "offset": [0.0, 0.0, 0.0], "rotation": [1.0, 0.0, 0.0, 0.0],
+             "bakedScaleX": 1.0, "bakedScaleY": 1.0, "bakedScaleZ": 1.0, "meshSourceModelId": 0, "proceduralType": 0,
+             "text3DSource": {"fontId": font_id, "text": text, "depth": depth, "flatness": flatness,
+                               "tracking": tracking, "scale": scale, "smoothNormals": smooth, "precise": precise}}
+    entity[PHYSICS] = {"motionType": motion, "mass": 1.0, "friction": 0.5, "restitution": 0.0, "motionQuality": 0,
+                        "layerOverride": 65535, "enhancedInternalEdgeRemoval": False, "isSensor": False, "shapes": [shape]}
+    return entity
+
+def spline_fields(spline_points, closed=False, mode=1, radius=0.5, roll_angle=0.0, sides=8, segments_per_span=8,
+                   caps=True, cross_planks=False, profile_type=0, profile_w=0.4, profile_h=0.4, profile_corner_r=0.08,
+                   profile_corner_seg=3, profile_thickness=0.05, railing_enabled=False, railing_lanes=None,
+                   railing_posts=True, railing_post_interval=4, railing_post_bottom=0.0, railing_post_top=1.0,
+                   railing_post_size=(0.05, 0.05), railing_post_lateral=0.0, railing_lateral_offset=0.0,
+                   cross_plank_interval=4, cross_plank_height=0.0, cross_plank_thickness=0.1, cross_plank_length=0.3):
+    """Flattened field set for both SplineMeshComponent (render) and PhysicsBodyDesc shape's
+    nested "splineParams" (see how these two are combined in a full spline entity example in
+    the template scene -- SPLINE render key gets these fields directly; PHYSICS shape gets them
+    nested under "splineParams"). mode: 0=Linear, 1=CatmullRom (Engine::SplineMode). Spline.MaxPoints=64."""
+    if railing_lanes is None:
+        railing_lanes = [[0.0, 0.0]]
+    return {
+        "bCaps": caps, "bCrossPlanks": cross_planks, "crossPlankInterval": cross_plank_interval,
+        "crossPlankHeight": cross_plank_height, "crossPlankThickness": cross_plank_thickness, "crossPlankLength": cross_plank_length,
+        "profileCornerRadius": profile_corner_r, "profileCornerSegments": profile_corner_seg, "profileHeight": profile_h,
+        "profileThickness": profile_thickness, "profileType": profile_type, "profileWidth": profile_w,
+        "radius": radius, "railingEnabled": railing_enabled, "railingLanes": railing_lanes,
+        "railingLateralOffset": railing_lateral_offset, "railingPostBottom": railing_post_bottom,
+        "railingPostInterval": railing_post_interval, "railingPostLateral": railing_post_lateral,
+        "railingPostSizeX": railing_post_size[0], "railingPostSizeY": railing_post_size[1],
+        "railingPostTop": railing_post_top, "railingPosts": railing_posts, "rollAngle": roll_angle,
+        "segmentsPerSpan": segments_per_span, "sides": sides,
+        "spline": {"bClosed": closed, "mode": mode, "points": [list(p) for p in spline_points]},
+    }
+
+# =============================================================================
+# oriented-box math (corner-pivot aware) -- for ramps/platforms/walls between
+# two 3D waypoints without hand-deriving quaternions.
+# =============================================================================
+def _sub(a, b): return (a[0]-b[0], a[1]-b[1], a[2]-b[2])
+def _add(a, b): return (a[0]+b[0], a[1]+b[1], a[2]+b[2])
+def _scale(a, s): return (a[0]*s, a[1]*s, a[2]*s)
+def _dot(a, b): return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
+def _cross(a, b): return (a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0])
+def _length(a): return math.sqrt(_dot(a, a))
+def _normalize(a):
+    l = _length(a)
+    return (a[0]/l, a[1]/l, a[2]/l)
+
+def mat_to_quat(right, up, fwd):
+    """3x3 rotation matrix (columns = local X,Y,Z expressed in world space) -> [w,x,y,z]."""
+    m00, m10, m20 = right
+    m01, m11, m21 = up
+    m02, m12, m22 = fwd
+    trace = m00 + m11 + m22
+    if trace > 0:
+        s = 0.5 / math.sqrt(trace + 1.0)
+        w, x, y, z = 0.25/s, (m21-m12)*s, (m02-m20)*s, (m10-m01)*s
+    elif m00 > m11 and m00 > m22:
+        s = 2.0 * math.sqrt(1.0+m00-m11-m22)
+        w, x, y, z = (m21-m12)/s, 0.25*s, (m01+m10)/s, (m02+m20)/s
+    elif m11 > m22:
+        s = 2.0 * math.sqrt(1.0+m11-m00-m22)
+        w, x, y, z = (m02-m20)/s, (m01+m10)/s, 0.25*s, (m12+m21)/s
+    else:
+        s = 2.0 * math.sqrt(1.0+m22-m00-m11)
+        w, x, y, z = (m10-m01)/s, (m02+m20)/s, (m12+m21)/s, 0.25*s
+    n = math.sqrt(w*w+x*x+y*y+z*z)
+    return (w/n, x/n, y/n, z/n)
+
+def basis_for(p_start, p_end, world_up=(0.0, 1.0, 0.0)):
+    """right/up/fwd MUST satisfy cross(right,up) == fwd (a proper rotation, det=+1) --
+    glm::mat3_cast(quat) columns are (X,Y,Z) and for any valid quaternion cross(col0,col1)==col2
+    (confirmed against src/game/systems/render_systems.cpp:1194-1197 and light_components.cpp:186-189,
+    which read rot[0]/rot[1]/rot[2] as right/up/normal off mat3_cast). Getting the cross-product
+    argument order backwards here produces a REFLECTION (det=-1), which mat_to_quat has no way to
+    represent correctly -- it silently returns some other rotation, so the box ends up in the wrong
+    place AND mirrored. (This bit us once already: 2026-07-04, see project_ballance_level.md.)
+    """
+    d = _sub(p_end, p_start)
+    fwd = _normalize(d)
+    if abs(_dot(fwd, world_up)) > 0.999:
+        world_up = (1.0, 0.0, 0.0)
+    right = _normalize(_cross(world_up, fwd))
+    up = _normalize(_cross(fwd, right))
+    check = _cross(right, up)
+    assert _dot(check, fwd) > 0.999, "basis_for produced a reflection, not a rotation -- fix the cross() argument order above"
+    return right, up, fwd, _length(d)
+
+def oriented_box(p_start, p_end, width, thickness, lateral_offset=0.0, vertical_offset=0.0, world_up=(0.0, 1.0, 0.0)):
+    """Returns (corner_position, rotation_wxyz, length) for a corner-pivot Box (GenerateBox
+    convention: local (0,0,0)..(sizeX,sizeY,sizeZ), Y up) whose TOP FACE CENTER runs along the
+    line p_start->p_end, offset laterally (+right) / vertically (+up)."""
+    right, up, fwd, length_ = basis_for(p_start, p_end, world_up)
+    mid = _scale(_add(p_start, p_end), 0.5)
+    target_top_center = _add(_add(mid, _scale(right, lateral_offset)), _scale(up, vertical_offset))
+    half_local = (width * 0.5, thickness, length_ * 0.5)
+    offset_world = _add(_add(_scale(right, half_local[0]), _scale(up, half_local[1])), _scale(fwd, half_local[2]))
+    corner = _sub(target_top_center, offset_world)
+    quat = mat_to_quat(right, up, fwd)
+    return corner, quat, length_
+
+def add_platform(entities, name, p_start, p_end, width, thickness=0.4, motion=0, friction=0.5):
+    corner, quat, length_ = oriented_box(p_start, p_end, width, thickness)
+    e = base_entity(name, corner, quat)
+    fields, idx = box_params(width, thickness, length_)
+    add_procedural(e, idx, fields, motion=motion, friction=friction)
+    entities.append(e)
+    return e
+
+def add_wall(entities, name, p_start, p_end, lateral_offset, height=0.6, thickness=0.15, embed=0.1):
+    corner, quat, length_ = oriented_box(p_start, p_end, thickness, height, lateral_offset=lateral_offset, vertical_offset=(height - embed))
+    e = base_entity(name, corner, quat)
+    fields, idx = box_params(thickness, height, length_)
+    add_procedural(e, idx, fields, motion=0)
+    entities.append(e)
+    return e
+
+# =============================================================================
+# top-level write
+# =============================================================================
+def write_scene(path, entities, scene_id, scene_name, editor_camera=None):
+    if editor_camera is None:
+        editor_camera = {"rotation": [0.0, 0.0, 0.0, 1.0], "translation": [0.0, 4.0, 12.0]}
+    body = {"editor_camera": editor_camera, "entities": entities, "scene_id": scene_id, "scene_name": scene_name}
+    header = f"wscene\nversion 1 0\nid {scene_id}\nname {scene_name}\nentity_count {len(entities)}\nend_header\n"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(header)
+        f.write(json.dumps(body, indent=2))
+    # sanity re-parse
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    hdr_end = next(i for i, l in enumerate(lines) if l.strip() == "end_header")
+    reparsed = json.loads("".join(lines[hdr_end + 1:]))
+    assert len(reparsed["entities"]) == len(entities)
+    return path
+
+
+def read_scene(path):
+    """Parse an existing .wscene into (header_dict, body_dict) for inspection/reuse
+    (e.g. copying a fontId, checking what component keys a scene actually uses)."""
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    hdr_end = next(i for i, l in enumerate(lines) if l.strip() == "end_header")
+    header_lines = [l.strip() for l in lines[:hdr_end]]
+    body = json.loads("".join(lines[hdr_end + 1:]))
+    return header_lines, body

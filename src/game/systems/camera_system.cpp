@@ -88,7 +88,7 @@ void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamil
 {
     ZoneScoped;
     entt::entity mainCamera;
-    if (state->bIsPlaying && state->bGameCursorCaptured) {
+    if (state->inputContext == Engine::InputContext::Gameplay) {
         auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
     } else {
@@ -107,7 +107,7 @@ void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainVie
 {
     ZoneScoped;
     entt::entity mainCamera;
-    if (state->bIsPlaying && state->bGameCursorCaptured) {
+    if (state->inputContext == Engine::InputContext::Gameplay) {
         auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
     } else {

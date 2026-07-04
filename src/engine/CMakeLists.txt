@@ -24,6 +24,9 @@ add_library(engine STATIC
         core/sampler_id.h
         core/model_id.h
         core/physics_collider_id.h
+        core/action_handle.h
+        input/input_resolve.cpp
+        input/input_resolve.h
         include/frame_sync.h
         include/game_interface.cpp
         include/game_interface.h

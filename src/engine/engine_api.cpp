@@ -103,11 +103,19 @@ EditorState::EditorState(Core::TlsfAllocator* allocator)
       texResidency(allocator)
 {}
 
+InputState::InputState(Core::TlsfAllocator* allocator)
+    : bindings(allocator, Core::AllocTag::EngineState, 128),
+      defaultBindings(allocator, Core::AllocTag::EngineState, 128),
+      actionIndex(allocator, Core::AllocTag::EngineState, 128),
+      actionStates(allocator, Core::AllocTag::EngineState, 128)
+{}
+
 EngineState::EngineState(Core::TlsfAllocator* allocator)
     : stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
       componentRegistry(allocator),
       physics(allocator),
-      editor(allocator)
+      editor(allocator),
+      input(allocator)
 {
     meshPrimitiveStore.Init(MAX_MESH_PRIMITIVE_INSTANCES, allocator, Core::AllocTag::RenderMesh);
 
