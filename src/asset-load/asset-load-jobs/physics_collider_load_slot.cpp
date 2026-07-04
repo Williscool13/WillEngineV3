@@ -22,6 +22,7 @@
 #include "engine/resources/physics/physics_collider_asset.h"
 #include "engine/spline/spline_frames.h"
 #include "procedural_geometry.h"
+#include "text3d_geometry.h"
 
 namespace AssetLoad
 {
@@ -273,6 +274,29 @@ bool PhysicsColliderLoadSlot::Build()
     if (c->text3DParams.has_value()) {
         const Engine::Text3DParams& tp = c->text3DParams.value();
         if (tp.font == nullptr) { return false; }
+
+        if (c->bPreciseText3D) {
+            Core::Vector<Engine::FullVertex> genVerts(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
+            Core::Vector<uint32_t> genIndices(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
+            if (!BuildText3DGeometry(*tp.font, tp, memoryManager->AssetsScratch(), genVerts, genIndices)) { return false; }
+            if (genVerts.IsEmpty() || genIndices.IsEmpty()) { return false; }
+
+            Core::HeapArray<Vec3> genPositions(&memoryManager->AssetsScratch(), Core::AllocTag::Physics, genVerts.Size());
+            for (size_t i = 0; i < genVerts.Size(); ++i) { genPositions[i] = genVerts[i].position; }
+
+            Core::Vector<Vec3> simPositions(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
+            Core::Vector<uint32_t> simIndices(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
+            SimplifyColliderMesh(Core::Span<const Vec3>(genPositions.Data(), genPositions.Size()), Core::Span<const uint32_t>(genIndices.Data(), genIndices.Size()), memoryManager, simPositions, simIndices);
+            if (simPositions.IsEmpty() || simIndices.IsEmpty()) { return false; }
+
+            c->kind = Engine::PhysicsColliderKind::TriangleMesh;
+            c->positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::Physics, simPositions.Size());
+            for (size_t i = 0; i < simPositions.Size(); ++i) { c->positions[i] = simPositions[i]; }
+            c->indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::Physics, simIndices.Size());
+            for (size_t i = 0; i < simIndices.Size(); ++i) { c->indices[i] = simIndices[i]; }
+            c->bounds = ComputeBounds(Core::Span<Vec3>(c->positions.Data(), c->positions.Size()));
+            return true;
+        }
 
         Core::Vector<Engine::SplineColliderPrimitive> prims(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
         if (!Engine::BuildText3DColliderPrimitives(*tp.font, tp, prims)) { return false; }

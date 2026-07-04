@@ -26,7 +26,7 @@
       "varianceGammaLuma": 1.0
     }
   },
-  "activeLightingProfile": "Standard",
+  "activeLightingProfile": "FINAL RESTIR + REGIR",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,
@@ -35,7 +35,7 @@
   "defaultScene": "New Scene",
   "editorCameraFovDegrees": 70.0,
   "editorCameraNearPlane": 0.10000000149011612,
-  "frameLimitTarget": 60,
+  "frameLimitTarget": 100,
   "gameCameraAspect": [
     16.0,
     9.0
@@ -43,5 +43,5 @@
   "gameCameraFovDegrees": 70.0,
   "gameCameraLockAspect": false,
   "gameCameraNearPlane": 0.10000000149011612,
-  "resolutionScale": 0.699999988079071
+  "resolutionScale": 0.75
 }

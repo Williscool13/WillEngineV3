@@ -51,6 +51,7 @@ struct Text3DShapeSource
     float tracking{0.0f};
     float scale{1.0f};
     bool bSmoothNormals{true};
+    bool bPrecise{false};
 
     bool IsValid() const { return fontId.IsValid() && text.Size() > 0; }
 };
@@ -69,7 +70,6 @@ struct PhysicsShapeDesc
     Text3DShapeSource text3DSource{};
 
     // Transient
-    Engine::StaticModelHandle meshSourceHandle{};
     Engine::PhysicsColliderHandle colliderHandle{};
 
     union

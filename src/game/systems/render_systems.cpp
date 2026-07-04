@@ -138,12 +138,6 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         bool affected = false;
         for (auto& shape : bodyDesc.shapes) {
             if (shape.meshSourceModelId.IsValid() && isHot(shape.meshSourceModelId)) {
-                if (shape.meshSourceHandle.IsValid()) {
-                    ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-                    shape.meshSourceHandle = {};
-                    affected = true;
-                }
-
                 if (shape.colliderHandle.IsValid()) {
                     ctx->assetManager->UnloadCollider(shape.colliderHandle);
                     shape.colliderHandle = {};
@@ -220,12 +214,6 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         bool affected = false;
         for (auto& shape : bodyDesc.shapes) {
             if (shape.text3DSource.IsValid() && isHot(shape.text3DSource.fontId)) {
-                if (shape.meshSourceHandle.IsValid()) {
-                    ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-                    shape.meshSourceHandle = {};
-                    affected = true;
-                }
-
                 if (shape.colliderHandle.IsValid()) {
                     ctx->assetManager->UnloadCollider(shape.colliderHandle);
                     shape.colliderHandle = {};

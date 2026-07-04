@@ -205,6 +205,7 @@ struct ArchParams
     float depth{0.5f};
     float thickness{0.3f};
     int32_t sides{8};
+    bool bFillCorners{false};
 };
 
 struct WedgeParams

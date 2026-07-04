@@ -36,12 +36,14 @@ static bool IsMeshShapeType(PhysicsShapeType type)
     return type == PhysicsShapeType::Collider;
 }
 
-// A concave, non-analytic procedural (Klein Bottle, Trefoil Knot, Bowl, Curved Ramp): its only collider is a triangle mesh, so it cannot back a dynamic body.
+// A concave collider source: a non-analytic procedural (Klein Bottle, Trefoil Knot, Bowl, Curved Ramp) or a precise Text3D. Only a triangle mesh, so it cannot back a dynamic body.
 static bool ShapeIsConcaveExotic(const PhysicsShapeDesc& shape)
 {
     if (!IsMeshShapeType(shape.type)) { return false; }
-    if (std::holds_alternative<std::monostate>(shape.proceduralParams)) { return false; }
-    return !Engine::CanBuildProceduralCollider(shape.proceduralParams);
+    if (!std::holds_alternative<std::monostate>(shape.proceduralParams)) {
+        return !Engine::CanBuildProceduralCollider(shape.proceduralParams);
+    }
+    return shape.text3DSource.IsValid() && shape.text3DSource.bPrecise;
 }
 
 static bool BodyHasConcaveExotic(const PhysicsBodyDesc& component)
@@ -118,10 +120,6 @@ void PhysicsBodyDesc::OnUpdate(entt::registry& registry, entt::entity entity)
     auto& component = registry.get<PhysicsBodyDesc>(entity);
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     for (auto& shape : component.shapes) {
-        if (shape.meshSourceHandle.IsValid()) {
-            ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-            shape.meshSourceHandle = {};
-        }
         if (shape.colliderHandle.IsValid()) {
             ctx->assetManager->UnloadCollider(shape.colliderHandle);
             shape.colliderHandle = {};
@@ -135,10 +133,6 @@ void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
     auto& component = registry.get<PhysicsBodyDesc>(entity);
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     for (auto& shape : component.shapes) {
-        if (shape.meshSourceHandle.IsValid()) {
-            ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-            shape.meshSourceHandle = {};
-        }
         if (shape.colliderHandle.IsValid()) {
             ctx->assetManager->UnloadCollider(shape.colliderHandle);
             shape.colliderHandle = {};
@@ -230,6 +224,7 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     t3["tracking"] = shape.text3DSource.tracking;
                     t3["scale"] = shape.text3DSource.scale;
                     t3["smoothNormals"] = shape.text3DSource.bSmoothNormals;
+                    t3["precise"] = shape.text3DSource.bPrecise;
                     shapeJson["text3DSource"] = t3;
                 }
                 std::visit([&shapeJson](const auto& p) {
@@ -272,6 +267,7 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                         shapeJson["depth"] = p.depth;
                         shapeJson["thickness"] = p.thickness;
                         shapeJson["sides"] = p.sides;
+                        shapeJson["bFillCorners"] = p.bFillCorners;
                     }
                     else if constexpr (std::is_same_v<T, Engine::WedgeParams>) {
                         shapeJson["sizeX"] = p.sizeX;
@@ -477,6 +473,7 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                         p.depth = shapeJson["depth"].get<float>();
                         p.thickness = shapeJson["thickness"].get<float>();
                         p.sides = shapeJson["sides"].get<int32_t>();
+                        p.bFillCorners = shapeJson.value("bFillCorners", false);
                         shape.proceduralParams = p;
                     }
                     else if (ptype == 7) {
@@ -665,6 +662,7 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                     src.tracking = t3.value("tracking", 0.0f);
                     src.scale = t3.value("scale", 1.0f);
                     src.bSmoothNormals = t3.value("smoothNormals", true);
+                    src.bPrecise = t3.value("precise", false);
                     shape.text3DSource = src;
                 }
                 break;
@@ -774,10 +772,6 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         bool wasMesh = IsMeshShapeType(shape.type);
                         bool isMesh = IsMeshShapeType(newType);
                         if (wasMesh && !isMesh) {
-                            if (shape.meshSourceHandle.IsValid()) {
-                                ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-                                shape.meshSourceHandle = {};
-                            }
                             if (shape.colliderHandle.IsValid()) {
                                 ctx->assetManager->UnloadCollider(shape.colliderHandle);
                                 shape.colliderHandle = {};
@@ -867,6 +861,19 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     else if (shape.text3DSource.IsValid()) {
                         ImGui::Text("Mesh Source: 3D Text");
                         bHasAny = true;
+
+                        ImGui::BeginDisabled(bIsDynamic);
+                        if (ImGui::Checkbox("Precise (Triangle Mesh)", &shape.text3DSource.bPrecise)) {
+                            if (shape.colliderHandle.IsValid()) {
+                                ctx->assetManager->UnloadCollider(shape.colliderHandle);
+                                shape.colliderHandle = {};
+                            }
+                            bAnyChange = true;
+                        }
+                        if (bIsDynamic && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                            ImGui::SetTooltip("A precise text collider is a concave triangle mesh and cannot back a dynamic body.");
+                        }
+                        ImGui::EndDisabled();
                     }
                     else {
                         ImGui::Text("Mesh Source: (none)");
@@ -879,10 +886,6 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         const bool bShouldClearMesh = ImGui::SmallButton("X");
                         ImGui::PopStyleColor();
                         if (bShouldClearMesh) {
-                            if (shape.meshSourceHandle.IsValid()) {
-                                ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-                                shape.meshSourceHandle = {};
-                            }
                             if (shape.colliderHandle.IsValid()) {
                                 ctx->assetManager->UnloadCollider(shape.colliderHandle);
                                 shape.colliderHandle = {};

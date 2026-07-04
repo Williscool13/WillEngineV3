@@ -137,9 +137,9 @@ public: // Physics colliders (CPU-only, analytic)
     PhysicsColliderHandle LoadModelCollider(Engine::ModelID sourceModelId, PhysicsColliderKind kind);
 
     /**
-     * Loads (or dedups) a Compound collider for extruded 3D text: one Box per glyph from the glyph plane bounds. Takes a generation-scoped font ref (released when the collider finalizes); freeze-gate on the FontID at the call site.
+     * Loads (or dedups) a collider for extruded 3D text: one Box per glyph from the glyph plane bounds (Compound), or with @p bPrecise, the exact extruded glyph mesh simplified into a concave TriangleMesh. Takes a generation-scoped font ref (released when the collider finalizes); freeze-gate on the FontID at the call site.
      */
-    PhysicsColliderHandle LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals);
+    PhysicsColliderHandle LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, bool bPrecise);
 
     PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle);
 

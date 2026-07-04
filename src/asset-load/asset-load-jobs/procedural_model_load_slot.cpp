@@ -835,10 +835,12 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
 
     // Outer side walls: arc segments use smooth radial normals from (0, legH);
     // legs and rectangular top use flat edge-perpendicular normals.
+    const bool bFillingCorners = p.bFillCorners && (N >= 2);
     for (int i = 0; i < M - 1; i++) {
         const Vec2 A = outerC[i], B = outerC[i + 1];
         const bool isArc = (N >= 2) && (i > 0) && (i < M - 2);
         if (isArc) {
+            if (bFillingCorners) { continue; }
             const Vec3 nA = glm::normalize(Vec3{A.x, A.y - legH, 0.0f});
             const Vec3 nB = glm::normalize(Vec3{B.x, B.y - legH, 0.0f});
             addSmoothWallQuad(A, B, nA, nB, false);
@@ -848,6 +850,34 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
             addQuad({A.x, A.y, 0}, {B.x, B.y, 0}, {B.x, B.y, depth}, {A.x, A.y, depth},
                     glm::normalize(Vec3{d.y, -d.x, 0.0f}));
         }
+    }
+
+    if (bFillingCorners) {
+        const Vec3 cornerR{outerR, legH + outerR, 0.0f};
+        const Vec3 cornerL{-outerR, legH + outerR, 0.0f};
+        const Vec3 cornerRd = cornerR + Vec3{0, 0, depth};
+        const Vec3 cornerLd = cornerL + Vec3{0, 0, depth};
+        for (int i = 0; i < arcSize - 1; i++) {
+            const Vec2 A = outerArc[i], B = outerArc[i + 1];
+            const Vec3 A0{A.x, A.y, 0}, B0{B.x, B.y, 0};
+            const Vec3 Ad{A.x, A.y, depth}, Bd{B.x, B.y, depth};
+            if (A.x >= 0.0f && B.x >= 0.0f) {
+                addQuad(A0, B0, cornerR, cornerR, {0, 0, -1});
+                addQuad(cornerRd, Bd, Ad, Ad, {0, 0, 1});
+            }
+            else if (A.x <= 0.0f && B.x <= 0.0f) {
+                addQuad(A0, B0, cornerL, cornerL, {0, 0, -1});
+                addQuad(cornerLd, Bd, Ad, Ad, {0, 0, 1});
+            }
+            else {
+                addQuad(B0, cornerL, cornerR, A0, {0, 0, -1});
+                addQuad(Ad, cornerRd, cornerLd, Bd, {0, 0, 1});
+            }
+        }
+        // New exterior walls replacing the now-interior arc wall.
+        addQuad({outerR, legH, 0}, {cornerR.x, cornerR.y, 0}, {cornerR.x, cornerR.y, depth}, {outerR, legH, depth}, {1, 0, 0});
+        addQuad({cornerR.x, cornerR.y, 0}, {cornerL.x, cornerL.y, 0}, {cornerL.x, cornerL.y, depth}, {cornerR.x, cornerR.y, depth}, {0, 1, 0});
+        addQuad({cornerL.x, cornerL.y, 0}, {-outerR, legH, 0}, {-outerR, legH, depth}, {cornerL.x, cornerL.y, depth}, {-1, 0, 0});
     }
 
     // Inner side walls: same but inward normals, reversed winding

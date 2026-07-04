@@ -676,7 +676,7 @@ PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceMode
     return handle;
 }
 
-PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals)
+PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, bool bPrecise)
 {
     assert(!IsFontFrozen(fontId) && "LoadText3DCollider called with a frozen font. Freeze-gate (IsFontFrozen) before generating");
 
@@ -688,7 +688,9 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&tracking), sizeof(tracking), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&scale), sizeof(scale), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bSmoothNormals), sizeof(bSmoothNormals), hash);
-    const uint8_t kindByte = static_cast<uint8_t>(PhysicsColliderKind::Compound);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bPrecise), sizeof(bPrecise), hash);
+    const PhysicsColliderKind kind = bPrecise ? PhysicsColliderKind::TriangleMesh : PhysicsColliderKind::Compound;
+    const uint8_t kindByte = static_cast<uint8_t>(kind);
     hash = fnv1a64(&kindByte, sizeof(kindByte), hash);
     constexpr uint8_t domain = 3;
     hash = fnv1a64(&domain, sizeof(domain), hash);
@@ -735,8 +737,9 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
     collider.selfHandle = handle;
     collider.name = Core::InlineString<128>::Format("Text3D Collider %d", text3DColliderCounter++);
     collider.colliderId = colliderId;
-    collider.kind = PhysicsColliderKind::Compound;
+    collider.kind = kind;
     collider.text3DParams = std::move(params);
+    collider.bPreciseText3D = bPrecise;
     // Generation-scoped font ref: the worker reads glyph plane bounds; released when the collider finalizes (ResolveLoads).
     collider.text3DFontHandle = fontHandle;
     collider.refCount = 1;

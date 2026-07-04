@@ -113,6 +113,7 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
             json["depth"] = p.depth;
             json["thickness"] = p.thickness;
             json["sides"] = p.sides;
+            json["bFillCorners"] = p.bFillCorners;
         }
         else if constexpr (std::is_same_v<T, Engine::WedgeParams>) {
             json["sizeX"] = p.sizeX;
@@ -280,6 +281,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.depth = json["depth"].get<float>();
         p.thickness = json["thickness"].get<float>();
         p.sides = json["sides"].get<int32_t>();
+        p.bFillCorners = json.value("bFillCorners", false);
         comp.params = p;
     }
     else if (type == 7) {
@@ -696,6 +698,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragInt("Sides", &p.sides, 1, 1, 64);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Fill Corners", &p.bFillCorners)) { dirty = true; }
                 }
                 else if constexpr (std::is_same_v<T, Engine::WedgeParams>) {
                     ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);

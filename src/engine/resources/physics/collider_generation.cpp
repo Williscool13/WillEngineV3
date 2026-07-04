@@ -364,8 +364,8 @@ static void CompoundArch(const ArchParams& p, Core::Vector<SplineColliderPrimiti
     const float depth = p.depth;
     const float pi = glm::pi<float>();
 
-    Core::InlineVector<Vec2, 40> outerC{};
-    Core::InlineVector<Vec2, 40> innerC{};
+    Core::InlineVector<Vec2, 80> outerC{};
+    Core::InlineVector<Vec2, 80> innerC{};
     outerC.PushBack(Vec2(outerR, 0.0f));
     innerC.PushBack(Vec2(innerR, 0.0f));
     if (N == 1) {
@@ -402,6 +402,40 @@ static void CompoundArch(const ArchParams& p, Core::Vector<SplineColliderPrimiti
         const Vec3 xAxis(glm::normalize(radial2), 0.0f);
         const Vec3 yAxis = glm::cross(zAxis, xAxis); // in-plane, perpendicular to radial (unit)
         PushBoxPrim(Vec3(center2.x, center2.y, depth * 0.5f), Vec3(radialLen * 0.5f, tangLen * 0.5f, depth * 0.5f), BasisToQuat(xAxis, yAxis, zAxis), out);
+    }
+
+    if (p.bFillCorners && N >= 2) {
+        const Vec2 cornerR(outerR, legH + outerR);
+        const Vec2 cornerL(-outerR, legH + outerR);
+        const auto addCornerBox = [&](const Vec2& A, const Vec2& B, const Vec2& corner) {
+            const Vec2 segMid = (A + B) * 0.5f;
+            const Vec2 center2 = (segMid + corner) * 0.5f;
+            const Vec2 radial2 = corner - segMid;
+            const float radialLen = glm::length(radial2);
+            const Vec2 tang2 = B - A;
+            const float tangLen = glm::length(tang2);
+            if (radialLen < 1e-5f || tangLen < 1e-5f) { return; }
+            const Vec3 xAxis(glm::normalize(radial2), 0.0f);
+            const Vec3 yAxis = glm::cross(zAxis, xAxis);
+            PushBoxPrim(Vec3(center2.x, center2.y, depth * 0.5f), Vec3(radialLen * 0.5f, tangLen * 0.5f, depth * 0.5f), BasisToQuat(xAxis, yAxis, zAxis), out);
+        };
+        for (int i = 0; i < N; i++) {
+            const float th0 = pi * static_cast<float>(i) / static_cast<float>(N);
+            const float th1 = pi * static_cast<float>(i + 1) / static_cast<float>(N);
+            const Vec2 A(outerR * std::cos(th0), legH + outerR * std::sin(th0));
+            const Vec2 B(outerR * std::cos(th1), legH + outerR * std::sin(th1));
+            if (A.x >= 0.0f && B.x >= 0.0f) {
+                addCornerBox(A, B, cornerR);
+            }
+            else if (A.x <= 0.0f && B.x <= 0.0f) {
+                addCornerBox(A, B, cornerL);
+            }
+            else {
+                const Vec2 mid = (A + B) * 0.5f;
+                addCornerBox(A, mid, cornerR);
+                addCornerBox(mid, B, cornerL);
+            }
+        }
     }
 }
 

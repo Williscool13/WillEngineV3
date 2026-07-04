@@ -163,7 +163,7 @@ void PhysicsSystem::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter)
     JPH::BodyManager::DrawSettings settings;
     settings.mDrawShape = true;
     settings.mDrawShapeWireframe = true;
-    settings.mDrawShapeColor = JPH::BodyManager::EShapeColor::MotionTypeColor;
+    settings.mDrawShapeColor = JPH::BodyManager::EShapeColor::InstanceColor;
 
     if (bUseFilter) {
         physicsSystem.DrawBodies(settings, debugRenderer, debugDrawFilter);

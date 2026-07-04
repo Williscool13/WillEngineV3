@@ -94,6 +94,7 @@ struct PhysicsColliderAsset
     std::optional<SplineParams> splineParams{};
     std::optional<Text3DParams> text3DParams{};
     FontHandle text3DFontHandle{};
+    bool bPreciseText3D{false};
 
     // Payload (written by the worker into memoryManager->Assets()).
     Core::HeapArray<SplineColliderPrimitive> primitives{}; // Compound
