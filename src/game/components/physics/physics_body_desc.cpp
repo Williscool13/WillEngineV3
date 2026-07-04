@@ -43,6 +43,9 @@ static bool ShapeIsConcaveExotic(const PhysicsShapeDesc& shape)
     if (!std::holds_alternative<std::monostate>(shape.proceduralParams)) {
         return !Engine::CanBuildProceduralCollider(shape.proceduralParams);
     }
+    if (shape.meshSourceModelId.IsValid()) {
+        return shape.bMeshPrecise;
+    }
     return shape.text3DSource.IsValid() && shape.text3DSource.bPrecise;
 }
 
@@ -180,6 +183,7 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                 break;
             case Component::PhysicsShapeType::Collider:
                 shapeJson["meshSourceModelId"] = shape.meshSourceModelId.id;
+                shapeJson["meshPrecise"] = shape.bMeshPrecise;
                 shapeJson["proceduralType"] = shape.proceduralParams.index();
                 if (!shape.splineParams.spline.points.IsEmpty()) {
                     nlohmann::json sp;
@@ -422,6 +426,7 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                 if (shapeJson.contains("meshSourceModelId")) {
                     shape.meshSourceModelId = Engine::ModelID(shapeJson["meshSourceModelId"].get<uint64_t>());
                 }
+                shape.bMeshPrecise = shapeJson.value("meshPrecise", false);
                 if (shapeJson.contains("proceduralType")) {
                     const int32_t ptype = shapeJson["proceduralType"].get<int32_t>();
                     if (ptype == 1) {
@@ -849,6 +854,19 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     if (meta) {
                         ImGui::Text("Mesh Source: %s", meta->name.c_str());
                         bHasAny = true;
+
+                        ImGui::BeginDisabled(bIsDynamic);
+                        if (ImGui::Checkbox("Precise (Triangle Mesh)", &shape.bMeshPrecise)) {
+                            if (shape.colliderHandle.IsValid()) {
+                                ctx->assetManager->UnloadCollider(shape.colliderHandle);
+                                shape.colliderHandle = {};
+                            }
+                            bAnyChange = true;
+                        }
+                        if (bIsDynamic && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                            ImGui::SetTooltip("A precise mesh collider is concave and cannot back a dynamic body.");
+                        }
+                        ImGui::EndDisabled();
                     }
                     else if (idx > 0 && idx < kProceduralNames.Size()) {
                         ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);

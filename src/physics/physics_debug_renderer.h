@@ -25,6 +25,8 @@ public:
 
     void SetViewFamily(Core::ViewFamily* _viewFamily);
 
+    void SetForceLowestLOD(bool bForce) { forceLowestLOD = bForce; }
+
     void DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, JPH::ColorArg inColor) override;
 
     void DrawTriangle(JPH::RVec3Arg inV1, JPH::RVec3Arg inV2, JPH::RVec3Arg inV3,
@@ -60,6 +62,7 @@ private:
     Core::ViewFamily* viewFamily = nullptr;
     JPH::RVec3 cameraPos;
     bool cameraPosSet = false;
+    bool forceLowestLOD = false;
 };
 } // Physics
 

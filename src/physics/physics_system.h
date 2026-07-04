@@ -70,6 +70,7 @@ public:
 
 #if JPH_DEBUG_RENDERER
     DebugDrawFilter& GetDebugDrawFilter() const { return *debugDrawFilter; }
+    void SetDebugDrawForceLowestLOD(bool bForce) const { debugRenderer->SetForceLowestLOD(bForce); }
 #endif
     void DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter = true);
 

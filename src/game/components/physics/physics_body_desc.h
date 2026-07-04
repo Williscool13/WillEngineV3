@@ -65,6 +65,7 @@ struct PhysicsShapeDesc
 
     // Only used for Collider (mutually exclusive: modelId has priority, then procedural, spline, text3D).
     Engine::ModelID meshSourceModelId{};
+    bool bMeshPrecise{false};
     Engine::ProceduralParams proceduralParams{};
     Engine::SplineParams splineParams{};
     Text3DShapeSource text3DSource{};

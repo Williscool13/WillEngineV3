@@ -89,12 +89,15 @@ void DebugRenderer::DrawGeometry(JPH::RMat44Arg inModelMatrix, const JPH::AABox&
                                  ECullMode inCullMode, ECastShadow inCastShadow, EDrawMode inDrawMode)
 {
     const LOD* lod = inGeometry->mLODs.data();
-    if (cameraPosSet) {
+    if (forceLowestLOD) {
+        lod = &inGeometry->mLODs.back();
+    }
+    else if (cameraPosSet) {
         lod = &inGeometry->GetLOD(JPH::Vec3(cameraPos), inWorldSpaceBounds, inLODScaleSq);
     }
 
     // Never draw LOD 0 if we can help it (too many lines)
-    if (inGeometry->mLODs.size() > 1 && lod == inGeometry->mLODs.data()) {
+    if (!forceLowestLOD && inGeometry->mLODs.size() > 1 && lod == inGeometry->mLODs.data()) {
         lod = &inGeometry->mLODs[1];
     }
 

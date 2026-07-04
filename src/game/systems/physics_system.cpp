@@ -218,6 +218,8 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
     auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
     filter.Clear();
 
+    ctx->physicsSystem->SetDebugDrawForceLowestLOD(state->editor.physicsDebugMode == PhysicsDebugMode::On);
+
     if (state->editor.physicsDebugMode == PhysicsDebugMode::On) {
         auto view = state->registry.view<Component::PhysicsBodyComponent>();
         for (const auto& [entity, physicsBody] : view.each()) {
@@ -470,7 +472,8 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
             if (shapeDesc.meshSourceModelId.IsValid()) {
                 if (ctx->assetManager->IsModelFrozen(shapeDesc.meshSourceModelId)) { allArmed = false; break; }
 
-                const Engine::PhysicsColliderKind kind = bodyDesc.motionType == Component::PhysicsMotionType::Dynamic ? Engine::PhysicsColliderKind::ConvexHull : Engine::PhysicsColliderKind::TriangleMesh;
+                const bool bWantsMesh = shapeDesc.bMeshPrecise && bodyDesc.motionType != Component::PhysicsMotionType::Dynamic;
+                const Engine::PhysicsColliderKind kind = bWantsMesh ? Engine::PhysicsColliderKind::TriangleMesh : Engine::PhysicsColliderKind::ConvexHull;
                 shapeDesc.colliderHandle = ctx->assetManager->LoadModelCollider(shapeDesc.meshSourceModelId, kind);
             }
             else if (!std::holds_alternative<std::monostate>(shapeDesc.proceduralParams)) {
