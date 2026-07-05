@@ -149,7 +149,7 @@ struct PhysicsState
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;
 };
 
-enum class BindingSourceType : uint8_t { Key, MouseButton };
+enum class BindingSourceType : uint8_t { Key, MouseButton, GamepadButton, GamepadAxis };
 
 struct BindingSource
 {
@@ -158,9 +158,11 @@ struct BindingSource
     {
         Core::Key key;
         Core::MouseButton mouseButton;
+        Core::GamepadButton gamepadButton;
+        Core::GamepadAxis gamepadAxis;
     };
 
-    constexpr BindingSource() : key(Key::UNKNOWN) {}
+    constexpr BindingSource();
 
     static constexpr BindingSource FromKey(Core::Key k)
     {
@@ -177,7 +179,25 @@ struct BindingSource
         b.mouseButton = m;
         return b;
     }
+
+    static constexpr BindingSource FromGamepadButton(Core::GamepadButton b_)
+    {
+        BindingSource b;
+        b.type = BindingSourceType::GamepadButton;
+        b.gamepadButton = b_;
+        return b;
+    }
+
+    static constexpr BindingSource FromGamepadAxis(Core::GamepadAxis a)
+    {
+        BindingSource b;
+        b.type = BindingSourceType::GamepadAxis;
+        b.gamepadAxis = a;
+        return b;
+    }
 };
+
+constexpr BindingSource::BindingSource(): key(Key::UNKNOWN) {}
 
 struct AxisComposite2D
 {
@@ -187,7 +207,13 @@ struct AxisComposite2D
     BindingSource right;
 };
 
-enum class BindingShape : uint8_t { Discrete, Axis2DComposite };
+struct AnalogStick2D
+{
+    BindingSource x;
+    BindingSource y;
+};
+
+enum class BindingShape : uint8_t { Discrete, Axis2DComposite, AnalogStick2D };
 
 struct ActionBinding
 {
@@ -198,6 +224,7 @@ struct ActionBinding
     {
         BindingSource source;
         AxisComposite2D composite;
+        AnalogStick2D stick;
     };
 
     constexpr ActionBinding() : source() {}
@@ -219,6 +246,16 @@ struct ActionBinding
         b.context = context;
         b.shape = BindingShape::Axis2DComposite;
         b.composite = composite;
+        return b;
+    }
+
+    static constexpr ActionBinding Stick(ActionHandle action, InputContext context, AnalogStick2D stick)
+    {
+        ActionBinding b;
+        b.action = action;
+        b.context = context;
+        b.shape = BindingShape::AnalogStick2D;
+        b.stick = stick;
         return b;
     }
 };

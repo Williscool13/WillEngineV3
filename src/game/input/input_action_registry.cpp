@@ -25,6 +25,14 @@ static void AddComposite2D(Engine::InputState& input, Engine::ActionHandle actio
     input.defaultBindings.PushBack(Engine::ActionBinding::Composite(action, context, composite));
 }
 
+static void AddStick(Engine::InputState& input, Engine::ActionHandle action, Engine::InputContext context, Engine::AnalogStick2D stick)
+{
+    if (!input.actionIndex.Find(action)) {
+        input.actionIndex.Insert(action, input.actionIndex.Size());
+    }
+    input.defaultBindings.PushBack(Engine::ActionBinding::Stick(action, context, stick));
+}
+
 void RegisterInputActions(Engine::InputState& input)
 {
     input.defaultBindings.Clear();
@@ -36,7 +44,13 @@ void RegisterInputActions(Engine::InputState& input)
         Engine::BindingSource::FromKey(Key::A),
         Engine::BindingSource::FromKey(Key::D)
     });
+    AddStick(input, Actions::ACTION_MOVE, Engine::InputContext::Gameplay, {
+        Engine::BindingSource::FromGamepadAxis(GamepadAxis::LEFT_X),
+        Engine::BindingSource::FromGamepadAxis(GamepadAxis::LEFT_Y)
+    });
+
     Add(input, Actions::ACTION_JUMP, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::SPACE));
+    Add(input, Actions::ACTION_JUMP, Engine::InputContext::Gameplay, Engine::BindingSource::FromGamepadButton(GamepadButton::SOUTH));
 
     input.bindings = input.defaultBindings;
     input.actionStates.Resize(input.actionIndex.Size());

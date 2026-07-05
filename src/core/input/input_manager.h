@@ -7,6 +7,7 @@
 
 
 #include <SDL3/SDL_events.h>
+#include <SDL3/SDL_gamepad.h>
 #include "input_frame.h"
 #include "input_utils.h"
 
@@ -18,6 +19,8 @@ public:
     InputManager() = default;
 
     InputManager(uint32_t w, uint32_t h);
+
+    ~InputManager();
 
     void ProcessEvent(const SDL_Event& event);
 
@@ -32,9 +35,15 @@ public:
     [[nodiscard]] bool IsQuitRequested() const { return bRequestedQuit; }
 
 private:
+    void OpenFirstGamepad();
+    void CloseGamepad();
+
     InputFrame currentInput{};
     bool bRequestedQuit{false};
     Vec2 windowExtents{1700, 900};
+
+    SDL_Gamepad* gamepad{nullptr};
+    static constexpr float GAMEPAD_DEADZONE = 0.15f;
 };
 } // Core
 

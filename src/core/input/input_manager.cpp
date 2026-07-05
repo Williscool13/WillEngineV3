@@ -9,6 +9,14 @@ namespace Core
 InputManager::InputManager(uint32_t w, uint32_t h)
 {
     windowExtents = Vec2(static_cast<float>(w), static_cast<float>(h));
+    OpenFirstGamepad();
+}
+
+InputManager::~InputManager()
+{
+    if (gamepad) {
+        SDL_CloseGamepad(gamepad);
+    }
 }
 
 void InputManager::ProcessEvent(const SDL_Event& event)
@@ -48,6 +56,52 @@ void InputManager::ProcessEvent(const SDL_Event& event)
             currentInput.mouseWheelDelta.y += event.wheel.y;
             break;
         }
+
+        case SDL_EVENT_GAMEPAD_ADDED:
+        {
+            if (!gamepad) {
+                OpenFirstGamepad();
+            }
+            break;
+        }
+
+        case SDL_EVENT_GAMEPAD_REMOVED:
+        {
+            if (gamepad && SDL_GetGamepadID(gamepad) == event.gdevice.which) {
+                CloseGamepad();
+            }
+            break;
+        }
+
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+        case SDL_EVENT_GAMEPAD_BUTTON_UP:
+        {
+            GamepadButton btn = SDLGamepadButtonToGamepadButton(static_cast<SDL_GamepadButton>(event.gbutton.button));
+            if (btn != GamepadButton::COUNT) {
+                UpdateButtonState(currentInput.GetGamepadButton(btn), event.gbutton.down);
+            }
+            break;
+        }
+
+        case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+        {
+            GamepadAxis axis;
+            switch (static_cast<SDL_GamepadAxis>(event.gaxis.axis))
+            {
+                case SDL_GAMEPAD_AXIS_LEFTX: axis = GamepadAxis::LEFT_X; break;
+                case SDL_GAMEPAD_AXIS_LEFTY: axis = GamepadAxis::LEFT_Y; break;
+                case SDL_GAMEPAD_AXIS_RIGHTX: axis = GamepadAxis::RIGHT_X; break;
+                case SDL_GAMEPAD_AXIS_RIGHTY: axis = GamepadAxis::RIGHT_Y; break;
+                case SDL_GAMEPAD_AXIS_LEFT_TRIGGER: axis = GamepadAxis::LEFT_TRIGGER; break;
+                case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER: axis = GamepadAxis::RIGHT_TRIGGER; break;
+                default: axis = GamepadAxis::COUNT; break;
+            }
+            if (axis != GamepadAxis::COUNT) {
+                currentInput.gamepadAxes[static_cast<size_t>(axis)] = NormalizeGamepadAxis(axis, event.gaxis.value, GAMEPAD_DEADZONE);
+            }
+            break;
+        }
+
         case SDL_EVENT_QUIT:
         {
             bRequestedQuit = true;
@@ -56,6 +110,31 @@ void InputManager::ProcessEvent(const SDL_Event& event)
 
         default:
             break;
+    }
+}
+
+void InputManager::OpenFirstGamepad()
+{
+    int count = 0;
+    SDL_JoystickID* ids = SDL_GetGamepads(&count);
+    if (ids && count > 0) {
+        gamepad = SDL_OpenGamepad(ids[0]);
+        currentInput.isGamepadConnected = gamepad != nullptr;
+    }
+    SDL_free(ids);
+}
+
+void InputManager::CloseGamepad()
+{
+    SDL_CloseGamepad(gamepad);
+    gamepad = nullptr;
+    currentInput.isGamepadConnected = false;
+
+    for (auto& btn : currentInput.gamepadButtons) {
+        btn = {};
+    }
+    for (float& axis : currentInput.gamepadAxes) {
+        axis = 0.0f;
     }
 }
 
@@ -72,6 +151,11 @@ void InputManager::FrameReset()
     }
 
     for (auto& btn : currentInput.mouseButtons) {
+        btn.pressed = false;
+        btn.released = false;
+    }
+
+    for (auto& btn : currentInput.gamepadButtons) {
         btn.pressed = false;
         btn.released = false;
     }

@@ -49,7 +49,7 @@ private:
     float torqueStrength{10.0f};
     float rollSpeedMultiplier{600.0f};
     float maxAngularSpeed{20.0f};
-    float jumpImpulse{5.0f};
+    float jumpImpulse{100.0f};
 
     bool grounded{false};
 };

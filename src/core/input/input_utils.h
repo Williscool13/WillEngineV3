@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_INPUT_UTILS_H
 #define WILL_ENGINE_INPUT_UTILS_H
 
+#include <cmath>
 #include <SDL3/SDL.h>
 
 #include "input_frame.h"
@@ -136,6 +137,51 @@ inline void UpdateButtonState(InputFrame::ButtonState& button, bool isPressed)
         button.released = true;
     }
     button.down = isPressed;
+}
+
+inline GamepadButton SDLGamepadButtonToGamepadButton(SDL_GamepadButton sdl)
+{
+    switch (sdl)
+    {
+        case SDL_GAMEPAD_BUTTON_SOUTH: return GamepadButton::SOUTH;
+        case SDL_GAMEPAD_BUTTON_EAST: return GamepadButton::EAST;
+        case SDL_GAMEPAD_BUTTON_WEST: return GamepadButton::WEST;
+        case SDL_GAMEPAD_BUTTON_NORTH: return GamepadButton::NORTH;
+        case SDL_GAMEPAD_BUTTON_BACK: return GamepadButton::BACK;
+        case SDL_GAMEPAD_BUTTON_GUIDE: return GamepadButton::GUIDE;
+        case SDL_GAMEPAD_BUTTON_START: return GamepadButton::START;
+        case SDL_GAMEPAD_BUTTON_LEFT_STICK: return GamepadButton::LEFT_STICK;
+        case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return GamepadButton::RIGHT_STICK;
+        case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return GamepadButton::LEFT_SHOULDER;
+        case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return GamepadButton::RIGHT_SHOULDER;
+        case SDL_GAMEPAD_BUTTON_DPAD_UP: return GamepadButton::DPAD_UP;
+        case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return GamepadButton::DPAD_DOWN;
+        case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return GamepadButton::DPAD_LEFT;
+        case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return GamepadButton::DPAD_RIGHT;
+        default: return GamepadButton::COUNT;
+    }
+}
+
+inline float NormalizeGamepadAxis(GamepadAxis axis, Sint16 rawValue, float deadzone)
+{
+    const bool isTrigger = axis == GamepadAxis::LEFT_TRIGGER || axis == GamepadAxis::RIGHT_TRIGGER;
+    if (isTrigger) {
+        const float value = static_cast<float>(rawValue) / 32767.0f;
+        return value < deadzone ? 0.0f : (value - deadzone) / (1.0f - deadzone);
+    }
+
+    // SDL reports stick-up as negative; flip so "up" is positive, matching the WASD composite convention.
+    const bool isVertical = axis == GamepadAxis::LEFT_Y || axis == GamepadAxis::RIGHT_Y;
+    float value = rawValue < 0 ? static_cast<float>(rawValue) / 32768.0f : static_cast<float>(rawValue) / 32767.0f;
+    if (isVertical) {
+        value = -value;
+    }
+    const float magnitude = std::fabsf(value);
+    if (magnitude < deadzone) {
+        return 0.0f;
+    }
+    const float sign = value < 0.0f ? -1.0f : 1.0f;
+    return sign * (magnitude - deadzone) / (1.0f - deadzone);
 }
 
 } // Core

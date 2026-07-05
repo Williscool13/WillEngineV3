@@ -49,6 +49,26 @@ enum class MouseButton : uint8_t
     COUNT
 };
 
+// Dense sequential enum for array indexing; maps 1:1 onto SDL_GamepadButton
+enum class GamepadButton : uint8_t
+{
+    SOUTH = 0, EAST, WEST, NORTH,
+    BACK, GUIDE, START,
+    LEFT_STICK, RIGHT_STICK,
+    LEFT_SHOULDER, RIGHT_SHOULDER,
+    DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT,
+    COUNT
+};
+
+// Dense sequential enum for array indexing; maps 1:1 onto SDL_GamepadAxis
+enum class GamepadAxis : uint8_t
+{
+    LEFT_X = 0, LEFT_Y,
+    RIGHT_X, RIGHT_Y,
+    LEFT_TRIGGER, RIGHT_TRIGGER,
+    COUNT
+};
+
 struct InputFrame
 {
     struct ButtonState
@@ -60,6 +80,13 @@ struct InputFrame
 
     Array<ButtonState, static_cast<size_t>(Key::COUNT)> keys{};
     Array<ButtonState, static_cast<size_t>(MouseButton::COUNT)> mouseButtons{};
+    Array<ButtonState, static_cast<size_t>(GamepadButton::COUNT)> gamepadButtons{};
+
+    /**
+     * Normalized [-1, 1] for sticks, [0, 1] for triggers
+     */
+    Array<float, static_cast<size_t>(GamepadAxis::COUNT)> gamepadAxes{};
+    bool isGamepadConnected{false};
 
     /**
      * Normalized mouse position
@@ -76,9 +103,12 @@ struct InputFrame
     // Helper accessors
     [[nodiscard]] const ButtonState& GetKey(Key k) const { return keys[static_cast<size_t>(k)]; }
     [[nodiscard]] const ButtonState& GetMouse(MouseButton btn) const { return mouseButtons[static_cast<size_t>(btn)]; }
+    [[nodiscard]] const ButtonState& GetGamepadButton(GamepadButton btn) const { return gamepadButtons[static_cast<size_t>(btn)]; }
+    [[nodiscard]] float GetGamepadAxis(GamepadAxis axis) const { return gamepadAxes[static_cast<size_t>(axis)]; }
 
     ButtonState& GetKey(Key k) { return keys[static_cast<size_t>(k)]; }
     ButtonState& GetMouse(MouseButton btn) { return mouseButtons[static_cast<size_t>(btn)]; }
+    ButtonState& GetGamepadButton(GamepadButton btn) { return gamepadButtons[static_cast<size_t>(btn)]; }
 
     bool ConsumeKeyPress(Key key)
     {
@@ -101,5 +131,7 @@ struct InputFrame
 using InputFrame = Core::InputFrame;
 using Key = Core::Key;
 using MouseButton = Core::MouseButton;
+using GamepadButton = Core::GamepadButton;
+using GamepadAxis = Core::GamepadAxis;
 
 #endif //WILL_ENGINE_INPUT_FRAME_H
