@@ -9,6 +9,8 @@
 #include "core/input/input_names.h"
 #include "engine/engine_api.h"
 #include "engine/input/input_rebinding.h"
+#include "engine/input_config.h"
+#include "engine/profiles/profile_library.h"
 #include "game/input/game_actions.h"
 
 namespace Game
@@ -35,9 +37,58 @@ static const char* BindingSourceLabel(const Engine::BindingSource& source)
     return "?";
 }
 
+static void DrawInputProfiles(Engine::EngineState* state)
+{
+    Engine::ProjectConfig& cfg = state->projectConfig;
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::BeginCombo("Profile##inputprofile", cfg.activeInputProfile.IsEmpty() ? "Default" : cfg.activeInputProfile.c_str())) {
+        if (ImGui::Selectable("Default", cfg.activeInputProfile.IsEmpty())) {
+            cfg.activeInputProfile = Core::InlineString<64>();
+            Engine::LoadAndApplyInputConfig(state->input, cfg);
+            Engine::WriteProjectConfig(cfg);
+        }
+
+        Engine::Profiles::ProfileName names[Engine::Profiles::MAX_PROFILES];
+        const uint32_t count = Engine::Profiles::ListInputProfiles(names, Engine::Profiles::MAX_PROFILES);
+        for (uint32_t i = 0; i < count; ++i) {
+            if (ImGui::Selectable(names[i].c_str(), cfg.activeInputProfile == names[i])) {
+                cfg.activeInputProfile = names[i];
+                Engine::InputConfig loaded{};
+                Engine::Profiles::LoadInputProfile(names[i].c_str(), loaded);
+                Engine::ApplyInputOverrides(state->input, loaded);
+                Engine::WriteProjectConfig(cfg);
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(cfg.activeInputProfile.IsEmpty());
+    if (ImGui::Button("Delete##inputprofile")) {
+        Engine::Profiles::DeleteInputProfile(cfg.activeInputProfile.c_str());
+        cfg.activeInputProfile = Core::InlineString<64>();
+        Engine::SaveInputConfig(state->input, cfg);
+        Engine::WriteProjectConfig(cfg);
+    }
+    ImGui::EndDisabled();
+
+    static char inputNewName[64] = "";
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::InputText("##inputnewname", inputNewName, sizeof(inputNewName));
+    ImGui::SameLine();
+    if (ImGui::Button("Save As##inputprofile") && inputNewName[0] != '\0') {
+        Engine::Profiles::SaveInputProfile(inputNewName, Engine::BuildInputConfigFromState(state->input));
+        cfg.activeInputProfile = Core::InlineString<64>(inputNewName);
+        Engine::WriteProjectConfig(cfg);
+        inputNewName[0] = '\0';
+    }
+}
+
 void DrawInputBindingsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ImGui::Begin("Input Bindings")) {
+        DrawInputProfiles(state);
+        ImGui::Separator();
+
         for (const DisplayedAction& displayed : DISPLAYED_ACTIONS) {
             ImGui::SeparatorText(displayed.name);
 

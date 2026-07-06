@@ -121,7 +121,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     Audio::AudioManager::RegisterAudio();
     Game::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
-    Engine::ApplyInputOverrides(state->input, Engine::ReadInputConfig());
+    Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
     Game::ConnectRenderObservers(state->registry);
@@ -198,7 +198,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 
     Game::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
-    Engine::ApplyInputOverrides(state->input, Engine::ReadInputConfig());
+    Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
     Game::ConnectRenderObservers(state->registry);

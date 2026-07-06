@@ -4,11 +4,13 @@
 
 #include "input_config.h"
 
+#include <cstdio>
 #include <fstream>
 
 #include <json/nlohmann/json.hpp>
 
 #include "platform/paths.h"
+#include "platform/file_utils.h"
 #include "engine/input/input_rebinding.h"
 
 namespace Engine
@@ -47,18 +49,27 @@ static bool BindingSourceFromJson(const nlohmann::json& j, BindingSource& outSou
     return false;
 }
 
-InputConfig ReadInputConfig()
+static nlohmann::json InputConfigToJson(const InputConfig& config)
 {
-    InputConfig config{};
-
-    const Core::Path path = GetInputConfigPath();
-    std::ifstream file(path.c_str());
-    if (!file.is_open()) {
-        return config;
+    nlohmann::json overrides = nlohmann::json::array();
+    for (size_t i = 0; i < config.overrides.Size(); ++i) {
+        const InputBindingOverride& o = config.overrides[i];
+        overrides.push_back({
+            {"action", o.action.id},
+            {"row", o.bindingRowInDefault},
+            {"source", BindingSourceToJson(o.source)}
+        });
     }
 
-    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
-    if (j.is_discarded() || !j.contains("overrides") || !j["overrides"].is_array()) {
+    nlohmann::json j;
+    j["overrides"] = overrides;
+    return j;
+}
+
+static InputConfig InputConfigFromJson(const nlohmann::json& j)
+{
+    InputConfig config{};
+    if (!j.is_object() || !j.contains("overrides") || !j["overrides"].is_array()) {
         return config;
     }
 
@@ -81,30 +92,76 @@ InputConfig ReadInputConfig()
     return config;
 }
 
-bool WriteInputConfig(const InputConfig& config)
+static InputConfig ReadInputConfig()
+{
+    const Core::Path path = GetInputConfigPath();
+    std::ifstream file(path.c_str());
+    if (!file.is_open()) { return InputConfig{}; }
+
+    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    if (j.is_discarded()) { return InputConfig{}; }
+
+    return InputConfigFromJson(j);
+}
+
+static bool WriteInputConfig(const InputConfig& config)
 {
     const Core::Path path = GetInputConfigPath();
     std::ofstream file(path.c_str());
-    if (!file.is_open()) {
-        return false;
-    }
+    if (!file.is_open()) { return false; }
 
-    nlohmann::json overrides = nlohmann::json::array();
-    for (size_t i = 0; i < config.overrides.Size(); ++i) {
-        const InputBindingOverride& o = config.overrides[i];
-        overrides.push_back({
-            {"action", o.action.id},
-            {"row", o.bindingRowInDefault},
-            {"source", BindingSourceToJson(o.source)}
-        });
-    }
-
-    nlohmann::json j;
-    j["overrides"] = overrides;
-
-    file << j.dump(2);
+    file << InputConfigToJson(config).dump(2);
     return file.good();
 }
+
+static Core::Path InputProfilesDir()
+{
+    return Platform::GetConfigPath() / "profiles" / "input";
+}
+
+static Core::Path InputProfilePath(const char* name)
+{
+    char fileName[128];
+    std::snprintf(fileName, sizeof(fileName), "%s.wprofile", name);
+    return InputProfilesDir() / fileName;
+}
+
+namespace Profiles
+{
+uint32_t ListInputProfiles(ProfileName* outNames, uint32_t maxNames)
+{
+    Core::Path paths[MAX_PROFILES];
+    const uint32_t found = Platform::FindFilesByExtension(InputProfilesDir(), ".wprofile", paths, MAX_PROFILES);
+    const uint32_t count = found < maxNames ? found : maxNames;
+    for (uint32_t i = 0; i < count; ++i) {
+        outNames[i] = ProfileName(paths[i].Stem());
+    }
+    return count;
+}
+
+bool LoadInputProfile(const char* name, InputConfig& out)
+{
+    std::ifstream file(InputProfilePath(name).c_str());
+    if (!file.is_open()) { return false; }
+
+    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    if (!j.is_object()) { return false; }
+
+    out = InputConfigFromJson(j);
+    return true;
+}
+
+bool SaveInputProfile(const char* name, const InputConfig& config)
+{
+    const std::string dump = InputConfigToJson(config).dump(2);
+    return Platform::WriteFile(InputProfilePath(name), std::string_view(dump));
+}
+
+bool DeleteInputProfile(const char* name)
+{
+    return Platform::DeleteSingleFile(InputProfilePath(name));
+}
+} // Profiles
 
 void ApplyInputOverrides(InputState& input, const InputConfig& config)
 {
@@ -134,5 +191,28 @@ InputConfig BuildInputConfigFromState(const InputState& input)
     }
 
     return config;
+}
+
+void LoadAndApplyInputConfig(InputState& input, const ProjectConfig& projectConfig)
+{
+    InputConfig config{};
+    if (!projectConfig.activeInputProfile.IsEmpty()) {
+        Profiles::LoadInputProfile(projectConfig.activeInputProfile.c_str(), config);
+    }
+    else {
+        config = ReadInputConfig();
+    }
+    ApplyInputOverrides(input, config);
+}
+
+void SaveInputConfig(const InputState& input, const ProjectConfig& projectConfig)
+{
+    const InputConfig config = BuildInputConfigFromState(input);
+    if (!projectConfig.activeInputProfile.IsEmpty()) {
+        Profiles::SaveInputProfile(projectConfig.activeInputProfile.c_str(), config);
+    }
+    else {
+        WriteInputConfig(config);
+    }
 }
 } // Engine

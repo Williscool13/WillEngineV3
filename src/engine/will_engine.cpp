@@ -1391,7 +1391,7 @@ void WillEngine::Run()
             PollCapture(engineState->input, currentInput);
             ResolveInputActions(currentInput, engineState->inputContext, engineState->input);
             if (engineState->input.bBindingsDirty) {
-                WriteInputConfig(BuildInputConfigFromState(engineState->input));
+                SaveInputConfig(engineState->input, engineState->projectConfig);
                 engineState->input.bBindingsDirty = false;
             }
             engineState->timeFrame = &timeManager->GetTime();

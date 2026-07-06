@@ -59,6 +59,9 @@ ProjectConfig ReadProjectConfig()
     if (j.contains("activePostProcessProfile") && j["activePostProcessProfile"].is_string()) {
         config.activePostProcessProfile = Core::InlineString<64>(j["activePostProcessProfile"].get<std::string_view>());
     }
+    if (j.contains("activeInputProfile") && j["activeInputProfile"].is_string()) {
+        config.activeInputProfile = Core::InlineString<64>(j["activeInputProfile"].get<std::string_view>());
+    }
 
     if (j.contains("aa") && j["aa"].is_object()) {
         ConfigSerialization::FromJson(j["aa"], config.aaConfig);
@@ -107,6 +110,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
     j["bAutoSavePostProcess"] = config.bAutoSavePostProcess;
     j["activeLightingProfile"] = std::string_view(config.activeLightingProfile.c_str(), config.activeLightingProfile.Size());
     j["activePostProcessProfile"] = std::string_view(config.activePostProcessProfile.c_str(), config.activePostProcessProfile.Size());
+    j["activeInputProfile"] = std::string_view(config.activeInputProfile.c_str(), config.activeInputProfile.Size());
     j["aa"] = ConfigSerialization::ToJson(config.aaConfig);
     j["resolutionScale"] = config.resolutionScale;
     j["gameCameraFovDegrees"] = config.gameCameraFovDegrees;
