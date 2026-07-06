@@ -13,6 +13,7 @@
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
 #include "game/gameplay/camera/gameplay_camera.h"
+#include "game/input/game_actions.h"
 
 namespace Game
 {
@@ -28,23 +29,24 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
         float yaw = 0;
         float pitch = 0;
 
-        const bool rmbHeld = state->inputFrame->GetMouse(MouseButton::RMB).down;
+        const Core::ActionState& lookModifier = state->input.GetActionState(Actions::ACTION_EDITOR_CAM_LOOK_MODIFIER);
+        const bool rmbHeld = lookModifier.down;
         if (!ctx->bImguiMouseCaptured) {
-            if (state->inputFrame->GetMouse(MouseButton::RMB).pressed) {
+            if (lookModifier.pressed) {
                 ctx->setCursorHiddenFn(true);
-            } else if (state->inputFrame->GetMouse(MouseButton::RMB).released) {
+            } else if (lookModifier.released) {
                 ctx->setCursorHiddenFn(false);
             }
         }
         if (!ctx->bImguiKeyboardCaptured && !ctx->bImguiMouseCaptured && rmbHeld) {
-            if (state->inputFrame->GetKey(Key::D).down) velocity.x += 1.0f;
-            if (state->inputFrame->GetKey(Key::A).down) velocity.x -= 1.0f;
-            if (state->inputFrame->GetKey(Key::LCTRL).down) verticalVelocity -= 1.0f;
-            if (state->inputFrame->GetKey(Key::SPACE).down) verticalVelocity += 1.0f;
-            if (state->inputFrame->GetKey(Key::W).down) velocity.z += 1.0f;
-            if (state->inputFrame->GetKey(Key::S).down) velocity.z -= 1.0f;
-            yaw = glm::radians(-state->inputFrame->mouseXDelta * freeCam.lookSpeed);
-            pitch = glm::radians(-state->inputFrame->mouseYDelta * freeCam.lookSpeed);
+            const Core::ActionState& moveAction = state->input.GetActionState(Actions::ACTION_EDITOR_CAM_MOVE);
+            velocity.x += moveAction.axis.x;
+            velocity.z += moveAction.axis.y;
+            if (state->input.GetActionState(Actions::ACTION_EDITOR_CAM_DOWN).down) verticalVelocity -= 1.0f;
+            if (state->input.GetActionState(Actions::ACTION_EDITOR_CAM_UP).down) verticalVelocity += 1.0f;
+            const Core::ActionState& mouseDelta = state->input.GetActionState(Actions::ACTION_EDITOR_CAM_MOUSE_DELTA);
+            yaw = glm::radians(-mouseDelta.axis.x * freeCam.lookSpeed);
+            pitch = glm::radians(-mouseDelta.axis.y * freeCam.lookSpeed);
         }
 
         freeCam.lookSpeed = glm::clamp(freeCam.lookSpeed, 0.1f, 1.0f);
@@ -69,13 +71,15 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
         transform.translation += right * velocity.x + forwardDir * velocity.z + WORLD_UP * verticalVelocity;
 
         if (!ctx->bImguiMouseCaptured && rmbHeld) {
-            freeCam.moveSpeed = glm::clamp(freeCam.moveSpeed + state->inputFrame->mouseWheelDelta.y * 0.5f, 1.0f, 100.0f);
+            const float wheelY = state->input.GetActionState(Actions::ACTION_EDITOR_CAM_ZOOM_SPEED).axis.y;
+            freeCam.moveSpeed = glm::clamp(freeCam.moveSpeed + wheelY * 0.5f, 1.0f, 100.0f);
         }
 
-        if (!ctx->bImguiMouseCaptured && state->inputFrame->GetMouse(MouseButton::MMB).down) {
+        if (!ctx->bImguiMouseCaptured && state->input.GetActionState(Actions::ACTION_EDITOR_CAM_PAN_MODIFIER).down) {
             const float panScale = scaledMoveSpeed * 0.1f;
-            transform.translation -= right * state->inputFrame->mouseXDelta * panScale;
-            transform.translation += WORLD_UP * state->inputFrame->mouseYDelta * panScale;
+            const Core::ActionState& mouseDelta = state->input.GetActionState(Actions::ACTION_EDITOR_CAM_MOUSE_DELTA);
+            transform.translation -= right * mouseDelta.axis.x * panScale;
+            transform.translation += WORLD_UP * mouseDelta.axis.y * panScale;
         }
 
         const float aspectRatio = static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight);

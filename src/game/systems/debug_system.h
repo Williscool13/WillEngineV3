@@ -5,6 +5,8 @@
 #ifndef WILL_ENGINE_DEBUG_SYSTEM_H
 #define WILL_ENGINE_DEBUG_SYSTEM_H
 
+#include <iterator>
+
 #include "render/interface/render_interface.h"
 #include "core/input/input_frame.h"
 #include "render/shaders/common_interop.h"
@@ -47,6 +49,7 @@ static const DebugHotkey DEBUG_HOTKEYS[] = {
     {Key::NUM_9, "Portal Deferred Resolve", "portal_deferred_resolve", DebugTransformationType::None, Core::DebugViewAspect::None},
     {Key::NUM_0, "Stencil Target", "depth_target", DebugTransformationType::StencilRemap, Core::DebugViewAspect::Stencil},
 };
+static_assert(std::size(DEBUG_HOTKEYS) == 10);
 
 }
 

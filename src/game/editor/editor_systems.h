@@ -32,6 +32,8 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
 
 void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 
+void EditorTickInput(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 }
 

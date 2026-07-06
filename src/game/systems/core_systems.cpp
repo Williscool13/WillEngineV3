@@ -6,12 +6,13 @@
 
 #include "core/input/input_frame.h"
 #include "engine/engine_api.h"
+#include "game/input/game_actions.h"
 
 namespace Game
 {
 void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->inputFrame->GetKey(Key::F10).pressed) {
+    if (state->input.GetActionState(Actions::ACTION_SCREENSHOT).pressed) {
         state->bWantsScreenshot |= true;
     }
 }

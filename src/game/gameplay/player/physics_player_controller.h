@@ -33,6 +33,7 @@ private:
     float lookYaw{0.0f};
     float lookPitch{0.0f};
     float lookSpeed{10.0f};
+    float gamepadLookSpeed{180.0f};
 
     Camera::OrbitCameraParams cameraParams{};
     Camera::OrbitCameraState cameraState{};

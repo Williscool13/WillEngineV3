@@ -14,6 +14,7 @@
 #include "game/systems/debug_system.h"
 #include "game/editor/settings/graphics_settings.h"
 #include "game/editor/settings/input_settings.h"
+#include "game/input/game_actions.h"
 #include "game/editor/editor_scene_browser.h"
 #include "game/editor/editor_materials.h"
 #include "imgui.h"
@@ -287,7 +288,7 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     if (state->inputContext != Engine::InputContext::Editor) {
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
-        if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+        if (!popupOpen && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
             if (state->inputContext == Engine::InputContext::Gameplay) {
                 state->inputContext = Engine::InputContext::Menu;
                 ctx->setCursorHiddenFn(false);
@@ -309,6 +310,14 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
+void EditorTickInput(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (state->inputContext != Engine::InputContext::Gameplay && !ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->input.GetActionState(Actions::ACTION_VIEWPORT_SELECT).pressed) {
+        state->bViewportClickPending = true;
+    }
+    HandleEditorHotkeys(ctx, state);
+}
+
 void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
@@ -318,7 +327,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     state->editor.bExclusiveGizmoActive = false;
 
     const bool bJustSelected = HandleViewportSelection(ctx, state);
-    HandleEditorHotkeys(ctx, state);
 
     DrawDebugViewWindow(ctx, state);
     DrawProjectConfigWindow(ctx, state);
@@ -373,62 +381,78 @@ static bool HandleViewportSelection(Engine::EngineContext* ctx, Engine::EngineSt
 {
     bool bJustSelected = false;
 
-    const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
-    if (state->inputContext != Engine::InputContext::Gameplay && !ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
-        auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
-        if (it != nullptr) {
-            bJustSelected = true;
-            state->editor.selectedFolders.Clear();
-            entt::entity clicked = *it;
-            if (ctrlHeld) {
-                auto pos = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), clicked);
-                if (pos != state->editor.selectedEntities.end()) {
-                    state->editor.selectedEntities.Remove(pos);
+    const bool ctrlHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_CTRL).down;
+    if (state->bViewportClickPending) {
+        state->bViewportClickPending = false;
+
+        if (state->inputContext != Engine::InputContext::Gameplay && !ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev) {
+            auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
+            if (it != nullptr) {
+                bJustSelected = true;
+                state->editor.selectedFolders.Clear();
+                entt::entity clicked = *it;
+                if (ctrlHeld) {
+                    auto pos = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), clicked);
+                    if (pos != state->editor.selectedEntities.end()) {
+                        state->editor.selectedEntities.Remove(pos);
+                    }
+                    else {
+                        state->editor.selectedEntities.PushBack(clicked);
+                    }
                 }
                 else {
+                    state->editor.selectedEntities.Clear();
                     state->editor.selectedEntities.PushBack(clicked);
                 }
             }
-            else {
+            else if (!ctrlHeld) {
+                state->editor.selectedFolders.Clear();
                 state->editor.selectedEntities.Clear();
-                state->editor.selectedEntities.PushBack(clicked);
             }
-        }
-        else if (!ctrlHeld) {
-            state->editor.selectedFolders.Clear();
-            state->editor.selectedEntities.Clear();
         }
     }
 
     return bJustSelected;
 }
 
+static void ToggleDebugView(Engine::EngineState* state, const DebugHotkey& hotkey)
+{
+    if (state->debug.resourceName == hotkey.resourceName && state->debug.viewAspect == hotkey.aspect && state->debug.transformationType == hotkey.transform) {
+        state->debug.resourceName.Clear();
+    }
+    else {
+        state->debug.resourceName = Core::InlineString(hotkey.resourceName);
+        state->debug.transformationType = hotkey.transform;
+        state->debug.viewAspect = hotkey.aspect;
+    }
+}
+
 static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
+    const bool ctrlHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_CTRL).down;
 
     if (state->inputContext == Engine::InputContext::Editor && !ctx->bImGuiWantsTextInput) {
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
-        const bool rmbHeld = state->inputFrame->GetMouse(MouseButton::RMB).down;
+        const bool rmbHeld = state->input.GetActionState(Actions::ACTION_EDITOR_CAM_LOOK_MODIFIER).down;
         const bool multiSelectActive = state->editor.selectedEntities.Size() > 1;
 
         if (multiSelectActive && state->editor.currentGizmoOperation == ImGuizmo::SCALE) {
             state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE;
         }
         if (!ctrlHeld) {
-            if (state->inputFrame->GetKey(Key::W).pressed) {
+            if (state->input.GetActionState(Actions::ACTION_GIZMO_TRANSLATE).pressed) {
                 state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE;
             }
-            else if (state->inputFrame->GetKey(Key::E).pressed) {
+            else if (state->input.GetActionState(Actions::ACTION_GIZMO_ROTATE).pressed) {
                 state->editor.currentGizmoOperation = ImGuizmo::ROTATE;
             }
-            else if (state->inputFrame->GetKey(Key::R).pressed && !multiSelectActive) {
+            else if (state->input.GetActionState(Actions::ACTION_GIZMO_SCALE).pressed && !multiSelectActive) {
                 state->editor.currentGizmoOperation = ImGuizmo::SCALE;
             }
         }
 
         if (!rmbHeld) {
-            if (!popupOpen && ctrlHeld && state->inputFrame->GetKey(Key::W).pressed) {
+            if (!popupOpen && ctrlHeld && state->input.GetActionState(Actions::ACTION_DUPLICATE).pressed) {
                 auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), state->editor.selectedEntities.Size());
                 for (entt::entity entity : state->editor.selectedEntities) {
                     if (!state->registry.valid(entity)) continue;
@@ -444,7 +468,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 if (!copies.IsEmpty()) { MarkSceneModified(state, state->currentSceneId); }
             }
 
-            if (!popupOpen && state->inputFrame->GetKey(Key::DEL).pressed) {
+            if (!popupOpen && state->input.GetActionState(Actions::ACTION_DELETE_SELECTED).pressed) {
                 const bool hadSelection = !state->editor.selectedEntities.IsEmpty();
                 for (entt::entity entity : state->editor.selectedEntities) {
                     if (!state->registry.valid(entity)) continue;
@@ -454,12 +478,12 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 if (hadSelection) { MarkSceneModified(state, state->currentSceneId); }
             }
 
-            if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+            if (!popupOpen && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
                 state->editor.selectedFolders.Clear();
                 state->editor.selectedEntities.Clear();
             }
 
-            if (!popupOpen && state->inputFrame->GetKey(Key::F2).pressed) {
+            if (!popupOpen && state->input.GetActionState(Actions::ACTION_BEGIN_RENAME).pressed) {
                 if (state->editor.selectedFolders.Size() == 1 && state->registry.valid(state->editor.selectedFolders[0])) {
                     if (const auto* fc = state->registry.try_get<Component::SceneFolderComponent>(state->editor.selectedFolders[0])) {
                         state->editor.renamingEntity = state->editor.selectedFolders[0];
@@ -478,7 +502,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 }
             }
 
-            if (!popupOpen && state->inputFrame->GetKey(Key::F).pressed && !state->editor.selectedEntities.IsEmpty()) {
+            if (!popupOpen && state->input.GetActionState(Actions::ACTION_FOCUS_SELECTION).pressed && !state->editor.selectedEntities.IsEmpty()) {
                 entt::entity target = state->editor.selectedEntities.Front();
                 if (state->registry.valid(target)) {
                     auto* targetTransform = state->registry.try_get<Component::TransformComponent>(target);
@@ -539,18 +563,16 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
             }
         }
 
-        for (const auto& hotkey : DEBUG_HOTKEYS) {
-            if (state->inputFrame->GetKey(hotkey.key).pressed) {
-                if (state->debug.resourceName == hotkey.resourceName && state->debug.viewAspect == hotkey.aspect && state->debug.transformationType == hotkey.transform) {
-                    state->debug.resourceName.Clear();
-                }
-                else {
-                    state->debug.resourceName = Core::InlineString(hotkey.resourceName);
-                    state->debug.transformationType = hotkey.transform;
-                    state->debug.viewAspect = hotkey.aspect;
-                }
-            }
-        }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_1).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[0]); }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_2).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[1]); }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_3).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[2]); }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_4).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[3]); }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_5).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[4]); }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_6).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[5]); }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_7).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[6]); }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_8).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[7]); }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_9).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[8]); }
+        if (state->input.GetActionState(Actions::ACTION_DEBUG_VIEW_0).pressed) { ToggleDebugView(state, DEBUG_HOTKEYS[9]); }
     }
 }
 

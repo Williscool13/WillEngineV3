@@ -18,6 +18,7 @@
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
 #include "game/components/debug_components.h"
+#include "game/input/game_actions.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/text3d_component.h"
@@ -837,6 +838,18 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
+void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    const Vec2 mousePos = state->input.mousePositionAbsolute;
+    const float viewportOffsetX = static_cast<float>(ctx->windowContext.viewportOffsetX);
+    const float viewportOffsetY = static_cast<float>(ctx->windowContext.viewportOffsetY);
+    const bool bIsMouseDown = state->input.GetActionState(Actions::ACTION_UI_POINTER_DOWN).down;
+    Clay_SetPointerState(Clay_Vector2{mousePos.x - viewportOffsetX, mousePos.y - viewportOffsetY}, bIsMouseDown);
+
+    const Vec2 scroll = state->input.GetActionState(Actions::ACTION_UI_SCROLL).axis;
+    Clay_UpdateScrollContainers(true, Clay_Vector2{scroll.x, scroll.y}, state->timeFrame->deltaTime);
+}
+
 void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
@@ -1406,15 +1419,6 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
 void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     Clay_SetLayoutDimensions({static_cast<float>(ctx->windowContext.viewportWidth), static_cast<float>(ctx->windowContext.viewportHeight)});
-
-    const Vec2 mousePos = state->inputFrame->mousePositionAbsolute;
-    const bool bIsMouseDown = state->inputFrame->GetMouse(MouseButton::LMB).down;
-    const float viewportOffsetX = static_cast<float>(ctx->windowContext.viewportOffsetX);
-    const float viewportOffsetY = static_cast<float>(ctx->windowContext.viewportOffsetY);
-    Clay_SetPointerState(Clay_Vector2{mousePos.x - viewportOffsetX, mousePos.y - viewportOffsetY}, bIsMouseDown);
-
-    const Vec2 mouseWheelDelta = state->inputFrame->mouseWheelDelta;
-    Clay_UpdateScrollContainers(true, Clay_Vector2{mouseWheelDelta.x, mouseWheelDelta.y}, state->timeFrame->deltaTime);
 
     Clay_BeginLayout();
 

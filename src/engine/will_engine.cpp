@@ -264,7 +264,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineState->projectConfig = ReadProjectConfig();
         engineState->lighting.aaConfig = engineState->projectConfig.aaConfig;
         if (!engineState->projectConfig.activeLightingProfile.IsEmpty()) {
-            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.gtaoConfig, engineState->debug.shadingShaderOverride, engineState->debug.lightingShaderOverride, engineState->lighting.iblIntensity);
+            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.ddgi, engineState->lighting.gtaoConfig, engineState->debug.shadingShaderOverride, engineState->debug.lightingShaderOverride, engineState->lighting.iblIntensity);
         }
         if (!engineState->projectConfig.activePostProcessProfile.IsEmpty()) {
             Profiles::LoadPostProcessProfile(engineState->projectConfig.activePostProcessProfile.c_str(), engineState->lighting.postProcess);
@@ -1387,7 +1387,6 @@ void WillEngine::Run()
         {
             ZoneScopedN("GameFrame");
             const Core::InputFrame& currentInput = inputManager->GetCurrentInput();
-            engineState->inputFrame = &currentInput;
             PollCapture(engineState->input, currentInput);
             ResolveInputActions(currentInput, engineState->inputContext, engineState->input);
             if (engineState->input.bBindingsDirty) {
@@ -1397,25 +1396,6 @@ void WillEngine::Run()
             engineState->timeFrame = &timeManager->GetTime();
             gameFunctions.gameUpdate(engineContext, engineState);
 
-            // Accumulate into render frame
-            Core::InputFrame& ri = engineState->renderInputFrame;
-            for (size_t i = 0; i < currentInput.keys.Size(); ++i) {
-                ri.keys[i].pressed |= currentInput.keys[i].pressed;
-                ri.keys[i].down |= currentInput.keys[i].down;
-                ri.keys[i].released |= currentInput.keys[i].released;
-            }
-            for (size_t i = 0; i < currentInput.mouseButtons.Size(); ++i) {
-                ri.mouseButtons[i].pressed |= currentInput.mouseButtons[i].pressed;
-                ri.mouseButtons[i].down |= currentInput.mouseButtons[i].down;
-                ri.mouseButtons[i].released |= currentInput.mouseButtons[i].released;
-            }
-            ri.mousePosition = currentInput.mousePosition;
-            ri.mousePositionAbsolute = currentInput.mousePositionAbsolute;
-            ri.mouseXDelta += currentInput.mouseXDelta;
-            ri.mouseYDelta += currentInput.mouseYDelta;
-            ri.mouseWheelDelta += currentInput.mouseWheelDelta;
-            ri.isCursorActive = currentInput.isCursorActive;
-            ri.isWindowInputFocus = currentInput.isWindowInputFocus;
             inputManager->FrameReset();
 
             Core::TimeFrame& rt = engineState->renderTimeFrame;
@@ -1501,19 +1481,18 @@ void WillEngine::Run()
                 }
 
 
+                const Vec2 currentMousePositionAbsolute = inputManager->GetCurrentInput().mousePositionAbsolute;
                 glm::uvec2 mousePos = {
-                    engineState->inputFrame->mousePositionAbsolute.x - engineContext->windowContext.viewportOffsetX,
-                    engineState->inputFrame->mousePositionAbsolute.y - engineContext->windowContext.viewportOffsetY
+                    currentMousePositionAbsolute.x - engineContext->windowContext.viewportOffsetX,
+                    currentMousePositionAbsolute.y - engineContext->windowContext.viewportOffsetY
                 };
                 mousePos.y = engineContext->windowContext.viewportHeight - 1 - mousePos.y;
                 engineRenderSynchronization->GetCurrentFrameBuffer()->currentMousePosition = {(mousePos.x), (mousePos.y)};
                 //
                 {
                     ZoneScopedN("GamePrepareFrame");
-                    engineState->inputFrame = &engineState->renderInputFrame;
                     engineState->timeFrame = &engineState->renderTimeFrame;
                     gameFunctions.gamePrepareFrame(engineContext, engineState, engineRenderSynchronization->GetCurrentFrameBuffer());
-                    engineState->renderInputFrame = {};
                     engineState->renderTimeFrame = {};
                 }
 

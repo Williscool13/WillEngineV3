@@ -55,6 +55,8 @@ void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* 
  */
 void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* state);
 
+void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);

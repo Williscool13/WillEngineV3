@@ -10,6 +10,8 @@ namespace Engine
 {
 void ResolveInputActions(const Core::InputFrame& frame, InputContext context, InputState& input)
 {
+    input.mousePositionAbsolute = frame.mousePositionAbsolute;
+
     if (input.bCaptureActive) { return; }
 
     for (Core::ActionState& state : input.actionStates) {
@@ -48,7 +50,14 @@ void ResolveInputActions(const Core::InputFrame& frame, InputContext context, In
         }
         else {
             const auto AxisValue = [&frame](const BindingSource& src) -> float {
-                return src.type == BindingSourceType::GamepadAxis ? frame.GetGamepadAxis(src.gamepadAxis) : 0.0f;
+                switch (src.type) {
+                    case BindingSourceType::GamepadAxis: return frame.GetGamepadAxis(src.gamepadAxis);
+                    case BindingSourceType::MouseDeltaX: return frame.mouseXDelta;
+                    case BindingSourceType::MouseDeltaY: return frame.mouseYDelta;
+                    case BindingSourceType::MouseWheelX: return frame.mouseWheelDelta.x;
+                    case BindingSourceType::MouseWheelY: return frame.mouseWheelDelta.y;
+                    default: return 0.0f;
+                }
             };
             state.axis.x += AxisValue(binding.stick.x);
             state.axis.y += AxisValue(binding.stick.y);

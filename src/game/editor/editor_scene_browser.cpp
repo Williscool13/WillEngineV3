@@ -14,6 +14,7 @@
 #include "imgui_internal.h"
 #include "game/editor/editor_systems.h"
 #include "game/systems/scene_system.h"
+#include "game/input/game_actions.h"
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "engine/asset_manager.h"
@@ -529,8 +530,8 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                 }
                 if (ImGui::Selectable(uniqueLabel, selected)) {
                     state->editor.selectedFolders.Clear();
-                    const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
-                    const bool shiftHeld = state->inputFrame->GetKey(Key::LSHIFT).down || state->inputFrame->GetKey(Key::RSHIFT).down;
+                    const bool ctrlHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_CTRL).down;
+                    const bool shiftHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_SHIFT).down;
                     if (shiftHeld && s_selectionAnchor != entt::null) {
                         int anchorIdx = -1;
                         int clickedIdx = -1;
@@ -685,8 +686,8 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         };
 
         auto folderClicked = [&](entt::entity folderEntity, Core::Span<AnchorInfo*> siblings) {
-            const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
-            const bool shiftHeld = state->inputFrame->GetKey(Key::LSHIFT).down || state->inputFrame->GetKey(Key::RSHIFT).down;
+            const bool ctrlHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_CTRL).down;
+            const bool shiftHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_SHIFT).down;
             state->editor.selectedEntities.Clear();
 
             if (shiftHeld && s_selectionAnchor != entt::null) {

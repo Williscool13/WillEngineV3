@@ -11,6 +11,7 @@
 #include "game/components/camera_components.h"
 #include "game/components/character_components.h"
 #include "game/components/core_components.h"
+#include "game/input/game_actions.h"
 #include "physics/physics_system.h"
 
 namespace Game
@@ -24,30 +25,29 @@ void PlayerController::Initialize(Engine::EngineState* gameState, Physics::Physi
 void PlayerController::Update(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     const float deltaTime = state->timeFrame->deltaTime;
-    const Core::InputFrame* input = state->inputFrame;
 
     glm::vec3 moveInput{0.0f};
     bool jumpRequested = false;
 
     if (state->inputContext == Engine::InputContext::Gameplay) {
-        lookYaw += glm::radians(-input->mouseXDelta * lookSpeed);
-        lookPitch += glm::radians(-input->mouseYDelta * lookSpeed);
+        const Core::ActionState& lookAction = state->input.GetActionState(Game::Actions::ACTION_LOOK);
+        lookYaw += glm::radians(-lookAction.axis.x * lookSpeed);
+        lookPitch += glm::radians(-lookAction.axis.y * lookSpeed);
         lookPitch = glm::clamp(lookPitch, glm::radians(-89.9f), glm::radians(89.9f));
 
         const glm::quat horizontalRotation = glm::angleAxis(lookYaw, WORLD_UP);
         const glm::vec3 forward = horizontalRotation * WORLD_FORWARD;
         const glm::vec3 right = horizontalRotation * WORLD_RIGHT;
 
-        if (input->GetKey(Key::W).down) moveInput += forward;
-        if (input->GetKey(Key::S).down) moveInput -= forward;
-        if (input->GetKey(Key::D).down) moveInput += right;
-        if (input->GetKey(Key::A).down) moveInput -= right;
+        const Core::ActionState& moveAction = state->input.GetActionState(Game::Actions::ACTION_MOVE);
+        moveInput += forward * moveAction.axis.y;
+        moveInput += right * moveAction.axis.x;
 
         if (glm::length(moveInput) > 0.001f) {
             moveInput = glm::normalize(moveInput);
         }
 
-        jumpRequested = input->GetKey(Key::SPACE).pressed;
+        jumpRequested = state->input.GetActionState(Game::Actions::ACTION_JUMP).pressed;
     }
 
     character->Update(deltaTime, moveInput, jumpRequested, ctx->physicsSystem);

@@ -18,6 +18,7 @@
 #include "engine/material_manager.h"
 #include "engine/asset_manager.h"
 #include "engine/resources/texture/texture.h"
+#include "game/input/game_actions.h"
 
 namespace Game
 {
@@ -345,7 +346,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                                     ImGui::CloseCurrentPopup();
                                 }
                                 ImGui::SameLine();
-                                if (ImGui::Button("Cancel") || state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+                                if (ImGui::Button("Cancel") || state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
                                     if (previewId.IsValid()) {
                                         state->editor.texResidency.Release(previewId, ctx);
                                         previewId = Engine::TextureID::INVALID;
@@ -405,7 +406,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                                     ImGui::CloseCurrentPopup();
                                 }
                                 ImGui::SameLine();
-                                if (ImGui::Button("Cancel") || state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+                                if (ImGui::Button("Cancel") || state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
                                     ImGui::CloseCurrentPopup();
                                 }
                                 ImGui::EndPopup();

@@ -15,6 +15,7 @@
 #include "game/components/debug_components.h"
 #include "game/components/debug_gizmo_component.h"
 #include "game/components/physics/physics_body_component.h"
+#include "game/input/game_actions.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
 
@@ -22,16 +23,16 @@ namespace Game
 {
 void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->inputFrame->GetKey(Key::M).pressed) {
+    if (state->input.GetActionState(Actions::ACTION_DEBUG_PLAY_MUSIC).pressed) {
         auto musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
         auto _musicPath = Core::Path(musicPath);
         Core::Handle<Audio::WillAudio> testMusic = ctx->audioManager->LoadAudio("test_music", _musicPath);
         ctx->audioManager->PlayMusic(testMusic);
     }
-    if (state->inputFrame->GetKey(Key::N).pressed) {
+    if (state->input.GetActionState(Actions::ACTION_DEBUG_MUSIC_VOL_LOW).pressed) {
         ctx->audioManager->SetMusicVolume(0.25f);
     }
-    if (state->inputFrame->GetKey(Key::B).pressed) {
+    if (state->input.GetActionState(Actions::ACTION_DEBUG_MUSIC_VOL_FULL).pressed) {
         ctx->audioManager->SetMusicVolume(1.0f);
     }
 }

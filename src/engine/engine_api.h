@@ -149,7 +149,7 @@ struct PhysicsState
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;
 };
 
-enum class BindingSourceType : uint8_t { Key, MouseButton, GamepadButton, GamepadAxis };
+enum class BindingSourceType : uint8_t { Key, MouseButton, GamepadButton, GamepadAxis, MouseDeltaX, MouseDeltaY, MouseWheelX, MouseWheelY };
 
 struct BindingSource
 {
@@ -196,6 +196,34 @@ struct BindingSource
         return b;
     }
 
+    static constexpr BindingSource FromMouseDeltaX()
+    {
+        BindingSource b;
+        b.type = BindingSourceType::MouseDeltaX;
+        return b;
+    }
+
+    static constexpr BindingSource FromMouseDeltaY()
+    {
+        BindingSource b;
+        b.type = BindingSourceType::MouseDeltaY;
+        return b;
+    }
+
+    static constexpr BindingSource FromMouseWheelX()
+    {
+        BindingSource b;
+        b.type = BindingSourceType::MouseWheelX;
+        return b;
+    }
+
+    static constexpr BindingSource FromMouseWheelY()
+    {
+        BindingSource b;
+        b.type = BindingSourceType::MouseWheelY;
+        return b;
+    }
+
     constexpr bool operator==(const BindingSource& other) const
     {
         if (type != other.type) { return false; }
@@ -204,6 +232,11 @@ struct BindingSource
             case BindingSourceType::MouseButton: return mouseButton == other.mouseButton;
             case BindingSourceType::GamepadButton: return gamepadButton == other.gamepadButton;
             case BindingSourceType::GamepadAxis: return gamepadAxis == other.gamepadAxis;
+            case BindingSourceType::MouseDeltaX:
+            case BindingSourceType::MouseDeltaY:
+            case BindingSourceType::MouseWheelX:
+            case BindingSourceType::MouseWheelY:
+                return true;
         }
         return false;
     }

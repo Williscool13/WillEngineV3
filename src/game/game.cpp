@@ -226,6 +226,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 #if WILL_EDITOR
     Game::EditorUpdate(ctx, state);
+    Game::EditorTickInput(ctx, state);
 #endif
 
     Game::FunctionKeyUpdate(ctx, state);

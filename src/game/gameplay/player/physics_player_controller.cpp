@@ -26,14 +26,19 @@ void PhysicsPlayerController::Initialize(Engine::EngineState* gameState, Engine:
 void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     const float deltaTime = state->timeFrame->deltaTime;
-    const Core::InputFrame* input = state->inputFrame;
 
     glm::vec3 moveInput{0.0f};
     bool jumpRequested = false;
 
     if (state->inputContext == Engine::InputContext::Gameplay) {
-        lookYaw += glm::radians(-input->mouseXDelta * lookSpeed) * deltaTime;
-        lookPitch += glm::radians(-input->mouseYDelta * lookSpeed) * deltaTime;
+        const Core::ActionState& lookAction = state->input.GetActionState(Game::Actions::ACTION_LOOK);
+        lookYaw += glm::radians(-lookAction.axis.x * lookSpeed) * deltaTime;
+        lookPitch += glm::radians(-lookAction.axis.y * lookSpeed) * deltaTime;
+
+        const Core::ActionState& gamepadLookAction = state->input.GetActionState(Game::Actions::ACTION_LOOK_GAMEPAD);
+        lookYaw += glm::radians(-gamepadLookAction.axis.x * gamepadLookSpeed) * deltaTime;
+        lookPitch += glm::radians(gamepadLookAction.axis.y * gamepadLookSpeed) * deltaTime;
+
         lookPitch = glm::clamp(lookPitch, glm::radians(-89.0f), glm::radians(89.0f));
 
         const glm::quat horizontalRotation = glm::angleAxis(lookYaw, WORLD_UP);
