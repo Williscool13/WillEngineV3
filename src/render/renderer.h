@@ -15,6 +15,7 @@
 #include "render/passes/anti_aliasing_passes.h"
 #include "render/passes/ui_passes.h"
 #include "render/passes/raytracing_passes.h"
+#include "render/passes/debug_passes.h"
 
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"

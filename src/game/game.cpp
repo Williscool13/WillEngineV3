@@ -334,6 +334,9 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bWireframe = state->debug.bWireframe;
     frameBuffer->bEnableShadeDispatchBucketingVisualization = state->debug.bEnableShadeDispatchBucketingVisualization;
     frameBuffer->bEnableLightingBucketingVisualization = state->debug.bEnableLightingBucketingVisualization;
+    frameBuffer->bEnableGPUDebug = state->debug.bEnableGPUDebug;
+    frameBuffer->bLockGPUDebug = state->debug.bLockGPUDebug;
+    frameBuffer->bGPUDebugTestPattern = state->debug.bGPUDebugTestPattern;
     frameBuffer->restir = state->debug.restir;
     state->debug.restir.bResetReGIR = false;
     frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;

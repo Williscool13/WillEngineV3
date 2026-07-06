@@ -875,6 +875,43 @@ SHADER_PUBLIC struct DebugDrawPushConstant
     SHADER_PUBLIC uint32_t totalLineSegments;
 };
 
+SHADER_PUBLIC struct GPUDebugDrawPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(GPUDebugDrawArgs) args;
+    SHADER_PUBLIC SHADER_PTR(DebugLineSegment) segmentBuffer;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+};
+
+SHADER_PUBLIC struct GPUDebugBuildIndirectPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(GPUDebugDrawArgs) args;
+    SHADER_PUBLIC SHADER_PTR(GPUDebugSphereArgs) sphereArgs;
+};
+
+SHADER_PUBLIC struct GPUDebugTestPatternPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(GPUDebugDrawArgs) args;
+    SHADER_PUBLIC SHADER_PTR(DebugLineSegment) segmentBuffer;
+    SHADER_PUBLIC SHADER_PTR(GPUDebugSphereArgs) sphereArgs;
+    SHADER_PUBLIC SHADER_PTR(DebugSphereInstance) sphereBuffer;
+    SHADER_PUBLIC uint32_t frameIndex;
+};
+
+SHADER_PUBLIC struct GPUDebugSphereDrawPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(DebugSphereInstance) instanceBuffer;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+};
+
+SHADER_PUBLIC struct DDGIProbeDebugPushConstant
+{
+    SHADER_PUBLIC DDGIVolumeParams volume;
+    SHADER_PUBLIC SHADER_PTR(GPUDebugSphereArgs) sphereArgs;
+    SHADER_PUBLIC SHADER_PTR(DebugSphereInstance) sphereBuffer;
+};
+
 SHADER_PUBLIC struct EquirectToCubemapPushConstant
 {
     SHADER_PUBLIC uint32_t samplerIndex;

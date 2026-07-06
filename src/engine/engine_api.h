@@ -382,6 +382,9 @@ struct DebugState
     bool bEnablePortal{true};
     bool bEnableShadeDispatchBucketingVisualization{false};
     bool bEnableLightingBucketingVisualization{false};
+    bool bEnableGPUDebug{false};
+    bool bLockGPUDebug{false};
+    bool bGPUDebugTestPattern{false};
     Core::ReSTIRParams restir{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};

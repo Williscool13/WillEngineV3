@@ -55,6 +55,33 @@ SHADER_PUBLIC struct DebugLineSegment
     SHADER_PUBLIC float4 color;
 };
 
+SHADER_PUBLIC struct GPUDebugDrawArgs
+{
+    SHADER_PUBLIC uint32_t groupCountX;
+    SHADER_PUBLIC uint32_t groupCountY;
+    SHADER_PUBLIC uint32_t groupCountZ;
+    SHADER_PUBLIC uint32_t segmentCount;
+    SHADER_PUBLIC uint32_t capacity;
+};
+
+SHADER_PUBLIC struct GPUDebugSphereArgs
+{
+    SHADER_PUBLIC uint32_t vertexCount;
+    SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t firstVertex;
+    SHADER_PUBLIC uint32_t firstInstance;
+    SHADER_PUBLIC uint32_t capacity;
+};
+
+SHADER_PUBLIC struct DebugSphereInstance
+{
+    SHADER_PUBLIC float3 center;
+    SHADER_PUBLIC float radius;
+    SHADER_PUBLIC float4 shR; // L1 SH per channel, pre-scaled so shaded color = sh.x + dot(sh.yzw, normal)
+    SHADER_PUBLIC float4 shG;
+    SHADER_PUBLIC float4 shB;
+};
+
 
 SHADER_PUBLIC struct VertexPosition
 {

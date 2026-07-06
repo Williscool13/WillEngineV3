@@ -850,6 +850,9 @@ struct FrameBuffer
     bool bWireframe = false;
     bool bEnableShadeDispatchBucketingVisualization = false;
     bool bEnableLightingBucketingVisualization = false;
+    bool bEnableGPUDebug = false;
+    bool bLockGPUDebug = false;
+    bool bGPUDebugTestPattern = false;
     bool bLogRDG = false;
     ReSTIRParams restir{};
 

@@ -459,6 +459,11 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("directional_light"), src / "directional_light.spv", "ComputeDirectionalLight",
                             sizeof(DirectionalLightPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("gpu_debug_build_indirect"), src / "gpu_debug.spv", "ComputeGPUDebugBuildIndirect",
+                            sizeof(GPUDebugBuildIndirectPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gpu_debug_test_pattern"), src / "gpu_debug.spv", "ComputeGPUDebugTestPattern",
+                            sizeof(GPUDebugTestPatternPushConstant), PipelineCategory::Critical);
+
 
     RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test.spv", "ComputeRTShadowTest",
                             sizeof(RTShadowTestPushConstant), PipelineCategory::Critical);
@@ -933,6 +938,71 @@ void PipelineManager::RegisterPipelines()
             builder,
             sizeof(DebugDrawPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    // GPU Debug Render (indirect, GPU-appended segments)
+    {
+        builder.AddShaderStage(src / "debug_render.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshDebugRenderGPU");
+        builder.AddShaderStage(src / "debug_render.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentDebugRender");
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        VkPipelineColorBlendAttachmentState blendState{
+            .blendEnable = VK_TRUE,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+            .alphaBlendOp = VK_BLEND_OP_ADD,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+
+        builder.SetupBlending(&blendState, 1);
+
+        VkFormat colorFormats[1] = {
+            COLOR_ATTACHMENT_FORMAT,
+        };
+        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("debug_render_gpu"),
+            builder,
+            sizeof(GPUDebugDrawPushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    // Debug Sphere Render (indirect, GPU-appended instances)
+    {
+        builder.AddShaderStage(src / "debug_sphere.spv", VK_SHADER_STAGE_VERTEX_BIT, "VertexDebugSphere");
+        builder.AddShaderStage(src / "debug_sphere.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentDebugSphere");
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        VkPipelineColorBlendAttachmentState blendState{
+            .blendEnable = VK_FALSE,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+
+        builder.SetupBlending(&blendState, 1);
+
+        VkFormat colorFormats[1] = {
+            COLOR_ATTACHMENT_FORMAT,
+        };
+        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("debug_sphere"),
+            builder,
+            sizeof(GPUDebugSphereDrawPushConstant),
+            VK_SHADER_STAGE_VERTEX_BIT,
             PipelineCategory::Critical
         );
         builder.Clear();

@@ -471,6 +471,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     if (renderFamilyProperties.bCanRender) {
         ZoneScopedN("SetupRenderGraph");
 
+        if (frameBuffer.bEnableGPUDebug) {
+            SetupGPUDebugBegin(*renderGraph, pipelineManager, frameBuffer.bLockGPUDebug, frameBuffer.bGPUDebugTestPattern, frameNumber);
+        }
+
         // Geometry
         if (!viewFamily.primitiveInstances.IsEmpty()) {
             SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, renderFamilyProperties, renderExtent, targets, 0);
@@ -611,6 +615,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
 
         SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, targets.colorOutput, frameResourceLimits);
+
+        if (frameBuffer.bEnableGPUDebug) {
+            SetupGPUDebugDraw(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, frameBuffer.bLockGPUDebug);
+        }
 
         switch (viewFamily.aaConfig.mode) {
             case Core::AntiAliasingMode::SMAA:

@@ -1,0 +1,177 @@
+//
+// Created by William on 2026-07-06.
+//
+
+#include "render/passes/debug_passes.h"
+
+#include "render/render_utils.h"
+#include "render/pipelines/pipeline_data.h"
+#include "render/pipelines/pipeline_manager.h"
+#include "render/render-graph/render_pass.h"
+#include "render/vulkan/vk_helpers.h"
+
+namespace Render
+{
+void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, const bool bLocked, const bool bTestPattern, const uint64_t frameNumber)
+{
+#ifdef WDEBUG
+    if (bLocked) {
+        return;
+    }
+
+    if (!graph.HasBuffer(GPU_DEBUG_ARGS_BUFFER)) {
+        graph.CreateBuffer(GPU_DEBUG_ARGS_BUFFER, sizeof(GPUDebugDrawArgs), false);
+        graph.CreateBuffer(GPU_DEBUG_SEGMENT_BUFFER, GPU_DEBUG_MAX_SEGMENTS * sizeof(DebugLineSegment), false);
+        graph.CreateBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER, sizeof(GPUDebugSphereArgs), false);
+        graph.CreateBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER, GPU_DEBUG_MAX_SPHERES * sizeof(DebugSphereInstance), false);
+    }
+
+    RenderPass& clearPass = graph.AddPass(SID("GPU Debug Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Debug);
+    clearPass.WriteTransferBuffer(GPU_DEBUG_ARGS_BUFFER);
+    clearPass.WriteTransferBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
+    clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const GPUDebugDrawArgs args{
+            .groupCountX = 0,
+            .groupCountY = 1,
+            .groupCountZ = 1,
+            .segmentCount = 0,
+            .capacity = GPU_DEBUG_MAX_SEGMENTS,
+        };
+        vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(GPU_DEBUG_ARGS_BUFFER), 0, sizeof(GPUDebugDrawArgs), &args);
+
+        const GPUDebugSphereArgs sphereArgs{
+            .vertexCount = GPU_DEBUG_SPHERE_VERTEX_COUNT,
+            .instanceCount = 0,
+            .firstVertex = 0,
+            .firstInstance = 0,
+            .capacity = GPU_DEBUG_MAX_SPHERES,
+        };
+        vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(GPU_DEBUG_SPHERE_ARGS_BUFFER), 0, sizeof(GPUDebugSphereArgs), &sphereArgs);
+    });
+
+    if (bTestPattern) {
+        RenderPass& testPass = graph.AddPass(SID("GPU Debug Test Pattern"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+        testPass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
+        testPass.WriteBuffer(GPU_DEBUG_SEGMENT_BUFFER);
+        testPass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
+        testPass.WriteBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER);
+        testPass.Execute([pipelineManager, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_test_pattern"));
+            if (!pipelineEntry) {
+                return;
+            }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            GPUDebugTestPatternPushConstant pc{
+                .args = graph.GetBufferAddress(GPU_DEBUG_ARGS_BUFFER),
+                .segmentBuffer = graph.GetBufferAddress(GPU_DEBUG_SEGMENT_BUFFER),
+                .sphereArgs = graph.GetBufferAddress(GPU_DEBUG_SPHERE_ARGS_BUFFER),
+                .sphereBuffer = graph.GetBufferAddress(GPU_DEBUG_SPHERE_INSTANCE_BUFFER),
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });
+    }
+#endif
+}
+
+void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, const Core::Array<uint32_t, 2> renderExtent, const StringID depthTarget, const StringID targetImage, const bool bLocked)
+{
+#ifdef WDEBUG
+    if (!graph.HasBuffer(GPU_DEBUG_ARGS_BUFFER)) {
+        return;
+    }
+
+    if (!bLocked) {
+        RenderPass& buildIndirectPass = graph.AddPass(SID("GPU Debug Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+        buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
+        buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
+        buildIndirectPass.Execute([pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_build_indirect"));
+            if (!pipelineEntry) {
+                return;
+            }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            GPUDebugBuildIndirectPushConstant pc{
+                .args = graph.GetBufferAddress(GPU_DEBUG_ARGS_BUFFER),
+                .sphereArgs = graph.GetBufferAddress(GPU_DEBUG_SPHERE_ARGS_BUFFER),
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });
+    }
+
+    RenderPass& drawPass = graph.AddPass(SID("GPU Debug Draw"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, ResourceCategory::Debug);
+    drawPass.WriteColorAttachment(targetImage);
+    const bool bHasDepth = graph.HasTexture(depthTarget);
+    if (bHasDepth) {
+        drawPass.ReadWriteDepthAttachment(depthTarget);
+    }
+    drawPass.ReadBuffer(SCENE_DATA_BUFFER);
+    drawPass.ReadBuffer(GPU_DEBUG_SEGMENT_BUFFER);
+    drawPass.ReadIndirectBuffer(GPU_DEBUG_ARGS_BUFFER);
+    drawPass.ReadBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER);
+    drawPass.ReadIndirectBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
+    drawPass.Execute([pipelineManager, width = renderExtent[0], height = renderExtent[1], bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* linePipeline = pipelineManager->GetPipelineEntry(SID("debug_render_gpu"));
+        const PipelineEntry* spherePipeline = pipelineManager->GetPipelineEntry(SID("debug_sphere"));
+        if (!linePipeline && !spherePipeline) {
+            return;
+        }
+
+        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targetImage), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingInfo renderInfo;
+        if (bHasDepth) {
+            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthTarget), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+        }
+        else {
+            renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, nullptr, nullptr);
+        }
+
+        vkCmdBeginRendering(cmd, &renderInfo);
+
+        if (spherePipeline) {
+            GPUDebugSphereDrawPushConstant spherePush{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .instanceBuffer = graph.GetBufferAddress(GPU_DEBUG_SPHERE_INSTANCE_BUFFER),
+                .sceneDataIndex = 0,
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, spherePipeline->pipeline);
+            vkCmdPushConstants(cmd, spherePipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDebugSphereDrawPushConstant), &spherePush);
+
+            vkCmdDrawIndirect(cmd, graph.GetBufferHandle(GPU_DEBUG_SPHERE_ARGS_BUFFER), offsetof(GPUDebugSphereArgs, vertexCount), 1, sizeof(GPUDebugSphereArgs));
+        }
+
+        if (linePipeline) {
+            GPUDebugDrawPushConstant pushConstants{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .args = graph.GetBufferAddress(GPU_DEBUG_ARGS_BUFFER),
+                .segmentBuffer = graph.GetBufferAddress(GPU_DEBUG_SEGMENT_BUFFER),
+                .sceneDataIndex = 0,
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, linePipeline->pipeline);
+            vkCmdPushConstants(cmd, linePipeline->layout, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(GPUDebugDrawPushConstant), &pushConstants);
+
+            vkCmdDrawMeshTasksIndirectEXT(cmd, graph.GetBufferHandle(GPU_DEBUG_ARGS_BUFFER), offsetof(GPUDebugDrawArgs, groupCountX), 1, sizeof(GPUDebugDrawArgs));
+        }
+
+        vkCmdEndRendering(cmd);
+    });
+
+    graph.CarryBufferToNextFrame(GPU_DEBUG_ARGS_BUFFER, GPU_DEBUG_ARGS_BUFFER, 0);
+    graph.CarryBufferToNextFrame(GPU_DEBUG_SEGMENT_BUFFER, GPU_DEBUG_SEGMENT_BUFFER, 0);
+    graph.CarryBufferToNextFrame(GPU_DEBUG_SPHERE_ARGS_BUFFER, GPU_DEBUG_SPHERE_ARGS_BUFFER, 0);
+    graph.CarryBufferToNextFrame(GPU_DEBUG_SPHERE_INSTANCE_BUFFER, GPU_DEBUG_SPHERE_INSTANCE_BUFFER, 0);
+#endif
+}
+} // Render

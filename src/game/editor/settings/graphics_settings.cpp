@@ -237,6 +237,12 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::Checkbox("Enable V-Buffer Shade Dispatch Bucketing Visualization", &state->debug.bEnableShadeDispatchBucketingVisualization);
         ImGui::Checkbox("Enable V-Buffer Lighting Bucketing Visualization", &state->debug.bEnableLightingBucketingVisualization);
 
+        ImGui::Checkbox("Enable GPU Debug Draw", &state->debug.bEnableGPUDebug);
+        ImGui::SameLine();
+        ImGui::Checkbox("Lock##GPUDebug", &state->debug.bLockGPUDebug);
+        ImGui::SameLine();
+        ImGui::Checkbox("Test Pattern##GPUDebug", &state->debug.bGPUDebugTestPattern);
+
         ImGui::Separator();
 
         ImGui::BeginDisabled(true);

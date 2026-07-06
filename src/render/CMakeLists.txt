@@ -91,6 +91,8 @@ add_library(render STATIC
         passes/anti_aliasing_passes.h
         passes/ui_passes.cpp
         passes/ui_passes.h
+        passes/debug_passes.cpp
+        passes/debug_passes.h
         post-processing/post_processing.cpp
         post-processing/post_processing.h
         renderer_types.h
