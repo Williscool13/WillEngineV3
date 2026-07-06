@@ -42,6 +42,7 @@ inline const StringID GEOMETRY_MODEL_BUFFER = SID("model_buffer");
 inline const StringID GEOMETRY_INSTANCE_BUFFER = SID("main_instance_buffer");
 inline const StringID GEOMETRY_VERTEX_POSITION_BUFFER = SID("vertex_position_buffer");
 inline const StringID GEOMETRY_VERTEX_ATTRIBUTE_BUFFER = SID("vertex_attribute_buffer");
+inline const StringID GEOMETRY_INDEX_BUFFER = SID("index_buffer");
 inline const StringID GEOMETRY_MESHLET_VERTEX_BUFFER = SID("meshlet_vertex_buffer");
 inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = SID("meshlet_triangle_buffer");
 inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");

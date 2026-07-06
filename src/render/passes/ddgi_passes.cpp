@@ -43,9 +43,9 @@ static glm::vec4 DDGIRayRotation(uint64_t frameNumber)
     return {s1 * std::sin(a), s1 * std::cos(a), s2 * std::sin(b), s2 * std::cos(b)};
 }
 
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, const Core::DDGIParams& params, const DDGIVolumeParams& volume, const DDGIVolumeParams& previousVolume, int32_t skyboxIndex, uint64_t frameNumber)
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, const Core::DDGIParams& params, const DDGIVolumeParams& volume, const DDGIVolumeParams& previousVolume, int32_t skyboxIndex, uint64_t frameNumber, bool bBounceOnly)
 {
-    if (!graph.HasBuffer(RT_TLAS_BUFFER)) {
+    if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) {
         return;
     }
 
@@ -57,8 +57,15 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
 
     RenderPass& tracePass = graph.AddPass(SID("DDGI Probe Trace"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
     tracePass.ReadTLASBuffer(RT_TLAS_BUFFER);
+    tracePass.ReadBuffer(LIGHT_DATA_BUFFER);
+    tracePass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    tracePass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+    tracePass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    tracePass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+    tracePass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
+    tracePass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     tracePass.WriteBuffer(SID("ddgi_ray_data"));
-    tracePass.Execute([pipelineManager, volume, rayRotation, skyboxIndex, raysPerProbe, probeCountTotal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    tracePass.Execute([pipelineManager, volume, rayRotation, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_trace"));
         if (!pipelineEntry) {
             return;
@@ -69,9 +76,17 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             .volume = volume,
             .rayRotation = rayRotation,
             .rayData = graph.GetBufferAddress(SID("ddgi_ray_data")),
+            .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+            .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
+            .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
             .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
             .skyboxIndex = skyboxIndex,
             .raysPerProbe = raysPerProbe,
+            .bBounceOnly = bBounceOnly ? 1u : 0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (raysPerProbe + 63) / 64, probeCountTotal, 1);

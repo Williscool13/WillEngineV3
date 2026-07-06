@@ -343,6 +343,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bLockGPUDebug = state->debug.bLockGPUDebug;
     frameBuffer->bGPUDebugTestPattern = state->debug.bGPUDebugTestPattern;
     frameBuffer->bDDGIProbeDebug = state->debug.bDDGIProbeDebug;
+    frameBuffer->bDDGIBounceOnly = state->debug.bDDGIBounceOnly;
     frameBuffer->restir = state->debug.restir;
     frameBuffer->ddgi = state->lighting.ddgi;
     state->debug.restir.bResetReGIR = false;

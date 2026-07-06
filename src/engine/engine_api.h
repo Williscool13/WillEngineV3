@@ -423,6 +423,7 @@ struct DebugState
     bool bLockGPUDebug{false};
     bool bGPUDebugTestPattern{false};
     bool bDDGIProbeDebug{false};
+    bool bDDGIBounceOnly{false};
     Core::ReSTIRParams restir{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};

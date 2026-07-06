@@ -244,6 +244,11 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::Checkbox("Test Pattern##GPUDebug", &state->debug.bGPUDebugTestPattern);
         ImGui::SameLine();
         ImGui::Checkbox("DDGI Probes##GPUDebug", &state->debug.bDDGIProbeDebug);
+        ImGui::SameLine();
+        ImGui::Checkbox("Bounce Only##GPUDebug", &state->debug.bDDGIBounceOnly);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Zero skybox and direct light-proxy radiance in the DDGI trace; anything left in the probes is one-bounce surface shading");
+        }
 
         ImGui::Separator();
 

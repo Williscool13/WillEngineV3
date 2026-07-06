@@ -28,8 +28,8 @@ class PipelineManager;
 DDGIVolumeParams ComputeDDGIVolumeParams(const Core::DDGIParams& params, const glm::vec3& cameraPosition);
 
 /**
- * Probe trace + irradiance blend. Traces params.raysPerProbe rays per probe against the TLAS (miss-only skybox radiance for now), then integrates them into the octahedral irradiance atlas "ddgi_irradiance" (stored as pow(E, 1/irradianceGamma)), hysteresis-blended in encoded space against the carried previous frame with RTXGI's change/brightness thresholds.
- * Slots invalidated by a window scroll, a count/spacing change, or a missing history atlas restart fresh. Requires the TLAS; no-op without it.
+ * Probe trace + irradiance blend. Traces params.raysPerProbe rays per probe (misses sample the skybox, light-proxy hits return the light's radiance, hits shade one sun bounce + emissive), then integrates them into the octahedral atlas "ddgi_irradiance" (stored as pow(E, 1/irradianceGamma)), hysteresis-blended in encoded space with RTXGI's change/brightness thresholds.
+ * Slots invalidated by a window scroll, count/spacing change, or missing history restart fresh. No-op without the TLAS and geometry/material/light buffers.
  * @param graph
  * @param pipelineManager
  * @param params
@@ -37,8 +37,9 @@ DDGIVolumeParams ComputeDDGIVolumeParams(const Core::DDGIParams& params, const g
  * @param previousVolume volume used last frame, for scroll/resize invalidation
  * @param skyboxIndex
  * @param frameNumber
+ * @param bBounceOnly debug: zero skybox and light-proxy radiance so probes show only one-bounce surface shading
  */
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, const Core::DDGIParams& params, const DDGIVolumeParams& volume, const DDGIVolumeParams& previousVolume, int32_t skyboxIndex, uint64_t frameNumber);
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, const Core::DDGIParams& params, const DDGIVolumeParams& volume, const DDGIVolumeParams& previousVolume, int32_t skyboxIndex, uint64_t frameNumber, bool bBounceOnly);
 
 /**
  * Appends one debug sphere per probe, shaded with an L1 SH fit of the probe's decoded irradiance atlas tile.

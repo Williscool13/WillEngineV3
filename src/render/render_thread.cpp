@@ -404,6 +404,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                            {resourceManager->megaVertexPositionBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
         renderGraph->ImportBufferNoBarrier(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER, resourceManager->megaVertexAttributeBuffer.handle, resourceManager->megaVertexAttributeBuffer.address,
                                            {resourceManager->megaVertexAttributeBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBufferNoBarrier(GEOMETRY_INDEX_BUFFER, resourceManager->megaIndexBuffer.handle, resourceManager->megaIndexBuffer.address,
+                                           {resourceManager->megaIndexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
         renderGraph->ImportBufferNoBarrier(SID("meshlet_vertex_buffer"), resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
                                            {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
         renderGraph->ImportBufferNoBarrier(SID("meshlet_triangle_buffer"), resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
@@ -498,7 +500,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             if (frameBuffer.ddgi.bEnabled) {
                 const DDGIVolumeParams ddgiVolume = ComputeDDGIVolumeParams(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos);
-                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, frameBuffer.ddgi, ddgiVolume, ddgiPreviousVolume, viewFamily.skyboxIndex, frameNumber);
+                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, frameBuffer.ddgi, ddgiVolume, ddgiPreviousVolume, viewFamily.skyboxIndex, frameNumber, frameBuffer.bDDGIBounceOnly);
                 ddgiPreviousVolume = ddgiVolume;
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
                     SetupDDGIProbeDebug(*renderGraph, pipelineManager, frameBuffer.ddgi, ddgiVolume);

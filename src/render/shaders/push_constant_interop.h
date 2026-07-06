@@ -921,10 +921,17 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC DDGIVolumeParams volume;
     SHADER_PUBLIC float4 rayRotation;
     SHADER_PUBLIC SHADER_PTR(float4) rayData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t bBounceOnly;
 };
 
 SHADER_PUBLIC struct DDGIProbeBlendPushConstant

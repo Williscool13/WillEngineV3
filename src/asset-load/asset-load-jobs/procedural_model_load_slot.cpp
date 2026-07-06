@@ -2426,6 +2426,15 @@ void ProceduralModelLoadSlot::PrepareUploadData()
         primitive.meshletOffset += meshletOffset;
     }
 
+    // Rebase indices and indexOffset to global for ray-query triangle fetch
+    uint32_t indexOffset = outputModel->modelData.indexAllocation.offset / sizeof(uint32_t);
+    for (auto& primitive : rawData.primitives) {
+        primitive.indexOffset += indexOffset;
+    }
+    for (uint32_t& index : rawData.indices) {
+        index += vertexOffset;
+    }
+
     uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(Primitive);
     for (auto& mesh : rawData.allMeshes) {
         for (auto& primitiveIndex : mesh.primitiveProperties) {
@@ -2607,8 +2616,11 @@ void ProceduralModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineF
     ZoneScopedN("BuildBLAS");
 
     const uint32_t primitiveCount = static_cast<uint32_t>(rawData.primitives.Size());
-    const VkDeviceAddress vertexBase = resourceManager->megaVertexPositionBuffer.address + outputModel->modelData.vertexPositionAllocation.offset;
-    const VkDeviceAddress indexBase = resourceManager->megaIndexBuffer.address + outputModel->modelData.indexAllocation.offset;
+
+    const VkDeviceAddress vertexBase = resourceManager->megaVertexPositionBuffer.address;
+    const VkDeviceAddress indexBase = resourceManager->megaIndexBuffer.address;
+    const uint32_t vertexOffsetCount = outputModel->modelData.vertexPositionAllocation.offset / sizeof(VertexPosition);
+    const uint32_t indexOffsetCount = outputModel->modelData.indexAllocation.offset / sizeof(uint32_t);
 
     if (!context->bMaintenance9Enabled) {
         Core::InlineVector<VkBufferMemoryBarrier2, 8> acquireBarriers;
@@ -2667,7 +2679,7 @@ void ProceduralModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineF
             const Primitive& prim = rawData.primitives[realPrimitiveIndex];
 
             const uint32_t indexStart = prim.indexOffset;
-            const uint32_t indexEnd = (realPrimitiveIndex + 1 < primitiveCount) ? rawData.primitives[realPrimitiveIndex + 1].indexOffset : static_cast<uint32_t>(rawData.indices.Size());
+            const uint32_t indexEnd = (realPrimitiveIndex + 1 < primitiveCount) ? rawData.primitives[realPrimitiveIndex + 1].indexOffset : indexOffsetCount + static_cast<uint32_t>(rawData.indices.Size());
             const uint32_t triCount = (indexEnd - indexStart) / 3;
 
             VkAccelerationStructureGeometryKHR geom{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
@@ -2678,7 +2690,7 @@ void ProceduralModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineF
             tri.vertexFormat = VK_FORMAT_R16G16B16A16_UNORM;
             tri.vertexData.deviceAddress = vertexBase;
             tri.vertexStride = sizeof(VertexPosition);
-            tri.maxVertex = static_cast<uint32_t>(rawData.vertices.Size()) - 1;
+            tri.maxVertex = vertexOffsetCount + static_cast<uint32_t>(rawData.vertices.Size()) - 1;
             tri.indexType = VK_INDEX_TYPE_UINT32;
             tri.indexData.deviceAddress = indexBase + indexStart * sizeof(uint32_t);
             tri.transformData.deviceAddress = stagingBuffer.address + realPrimitiveIndex * sizeof(VkTransformMatrixKHR);

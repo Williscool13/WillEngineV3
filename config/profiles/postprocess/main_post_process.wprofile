@@ -5,7 +5,7 @@
     "bBloomEnabled": false,
     "bColorGradingEnabled": true,
     "bDitherEnabled": true,
-    "bExposureEnabled": true,
+    "bExposureEnabled": false,
     "bFilmGrainEnabled": true,
     "bPaniniEnabled": false,
     "bSharpeningEnabled": true,

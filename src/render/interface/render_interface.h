@@ -872,6 +872,7 @@ struct FrameBuffer
     bool bLockGPUDebug = false;
     bool bGPUDebugTestPattern = false;
     bool bDDGIProbeDebug = false;
+    bool bDDGIBounceOnly = false;
     bool bLogRDG = false;
     ReSTIRParams restir{};
     DDGIParams ddgi{};
