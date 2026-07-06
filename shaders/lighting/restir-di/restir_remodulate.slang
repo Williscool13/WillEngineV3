@@ -56,25 +56,22 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
     float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb;
 
     // Indirect: diffuse from the DDGI probe volume when it covers this point (skybox irradiance fallback), specular from the prefiltered skybox.
+    float3 indirectDiffuse = float3(0.0);
     float3 ibl = float3(0.0);
     {
         float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
         float3 kD_ibl = (1.0 - F_ibl) * (1.0 - metallic);
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
 
-        float3 indirectDiffuse = float3(0.0);
-        bool bDiffuseFromProbes = false;
+        if (pc.skyboxIndex >= 0) {
+            indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+        }
         if (pc.bDDGIApply != 0) {
             float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
             float3 cameraDirection = normalize(mul(float3x3(scene.invView), viewPosition));
             float4 gi = DDGISampleIrradiance(worldPosition, worldN, cameraDirection, pc.ddgiVolume, pc.ddgiIrradianceIndex, pc.ddgiVisibilityIndex);
-            if (gi.w > 0.0) {
-                indirectDiffuse = gi.rgb;
-                bDiffuseFromProbes = true;
-            }
-        }
-        if (!bDiffuseFromProbes && pc.skyboxIndex >= 0) {
-            indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+            // gi.w fades to the skybox fallback over the volume's outermost cell.
+            indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
         }
 
         float3 reflectionSpecular = float3(0.0);
@@ -89,6 +86,9 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
         finalColor = diffuse * albedo + ibl + emissive;
     } else if (pc.outputMode == 2u) {
         finalColor = specular * specReflectance + ibl + emissive;
+    } else if (pc.outputMode == 3u) {
+        // Raw indirect diffuse
+        finalColor = indirectDiffuse;
     } else {
         finalColor = diffuse * albedo + specular * specReflectance + ibl + emissive;
     }

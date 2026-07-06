@@ -188,6 +188,7 @@ private:
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
     uint32_t rtGroundTruthDIAccumCount{0};
+    uint32_t rtGroundTruthGIAccumCount{0};
     DDGIVolumeParams ddgiPreviousVolume{};
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};

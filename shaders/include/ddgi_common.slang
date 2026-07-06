@@ -82,12 +82,19 @@ public float2 DDGIAtlasUV(int3 slot, float3 direction, DDGIVolumeParams volume, 
 /**
  * Irradiance lookup at a surface point: the 8 surrounding probes, weighted by trilinear position, soft backface (wrap lighting), and Chebyshev visibility from the distance atlas. cameraDirection points from the viewer toward the surface (bias direction).
  * Atlas args are rdgTexturesFloat4/rdgTexturesFloat2 descriptor indices (resource-typed params through module imports crash slangc's spirv emit).
- * Returns E/PI in rgb (Lambertian outgoing radiance = albedo * rgb) with w = 1, or w = 0 when no probe in the window contributed.
+ * Returns E/PI in rgb (Lambertian outgoing radiance = albedo * rgb); w in [0,1] fades to 0 over the window's outermost cell so callers can lerp to their fallback without a hard edge.
  */
 public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex)
 {
     float3 biasedPosition = worldPosition + normal * volume.normalBias - cameraDirection * volume.viewBias;
     float3 gridCoord = biasedPosition / volume.probeSpacing;
+
+    float3 edgeDistance = min(gridCoord - float3(volume.baseCell), float3(volume.baseCell + int3(volume.probeCount) - 1) - gridCoord);
+    float fade = saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)));
+    if (fade <= 0.0) {
+        return float4(0.0);
+    }
+
     int3 baseCell = int3(floor(gridCoord));
     float3 alpha = saturate(gridCoord - float3(baseCell));
 
@@ -136,7 +143,7 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         return float4(0.0);
     }
     float3 result = irradianceSum / weightSum;
-    return float4(result * result, 1.0);
+    return float4(result * result, fade);
 }
 
 public float3 DDGISphericalFibonacci(uint index, uint count)

@@ -78,7 +78,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         tracePass.ReadSampledImage(SID("ddgi_irradiance_history"));
         tracePass.ReadSampledImage(SID("ddgi_visibility_history"));
     }
-    tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell = previousVolume.baseCell, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell = previousVolume.baseCell, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_trace"));
         if (!pipelineEntry) {
             return;
@@ -104,6 +104,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             .bBounceOnly = bBounceOnly ? 1u : 0u,
             .irradianceHistoryIndex = bFeedback ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance_history")) : ~0x0u,
             .visibilityHistoryIndex = bFeedback ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_visibility_history")) : ~0x0u,
+            .frameIndex = static_cast<uint32_t>(frameNumber),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (raysPerProbe + 63) / 64, probeCountTotal, 1);

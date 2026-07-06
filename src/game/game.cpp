@@ -349,7 +349,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     state->debug.restir.bResetReGIR = false;
     frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;
     frameBuffer->mainViewFamily.bResetGroundTruth = state->lighting.bResetGroundTruth;
-    if (frameBuffer->mainViewFamily.lightingMode == Core::LightingMode::GroundTruthReSTIR) {
+    if (frameBuffer->mainViewFamily.lightingMode == Core::LightingMode::GroundTruthReSTIR || frameBuffer->mainViewFamily.lightingMode == Core::LightingMode::GroundTruthGI) {
         const Core::RenderView& rv = frameBuffer->mainViewFamily.mainView;
         if (rv.currentViewData.view != rv.previousViewData.view) {
             frameBuffer->mainViewFamily.bResetGroundTruth = true;

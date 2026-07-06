@@ -86,18 +86,15 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
         float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
 
         float3 indirectDiffuse = float3(0.0);
-        bool bDiffuseFromProbes = false;
+        if (pc.skyboxIndex >= 0) {
+            indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+        }
         if (pc.bDDGIApply != 0) {
             float3 worldPosition = mul(pc.sceneData[pc.sceneDataIndex].invView, float4(viewPosition, 1.0)).xyz;
             float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
             float4 gi = DDGISampleIrradiance(worldPosition, worldN, cameraDirection, pc.ddgiVolume, pc.ddgiIrradianceIndex, pc.ddgiVisibilityIndex);
-            if (gi.w > 0.0) {
-                indirectDiffuse = gi.rgb;
-                bDiffuseFromProbes = true;
-            }
-        }
-        if (!bDiffuseFromProbes && pc.skyboxIndex >= 0) {
-            indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+            // gi.w fades to the skybox fallback over the volume's outermost cell.
+            indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
         }
 
         float3 reflectionSpecular = float3(0.0);

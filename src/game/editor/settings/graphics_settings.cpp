@@ -247,7 +247,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SameLine();
         ImGui::Checkbox("Bounce Only##GPUDebug", &state->debug.bDDGIBounceOnly);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Zero skybox and direct light-proxy radiance in the DDGI trace; anything left in the probes is one-bounce surface shading");
+            ImGui::SetTooltip("Zero skybox radiance in the DDGI trace (feedback also disabled); anything left in the probes is one-bounce surface shading (sun + local-light NEE at hits)");
         }
 
         ImGui::Separator();
@@ -490,7 +490,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::Separator();
 
-        const bool bIsGroundTruth = state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR;
+        const bool bIsGroundTruth = state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR || state->lighting.lightingMode == Core::LightingMode::GroundTruthGI;
         ImGui::BeginDisabled(bIsGroundTruth);
         // Shading Pipeline Overrides
         {
@@ -544,13 +544,14 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::Separator();
 
-        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Ground-Truth ReSTIR", "Path Tracing"};
+        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Ground-Truth ReSTIR", "Path Tracing", "Ground-Truth GI"};
         Core::LightingMode prevLightingMode = state->lighting.lightingMode;
         int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
         if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, IM_ARRAYSIZE(lightingModeLabels))) {
             state->lighting.lightingMode = static_cast<Core::LightingMode>(lightingModeIndex);
             changed = true;
-            if (prevLightingMode != Core::LightingMode::GroundTruthReSTIR && state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR) {
+            const bool bEnteredGroundTruth = state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR || state->lighting.lightingMode == Core::LightingMode::GroundTruthGI;
+            if (prevLightingMode != state->lighting.lightingMode && bEnteredGroundTruth) {
                 state->lighting.bResetGroundTruth = true;
             }
         }
@@ -642,7 +643,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
 
             ImGui::SeparatorText("Options");
-            const char* remodulateOutputModes[] = {"Both", "Diffuse Only", "Specular Only"};
+            const char* remodulateOutputModes[] = {"Both", "Diffuse Only", "Specular Only", "Indirect Diffuse (DDGI)"};
             int currentRemodulateOutput = static_cast<int>(restir.remodulateOutput);
             if (ImGui::Combo("Remodulate Output##restir", &currentRemodulateOutput, remodulateOutputModes, IM_ARRAYSIZE(remodulateOutputModes))) {
                 restir.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(currentRemodulateOutput);

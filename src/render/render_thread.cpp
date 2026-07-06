@@ -576,6 +576,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     rtGroundTruthDIAccumCount += 1;
                     break;
                 }
+                case Core::LightingMode::GroundTruthGI:
+                {
+                    if (viewFamily.bResetGroundTruth) { rtGroundTruthGIAccumCount = 0; }
+                    SetupRTGroundTruthGI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthGIAccumCount, frameNumber);
+                    rtGroundTruthGIAccumCount += 1;
+                    break;
+                }
                 case Core::LightingMode::PathTracing:
                 {
                     SetupRTShadowTest(*renderGraph, context, pipelineManager, viewFamily, renderExtent, targets, targets.colorOutput, 0);

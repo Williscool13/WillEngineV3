@@ -532,6 +532,7 @@ enum class LightingMode : uint8_t
     ReSTIR, // (incl. ReGIR)
     GroundTruthReSTIR,
     PathTracing,
+    GroundTruthGI,
 };
 
 enum class ReSTIRDebugStop : uint8_t
@@ -696,7 +697,7 @@ struct ReSTIRParams
 
     DenoiserMode denoiserMode{DenoiserMode::None};
 
-    enum class RemodulateOutput : uint32_t { Both = 0, DiffuseOnly = 1, SpecularOnly = 2 };
+    enum class RemodulateOutput : uint32_t { Both = 0, DiffuseOnly = 1, SpecularOnly = 2, IndirectDiffuse = 3 };
 
     RemodulateOutput remodulateOutput{RemodulateOutput::Both};
 

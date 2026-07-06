@@ -10,9 +10,10 @@ import shader_constants;
 import shader_functions;
 import packing_functions;
 import pbr_functions;
+import random_common;
 
 // =============== Shader Summary ============
-// DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, light-proxy hits return the light's radiance, front-face hits shade one sun bounce + emissive plus last frame's probe irradiance (infinite bounce).
+// DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits shade sun + one NEE-sampled local light (shadow rays) + emissive plus last frame's probe irradiance (infinite bounce). Light-proxy hits carry no radiance (NEE owns direct light; probes hold pure bounce), only the hit distance for the visibility moments.
 // Blend: one thread group per probe tile; each interior texel cosine-integrates the probe's rays into octahedral irradiance stored as pow(E, 1/gamma), hysteresis-blended in that perceptual space with RTXGI's change/brightness thresholds. Slots whose lattice cell changed since last frame (window scroll) or with no history start fresh. Border texels copy wrapped interior texels so bilinear taps stay seamless.
 // Blend visibility: same layout at 16x16 tiles; each texel integrates mean/mean^2 ray distance with a sharpened (pow distanceExponent) cosine lobe, for the Chebyshev occlusion test at sampling.
 // Debug: one sphere per probe, L1 SH fitted from the probe's decoded atlas tile.
@@ -20,8 +21,8 @@ import pbr_functions;
 // Coarse fixed mip: probe irradiance is low frequency; keeps incoherent rays cache-friendly and pre-averages albedo.
 static const float DDGI_HIT_TEXTURE_LOD = 3.0;
 
-/** Radiance leaving the hit surface toward the probe: sun-lit Lambertian diffuse (shadow-ray tested), emissive, and last frame's probe irradiance (infinite bounce). Indices are global (rebased at upload). */
-static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection)
+/** Radiance leaving the hit surface toward the probe: Lambertian diffuse lit by the sun and one uniformly picked local light (both shadow-ray tested), emissive, and last frame's probe irradiance (infinite bounce). Indices are global (rebased at upload). */
+static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -71,6 +72,60 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
             }
         }
     }
+
+    // NEE
+    int lightCount = pc.lightData->lightCount;
+    if (lightCount > 0) {
+        uint rng = rngSeed;
+        float rng0 = HashStep(rng);
+        float2 xi;
+        xi.x = HashStep(rng);
+        xi.y = HashStep(rng);
+        int lightIdx = clamp(int(rng0 * float(lightCount)), 0, lightCount - 1);
+        LightInfo light = pc.lightData->lights[lightIdx];
+
+        float3 lightSamplePos;
+        float lightArea;
+        if (light.type == LIGHT_TYPE_SPHERE) {
+            float radius = light.right.w;
+            float z = 1.0 - 2.0 * xi.x;
+            float rr = sqrt(max(1.0 - z * z, 0.0));
+            float phi = 2.0 * PI * xi.y;
+            lightSamplePos = light.position.xyz + radius * float3(rr * cos(phi), rr * sin(phi), z);
+            lightArea = 4.0 * PI * radius * radius;
+        } else {
+            lightSamplePos = light.position.xyz + light.right.xyz * (xi.x * 2.0 - 1.0) * light.right.w + light.up.xyz * (xi.y * 2.0 - 1.0) * light.up.w;
+            lightArea = 4.0 * light.right.w * light.up.w;
+        }
+
+        float3 toLight = lightSamplePos - worldPosition;
+        float lightDist = max(length(toLight), 1e-5);
+        float3 L = toLight / lightDist;
+        float cosShade = dot(N, L);
+        float cosLight = light.type == LIGHT_TYPE_SPHERE
+            ? max(dot(normalize(lightSamplePos - light.position.xyz), -L), 0.0)
+            : max(dot(-light.normal.xyz, L), 0.0);
+        float atten = LightRangeCull(lightDist, light.range);
+        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
+            float3 rayOrigin = worldPosition + N * 0.05;
+            float3 toLightShadow = lightSamplePos - rayOrigin;
+            float shadowDist = length(toLightShadow);
+
+            RayDesc shadowRay;
+            shadowRay.Origin = rayOrigin;
+            shadowRay.Direction = toLightShadow / shadowDist;
+            shadowRay.TMin = 0.001;
+            shadowRay.TMax = shadowDist - 0.05;
+
+            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0x01, shadowRay);
+            shadow.Proceed();
+            if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
+                radiance += diffuseColor * (cosShade / PI) * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(lightCount) * lightArea;
+            }
+        }
+    }
+
     if (pc.bFeedbackValid != 0) {
         DDGIVolumeParams previousVolume = pc.volume;
         previousVolume.baseCell = pc.previousBaseCell;
@@ -100,7 +155,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
     ray.TMin = 0.0;
     ray.TMax = 10000.0;
 
-    // Mask 0x03: scene + light proxies, so probes see light emission directly.
+    // Mask 0x03: scene + light proxies, so lights occlude and register in the visibility moments.
     RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
     q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0x03, ray);
     q.Proceed();
@@ -110,13 +165,10 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         float hitT = q.CommittedRayT();
         Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
         if (instance.lightIndex != 0xFFFFFFFF) {
-            LightInfo light = pc.lightData->lights[instance.lightIndex];
-            // Area lights emit from their normal side only; spheres are omnidirectional. Range-culled to match the analytic paths.
-            bool bEmitting = pc.bBounceOnly == 0 && (light.type != LIGHT_TYPE_AREA || dot(-light.normal.xyz, direction) > 0.0);
-            float3 radiance = bEmitting ? UnpackUnorm4x8(light.packedColor).rgb * light.intensity * LightRangeCull(hitT, light.range) : float3(0.0);
-            result = float4(radiance, hitT);
+            result = float4(0.0, 0.0, 0.0, hitT);
         } else if (q.CommittedTriangleFrontFace()) {
-            float3 radiance = ShadeProbeRayHit(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), ray.Origin + direction * hitT, direction);
+            uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
+            float3 radiance = ShadeProbeRayHit(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), ray.Origin + direction * hitT, direction, rng);
             result = float4(radiance, hitT);
         } else {
             // Backface hits mark "probe likely inside geometry" with a shortened negative distance, classic DDGI convention.

@@ -945,6 +945,7 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC uint32_t bBounceOnly;
     SHADER_PUBLIC uint32_t irradianceHistoryIndex;
     SHADER_PUBLIC uint32_t visibilityHistoryIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
 };
 
 SHADER_PUBLIC struct DDGIProbeBlendPushConstant
@@ -1374,6 +1375,30 @@ SHADER_PUBLIC struct RTGroundTruthDIPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t accumulationCount;
+    SHADER_PUBLIC uint2 renderExtent;
+};
+
+SHADER_PUBLIC struct RTGroundTruthGIPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(float4) accumulationBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
+    SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC int32_t skyboxIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t accumulationCount;
+    SHADER_PUBLIC uint32_t pad0;
     SHADER_PUBLIC uint2 renderExtent;
 };
 

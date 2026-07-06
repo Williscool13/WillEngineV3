@@ -28,8 +28,8 @@ class PipelineManager;
 DDGIVolumeParams ComputeDDGIVolumeParams(const Core::DDGIParams& params, const glm::vec3& cameraPosition);
 
 /**
- * Probe trace + irradiance/visibility blend. Traces params.raysPerProbe rays per probe (misses sample the skybox, light-proxy hits return the light's radiance, hits shade one sun bounce + emissive plus last frame's carried atlas when bInfiniteBounce), then integrates them into
- * the octahedral atlases "ddgi_irradiance" (stored as pow(E, 1/irradianceGamma), hysteresis-blended in encoded space with RTXGI's change/brightness thresholds) and "ddgi_visibility" (mean/mean^2 ray distance for the Chebyshev occlusion test, DDGISampleIrradiance).
+ * Probe trace + irradiance/visibility blend. Traces params.raysPerProbe rays per probe (misses sample the skybox; hits shade sun + one NEE-sampled local light + emissive plus last frame's carried atlas when bInfiniteBounce; light-proxy hits are distance-only), then integrates
+ * them into the octahedral atlases "ddgi_irradiance" (stored as pow(E, 1/irradianceGamma), hysteresis-blended in encoded space with RTXGI's change/brightness thresholds) and "ddgi_visibility" (mean/mean^2 ray distance for the Chebyshev occlusion test, DDGISampleIrradiance).
  * Slots invalidated by a window scroll, count/spacing change, or missing history restart fresh. No-op without the TLAS and geometry/material/light buffers.
  * @param graph
  * @param pipelineManager
@@ -38,7 +38,7 @@ DDGIVolumeParams ComputeDDGIVolumeParams(const Core::DDGIParams& params, const g
  * @param previousVolume volume used last frame, for scroll/resize invalidation and feedback sampling
  * @param skyboxIndex
  * @param frameNumber
- * @param bBounceOnly debug: zero skybox and light-proxy radiance (and disable feedback) so probes show only one-bounce surface shading
+ * @param bBounceOnly debug: zero skybox radiance (and disable feedback) so probes show only one-bounce surface shading
  */
 void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, const Core::DDGIParams& params, const DDGIVolumeParams& volume, const DDGIVolumeParams& previousVolume, int32_t skyboxIndex, uint64_t frameNumber, bool bBounceOnly);
 

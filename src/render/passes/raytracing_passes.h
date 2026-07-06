@@ -68,6 +68,20 @@ void SetupRTGroundTruthDI(RenderGraph& graph,
                            uint32_t accumulationCount,
                            uint64_t frameNumber);
 
+/**
+ * Progressive path-traced reference for the DDGI indirect diffuse: primary direct like the DI ground truth, plus a cosine-sampled diffuse-only bounce path with NEE at each vertex (skybox on miss).
+ * Accumulates into a persistent buffer; reset on camera move or mode entry. No-op without the TLAS and geometry/material buffers.
+ */
+void SetupRTGroundTruthGI(RenderGraph& graph,
+                          PipelineManager* pipelineManager,
+                          const Core::ViewFamily& viewFamily,
+                          Core::Array<uint32_t, 2> renderExtent,
+                          const RenderTargets& targets,
+                          uint32_t sceneIndex,
+                          bool bReset,
+                          uint32_t accumulationCount,
+                          uint64_t frameNumber);
+
 } // Render
 
 #endif //WILL_ENGINE_RAYTRACING_PASSES_H

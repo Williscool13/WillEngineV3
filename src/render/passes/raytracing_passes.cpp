@@ -298,4 +298,85 @@ void SetupRTGroundTruthDI(RenderGraph& graph,
     graph.CarryBufferToNextFrame(SID("rt_gt_di_accum"), SID("rt_gt_di_accum"), 0);
 }
 
+void SetupRTGroundTruthGI(RenderGraph& graph,
+                          PipelineManager* pipelineManager,
+                          const Core::ViewFamily& viewFamily,
+                          Core::Array<uint32_t, 2> renderExtent,
+                          const RenderTargets& targets,
+                          uint32_t sceneIndex,
+                          bool bReset,
+                          uint32_t accumulationCount,
+                          uint64_t frameNumber)
+{
+    if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return; }
+
+    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
+
+    if (!graph.HasBuffer(SID("rt_gt_gi_accum"))) {
+        graph.CreateBuffer(SID("rt_gt_gi_accum"), bufferSize, false);
+        bReset = true;
+    }
+
+    if (bReset) {
+        RenderPass& clearPass = graph.AddPass(SID("RT GT GI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Lighting);
+        clearPass.WriteTransferBuffer(SID("rt_gt_gi_accum"));
+        clearPass.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("rt_gt_gi_accum")), 0, VK_WHOLE_SIZE, 0);
+        });
+    }
+
+    RenderPass& pass = graph.AddPass(SID("RT Ground Truth GI"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    pass.ReadTLASBuffer(RT_TLAS_BUFFER);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(SID("light_data"));
+    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+    pass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+    pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
+    pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
+    pass.ReadWriteBuffer(SID("rt_gt_gi_accum"));
+    pass.ReadSampledImage(targets.depthCopy);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.gbufferTwo);
+    pass.WriteStorageImage(targets.colorOutput);
+    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex,
+                  depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
+                  gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_gi"));
+        if (!pipeline) { return; }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+
+        RTGroundTruthGIPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .lightData = graph.GetBufferAddress(SID("light_data")),
+            .accumulationBuffer = graph.GetBufferAddress(SID("rt_gt_gi_accum")),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+            .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
+            .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
+            .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
+            .skyboxIndex = skyboxIndex,
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
+            .sceneDataIndex = sceneIndex,
+            .frameIndex = static_cast<uint32_t>(frameNumber),
+            .accumulationCount = accumulationCount,
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+        };
+        vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        const uint32_t groupsX = (renderExtent[0] + 7) / 8;
+        const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+        vkCmdDispatch(cmd, groupsX, groupsY, 1);
+    });
+
+    graph.CarryBufferToNextFrame(SID("rt_gt_gi_accum"), SID("rt_gt_gi_accum"), 0);
+}
+
 } // Render
