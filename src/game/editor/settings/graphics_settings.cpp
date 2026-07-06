@@ -30,7 +30,7 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
     }
     Engine::WriteProjectConfig(cfg);
 }
@@ -54,7 +54,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -74,7 +74,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -818,6 +818,45 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             else if (bReBLUR && !bReBLURPrev) { restir.denoiserMode = Core::ReSTIRParams::DenoiserMode::ReBLUR; }
             else if (!bRELAX && bRELAXPrev && restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) { restir.denoiserMode = Core::ReSTIRParams::DenoiserMode::None; }
             else if (!bReBLUR && bReBLURPrev && restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) { restir.denoiserMode = Core::ReSTIRParams::DenoiserMode::None; }
+        }
+
+        if (ImGui::CollapsingHeader("DDGI")) {
+            Core::DDGIParams& ddgi = state->lighting.ddgi;
+            static const Core::DDGIParams ddgiDefaults{};
+
+            auto ddgiF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+            };
+            auto ddgiI = [&](const char* label, int* v, int def, int mn, int mx, const char* tip) {
+                if (Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)})) { changed = true; }
+            };
+
+            if (ImGui::Checkbox("Enabled##ddgi", &ddgi.bEnabled)) { changed = true; }
+
+            ImGui::SeparatorText("Volume");
+            ddgiI("Probe Count X##ddgi", &ddgi.probeCountX, ddgiDefaults.probeCountX, 2, 32, "Probes along X. The volume is a camera-following rolling window; changing counts restarts probe history.");
+            ddgiI("Probe Count Y##ddgi", &ddgi.probeCountY, ddgiDefaults.probeCountY, 2, 32, "Probes along Y (vertical).");
+            ddgiI("Probe Count Z##ddgi", &ddgi.probeCountZ, ddgiDefaults.probeCountZ, 2, 32, "Probes along Z.");
+            ddgiF("Probe Spacing##ddgi", &ddgi.probeSpacing, ddgiDefaults.probeSpacing, 0.25f, 8.0f, "%.2f", "World-space distance between probes (meters); coverage = count * spacing per axis. Changing it restarts probe history.");
+
+            ImGui::SeparatorText("Trace");
+            int raysPerProbe = static_cast<int>(ddgi.raysPerProbe);
+            if (Widgets::SliderInt("Rays Per Probe##ddgi", &raysPerProbe, 16, 256, {.tooltip = "Rays traced per probe per frame. More rays = less temporal noise per frame, linearly more trace cost.", .reset = true, .resetTo = 128.0})) {
+                ddgi.raysPerProbe = static_cast<uint32_t>(raysPerProbe);
+                changed = true;
+            }
+
+            ImGui::SeparatorText("Blend");
+            ddgiF("Hysteresis##ddgi", &ddgi.hysteresis, ddgiDefaults.hysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight. Higher = smoother but laggier probes; 0 = no history (raw per-frame estimate). Default 0.97.");
+            ddgiF("Irradiance Gamma##ddgi", &ddgi.irradianceGamma, ddgiDefaults.irradianceGamma, 1.0f, 10.0f, "%.1f", "Perceptual encoding exponent: the atlas stores pow(E, 1/gamma) and blends in that space, so rare bright rays (sky through a small opening) cannot pulse the average. 1 = linear. Default 5.");
+            ddgiF("Irradiance Threshold##ddgi", &ddgi.irradianceThreshold, ddgiDefaults.irradianceThreshold, 0.0f, 1.0f, "%.2f", "Encoded-space brightening that counts as a real lighting change: hysteresis drops by 0.75 so the probe re-converges fast. Default 0.25.");
+            ddgiF("Brightness Threshold##ddgi", &ddgi.brightnessThreshold, ddgiDefaults.brightnessThreshold, 0.0f, 1.0f, "%.2f", "Encoded-space per-frame change clamp: deltas above this are scaled to 25% (firefly/pulse suppression). Default 0.10.");
+
+            ImGui::Spacing();
+            if (ImGui::Button("Reset DDGI")) {
+                ddgi = Core::DDGIParams{};
+                changed = true;
+            }
         }
 
         const bool bDefaultMode = state->lighting.lightingMode == Core::LightingMode::Default;

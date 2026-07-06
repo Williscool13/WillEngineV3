@@ -344,6 +344,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bGPUDebugTestPattern = state->debug.bGPUDebugTestPattern;
     frameBuffer->bDDGIProbeDebug = state->debug.bDDGIProbeDebug;
     frameBuffer->restir = state->debug.restir;
+    frameBuffer->ddgi = state->lighting.ddgi;
     state->debug.restir.bResetReGIR = false;
     frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;
     frameBuffer->mainViewFamily.bResetGroundTruth = state->lighting.bResetGroundTruth;

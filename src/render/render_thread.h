@@ -20,6 +20,7 @@
 #include "systems/render_screen_capture.h"
 #include "types/render_types.h"
 #include "post-processing/post_processing.h"
+#include "render/shaders/ddgi_interop.h"
 
 #include <imgui.h>
 #include <imgui_threaded_rendering.h>
@@ -187,6 +188,7 @@ private:
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
     uint32_t rtGroundTruthDIAccumCount{0};
+    DDGIVolumeParams ddgiPreviousVolume{};
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};

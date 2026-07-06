@@ -340,6 +340,7 @@ struct LightingState
     Core::AntiAliasingConfiguration aaConfig{};
     Core::PostProcessConfiguration postProcess{};
     Core::SIGMAParams sigmaParams{};
+    Core::DDGIParams ddgi{};
     float iblIntensity{1.0f};
     CubemapHandle skybox{CubemapHandle::INVALID};
     int32_t skyboxLOD{0};
@@ -363,6 +364,7 @@ struct EditorState
     bool bExclusiveGizmoActive{false};
     bool bExclusiveGizmoActivePrev{false};
     int32_t activeDotHandleId{-1};
+
     PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
     LightDebugDrawMode lightDebugDrawMode{LightDebugDrawMode::Selected};
     bool bShowLightSprites{true};
@@ -438,7 +440,9 @@ struct EngineState
     ~EngineState() = default;
 
     InputContext inputContext{InputContext::Editor};
+    // Gathered in GameUpdate, used in PrepareRenderFrame
     bool bWantsScreenshot{false};
+    bool bViewportClickPending{false};
 
     const Core::TimeFrame* timeFrame{nullptr};
 

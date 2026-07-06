@@ -40,6 +40,10 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
+SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_RAYS_PER_PROBE = 256u;
+SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_TILE = 8u;
+SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_INTERIOR = 6u;
+
 /**
  * Rolling probe window over an infinite world-space lattice. Probe cell g sits at g * probeSpacing; the window spans probeCount cells from baseCell.
  * Storage slot s holds cell baseCell + EuclideanMod(s - baseCell, probeCount), so a scroll only changes the cells of the newly exposed planes.

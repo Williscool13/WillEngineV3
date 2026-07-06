@@ -473,9 +473,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         if (frameBuffer.bEnableGPUDebug) {
             SetupGPUDebugBegin(*renderGraph, pipelineManager, frameBuffer.bLockGPUDebug, frameBuffer.bGPUDebugTestPattern, frameNumber);
-            if (frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
-                SetupDDGIProbeDebug(*renderGraph, pipelineManager, ComputeDDGIVolumeParams(viewFamily.mainView.currentViewData.cameraPos));
-            }
         }
 
         // Geometry
@@ -498,6 +495,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
             SetupTLASBuild(*renderGraph, context, viewFamily, renderExtent, frameResourceLimits);
+
+            if (frameBuffer.ddgi.bEnabled) {
+                const DDGIVolumeParams ddgiVolume = ComputeDDGIVolumeParams(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos);
+                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, frameBuffer.ddgi, ddgiVolume, ddgiPreviousVolume, viewFamily.skyboxIndex, frameNumber);
+                ddgiPreviousVolume = ddgiVolume;
+                if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
+                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, frameBuffer.ddgi, ddgiVolume);
+                }
+            }
 
             // Copy depth to R32_SFLOAT for all downstream compute passes.
             {

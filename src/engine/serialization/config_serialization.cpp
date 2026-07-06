@@ -266,6 +266,41 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     }
 }
 
+nlohmann::json ToJson(const Core::DDGIParams& p)
+{
+    return {
+        {"bEnabled", p.bEnabled},
+        {"probeCountX", p.probeCountX},
+        {"probeCountY", p.probeCountY},
+        {"probeCountZ", p.probeCountZ},
+        {"probeSpacing", p.probeSpacing},
+        {"raysPerProbe", p.raysPerProbe},
+        {"hysteresis", p.hysteresis},
+        {"irradianceGamma", p.irradianceGamma},
+        {"irradianceThreshold", p.irradianceThreshold},
+        {"brightnessThreshold", p.brightnessThreshold},
+    };
+}
+
+void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
+{
+    auto dBool = [&](const char* k, bool def) { return d.contains(k) && d[k].is_boolean() ? d[k].get<bool>() : def; };
+    auto dInt = [&](const char* k, int32_t def) { return d.contains(k) && d[k].is_number() ? d[k].get<int32_t>() : def; };
+    auto dUint = [&](const char* k, uint32_t def) { return d.contains(k) && d[k].is_number() ? d[k].get<uint32_t>() : def; };
+    auto dFloat = [&](const char* k, float def) { return d.contains(k) && d[k].is_number() ? d[k].get<float>() : def; };
+
+    p.bEnabled = dBool("bEnabled", p.bEnabled);
+    p.probeCountX = dInt("probeCountX", p.probeCountX);
+    p.probeCountY = dInt("probeCountY", p.probeCountY);
+    p.probeCountZ = dInt("probeCountZ", p.probeCountZ);
+    p.probeSpacing = dFloat("probeSpacing", p.probeSpacing);
+    p.raysPerProbe = dUint("raysPerProbe", p.raysPerProbe);
+    p.hysteresis = dFloat("hysteresis", p.hysteresis);
+    p.irradianceGamma = dFloat("irradianceGamma", p.irradianceGamma);
+    p.irradianceThreshold = dFloat("irradianceThreshold", p.irradianceThreshold);
+    p.brightnessThreshold = dFloat("brightnessThreshold", p.brightnessThreshold);
+}
+
 nlohmann::json ToJson(const Core::GTAOConfiguration& p)
 {
     return {

@@ -466,6 +466,10 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline(SID("ddgi_probe_debug"), src / "ddgi.spv", "ComputeDDGIProbeDebug",
                             sizeof(DDGIProbeDebugPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("ddgi_probe_trace"), src / "ddgi.spv", "ComputeDDGIProbeTrace",
+                            sizeof(DDGIProbeTracePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("ddgi_blend_irradiance"), src / "ddgi.spv", "ComputeDDGIBlendIrradiance",
+                            sizeof(DDGIProbeBlendPushConstant), PipelineCategory::Critical);
 
 
     RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test.spv", "ComputeRTShadowTest",

@@ -69,11 +69,6 @@ inline const StringID GPU_DEBUG_SPHERE_INSTANCE_BUFFER = SID("gpu_debug_sphere_i
 inline constexpr uint32_t GPU_DEBUG_MAX_SPHERES = 65536;
 inline constexpr uint32_t GPU_DEBUG_SPHERE_VERTEX_COUNT = 16 * 32 * 6;
 
-inline constexpr uint32_t DDGI_PROBE_COUNT_X = 24;
-inline constexpr uint32_t DDGI_PROBE_COUNT_Y = 12;
-inline constexpr uint32_t DDGI_PROBE_COUNT_Z = 24;
-inline constexpr float DDGI_PROBE_SPACING = 1.5f;
-
 inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
 inline constexpr int32_t RDG_MAX_PASSES = 256;
 inline constexpr int32_t RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE = 1 * 1024 * 1024; // 1MB base (doubles as needed)

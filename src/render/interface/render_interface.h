@@ -727,6 +727,24 @@ struct ReSTIRParams
     ReBLURParams reblur{};
 };
 
+struct DDGIParams
+{
+    bool bEnabled{true};
+
+    // Volume (count/spacing changes restart probe history)
+    int32_t probeCountX{24};
+    int32_t probeCountY{12};
+    int32_t probeCountZ{24};
+    float probeSpacing{1.5f};
+
+    uint32_t raysPerProbe{128};
+
+    float hysteresis{0.97f};
+    float irradianceGamma{5.0f};
+    float irradianceThreshold{0.25f};
+    float brightnessThreshold{0.10f};
+};
+
 struct ViewFamily
 {
     ViewFamily() = default;
@@ -856,6 +874,7 @@ struct FrameBuffer
     bool bDDGIProbeDebug = false;
     bool bLogRDG = false;
     ReSTIRParams restir{};
+    DDGIParams ddgi{};
 
     bool bTakeScreenshot{false};
 };
