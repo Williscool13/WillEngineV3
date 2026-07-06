@@ -43,19 +43,22 @@ using float4x4 = glm::mat4;
 SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_RAYS_PER_PROBE = 256u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_TILE = 8u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_INTERIOR = 6u;
+SHADER_PUBLIC SHADER_CONST uint DDGI_VISIBILITY_TILE = 16u;
+SHADER_PUBLIC SHADER_CONST uint DDGI_VISIBILITY_INTERIOR = 14u;
 
 /**
  * Rolling probe window over an infinite world-space lattice. Probe cell g sits at g * probeSpacing; the window spans probeCount cells from baseCell.
  * Storage slot s holds cell baseCell + EuclideanMod(s - baseCell, probeCount), so a scroll only changes the cells of the newly exposed planes.
+ * Also carries the sampling parameters (biases, encoding gamma) so consumers need only this struct plus the two atlas textures.
  */
 SHADER_PUBLIC struct DDGIVolumeParams
 {
     SHADER_PUBLIC int3 baseCell;
-    SHADER_PUBLIC uint pad0;
+    SHADER_PUBLIC float normalBias;
     SHADER_PUBLIC uint3 probeCount;
-    SHADER_PUBLIC uint pad1;
+    SHADER_PUBLIC float viewBias;
     SHADER_PUBLIC float3 probeSpacing;
-    SHADER_PUBLIC float pad2;
+    SHADER_PUBLIC float irradianceGamma;
 };
 
 #endif //WILL_ENGINE_DDGI_INTEROP_H

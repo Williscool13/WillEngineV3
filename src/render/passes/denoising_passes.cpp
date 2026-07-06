@@ -26,7 +26,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         uint32_t remodulateOutputMode,
                         float iblIntensity,
                         uint32_t activeCheckerboardField,
-                        float checkerboardResolveAccumSpeed)
+                        float checkerboardResolveAccumSpeed,
+                        const DDGIVolumeParams& ddgiVolume,
+                        bool bDDGIApply)
 {
     const bool bCheckerboard = activeCheckerboardField != 0u;
     // NRD RELAX resolves checkerboard inside the prepass
@@ -559,6 +561,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     //   final = diffuse * albedo + specular * specReflectance + emissive
     {
         const StringID gbufferTwo = targets.gbufferTwo;
+        const bool bDDGI = bDDGIApply && graph.HasTexture(SID("ddgi_irradiance")) && graph.HasTexture(SID("ddgi_visibility"));
 
         auto& pass = graph.AddPass(SID("[ReLAX] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -567,10 +570,14 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(gbufferTwo);
         pass.ReadSampledImage(depth);
+        if (bDDGI) {
+            pass.ReadSampledImage(SID("ddgi_irradiance"));
+            pass.ReadSampledImage(SID("ddgi_visibility"));
+        }
         pass.WriteStorageImage(noisyInput);
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, ddgiVolume, bDDGI](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -586,6 +593,10 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,
+                .ddgiVolume = ddgiVolume,
+                .ddgiIrradianceIndex = bDDGI ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance")) : ~0x0u,
+                .ddgiVisibilityIndex = bDDGI ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_visibility")) : ~0x0u,
+                .bDDGIApply = bDDGI ? 1u : 0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -605,7 +616,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          uint32_t remodulateOutputMode,
                          float iblIntensity,
                          uint32_t activeCheckerboardField,
-                         float checkerboardResolveAccumSpeed)
+                         float checkerboardResolveAccumSpeed,
+                         const DDGIVolumeParams& ddgiVolume,
+                         bool bDDGIApply)
 {
     const bool bCheckerboard = activeCheckerboardField != 0u;
     // NRD resolves checkerboard inside the prepass, so it must run when checkerboard is on
@@ -1101,6 +1114,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     // Pass 9: Remodulate denoised diff/spec into final color (reuses the ReSTIR remodulate shader).
     {
         const StringID gbufferTwo = targets.gbufferTwo;
+        const bool bDDGI = bDDGIApply && graph.HasTexture(SID("ddgi_irradiance")) && graph.HasTexture(SID("ddgi_visibility"));
 
         auto& pass = graph.AddPass(SID("[ReBLUR] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -1109,10 +1123,14 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(gbufferTwo);
         pass.ReadSampledImage(depth);
+        if (bDDGI) {
+            pass.ReadSampledImage(SID("ddgi_irradiance"));
+            pass.ReadSampledImage(SID("ddgi_visibility"));
+        }
         pass.WriteStorageImage(noisyInput);
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, ddgiVolume, bDDGI](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -1128,6 +1146,10 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,
+                .ddgiVolume = ddgiVolume,
+                .ddgiIrradianceIndex = bDDGI ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance")) : ~0x0u,
+                .ddgiVisibilityIndex = bDDGI ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_visibility")) : ~0x0u,
+                .bDDGIApply = bDDGI ? 1u : 0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

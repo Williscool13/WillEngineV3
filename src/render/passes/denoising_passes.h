@@ -8,6 +8,7 @@
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
+#include "render/shaders/ddgi_interop.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -25,7 +26,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         uint32_t remodulateOutputMode,
                         float iblIntensity,
                         uint32_t activeCheckerboardField,
-                        float checkerboardResolveAccumSpeed);
+                        float checkerboardResolveAccumSpeed,
+                        const DDGIVolumeParams& ddgiVolume,
+                        bool bDDGIApply);
 
 void SetupReBLURDenoiser(RenderGraph& graph,
                          PipelineManager* pipelineManager,
@@ -37,7 +40,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          uint32_t remodulateOutputMode,
                          float iblIntensity,
                          uint32_t activeCheckerboardField,
-                         float checkerboardResolveAccumSpeed);
+                         float checkerboardResolveAccumSpeed,
+                         const DDGIVolumeParams& ddgiVolume,
+                         bool bDDGIApply);
 } // Render
 
 #endif //WILL_ENGINE_DENOISING_PASSES_H

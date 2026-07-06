@@ -5,6 +5,8 @@ import bindless_declarations;
 import shader_functions;
 import pbr_functions;
 import restir_common;
+import ddgi_interop;
+import ddgi_common;
 
 static const float BILATERAL_DEPTH_SIGMA = 0.01;
 static const float BILATERAL_NORMAL_POWER = 32.0;
@@ -53,15 +55,33 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
     float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb;
     float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb;
 
+    // Indirect: diffuse from the DDGI probe volume when it covers this point (skybox irradiance fallback), specular from the prefiltered skybox.
     float3 ibl = float3(0.0);
-    if (pc.skyboxIndex >= 0) {
+    {
         float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
         float3 kD_ibl = (1.0 - F_ibl) * (1.0 - metallic);
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
-        float3 irradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN);
-        float3 reflectionDiffuse = irradiance * albedo;
-        float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl);
-        ibl = (kD_ibl * reflectionDiffuse + reflectionSpecular) * pc.iblIntensity;
+
+        float3 indirectDiffuse = float3(0.0);
+        bool bDiffuseFromProbes = false;
+        if (pc.bDDGIApply != 0) {
+            float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+            float3 cameraDirection = normalize(mul(float3x3(scene.invView), viewPosition));
+            float4 gi = DDGISampleIrradiance(worldPosition, worldN, cameraDirection, pc.ddgiVolume, pc.ddgiIrradianceIndex, pc.ddgiVisibilityIndex);
+            if (gi.w > 0.0) {
+                indirectDiffuse = gi.rgb;
+                bDiffuseFromProbes = true;
+            }
+        }
+        if (!bDiffuseFromProbes && pc.skyboxIndex >= 0) {
+            indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+        }
+
+        float3 reflectionSpecular = float3(0.0);
+        if (pc.skyboxIndex >= 0) {
+            reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl) * pc.iblIntensity;
+        }
+        ibl = kD_ibl * indirectDiffuse * albedo + reflectionSpecular;
     }
 
     float3 finalColor;

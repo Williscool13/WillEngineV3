@@ -22,6 +22,9 @@ DDGIVolumeParams ComputeDDGIVolumeParams(const Core::DDGIParams& params, const g
     volume.baseCell = centerCell - counts / 2;
     volume.probeCount = glm::uvec3(counts);
     volume.probeSpacing = glm::vec3(spacing);
+    volume.normalBias = glm::max(params.normalBias, 0.0f);
+    volume.viewBias = glm::max(params.viewBias, 0.0f);
+    volume.irradianceGamma = glm::max(params.irradianceGamma, 1.0f);
     return volume;
 }
 
@@ -53,6 +56,12 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     const uint32_t raysPerProbe = glm::clamp(params.raysPerProbe, 16u, DDGI_MAX_RAYS_PER_PROBE);
     const glm::vec4 rayRotation = DDGIRayRotation(frameNumber);
 
+    const bool bHistoryValid = graph.HasTexture(SID("ddgi_irradiance_history"))
+        && graph.HasTexture(SID("ddgi_visibility_history"))
+        && previousVolume.probeCount == volume.probeCount
+        && previousVolume.probeSpacing == volume.probeSpacing;
+    const bool bFeedback = bHistoryValid && params.bInfiniteBounce && !bBounceOnly;
+
     graph.CreateBuffer(SID("ddgi_ray_data"), static_cast<VkDeviceSize>(probeCountTotal) * raysPerProbe * sizeof(glm::vec4), false);
 
     RenderPass& tracePass = graph.AddPass(SID("DDGI Probe Trace"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
@@ -65,7 +74,11 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     tracePass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
     tracePass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     tracePass.WriteBuffer(SID("ddgi_ray_data"));
-    tracePass.Execute([pipelineManager, volume, rayRotation, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    if (bFeedback) {
+        tracePass.ReadSampledImage(SID("ddgi_irradiance_history"));
+        tracePass.ReadSampledImage(SID("ddgi_visibility_history"));
+    }
+    tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell = previousVolume.baseCell, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_trace"));
         if (!pipelineEntry) {
             return;
@@ -75,6 +88,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         DDGIProbeTracePushConstant pc{
             .volume = volume,
             .rayRotation = rayRotation,
+            .previousBaseCell = previousBaseCell,
+            .bFeedbackValid = bFeedback ? 1u : 0u,
             .rayData = graph.GetBufferAddress(SID("ddgi_ray_data")),
             .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
@@ -87,6 +102,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             .skyboxIndex = skyboxIndex,
             .raysPerProbe = raysPerProbe,
             .bBounceOnly = bBounceOnly ? 1u : 0u,
+            .irradianceHistoryIndex = bFeedback ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance_history")) : ~0x0u,
+            .visibilityHistoryIndex = bFeedback ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_visibility_history")) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (raysPerProbe + 63) / 64, probeCountTotal, 1);
@@ -95,10 +112,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     const uint32_t atlasWidth = volume.probeCount.x * volume.probeCount.y * DDGI_IRRADIANCE_TILE;
     const uint32_t atlasHeight = volume.probeCount.z * DDGI_IRRADIANCE_TILE;
     graph.CreateTexture(SID("ddgi_irradiance"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, atlasWidth, atlasHeight, 1}, {std::nullopt}, false);
-
-    const bool bHistoryValid = graph.HasTexture(SID("ddgi_irradiance_history"))
-        && previousVolume.probeCount == volume.probeCount
-        && previousVolume.probeSpacing == volume.probeSpacing;
+    graph.CreateTexture(SID("ddgi_visibility"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, volume.probeCount.x * volume.probeCount.y * DDGI_VISIBILITY_TILE, volume.probeCount.z * DDGI_VISIBILITY_TILE, 1}, {std::nullopt}, false);
 
     RenderPass& blendPass = graph.AddPass(SID("DDGI Blend Irradiance"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
     blendPass.ReadBuffer(SID("ddgi_ray_data"));
@@ -123,7 +137,6 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             .atlasHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance_history")) : 0u,
             .raysPerProbe = raysPerProbe,
             .hysteresis = glm::clamp(params.hysteresis, 0.0f, 0.995f),
-            .irradianceGamma = glm::max(params.irradianceGamma, 1.0f),
             .irradianceThreshold = params.irradianceThreshold,
             .brightnessThreshold = params.brightnessThreshold,
         };
@@ -131,10 +144,40 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         vkCmdDispatch(cmd, probeCountTotal, 1, 1);
     });
 
+    RenderPass& visibilityPass = graph.AddPass(SID("DDGI Blend Visibility"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    visibilityPass.ReadBuffer(SID("ddgi_ray_data"));
+    visibilityPass.WriteStorageImage(SID("ddgi_visibility"));
+    if (bHistoryValid) {
+        visibilityPass.ReadSampledImage(SID("ddgi_visibility_history"));
+    }
+    visibilityPass.Execute([pipelineManager, params, volume, rayRotation, previousBaseCell = previousVolume.baseCell, bHistoryValid, raysPerProbe, probeCountTotal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_visibility"));
+        if (!pipelineEntry) {
+            return;
+        }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        DDGIProbeBlendPushConstant pc{
+            .volume = volume,
+            .rayRotation = rayRotation,
+            .previousBaseCell = previousBaseCell,
+            .bHistoryValid = bHistoryValid ? 1u : 0u,
+            .rayData = graph.GetBufferAddress(SID("ddgi_ray_data")),
+            .atlasOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("ddgi_visibility")),
+            .atlasHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_visibility_history")) : 0u,
+            .raysPerProbe = raysPerProbe,
+            .hysteresis = glm::clamp(params.hysteresis, 0.0f, 0.995f),
+            .distanceExponent = glm::max(params.distanceExponent, 1.0f),
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, probeCountTotal, 1, 1);
+    });
+
     graph.CarryTextureToNextFrame(SID("ddgi_irradiance"), SID("ddgi_irradiance_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CarryTextureToNextFrame(SID("ddgi_visibility"), SID("ddgi_visibility_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 }
 
-void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const Core::DDGIParams& params, const DDGIVolumeParams& volume)
+void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGIVolumeParams& volume)
 {
 #ifdef WDEBUG
     if (!graph.HasBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER) || !graph.HasTexture(SID("ddgi_irradiance"))) {
@@ -145,7 +188,7 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
     pass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
     pass.WriteBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER);
     pass.ReadSampledImage(SID("ddgi_irradiance"));
-    pass.Execute([pipelineManager, volume, irradianceGamma = glm::max(params.irradianceGamma, 1.0f)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, volume](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_debug"));
         if (!pipelineEntry) {
             return;
@@ -157,7 +200,6 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
             .sphereArgs = graph.GetBufferAddress(GPU_DEBUG_SPHERE_ARGS_BUFFER),
             .sphereBuffer = graph.GetBufferAddress(GPU_DEBUG_SPHERE_INSTANCE_BUFFER),
             .irradianceAtlasIndex = graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance")),
-            .irradianceGamma = irradianceGamma,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (volume.probeCount.x + 3) / 4, (volume.probeCount.y + 3) / 4, (volume.probeCount.z + 3) / 4);

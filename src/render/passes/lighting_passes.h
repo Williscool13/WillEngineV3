@@ -8,6 +8,7 @@
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
+#include "render/shaders/ddgi_interop.h"
 
 namespace Render
 {
@@ -20,7 +21,9 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         const RenderTargets& targets,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
-                                        uint64_t frameNumber);
+                                        uint64_t frameNumber,
+                                        const DDGIVolumeParams& ddgiVolume,
+                                        bool bDDGIApply);
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,

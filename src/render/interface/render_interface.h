@@ -738,11 +738,17 @@ struct DDGIParams
     float probeSpacing{1.5f};
 
     uint32_t raysPerProbe{128};
+    bool bInfiniteBounce{true};
 
     float hysteresis{0.97f};
     float irradianceGamma{5.0f};
     float irradianceThreshold{0.25f};
     float brightnessThreshold{0.10f};
+    float distanceExponent{50.0f};
+
+    bool bApplyToLighting{true};
+    float normalBias{0.1f};
+    float viewBias{0.3f};
 };
 
 struct ViewFamily

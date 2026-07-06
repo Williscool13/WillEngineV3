@@ -275,10 +275,15 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"probeCountZ", p.probeCountZ},
         {"probeSpacing", p.probeSpacing},
         {"raysPerProbe", p.raysPerProbe},
+        {"bInfiniteBounce", p.bInfiniteBounce},
         {"hysteresis", p.hysteresis},
         {"irradianceGamma", p.irradianceGamma},
         {"irradianceThreshold", p.irradianceThreshold},
         {"brightnessThreshold", p.brightnessThreshold},
+        {"distanceExponent", p.distanceExponent},
+        {"bApplyToLighting", p.bApplyToLighting},
+        {"normalBias", p.normalBias},
+        {"viewBias", p.viewBias},
     };
 }
 
@@ -295,10 +300,15 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.probeCountZ = dInt("probeCountZ", p.probeCountZ);
     p.probeSpacing = dFloat("probeSpacing", p.probeSpacing);
     p.raysPerProbe = dUint("raysPerProbe", p.raysPerProbe);
+    p.bInfiniteBounce = dBool("bInfiniteBounce", p.bInfiniteBounce);
     p.hysteresis = dFloat("hysteresis", p.hysteresis);
     p.irradianceGamma = dFloat("irradianceGamma", p.irradianceGamma);
     p.irradianceThreshold = dFloat("irradianceThreshold", p.irradianceThreshold);
     p.brightnessThreshold = dFloat("brightnessThreshold", p.brightnessThreshold);
+    p.distanceExponent = dFloat("distanceExponent", p.distanceExponent);
+    p.bApplyToLighting = dBool("bApplyToLighting", p.bApplyToLighting);
+    p.normalBias = dFloat("normalBias", p.normalBias);
+    p.viewBias = dFloat("viewBias", p.viewBias);
 }
 
 nlohmann::json ToJson(const Core::GTAOConfiguration& p)

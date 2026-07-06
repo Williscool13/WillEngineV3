@@ -12,15 +12,16 @@ import packing_functions;
 import pbr_functions;
 
 // =============== Shader Summary ============
-// DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, light-proxy hits return the light's radiance, front-face hits shade one sun bounce + emissive.
+// DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, light-proxy hits return the light's radiance, front-face hits shade one sun bounce + emissive plus last frame's probe irradiance (infinite bounce).
 // Blend: one thread group per probe tile; each interior texel cosine-integrates the probe's rays into octahedral irradiance stored as pow(E, 1/gamma), hysteresis-blended in that perceptual space with RTXGI's change/brightness thresholds. Slots whose lattice cell changed since last frame (window scroll) or with no history start fresh. Border texels copy wrapped interior texels so bilinear taps stay seamless.
+// Blend visibility: same layout at 16x16 tiles; each texel integrates mean/mean^2 ray distance with a sharpened (pow distanceExponent) cosine lobe, for the Chebyshev occlusion test at sampling.
 // Debug: one sphere per probe, L1 SH fitted from the probe's decoded atlas tile.
 
 // Coarse fixed mip: probe irradiance is low frequency; keeps incoherent rays cache-friendly and pre-averages albedo.
 static const float DDGI_HIT_TEXTURE_LOD = 3.0;
 
-/** Radiance leaving the hit surface toward the probe: sun-lit Lambertian diffuse (shadow-ray tested) plus emissive. Indices are global (rebased at upload). */
-static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition)
+/** Radiance leaving the hit surface toward the probe: sun-lit Lambertian diffuse (shadow-ray tested), emissive, and last frame's probe irradiance (infinite bounce). Indices are global (rebased at upload). */
+static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -70,6 +71,12 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
             }
         }
     }
+    if (pc.bFeedbackValid != 0) {
+        DDGIVolumeParams previousVolume = pc.volume;
+        previousVolume.baseCell = pc.previousBaseCell;
+        float4 gi = DDGISampleIrradiance(worldPosition, N, rayDirection, previousVolume, pc.irradianceHistoryIndex, pc.visibilityHistoryIndex);
+        radiance += diffuseColor * gi.rgb;
+    }
     return radiance;
 }
 
@@ -109,7 +116,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
             float3 radiance = bEmitting ? UnpackUnorm4x8(light.packedColor).rgb * light.intensity * LightRangeCull(hitT, light.range) : float3(0.0);
             result = float4(radiance, hitT);
         } else if (q.CommittedTriangleFrontFace()) {
-            float3 radiance = ShadeProbeRayHit(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), ray.Origin + direction * hitT);
+            float3 radiance = ShadeProbeRayHit(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), ray.Origin + direction * hitT, direction);
             result = float4(radiance, hitT);
         } else {
             // Backface hits mark "probe likely inside geometry" with a shortened negative distance, classic DDGI convention.
@@ -128,9 +135,8 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
 }
 
 /** Border texel -> wrapped interior source texel; identity for interior texels. Corners copy the diagonally opposite interior corner. */
-static int2 DDGIOctBorderSource(int2 texel)
+static int2 DDGIOctBorderSource(int2 texel, int n)
 {
-    const int n = int(DDGI_IRRADIANCE_INTERIOR);
     bool onX = texel.x == 0 || texel.x == n + 1;
     bool onY = texel.y == 0 || texel.y == n + 1;
     if (!onX && !onY) {
@@ -159,7 +165,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
 {
     uint probeIndex = groupId.x;
     int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
-    int2 tileOrigin = DDGIProbeTileOrigin(slot, pc.volume);
+    int2 tileOrigin = DDGIProbeTileOrigin(slot, pc.volume, DDGI_IRRADIANCE_TILE);
 
     uint threadIndex = gtid.y * DDGI_IRRADIANCE_TILE + gtid.x;
     for (uint r = threadIndex; r < pc.raysPerProbe; r += DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE) {
@@ -170,7 +176,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     int2 texel = int2(gtid.xy);
     bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_IRRADIANCE_INTERIOR));
     if (bInterior) {
-        float3 texelDirection = DDGIOctTexelDirection(texel);
+        float3 texelDirection = DDGIOctTexelDirection(texel, DDGI_IRRADIANCE_INTERIOR);
         float3 radianceSum = float3(0.0);
         float weightSum = 0.0;
         for (uint r = 0; r < pc.raysPerProbe; ++r) {
@@ -182,7 +188,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
         // The EMA runs in perceptual space (pow 1/gamma): a rare bright ray moves the encoded value little, so small
         // sky apertures stop pulsing. Thresholds and the delta clamp follow RTXGI's probe blending.
         float3 result = weightSum > 1e-4 ? radianceSum / weightSum : float3(0.0);
-        result = pow(result, 1.0 / pc.irradianceGamma);
+        result = pow(result, 1.0 / pc.volume.irradianceGamma);
 
         if (pc.bHistoryValid != 0) {
             DDGIVolumeParams previousVolume = pc.volume;
@@ -210,9 +216,58 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     }
     GroupMemoryBarrierWithGroupSync();
 
-    int2 source = DDGIOctBorderSource(texel);
+    int2 source = DDGIOctBorderSource(texel, int(DDGI_IRRADIANCE_INTERIOR));
     float3 value = gsTexels[uint(source.y) * DDGI_IRRADIANCE_TILE + uint(source.x)];
     rdgStorageFloat4[pc.atlasOutIndex][uint2(tileOrigin + texel)] = float4(value, 1.0);
+}
+
+groupshared float gsRayDistances[DDGI_MAX_RAYS_PER_PROBE];
+groupshared float2 gsVisTexels[DDGI_VISIBILITY_TILE * DDGI_VISIBILITY_TILE];
+
+[shader("compute")]
+[numthreads(DDGI_VISIBILITY_TILE, DDGI_VISIBILITY_TILE, 1)]
+void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupThreadID, uniform DDGIProbeBlendPushConstant pc)
+{
+    uint probeIndex = groupId.x;
+    int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
+    int2 tileOrigin = DDGIProbeTileOrigin(slot, pc.volume, DDGI_VISIBILITY_TILE);
+
+    // abs() folds the negative backface marker back into a distance; the clamp bounds what Chebyshev ever compares against.
+    float maxDistance = length(pc.volume.probeSpacing) * 1.5;
+    uint threadIndex = gtid.y * DDGI_VISIBILITY_TILE + gtid.x;
+    for (uint r = threadIndex; r < pc.raysPerProbe; r += DDGI_VISIBILITY_TILE * DDGI_VISIBILITY_TILE) {
+        gsRayDistances[r] = min(abs(pc.rayData[probeIndex * pc.raysPerProbe + r].w), maxDistance);
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    int2 texel = int2(gtid.xy);
+    bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_VISIBILITY_INTERIOR));
+    if (bInterior) {
+        float3 texelDirection = DDGIOctTexelDirection(texel, DDGI_VISIBILITY_INTERIOR);
+        float2 momentsSum = float2(0.0);
+        float weightSum = 0.0;
+        for (uint r = 0; r < pc.raysPerProbe; ++r) {
+            float3 rayDirection = DDGIRotate(DDGISphericalFibonacci(r, pc.raysPerProbe), pc.rayRotation);
+            float weight = pow(max(dot(texelDirection, rayDirection), 0.0), pc.distanceExponent);
+            momentsSum += float2(gsRayDistances[r], gsRayDistances[r] * gsRayDistances[r]) * weight;
+            weightSum += weight;
+        }
+        float2 result = weightSum > 1e-4 ? momentsSum / weightSum : float2(0.0);
+
+        if (pc.bHistoryValid != 0) {
+            DDGIVolumeParams previousVolume = pc.volume;
+            previousVolume.baseCell = pc.previousBaseCell;
+            if (all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume))) {
+                float2 previous = rdgTexturesFloat2[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rg;
+                result = lerp(result, previous, pc.hysteresis);
+            }
+        }
+        gsVisTexels[threadIndex] = result;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    int2 source = DDGIOctBorderSource(texel, int(DDGI_VISIBILITY_INTERIOR));
+    rdgStorageFloat2[pc.atlasOutIndex][uint2(tileOrigin + texel)] = gsVisTexels[uint(source.y) * DDGI_VISIBILITY_TILE + uint(source.x)];
 }
 
 [shader("compute")]
@@ -228,7 +283,7 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
     float radius = 0.08 * min(pc.volume.probeSpacing.x, min(pc.volume.probeSpacing.y, pc.volume.probeSpacing.z));
 
     // Least-squares L1 fit over the tile: E(n) ~ dc + dot(dir, n), with dir = 3 * mean(E * n) since mean(n n^T) = I/3 over the sphere.
-    int2 tileOrigin = DDGIProbeTileOrigin(slot, pc.volume);
+    int2 tileOrigin = DDGIProbeTileOrigin(slot, pc.volume, DDGI_IRRADIANCE_TILE);
     float3 dc = float3(0.0);
     float3 dirR = float3(0.0);
     float3 dirG = float3(0.0);
@@ -236,8 +291,8 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
     for (int ty = 1; ty <= int(DDGI_IRRADIANCE_INTERIOR); ++ty) {
         for (int tx = 1; tx <= int(DDGI_IRRADIANCE_INTERIOR); ++tx) {
             float3 encoded = rdgTexturesFloat4[pc.irradianceAtlasIndex].Load(int3(tileOrigin + int2(tx, ty), 0)).rgb;
-            float3 irradiance = pow(max(encoded, float3(0.0)), pc.irradianceGamma);
-            float3 texelDirection = DDGIOctTexelDirection(int2(tx, ty));
+            float3 irradiance = pow(max(encoded, float3(0.0)), pc.volume.irradianceGamma);
+            float3 texelDirection = DDGIOctTexelDirection(int2(tx, ty), DDGI_IRRADIANCE_INTERIOR);
             dc += irradiance;
             dirR += irradiance.r * texelDirection;
             dirG += irradiance.g * texelDirection;

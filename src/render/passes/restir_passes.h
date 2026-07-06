@@ -8,6 +8,7 @@
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
+#include "render/shaders/ddgi_interop.h"
 
 namespace Core
 {
@@ -49,7 +50,9 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                uint32_t sceneIndex,
                                uint32_t outputMode,
                                float iblIntensity,
-                               uint64_t frameNumber);
+                               uint64_t frameNumber,
+                               const DDGIVolumeParams& ddgiVolume,
+                               bool bDDGIApply);
 } // Render
 
 #endif //WILL_ENGINE_RESTIR_PASSES_H

@@ -2,6 +2,8 @@ import push_constant_interop;
 import constants_interop;
 import model_interop;
 import lights_interop;
+import ddgi_interop;
+import ddgi_common;
 
 import shader_functions;
 import pbr_functions;
@@ -76,21 +78,33 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
         directLight += (diffusePl + specularPl) * nDotLpl * attenuation * pl.intensity * plColor;
     }
 
-    // IBL
+    // DDGI probe diffuse
     float3 ibl = 0.0;
-    if (pc.skyboxIndex >= 0)
     {
-        float NdotV = max(dot(N, V), 0.0);
-        float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
-        float3 F_ibl = F_SCHLICK_ROUGHNESS(NdotV, F0, roughness);
-        float3 kS_ibl = F_ibl;
-        float3 kD_ibl = (1.0 - kS_ibl) * (1.0 - li.metallic);
-
+        float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
+        float3 kD_ibl = (1.0 - F_ibl) * (1.0 - li.metallic);
         float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
-        float3 irradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN);
-        float3 reflectionDiffuse = irradiance * li.albedo.xyz;
-        float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl);
-        ibl = (kD_ibl * reflectionDiffuse + reflectionSpecular) * gtao * pc.iblIntensity;
+
+        float3 indirectDiffuse = float3(0.0);
+        bool bDiffuseFromProbes = false;
+        if (pc.bDDGIApply != 0) {
+            float3 worldPosition = mul(pc.sceneData[pc.sceneDataIndex].invView, float4(viewPosition, 1.0)).xyz;
+            float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
+            float4 gi = DDGISampleIrradiance(worldPosition, worldN, cameraDirection, pc.ddgiVolume, pc.ddgiIrradianceIndex, pc.ddgiVisibilityIndex);
+            if (gi.w > 0.0) {
+                indirectDiffuse = gi.rgb;
+                bDiffuseFromProbes = true;
+            }
+        }
+        if (!bDiffuseFromProbes && pc.skyboxIndex >= 0) {
+            indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+        }
+
+        float3 reflectionSpecular = float3(0.0);
+        if (pc.skyboxIndex >= 0) {
+            reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl) * pc.iblIntensity;
+        }
+        ibl = (kD_ibl * indirectDiffuse * li.albedo.xyz + reflectionSpecular) * gtao;
     }
 
     float3 finalColor = directLight + ibl + li.emissiveRGB;

@@ -520,6 +520,11 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC uint32_t activeCheckerboardField;
     SHADER_PUBLIC uint32_t bCheckerboardPacked;
+    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC DDGIVolumeParams ddgiVolume;
+    SHADER_PUBLIC uint32_t ddgiIrradianceIndex;
+    SHADER_PUBLIC uint32_t ddgiVisibilityIndex;
+    SHADER_PUBLIC uint32_t bDDGIApply;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -538,6 +543,11 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC DDGIVolumeParams ddgiVolume;
+    SHADER_PUBLIC uint32_t ddgiIrradianceIndex;
+    SHADER_PUBLIC uint32_t ddgiVisibilityIndex;
+    SHADER_PUBLIC uint32_t bDDGIApply;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
@@ -913,13 +923,14 @@ SHADER_PUBLIC struct DDGIProbeDebugPushConstant
     SHADER_PUBLIC SHADER_PTR(GPUDebugSphereArgs) sphereArgs;
     SHADER_PUBLIC SHADER_PTR(DebugSphereInstance) sphereBuffer;
     SHADER_PUBLIC uint32_t irradianceAtlasIndex;
-    SHADER_PUBLIC float irradianceGamma;
 };
 
 SHADER_PUBLIC struct DDGIProbeTracePushConstant
 {
     SHADER_PUBLIC DDGIVolumeParams volume;
     SHADER_PUBLIC float4 rayRotation;
+    SHADER_PUBLIC int3 previousBaseCell;
+    SHADER_PUBLIC uint32_t bFeedbackValid;
     SHADER_PUBLIC SHADER_PTR(float4) rayData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
@@ -932,6 +943,8 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
     SHADER_PUBLIC uint32_t bBounceOnly;
+    SHADER_PUBLIC uint32_t irradianceHistoryIndex;
+    SHADER_PUBLIC uint32_t visibilityHistoryIndex;
 };
 
 SHADER_PUBLIC struct DDGIProbeBlendPushConstant
@@ -945,7 +958,7 @@ SHADER_PUBLIC struct DDGIProbeBlendPushConstant
     SHADER_PUBLIC uint32_t atlasHistoryIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
     SHADER_PUBLIC float hysteresis;
-    SHADER_PUBLIC float irradianceGamma;
+    SHADER_PUBLIC float distanceExponent;
     SHADER_PUBLIC float irradianceThreshold;
     SHADER_PUBLIC float brightnessThreshold;
     SHADER_PUBLIC uint32_t pad0;
