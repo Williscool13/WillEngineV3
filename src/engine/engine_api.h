@@ -287,6 +287,8 @@ struct InputState
     size_t captureTargetBindingRow{~size_t{0}};
     bool bBindingsDirty{false};
 
+    Vec2 mousePositionAbsolute{};
+
     [[nodiscard]] const Core::ActionState& GetActionState(ActionHandle action) const
     {
         static constexpr Core::ActionState ACTION_STATE_EMPTY{};
@@ -385,6 +387,7 @@ struct DebugState
     bool bEnableGPUDebug{false};
     bool bLockGPUDebug{false};
     bool bGPUDebugTestPattern{false};
+    bool bDDGIProbeDebug{false};
     Core::ReSTIRParams restir{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
@@ -404,14 +407,12 @@ struct EngineState
     InputContext inputContext{InputContext::Editor};
     bool bWantsScreenshot{false};
 
-    const Core::InputFrame* inputFrame{nullptr};
     const Core::TimeFrame* timeFrame{nullptr};
 
     /**
      * Accumulated across game ticks since the last render-prepare; drained and reset each render frame.
-     * Note: Do not use directly, inputFrame and timeFrame will be replaced with this in the render frame function.
+     * Note: Do not use directly, timeFrame will be replaced with this in the render frame function.
      */
-    Core::InputFrame renderInputFrame{};
     Core::TimeFrame renderTimeFrame{};
     std::mt19937_64 rng{std::random_device{}()};
 

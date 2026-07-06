@@ -464,6 +464,9 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("gpu_debug_test_pattern"), src / "gpu_debug.spv", "ComputeGPUDebugTestPattern",
                             sizeof(GPUDebugTestPatternPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("ddgi_probe_debug"), src / "ddgi.spv", "ComputeDDGIProbeDebug",
+                            sizeof(DDGIProbeDebugPushConstant), PipelineCategory::Critical);
+
 
     RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test.spv", "ComputeRTShadowTest",
                             sizeof(RTShadowTestPushConstant), PipelineCategory::Critical);

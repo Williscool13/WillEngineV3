@@ -242,6 +242,8 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::Checkbox("Lock##GPUDebug", &state->debug.bLockGPUDebug);
         ImGui::SameLine();
         ImGui::Checkbox("Test Pattern##GPUDebug", &state->debug.bGPUDebugTestPattern);
+        ImGui::SameLine();
+        ImGui::Checkbox("DDGI Probes##GPUDebug", &state->debug.bDDGIProbeDebug);
 
         ImGui::Separator();
 

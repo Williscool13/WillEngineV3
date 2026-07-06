@@ -230,6 +230,10 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     Game::FunctionKeyUpdate(ctx, state);
 
+    if (state->debug.bEnableUI) {
+        Game::UpdateUIPointerState(ctx, state);
+    }
+
     // Gameplay simulation runs only while playing AND game-focused
     if (state->inputContext == Engine::InputContext::Gameplay) {
         if (state->physics.bEnabled) {
@@ -337,6 +341,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bEnableGPUDebug = state->debug.bEnableGPUDebug;
     frameBuffer->bLockGPUDebug = state->debug.bLockGPUDebug;
     frameBuffer->bGPUDebugTestPattern = state->debug.bGPUDebugTestPattern;
+    frameBuffer->bDDGIProbeDebug = state->debug.bDDGIProbeDebug;
     frameBuffer->restir = state->debug.restir;
     state->debug.restir.bResetReGIR = false;
     frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;

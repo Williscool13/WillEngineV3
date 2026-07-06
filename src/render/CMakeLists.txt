@@ -93,6 +93,9 @@ add_library(render STATIC
         passes/ui_passes.h
         passes/debug_passes.cpp
         passes/debug_passes.h
+        passes/ddgi_passes.cpp
+        passes/ddgi_passes.h
+        shaders/ddgi_interop.h
         post-processing/post_processing.cpp
         post-processing/post_processing.h
         renderer_types.h

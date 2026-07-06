@@ -21,6 +21,7 @@ import ui_interop;
 import restir_interop;
 import relax_interop;
 import reblur_interop;
+import ddgi_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -33,6 +34,7 @@ import reblur_interop;
 #include "restir_interop.h"
 #include "relax_interop.h"
 #include "reblur_interop.h"
+#include "ddgi_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;

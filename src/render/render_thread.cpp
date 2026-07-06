@@ -473,6 +473,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         if (frameBuffer.bEnableGPUDebug) {
             SetupGPUDebugBegin(*renderGraph, pipelineManager, frameBuffer.bLockGPUDebug, frameBuffer.bGPUDebugTestPattern, frameNumber);
+            if (frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
+                SetupDDGIProbeDebug(*renderGraph, pipelineManager, ComputeDDGIVolumeParams(viewFamily.mainView.currentViewData.cameraPos));
+            }
         }
 
         // Geometry
