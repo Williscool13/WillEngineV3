@@ -195,6 +195,18 @@ struct BindingSource
         b.gamepadAxis = a;
         return b;
     }
+
+    constexpr bool operator==(const BindingSource& other) const
+    {
+        if (type != other.type) { return false; }
+        switch (type) {
+            case BindingSourceType::Key: return key == other.key;
+            case BindingSourceType::MouseButton: return mouseButton == other.mouseButton;
+            case BindingSourceType::GamepadButton: return gamepadButton == other.gamepadButton;
+            case BindingSourceType::GamepadAxis: return gamepadAxis == other.gamepadAxis;
+        }
+        return false;
+    }
 };
 
 constexpr BindingSource::BindingSource(): key(Key::UNKNOWN) {}

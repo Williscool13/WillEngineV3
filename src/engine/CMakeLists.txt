@@ -27,6 +27,10 @@ add_library(engine STATIC
         core/action_handle.h
         input/input_resolve.cpp
         input/input_resolve.h
+        input/input_rebinding.cpp
+        input/input_rebinding.h
+        input_config.cpp
+        input_config.h
         include/frame_sync.h
         include/game_interface.cpp
         include/game_interface.h

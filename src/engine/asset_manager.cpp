@@ -439,7 +439,7 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
     model.selfHandle = handle;
     model.name = Core::InlineString<128>::Format("Text3D Mesh %d", text3DCounter++);
     model.modelId = textModelId;
-    model.text3DParams = std::move(params);
+    model.text3DParams = params;
     // Generation-scoped font ref: hand the model the ref we took so the worker can read the glyph contours; it keeps the font resident until the model finalizes (released in ResolveLoads).
     model.text3DFontHandle = fontHandle;
     model.refCount = 1;

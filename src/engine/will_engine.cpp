@@ -19,6 +19,8 @@
 #include "engine/include/game_interface.h"
 #include "core/input/input_manager.h"
 #include "input/input_resolve.h"
+#include "input/input_rebinding.h"
+#include "input_config.h"
 #include "core/time/time_manager.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
@@ -1386,7 +1388,12 @@ void WillEngine::Run()
             ZoneScopedN("GameFrame");
             const Core::InputFrame& currentInput = inputManager->GetCurrentInput();
             engineState->inputFrame = &currentInput;
+            PollCapture(engineState->input, currentInput);
             ResolveInputActions(currentInput, engineState->inputContext, engineState->input);
+            if (engineState->input.bBindingsDirty) {
+                WriteInputConfig(BuildInputConfigFromState(engineState->input));
+                engineState->input.bBindingsDirty = false;
+            }
             engineState->timeFrame = &timeManager->GetTime();
             gameFunctions.gameUpdate(engineContext, engineState);
 

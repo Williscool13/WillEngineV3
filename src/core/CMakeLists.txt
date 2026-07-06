@@ -12,6 +12,8 @@ add_library(core STATIC
         input/input_utils.h
         input/input_manager.cpp
         input/input_manager.h
+        input/input_names.cpp
+        input/input_names.h
         time/time_manager.cpp
         time/time_manager.h
         time/time_frame.cpp

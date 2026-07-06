@@ -13,6 +13,7 @@
 
 #include "game/systems/debug_system.h"
 #include "game/editor/settings/graphics_settings.h"
+#include "game/editor/settings/input_settings.h"
 #include "game/editor/editor_scene_browser.h"
 #include "game/editor/editor_materials.h"
 #include "imgui.h"
@@ -322,6 +323,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     DrawDebugViewWindow(ctx, state);
     DrawProjectConfigWindow(ctx, state);
     DrawLightingWindow(ctx, state);
+    DrawInputBindingsWindow(ctx, state);
     DrawGameplayWindow(state);
 
     ImGuizmo::SetOrthographic(false);

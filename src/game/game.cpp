@@ -20,6 +20,7 @@
 #include "fwd_components.h"
 #include "component-registry/component_registry.h"
 #include "input/input_action_registry.h"
+#include "engine/input_config.h"
 #include "components/common_components.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
@@ -120,6 +121,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     Audio::AudioManager::RegisterAudio();
     Game::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
+    Engine::ApplyInputOverrides(state->input, Engine::ReadInputConfig());
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
     Game::ConnectRenderObservers(state->registry);
@@ -196,6 +198,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 
     Game::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
+    Engine::ApplyInputOverrides(state->input, Engine::ReadInputConfig());
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
     Game::ConnectRenderObservers(state->registry);

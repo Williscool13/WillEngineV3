@@ -107,6 +107,8 @@ set(GAME_SOURCES
         component-registry/editor_gizmo_helpers.cpp
         editor/settings/graphics_settings.cpp
         editor/settings/graphics_settings.h
+        editor/settings/input_settings.cpp
+        editor/settings/input_settings.h
         editor/editor_widgets.cpp
         editor/editor_widgets.h
         components/render/text3d_component.cpp
