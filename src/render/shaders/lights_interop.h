@@ -47,10 +47,11 @@ using float4x4 = glm::mat4;
 #endif // __SLANG__
 
 SHADER_PUBLIC SHADER_CONST int MAX_POINT_LIGHTS = 256;
-SHADER_PUBLIC SHADER_CONST int MAX_LIGHTS = 2048;
+SHADER_PUBLIC SHADER_CONST int MAX_LIGHTS = 32768;
 
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_AREA = 0u;
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_SPHERE = 1u;
+SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_TRIANGLE = 2u;
 
 /** Directional light: direction (xyz) + intensity (w), color packed as RGBA8 unorm. */
 SHADER_PUBLIC struct DirectionalLightData
@@ -72,20 +73,20 @@ SHADER_PUBLIC struct PointLightData
     SHADER_PUBLIC float _pad1;
 };
 
-/** Unified light source tagged by type. Area: rect via normal + right/up half-extents. Sphere: center + radius (right.w); normal/up unused. */
+/** Unified light source tagged by type. Area: rect via normal + right/up half-extents. Sphere: center + radius (right.w); normal/up unused. Triangle: position = v0, right/up = edges e1/e2 (unnormalized), area = 0.5*|cross(e1,e2)|. */
 SHADER_PUBLIC struct LightInfo
 {
-    SHADER_PUBLIC float4 position; // xyz world-space center, w unused
-    SHADER_PUBLIC float4 normal; // xyz world-space normal (area only), w unused
-    SHADER_PUBLIC float4 right; // xyz right axis (area), w half-width (area) / radius (sphere)
-    SHADER_PUBLIC float4 up; // xyz up axis (area only), w half-height (area)
+    SHADER_PUBLIC float4 position; // xyz world-space center (area/sphere) / v0 (triangle), w unused
+    SHADER_PUBLIC float4 normal; // xyz world-space normal (area/triangle), w unused
+    SHADER_PUBLIC float4 right; // xyz right axis (area) / edge e1 (triangle), w half-width (area) / radius (sphere)
+    SHADER_PUBLIC float4 up; // xyz up axis (area) / edge e2 (triangle), w half-height (area)
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float intensity;
     SHADER_PUBLIC float range; // smoothstep attenuation cutoff distance
-    SHADER_PUBLIC uint type; // LIGHT_TYPE_AREA or LIGHT_TYPE_SPHERE
+    SHADER_PUBLIC uint type; // LIGHT_TYPE_*
 };
 
-/** Light pre-transformed to view space with derived geometry and emission cached. Written once per frame by the ReSTIR transform-lights pass. Sphere: center (xyz) + radius (centerHalfWidth.w), area = 4*pi*r^2 in rightArea.w. */
+/** Light pre-transformed to view space with derived geometry and emission cached. Written once per frame by the ReSTIR transform-lights pass. Sphere: center (xyz) + radius (centerHalfWidth.w), area = 4*pi*r^2 in rightArea.w. Triangle: center = v0, right/up = edges e1/e2 (unnormalized), halfWidth/halfHeight = 0. */
 SHADER_PUBLIC struct LightVSData
 {
     SHADER_PUBLIC float4 centerHalfWidth; // xyz view-space center, w half-width (area) / radius (sphere)
@@ -94,7 +95,7 @@ SHADER_PUBLIC struct LightVSData
     SHADER_PUBLIC float4 upRange; // xyz view-space up axis (area), w range
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float intensity;
-    SHADER_PUBLIC uint type; // LIGHT_TYPE_AREA or LIGHT_TYPE_SPHERE
+    SHADER_PUBLIC uint type;
     SHADER_PUBLIC float _pad1;
 };
 
@@ -102,7 +103,8 @@ SHADER_PUBLIC struct LightData
 {
     SHADER_PUBLIC int pointLightCount;
     SHADER_PUBLIC int lightCount;
-    float _pad0;
+    // Lights [0, analyticLightCount) are analytic (area/sphere); [analyticLightCount, lightCount) are emissive triangles
+    SHADER_PUBLIC int analyticLightCount;
     float _pad1;
     SHADER_PUBLIC DirectionalLightData directionalLight;
     SHADER_PUBLIC PointLightData pointLights[MAX_POINT_LIGHTS];

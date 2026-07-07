@@ -2411,6 +2411,8 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
 
 void ProceduralModelLoadSlot::PrepareUploadData()
 {
+    ExtractEmissiveTriangles(rawData, outputModel, memoryManager, outputModel->modelData.primitiveAllocation.offset / sizeof(Primitive), true);
+
     uint32_t vertexOffset = outputModel->modelData.vertexPositionAllocation.offset / sizeof(VertexPosition);
     uint32_t meshletVerticesOffset = outputModel->modelData.meshletVertexAllocation.offset / sizeof(uint32_t);
     uint32_t meshletTriangleOffset = outputModel->modelData.meshletTriangleAllocation.offset / sizeof(uint32_t);

@@ -72,6 +72,7 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 
     tempBufferBarriers = Core::Vector<VkBufferMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
     tempImageBarriers = Core::Vector<VkImageMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
+    lightAliasScratch = LightAliasScratch(&renderAlloc);
 
     for (RenderSynchronization& frameSync : frameSynchronization) {
         frameSync = RenderSynchronization(context);
@@ -1338,40 +1339,40 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     }
 
     // Lights
-    LightData lightData{}; {
+    UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
+    auto* lightData = static_cast<LightData*>(lightDataUploadAllocation.ptr); {
         const glm::vec3& dir = viewFamily.directionalLight.direction;
         const glm::vec3& col = viewFamily.directionalLight.color;
-        lightData.directionalLight.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
-        lightData.directionalLight.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
-        lightData.directionalLight.packedColor =
+        lightData->directionalLight.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
+        lightData->directionalLight.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
+        lightData->directionalLight.packedColor =
                 (static_cast<uint32_t>(glm::clamp(col.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
                 (static_cast<uint32_t>(glm::clamp(col.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
                 (static_cast<uint32_t>(glm::clamp(col.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
                 (0xFFu << 24);
+        lightData->directionalLight._pad1 = 0.0f;
+        lightData->directionalLight._pad2 = 0.0f;
+        lightData->analyticLightCount = static_cast<int32_t>(viewFamily.analyticLightCount);
+        lightData->_pad1 = 0.0f;
 
-        lightData.pointLightCount = static_cast<int32_t>(viewFamily.pointLights.Size());
-        for (int32_t i = 0; i < lightData.pointLightCount; i++) {
-            lightData.pointLights[i] = viewFamily.pointLights[i];
+        lightData->pointLightCount = static_cast<int32_t>(viewFamily.pointLights.Size());
+        for (int32_t i = 0; i < lightData->pointLightCount; i++) {
+            lightData->pointLights[i] = viewFamily.pointLights[i];
         }
 
-        lightData.lightCount = static_cast<int32_t>(viewFamily.lights.Size());
-        for (int32_t i = 0; i < lightData.lightCount; i++) {
-            lightData.lights[i] = viewFamily.lights[i];
+        lightData->lightCount = static_cast<int32_t>(viewFamily.lights.Size());
+        for (int32_t i = 0; i < lightData->lightCount; i++) {
+            lightData->lights[i] = viewFamily.lights[i];
         }
     }
 
-    UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
-    memcpy(lightDataUploadAllocation.ptr, &lightData, sizeof(LightData));
-
     // Power alias table (rebuilt every frame on the CPU, world space)
-    const uint32_t lightCount = static_cast<uint32_t>(viewFamily.lights.Size());
-    LightAliasEntry aliasEntries[MAX_LIGHTS];
-    const uint32_t aliasLightCount = BuildLightPowerAlias(viewFamily.lights.Data(), lightCount, aliasEntries);
-    const size_t aliasBytes = static_cast<size_t>(aliasLightCount) * sizeof(LightAliasEntry);
+    const auto lightCount = static_cast<uint32_t>(viewFamily.lights.Size());
+    const size_t aliasBytes = static_cast<size_t>(lightCount) * sizeof(LightAliasEntry);
     UploadAllocation aliasUploadAllocation{};
     if (aliasBytes > 0) {
         aliasUploadAllocation = renderGraph->AllocateTransient(aliasBytes);
-        memcpy(aliasUploadAllocation.ptr, aliasEntries, aliasBytes);
+        BuildLightPowerAlias(viewFamily.lights.Data(), lightCount, lightAliasScratch, static_cast<LightAliasEntry*>(aliasUploadAllocation.ptr));
     }
 
     auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::Untagged);
@@ -1458,6 +1459,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             .lightingIndex = lightingIndex,
             .stableId = inst.stableId,
             .lightIndex = inst.lightIndex,
+            .emissiveTriLightBase = inst.emissiveTriLightBase,
         };
     }
 

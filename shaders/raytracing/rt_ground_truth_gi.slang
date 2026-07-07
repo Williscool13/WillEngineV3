@@ -117,13 +117,14 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
         }
     }
 
-    int lightCount = pc.lightData->lightCount;
-    if (lightCount > 0) {
+    // NEE (analytic lights only)
+    int analyticCount = pc.lightData->analyticLightCount;
+    if (analyticCount > 0) {
         float rng0 = HashStep(rng);
         float2 xi;
         xi.x = HashStep(rng);
         xi.y = HashStep(rng);
-        int lightIdx = clamp(int(rng0 * float(lightCount)), 0, lightCount - 1);
+        int lightIdx = clamp(int(rng0 * float(analyticCount)), 0, analyticCount - 1);
         LightInfo light = pc.lightData->lights[lightIdx];
 
         float3 lightSamplePos;
@@ -163,7 +164,7 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             shadow.TraceRayInline(tlas, 0, 0x01, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(lightCount) * lightArea;
+                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
             }
         }
     }
@@ -221,13 +222,14 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
 
     // Direct at the primary surface: one light sample + cone-sampled sun, full BRDF (spec + Oren-Nayar diffuse), matching rt_ground_truth_di.
     float3 direct = float3(0.0);
-    int lightCount = pc.lightData->lightCount;
-    if (lightCount > 0) {
+    // NEE (analytic lights)
+    int analyticCount = pc.lightData->analyticLightCount;
+    if (analyticCount > 0) {
         float rng0 = HashStep(rng);
         float2 xi;
         xi.x = HashStep(rng);
         xi.y = HashStep(rng);
-        int lightIdx = clamp(int(rng0 * float(lightCount)), 0, lightCount - 1);
+        int lightIdx = clamp(int(rng0 * float(analyticCount)), 0, analyticCount - 1);
         LightInfo al = pc.lightData->lights[lightIdx];
 
         float3 lightSamplePos;
@@ -279,7 +281,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
 
                 float geomTerm = LightGeometryTerm(cosLight, lightDist);
                 float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                direct = (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(lightCount) * lightArea;
+                direct = (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(analyticCount) * lightArea;
             }
         }
     }

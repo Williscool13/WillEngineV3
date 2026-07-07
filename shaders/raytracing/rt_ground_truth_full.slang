@@ -122,11 +122,12 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
     float nDotV = max(dot(N, V), 0.0);
 
-    int lightCount = pc.lightData->lightCount;
-    if (lightCount > 0) {
+    // NEE (analytic lights only)
+    int analyticCount = pc.lightData->analyticLightCount;
+    if (analyticCount > 0) {
         float rsel = HashStep(rng);
         float2 xi = float2(HashStep(rng), HashStep(rng));
-        int lightIdx = clamp(int(rsel * float(lightCount)), 0, lightCount - 1);
+        int lightIdx = clamp(int(rsel * float(analyticCount)), 0, analyticCount - 1);
         LightInfo al = pc.lightData->lights[lightIdx];
 
         float3 lightSamplePos;
@@ -175,7 +176,7 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
                 float3 diff = kD * albedo * orenNayar;
                 float geomTerm = LightGeometryTerm(cosLight, lightDist);
                 float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                radiance += (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(lightCount) * lightArea;
+                radiance += (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(analyticCount) * lightArea;
             }
         }
     }

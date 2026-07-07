@@ -175,6 +175,8 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
                 int hitLightIdx = -1;
                 float hitT = 0.0;
+                bool bTriHit = false;
+                float3 triXi = float3(0.0);
 #if RESTIR_ENABLE_BRDF_RAY
                 float3 worldN = normalize(mul(float3x3(scene.invView), N));
                 RayDesc ray;
@@ -186,11 +188,24 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                 q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0xFF, ray);
                 q.Proceed();
                 if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
-                    uint hl = pc.instanceBuffer[q.CommittedInstanceID()].lightIndex;
-                    float t;
-                    if (hl != ~0u && hl < uint(lightCount) && RayIntersectLight(UnpackLightVS(pc.lightVS[hl]), viewPosition, brdfL, t)) {
-                        hitLightIdx = int(hl);
-                        hitT = t;
+                    Instance hitInst = pc.instanceBuffer[q.CommittedInstanceID()];
+                    if (hitInst.emissiveTriLightBase != ~0u) {
+                        uint idx = hitInst.emissiveTriLightBase + q.CommittedPrimitiveIndex();
+                        if (idx < uint(lightCount)) {
+                            hitLightIdx = int(idx);
+                            LightVS tvs = UnpackLightVS(pc.lightVS[idx]);
+                            float2 bary = q.CommittedTriangleBarycentrics();
+                            // Exact view-space hit from barycentrics avoids the origin-offset t error of a re-intersection
+                            triXi = tvs.center + bary.x * tvs.right + bary.y * tvs.up;
+                            bTriHit = true;
+                        }
+                    } else {
+                        uint hl = hitInst.lightIndex;
+                        float t;
+                        if (hl != ~0u && hl < uint(lightCount) && RayIntersectLight(UnpackLightVS(pc.lightVS[hl]), viewPosition, brdfL, t)) {
+                            hitLightIdx = int(hl);
+                            hitT = t;
+                        }
                     }
                 }
 #else
@@ -206,7 +221,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
 #endif
                 if (hitLightIdx >= 0) {
                     LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
-                    Xi = viewPosition + brdfL * hitT;
+                    Xi = bTriHit ? triXi : viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                     float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(lightCount))) : (1.0 / float(lightCount));
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);

@@ -670,6 +670,16 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 changed = true;
             }
 
+            featureSection("Emissive Triangle Lights", &restir.bEmissiveTriangleLights, [&] {
+                if (Widgets::SliderFloat("Emissive Range Multiplier", &restir.emissiveTriRangeMultiplier, 0.0f, 64.0f,
+                        {.format = "%.1f", .tooltip = "Attenuation cutoff per triangle: range = multiplier * sqrt(intensity * area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 8.0f})) {
+                    changed = true;
+                }
+                if (Widgets::SliderInt("Max Tris Per Emissive Primitive", &restir.emissiveTriMaxPerPrimitive, 1, 16384)) {
+                    changed = true;
+                }
+            });
+
             if (bReGIR) {
                 ImGui::SeparatorText("ReGIR");
                 if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {

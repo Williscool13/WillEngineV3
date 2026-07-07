@@ -163,7 +163,8 @@ SHADER_PUBLIC struct Instance
     SHADER_PUBLIC uint64_t stableId;
     // Index into LightData.lights for an instance that is a light's representative emissive mesh
     SHADER_PUBLIC uint32_t lightIndex;
-    uint32_t padding3;
+    // Base index into LightData.lights of this instance's emissive-triangle lights (+PrimitiveIndex())
+    SHADER_PUBLIC uint32_t emissiveTriLightBase;
 };
 
 SHADER_PUBLIC struct Model

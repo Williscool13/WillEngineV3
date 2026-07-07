@@ -390,6 +390,8 @@ void StaticModelLoadSlot::PrepareUploadData()
     }
 
     uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(Primitive);
+
+    AssetLoad::ExtractEmissiveTriangles(rawData, outputModel, memoryManager, primitiveOffsetCount, false);
     for (auto& mesh : rawData.allMeshes) {
         for (auto& primitiveIndex : mesh.primitiveProperties) {
             const Primitive& prim = rawData.primitives[primitiveIndex.index];

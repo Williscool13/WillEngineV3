@@ -11,6 +11,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     portalViews = ArenaFixedVector<PortalView>(&arena, Render::VIEW_COUNT - 1);
 
     modelMatrices = ArenaVector<Model>(&arena, wm.modelMatrices);
+    lights = ArenaVector<LightInfo>(&arena, wm.lights);
 
     primitiveInstances = ArenaVector<PrimitiveInstanceData>(&arena, wm.primitiveInstances);
     worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, wm.worldGlyphQuads);
@@ -21,6 +22,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
 
     activeMaterials = ArenaMap<Engine::MaterialID, uint32_t>(&arena, wm.activeMaterials);
     lightEntityToIndex = ArenaMap<uint32_t, uint32_t>(&arena, MAX_LIGHTS);
+    triLightBaseBySlot = ArenaMap<uint32_t, uint32_t>(&arena, MAX_LIGHTS);
     materials = ArenaVector<Engine::RenderMaterial>(&arena, wm.materials);
     activeTextMaterials = ArenaMap<Engine::TextMaterialID, uint32_t>(&arena, wm.activeTextMaterials);
     textMaterials = ArenaVector<TextRenderMaterial>(&arena, wm.textMaterials);
@@ -55,6 +57,7 @@ void FrameBuffer::Reinitialize()
     viewFamilyWatermarks.worldGlyphQuads = std::max(viewFamilyWatermarks.worldGlyphQuads, vf.worldGlyphQuads.Size());
     viewFamilyWatermarks.textInstances = std::max(viewFamilyWatermarks.textInstances, vf.textInstances.Size());
     viewFamilyWatermarks.modelMatrices = std::max(viewFamilyWatermarks.modelMatrices, vf.modelMatrices.Size());
+    viewFamilyWatermarks.lights = std::max(viewFamilyWatermarks.lights, vf.lights.Size());
     viewFamilyWatermarks.activeMaterials = std::max(viewFamilyWatermarks.activeMaterials, vf.activeMaterials.Size());
     viewFamilyWatermarks.materials = std::max(viewFamilyWatermarks.materials, vf.materials.Size());
     viewFamilyWatermarks.activeTextMaterials = std::max(viewFamilyWatermarks.activeTextMaterials, vf.activeTextMaterials.Size());

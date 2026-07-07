@@ -108,7 +108,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         .assetsScratchPoolSize = 4096ull * 1024 * 1024,
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
         .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 64 MB
-        .renderPoolSize = 4ull * 1024 * 1024, // 4 MB
+        .renderPoolSize = 8ull * 1024 * 1024, // 4 MB
         .arenaPoolSize = 256ull * 1024 * 1024, // 256 MB
     });
 

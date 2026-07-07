@@ -18,17 +18,17 @@ static float LightColorMax(uint32_t packedColor)
     return glm::max(r, glm::max(g, b));
 }
 
-uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, LightAliasEntry* outEntries)
+uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, LightAliasScratch& scratch, LightAliasEntry* outEntries)
 {
     if (count == 0u) { return 0u; }
 
     // pdf[i] holds raw power(i) first, then the normalised probability power(i)/total.
-    float pdf[MAX_LIGHTS];
-    float scaled[MAX_LIGHTS]; // Vose scaled probability = pdf[i] * count
-    float prob[MAX_LIGHTS]; // Vose per-bin split threshold
-    uint32_t aliasIdx[MAX_LIGHTS];
-    uint32_t smallQ[MAX_LIGHTS];
-    uint32_t largeQ[MAX_LIGHTS];
+    float* pdf = scratch.pdf.Data();
+    float* scaled = scratch.scaled.Data(); // Vose scaled probability = pdf[i] * count
+    float* prob = scratch.prob.Data(); // Vose per-bin split threshold
+    uint32_t* aliasIdx = scratch.aliasIdx.Data();
+    uint32_t* smallQ = scratch.smallQ.Data();
+    uint32_t* largeQ = scratch.largeQ.Data();
 
     // Power metric: intensity * area * max(colorRGB)
     double total = 0.0;
@@ -38,6 +38,9 @@ uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, LightAlia
         if (L.type == LIGHT_TYPE_SPHERE) {
             const float radius = L.right.w;
             area = 4.0f * LIGHT_BVH_PI * radius * radius;
+        }
+        else if (L.type == LIGHT_TYPE_TRIANGLE) {
+            area = 0.5f * glm::length(glm::cross(glm::vec3(L.right), glm::vec3(L.up)));
         }
         else {
             area = 4.0f * L.right.w * L.up.w;

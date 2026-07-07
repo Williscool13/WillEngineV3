@@ -365,6 +365,8 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         };
 
         uint32_t totalPrimitives = 0;
+
+        //
         {
             uint32_t ordinal = 0;
             for (size_t n = 0; n < nodes.Size(); ++n) {
@@ -516,7 +518,11 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
             if (mi == ~0u || mi >= meshes.Size()) { continue; }
             Engine::MeshInformation& mesh = meshes[mi];
             for (size_t j = 0; j < mesh.primitiveProperties.Size(); ++j) {
-                if (ordinal == meshComponent.primitiveOrdinal) { targetNode = n; targetPrim = &mesh.primitiveProperties[j]; break; }
+                if (ordinal == meshComponent.primitiveOrdinal) {
+                    targetNode = n;
+                    targetPrim = &mesh.primitiveProperties[j];
+                    break;
+                }
                 ++ordinal;
             }
         }
@@ -908,9 +914,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    auto& materialManager = ctx->materialManager;
-
-    {
+    auto& materialManager = ctx->materialManager; {
         ZoneScopedN("SyncMeshVisibility");
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
@@ -960,18 +964,18 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform);
                     lastNode = inst.sourceNodeIndex;
                 }
+                const uint32_t* triBase = frameBuffer->mainViewFamily.triLightBaseBySlot.Find(base + i);
                 frameBuffer->mainViewFamily.primitiveInstances.PushBack({
                     .primitiveIndex = inst.primitiveIndex,
                     .materialID = inst.materialID,
                     .modelIndex = modelIndex,
                     .stableId = stableId,
                     .blasDeviceAddress = inst.blasDeviceAddress,
+                    .emissiveTriLightBase = triBase ? *triBase : 0xFFFFFFFFu,
                 });
             }
         }
-    }
-
-    {
+    } {
         ZoneScopedN("AreaLightQuads");
         const Engine::StaticModelHandle quadHandle = state->builtinAssets.GetUnitQuad(ctx->assetManager);
         Engine::StaticModel* quadModel = ctx->assetManager->GetModel(quadHandle);
@@ -1202,7 +1206,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 
     auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : areaView.each()) {
-        if (vf.lights.IsFull()) { break; }
+        if (vf.lights.Size() >= static_cast<size_t>(MAX_LIGHTS)) { break; }
         vf.lightEntityToIndex[static_cast<uint32_t>(entity)] = static_cast<uint32_t>(vf.lights.Size());
         const glm::mat3 rot = glm::mat3_cast(transform.rotation);
         const glm::vec3 normal = rot[2];
@@ -1227,7 +1231,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 
     auto sphereView = state->registry.view<Component::SphereLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : sphereView.each()) {
-        if (vf.lights.IsFull()) { break; }
+        if (vf.lights.Size() >= static_cast<size_t>(MAX_LIGHTS)) { break; }
         vf.lightEntityToIndex[static_cast<uint32_t>(entity)] = static_cast<uint32_t>(vf.lights.Size());
         const glm::vec3& c = light.color;
         vf.lights.PushBack(LightInfo{
@@ -1244,6 +1248,113 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
             .range = light.range,
             .type = LIGHT_TYPE_SPHERE,
         });
+    }
+
+    vf.analyticLightCount = static_cast<uint32_t>(vf.lights.Size());
+
+    if (state->debug.restir.bEmissiveTriangleLights) {
+        ZoneScopedN("EmissiveTriangleLights");
+        auto view = state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent>(
+            entt::exclude<
+                Component::PortalPlaneTag,
+                Component::CubemapVisualizeTag
+            >);
+
+        size_t meshCount = view.size_hint();
+        if (meshCount > 0) {
+            struct EmissiveEntry
+            {
+                uint64_t sortKey;
+                entt::entity entity;
+            };
+            auto sorted = Core::ArenaFixedVector<EmissiveEntry>(&ctx->gameplayArena.Get(), view.size_hint());
+            for (const auto& [entity, runtime, renderTransform] : view.each()) {
+                if (!runtime.range.IsValid() || !runtime.visible) { continue; }
+                const Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
+                if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded || model->modelData.emissiveTriangles.IsEmpty()) { continue; }
+                uint64_t sortKey = static_cast<uint64_t>(entity);
+                if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                    sortKey = stable->id.id;
+                }
+                sorted.PushBack({sortKey, entity});
+            }
+
+            std::ranges::sort(sorted, [](const EmissiveEntry& a, const EmissiveEntry& b) { return a.sortKey < b.sortKey; });
+
+            Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
+            const auto maxPerPrimitive = static_cast<uint32_t>(glm::max(state->debug.restir.emissiveTriMaxPerPrimitive, 1));
+            bool bLoggedCapacity = false;
+            for (const EmissiveEntry& entry : sorted) {
+                const auto& runtime = state->registry.get<Component::MeshRuntime>(entry.entity);
+                const auto& renderTransform = state->registry.get<Component::RenderTransformComponent>(entry.entity);
+                const Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
+                const Core::HeapArray<Engine::EmissiveTriangleSet>& sets = model->modelData.emissiveTriangles;
+
+                for (uint32_t i = 0; i < runtime.range.count; ++i) {
+                    const uint32_t slot = runtime.range.offset + i;
+                    const Engine::MeshPrimitiveInstance& inst = store[slot];
+
+                    const Engine::EmissiveTriangleSet* set = nullptr;
+                    for (const auto& candidate : sets) {
+                        if (candidate.primitiveIndex == inst.primitiveIndex) {
+                            set = &candidate;
+                            break;
+                        }
+                    }
+                    if (!set || set->verts.IsEmpty()) { continue; }
+
+                    const MaterialProperties props = ctx->materialManager->GetProperties(inst.materialID);
+                    const glm::vec3 emissive = glm::vec3(props.emissiveFactor);
+                    const float maxEmissive = glm::max(emissive.r, glm::max(emissive.g, emissive.b));
+                    const float intensity = props.emissiveFactor.w * maxEmissive;
+                    if (intensity <= 0.0f) { continue; }
+
+                    const auto setTris = static_cast<uint32_t>(set->verts.Size() / 3);
+                    const uint32_t pushCount = glm::min(setTris, maxPerPrimitive);
+                    if (vf.lights.Size() + pushCount > static_cast<size_t>(MAX_LIGHTS)) {
+                        if (!bLoggedCapacity) {
+                            SPDLOG_WARN("[GatherLights] Light array full ({}); skipping emissive-triangle primitives", MAX_LIGHTS);
+                            bLoggedCapacity = true;
+                        }
+                        continue;
+                    }
+
+                    // BRDF-ray hits map via base + PrimitiveIndex(); only valid when the push covers the full BLAS triangle range
+                    const bool bFullPush = !set->bTruncated && pushCount == setTris;
+                    if (bFullPush) {
+                        vf.triLightBaseBySlot[slot] = static_cast<uint32_t>(vf.lights.Size());
+                    }
+
+                    const glm::vec3 color = emissive / maxEmissive;
+                    const uint32_t packedColor =
+                            (static_cast<uint32_t>(glm::clamp(color.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
+                            (static_cast<uint32_t>(glm::clamp(color.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
+                            (static_cast<uint32_t>(glm::clamp(color.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+                            (0xFFu << 24);
+                    const glm::mat4 m = renderTransform.modelMatrix * inst.modelSpaceTransform;
+                    const glm::mat3 m3 = glm::mat3(m);
+                    for (uint32_t t = 0; t < pushCount; ++t) {
+                        const glm::vec3 v0 = glm::vec3(m * glm::vec4(set->verts[t * 3 + 0], 1.0f));
+                        const glm::vec3 e1 = m3 * set->verts[t * 3 + 1];
+                        const glm::vec3 e2 = m3 * set->verts[t * 3 + 2];
+                        const glm::vec3 cr = glm::cross(e1, e2);
+                        const float area = 0.5f * glm::length(cr);
+                        // Degenerate triangles still occupy a slot (zero intensity) so base + PrimitiveIndex() stays aligned
+                        const bool bDegenerate = area <= 1e-8f;
+                        vf.lights.PushBack(LightInfo{
+                            .position = {v0, 0.0f},
+                            .normal = {bDegenerate ? glm::vec3(0.0f, 1.0f, 0.0f) : cr / (2.0f * area), 0.0f},
+                            .right = {e1, 0.0f},
+                            .up = {e2, 0.0f},
+                            .packedColor = packedColor,
+                            .intensity = bDegenerate ? 0.0f : intensity,
+                            .range = state->debug.restir.emissiveTriRangeMultiplier * glm::sqrt(intensity * area),
+                            .type = LIGHT_TYPE_TRIANGLE,
+                        });
+                    }
+                }
+            }
+        }
     }
 
     //

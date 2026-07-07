@@ -262,6 +262,7 @@ struct PrimitiveInstanceData
     uint64_t stableId{};
     uint64_t blasDeviceAddress{};
     uint32_t lightIndex{0xFFFFFFFFu};
+    uint32_t emissiveTriLightBase{0xFFFFFFFFu};
 };
 
 struct CustomShaderDraw
@@ -508,6 +509,7 @@ struct ViewFamilyWatermarks
     size_t worldGlyphQuads{256};
     size_t textInstances{32};
     size_t modelMatrices{256};
+    size_t lights{256};
     size_t activeMaterials{256};
     size_t materials{256};
     size_t activeTextMaterials{32};
@@ -690,6 +692,10 @@ struct ReSTIRParams
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};
+    // Emissive triangle lights
+    bool bEmissiveTriangleLights{true};
+    float emissiveTriRangeMultiplier{8.0f};
+    int32_t emissiveTriMaxPerPrimitive{1024};
     // Temporal-gradient antilag confidence (RELAX only)
     bool bEnableConfidence{false};
     float confidenceStrength{0.75f};
@@ -800,8 +806,12 @@ struct ViewFamily
 
     DirectionalLight directionalLight{};
     InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
-    InlineVector<LightInfo, MAX_LIGHTS> lights{};
+    ArenaVector<LightInfo> lights{};
     ArenaMap<uint32_t, uint32_t> lightEntityToIndex{};
+
+    uint32_t analyticLightCount{0};
+    // MeshPrimitiveStore slot -> base light index of light list
+    ArenaMap<uint32_t, uint32_t> triLightBaseBySlot{};
 
     GTAOConfiguration gtaoConfig{};
     AntiAliasingConfiguration aaConfig{};

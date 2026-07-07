@@ -192,6 +192,9 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bSunCandidateVisibility", p.bSunCandidateVisibility},
         {"regirWClamp", p.regirWClamp},
         {"restirWClamp", p.restirWClamp},
+        {"bEmissiveTriangleLights", p.bEmissiveTriangleLights},
+        {"emissiveTriRangeMultiplier", p.emissiveTriRangeMultiplier},
+        {"emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive},
         {"bEnableConfidence", p.bEnableConfidence},
         {"confidenceStrength", p.confidenceStrength},
         {"confidenceSensitivity", p.confidenceSensitivity},
@@ -230,6 +233,9 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bSunCandidateVisibility = getBool("bSunCandidateVisibility", p.bSunCandidateVisibility);
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
+    p.bEmissiveTriangleLights = getBool("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
+    p.emissiveTriRangeMultiplier = r.contains("emissiveTriRangeMultiplier") && r["emissiveTriRangeMultiplier"].is_number() ? r["emissiveTriRangeMultiplier"].get<float>() : p.emissiveTriRangeMultiplier;
+    p.emissiveTriMaxPerPrimitive = getInt("emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive);
     p.bEnableConfidence = getBool("bEnableConfidence", p.bEnableConfidence);
     p.confidenceStrength = r.contains("confidenceStrength") && r["confidenceStrength"].is_number() ? r["confidenceStrength"].get<float>() : p.confidenceStrength;
     p.confidenceSensitivity = r.contains("confidenceSensitivity") && r["confidenceSensitivity"].is_number() ? r["confidenceSensitivity"].get<float>() : p.confidenceSensitivity;

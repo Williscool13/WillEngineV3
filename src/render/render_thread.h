@@ -12,6 +12,7 @@
 #include "asset-load/async_asset_load_manager.h"
 #include "core/containers/array.h"
 #include "interface/render_interface.h"
+#include "render/light_bvh.h"
 #include "render/renderer_statistics.h"
 #include "render/render-graph/render_graph_resources.h"
 #include "render/vulkan/vk_pipeline_stats.h"
@@ -184,6 +185,7 @@ private:
 
     Core::Vector<VkBufferMemoryBarrier2> tempBufferBarriers;
     Core::Vector<VkImageMemoryBarrier2> tempImageBarriers;
+    mutable LightAliasScratch lightAliasScratch{};
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};

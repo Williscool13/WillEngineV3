@@ -110,6 +110,12 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             float3 dir = float3(rr * cos(phi), rr * sin(phi), z);
             lightSamplePos = al.position.xyz + radius * dir;
             lightArea = 4.0 * PI * radius * radius;
+        } else if (al.type == LIGHT_TYPE_TRIANGLE) {
+            float su = sqrt(xi.x);
+            float b1 = 1.0 - su;
+            float b2 = xi.y * su;
+            lightSamplePos = al.position.xyz + b1 * al.right.xyz + b2 * al.up.xyz;
+            lightArea = 0.5 * length(cross(al.right.xyz, al.up.xyz));
         } else {
             lightSamplePos = al.position.xyz
                 + al.right.xyz * (xi.x * 2.0 - 1.0) * al.right.w

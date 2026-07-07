@@ -4,8 +4,89 @@
 
 #include "asset_load_utils.h"
 
+#include "asset-load/asset_load_types.h"
+#include "core/containers/heap_array.h"
+#include "core/memory/memory_manager.h"
+#include "engine/logging/engine_log.h"
+
 namespace AssetLoad
 {
+static constexpr uint32_t kEmissiveTriExtractCap = 16384;
+
+static bool IsEmissiveMaterial(const MaterialProperties& props)
+{
+    const float maxEmissive = glm::max(props.emissiveFactor.x, glm::max(props.emissiveFactor.y, props.emissiveFactor.z));
+    return (props.emissiveFactor.w > 0.0f && maxEmissive > 0.0f) || props.textureImageIndices.w >= 0;
+}
+
+void ExtractEmissiveTriangles(const UnpackedStaticModel& rawData, Engine::StaticModel* outputModel, Core::MemoryManager* memoryManager, uint32_t primitiveOffsetCount, bool bForceAllEmissive)
+{
+    auto primitiveTriCount = [&](const Engine::PrimitiveProperty& prop) -> uint32_t {
+        const uint32_t localPi = prop.index;
+        const size_t indexStart = rawData.primitives[localPi].indexOffset;
+        const size_t indexEnd = localPi + 1 < rawData.primitives.Size() ? rawData.primitives[localPi + 1].indexOffset : rawData.indices.Size();
+        return static_cast<uint32_t>((indexEnd - indexStart) / 3);
+    };
+    auto qualifies = [&](const Engine::PrimitiveProperty& prop) {
+        if (prop.index >= rawData.primitives.Size()) { return false; }
+        if (!bForceAllEmissive) {
+            if (prop.materialIndex < 0 || static_cast<size_t>(prop.materialIndex) >= rawData.materials.Size()) { return false; }
+            if (!IsEmissiveMaterial(rawData.materials[prop.materialIndex].props)) { return false; }
+        }
+        return primitiveTriCount(prop) > 0;
+    };
+
+    uint32_t setCount = 0;
+    for (const auto& mesh : rawData.allMeshes) {
+        for (const auto& prop : mesh.primitiveProperties) {
+            if (qualifies(prop)) { setCount++; }
+        }
+    }
+    if (setCount == 0) { return; }
+
+    Core::HeapArray<Engine::EmissiveTriangleSet>& dst = outputModel->modelData.emissiveTriangles;
+    assert(!dst.IsAllocated() && "modelData.emissiveTriangles was found to be allocated (memory leak)");
+    dst = Core::HeapArray<Engine::EmissiveTriangleSet>(&memoryManager->Assets(), Core::AllocTag::AssetModel, setCount);
+
+    uint32_t setIndex = 0;
+    for (const auto& mesh : rawData.allMeshes) {
+        for (const auto& prop : mesh.primitiveProperties) {
+            if (!qualifies(prop)) { continue; }
+
+            const uint32_t localPi = prop.index;
+            const Primitive& prim = rawData.primitives[localPi];
+            const size_t indexStart = prim.indexOffset;
+            const uint32_t triCount = primitiveTriCount(prop);
+            const uint32_t extractCount = std::min(triCount, kEmissiveTriExtractCap);
+
+            Engine::EmissiveTriangleSet& set = dst[setIndex++];
+            set.primitiveIndex = prop.index + primitiveOffsetCount;
+            set.bTruncated = extractCount < triCount;
+            set.verts = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, static_cast<size_t>(extractCount) * 3);
+
+            const Vec3 boundsMin = prim.boundingBoxMin;
+            const Vec3 boundsExtents = prim.boundingBoxMax - prim.boundingBoxMin;
+            for (uint32_t t = 0; t < extractCount; ++t) {
+                Vec3 v[3];
+                for (uint32_t c = 0; c < 3; ++c) {
+                    const Engine::Vertex& vert = rawData.vertices[rawData.indices[indexStart + static_cast<size_t>(t) * 3 + c]];
+                    v[c] = Vec3{
+                        static_cast<float>(vert.pos0 & 0xFFFF) / 65535.0f * boundsExtents.x + boundsMin.x,
+                        static_cast<float>(vert.pos0 >> 16 & 0xFFFF) / 65535.0f * boundsExtents.y + boundsMin.y,
+                        static_cast<float>(vert.pos1 & 0xFFFF) / 65535.0f * boundsExtents.z + boundsMin.z
+                    };
+                }
+                set.verts[t * 3 + 0] = v[0];
+                set.verts[t * 3 + 1] = v[1] - v[0];
+                set.verts[t * 3 + 2] = v[2] - v[0];
+            }
+            if (set.bTruncated) {
+                LOG_WARN(Asset, "[ExtractEmissiveTriangles] {}: emissive primitive {} truncated to {} of {} triangles (extraction cap)", outputModel->name.c_str(), prop.index, extractCount, triCount);
+            }
+        }
+    }
+}
+
 Mat3 JacobiEigen3x3(const Mat3& symMat)
 {
     float a[3][3];

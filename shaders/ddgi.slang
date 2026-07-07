@@ -77,15 +77,15 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
         }
     }
 
-    // NEE
-    int lightCount = pc.lightData->lightCount;
-    if (lightCount > 0) {
+    // NEE (analytic lights only)
+    int analyticCount = pc.lightData->analyticLightCount;
+    if (analyticCount > 0) {
         uint rng = rngSeed;
         float rng0 = HashStep(rng);
         float2 xi;
         xi.x = HashStep(rng);
         xi.y = HashStep(rng);
-        int lightIdx = clamp(int(rng0 * float(lightCount)), 0, lightCount - 1);
+        int lightIdx = clamp(int(rng0 * float(analyticCount)), 0, analyticCount - 1);
         LightInfo light = pc.lightData->lights[lightIdx];
 
         float3 lightSamplePos;
@@ -125,7 +125,7 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
             shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0x01, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(lightCount) * lightArea;
+                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
             }
         }
     }

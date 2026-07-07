@@ -89,6 +89,16 @@ public LightVS TransformLight(LightInfo al, float4x4 view)
         vs.halfHeight = radius;
         vs.area = 4.0 * PI * radius * radius;
     }
+    else if (al.type == LIGHT_TYPE_TRIANGLE)
+    {
+        // right/up are the triangle edges e1/e2; must stay unnormalized so the barycentric param maps to the surface
+        vs.normal = normalize(mul((float3x3)view, al.normal.xyz));
+        vs.right = mul((float3x3)view, al.right.xyz);
+        vs.up = mul((float3x3)view, al.up.xyz);
+        vs.halfWidth = 0.0;
+        vs.halfHeight = 0.0;
+        vs.area = 0.5 * length(cross(vs.right, vs.up));
+    }
     else
     {
         vs.normal = normalize(mul((float3x3)view, al.normal.xyz));
@@ -183,6 +193,13 @@ public float3 SampleLightPos(LightVS vs, float uU, float uV)
     {
         return vs.center + vs.halfWidth * UniformSampleSphere(uU, uV);
     }
+    if (vs.type == LIGHT_TYPE_TRIANGLE)
+    {
+        float su = sqrt(uU);
+        float b1 = 1.0 - su;
+        float b2 = uV * su;
+        return vs.center + b1 * vs.right + b2 * vs.up;
+    }
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
 
@@ -214,6 +231,13 @@ public float3 SampleLightSurface(LightVS vs, float3 shadingPos, float uU, float 
         float disc = max(bq * bq - (d2 - radius * radius), 0.0);
         float s = -bq - sqrt(disc);
         return shadingPos + max(s, 1e-4) * dir;
+    }
+    if (vs.type == LIGHT_TYPE_TRIANGLE)
+    {
+        float su = sqrt(uU);
+        float b1 = 1.0 - su;
+        float b2 = uV * su;
+        return vs.center + b1 * vs.right + b2 * vs.up;
     }
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
@@ -312,6 +336,23 @@ public uint EncodeSampleOffset(float3 samplePos, LightVS vs)
         float3 localDir = float3(dot(dir, vs.right), dot(dir, vs.up), dot(dir, vs.normal));
         return PackNormalOct16(localDir);
     }
+    if (vs.type == LIGHT_TYPE_TRIANGLE)
+    {
+        // Solve the 2x2 Gram system for barycentrics (right/up are non-orthogonal edges)
+        float3 delta = samplePos - vs.center;
+        float a = dot(vs.right, vs.right);
+        float b = dot(vs.right, vs.up);
+        float c = dot(vs.up, vs.up);
+        float d1 = dot(delta, vs.right);
+        float d2 = dot(delta, vs.up);
+        float det = a * c - b * b;
+        float invDet = det > 1e-20 ? 1.0 / det : 0.0;
+        float b1 = clamp((d1 * c - d2 * b) * invDet, 0.0, 1.0);
+        float b2 = clamp((a * d2 - b * d1) * invDet, 0.0, 1.0);
+        uint bx = uint(b1 * 65535.0 + 0.5) & 0xFFFF;
+        uint by = uint(b2 * 65535.0 + 0.5) & 0xFFFF;
+        return bx | (by << 16);
+    }
     float3 delta = samplePos - vs.center;
     float u = clamp(dot(delta, vs.right) / vs.halfWidth, -1.0, 1.0);
     float v = clamp(dot(delta, vs.up) / vs.halfHeight, -1.0, 1.0);
@@ -327,6 +368,12 @@ public float3 DecodeSamplePos(uint sampleOffsetPacked, LightVS vs)
         float3 localDir = UnpackNormalOct16(sampleOffsetPacked);
         float3 dir = localDir.x * vs.right + localDir.y * vs.up + localDir.z * vs.normal;
         return vs.center + vs.halfWidth * dir;
+    }
+    if (vs.type == LIGHT_TYPE_TRIANGLE)
+    {
+        float b1 = float(sampleOffsetPacked & 0xFFFF) / 65535.0;
+        float b2 = float((sampleOffsetPacked >> 16) & 0xFFFF) / 65535.0;
+        return vs.center + b1 * vs.right + b2 * vs.up;
     }
     int ix = int(sampleOffsetPacked << 16) >> 16;
     int iy = int(sampleOffsetPacked) >> 16;
@@ -572,6 +619,23 @@ public bool RayIntersectLight(LightVS vs, float3 rayOrigin, float3 rayDir, out f
         float sq = sqrt(disc);
         t = -b - sq;
         if (t <= 0.0) { t = -b + sq; }
+        return t > 0.0;
+    }
+    if (vs.type == LIGHT_TYPE_TRIANGLE)
+    {
+        // One-sided Moller-Trumbore over edges right/up (= e1/e2); front side matches the quad convention
+        if (dot(vs.normal, rayDir) >= 0.0) { t = -1.0; return false; }
+        float3 pvec = cross(rayDir, vs.up);
+        float det = dot(vs.right, pvec);
+        if (abs(det) < 1e-12) { t = -1.0; return false; }
+        float invDet = 1.0 / det;
+        float3 tvec = rayOrigin - vs.center;
+        float u = dot(tvec, pvec) * invDet;
+        if (u < 0.0 || u > 1.0) { t = -1.0; return false; }
+        float3 qvec = cross(tvec, vs.right);
+        float v = dot(rayDir, qvec) * invDet;
+        if (v < 0.0 || u + v > 1.0) { t = -1.0; return false; }
+        t = dot(vs.up, qvec) * invDet;
         return t > 0.0;
     }
     return RayIntersectQuad(rayOrigin, rayDir, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t);
