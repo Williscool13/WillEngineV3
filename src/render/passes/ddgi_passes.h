@@ -30,6 +30,7 @@ DDGIVolumeParams ComputeDDGIVolumeParams(const Core::DDGIParams& params, const g
 /**
  * Probe trace + irradiance/visibility blend. Traces params.raysPerProbe rays per probe (misses sample the skybox; hits shade sun + one NEE-sampled local light + emissive plus last frame's carried atlas when bInfiniteBounce; light-proxy hits are distance-only), then integrates
  * them into the octahedral atlases "ddgi_irradiance" (stored as pow(E, 1/irradianceGamma), hysteresis-blended in encoded space with RTXGI's change/brightness thresholds) and "ddgi_visibility" (mean/mean^2 ray distance for the Chebyshev occlusion test, DDGISampleIrradiance).
+ * With params.bRelocation, a per-probe pass applies RTXGI relocation to this frame's ray distances and writes "ddgi_probe_offsets" (world offset xyz capped at 45% of spacing, backface fraction w); rays trace from last frame's carried offsets, samplers use this frame's and skip dead probes.
  * Slots invalidated by a window scroll, count/spacing change, or missing history restart fresh. No-op without the TLAS and geometry/material/light buffers.
  * @param graph
  * @param pipelineManager
@@ -43,7 +44,7 @@ DDGIVolumeParams ComputeDDGIVolumeParams(const Core::DDGIParams& params, const g
 void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, const Core::DDGIParams& params, const DDGIVolumeParams& volume, const DDGIVolumeParams& previousVolume, int32_t skyboxIndex, uint64_t frameNumber, bool bBounceOnly);
 
 /**
- * Appends one debug sphere per probe, shaded with an L1 SH fit of the probe's decoded irradiance atlas tile.
+ * Appends one debug sphere per probe at its relocated position, shaded with an L1 SH fit of the probe's decoded irradiance atlas tile; dead probes (backface fraction past the sampler's skip threshold) render flat red.
  * Requires the GPU debug buffers and this frame's "ddgi_irradiance" atlas; skip when the debug lock is active.
  * @param graph
  * @param pipelineManager

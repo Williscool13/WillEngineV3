@@ -68,7 +68,6 @@ bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Cor
     }
     if (j.contains("lightingMode") && j["lightingMode"].is_number_integer()) {
         uint32_t storedMode = j["lightingMode"].get<uint32_t>();
-        if (storedMode == 4u) { storedMode = 1u; }
         lightingMode = static_cast<Core::LightingMode>(storedMode);
     }
     if (j.contains("restir") && j["restir"].is_object()) {

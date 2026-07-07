@@ -16,7 +16,8 @@ import random_common;
 // DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits shade sun + one NEE-sampled local light (shadow rays) + emissive plus last frame's probe irradiance (infinite bounce). Light-proxy hits carry no radiance (NEE owns direct light; probes hold pure bounce), only the hit distance for the visibility moments.
 // Blend: one thread group per probe tile; each interior texel cosine-integrates the probe's rays into octahedral irradiance stored as pow(E, 1/gamma), hysteresis-blended in that perceptual space with RTXGI's change/brightness thresholds. Slots whose lattice cell changed since last frame (window scroll) or with no history start fresh. Border texels copy wrapped interior texels so bilinear taps stay seamless.
 // Blend visibility: same layout at 16x16 tiles; each texel integrates mean/mean^2 ray distance with a sharpened (pow distanceExponent) cosine lobe, for the Chebyshev occlusion test at sampling.
-// Debug: one sphere per probe, L1 SH fitted from the probe's decoded atlas tile.
+// Relocate: one thread per probe applies RTXGI probe relocation to this frame's ray distances, writing next frame's per-slot world offset (xyz) and backface fraction (w, the sampler's dead-probe test).
+// Debug: one sphere per probe at its relocated position, L1 SH fitted from the probe's decoded atlas tile; dead probes render flat red.
 
 // Coarse fixed mip: probe irradiance is low frequency; keeps incoherent rays cache-friendly and pre-averages albedo.
 static const float DDGI_HIT_TEXTURE_LOD = 3.0;
@@ -129,7 +130,7 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
     if (pc.bFeedbackValid != 0) {
         DDGIVolumeParams previousVolume = pc.volume;
         previousVolume.baseCell = pc.previousBaseCell;
-        float4 gi = DDGISampleIrradiance(worldPosition, N, rayDirection, previousVolume, pc.irradianceHistoryIndex, pc.visibilityHistoryIndex);
+        float4 gi = DDGISampleIrradiance(worldPosition, N, rayDirection, previousVolume, pc.irradianceHistoryIndex, pc.visibilityHistoryIndex, pc.probeOffsets, pc.bOffsetsValid);
         radiance += diffuseColor * gi.rgb;
     }
     return radiance;
@@ -149,8 +150,18 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
     int3 cell = DDGICellFromSlot(slot, pc.volume);
     float3 direction = DDGIRotate(DDGISphericalFibonacci(rayIndex, pc.raysPerProbe), pc.rayRotation);
 
+    // Relocation offsets are last frame's
+    float3 origin = DDGIProbeWorldPosition(cell, pc.volume);
+    if (pc.bOffsetsValid != 0) {
+        DDGIVolumeParams previousVolume = pc.volume;
+        previousVolume.baseCell = pc.previousBaseCell;
+        if (all(DDGICellFromSlot(slot, previousVolume) == cell)) {
+            origin += pc.probeOffsets[probeIndex].xyz;
+        }
+    }
+
     RayDesc ray;
-    ray.Origin = DDGIProbeWorldPosition(cell, pc.volume);
+    ray.Origin = origin;
     ray.Direction = direction;
     ray.TMin = 0.0;
     ray.TMax = 10000.0;
@@ -323,6 +334,83 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
 }
 
 [shader("compute")]
+[numthreads(64, 1, 1)]
+void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeRelocatePushConstant pc)
+{
+    uint probeIndex = dtid.x;
+    if (probeIndex >= pc.volume.probeCount.x * pc.volume.probeCount.y * pc.volume.probeCount.z) {
+        return;
+    }
+    int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
+    int3 cell = DDGICellFromSlot(slot, pc.volume);
+
+    float3 offset = float3(0.0);
+    if (pc.bOffsetsValid != 0) {
+        DDGIVolumeParams previousVolume = pc.volume;
+        previousVolume.baseCell = pc.previousBaseCell;
+        if (all(DDGICellFromSlot(slot, previousVolume) == cell)) {
+            offset = pc.offsetsIn[probeIndex].xyz;
+        }
+    }
+
+    uint backfaceCount = 0;
+    float closestBackfaceDistance = 1e27;
+    uint closestBackfaceIndex = 0xFFFFFFFF;
+    float closestFrontfaceDistance = 1e27;
+    uint closestFrontfaceIndex = 0xFFFFFFFF;
+    float farthestFrontfaceDistance = 0.0;
+    uint farthestFrontfaceIndex = 0xFFFFFFFF;
+    for (uint r = 0; r < pc.raysPerProbe; ++r) {
+        float hitT = pc.rayData[probeIndex * pc.raysPerProbe + r].w;
+        if (hitT < 0.0) {
+            backfaceCount++;
+            float backfaceDistance = hitT * -5.0;
+            if (backfaceDistance < closestBackfaceDistance) {
+                closestBackfaceDistance = backfaceDistance;
+                closestBackfaceIndex = r;
+            }
+        } else {
+            if (hitT < closestFrontfaceDistance) {
+                closestFrontfaceDistance = hitT;
+                closestFrontfaceIndex = r;
+            }
+            if (hitT > farthestFrontfaceDistance) {
+                farthestFrontfaceDistance = hitT;
+                farthestFrontfaceIndex = r;
+            }
+        }
+    }
+
+    // RTXGI probe relocation
+    float backfaceFraction = float(backfaceCount) / float(max(pc.raysPerProbe, 1u));
+    float3 fullOffset = offset;
+    if (closestBackfaceIndex != 0xFFFFFFFF && backfaceFraction > 0.25) {
+        float3 backfaceDirection = DDGIRotate(DDGISphericalFibonacci(closestBackfaceIndex, pc.raysPerProbe), pc.rayRotation);
+        fullOffset = offset + backfaceDirection * (closestBackfaceDistance + pc.minFrontfaceDistance);
+    } else if (closestFrontfaceDistance < pc.minFrontfaceDistance && farthestFrontfaceIndex != 0xFFFFFFFF) {
+        float3 closestDirection = DDGIRotate(DDGISphericalFibonacci(closestFrontfaceIndex, pc.raysPerProbe), pc.rayRotation);
+        float3 farthestDirection = DDGIRotate(DDGISphericalFibonacci(farthestFrontfaceIndex, pc.raysPerProbe), pc.rayRotation);
+        // Only move if the far direction actually opposes the wall, so the probe never pushes through the far side.
+        if (dot(closestDirection, farthestDirection) <= 0.0) {
+            fullOffset = offset + farthestDirection * min(farthestFrontfaceDistance, 1.0);
+        }
+    } else if (closestFrontfaceDistance > pc.minFrontfaceDistance) {
+        float offsetLength = length(offset);
+        if (offsetLength > 1e-5) {
+            float moveBackMargin = min(closestFrontfaceDistance - pc.minFrontfaceDistance, offsetLength);
+            fullOffset = offset - (offset / offsetLength) * moveBackMargin;
+        }
+    }
+
+    // Cap at 45% of spacing so a probe never crosses into a neighboring cell's trilinear domain.
+    float3 normalizedOffset = fullOffset / pc.volume.probeSpacing;
+    if (dot(normalizedOffset, normalizedOffset) < 0.45 * 0.45) {
+        offset = fullOffset;
+    }
+    pc.offsetsOut[probeIndex] = float4(offset, backfaceFraction);
+}
+
+[shader("compute")]
 [numthreads(4, 4, 4)]
 void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDebugPushConstant pc)
 {
@@ -333,6 +421,14 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
     int3 cell = DDGICellFromSlot(slot, pc.volume);
     float3 position = DDGIProbeWorldPosition(cell, pc.volume);
     float radius = 0.08 * min(pc.volume.probeSpacing.x, min(pc.volume.probeSpacing.y, pc.volume.probeSpacing.z));
+    if (pc.bOffsetsValid != 0) {
+        float4 probeOffset = pc.probeOffsets[DDGIProbeIndexFromSlot(slot, pc.volume)];
+        position += probeOffset.xyz;
+        if (probeOffset.w > DDGI_PROBE_DEAD_BACKFACE_FRACTION) {
+            GPUDebugAddSphereFlat(pc.sphereArgs, pc.sphereBuffer, position, radius, float3(1.0, 0.0, 0.0));
+            return;
+        }
+    }
 
     // Least-squares L1 fit over the tile: E(n) ~ dc + dot(dir, n), with dir = 3 * mean(E * n) since mean(n n^T) = I/3 over the sphere.
     int2 tileOrigin = DDGIProbeTileOrigin(slot, pc.volume, DDGI_IRRADIANCE_TILE);

@@ -79,12 +79,16 @@ public float2 DDGIAtlasUV(int3 slot, float3 direction, DDGIVolumeParams volume, 
     return texel / atlasSize;
 }
 
+// Probes whose rays hit this many backfaces are inside geometry beyond what relocation could fix; the sampler and debug viz treat them as dead.
+public static const float DDGI_PROBE_DEAD_BACKFACE_FRACTION = 0.35;
+
 /**
  * Irradiance lookup at a surface point: the 8 surrounding probes, weighted by trilinear position, soft backface (wrap lighting), and Chebyshev visibility from the distance atlas. cameraDirection points from the viewer toward the surface (bias direction).
  * Atlas args are rdgTexturesFloat4/rdgTexturesFloat2 descriptor indices (resource-typed params through module imports crash slangc's spirv emit).
+ * probeOffsets (when bProbeOffsetsValid) holds per-slot relocation offsets in xyz and the backface fraction in w; relocated positions drive direction/distance/Chebyshev, trilinear stays on the lattice, dead probes are skipped.
  * Returns E/PI in rgb (Lambertian outgoing radiance = albedo * rgb); w in [0,1] fades to 0 over the window's outermost cell so callers can lerp to their fallback without a hard edge.
  */
-public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex)
+public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid)
 {
     float3 biasedPosition = worldPosition + normal * volume.normalBias - cameraDirection * volume.viewBias;
     float3 gridCoord = biasedPosition / volume.probeSpacing;
@@ -108,6 +112,13 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         }
         int3 slot = DDGISlotFromCell(cell, volume);
         float3 probePosition = DDGIProbeWorldPosition(cell, volume);
+        if (bProbeOffsetsValid != 0) {
+            float4 probeOffset = probeOffsets[DDGIProbeIndexFromSlot(slot, volume)];
+            if (probeOffset.w > DDGI_PROBE_DEAD_BACKFACE_FRACTION) {
+                continue;
+            }
+            probePosition += probeOffset.xyz;
+        }
 
         // Wrap lighting instead of a hard cosine cut so probes just behind thin geometry keep some support.
         float3 toProbe = normalize(probePosition - worldPosition);

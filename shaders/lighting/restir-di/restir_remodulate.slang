@@ -69,7 +69,7 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
         if (pc.bDDGIApply != 0) {
             float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
             float3 cameraDirection = normalize(mul(float3x3(scene.invView), viewPosition));
-            float4 gi = DDGISampleIrradiance(worldPosition, worldN, cameraDirection, pc.ddgiVolume, pc.ddgiIrradianceIndex, pc.ddgiVisibilityIndex);
+            float4 gi = DDGISampleIrradiance(worldPosition, worldN, cameraDirection, pc.ddgiVolume, pc.ddgiIrradianceIndex, pc.ddgiVisibilityIndex, pc.ddgiProbeOffsets, pc.bDDGIOffsetsValid);
             // gi.w fades to the skybox fallback over the volume's outermost cell.
             indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
         }

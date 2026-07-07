@@ -472,6 +472,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(DDGIProbeBlendPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("ddgi_blend_visibility"), src / "ddgi.spv", "ComputeDDGIBlendVisibility",
                             sizeof(DDGIProbeBlendPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("ddgi_probe_relocate"), src / "ddgi.spv", "ComputeDDGIProbeRelocate",
+                            sizeof(DDGIProbeRelocatePushConstant), PipelineCategory::Critical);
 
 
     RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test.spv", "ComputeRTShadowTest",

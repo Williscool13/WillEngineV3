@@ -27,6 +27,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
     const bool bDDGI = bDDGIApply && graph.HasTexture(SID("ddgi_irradiance")) && graph.HasTexture(SID("ddgi_visibility"));
+    const bool bDDGIOffsets = bDDGI && graph.HasBuffer(SID("ddgi_probe_offsets"));
 
     struct LightingEntry
     {
@@ -58,12 +59,15 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadSampledImage(SID("ddgi_irradiance"));
         lightingResolve.ReadSampledImage(SID("ddgi_visibility"));
     }
+    if (bDDGIOffsets) {
+        lightingResolve.ReadBuffer(SID("ddgi_probe_offsets"));
+    }
     lightingResolve.WriteStorageImage(targets.colorOutput);
     lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
-            ddgiVolume, bDDGI,
+            ddgiVolume, bDDGI, bDDGIOffsets,
             buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -99,6 +103,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .ddgiIrradianceIndex = bDDGI ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance")) : ~0x0u,
                     .ddgiVisibilityIndex = bDDGI ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_visibility")) : ~0x0u,
                     .bDDGIApply = bDDGI ? 1u : 0u,
+                    .ddgiProbeOffsets = bDDGIOffsets ? graph.GetBufferAddress(SID("ddgi_probe_offsets")) : 0,
+                    .bDDGIOffsetsValid = bDDGIOffsets ? 1u : 0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

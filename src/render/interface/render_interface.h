@@ -750,6 +750,9 @@ struct DDGIParams
     bool bApplyToLighting{true};
     float normalBias{0.1f};
     float viewBias{0.3f};
+
+    bool bRelocation{true};
+    float minFrontfaceDistance{0.3f};
 };
 
 struct ViewFamily

@@ -525,6 +525,9 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t ddgiIrradianceIndex;
     SHADER_PUBLIC uint32_t ddgiVisibilityIndex;
     SHADER_PUBLIC uint32_t bDDGIApply;
+    SHADER_PUBLIC uint32_t pad1; /* pointer needs 8-byte offset (std430) */
+    SHADER_PUBLIC SHADER_PTR(float4) ddgiProbeOffsets;
+    SHADER_PUBLIC uint32_t bDDGIOffsetsValid;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -548,6 +551,9 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t ddgiIrradianceIndex;
     SHADER_PUBLIC uint32_t ddgiVisibilityIndex;
     SHADER_PUBLIC uint32_t bDDGIApply;
+    SHADER_PUBLIC uint32_t pad1; /* pointer needs 8-byte offset (std430) */
+    SHADER_PUBLIC SHADER_PTR(float4) ddgiProbeOffsets;
+    SHADER_PUBLIC uint32_t bDDGIOffsetsValid;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
@@ -922,7 +928,9 @@ SHADER_PUBLIC struct DDGIProbeDebugPushConstant
     SHADER_PUBLIC DDGIVolumeParams volume;
     SHADER_PUBLIC SHADER_PTR(GPUDebugSphereArgs) sphereArgs;
     SHADER_PUBLIC SHADER_PTR(DebugSphereInstance) sphereBuffer;
+    SHADER_PUBLIC SHADER_PTR(float4) probeOffsets;
     SHADER_PUBLIC uint32_t irradianceAtlasIndex;
+    SHADER_PUBLIC uint32_t bOffsetsValid;
 };
 
 SHADER_PUBLIC struct DDGIProbeTracePushConstant
@@ -939,6 +947,7 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
     SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
+    SHADER_PUBLIC SHADER_PTR(float4) probeOffsets;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
@@ -946,6 +955,7 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC uint32_t irradianceHistoryIndex;
     SHADER_PUBLIC uint32_t visibilityHistoryIndex;
     SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t bOffsetsValid;
 };
 
 SHADER_PUBLIC struct DDGIProbeBlendPushConstant
@@ -963,6 +973,19 @@ SHADER_PUBLIC struct DDGIProbeBlendPushConstant
     SHADER_PUBLIC float irradianceThreshold;
     SHADER_PUBLIC float brightnessThreshold;
     SHADER_PUBLIC uint32_t pad0;
+};
+
+SHADER_PUBLIC struct DDGIProbeRelocatePushConstant
+{
+    SHADER_PUBLIC DDGIVolumeParams volume;
+    SHADER_PUBLIC float4 rayRotation;
+    SHADER_PUBLIC int3 previousBaseCell;
+    SHADER_PUBLIC uint32_t bOffsetsValid;
+    SHADER_PUBLIC SHADER_PTR(float4) rayData;
+    SHADER_PUBLIC SHADER_PTR(float4) offsetsIn;
+    SHADER_PUBLIC SHADER_PTR(float4) offsetsOut;
+    SHADER_PUBLIC uint32_t raysPerProbe;
+    SHADER_PUBLIC float minFrontfaceDistance;
 };
 
 SHADER_PUBLIC struct EquirectToCubemapPushConstant

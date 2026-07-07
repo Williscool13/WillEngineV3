@@ -284,6 +284,8 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"bApplyToLighting", p.bApplyToLighting},
         {"normalBias", p.normalBias},
         {"viewBias", p.viewBias},
+        {"bRelocation", p.bRelocation},
+        {"minFrontfaceDistance", p.minFrontfaceDistance},
     };
 }
 
@@ -309,6 +311,8 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.bApplyToLighting = dBool("bApplyToLighting", p.bApplyToLighting);
     p.normalBias = dFloat("normalBias", p.normalBias);
     p.viewBias = dFloat("viewBias", p.viewBias);
+    p.bRelocation = dBool("bRelocation", p.bRelocation);
+    p.minFrontfaceDistance = dFloat("minFrontfaceDistance", p.minFrontfaceDistance);
 }
 
 nlohmann::json ToJson(const Core::GTAOConfiguration& p)
