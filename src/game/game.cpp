@@ -344,12 +344,14 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bGPUDebugTestPattern = state->debug.bGPUDebugTestPattern;
     frameBuffer->bDDGIProbeDebug = state->debug.bDDGIProbeDebug;
     frameBuffer->bDDGIBounceOnly = state->debug.bDDGIBounceOnly;
+    frameBuffer->ddgiProbeDebugExposure = state->debug.ddgiProbeDebugExposure;
     frameBuffer->restir = state->debug.restir;
     frameBuffer->ddgi = state->lighting.ddgi;
     state->debug.restir.bResetReGIR = false;
     frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;
+    frameBuffer->mainViewFamily.groundTruthMode = state->lighting.groundTruthMode;
     frameBuffer->mainViewFamily.bResetGroundTruth = state->lighting.bResetGroundTruth;
-    if (frameBuffer->mainViewFamily.lightingMode == Core::LightingMode::GroundTruthReSTIR || frameBuffer->mainViewFamily.lightingMode == Core::LightingMode::GroundTruthGI) {
+    if (frameBuffer->mainViewFamily.groundTruthMode != Core::GroundTruthMode::None) {
         const Core::RenderView& rv = frameBuffer->mainViewFamily.mainView;
         if (rv.currentViewData.view != rv.previousViewData.view) {
             frameBuffer->mainViewFamily.bResetGroundTruth = true;

@@ -333,6 +333,7 @@ struct InputState
 struct LightingState
 {
     Core::LightingMode lightingMode{Core::LightingMode::Default};
+    Core::GroundTruthMode groundTruthMode{Core::GroundTruthMode::None};
     bool bResetGroundTruth{false};
 
     Core::DirectionalLight directionalLight{};
@@ -424,6 +425,7 @@ struct DebugState
     bool bGPUDebugTestPattern{false};
     bool bDDGIProbeDebug{false};
     bool bDDGIBounceOnly{false};
+    float ddgiProbeDebugExposure{1.0f};
     Core::ReSTIRParams restir{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};

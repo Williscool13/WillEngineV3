@@ -184,35 +184,62 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     });
 
     if (params.bRelocation) {
-        graph.CreateBuffer(SID("ddgi_probe_offsets"), static_cast<VkDeviceSize>(probeCountTotal) * sizeof(glm::vec4), false);
+        const uint32_t relocationIterations = glm::clamp(static_cast<uint32_t>(params.relocationIterations), 1u, 8u);
+        const VkDeviceSize offsetsBufferSize = static_cast<VkDeviceSize>(probeCountTotal) * sizeof(glm::vec4);
+        graph.CreateBuffer(SID("ddgi_probe_offsets"), offsetsBufferSize, false);
 
-        RenderPass& relocatePass = graph.AddPass(SID("DDGI Probe Relocate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
-        relocatePass.ReadBuffer(SID("ddgi_ray_data"));
-        relocatePass.WriteBuffer(SID("ddgi_probe_offsets"));
-        if (bOffsetsHistoryValid) {
-            relocatePass.ReadBuffer(SID("ddgi_probe_offsets_history"));
-        }
-        relocatePass.Execute([pipelineManager, params, volume, rayRotation, previousBaseCell = previousVolume.baseCell, bOffsetsHistoryValid, raysPerProbe, probeCountTotal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_relocate"));
-            if (!pipelineEntry) {
-                return;
+        StringID scratch[2] = {};
+        if (relocationIterations > 1u) {
+            scratch[0] = SID("ddgi_probe_offsets_scratch0");
+            graph.CreateBuffer(scratch[0], offsetsBufferSize, false);
+            if (relocationIterations > 2u) {
+                scratch[1] = SID("ddgi_probe_offsets_scratch1");
+                graph.CreateBuffer(scratch[1], offsetsBufferSize, false);
             }
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        }
 
-            DDGIProbeRelocatePushConstant pc{
-                .volume = volume,
-                .rayRotation = rayRotation,
-                .previousBaseCell = previousBaseCell,
-                .bOffsetsValid = bOffsetsHistoryValid ? 1u : 0u,
-                .rayData = graph.GetBufferAddress(SID("ddgi_ray_data")),
-                .offsetsIn = bOffsetsHistoryValid ? graph.GetBufferAddress(SID("ddgi_probe_offsets_history")) : 0,
-                .offsetsOut = graph.GetBufferAddress(SID("ddgi_probe_offsets")),
-                .raysPerProbe = raysPerProbe,
-                .minFrontfaceDistance = glm::max(params.minFrontfaceDistance, 0.0f),
-            };
-            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (probeCountTotal + 63) / 64, 1, 1);
-        });
+        StringID previousOutput{};
+        for (uint32_t iter = 0; iter < relocationIterations; ++iter) {
+            const bool bFirst = iter == 0u;
+            const bool bLast = iter == relocationIterations - 1u;
+            const StringID outputName = bLast ? SID("ddgi_probe_offsets") : scratch[iter & 1u];
+            const bool bInputValid = bFirst ? bOffsetsHistoryValid : true;
+            const StringID inputName = bFirst ? SID("ddgi_probe_offsets_history") : previousOutput;
+            const glm::ivec3 iterPreviousBaseCell = bFirst ? previousVolume.baseCell : volume.baseCell;
+
+            const Core::InlineString<32> passName = Core::InlineString<32>::Format("DDGI Probe Relocate %u", iter);
+            const StringID passId = relocationIterations > 1u ? StringID(passName.c_str(), passName.Size()) : SID("DDGI Probe Relocate");
+
+            RenderPass& relocatePass = graph.AddPass(passId, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+            relocatePass.ReadBuffer(SID("ddgi_ray_data"));
+            relocatePass.WriteBuffer(outputName);
+            if (bInputValid) {
+                relocatePass.ReadBuffer(inputName);
+            }
+            relocatePass.Execute([pipelineManager, params, volume, rayRotation, iterPreviousBaseCell, bInputValid, inputName, outputName, raysPerProbe, probeCountTotal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_relocate"));
+                if (!pipelineEntry) {
+                    return;
+                }
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+                DDGIProbeRelocatePushConstant pc{
+                    .volume = volume,
+                    .rayRotation = rayRotation,
+                    .previousBaseCell = iterPreviousBaseCell,
+                    .bOffsetsValid = bInputValid ? 1u : 0u,
+                    .rayData = graph.GetBufferAddress(SID("ddgi_ray_data")),
+                    .offsetsIn = bInputValid ? graph.GetBufferAddress(inputName) : 0,
+                    .offsetsOut = graph.GetBufferAddress(outputName),
+                    .raysPerProbe = raysPerProbe,
+                    .minFrontfaceDistance = glm::max(params.minFrontfaceDistance, 0.0f),
+                };
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatch(cmd, (probeCountTotal + 63) / 64, 1, 1);
+            });
+
+            previousOutput = outputName;
+        }
 
         graph.CarryBufferToNextFrame(SID("ddgi_probe_offsets"), SID("ddgi_probe_offsets_history"), 0);
     }
@@ -221,7 +248,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     graph.CarryTextureToNextFrame(SID("ddgi_visibility"), SID("ddgi_visibility_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 }
 
-void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGIVolumeParams& volume)
+void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGIVolumeParams& volume, float probeDebugExposure)
 {
 #ifdef WDEBUG
     if (!graph.HasBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER) || !graph.HasTexture(SID("ddgi_irradiance"))) {
@@ -237,7 +264,7 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
     if (bOffsets) {
         pass.ReadBuffer(SID("ddgi_probe_offsets"));
     }
-    pass.Execute([pipelineManager, volume, bOffsets](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, volume, bOffsets, probeDebugExposure](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_debug"));
         if (!pipelineEntry) {
             return;
@@ -251,6 +278,7 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
             .probeOffsets = bOffsets ? graph.GetBufferAddress(SID("ddgi_probe_offsets")) : 0,
             .irradianceAtlasIndex = graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance")),
             .bOffsetsValid = bOffsets ? 1u : 0u,
+            .probeDebugExposure = probeDebugExposure,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (volume.probeCount.x + 3) / 4, (volume.probeCount.y + 3) / 4, (volume.probeCount.z + 3) / 4);

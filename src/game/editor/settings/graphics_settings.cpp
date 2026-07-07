@@ -249,6 +249,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Zero skybox radiance in the DDGI trace (feedback also disabled); anything left in the probes is one-bounce surface shading (sun + local-light NEE at hits)");
         }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(240.0f);
+        Widgets::SliderFloat("Probe Exposure##GPUDebug", &state->debug.ddgiProbeDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
 
         ImGui::Separator();
 
@@ -490,7 +493,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::Separator();
 
-        const bool bIsGroundTruth = state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR || state->lighting.lightingMode == Core::LightingMode::GroundTruthGI;
+        const bool bIsGroundTruth = state->lighting.groundTruthMode != Core::GroundTruthMode::None;
         ImGui::BeginDisabled(bIsGroundTruth);
         // Shading Pipeline Overrides
         {
@@ -544,16 +547,33 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::Separator();
 
-        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Ground-Truth ReSTIR", "Path Tracing", "Ground-Truth GI"};
-        Core::LightingMode prevLightingMode = state->lighting.lightingMode;
+        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Path Tracing"};
         int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
         if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, IM_ARRAYSIZE(lightingModeLabels))) {
             state->lighting.lightingMode = static_cast<Core::LightingMode>(lightingModeIndex);
             changed = true;
-            const bool bEnteredGroundTruth = state->lighting.lightingMode == Core::LightingMode::GroundTruthReSTIR || state->lighting.lightingMode == Core::LightingMode::GroundTruthGI;
-            if (prevLightingMode != state->lighting.lightingMode && bEnteredGroundTruth) {
-                state->lighting.bResetGroundTruth = true;
-            }
+        }
+
+        ImGui::SeparatorText("Ground-Truth Reference");
+        {
+            auto gtToggle = [&](const char* label, Core::GroundTruthMode mode) {
+                const bool active = state->lighting.groundTruthMode == mode;
+                if (active) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.75f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.55f, 0.85f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.40f, 0.70f, 1.0f));
+                }
+                if (ImGui::Button(label)) {
+                    state->lighting.groundTruthMode = active ? Core::GroundTruthMode::None : mode;
+                    state->lighting.bResetGroundTruth = true;
+                }
+                if (active) { ImGui::PopStyleColor(3); }
+            };
+            gtToggle("DI", Core::GroundTruthMode::DI);
+            ImGui::SameLine();
+            gtToggle("GI", Core::GroundTruthMode::GI);
+            ImGui::SameLine();
+            gtToggle("Full", Core::GroundTruthMode::Full);
         }
 
         ImGui::Separator();
@@ -878,6 +898,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ImGui::SetTooltip("Probes inside geometry step out through the nearest backface (capped at 45% of spacing); probes still buried past the cap are classified dead and skipped at sampling (drawn red in the probe debug view).");
             }
             ddgiF("Min Frontface Distance##ddgi", &ddgi.minFrontfaceDistance, ddgiDefaults.minFrontfaceDistance, 0.0f, 1.0f, "%.2f", "Meters of clearance relocation keeps between a probe and nearby geometry; probes closer than this to a wall get nudged away from it. Default 0.30.");
+            ddgiI("Relocation Iterations##ddgi", &ddgi.relocationIterations, ddgiDefaults.relocationIterations, 1, 8, "Relocation steps run per frame, each feeding the next its offset against this frame's ray distances (no re-trace). Higher = probes escape geometry in fewer frames, at a small extra compute cost. Default 1.");
 
             ImGui::Spacing();
             if (ImGui::Button("Reset DDGI")) {
@@ -914,8 +935,32 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
-        if (bDefaultMode && ImGui::CollapsingHeader("Ground Truth Ambient Occlusion")) {
-            if (ImGui::Checkbox("Enable GTAO", &state->lighting.gtaoConfig.bEnabled)) { changed = true; }
+        if (ImGui::CollapsingHeader("Ground Truth Ambient Occlusion")) {
+            Core::GTAOConfiguration& gtao = state->lighting.gtaoConfig;
+            static const Core::GTAOConfiguration gtaoDefaults{};
+
+            if (ImGui::Checkbox("Enable GTAO", &gtao.bEnabled)) { changed = true; }
+
+            auto gtaoF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+            };
+
+            gtaoF("Effect Radius##gtao", &gtao.effectRadius, gtaoDefaults.effectRadius, 0.0f, 5.0f, "%.2f", "World-space radius (meters) the occlusion horizon search covers. Larger = broader, softer AO reaching more distant occluders; smaller = tighter contact darkening. Default 0.5.");
+            gtaoF("Radius Multiplier##gtao", &gtao.radiusMultiplier, gtaoDefaults.radiusMultiplier, 0.0f, 3.0f, "%.3f", "Scales the sampling radius relative to Effect Radius; the XeGTAO tuning constant that trades screen-space reach against sample density. Default 1.457.");
+            gtaoF("Falloff Range##gtao", &gtao.effectFalloffRange, gtaoDefaults.effectFalloffRange, 0.0f, 1.0f, "%.3f", "Fraction of the radius over which occlusion attenuates to zero at the edge. Higher = smoother distance falloff; lower = harder cutoff. Default 0.615.");
+            gtaoF("Sample Distribution Power##gtao", &gtao.sampleDistributionPower, gtaoDefaults.sampleDistributionPower, 1.0f, 3.0f, "%.2f", "Bias of step placement along each slice toward the pixel. >1 concentrates samples near the center for stronger contact AO. Default 2.0.");
+            gtaoF("Thin Occluder Compensation##gtao", &gtao.thinOccluderCompensation, gtaoDefaults.thinOccluderCompensation, 0.0f, 0.7f, "%.2f", "Reduces over-darkening behind thin geometry (railings, foliage) by assuming occluders have limited thickness. Keep <= 0.7. Default 0.0.");
+            gtaoF("Final Value Power##gtao", &gtao.finalValuePower, gtaoDefaults.finalValuePower, 0.5f, 5.0f, "%.2f", "Exponent applied to the final AO term. Higher = darker, higher-contrast occlusion; lower = subtler. Default 2.2.");
+            gtaoF("Depth MIP Sampling Offset##gtao", &gtao.depthMipSamplingOffset, gtaoDefaults.depthMipSamplingOffset, 0.0f, 5.0f, "%.2f", "Controls how aggressively coarser depth mips are used for far samples. Higher = cheaper/blurrier distant AO; lower = sharper but costlier. Default 3.3.");
+            gtaoF("Slice Count##gtao", &gtao.sliceCount, gtaoDefaults.sliceCount, 1.0f, 9.0f, "%.0f", "Number of angular slices sampled per pixel. More = smoother, less directional noise, higher cost. Default 5.");
+            gtaoF("Steps Per Slice##gtao", &gtao.stepsPerSlice, gtaoDefaults.stepsPerSlice, 1.0f, 9.0f, "%.0f", "Horizon-march steps taken along each slice. More = finer occluder detection, higher cost. Default 3.");
+            gtaoF("Denoise Blur Beta##gtao", &gtao.denoiseBlurBeta, gtaoDefaults.denoiseBlurBeta, 0.0f, 10.0f, "%.2f", "Edge-stopping strength of the final denoise blur. Higher = preserves edges but leaves more noise; lower = smoother but softer. Default 1.2.");
+
+            ImGui::Spacing();
+            if (ImGui::Button("Reset GTAO")) {
+                gtao = Core::GTAOConfiguration{};
+                changed = true;
+            }
         }
 
         if (changed && state->projectConfig.bAutoSaveLighting) {

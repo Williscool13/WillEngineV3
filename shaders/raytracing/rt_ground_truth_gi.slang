@@ -13,7 +13,7 @@ import random_common;
 
 // =============== Shader Summary ============
 // Progressive path-traced reference for the DDGI indirect diffuse: primary surface from the gbuffer, direct = one NEE light sample + cone-sampled sun (identical estimator to rt_ground_truth_di),
-// indirect = cosine-sampled diffuse-only path (Lambert at every bounce vertex, NEE at each, skybox on miss), accumulated per pixel until reset.
+// indirect = cosine-sampled diffuse-only path (Oren-Nayar at every bounce vertex, NEE at each, skybox on miss), accumulated per pixel until reset.
 // Indirect is modulated by the primary's kD * albedo like the engine's composite, so DDGI-on screenshots compare apples-to-apples. Specular indirect is deliberately absent (DDGI doesn't model it).
 
 static const uint GT_GI_MAX_BOUNCES = 8;
@@ -32,7 +32,7 @@ static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float 
     return normalize(sinTheta * cos(phi) * t + sinTheta * sin(phi) * b + cosTheta * w);
 }
 
-/** pdf = cos/PI; dividing it out of a Lambert bounce leaves plain albedo as the throughput factor. */
+/** pdf = cos/PI; dividing it out of a diffuse bounce cancels the cosine, leaving diffuse * OrenNayar * PI as the throughput factor. */
 static float3 SampleCosineHemisphere(float3 n, float u1, float u2)
 {
     float r = sqrt(u1);
@@ -47,6 +47,7 @@ struct GTSurface
 {
     float3 normal;
     float3 diffuseColor;
+    float roughness;
     float3 emissive;
 };
 
@@ -82,14 +83,16 @@ static GTSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instan
     GTSurface surface;
     surface.normal = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
     surface.diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
+    surface.roughness = max(material.metalRoughFactors.y, 0.045);
     surface.emissive = emissive;
     return surface;
 }
 
-/** Direct diffuse radiance at a bounce vertex: cone-sampled sun + one uniformly picked light, both shadow-ray tested (estimator matches rt_ground_truth_di). */
-static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPosition, float3 N, float3 diffuseColor, inout uint rng)
+/** Direct diffuse radiance at a bounce vertex: cone-sampled sun + one uniformly picked light, both shadow-ray tested (estimator matches rt_ground_truth_di). Oren-Nayar diffuse (V = direction back toward the previous vertex). */
+static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPosition, float3 N, float3 V, float3 diffuseColor, float roughness, inout uint rng)
 {
     float3 radiance = float3(0.0);
+    float NoV = max(dot(N, V), 0.0);
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
     DirectionalLightData sun = pc.lightData->directionalLight;
@@ -109,7 +112,7 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             shadow.TraceRayInline(tlas, 0, 0x01, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * (NoL / PI) * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
+                radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
             }
         }
     }
@@ -160,7 +163,7 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             shadow.TraceRayInline(tlas, 0, 0x01, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * (cosShade / PI) * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(lightCount) * lightArea;
+                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(lightCount) * lightArea;
             }
         }
     }
@@ -177,14 +180,23 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     }
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
+    SceneData scene = pc.sceneData[pc.sceneDataIndex];
+    float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
+
+    // Primary miss: draw the environment map (matches the skybox pass reconstruction + Y flip).
     if (depth <= 0.0) {
-        rdgStorageFloat4[pc.outputIndex][pixel] = float4(0.0, 0.0, 0.0, 1.0);
+        float3 background = float3(0.0);
+        if (pc.skyboxIndex >= 0) {
+            float2 ndc = uv * 2.0 - 1.0;
+            float4 farPoint = mul(scene.invViewProj, float4(ndc, 1.0, 1.0));
+            float3 rayDir = normalize(farPoint.xyz / farPoint.w - scene.cameraWorldPos.xyz);
+            rayDir.y = -rayDir.y;
+            background = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], rayDir, 0).rgb;
+        }
+        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background, 1.0);
         return;
     }
 
-    SceneData scene = pc.sceneData[pc.sceneDataIndex];
-
-    float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float3 worldPos = ReconstructWorldPosition(scene.invViewProj, uv, depth);
     float3 cameraPos = scene.cameraWorldPos.xyz;
 
@@ -308,16 +320,23 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
         }
     }
 
-    // Indirect: diffuse-only path. Primary throughput uses the engine's indirect-diffuse modulation (kD * albedo) so results compare directly to the DDGI composite.
+    // Indirect: diffuse-only path (Oren-Nayar). The diffuse transport is evaluated per vertex at sample time (cosine-sampled: f * cos / pdf = diffuse * OrenNayar * PI), so the view-dependent term matches the direct paths. Primary diffuse keeps the engine's (1 - F_ibl) * (1 - metallic) modulation.
     float3 indirect = float3(0.0);
     float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
-    float3 throughput = (1.0 - F_ibl) * (1.0 - metallic) * albedo.xyz;
+    float3 throughput = float3(1.0);
+    float3 vertexDiffuse = (1.0 - F_ibl) * (1.0 - metallic) * albedo.xyz;
+    float vertexRoughness = roughness;
+    float3 vertexNormal = N;
+    float3 vertexView = V;
     float3 origin = worldPos + N * 0.05;
-    float3 surfaceNormal = N;
     for (uint bounce = 0; bounce < GT_GI_MAX_BOUNCES; ++bounce) {
         float u1 = HashStep(rng);
         float u2 = HashStep(rng);
-        float3 direction = SampleCosineHemisphere(surfaceNormal, u1, u2);
+        float3 direction = SampleCosineHemisphere(vertexNormal, u1, u2);
+
+        float NoL = max(dot(vertexNormal, direction), 0.0);
+        float NoV = max(dot(vertexNormal, vertexView), 0.0);
+        throughput *= vertexDiffuse * Diffuse_OrenNayar(NoL, NoV, direction, vertexView, vertexRoughness) * PI;
 
         RayDesc ray;
         ray.Origin = origin;
@@ -347,12 +366,15 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
         Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
         GTSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
 
+        float3 vNext = -direction;
         indirect += throughput * surface.emissive;
-        indirect += throughput * SampleDirectDiffuse(pc, hitPosition, surface.normal, surface.diffuseColor, rng);
+        indirect += throughput * SampleDirectDiffuse(pc, hitPosition, surface.normal, vNext, surface.diffuseColor, surface.roughness, rng);
 
-        throughput *= surface.diffuseColor;
+        vertexDiffuse = surface.diffuseColor;
+        vertexRoughness = surface.roughness;
+        vertexNormal = surface.normal;
+        vertexView = vNext;
         origin = hitPosition + surface.normal * 0.05;
-        surfaceNormal = surface.normal;
     }
 
     float3 newSample = direct + sunLight + indirect + emissiveRGB;

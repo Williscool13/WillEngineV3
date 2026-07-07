@@ -2,6 +2,7 @@ import common_interop;
 import push_constant_interop;
 import lights_interop;
 import bindless_declarations;
+import constants_interop;
 import shader_constants;
 
 import shader_functions;
@@ -34,14 +35,23 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     }
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
+    SceneData scene = pc.sceneData[pc.sceneDataIndex];
+    float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
+
+    // Primary miss: draw the environment map (matches the skybox pass reconstruction + Y flip).
     if (depth <= 0.0) {
-        rdgStorageFloat4[pc.outputIndex][pixel] = float4(0.0, 0.0, 0.0, 1.0);
+        float3 background = float3(0.0);
+        if (pc.skyboxIndex >= 0) {
+            float2 ndc = uv * 2.0 - 1.0;
+            float4 farPoint = mul(scene.invViewProj, float4(ndc, 1.0, 1.0));
+            float3 rayDir = normalize(farPoint.xyz / farPoint.w - scene.cameraWorldPos.xyz);
+            rayDir.y = -rayDir.y;
+            background = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], rayDir, 0).rgb;
+        }
+        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background, 1.0);
         return;
     }
 
-    SceneData scene = pc.sceneData[pc.sceneDataIndex];
-
-    float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float3 worldPos = ReconstructWorldPosition(scene.invViewProj, uv, depth);
     float3 cameraPos = scene.cameraWorldPos.xyz;
 

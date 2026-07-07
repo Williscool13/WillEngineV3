@@ -22,7 +22,7 @@ import random_common;
 // Coarse fixed mip: probe irradiance is low frequency; keeps incoherent rays cache-friendly and pre-averages albedo.
 static const float DDGI_HIT_TEXTURE_LOD = 3.0;
 
-/** Radiance leaving the hit surface toward the probe: Lambertian diffuse lit by the sun and one uniformly picked local light (both shadow-ray tested), emissive, and last frame's probe irradiance (infinite bounce). Indices are global (rebased at upload). */
+/** Radiance leaving the hit surface toward the probe: Oren-Nayar diffuse lit by the sun and one uniformly picked local light (both shadow-ray tested), emissive, and last frame's probe irradiance (infinite bounce). Indices are global (rebased at upload). */
 static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
@@ -52,6 +52,9 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
         emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, DDGI_HIT_TEXTURE_LOD).rgb;
     }
     float3 diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
+    float roughness = max(material.metalRoughFactors.y, 0.045);
+    float3 V = -rayDirection;
+    float NoV = max(dot(N, V), 0.0);
 
     float3 radiance = emissive;
     DirectionalLightData sun = pc.lightData->directionalLight;
@@ -69,7 +72,7 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
             shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0x01, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * (NoL / PI) * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
+                radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
             }
         }
     }
@@ -122,7 +125,7 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
             shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0x01, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * (cosShade / PI) * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(lightCount) * lightArea;
+                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(lightCount) * lightArea;
             }
         }
     }
@@ -447,7 +450,7 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
             dirB += irradiance.b * texelDirection;
         }
     }
-    float invCount = 1.0 / float(DDGI_IRRADIANCE_INTERIOR * DDGI_IRRADIANCE_INTERIOR);
+    float invCount = pc.probeDebugExposure / float(DDGI_IRRADIANCE_INTERIOR * DDGI_IRRADIANCE_INTERIOR);
     dc *= invCount;
     dirR *= 3.0 * invCount;
     dirG *= 3.0 * invCount;

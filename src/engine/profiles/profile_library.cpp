@@ -12,6 +12,7 @@
 #include "platform/paths.h"
 #include "platform/file_utils.h"
 #include "engine/serialization/config_serialization.h"
+#include "render/interface/render_interface.h"
 
 namespace Engine::Profiles
 {

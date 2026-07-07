@@ -504,7 +504,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupDDGIProbeUpdate(*renderGraph, pipelineManager, frameBuffer.ddgi, ddgiVolume, ddgiPreviousVolume, viewFamily.skyboxIndex, frameNumber, frameBuffer.bDDGIBounceOnly);
                 ddgiPreviousVolume = ddgiVolume;
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
-                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiVolume);
+                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiVolume, frameBuffer.ddgiProbeDebugExposure);
                 }
             }
 
@@ -542,61 +542,77 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             relax.framerateScale = denoiserFramerateScale;
             reblur.framerateScale = denoiserFramerateScale;
 
-            switch (viewFamily.lightingMode) {
-                case Core::LightingMode::Default:
-                {
-                    SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, ddgiVolume, bDDGIApply);
-                    break;
-                }
-                case Core::LightingMode::ReSTIR:
-                {
-                    const uint32_t restirCheckerboardField = restir.bCheckerboard ? ((static_cast<uint32_t>(frameNumber) & 1u) ? 1u : 2u) : 0u;
-                    const uint32_t restirCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) ? 1u : 0u;
-                    const float restirCheckerboardResolveSpeed = ComputeCheckerboardResolveAccumSpeed(viewFamily.aaConfig.mode, frameNumber, renderFps);
-
-                    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField);
-                    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
-                    const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
-
-                    if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, ddgiVolume, bDDGIApply);
+            // Ground-truth reference overlays are orthogonal to LightingMode: when one is active it replaces the normal lighting path entirely.
+            if (viewFamily.groundTruthMode != Core::GroundTruthMode::None) {
+                switch (viewFamily.groundTruthMode) {
+                    case Core::GroundTruthMode::DI:
+                    {
+                        if (viewFamily.bResetGroundTruth) { rtGroundTruthDIAccumCount = 0; }
+                        SetupRTGroundTruthDI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthDIAccumCount, frameNumber);
+                        rtGroundTruthDIAccumCount += 1;
+                        break;
                     }
-                    else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                        SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, ddgiVolume, bDDGIApply);
+                    case Core::GroundTruthMode::GI:
+                    {
+                        if (viewFamily.bResetGroundTruth) { rtGroundTruthGIAccumCount = 0; }
+                        SetupRTGroundTruthGI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthGIAccumCount, frameNumber);
+                        rtGroundTruthGIAccumCount += 1;
+                        break;
                     }
-                    else {
-                        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, ddgiVolume, bDDGIApply);
+                    case Core::GroundTruthMode::Full:
+                    {
+                        if (viewFamily.bResetGroundTruth) { rtGroundTruthFullAccumCount = 0; }
+                        SetupRTGroundTruthFull(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthFullAccumCount, frameNumber);
+                        rtGroundTruthFullAccumCount += 1;
+                        break;
                     }
-                    break;
-                }
-                case Core::LightingMode::GroundTruthReSTIR:
-                {
-                    if (viewFamily.bResetGroundTruth) { rtGroundTruthDIAccumCount = 0; }
-                    SetupRTGroundTruthDI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthDIAccumCount, frameNumber);
-                    rtGroundTruthDIAccumCount += 1;
-                    break;
-                }
-                case Core::LightingMode::GroundTruthGI:
-                {
-                    if (viewFamily.bResetGroundTruth) { rtGroundTruthGIAccumCount = 0; }
-                    SetupRTGroundTruthGI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthGIAccumCount, frameNumber);
-                    rtGroundTruthGIAccumCount += 1;
-                    break;
-                }
-                case Core::LightingMode::PathTracing:
-                {
-                    SetupRTShadowTest(*renderGraph, context, pipelineManager, viewFamily, renderExtent, targets, targets.colorOutput, 0);
-                    break;
+                    case Core::GroundTruthMode::None:
+                        break;
                 }
             }
+            else {
+                switch (viewFamily.lightingMode) {
+                    case Core::LightingMode::Default:
+                    {
+                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, ddgiVolume, bDDGIApply);
+                        break;
+                    }
+                    case Core::LightingMode::ReSTIR:
+                    {
+                        const uint32_t restirCheckerboardField = restir.bCheckerboard ? ((static_cast<uint32_t>(frameNumber) & 1u) ? 1u : 2u) : 0u;
+                        const uint32_t restirCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) ? 1u : 0u;
+                        const float restirCheckerboardResolveSpeed = ComputeCheckerboardResolveAccumSpeed(viewFamily.aaConfig.mode, frameNumber, renderFps);
 
-            if (viewFamily.directionalLight.bEnabled && viewFamily.lightingMode == Core::LightingMode::Default) {
-                const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
-                const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
-                SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, targets, 0, frameNumber, sunShadowPixelScale);
-                SetupSigmaShadowDenoise(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, targets, 0, frameNumber);
-                SetupSigmaShadowTemporal(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, targets, 0);
-                SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, sunShadowExtent, targets, 0, sunShadowPixelScale);
+                        SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField);
+                        SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
+                        const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
+
+                        if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
+                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, ddgiVolume, bDDGIApply);
+                        }
+                        else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
+                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, ddgiVolume, bDDGIApply);
+                        }
+                        else {
+                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, ddgiVolume, bDDGIApply);
+                        }
+                        break;
+                    }
+                    case Core::LightingMode::PathTracing:
+                    {
+                        SetupRTShadowTest(*renderGraph, context, pipelineManager, viewFamily, renderExtent, targets, targets.colorOutput, 0);
+                        break;
+                    }
+                }
+
+                if (viewFamily.directionalLight.bEnabled && viewFamily.lightingMode == Core::LightingMode::Default) {
+                    const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
+                    const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
+                    SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, targets, 0, frameNumber, sunShadowPixelScale);
+                    SetupSigmaShadowDenoise(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, targets, 0, frameNumber);
+                    SetupSigmaShadowTemporal(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, targets, 0);
+                    SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, sunShadowExtent, targets, 0, sunShadowPixelScale);
+                }
             }
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
         }

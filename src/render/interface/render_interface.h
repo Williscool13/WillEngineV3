@@ -530,9 +530,15 @@ enum class LightingMode : uint8_t
 {
     Default = 0,
     ReSTIR, // (incl. ReGIR)
-    GroundTruthReSTIR,
     PathTracing,
-    GroundTruthGI,
+};
+
+enum class GroundTruthMode : uint8_t
+{
+    None = 0,
+    DI,
+    GI, // DI + diffuse GI reference
+    Full, // DI + diffuse GI + specular GI reference
 };
 
 enum class ReSTIRDebugStop : uint8_t
@@ -753,6 +759,7 @@ struct DDGIParams
 
     bool bRelocation{true};
     float minFrontfaceDistance{0.3f};
+    int32_t relocationIterations{1};
 };
 
 struct ViewFamily
@@ -823,6 +830,7 @@ struct ViewFamily
 
     // Lighting
     LightingMode lightingMode{LightingMode::Default};
+    GroundTruthMode groundTruthMode{GroundTruthMode::None};
     bool bResetGroundTruth{false};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
@@ -883,6 +891,7 @@ struct FrameBuffer
     bool bGPUDebugTestPattern = false;
     bool bDDGIProbeDebug = false;
     bool bDDGIBounceOnly = false;
+    float ddgiProbeDebugExposure = 1.0f;
     bool bLogRDG = false;
     ReSTIRParams restir{};
     DDGIParams ddgi{};

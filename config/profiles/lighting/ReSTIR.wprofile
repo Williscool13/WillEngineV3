@@ -8,7 +8,7 @@
     "distanceExponent": 50.0,
     "hysteresis": 0.9700000286102295,
     "irradianceGamma": 5.0,
-    "irradianceThreshold": 0.5099149942398071,
+    "irradianceThreshold": 0.25,
     "minFrontfaceDistance": 0.30000001192092896,
     "normalBias": 0.10000000149011612,
     "probeCountX": 24,
@@ -16,10 +16,11 @@
     "probeCountZ": 24,
     "probeSpacing": 1.5,
     "raysPerProbe": 128,
+    "relocationIterations": 1,
     "viewBias": 0.30000001192092896
   },
   "gtao": {
-    "bEnabled": false,
+    "bEnabled": true,
     "denoiseBlurBeta": 1.2000000476837158,
     "depthMipSamplingOffset": 3.299999952316284,
     "effectFalloffRange": 0.6150000095367432,

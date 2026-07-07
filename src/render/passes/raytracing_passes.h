@@ -82,6 +82,21 @@ void SetupRTGroundTruthGI(RenderGraph& graph,
                           uint32_t accumulationCount,
                           uint64_t frameNumber);
 
+/**
+ * Full path-traced reference: primary direct like the DI/GI ground truth, plus a complete indirect path carrying both diffuse and specular lobes (single-sample
+ * MIS) with NEE at each bounce and the skybox on miss. Unlike SetupRTGroundTruthGI this includes specular GI (glossy inter-reflections + environment reflections).
+ * Accumulates into a persistent buffer; reset on camera move or mode entry. No-op without the TLAS and geometry/material buffers.
+ */
+void SetupRTGroundTruthFull(RenderGraph& graph,
+                            PipelineManager* pipelineManager,
+                            const Core::ViewFamily& viewFamily,
+                            Core::Array<uint32_t, 2> renderExtent,
+                            const RenderTargets& targets,
+                            uint32_t sceneIndex,
+                            bool bReset,
+                            uint32_t accumulationCount,
+                            uint64_t frameNumber);
+
 } // Render
 
 #endif //WILL_ENGINE_RAYTRACING_PASSES_H

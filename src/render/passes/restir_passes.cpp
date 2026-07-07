@@ -627,6 +627,9 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(targets.depthCopy);
+    if (targets.shadows != StringID{}) {
+        pass.ReadSampledImage(targets.shadows);
+    }
     if (bDDGI) {
         pass.ReadSampledImage(SID("ddgi_irradiance"));
         pass.ReadSampledImage(SID("ddgi_visibility"));
@@ -639,7 +642,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, ddgiVolume, bDDGI, bDDGIOffsets,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            depth = targets.depthCopy, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = sceneIndex,
@@ -661,6 +664,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .ddgiProbeOffsets = bDDGIOffsets ? graph.GetBufferAddress(SID("ddgi_probe_offsets")) : 0,
                 .bDDGIOffsetsValid = bDDGIOffsets ? 1u : 0u,
+                .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

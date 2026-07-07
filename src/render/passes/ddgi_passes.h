@@ -49,8 +49,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
  * @param graph
  * @param pipelineManager
  * @param volume
+ * @param probeDebugExposure linear scale applied to the fitted probe irradiance so bright probes do not blow out to flat white in the debug view
  */
-void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGIVolumeParams& volume);
+void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGIVolumeParams& volume, float probeDebugExposure);
 } // Render
 
 #endif //WILL_ENGINE_DDGI_PASSES_H

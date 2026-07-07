@@ -27,7 +27,7 @@
     }
   },
   "activeInputProfile": "",
-  "activeLightingProfile": "Ground Truth GI",
+  "activeLightingProfile": "ReSTIR",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,

@@ -554,6 +554,7 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t pad1; /* pointer needs 8-byte offset (std430) */
     SHADER_PUBLIC SHADER_PTR(float4) ddgiProbeOffsets;
     SHADER_PUBLIC uint32_t bDDGIOffsetsValid;
+    SHADER_PUBLIC uint32_t shadowsIndex;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
@@ -931,6 +932,7 @@ SHADER_PUBLIC struct DDGIProbeDebugPushConstant
     SHADER_PUBLIC SHADER_PTR(float4) probeOffsets;
     SHADER_PUBLIC uint32_t irradianceAtlasIndex;
     SHADER_PUBLIC uint32_t bOffsetsValid;
+    SHADER_PUBLIC float probeDebugExposure;
 };
 
 SHADER_PUBLIC struct DDGIProbeTracePushConstant
@@ -1391,6 +1393,7 @@ SHADER_PUBLIC struct RTGroundTruthDIPushConstant
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(float4) accumulationBuffer;
     SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
@@ -1398,6 +1401,7 @@ SHADER_PUBLIC struct RTGroundTruthDIPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t accumulationCount;
+    SHADER_PUBLIC uint32_t pad0;
     SHADER_PUBLIC uint2 renderExtent;
 };
 

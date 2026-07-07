@@ -564,6 +564,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const bool bDDGI = bDDGIApply && graph.HasTexture(SID("ddgi_irradiance")) && graph.HasTexture(SID("ddgi_visibility"));
         const bool bDDGIOffsets = bDDGI && graph.HasBuffer(SID("ddgi_probe_offsets"));
 
+        const StringID shadows = targets.shadows;
+
         auto& pass = graph.AddPass(SID("[ReLAX] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadSampledImage(diffInput);
@@ -571,6 +573,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(gbufferTwo);
         pass.ReadSampledImage(depth);
+        if (shadows != StringID{}) {
+            pass.ReadSampledImage(shadows);
+        }
         if (bDDGI) {
             pass.ReadSampledImage(SID("ddgi_irradiance"));
             pass.ReadSampledImage(SID("ddgi_visibility"));
@@ -581,7 +586,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(noisyInput);
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, ddgiVolume, bDDGI, bDDGIOffsets](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, ddgiVolume, bDDGI, bDDGIOffsets, shadows](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -603,6 +608,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .ddgiProbeOffsets = bDDGIOffsets ? graph.GetBufferAddress(SID("ddgi_probe_offsets")) : 0,
                 .bDDGIOffsetsValid = bDDGIOffsets ? 1u : 0u,
+                .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1123,6 +1129,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         const bool bDDGI = bDDGIApply && graph.HasTexture(SID("ddgi_irradiance")) && graph.HasTexture(SID("ddgi_visibility"));
         const bool bDDGIOffsets = bDDGI && graph.HasBuffer(SID("ddgi_probe_offsets"));
 
+        const StringID shadows = targets.shadows;
+
         auto& pass = graph.AddPass(SID("[ReBLUR] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadSampledImage(diffInput);
@@ -1130,6 +1138,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(gbufferTwo);
         pass.ReadSampledImage(depth);
+        if (shadows != StringID{}) {
+            pass.ReadSampledImage(shadows);
+        }
         if (bDDGI) {
             pass.ReadSampledImage(SID("ddgi_irradiance"));
             pass.ReadSampledImage(SID("ddgi_visibility"));
@@ -1140,7 +1151,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(noisyInput);
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, ddgiVolume, bDDGI, bDDGIOffsets](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, ddgiVolume, bDDGI, bDDGIOffsets, shadows](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -1162,6 +1173,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .ddgiProbeOffsets = bDDGIOffsets ? graph.GetBufferAddress(SID("ddgi_probe_offsets")) : 0,
                 .bDDGIOffsetsValid = bDDGIOffsets ? 1u : 0u,
+                .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
