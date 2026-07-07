@@ -8,6 +8,7 @@ import ddgi_common;
 import shader_functions;
 import pbr_functions;
 import packing_functions;
+import punctual_lighting;
 import visibility_lighting_common;
 
 import bindless_declarations;
@@ -76,6 +77,13 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
         float attenuation = LightDistanceFalloff(dist, range);
         float3 plColor = UnpackUnorm4x8(pl.packedColor).rgb;
         directLight += (diffusePl + specularPl) * nDotLpl * attenuation * pl.intensity * plColor;
+    }
+
+    // Area / sphere lights degenerated to punctual sources.
+    for (int j = 0; j < pc.lightData->lightCount; j++)
+    {
+        PunctualLight punctual = DegenerateLight(pc.lightData->lights[j], pc.sceneData[pc.sceneDataIndex].view);
+        directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0);
     }
 
     // DDGI probe diffuse
