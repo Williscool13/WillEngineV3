@@ -13,6 +13,45 @@
 
 namespace Render
 {
+void SetupLightCullingPass(RenderGraph& graph,
+                           PipelineManager* pipelineManager,
+                           const Core::ViewFamily& viewFamily,
+                           uint32_t sceneIndex,
+                           float clusterZNear,
+                           float clusterZFar)
+{
+    if (!graph.HasBuffer(LIGHT_DATA_BUFFER)) { return; }
+
+    const VkDeviceSize gridBytes = static_cast<VkDeviceSize>(CLUSTER_COUNT) * 2u * sizeof(uint32_t);
+    const VkDeviceSize indexBytes = static_cast<VkDeviceSize>(CLUSTER_COUNT) * MAX_LIGHTS_PER_CLUSTER * sizeof(uint32_t);
+    graph.CreateBuffer(SID("cluster_light_grid"), gridBytes, false);
+    graph.CreateBuffer(SID("cluster_light_index_list"), indexBytes, false);
+
+    RenderPass& cull = graph.AddPass(SID("Light Culling"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
+    cull.ReadBuffer(SCENE_DATA_BUFFER);
+    cull.ReadBuffer(LIGHT_DATA_BUFFER);
+    cull.WriteBuffer(SID("cluster_light_grid"));
+    cull.WriteBuffer(SID("cluster_light_index_list"));
+    cull.Execute([pipelineManager, sceneIndex, clusterZNear, clusterZFar](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("light_culling"));
+        if (!pipelineEntry) { return; }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        LightCullingPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
+            .lightGrid = graph.GetBufferAddress(SID("cluster_light_grid")),
+            .lightIndexList = graph.GetBufferAddress(SID("cluster_light_index_list")),
+            .zNear = clusterZNear,
+            .zFar = clusterZFar,
+            .sceneDataIndex = sceneIndex,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        const uint32_t groups = (CLUSTER_COUNT + 63u) / 64u;
+        vkCmdDispatch(cmd, groups, 1, 1);
+    });
+}
+
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
@@ -22,9 +61,13 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
                                         const DDGIVolumeParams& ddgiVolume,
-                                        bool bDDGIApply)
+                                        bool bDDGIApply,
+                                        float clusterZNear,
+                                        float clusterZFar)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
+
+    const bool bClustered = graph.HasBuffer(SID("cluster_light_grid")) && graph.HasBuffer(SID("cluster_light_index_list"));
 
     const bool bDDGI = bDDGIApply && graph.HasTexture(SID("ddgi_irradiance")) && graph.HasTexture(SID("ddgi_visibility"));
     const bool bDDGIOffsets = bDDGI && graph.HasBuffer(SID("ddgi_probe_offsets"));
@@ -45,6 +88,10 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     RenderPass& lightingResolve = graph.AddPass(SID("Visibility Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
+    if (bClustered) {
+        lightingResolve.ReadBuffer(SID("cluster_light_grid"));
+        lightingResolve.ReadBuffer(SID("cluster_light_index_list"));
+    }
     if (graph.HasBuffer(SID("restir_reservoir_final"))) {
         lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
     }
@@ -67,7 +114,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
-            ddgiVolume, bDDGI, bDDGIOffsets,
+            ddgiVolume, bDDGI, bDDGIOffsets, bClustered, clusterZNear, clusterZFar,
             buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -105,6 +152,10 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .bDDGIApply = bDDGI ? 1u : 0u,
                     .ddgiProbeOffsets = bDDGIOffsets ? graph.GetBufferAddress(SID("ddgi_probe_offsets")) : 0,
                     .bDDGIOffsetsValid = bDDGIOffsets ? 1u : 0u,
+                    .clusterLightGrid = bClustered ? graph.GetBufferAddress(SID("cluster_light_grid")) : 0,
+                    .clusterLightIndexList = bClustered ? graph.GetBufferAddress(SID("cluster_light_index_list")) : 0,
+                    .clusterZNear = clusterZNear,
+                    .clusterZFar = clusterZFar,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

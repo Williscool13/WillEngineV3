@@ -817,6 +817,7 @@ struct ViewFamily
     PostProcessConfiguration postProcessConfig{};
     SIGMAParams sigmaParams{};
     float iblIntensity{1.0f};
+    float clusterZFar{500.0f};
     float resolutionScale{1.0f};
 
 
@@ -899,6 +900,7 @@ struct FrameBuffer
     bool bLockGPUDebug = false;
     bool bGPUDebugTestPattern = false;
     bool bDDGIProbeDebug = false;
+    bool bClusterGridDebug = false;
     bool bDDGIBounceOnly = false;
     float ddgiProbeDebugExposure = 1.0f;
     bool bLogRDG = false;

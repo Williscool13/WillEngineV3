@@ -343,6 +343,7 @@ struct LightingState
     Core::SIGMAParams sigmaParams{};
     Core::DDGIParams ddgi{};
     float iblIntensity{1.0f};
+    float clusterZFar{500.0f};
     CubemapHandle skybox{CubemapHandle::INVALID};
     int32_t skyboxLOD{0};
 };
@@ -424,6 +425,7 @@ struct DebugState
     bool bLockGPUDebug{false};
     bool bGPUDebugTestPattern{false};
     bool bDDGIProbeDebug{false};
+    bool bClusterGridDebug{false};
     bool bDDGIBounceOnly{false};
     float ddgiProbeDebugExposure{1.0f};
     Core::ReSTIRParams restir{};

@@ -44,12 +44,19 @@
 namespace Game
 {
 static bool HandleViewportSelection(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 static void DrawGameplayWindow(Engine::EngineState* state);
+
 static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+
 static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, const glm::vec3& centroid, int transformCount);
+
 static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& view, const glm::mat4& proj, const glm::vec3& multiGizmoCentroid, bool bJustSelected);
+
 static void DrawSceneStatsWindow(Engine::EngineState* state);
 
 void MarkSceneModified(Engine::EngineState* state, StringID sceneId)

@@ -575,7 +575,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 switch (viewFamily.lightingMode) {
                     case Core::LightingMode::Default:
                     {
-                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, ddgiVolume, bDDGIApply);
+                        const float clusterZNear = viewFamily.mainView.currentViewData.nearPlane;
+                        const float clusterZFar = viewFamily.clusterZFar;
+                        SetupLightCullingPass(*renderGraph, pipelineManager, viewFamily, 0, clusterZNear, clusterZFar);
+                        if (frameBuffer.bEnableGPUDebug && frameBuffer.bClusterGridDebug && !frameBuffer.bLockGPUDebug) {
+                            SetupClusterGridDebug(*renderGraph, pipelineManager, 0, clusterZNear, clusterZFar);
+                        }
+                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, ddgiVolume, bDDGIApply, clusterZNear, clusterZFar);
                         break;
                     }
                     case Core::LightingMode::ReSTIR:

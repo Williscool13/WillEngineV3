@@ -174,4 +174,36 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
     graph.CarryBufferToNextFrame(GPU_DEBUG_SPHERE_INSTANCE_BUFFER, GPU_DEBUG_SPHERE_INSTANCE_BUFFER, 0);
 #endif
 }
+void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, uint32_t sceneIndex, float clusterZNear, float clusterZFar)
+{
+#ifdef WDEBUG
+    if (!graph.HasBuffer(GPU_DEBUG_ARGS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER)) {
+        return;
+    }
+
+    RenderPass& pass = graph.AddPass(SID("Cluster Grid Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+    pass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
+    pass.WriteBuffer(GPU_DEBUG_SEGMENT_BUFFER);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.Execute([pipelineManager, sceneIndex, clusterZNear, clusterZFar](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_cluster_grid"));
+        if (!pipelineEntry) {
+            return;
+        }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        ClusterGridDebugPushConstant pc{
+            .args = graph.GetBufferAddress(GPU_DEBUG_ARGS_BUFFER),
+            .segmentBuffer = graph.GetBufferAddress(GPU_DEBUG_SEGMENT_BUFFER),
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .zNear = clusterZNear,
+            .zFar = clusterZFar,
+            .sceneDataIndex = sceneIndex,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        const uint32_t groups = (CLUSTER_COUNT + 63u) / 64u;
+        vkCmdDispatch(cmd, groups, 1, 1);
+    });
+#endif
+}
 } // Render

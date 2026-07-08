@@ -9,6 +9,7 @@ import shader_functions;
 import pbr_functions;
 import packing_functions;
 import punctual_lighting;
+import cluster_common;
 import visibility_lighting_common;
 
 import bindless_declarations;
@@ -79,11 +80,25 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
         directLight += (diffusePl + specularPl) * nDotLpl * attenuation * pl.intensity * plColor;
     }
 
-    // Area / sphere lights degenerated to punctual sources.
-    for (int j = 0; j < pc.lightData->lightCount; j++)
+    // Area / sphere lights degenerated to punctual sources, selected per froxel cluster.
+    if (pc.clusterLightGrid != 0)
     {
-        PunctualLight punctual = DegenerateLight(pc.lightData->lights[j], pc.sceneData[pc.sceneDataIndex].view);
-        directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0);
+        uint cluster = ClusterIndexFromPixel(pixel, pc.renderExtent, viewSpaceDepth, pc.clusterZNear, pc.clusterZFar);
+        uint2 gridEntry = pc.clusterLightGrid[cluster];
+        for (uint j = 0; j < gridEntry.y; j++)
+        {
+            uint lightIndex = pc.clusterLightIndexList[gridEntry.x + j];
+            PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], pc.sceneData[pc.sceneDataIndex].view);
+            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0);
+        }
+    }
+    else
+    {
+        for (int j = 0; j < pc.lightData->lightCount; j++)
+        {
+            PunctualLight punctual = DegenerateLight(pc.lightData->lights[j], pc.sceneData[pc.sceneDataIndex].view);
+            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0);
+        }
     }
 
     // DDGI probe diffuse

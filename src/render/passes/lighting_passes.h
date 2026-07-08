@@ -14,6 +14,14 @@ namespace Render
 {
 class PipelineManager;
 
+/** Culls the analytic light pool into the per-cluster light-index list for the default lighting resolve. */
+void SetupLightCullingPass(RenderGraph& graph,
+                           PipelineManager* pipelineManager,
+                           const Core::ViewFamily& viewFamily,
+                           uint32_t sceneIndex,
+                           float clusterZNear,
+                           float clusterZFar);
+
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
@@ -23,7 +31,9 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
                                         const DDGIVolumeParams& ddgiVolume,
-                                        bool bDDGIApply);
+                                        bool bDDGIApply,
+                                        float clusterZNear,
+                                        float clusterZFar);
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,

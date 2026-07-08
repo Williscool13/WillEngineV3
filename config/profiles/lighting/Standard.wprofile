@@ -16,7 +16,6 @@
     "probeCountZ": 24,
     "probeSpacing": 1.5,
     "raysPerProbe": 128,
-    "relocationIterations": 1,
     "viewBias": 0.30000001192092896
   },
   "gtao": {
@@ -32,7 +31,7 @@
     "stepsPerSlice": 3.0,
     "thinOccluderCompensation": 0.0
   },
-  "iblIntensity": 0.0,
+  "iblIntensity": 1.0,
   "lightingMode": 0,
   "lightingShaderOverride": 12304496605836952073,
   "restir": {

@@ -525,9 +525,26 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t ddgiIrradianceIndex;
     SHADER_PUBLIC uint32_t ddgiVisibilityIndex;
     SHADER_PUBLIC uint32_t bDDGIApply;
-    SHADER_PUBLIC uint32_t pad1; /* pointer needs 8-byte offset (std430) */
+    SHADER_PUBLIC uint32_t pad1;
     SHADER_PUBLIC SHADER_PTR(float4) ddgiProbeOffsets;
     SHADER_PUBLIC uint32_t bDDGIOffsetsValid;
+    SHADER_PUBLIC uint32_t clusterPad0;
+    SHADER_PUBLIC SHADER_PTR(uint2) clusterLightGrid;
+    SHADER_PUBLIC SHADER_PTR(uint) clusterLightIndexList;
+    SHADER_PUBLIC float clusterZNear;
+    SHADER_PUBLIC float clusterZFar;
+};
+
+SHADER_PUBLIC struct LightCullingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(uint2) lightGrid;
+    SHADER_PUBLIC SHADER_PTR(uint) lightIndexList;
+    SHADER_PUBLIC float zNear;
+    SHADER_PUBLIC float zFar;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -551,7 +568,7 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t ddgiIrradianceIndex;
     SHADER_PUBLIC uint32_t ddgiVisibilityIndex;
     SHADER_PUBLIC uint32_t bDDGIApply;
-    SHADER_PUBLIC uint32_t pad1; /* pointer needs 8-byte offset (std430) */
+    SHADER_PUBLIC uint32_t pad1;
     SHADER_PUBLIC SHADER_PTR(float4) ddgiProbeOffsets;
     SHADER_PUBLIC uint32_t bDDGIOffsetsValid;
     SHADER_PUBLIC uint32_t shadowsIndex;
@@ -933,6 +950,17 @@ SHADER_PUBLIC struct DDGIProbeDebugPushConstant
     SHADER_PUBLIC uint32_t irradianceAtlasIndex;
     SHADER_PUBLIC uint32_t bOffsetsValid;
     SHADER_PUBLIC float probeDebugExposure;
+};
+
+SHADER_PUBLIC struct ClusterGridDebugPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(GPUDebugDrawArgs) args;
+    SHADER_PUBLIC SHADER_PTR(DebugLineSegment) segmentBuffer;
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC float zNear;
+    SHADER_PUBLIC float zFar;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct DDGIProbeTracePushConstant

@@ -61,7 +61,7 @@ uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames)
     return ListProfiles("lighting", outNames, maxNames);
 }
 
-bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::GTAOConfiguration& gtao, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity)
+bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::GTAOConfiguration& gtao, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity, float& clusterZFar)
 {
     const nlohmann::json j = ReadProfileJson("lighting", name);
     if (!j.is_object()) {
@@ -87,12 +87,15 @@ bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Cor
     else if (j.contains("restir") && j["restir"].is_object() && j["restir"].contains("iblIntensity") && j["restir"]["iblIntensity"].is_number()) {
         iblIntensity = j["restir"]["iblIntensity"].get<float>();
     }
+    if (j.contains("clusterZFar") && j["clusterZFar"].is_number()) {
+        clusterZFar = j["clusterZFar"].get<float>();
+    }
     shadingOverride = j.contains("shadingShaderOverride") ? StringID(j["shadingShaderOverride"].get<uint64_t>()) : StringID{};
     lightingOverride = j.contains("lightingShaderOverride") ? StringID(j["lightingShaderOverride"].get<uint64_t>()) : StringID{};
     return true;
 }
 
-bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::GTAOConfiguration& gtao, StringID shadingOverride, StringID lightingOverride, float iblIntensity)
+bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::GTAOConfiguration& gtao, StringID shadingOverride, StringID lightingOverride, float iblIntensity, float clusterZFar)
 {
     nlohmann::json j;
     j["lightingMode"] = static_cast<uint32_t>(lightingMode);
@@ -100,6 +103,7 @@ bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, cons
     j["ddgi"] = ConfigSerialization::ToJson(ddgi);
     j["gtao"] = ConfigSerialization::ToJson(gtao);
     j["iblIntensity"] = iblIntensity;
+    j["clusterZFar"] = clusterZFar;
     if (shadingOverride) { j["shadingShaderOverride"] = shadingOverride.id; }
     if (lightingOverride) { j["lightingShaderOverride"] = lightingOverride.id; }
     return WriteProfileJson("lighting", name, j);

@@ -34,6 +34,11 @@ void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, bo
  * @param bLocked
  */
 void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, bool bLocked);
+
+/**
+ * Emits the froxel cluster grid AABBs as world-space wireframe boxes into the GPU debug segment buffer, colored by depth slice.
+ */
+void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, uint32_t sceneIndex, float clusterZNear, float clusterZFar);
 } // Render
 
 #endif //WILL_ENGINE_DEBUG_PASSES_H

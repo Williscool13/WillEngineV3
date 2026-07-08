@@ -53,6 +53,13 @@ SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_AREA = 0u;
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_SPHERE = 1u;
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_TRIANGLE = 2u;
 
+// Froxel clustering (non-restir): resolution-independent XY tiles, log-distributed Z slices.
+SHADER_PUBLIC SHADER_CONST uint CLUSTER_GRID_X = 16u;
+SHADER_PUBLIC SHADER_CONST uint CLUSTER_GRID_Y = 9u;
+SHADER_PUBLIC SHADER_CONST uint CLUSTER_GRID_Z = 24u;
+SHADER_PUBLIC SHADER_CONST uint CLUSTER_COUNT = CLUSTER_GRID_X * CLUSTER_GRID_Y * CLUSTER_GRID_Z;
+SHADER_PUBLIC SHADER_CONST uint MAX_LIGHTS_PER_CLUSTER = 128u;
+
 /** Directional light: direction (xyz) + intensity (w), color packed as RGBA8 unorm. */
 SHADER_PUBLIC struct DirectionalLightData
 {

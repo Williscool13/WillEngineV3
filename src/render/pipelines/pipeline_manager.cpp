@@ -459,8 +459,13 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("directional_light"), src / "directional_light.spv", "ComputeDirectionalLight",
                             sizeof(DirectionalLightPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("light_culling"), src / "light_culling.spv", "ComputeLightCulling",
+                            sizeof(LightCullingPushConstant), PipelineCategory::Critical);
+
     RegisterComputePipeline(SID("gpu_debug_build_indirect"), src / "gpu_debug.spv", "ComputeGPUDebugBuildIndirect",
                             sizeof(GPUDebugBuildIndirectPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gpu_debug_cluster_grid"), src / "gpu_debug.spv", "ComputeGPUDebugClusterGrid",
+                            sizeof(ClusterGridDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gpu_debug_test_pattern"), src / "gpu_debug.spv", "ComputeGPUDebugTestPattern",
                             sizeof(GPUDebugTestPatternPushConstant), PipelineCategory::Critical);
 

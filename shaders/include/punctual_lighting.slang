@@ -5,9 +5,7 @@ import lights_interop;
 import pbr_functions;
 import packing_functions;
 
-/** Area/sphere light degenerated to a view-space punctual source for the default (non-ReSTIR) path.
- *  Sphere -> point, rect -> one-sided emitter. View space + pos/range so a future clustered pass can
- *  reuse DegenerateLight + ShadePunctual unchanged. */
+/** Area/sphere light degenerated to a view-space punctual source: sphere -> point, rect -> one-sided emitter. */
 public struct PunctualLight
 {
     public float3 pos; // view-space center

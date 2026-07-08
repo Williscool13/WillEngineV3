@@ -343,6 +343,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bLockGPUDebug = state->debug.bLockGPUDebug;
     frameBuffer->bGPUDebugTestPattern = state->debug.bGPUDebugTestPattern;
     frameBuffer->bDDGIProbeDebug = state->debug.bDDGIProbeDebug;
+    frameBuffer->bClusterGridDebug = state->debug.bClusterGridDebug;
     frameBuffer->bDDGIBounceOnly = state->debug.bDDGIBounceOnly;
     frameBuffer->ddgiProbeDebugExposure = state->debug.ddgiProbeDebugExposure;
     frameBuffer->restir = state->debug.restir;
@@ -366,6 +367,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
     frameBuffer->mainViewFamily.sigmaParams = state->lighting.sigmaParams;
     frameBuffer->mainViewFamily.iblIntensity = state->lighting.iblIntensity;
+    frameBuffer->mainViewFamily.clusterZFar = state->lighting.clusterZFar;
     frameBuffer->mainViewFamily.resolutionScale = state->projectConfig.resolutionScale;
     if (state->debug.bEnablePortal) {
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);

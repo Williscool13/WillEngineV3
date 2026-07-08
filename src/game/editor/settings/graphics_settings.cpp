@@ -30,7 +30,7 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
     }
     Engine::WriteProjectConfig(cfg);
 }
@@ -54,7 +54,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -74,7 +74,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -244,6 +244,8 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::Checkbox("Test Pattern##GPUDebug", &state->debug.bGPUDebugTestPattern);
         ImGui::SameLine();
         ImGui::Checkbox("DDGI Probes##GPUDebug", &state->debug.bDDGIProbeDebug);
+        ImGui::SameLine();
+        ImGui::Checkbox("Cluster Grid##GPUDebug", &state->debug.bClusterGridDebug);
         ImGui::SameLine();
         ImGui::Checkbox("Bounce Only##GPUDebug", &state->debug.bDDGIBounceOnly);
         if (ImGui::IsItemHovered()) {
@@ -554,8 +556,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             changed = true;
         }
 
-        ImGui::SeparatorText("Ground-Truth Reference");
-        {
+        ImGui::SeparatorText("Ground-Truth Reference"); {
             auto gtToggle = [&](const char* label, Core::GroundTruthMode mode) {
                 const bool active = state->lighting.groundTruthMode == mode;
                 if (active) {
@@ -578,282 +579,43 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::Separator();
 
+        const bool bDefaultMode = state->lighting.lightingMode == Core::LightingMode::Default;
+        const bool bReSTIRMode = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
+
+        ImGui::SeparatorText("Both");
+
         if (ImGui::CollapsingHeader("Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
             if (Widgets::SliderFloat("IBL Intensity##env", &state->lighting.iblIntensity, 0.0f, 2.0f)) {
                 changed = true;
             }
         }
 
-        if (ImGui::CollapsingHeader("ReSTIR DI Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-            Core::ReSTIRParams& restir = state->debug.restir;
-            const bool bReGIR = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
+        if (ImGui::CollapsingHeader("Ground Truth Ambient Occlusion")) {
+            Core::GTAOConfiguration& gtao = state->lighting.gtaoConfig;
+            static const Core::GTAOConfiguration gtaoDefaults{};
 
-            // Sections compiled out via restir_features_macros.h are greyed: the runtime toggle has no effect until the macro is set to 1 and shaders are rebuilt.
-            ImGui::SeparatorText("Base (Candidate Generation)");
-            ImGui::BeginDisabled(!RESTIR_ENABLE_INITIAL_VISIBILITY);
-            if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
+            if (ImGui::Checkbox("Enable GTAO", &gtao.bEnabled)) { changed = true; }
+
+            auto gtaoF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+            };
+
+            gtaoF("Effect Radius##gtao", &gtao.effectRadius, gtaoDefaults.effectRadius, 0.0f, 5.0f, "%.2f", "World-space radius (meters) the occlusion horizon search covers. Larger = broader, softer AO reaching more distant occluders; smaller = tighter contact darkening. Default 0.5.");
+            gtaoF("Radius Multiplier##gtao", &gtao.radiusMultiplier, gtaoDefaults.radiusMultiplier, 0.0f, 3.0f, "%.3f", "Scales the sampling radius relative to Effect Radius; the XeGTAO tuning constant that trades screen-space reach against sample density. Default 1.457.");
+            gtaoF("Falloff Range##gtao", &gtao.effectFalloffRange, gtaoDefaults.effectFalloffRange, 0.0f, 1.0f, "%.3f", "Fraction of the radius over which occlusion attenuates to zero at the edge. Higher = smoother distance falloff; lower = harder cutoff. Default 0.615.");
+            gtaoF("Sample Distribution Power##gtao", &gtao.sampleDistributionPower, gtaoDefaults.sampleDistributionPower, 1.0f, 3.0f, "%.2f", "Bias of step placement along each slice toward the pixel. >1 concentrates samples near the center for stronger contact AO. Default 2.0.");
+            gtaoF("Thin Occluder Compensation##gtao", &gtao.thinOccluderCompensation, gtaoDefaults.thinOccluderCompensation, 0.0f, 0.7f, "%.2f", "Reduces over-darkening behind thin geometry (railings, foliage) by assuming occluders have limited thickness. Keep <= 0.7. Default 0.0.");
+            gtaoF("Final Value Power##gtao", &gtao.finalValuePower, gtaoDefaults.finalValuePower, 0.5f, 5.0f, "%.2f", "Exponent applied to the final AO term. Higher = darker, higher-contrast occlusion; lower = subtler. Default 2.2.");
+            gtaoF("Depth MIP Sampling Offset##gtao", &gtao.depthMipSamplingOffset, gtaoDefaults.depthMipSamplingOffset, 0.0f, 5.0f, "%.2f", "Controls how aggressively coarser depth mips are used for far samples. Higher = cheaper/blurrier distant AO; lower = sharper but costlier. Default 3.3.");
+            gtaoF("Slice Count##gtao", &gtao.sliceCount, gtaoDefaults.sliceCount, 1.0f, 9.0f, "%.0f", "Number of angular slices sampled per pixel. More = smoother, less directional noise, higher cost. Default 5.");
+            gtaoF("Steps Per Slice##gtao", &gtao.stepsPerSlice, gtaoDefaults.stepsPerSlice, 1.0f, 9.0f, "%.0f", "Horizon-march steps taken along each slice. More = finer occluder detection, higher cost. Default 3.");
+            gtaoF("Denoise Blur Beta##gtao", &gtao.denoiseBlurBeta, gtaoDefaults.denoiseBlurBeta, 0.0f, 10.0f, "%.2f", "Edge-stopping strength of the final denoise blur. Higher = preserves edges but leaves more noise; lower = smoother but softer. Default 1.2.");
+
+            ImGui::Spacing();
+            if (ImGui::Button("Reset GTAO")) {
+                gtao = Core::GTAOConfiguration{};
                 changed = true;
             }
-            ImGui::EndDisabled();
-            if (ImGui::Checkbox("Sun Candidate Visibility", &restir.bSunCandidateVisibility)) {
-                changed = true;
-            }
-
-            ImGui::SeparatorText("Temporal");
-            if (ImGui::Checkbox("Temporal Reuse", &restir.bEnableTemporal)) {
-                changed = true;
-            }
-            int temporalMCap = static_cast<int>(restir.temporalMCap);
-            if (Widgets::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
-                restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
-                changed = true;
-            }
-            if (ImGui::Checkbox("Checkerboard Rendering", &restir.bCheckerboard)) {
-                changed = true;
-            }
-            ImGui::BeginDisabled(!RESTIR_ENABLE_PERMUTATION_SAMPLING);
-            if (ImGui::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
-                changed = true;
-            }
-            ImGui::EndDisabled();
-            if (Widgets::SliderFloat("Boiling Filter (0=off)", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
-                changed = true;
-            }
-            ImGui::BeginDisabled(!RESTIR_ENABLE_ANTILAG);
-            featureSection("Antilag", &restir.bEnableAntilag, [&] {
-                if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
-                        {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. May add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.5f})) {
-                    changed = true;
-                }
-            });
-            ImGui::EndDisabled();
-
-            ImGui::SeparatorText("Spatial Reuse");
-            int spatialPasses = static_cast<int>(restir.spatialPasses);
-            if (Widgets::SliderInt("Spatial Passes (0=off)", &spatialPasses, 0, 8)) {
-                restir.spatialPasses = static_cast<uint32_t>(spatialPasses);
-                changed = true;
-            }
-            if (restir.spatialPasses > 0u) {
-                int spatialRadius = static_cast<int>(restir.spatialRadius);
-                if (Widgets::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
-                    restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
-                    changed = true;
-                }
-                int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
-                if (Widgets::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
-                    restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
-                    changed = true;
-                }
-                int spatialMCap = static_cast<int>(restir.spatialMCap);
-                if (Widgets::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
-                    restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
-                    changed = true;
-                }
-                if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 100.0f)) {
-                    changed = true;
-                }
-                ImGui::BeginDisabled(!RESTIR_ENABLE_SPATIAL_DILATE);
-                featureSection("Spatial Dilate", &restir.bAdaptiveSpatial, [&] {
-                    if (Widgets::SliderFloat("Dilate Boost##restir", &restir.adaptiveSpatialBoost, 0.0f, 3.0f)) {
-                        changed = true;
-                    }
-                });
-                ImGui::EndDisabled();
-            }
-
-            ImGui::SeparatorText("Options");
-            const char* remodulateOutputModes[] = {"Both", "Diffuse Only", "Specular Only", "Indirect Diffuse (DDGI)"};
-            int currentRemodulateOutput = static_cast<int>(restir.remodulateOutput);
-            if (ImGui::Combo("Remodulate Output##restir", &currentRemodulateOutput, remodulateOutputModes, IM_ARRAYSIZE(remodulateOutputModes))) {
-                restir.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(currentRemodulateOutput);
-                changed = true;
-            }
-
-            featureSection("Emissive Triangle Lights", &restir.bEmissiveTriangleLights, [&] {
-                if (Widgets::SliderFloat("Emissive Range Multiplier", &restir.emissiveTriRangeMultiplier, 0.0f, 64.0f,
-                        {.format = "%.1f", .tooltip = "Attenuation cutoff per triangle: range = multiplier * sqrt(intensity * area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 8.0f})) {
-                    changed = true;
-                }
-                if (Widgets::SliderInt("Max Tris Per Emissive Primitive", &restir.emissiveTriMaxPerPrimitive, 1, 16384)) {
-                    changed = true;
-                }
-            });
-
-            if (bReGIR) {
-                ImGui::SeparatorText("ReGIR");
-                if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
-                    changed = true;
-                }
-                if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
-            }
-            ImGui::SeparatorText("Denoiser");
-            bool bRELAX = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
-            bool bReBLUR = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR;
-            const bool bRELAXPrev = bRELAX;
-            const bool bReBLURPrev = bReBLUR;
-            featureSection("RELAX", &bRELAX, [&] {
-                Core::RELAXParams& relax = restir.relax;
-
-                ImGui::BeginDisabled(!RESTIR_ENABLE_CONFIDENCE);
-                featureSection("Confidence (Moving-Shadow Antilag)", &restir.bEnableConfidence, [&] {
-                    if (Widgets::SliderFloat("History Confidence##restir", &state->debug.restir.confidenceStrength, 0.0f, 1.0f,
-                            {.format = "%.2f", .tooltip = "Moving-shadow antilag: temporal luminance-gradient confidence fed to RELAX (RTXDI-style). Master mix.", .reset = true, .resetTo = 0.75f})) {
-                        changed = true;
-                    }
-                    if (Widgets::SliderFloat("Confidence Sensitivity##restir", &state->debug.restir.confidenceSensitivity, 0.5f, 16.0f,
-                            {.format = "%.2f", .tooltip = "Pow exponent on the gradient->confidence curve. Higher = collapses history on smaller lighting changes (more aggressive antilag, more noise).", .reset = true, .resetTo = 3.0f})) {
-                        changed = true;
-                    }
-                    if (Widgets::SliderFloat("Confidence Darkness Bias##restir", &state->debug.restir.confidenceDarknessBias, 0.0f, 1.0f,
-                            {.format = "%.4f", .tooltip = "Floor added to the gradient normalizer so dark-region noise does not produce a large relative gradient (false history collapse).", .reset = true, .resetTo = 0.01f})) {
-                        changed = true;
-                    }
-                    if (Widgets::SliderFloat("Confidence History##restir", &state->debug.restir.confidenceHistoryLength, 0.0f, 16.0f,
-                            {.format = "%.1f", .tooltip = "Frames the confidence temporal filter holds a dip. Drops fast, recovers slowly; gives ReSTIR time to re-converge before RELAX trusts history again. 0 = no temporal filter.", .reset = true, .resetTo = 4.0f})) {
-                        changed = true;
-                    }
-                    int confidenceBlurRadius = static_cast<int>(state->debug.restir.confidenceBlurRadius);
-                    if (Widgets::SliderInt("Confidence Blur##restir", &confidenceBlurRadius, 0, 6,
-                            {.tooltip = "Gradient blur radius (in downsampled gradient texels). Wider = smoother penumbra confidence, less noise; too wide blurs the antilag region."})) {
-                        state->debug.restir.confidenceBlurRadius = static_cast<uint32_t>(confidenceBlurRadius);
-                        changed = true;
-                    }
-                });
-                ImGui::EndDisabled();
-
-                static const Core::RELAXParams relaxDefaults{};
-                auto relaxTip = [&](const char* tip) {
-                    if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                        ImGui::SetTooltip("%s", tip);
-                    }
-                };
-                auto relaxF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.4f", const char* tip = nullptr) {
-                    changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
-                };
-                auto relaxI = [&](const char* label, int* v, int def, int mn, int mx, const char* tip = nullptr) {
-                    changed |= Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)});
-                };
-
-                if (ImGui::Checkbox("Prepass##relax", &relax.enablePrepass)) { changed = true; }
-                relaxTip("Spatial pre-blur before temporal accumulation, lowering the input noise fed into history. Default on.");
-                ImGui::SameLine();
-                if (ImGui::Checkbox("Anti-Firefly##relax", &relax.enableAntiFirefly)) { changed = true; }
-                relaxTip("Suppresses isolated bright outlier pixels (fireflies) before accumulation. Default on.");
-                if (ImGui::Checkbox("Roughness Edge Stopping##relax", &relax.roughnessEdgeStoppingEnabled)) { changed = true; }
-                relaxTip("Roughness-aware specular edge stopping (roughness + oriented-normal weights). Off uses a simpler normal-only weight. Default on.");
-
-                ImGui::SeparatorText("General");
-                relaxF("Denoising Range", &relax.denoisingRange, relaxDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through untouched. Default 1000; set to roughly cover your scene depth.");
-                relaxF("Disocclusion Threshold", &relax.disocclusionThreshold, relaxDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Higher accepts more (less ghosting rejection); lower resets more on edges/motion. Default 0.005; common ~0.01.");
-                relaxF("Depth Threshold", &relax.depthThreshold, relaxDefaults.depthThreshold, 0.0f, 0.05f, "%.4f", "Plane-distance tolerance for spatial edge stopping, as a fraction of depth. Lower preserves geometry edges; higher blurs across them. Default 0.003.");
-
-                ImGui::SeparatorText("Accumulation");
-                relaxF("Spec Max Accum Frames", &relax.specMaxAccumFrames, relaxDefaults.specMaxAccumFrames, 0.f, 64.f, "%.0f", "Max specular history length (stable). Higher = cleaner but laggier reflections. Default 32; common 30-60.");
-                relaxF("Spec Max Fast Accum Frames", &relax.specMaxFastAccumFrames, relaxDefaults.specMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' specular history used to clamp the slow one (anti-lag). Must be below Spec Max Accum to enable clamping. Default 4; common 4-6.");
-                relaxF("Diff Max Accum Frames", &relax.diffMaxAccumFrames, relaxDefaults.diffMaxAccumFrames, 0.f, 64.f, "%.0f", "Max diffuse history length (stable). Higher = cleaner but slower to react to lighting changes (more lag). Default 32; common 30-60.");
-                relaxF("Diff Max Fast Accum Frames", &relax.diffMaxFastAccumFrames, relaxDefaults.diffMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' diffuse history used to clamp the slow one (anti-lag). Lower = snappier response. Must be below Diff Max Accum. Default 4; common 4-6.");
-                relaxF("History Acceleration Amount", &relax.historyAccelerationAmount, relaxDefaults.historyAccelerationAmount, 0.f, 1.f, "%.2f", "Strength of anti-lag acceleration pushing the slow history toward the fast one on changes. 0 = off, 1 = max. Default 1.0.");
-
-                ImGui::SeparatorText("Prepass");
-                relaxF("Diff Blur Radius", &relax.diffBlurRadius, relaxDefaults.diffBlurRadius, 0.f, 100.f, "%.1f", "Radius (px) of the diffuse pre-blur applied before accumulation. Larger knocks down more input noise but loses detail. 0 disables. Default 30.");
-                relaxF("Spec Blur Radius", &relax.specBlurRadius, relaxDefaults.specBlurRadius, 0.f, 100.f, "%.1f", "Radius (px) of the specular pre-blur before accumulation. 0 disables. Default 50.");
-                relaxF("Min Hit Distance Weight", &relax.minHitDistanceWeight, relaxDefaults.minHitDistanceWeight, 0.f, 1.f, "%.2f", "Minimum weight for ray hit-distance when reconstructing specular in the prepass. 0 ignores hitT. Default 0; NRD commonly ~0.1-0.2.");
-
-                ImGui::SeparatorText("A-Trous / Edge Stopping");
-                relaxI("ATrous Iterations", &relax.atrousIterations, relaxDefaults.atrousIterations, 1, 5, "Number of A-trous wavelet (spatial) passes. More = wider, smoother denoising but blurrier and costlier. Default 3; common 4-5.");
-                relaxF("Lobe Angle Fraction", &relax.lobeAngleFraction, relaxDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance, as a fraction of the BRDF lobe angle. Lower preserves sharper normal detail; higher blurs across normals. Default 0.15.");
-                relaxF("Roughness Fraction", &relax.roughnessFraction, relaxDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Higher blends across differing roughness; lower keeps roughness boundaries crisp. Default 0.15.");
-                relaxF("Spec Lobe Angle Slack", &relax.specLobeAngleSlack, relaxDefaults.specLobeAngleSlack, 0.f, 1.f, "%.3f", "Extra angular slack added to the specular lobe for edge stopping, loosening normal/view rejection. Default 0.15.");
-                relaxF("Spec Phi Luminance", &relax.specPhiLuminance, relaxDefaults.specPhiLuminance, 0.f, 10.f, "%.2f", "Specular luminance edge-stopping sensitivity (sigma scale). Higher = more blur (ignores luminance diffs); lower preserves highlights. Default 2.0; common 1-2.");
-                relaxF("Diff Phi Luminance", &relax.diffPhiLuminance, relaxDefaults.diffPhiLuminance, 0.f, 10.f, "%.2f", "Diffuse luminance edge-stopping sensitivity (sigma scale). Higher = more blur; lower keeps luminance edges. Default 2.0; common 1-2.");
-                relaxF("Diff Max Lum Rel Diff", &relax.diffMaxLuminanceRelativeDifference, relaxDefaults.diffMaxLuminanceRelativeDifference, 0.f, 10.f, "%.2f", "Caps how strongly a luminance difference can reject a diffuse sample (in sigmas). Lower = firmer edge stopping. Default 3.");
-                relaxF("Spec Max Lum Rel Diff", &relax.specMaxLuminanceRelativeDifference, relaxDefaults.specMaxLuminanceRelativeDifference, 0.f, 10.f, "%.2f", "Caps how strongly a luminance difference can reject a specular sample (in sigmas). Default 3.");
-                relaxF("Luminance Edge Stop Relax", &relax.luminanceEdgeStoppingRelaxation, relaxDefaults.luminanceEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "On early A-trous passes, relaxes specular luminance edge stopping where reprojection confidence is low (helps fresh/disoccluded pixels). 0-1. Default 0.5.");
-                relaxF("Normal Edge Stop Relax", &relax.normalEdgeStoppingRelaxation, relaxDefaults.normalEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "Relaxes specular normal edge stopping based on reprojection confidence, cutting noise on low-confidence pixels. 0-1. Default 0.3.");
-                relaxF("Roughness Edge Stop Relax", &relax.roughnessEdgeStoppingRelaxation, relaxDefaults.roughnessEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "Relaxes the view vector used in specular weighting, loosening rejection on curved/rough surfaces. Default 0.3.");
-                relaxF("Spec Variance Boost", &relax.specVarianceBoost, relaxDefaults.specVarianceBoost, 0.f, 8.f, "%.2f", "Boosts specular variance while history is short so fresh pixels filter more aggressively. 1 = no boost. Default 1.0.");
-
-                ImGui::SeparatorText("History Fix");
-                relaxF("Hist Fix Edge Stop Normal Pow", &relax.historyFixEdgeStoppingNormalPower, relaxDefaults.historyFixEdgeStoppingNormalPower, 0.f, 32.f, "%.1f", "Normal-match strictness for the history-fix fill that bootstraps fresh pixels. Higher = stricter normal matching. Default 8.");
-                relaxF("Hist Fix Frame Num", &relax.historyFixFrameNum, relaxDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill (bootstrap) instead of relying on accumulation. 0 disables. Default 4.");
-                relaxF("Hist Fix Base Pixel Stride", &relax.historyFixBasePixelStride, relaxDefaults.historyFixBasePixelStride, 0.f, 32.f, "%.1f", "Base sample spacing (px) for the history-fix fill; shrinks as history grows. Larger = wider initial fill. Default 14.");
-
-                ImGui::SeparatorText("History Clamp / Reset");
-                relaxF("Fast History Clamp Sigma", &relax.fastHistoryClampingSigmaScale, relaxDefaults.fastHistoryClampingSigmaScale, 0.f, 8.f, "%.2f", "Width (in sigmas) of the fast-history color box that clamps the slow history (anti-lag/anti-ghosting). Lower = tighter clamp, less lag but more noise. Default 2.0; common 1-2.");
-                relaxF("History Reset Temporal Sigma", &relax.historyResetTemporalSigmaScale, relaxDefaults.historyResetTemporalSigmaScale, 0.f, 10.f, "%.2f", "Temporal noise sigma scale in history-reset detection; larger tolerates more temporal noise before resetting. Default 5.");
-                relaxF("History Reset Spatial Sigma", &relax.historyResetSpatialSigmaScale, relaxDefaults.historyResetSpatialSigmaScale, 0.f, 10.f, "%.2f", "Spatial noise sigma scale in history-reset detection; larger tolerates more spatial noise before resetting. Default 1.");
-                relaxF("History Reset Amount", &relax.historyResetAmount, relaxDefaults.historyResetAmount, 0.f, 1.f, "%.2f", "How hard to snap history to the current noisy signal on big lighting changes. 0 = off (rely on clamping); 1 = aggressive. Default 0.5.");
-
-                ImGui::Spacing();
-                if (ImGui::Button("Reset RELAX")) {
-                    relax = Core::RELAXParams{};
-                    changed = true;
-                }
-            });
-
-            featureSection("ReBLUR", &bReBLUR, [&] {
-                Core::ReBLURParams& reblur = restir.reblur;
-                static const Core::ReBLURParams reblurDefaults{};
-                auto reblurF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.4f", const char* tip = nullptr) {
-                    changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
-                };
-
-                if (ImGui::Checkbox("Prepass##reblur", &reblur.enablePrepass)) { changed = true; }
-                ImGui::SameLine();
-                if (ImGui::Checkbox("Anti-Firefly##reblur", &reblur.enableAntiFirefly)) { changed = true; }
-                if (ImGui::Checkbox("Temporal Stabilization##reblur", &reblur.enableTemporalStabilization)) { changed = true; }
-                ImGui::SameLine();
-                if (ImGui::Checkbox("Stab. Firefly Cleanup##reblur", &reblur.enableStabilizationFireflyCleanup)) { changed = true; }
-                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("NRD short-history luma cap. Eats sparse disoccluded-pixel energy (black band on fast camera motion); keep OFF."); }
-
-                ImGui::SeparatorText("General");
-                reblurF("Denoising Range", &reblur.denoisingRange, reblurDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through. Default 1000.");
-                reblurF("Disocclusion Threshold", &reblur.disocclusionThreshold, reblurDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Default 0.01.");
-                reblurF("Plane Distance Sensitivity", &reblur.planeDistanceSensitivity, reblurDefaults.planeDistanceSensitivity, 0.001f, 0.2f, "%.4f", "Max allowed deviation from the local tangent plane for spatial edge stopping. Default 0.02.");
-                reblurF("Lobe Angle Fraction", &reblur.lobeAngleFraction, reblurDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance as a fraction of the BRDF lobe angle. Default 0.15.");
-                reblurF("Roughness Fraction", &reblur.roughnessFraction, reblurDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Default 0.15.");
-                reblurF("Min Hit Distance Weight", &reblur.minHitDistanceWeight, reblurDefaults.minHitDistanceWeight, 0.f, 0.2f, "%.3f", "Sensitivity to hit distance in spatial passes; smaller for clean RTXDI-style hitT. Default 0.1.");
-
-                ImGui::SeparatorText("Hit Distance Normalization (A/B/C/D)");
-                reblurF("Hit Dist A", &reblur.hitDistA, reblurDefaults.hitDistA, 0.f, 50.f, "%.2f", "Constant term (units). Default 3.");
-                reblurF("Hit Dist B", &reblur.hitDistB, reblurDefaults.hitDistB, 0.f, 5.f, "%.3f", "viewZ-based linear scale. Default 0.1.");
-                reblurF("Hit Dist C", &reblur.hitDistC, reblurDefaults.hitDistC, 1.f, 100.f, "%.1f", "Roughness-based scale (>1 = larger hit distance for low roughness). Default 20.");
-                reblurF("Hit Dist D", &reblur.hitDistD, reblurDefaults.hitDistD, -50.f, 0.f, "%.1f", "Roughness falloff exponent (<=0). Default -25.");
-
-                ImGui::SeparatorText("Accumulation");
-                reblurF("Max Accum Frames", &reblur.maxAccumulatedFrameNum, reblurDefaults.maxAccumulatedFrameNum, 0.f, 63.f, "%.0f", "Max (stable) history length. Higher = cleaner but laggier. Default 30.");
-                reblurF("Max Fast Accum Frames", &reblur.maxFastAccumulatedFrameNum, reblurDefaults.maxFastAccumulatedFrameNum, 0.f, 32.f, "%.0f", "Fast (responsive) history length used for anti-lag clamping. Usually ~1/6 of max. Default 6.");
-                reblurF("Max Stabilized Frames", &reblur.maxStabilizedFrameNum, reblurDefaults.maxStabilizedFrameNum, 0.f, 63.f, "%.0f", "History length for the temporal stabilization pass. 0 disables stabilization. Default 30.");
-
-                ImGui::SeparatorText("Blur");
-                reblurF("Min Blur Radius", &reblur.minBlurRadius, reblurDefaults.minBlurRadius, 0.f, 10.f, "%.2f", "Min denoising radius (px) for the converged state. Default 1.");
-                reblurF("Max Blur Radius", &reblur.maxBlurRadius, reblurDefaults.maxBlurRadius, 0.f, 60.f, "%.1f", "Base (max) denoising radius (px); shrinks as history grows. Default 30.");
-                reblurF("Diffuse Prepass Blur Radius", &reblur.diffusePrepassBlurRadius, reblurDefaults.diffusePrepassBlurRadius, 0.f, 100.f, "%.1f", "Diffuse pre-blur radius (px). 0 disables. Default 30.");
-                reblurF("Specular Prepass Blur Radius", &reblur.specularPrepassBlurRadius, reblurDefaults.specularPrepassBlurRadius, 0.f, 100.f, "%.1f", "Specular pre-blur radius (px). 0 disables. Default 50.");
-
-                ImGui::SeparatorText("History Fix");
-                reblurF("Hist Fix Frame Num", &reblur.historyFixFrameNum, reblurDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill. Default 3.");
-                reblurF("Hist Fix Base Pixel Stride", &reblur.historyFixBasePixelStride, reblurDefaults.historyFixBasePixelStride, 0.f, 32.f, "%.1f", "Base sample spacing (px) for the history-fix fill; shrinks as history grows. Default 14.");
-                reblurF("Fast History Clamp Sigma", &reblur.fastHistoryClampingSigmaScale, reblurDefaults.fastHistoryClampingSigmaScale, 1.f, 3.f, "%.2f", "Width (sigmas) of the fast-history color box clamping the slow history. Default 2.");
-
-                ImGui::SeparatorText("Stabilization / Antilag");
-                reblurF("Stabilization Strength", &reblur.stabilizationStrength, reblurDefaults.stabilizationStrength, 0.f, 1.f, "%.2f", "Blend toward the reprojected stabilized history. 0 = off. Default 1.");
-                reblurF("Antilag Luminance Sigma", &reblur.antilagLuminanceSigmaScale, reblurDefaults.antilagLuminanceSigmaScale, 1.f, 5.f, "%.2f", "Color-box width (sigmas) used to clamp the stabilized history. Lower = tighter, less lag. Default 2.");
-                reblurF("Firefly Suppressor Min Scale", &reblur.fireflySuppressorMinRelativeScale, reblurDefaults.fireflySuppressorMinRelativeScale, 1.f, 3.f, "%.2f", "Outlier suppression strength (smaller = stronger). Default 2.");
-
-                ImGui::Spacing();
-                if (ImGui::Button("Reset ReBLUR")) {
-                    reblur = Core::ReBLURParams{};
-                    changed = true;
-                }
-            });
-
-            // Mutually-exclusive denoiser selection: a newly-enabled toggle wins; disabling the active one falls back to None.
-            if (bRELAX && !bRELAXPrev) { restir.denoiserMode = Core::ReSTIRParams::DenoiserMode::RELAX; }
-            else if (bReBLUR && !bReBLURPrev) { restir.denoiserMode = Core::ReSTIRParams::DenoiserMode::ReBLUR; }
-            else if (!bRELAX && bRELAXPrev && restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) { restir.denoiserMode = Core::ReSTIRParams::DenoiserMode::None; }
-            else if (!bReBLUR && bReBLURPrev && restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) { restir.denoiserMode = Core::ReSTIRParams::DenoiserMode::None; }
         }
 
         if (ImGui::CollapsingHeader("DDGI")) {
@@ -916,59 +678,325 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
-        const bool bDefaultMode = state->lighting.lightingMode == Core::LightingMode::Default;
+        if (bDefaultMode) {
+            ImGui::SeparatorText("Default Rendering");
 
-        if (bDefaultMode && ImGui::CollapsingHeader("SIGMA Shadow Denoiser")) {
-            Core::SIGMAParams& sigma = state->lighting.sigmaParams;
-            static const Core::SIGMAParams sigmaDefaults{};
+            if (ImGui::CollapsingHeader("Clustered Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (Widgets::SliderFloat("Cluster Z Far##cluster", &state->lighting.clusterZFar, 10.0f, 5000.0f,
+                                         {.format = "%.0f", .tooltip = "Far cutoff of the froxel light-cull grid. The 24 depth slices are log-distributed from the camera near plane to here; raise to cover local lights on distant geometry. Larger = clusters longer along view-Z (slightly coarser culling). Past it, surfaces get sun + IBL + DDGI only.", .reset = true, .resetTo = 500.0})) {
+                    changed = true;
+                }
+            }
 
-            auto sigmaTip = [&](const char* tip) {
-                if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("%s", tip); }
-            };
+            if (ImGui::CollapsingHeader("SIGMA Shadow Denoiser")) {
+                Core::SIGMAParams& sigma = state->lighting.sigmaParams;
+                static const Core::SIGMAParams sigmaDefaults{};
 
-            if (ImGui::Checkbox("Half Res##sigma", &sigma.bHalfRes)) { changed = true; }
-            sigmaTip("Trace + denoise the sun shadow at half resolution, then bilaterally upsample. Cuts the trace/temporal cost; softens contact shadows. Matches half-res ReSTIR.");
-            if (ImGui::Checkbox("Post-Blur##sigma", &sigma.enablePostBlur)) { changed = true; }
-            sigmaTip("Second decorrelated spatial pass after the main blur. The single largest quality lever; cleans residual penumbra noise. Default on.");
+                auto sigmaTip = [&](const char* tip) {
+                    if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("%s", tip); }
+                };
 
-            auto sigmaF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
-                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
-            };
-            sigmaF("History Weight##sigma", &sigma.historyWeight, sigmaDefaults.historyWeight, 0.0f, 0.95f, "%.2f", "Temporal stabilization strength. Higher = steadier but laggier on moving shadows; lower = snappier but shimmerier. Default 0.8.");
-            sigmaF("Max Kernel Pixels##sigma", &sigma.maxKernelPixels, sigmaDefaults.maxKernelPixels, 1.0f, 64.0f, "%.0f", "Cap on the penumbra blur radius (px). Bounds cost on very soft shadows. Default 32.");
-            sigmaF("Penumbra Scale##sigma", &sigma.penumbraScale, sigmaDefaults.penumbraScale, 0.0f, 4.0f, "%.2f", "Artistic multiplier on the estimated penumbra. >1 softer, <1 sharper. Default 1.0.");
+                if (ImGui::Checkbox("Half Res##sigma", &sigma.bHalfRes)) { changed = true; }
+                sigmaTip("Trace + denoise the sun shadow at half resolution, then bilaterally upsample. Cuts the trace/temporal cost; softens contact shadows. Matches half-res ReSTIR.");
+                if (ImGui::Checkbox("Post-Blur##sigma", &sigma.enablePostBlur)) { changed = true; }
+                sigmaTip("Second decorrelated spatial pass after the main blur. The single largest quality lever; cleans residual penumbra noise. Default on.");
 
-            if (ImGui::Button("Reset SIGMA")) {
-                sigma = Core::SIGMAParams{};
-                changed = true;
+                auto sigmaF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                    if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+                };
+                sigmaF("History Weight##sigma", &sigma.historyWeight, sigmaDefaults.historyWeight, 0.0f, 0.95f, "%.2f", "Temporal stabilization strength. Higher = steadier but laggier on moving shadows; lower = snappier but shimmerier. Default 0.8.");
+                sigmaF("Max Kernel Pixels##sigma", &sigma.maxKernelPixels, sigmaDefaults.maxKernelPixels, 1.0f, 64.0f, "%.0f", "Cap on the penumbra blur radius (px). Bounds cost on very soft shadows. Default 32.");
+                sigmaF("Penumbra Scale##sigma", &sigma.penumbraScale, sigmaDefaults.penumbraScale, 0.0f, 4.0f, "%.2f", "Artistic multiplier on the estimated penumbra. >1 softer, <1 sharper. Default 1.0.");
+
+                if (ImGui::Button("Reset SIGMA")) {
+                    sigma = Core::SIGMAParams{};
+                    changed = true;
+                }
             }
         }
 
-        if (ImGui::CollapsingHeader("Ground Truth Ambient Occlusion")) {
-            Core::GTAOConfiguration& gtao = state->lighting.gtaoConfig;
-            static const Core::GTAOConfiguration gtaoDefaults{};
+        if (bReSTIRMode) {
+            ImGui::SeparatorText("ReSTIR Rendering");
 
-            if (ImGui::Checkbox("Enable GTAO", &gtao.bEnabled)) { changed = true; }
+            if (ImGui::CollapsingHeader("ReSTIR Options", ImGuiTreeNodeFlags_DefaultOpen)) {
+                Core::ReSTIRParams& restir = state->debug.restir;
+                const bool bReGIR = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
 
-            auto gtaoF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
-                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
-            };
+                // Sections compiled out via restir_features_macros.h are greyed: the runtime toggle has no effect until the macro is set to 1 and shaders are rebuilt.
+                ImGui::SeparatorText("Base (Candidate Generation)");
+                ImGui::BeginDisabled(!RESTIR_ENABLE_INITIAL_VISIBILITY);
+                if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
+                    changed = true;
+                }
+                ImGui::EndDisabled();
+                if (ImGui::Checkbox("Sun Candidate Visibility", &restir.bSunCandidateVisibility)) {
+                    changed = true;
+                }
 
-            gtaoF("Effect Radius##gtao", &gtao.effectRadius, gtaoDefaults.effectRadius, 0.0f, 5.0f, "%.2f", "World-space radius (meters) the occlusion horizon search covers. Larger = broader, softer AO reaching more distant occluders; smaller = tighter contact darkening. Default 0.5.");
-            gtaoF("Radius Multiplier##gtao", &gtao.radiusMultiplier, gtaoDefaults.radiusMultiplier, 0.0f, 3.0f, "%.3f", "Scales the sampling radius relative to Effect Radius; the XeGTAO tuning constant that trades screen-space reach against sample density. Default 1.457.");
-            gtaoF("Falloff Range##gtao", &gtao.effectFalloffRange, gtaoDefaults.effectFalloffRange, 0.0f, 1.0f, "%.3f", "Fraction of the radius over which occlusion attenuates to zero at the edge. Higher = smoother distance falloff; lower = harder cutoff. Default 0.615.");
-            gtaoF("Sample Distribution Power##gtao", &gtao.sampleDistributionPower, gtaoDefaults.sampleDistributionPower, 1.0f, 3.0f, "%.2f", "Bias of step placement along each slice toward the pixel. >1 concentrates samples near the center for stronger contact AO. Default 2.0.");
-            gtaoF("Thin Occluder Compensation##gtao", &gtao.thinOccluderCompensation, gtaoDefaults.thinOccluderCompensation, 0.0f, 0.7f, "%.2f", "Reduces over-darkening behind thin geometry (railings, foliage) by assuming occluders have limited thickness. Keep <= 0.7. Default 0.0.");
-            gtaoF("Final Value Power##gtao", &gtao.finalValuePower, gtaoDefaults.finalValuePower, 0.5f, 5.0f, "%.2f", "Exponent applied to the final AO term. Higher = darker, higher-contrast occlusion; lower = subtler. Default 2.2.");
-            gtaoF("Depth MIP Sampling Offset##gtao", &gtao.depthMipSamplingOffset, gtaoDefaults.depthMipSamplingOffset, 0.0f, 5.0f, "%.2f", "Controls how aggressively coarser depth mips are used for far samples. Higher = cheaper/blurrier distant AO; lower = sharper but costlier. Default 3.3.");
-            gtaoF("Slice Count##gtao", &gtao.sliceCount, gtaoDefaults.sliceCount, 1.0f, 9.0f, "%.0f", "Number of angular slices sampled per pixel. More = smoother, less directional noise, higher cost. Default 5.");
-            gtaoF("Steps Per Slice##gtao", &gtao.stepsPerSlice, gtaoDefaults.stepsPerSlice, 1.0f, 9.0f, "%.0f", "Horizon-march steps taken along each slice. More = finer occluder detection, higher cost. Default 3.");
-            gtaoF("Denoise Blur Beta##gtao", &gtao.denoiseBlurBeta, gtaoDefaults.denoiseBlurBeta, 0.0f, 10.0f, "%.2f", "Edge-stopping strength of the final denoise blur. Higher = preserves edges but leaves more noise; lower = smoother but softer. Default 1.2.");
+                ImGui::SeparatorText("Temporal");
+                if (ImGui::Checkbox("Temporal Reuse", &restir.bEnableTemporal)) {
+                    changed = true;
+                }
+                int temporalMCap = static_cast<int>(restir.temporalMCap);
+                if (Widgets::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
+                    restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
+                    changed = true;
+                }
+                if (ImGui::Checkbox("Checkerboard Rendering", &restir.bCheckerboard)) {
+                    changed = true;
+                }
+                ImGui::BeginDisabled(!RESTIR_ENABLE_PERMUTATION_SAMPLING);
+                if (ImGui::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
+                    changed = true;
+                }
+                ImGui::EndDisabled();
+                if (Widgets::SliderFloat("Boiling Filter (0=off)", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
+                    changed = true;
+                }
+                ImGui::BeginDisabled(!RESTIR_ENABLE_ANTILAG);
+                featureSection("Antilag", &restir.bEnableAntilag, [&] {
+                    if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
+                                             {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. May add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.5f})) {
+                        changed = true;
+                    }
+                });
+                ImGui::EndDisabled();
 
-            ImGui::Spacing();
-            if (ImGui::Button("Reset GTAO")) {
-                gtao = Core::GTAOConfiguration{};
-                changed = true;
+                ImGui::SeparatorText("Spatial Reuse");
+                int spatialPasses = static_cast<int>(restir.spatialPasses);
+                if (Widgets::SliderInt("Spatial Passes (0=off)", &spatialPasses, 0, 8)) {
+                    restir.spatialPasses = static_cast<uint32_t>(spatialPasses);
+                    changed = true;
+                }
+                if (restir.spatialPasses > 0u) {
+                    int spatialRadius = static_cast<int>(restir.spatialRadius);
+                    if (Widgets::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
+                        restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
+                        changed = true;
+                    }
+                    int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
+                    if (Widgets::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
+                        restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
+                        changed = true;
+                    }
+                    int spatialMCap = static_cast<int>(restir.spatialMCap);
+                    if (Widgets::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
+                        restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
+                        changed = true;
+                    }
+                    if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 100.0f)) {
+                        changed = true;
+                    }
+                    ImGui::BeginDisabled(!RESTIR_ENABLE_SPATIAL_DILATE);
+                    featureSection("Spatial Dilate", &restir.bAdaptiveSpatial, [&] {
+                        if (Widgets::SliderFloat("Dilate Boost##restir", &restir.adaptiveSpatialBoost, 0.0f, 3.0f)) {
+                            changed = true;
+                        }
+                    });
+                    ImGui::EndDisabled();
+                }
+
+                ImGui::SeparatorText("Options");
+                const char* remodulateOutputModes[] = {"Both", "Diffuse Only", "Specular Only", "Indirect Diffuse (DDGI)"};
+                int currentRemodulateOutput = static_cast<int>(restir.remodulateOutput);
+                if (ImGui::Combo("Remodulate Output##restir", &currentRemodulateOutput, remodulateOutputModes, IM_ARRAYSIZE(remodulateOutputModes))) {
+                    restir.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(currentRemodulateOutput);
+                    changed = true;
+                }
+
+                featureSection("Emissive Triangle Lights", &restir.bEmissiveTriangleLights, [&] {
+                    if (Widgets::SliderFloat("Emissive Range Multiplier", &restir.emissiveTriRangeMultiplier, 0.0f, 64.0f,
+                                             {.format = "%.1f", .tooltip = "Attenuation cutoff per triangle: range = multiplier * sqrt(intensity * area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 8.0f})) {
+                        changed = true;
+                    }
+                    if (Widgets::SliderInt("Max Tris Per Emissive Primitive", &restir.emissiveTriMaxPerPrimitive, 1, 16384)) {
+                        changed = true;
+                    }
+                });
+
+                if (bReGIR) {
+                    ImGui::SeparatorText("ReGIR");
+                    if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
+                        changed = true;
+                    }
+                    if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
+                }
+            }
+
+            if (ImGui::CollapsingHeader("Denoiser", ImGuiTreeNodeFlags_DefaultOpen)) {
+                Core::ReSTIRParams& restir = state->debug.restir;
+
+                const char* denoiserModes[] = {"None", "RELAX", "ReBLUR"};
+                int denoiserIdx = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX
+                                      ? 1
+                                      : restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR
+                                            ? 2
+                                            : 0;
+                if (ImGui::Combo("Mode##denoiser", &denoiserIdx, denoiserModes, IM_ARRAYSIZE(denoiserModes))) {
+                    restir.denoiserMode = denoiserIdx == 1
+                                              ? Core::ReSTIRParams::DenoiserMode::RELAX
+                                              : denoiserIdx == 2
+                                                    ? Core::ReSTIRParams::DenoiserMode::ReBLUR
+                                                    : Core::ReSTIRParams::DenoiserMode::None;
+                    changed = true;
+                }
+
+                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
+                    Core::RELAXParams& relax = restir.relax;
+
+                    ImGui::BeginDisabled(!RESTIR_ENABLE_CONFIDENCE);
+                    featureSection("Confidence (Moving-Shadow Antilag)", &restir.bEnableConfidence, [&] {
+                        if (Widgets::SliderFloat("History Confidence##restir", &state->debug.restir.confidenceStrength, 0.0f, 1.0f,
+                                                 {.format = "%.2f", .tooltip = "Moving-shadow antilag: temporal luminance-gradient confidence fed to RELAX (RTXDI-style). Master mix.", .reset = true, .resetTo = 0.75f})) {
+                            changed = true;
+                        }
+                        if (Widgets::SliderFloat("Confidence Sensitivity##restir", &state->debug.restir.confidenceSensitivity, 0.5f, 16.0f,
+                                                 {.format = "%.2f", .tooltip = "Pow exponent on the gradient->confidence curve. Higher = collapses history on smaller lighting changes (more aggressive antilag, more noise).", .reset = true, .resetTo = 3.0f})) {
+                            changed = true;
+                        }
+                        if (Widgets::SliderFloat("Confidence Darkness Bias##restir", &state->debug.restir.confidenceDarknessBias, 0.0f, 1.0f,
+                                                 {.format = "%.4f", .tooltip = "Floor added to the gradient normalizer so dark-region noise does not produce a large relative gradient (false history collapse).", .reset = true, .resetTo = 0.01f})) {
+                            changed = true;
+                        }
+                        if (Widgets::SliderFloat("Confidence History##restir", &state->debug.restir.confidenceHistoryLength, 0.0f, 16.0f,
+                                                 {.format = "%.1f", .tooltip = "Frames the confidence temporal filter holds a dip. Drops fast, recovers slowly; gives ReSTIR time to re-converge before RELAX trusts history again. 0 = no temporal filter.", .reset = true, .resetTo = 4.0f})) {
+                            changed = true;
+                        }
+                        int confidenceBlurRadius = static_cast<int>(state->debug.restir.confidenceBlurRadius);
+                        if (Widgets::SliderInt("Confidence Blur##restir", &confidenceBlurRadius, 0, 6,
+                                               {.tooltip = "Gradient blur radius (in downsampled gradient texels). Wider = smoother penumbra confidence, less noise; too wide blurs the antilag region."})) {
+                            state->debug.restir.confidenceBlurRadius = static_cast<uint32_t>(confidenceBlurRadius);
+                            changed = true;
+                        }
+                    });
+                    ImGui::EndDisabled();
+
+                    static const Core::RELAXParams relaxDefaults{};
+                    auto relaxTip = [&](const char* tip) {
+                        if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                            ImGui::SetTooltip("%s", tip);
+                        }
+                    };
+                    auto relaxF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.4f", const char* tip = nullptr) {
+                        changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
+                    };
+                    auto relaxI = [&](const char* label, int* v, int def, int mn, int mx, const char* tip = nullptr) {
+                        changed |= Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)});
+                    };
+
+                    if (ImGui::Checkbox("Prepass##relax", &relax.enablePrepass)) { changed = true; }
+                    relaxTip("Spatial pre-blur before temporal accumulation, lowering the input noise fed into history. Default on.");
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox("Anti-Firefly##relax", &relax.enableAntiFirefly)) { changed = true; }
+                    relaxTip("Suppresses isolated bright outlier pixels (fireflies) before accumulation. Default on.");
+                    if (ImGui::Checkbox("Roughness Edge Stopping##relax", &relax.roughnessEdgeStoppingEnabled)) { changed = true; }
+                    relaxTip("Roughness-aware specular edge stopping (roughness + oriented-normal weights). Off uses a simpler normal-only weight. Default on.");
+
+                    ImGui::SeparatorText("General");
+                    relaxF("Denoising Range", &relax.denoisingRange, relaxDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through untouched. Default 1000; set to roughly cover your scene depth.");
+                    relaxF("Disocclusion Threshold", &relax.disocclusionThreshold, relaxDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Higher accepts more (less ghosting rejection); lower resets more on edges/motion. Default 0.005; common ~0.01.");
+                    relaxF("Depth Threshold", &relax.depthThreshold, relaxDefaults.depthThreshold, 0.0f, 0.05f, "%.4f", "Plane-distance tolerance for spatial edge stopping, as a fraction of depth. Lower preserves geometry edges; higher blurs across them. Default 0.003.");
+
+                    ImGui::SeparatorText("Accumulation");
+                    relaxF("Spec Max Accum Frames", &relax.specMaxAccumFrames, relaxDefaults.specMaxAccumFrames, 0.f, 64.f, "%.0f", "Max specular history length (stable). Higher = cleaner but laggier reflections. Default 32; common 30-60.");
+                    relaxF("Spec Max Fast Accum Frames", &relax.specMaxFastAccumFrames, relaxDefaults.specMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' specular history used to clamp the slow one (anti-lag). Must be below Spec Max Accum to enable clamping. Default 4; common 4-6.");
+                    relaxF("Diff Max Accum Frames", &relax.diffMaxAccumFrames, relaxDefaults.diffMaxAccumFrames, 0.f, 64.f, "%.0f", "Max diffuse history length (stable). Higher = cleaner but slower to react to lighting changes (more lag). Default 32; common 30-60.");
+                    relaxF("Diff Max Fast Accum Frames", &relax.diffMaxFastAccumFrames, relaxDefaults.diffMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' diffuse history used to clamp the slow one (anti-lag). Lower = snappier response. Must be below Diff Max Accum. Default 4; common 4-6.");
+                    relaxF("History Acceleration Amount", &relax.historyAccelerationAmount, relaxDefaults.historyAccelerationAmount, 0.f, 1.f, "%.2f", "Strength of anti-lag acceleration pushing the slow history toward the fast one on changes. 0 = off, 1 = max. Default 1.0.");
+
+                    ImGui::SeparatorText("Prepass");
+                    relaxF("Diff Blur Radius", &relax.diffBlurRadius, relaxDefaults.diffBlurRadius, 0.f, 100.f, "%.1f", "Radius (px) of the diffuse pre-blur applied before accumulation. Larger knocks down more input noise but loses detail. 0 disables. Default 30.");
+                    relaxF("Spec Blur Radius", &relax.specBlurRadius, relaxDefaults.specBlurRadius, 0.f, 100.f, "%.1f", "Radius (px) of the specular pre-blur before accumulation. 0 disables. Default 50.");
+                    relaxF("Min Hit Distance Weight", &relax.minHitDistanceWeight, relaxDefaults.minHitDistanceWeight, 0.f, 1.f, "%.2f", "Minimum weight for ray hit-distance when reconstructing specular in the prepass. 0 ignores hitT. Default 0; NRD commonly ~0.1-0.2.");
+
+                    ImGui::SeparatorText("A-Trous / Edge Stopping");
+                    relaxI("ATrous Iterations", &relax.atrousIterations, relaxDefaults.atrousIterations, 1, 5, "Number of A-trous wavelet (spatial) passes. More = wider, smoother denoising but blurrier and costlier. Default 3; common 4-5.");
+                    relaxF("Lobe Angle Fraction", &relax.lobeAngleFraction, relaxDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance, as a fraction of the BRDF lobe angle. Lower preserves sharper normal detail; higher blurs across normals. Default 0.15.");
+                    relaxF("Roughness Fraction", &relax.roughnessFraction, relaxDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Higher blends across differing roughness; lower keeps roughness boundaries crisp. Default 0.15.");
+                    relaxF("Spec Lobe Angle Slack", &relax.specLobeAngleSlack, relaxDefaults.specLobeAngleSlack, 0.f, 1.f, "%.3f", "Extra angular slack added to the specular lobe for edge stopping, loosening normal/view rejection. Default 0.15.");
+                    relaxF("Spec Phi Luminance", &relax.specPhiLuminance, relaxDefaults.specPhiLuminance, 0.f, 10.f, "%.2f", "Specular luminance edge-stopping sensitivity (sigma scale). Higher = more blur (ignores luminance diffs); lower preserves highlights. Default 2.0; common 1-2.");
+                    relaxF("Diff Phi Luminance", &relax.diffPhiLuminance, relaxDefaults.diffPhiLuminance, 0.f, 10.f, "%.2f", "Diffuse luminance edge-stopping sensitivity (sigma scale). Higher = more blur; lower keeps luminance edges. Default 2.0; common 1-2.");
+                    relaxF("Diff Max Lum Rel Diff", &relax.diffMaxLuminanceRelativeDifference, relaxDefaults.diffMaxLuminanceRelativeDifference, 0.f, 10.f, "%.2f", "Caps how strongly a luminance difference can reject a diffuse sample (in sigmas). Lower = firmer edge stopping. Default 3.");
+                    relaxF("Spec Max Lum Rel Diff", &relax.specMaxLuminanceRelativeDifference, relaxDefaults.specMaxLuminanceRelativeDifference, 0.f, 10.f, "%.2f", "Caps how strongly a luminance difference can reject a specular sample (in sigmas). Default 3.");
+                    relaxF("Luminance Edge Stop Relax", &relax.luminanceEdgeStoppingRelaxation, relaxDefaults.luminanceEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "On early A-trous passes, relaxes specular luminance edge stopping where reprojection confidence is low (helps fresh/disoccluded pixels). 0-1. Default 0.5.");
+                    relaxF("Normal Edge Stop Relax", &relax.normalEdgeStoppingRelaxation, relaxDefaults.normalEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "Relaxes specular normal edge stopping based on reprojection confidence, cutting noise on low-confidence pixels. 0-1. Default 0.3.");
+                    relaxF("Roughness Edge Stop Relax", &relax.roughnessEdgeStoppingRelaxation, relaxDefaults.roughnessEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "Relaxes the view vector used in specular weighting, loosening rejection on curved/rough surfaces. Default 0.3.");
+                    relaxF("Spec Variance Boost", &relax.specVarianceBoost, relaxDefaults.specVarianceBoost, 0.f, 8.f, "%.2f", "Boosts specular variance while history is short so fresh pixels filter more aggressively. 1 = no boost. Default 1.0.");
+
+                    ImGui::SeparatorText("History Fix");
+                    relaxF("Hist Fix Edge Stop Normal Pow", &relax.historyFixEdgeStoppingNormalPower, relaxDefaults.historyFixEdgeStoppingNormalPower, 0.f, 32.f, "%.1f", "Normal-match strictness for the history-fix fill that bootstraps fresh pixels. Higher = stricter normal matching. Default 8.");
+                    relaxF("Hist Fix Frame Num", &relax.historyFixFrameNum, relaxDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill (bootstrap) instead of relying on accumulation. 0 disables. Default 4.");
+                    relaxF("Hist Fix Base Pixel Stride", &relax.historyFixBasePixelStride, relaxDefaults.historyFixBasePixelStride, 0.f, 32.f, "%.1f", "Base sample spacing (px) for the history-fix fill; shrinks as history grows. Larger = wider initial fill. Default 14.");
+
+                    ImGui::SeparatorText("History Clamp / Reset");
+                    relaxF("Fast History Clamp Sigma", &relax.fastHistoryClampingSigmaScale, relaxDefaults.fastHistoryClampingSigmaScale, 0.f, 8.f, "%.2f", "Width (in sigmas) of the fast-history color box that clamps the slow history (anti-lag/anti-ghosting). Lower = tighter clamp, less lag but more noise. Default 2.0; common 1-2.");
+                    relaxF("History Reset Temporal Sigma", &relax.historyResetTemporalSigmaScale, relaxDefaults.historyResetTemporalSigmaScale, 0.f, 10.f, "%.2f", "Temporal noise sigma scale in history-reset detection; larger tolerates more temporal noise before resetting. Default 5.");
+                    relaxF("History Reset Spatial Sigma", &relax.historyResetSpatialSigmaScale, relaxDefaults.historyResetSpatialSigmaScale, 0.f, 10.f, "%.2f", "Spatial noise sigma scale in history-reset detection; larger tolerates more spatial noise before resetting. Default 1.");
+                    relaxF("History Reset Amount", &relax.historyResetAmount, relaxDefaults.historyResetAmount, 0.f, 1.f, "%.2f", "How hard to snap history to the current noisy signal on big lighting changes. 0 = off (rely on clamping); 1 = aggressive. Default 0.5.");
+
+                    ImGui::Spacing();
+                    if (ImGui::Button("Reset RELAX")) {
+                        relax = Core::RELAXParams{};
+                        changed = true;
+                    }
+                }
+
+                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
+                    Core::ReBLURParams& reblur = restir.reblur;
+                    static const Core::ReBLURParams reblurDefaults{};
+                    auto reblurF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.4f", const char* tip = nullptr) {
+                        changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
+                    };
+
+                    if (ImGui::Checkbox("Prepass##reblur", &reblur.enablePrepass)) { changed = true; }
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox("Anti-Firefly##reblur", &reblur.enableAntiFirefly)) { changed = true; }
+                    if (ImGui::Checkbox("Temporal Stabilization##reblur", &reblur.enableTemporalStabilization)) { changed = true; }
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox("Stab. Firefly Cleanup##reblur", &reblur.enableStabilizationFireflyCleanup)) { changed = true; }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("NRD short-history luma cap. Eats sparse disoccluded-pixel energy (black band on fast camera motion); keep OFF."); }
+
+                    ImGui::SeparatorText("General");
+                    reblurF("Denoising Range", &reblur.denoisingRange, reblurDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through. Default 1000.");
+                    reblurF("Disocclusion Threshold", &reblur.disocclusionThreshold, reblurDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Default 0.01.");
+                    reblurF("Plane Distance Sensitivity", &reblur.planeDistanceSensitivity, reblurDefaults.planeDistanceSensitivity, 0.001f, 0.2f, "%.4f", "Max allowed deviation from the local tangent plane for spatial edge stopping. Default 0.02.");
+                    reblurF("Lobe Angle Fraction", &reblur.lobeAngleFraction, reblurDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance as a fraction of the BRDF lobe angle. Default 0.15.");
+                    reblurF("Roughness Fraction", &reblur.roughnessFraction, reblurDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Default 0.15.");
+                    reblurF("Min Hit Distance Weight", &reblur.minHitDistanceWeight, reblurDefaults.minHitDistanceWeight, 0.f, 0.2f, "%.3f", "Sensitivity to hit distance in spatial passes; smaller for clean RTXDI-style hitT. Default 0.1.");
+
+                    ImGui::SeparatorText("Hit Distance Normalization (A/B/C/D)");
+                    reblurF("Hit Dist A", &reblur.hitDistA, reblurDefaults.hitDistA, 0.f, 50.f, "%.2f", "Constant term (units). Default 3.");
+                    reblurF("Hit Dist B", &reblur.hitDistB, reblurDefaults.hitDistB, 0.f, 5.f, "%.3f", "viewZ-based linear scale. Default 0.1.");
+                    reblurF("Hit Dist C", &reblur.hitDistC, reblurDefaults.hitDistC, 1.f, 100.f, "%.1f", "Roughness-based scale (>1 = larger hit distance for low roughness). Default 20.");
+                    reblurF("Hit Dist D", &reblur.hitDistD, reblurDefaults.hitDistD, -50.f, 0.f, "%.1f", "Roughness falloff exponent (<=0). Default -25.");
+
+                    ImGui::SeparatorText("Accumulation");
+                    reblurF("Max Accum Frames", &reblur.maxAccumulatedFrameNum, reblurDefaults.maxAccumulatedFrameNum, 0.f, 63.f, "%.0f", "Max (stable) history length. Higher = cleaner but laggier. Default 30.");
+                    reblurF("Max Fast Accum Frames", &reblur.maxFastAccumulatedFrameNum, reblurDefaults.maxFastAccumulatedFrameNum, 0.f, 32.f, "%.0f", "Fast (responsive) history length used for anti-lag clamping. Usually ~1/6 of max. Default 6.");
+                    reblurF("Max Stabilized Frames", &reblur.maxStabilizedFrameNum, reblurDefaults.maxStabilizedFrameNum, 0.f, 63.f, "%.0f", "History length for the temporal stabilization pass. 0 disables stabilization. Default 30.");
+
+                    ImGui::SeparatorText("Blur");
+                    reblurF("Min Blur Radius", &reblur.minBlurRadius, reblurDefaults.minBlurRadius, 0.f, 10.f, "%.2f", "Min denoising radius (px) for the converged state. Default 1.");
+                    reblurF("Max Blur Radius", &reblur.maxBlurRadius, reblurDefaults.maxBlurRadius, 0.f, 60.f, "%.1f", "Base (max) denoising radius (px); shrinks as history grows. Default 30.");
+                    reblurF("Diffuse Prepass Blur Radius", &reblur.diffusePrepassBlurRadius, reblurDefaults.diffusePrepassBlurRadius, 0.f, 100.f, "%.1f", "Diffuse pre-blur radius (px). 0 disables. Default 30.");
+                    reblurF("Specular Prepass Blur Radius", &reblur.specularPrepassBlurRadius, reblurDefaults.specularPrepassBlurRadius, 0.f, 100.f, "%.1f", "Specular pre-blur radius (px). 0 disables. Default 50.");
+
+                    ImGui::SeparatorText("History Fix");
+                    reblurF("Hist Fix Frame Num", &reblur.historyFixFrameNum, reblurDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill. Default 3.");
+                    reblurF("Hist Fix Base Pixel Stride", &reblur.historyFixBasePixelStride, reblurDefaults.historyFixBasePixelStride, 0.f, 32.f, "%.1f", "Base sample spacing (px) for the history-fix fill; shrinks as history grows. Default 14.");
+                    reblurF("Fast History Clamp Sigma", &reblur.fastHistoryClampingSigmaScale, reblurDefaults.fastHistoryClampingSigmaScale, 1.f, 3.f, "%.2f", "Width (sigmas) of the fast-history color box clamping the slow history. Default 2.");
+
+                    ImGui::SeparatorText("Stabilization / Antilag");
+                    reblurF("Stabilization Strength", &reblur.stabilizationStrength, reblurDefaults.stabilizationStrength, 0.f, 1.f, "%.2f", "Blend toward the reprojected stabilized history. 0 = off. Default 1.");
+                    reblurF("Antilag Luminance Sigma", &reblur.antilagLuminanceSigmaScale, reblurDefaults.antilagLuminanceSigmaScale, 1.f, 5.f, "%.2f", "Color-box width (sigmas) used to clamp the stabilized history. Lower = tighter, less lag. Default 2.");
+                    reblurF("Firefly Suppressor Min Scale", &reblur.fireflySuppressorMinRelativeScale, reblurDefaults.fireflySuppressorMinRelativeScale, 1.f, 3.f, "%.2f", "Outlier suppression strength (smaller = stronger). Default 2.");
+
+                    ImGui::Spacing();
+                    if (ImGui::Button("Reset ReBLUR")) {
+                        reblur = Core::ReBLURParams{};
+                        changed = true;
+                    }
+                }
             }
         }
 
