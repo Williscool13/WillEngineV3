@@ -31,6 +31,7 @@ DDGIVolumeParams ComputeDDGIVolumeParams(const Core::DDGIParams& params, const g
  * Probe trace + irradiance/visibility blend. Traces params.raysPerProbe rays per probe (misses sample the skybox; hits shade sun + one NEE-sampled local light + emissive plus last frame's carried atlas when bInfiniteBounce; light-proxy hits are distance-only), then integrates
  * them into the octahedral atlases "ddgi_irradiance" (stored as pow(E, 1/irradianceGamma), hysteresis-blended in encoded space with RTXGI's change/brightness thresholds) and "ddgi_visibility" (mean/mean^2 ray distance for the Chebyshev occlusion test, DDGISampleIrradiance).
  * With params.bRelocation, a per-probe pass applies RTXGI relocation to this frame's ray distances and writes "ddgi_probe_offsets" (world offset xyz capped at 45% of spacing, backface fraction w); rays trace from last frame's carried offsets, samplers use this frame's and skip dead probes.
+ * Teleports and dead-to-alive flips write a one-frame restart flag ("ddgi_probe_restart", carried) that drops the probe's blend hysteresis next frame.
  * Slots invalidated by a window scroll, count/spacing change, or missing history restart fresh. No-op without the TLAS and geometry/material/light buffers.
  * @param graph
  * @param pipelineManager

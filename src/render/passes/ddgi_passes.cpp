@@ -65,6 +65,10 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         && graph.HasBuffer(SID("ddgi_probe_offsets_history"))
         && previousVolume.probeCount == volume.probeCount
         && previousVolume.probeSpacing == volume.probeSpacing;
+    const bool bRestartHistoryValid = params.bRelocation
+        && graph.HasBuffer(SID("ddgi_probe_restart_history"))
+        && previousVolume.probeCount == volume.probeCount
+        && previousVolume.probeSpacing == volume.probeSpacing;
 
     graph.CreateBuffer(SID("ddgi_ray_data"), static_cast<VkDeviceSize>(probeCountTotal) * raysPerProbe * sizeof(glm::vec4), false);
 
@@ -130,7 +134,10 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     if (bHistoryValid) {
         blendPass.ReadSampledImage(SID("ddgi_irradiance_history"));
     }
-    blendPass.Execute([pipelineManager, params, volume, rayRotation, previousBaseCell = previousVolume.baseCell, bHistoryValid, raysPerProbe, probeCountTotal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    if (bRestartHistoryValid) {
+        blendPass.ReadBuffer(SID("ddgi_probe_restart_history"));
+    }
+    blendPass.Execute([pipelineManager, params, volume, rayRotation, previousBaseCell = previousVolume.baseCell, bHistoryValid, bRestartHistoryValid, raysPerProbe, probeCountTotal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_irradiance"));
         if (!pipelineEntry) {
             return;
@@ -143,12 +150,14 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             .previousBaseCell = previousBaseCell,
             .bHistoryValid = bHistoryValid ? 1u : 0u,
             .rayData = graph.GetBufferAddress(SID("ddgi_ray_data")),
+            .probeRestart = bRestartHistoryValid ? graph.GetBufferAddress(SID("ddgi_probe_restart_history")) : 0,
             .atlasOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("ddgi_irradiance")),
             .atlasHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance_history")) : 0u,
             .raysPerProbe = raysPerProbe,
             .hysteresis = glm::clamp(params.hysteresis, 0.0f, 0.995f),
             .irradianceThreshold = params.irradianceThreshold,
             .brightnessThreshold = params.brightnessThreshold,
+            .bRestartValid = bRestartHistoryValid ? 1u : 0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, probeCountTotal, 1, 1);
@@ -160,7 +169,10 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     if (bHistoryValid) {
         visibilityPass.ReadSampledImage(SID("ddgi_visibility_history"));
     }
-    visibilityPass.Execute([pipelineManager, params, volume, rayRotation, previousBaseCell = previousVolume.baseCell, bHistoryValid, raysPerProbe, probeCountTotal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    if (bRestartHistoryValid) {
+        visibilityPass.ReadBuffer(SID("ddgi_probe_restart_history"));
+    }
+    visibilityPass.Execute([pipelineManager, params, volume, rayRotation, previousBaseCell = previousVolume.baseCell, bHistoryValid, bRestartHistoryValid, raysPerProbe, probeCountTotal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_visibility"));
         if (!pipelineEntry) {
             return;
@@ -173,11 +185,13 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             .previousBaseCell = previousBaseCell,
             .bHistoryValid = bHistoryValid ? 1u : 0u,
             .rayData = graph.GetBufferAddress(SID("ddgi_ray_data")),
+            .probeRestart = bRestartHistoryValid ? graph.GetBufferAddress(SID("ddgi_probe_restart_history")) : 0,
             .atlasOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("ddgi_visibility")),
             .atlasHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_visibility_history")) : 0u,
             .raysPerProbe = raysPerProbe,
             .hysteresis = glm::clamp(params.hysteresis, 0.0f, 0.995f),
             .distanceExponent = glm::max(params.distanceExponent, 1.0f),
+            .bRestartValid = bRestartHistoryValid ? 1u : 0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, probeCountTotal, 1, 1);
@@ -185,10 +199,12 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
 
     if (params.bRelocation) {
         graph.CreateBuffer(SID("ddgi_probe_offsets"), static_cast<VkDeviceSize>(probeCountTotal) * sizeof(glm::vec4), false);
+        graph.CreateBuffer(SID("ddgi_probe_restart"), static_cast<VkDeviceSize>(probeCountTotal) * sizeof(uint32_t), false);
 
         RenderPass& relocatePass = graph.AddPass(SID("DDGI Probe Relocate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
         relocatePass.ReadBuffer(SID("ddgi_ray_data"));
         relocatePass.WriteBuffer(SID("ddgi_probe_offsets"));
+        relocatePass.WriteBuffer(SID("ddgi_probe_restart"));
         if (bOffsetsHistoryValid) {
             relocatePass.ReadBuffer(SID("ddgi_probe_offsets_history"));
         }
@@ -207,6 +223,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .rayData = graph.GetBufferAddress(SID("ddgi_ray_data")),
                 .offsetsIn = bOffsetsHistoryValid ? graph.GetBufferAddress(SID("ddgi_probe_offsets_history")) : 0,
                 .offsetsOut = graph.GetBufferAddress(SID("ddgi_probe_offsets")),
+                .restartOut = graph.GetBufferAddress(SID("ddgi_probe_restart")),
                 .raysPerProbe = raysPerProbe,
                 .minFrontfaceDistance = glm::max(params.minFrontfaceDistance, 0.0f),
             };
@@ -215,6 +232,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         });
 
         graph.CarryBufferToNextFrame(SID("ddgi_probe_offsets"), SID("ddgi_probe_offsets_history"), 0);
+        graph.CarryBufferToNextFrame(SID("ddgi_probe_restart"), SID("ddgi_probe_restart_history"), 0);
     }
 
     graph.CarryTextureToNextFrame(SID("ddgi_irradiance"), SID("ddgi_irradiance_history"), VK_IMAGE_USAGE_SAMPLED_BIT);

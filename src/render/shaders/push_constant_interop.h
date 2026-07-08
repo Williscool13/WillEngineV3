@@ -995,6 +995,7 @@ SHADER_PUBLIC struct DDGIProbeBlendPushConstant
     SHADER_PUBLIC int3 previousBaseCell;
     SHADER_PUBLIC uint32_t bHistoryValid;
     SHADER_PUBLIC SHADER_PTR(float4) rayData;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) probeRestart;
     SHADER_PUBLIC uint32_t atlasOutIndex;
     SHADER_PUBLIC uint32_t atlasHistoryIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
@@ -1002,7 +1003,7 @@ SHADER_PUBLIC struct DDGIProbeBlendPushConstant
     SHADER_PUBLIC float distanceExponent;
     SHADER_PUBLIC float irradianceThreshold;
     SHADER_PUBLIC float brightnessThreshold;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t bRestartValid;
 };
 
 SHADER_PUBLIC struct DDGIProbeRelocatePushConstant
@@ -1014,6 +1015,7 @@ SHADER_PUBLIC struct DDGIProbeRelocatePushConstant
     SHADER_PUBLIC SHADER_PTR(float4) rayData;
     SHADER_PUBLIC SHADER_PTR(float4) offsetsIn;
     SHADER_PUBLIC SHADER_PTR(float4) offsetsOut;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) restartOut;
     SHADER_PUBLIC uint32_t raysPerProbe;
     SHADER_PUBLIC float minFrontfaceDistance;
 };

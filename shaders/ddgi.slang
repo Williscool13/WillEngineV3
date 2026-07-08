@@ -16,7 +16,7 @@ import random_common;
 // DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits shade sun + one NEE-sampled local light (shadow rays) + emissive plus last frame's probe irradiance (infinite bounce). Light-proxy hits carry no radiance (NEE owns direct light; probes hold pure bounce), only the hit distance for the visibility moments.
 // Blend: one thread group per probe tile; each interior texel cosine-integrates the probe's rays into octahedral irradiance stored as pow(E, 1/gamma), hysteresis-blended in that perceptual space with RTXGI's change/brightness thresholds. Slots whose lattice cell changed since last frame (window scroll) or with no history start fresh. Border texels copy wrapped interior texels so bilinear taps stay seamless.
 // Blend visibility: same layout at 16x16 tiles; each texel integrates mean/mean^2 ray distance with a sharpened (pow distanceExponent) cosine lobe, for the Chebyshev occlusion test at sampling.
-// Relocate: one thread per probe applies RTXGI probe relocation to this frame's ray distances, writing next frame's per-slot world offset (xyz) and backface fraction (w, the sampler's dead-probe test).
+// Relocate: one thread per probe applies RTXGI probe relocation to this frame's ray distances (light-proxy hits ignored), writing next frame's per-slot world offset (xyz, capped at 45% of spacing) and backface fraction (w, the sampler's dead-probe test).
 // Debug: one sphere per probe at its relocated position, L1 SH fitted from the probe's decoded atlas tile; dead probes render flat red.
 
 // Coarse fixed mip: probe irradiance is low frequency; keeps incoherent rays cache-friendly and pre-averages albedo.
@@ -151,6 +151,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
 
     int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
     int3 cell = DDGICellFromSlot(slot, pc.volume);
+    // The per-frame rotation doubles as relocation's direction search; found escapes persist in the carried offset.
     float3 direction = DDGIRotate(DDGISphericalFibonacci(rayIndex, pc.raysPerProbe), pc.rayRotation);
 
     // Relocation offsets are last frame's
@@ -179,7 +180,8 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         float hitT = q.CommittedRayT();
         Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
         if (instance.lightIndex != 0xFFFFFFFF) {
-            result = float4(0.0, 0.0, 0.0, hitT);
+            // -1 in x tags a light-proxy hit so relocation can ignore it; blending clamps it back to black.
+            result = float4(-1.0, 0.0, 0.0, hitT);
         } else if (q.CommittedTriangleFrontFace()) {
             uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
             float3 radiance = ShadeProbeRayHit(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), ray.Origin + direction * hitT, direction, rng);
@@ -246,9 +248,14 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
         float3 radianceSum = float3(0.0);
         float weightSum = 0.0;
         for (uint r = 0; r < pc.raysPerProbe; ++r) {
+            // Backface hits are excluded entirely (RTXGI); counting their weight darkens probes near geometry.
+            float4 rayData = gsRays[r];
+            if (rayData.w < 0.0) {
+                continue;
+            }
             float3 rayDirection = DDGIRotate(DDGISphericalFibonacci(r, pc.raysPerProbe), pc.rayRotation);
             float weight = max(dot(texelDirection, rayDirection), 0.0);
-            radianceSum += gsRays[r].rgb * weight;
+            radianceSum += max(rayData.rgb, float3(0.0)) * weight;
             weightSum += weight;
         }
         // The EMA runs in perceptual space (pow 1/gamma): a rare bright ray moves the encoded value little, so small
@@ -262,20 +269,25 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
             if (all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume))) {
                 float3 previous = rdgTexturesFloat4[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rgb;
 
-                float hysteresis = pc.hysteresis;
-                if (DDGIMaxComponent(result - previous) > pc.irradianceThreshold) {
-                    hysteresis = max(hysteresis - 0.75, 0.0);
+                if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
+                    // Relocation teleport or revival is a real change, not noise; skip the anti-flicker clamps.
+                    result = lerp(result, previous, max(pc.hysteresis - 0.75, 0.0));
+                } else {
+                    float hysteresis = pc.hysteresis;
+                    if (DDGIMaxComponent(result - previous) > pc.irradianceThreshold) {
+                        hysteresis = max(hysteresis - 0.75, 0.0);
+                    }
+                    float3 delta = result - previous;
+                    if (DDGIMaxComponent(delta) > pc.brightnessThreshold) {
+                        delta *= 0.25;
+                    }
+                    float3 lerpDelta = (1.0 - hysteresis) * delta;
+                    if (DDGIMaxComponent(result) < DDGIMaxComponent(previous)) {
+                        const float minDarkeningStep = 1.0 / 1024.0;
+                        lerpDelta = min(max(float3(minDarkeningStep), abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
+                    }
+                    result = previous + lerpDelta;
                 }
-                float3 delta = result - previous;
-                if (DDGIMaxComponent(delta) > pc.brightnessThreshold) {
-                    delta *= 0.25;
-                }
-                float3 lerpDelta = (1.0 - hysteresis) * delta;
-                if (DDGIMaxComponent(result) < DDGIMaxComponent(previous)) {
-                    const float minDarkeningStep = 1.0 / 1024.0;
-                    lerpDelta = min(max(float3(minDarkeningStep), abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
-                }
-                result = previous + lerpDelta;
             }
         }
         gsTexels[threadIndex] = result;
@@ -325,7 +337,11 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
             previousVolume.baseCell = pc.previousBaseCell;
             if (all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume))) {
                 float2 previous = rdgTexturesFloat2[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rg;
-                result = lerp(result, previous, pc.hysteresis);
+                float hysteresis = pc.hysteresis;
+                if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
+                    hysteresis = max(hysteresis - 0.75, 0.0);
+                }
+                result = lerp(result, previous, hysteresis);
             }
         }
         gsVisTexels[threadIndex] = result;
@@ -348,13 +364,17 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
     int3 cell = DDGICellFromSlot(slot, pc.volume);
 
     float3 offset = float3(0.0);
+    float previousBackfaceFraction = -1.0;
     if (pc.bOffsetsValid != 0) {
         DDGIVolumeParams previousVolume = pc.volume;
         previousVolume.baseCell = pc.previousBaseCell;
         if (all(DDGICellFromSlot(slot, previousVolume) == cell)) {
-            offset = pc.offsetsIn[probeIndex].xyz;
+            float4 previous = pc.offsetsIn[probeIndex];
+            offset = previous.xyz;
+            previousBackfaceFraction = previous.w;
         }
     }
+    float3 previousOffset = offset;
 
     uint backfaceCount = 0;
     float closestBackfaceDistance = 1e27;
@@ -364,7 +384,11 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
     float farthestFrontfaceDistance = 0.0;
     uint farthestFrontfaceIndex = 0xFFFFFFFF;
     for (uint r = 0; r < pc.raysPerProbe; ++r) {
-        float hitT = pc.rayData[probeIndex * pc.raysPerProbe + r].w;
+        float4 rayData = pc.rayData[probeIndex * pc.raysPerProbe + r];
+        if (rayData.x < 0.0) {
+            continue;
+        }
+        float hitT = rayData.w;
         if (hitT < 0.0) {
             backfaceCount++;
             float backfaceDistance = hitT * -5.0;
@@ -389,13 +413,14 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
     float3 fullOffset = offset;
     if (closestBackfaceIndex != 0xFFFFFFFF && backfaceFraction > 0.25) {
         float3 backfaceDirection = DDGIRotate(DDGISphericalFibonacci(closestBackfaceIndex, pc.raysPerProbe), pc.rayRotation);
-        fullOffset = offset + backfaceDirection * (closestBackfaceDistance + pc.minFrontfaceDistance);
+        fullOffset = offset + backfaceDirection * (closestBackfaceDistance + pc.minFrontfaceDistance * 0.5);
     } else if (closestFrontfaceDistance < pc.minFrontfaceDistance && farthestFrontfaceIndex != 0xFFFFFFFF) {
         float3 closestDirection = DDGIRotate(DDGISphericalFibonacci(closestFrontfaceIndex, pc.raysPerProbe), pc.rayRotation);
         float3 farthestDirection = DDGIRotate(DDGISphericalFibonacci(farthestFrontfaceIndex, pc.raysPerProbe), pc.rayRotation);
         // Only move if the far direction actually opposes the wall, so the probe never pushes through the far side.
         if (dot(closestDirection, farthestDirection) <= 0.0) {
-            fullOffset = offset + farthestDirection * min(farthestFrontfaceDistance, 1.0);
+            // Deficit step, not RTXGI's min(farthest, 1): full-size jumps oscillate at this spacing.
+            fullOffset = offset + farthestDirection * min(pc.minFrontfaceDistance - closestFrontfaceDistance, farthestFrontfaceDistance);
         }
     } else if (closestFrontfaceDistance > pc.minFrontfaceDistance) {
         float offsetLength = length(offset);
@@ -405,11 +430,22 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
         }
     }
 
-    // Cap at 45% of spacing so a probe never crosses into a neighboring cell's trilinear domain.
+    // Cap at 45% of spacing (trilinear domain). reject rather than clamp so unreachable escapes freeze instead of wandering.
     float3 normalizedOffset = fullOffset / pc.volume.probeSpacing;
     if (dot(normalizedOffset, normalizedOffset) < 0.45 * 0.45) {
         offset = fullOffset;
     }
+
+    // A real move or dead-to-alive flip flags a temporal restart for next frame's blends, the first fed by rays from the new position.
+    uint restart = 0;
+    if (previousBackfaceFraction >= 0.0) {
+        float3 movedNormalized = (offset - previousOffset) / pc.volume.probeSpacing;
+        bool bRevived = previousBackfaceFraction > DDGI_PROBE_DEAD_BACKFACE_FRACTION && backfaceFraction <= DDGI_PROBE_DEAD_BACKFACE_FRACTION;
+        if (dot(movedNormalized, movedNormalized) > 0.05 * 0.05 || bRevived) {
+            restart = 1;
+        }
+    }
+    pc.restartOut[probeIndex] = restart;
     pc.offsetsOut[probeIndex] = float4(offset, backfaceFraction);
 }
 

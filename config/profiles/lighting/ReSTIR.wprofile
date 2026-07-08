@@ -1,4 +1,5 @@
 {
+  "clusterZFar": 500.0,
   "ddgi": {
     "bApplyToLighting": true,
     "bEnabled": true,
@@ -8,9 +9,9 @@
     "distanceExponent": 50.0,
     "hysteresis": 0.9700000286102295,
     "irradianceGamma": 5.0,
-    "irradianceThreshold": 1.0,
+    "irradianceThreshold": 0.25,
     "minFrontfaceDistance": 0.30000001192092896,
-    "normalBias": 0.7307692170143127,
+    "normalBias": 0.4957983195781708,
     "probeCountX": 24,
     "probeCountY": 12,
     "probeCountZ": 24,
