@@ -51,7 +51,6 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                uint32_t outputMode,
                                float iblIntensity,
                                uint64_t frameNumber,
-                               const DDGIVolumeParams& ddgiVolume,
                                bool bDDGIApply);
 } // Render
 

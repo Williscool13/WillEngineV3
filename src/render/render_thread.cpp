@@ -499,13 +499,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupTLASBuild(*renderGraph, context, viewFamily, renderExtent, frameResourceLimits);
 
-            const DDGIVolumeParams ddgiVolume = ComputeDDGIVolumeParams(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos);
+            const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber);
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
-                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, frameBuffer.ddgi, ddgiVolume, ddgiPreviousVolume, viewFamily.skyboxIndex, frameNumber, frameBuffer.bDDGIBounceOnly);
-                ddgiPreviousVolume = ddgiVolume;
+                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, frameNumber, frameBuffer.bDDGIBounceOnly);
+                ddgiPreviousCascades = ddgiCascades;
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
-                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiVolume, frameBuffer.ddgiProbeDebugExposure);
+                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure);
                 }
             }
 
@@ -581,7 +581,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         if (frameBuffer.bEnableGPUDebug && frameBuffer.bClusterGridDebug && !frameBuffer.bLockGPUDebug) {
                             SetupClusterGridDebug(*renderGraph, pipelineManager, 0, clusterZNear, clusterZFar);
                         }
-                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, ddgiVolume, bDDGIApply, clusterZNear, clusterZFar);
+                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, clusterZNear, clusterZFar);
                         break;
                     }
                     case Core::LightingMode::ReSTIR:
@@ -595,13 +595,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                         if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, ddgiVolume, bDDGIApply);
+                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, ddgiVolume, bDDGIApply);
+                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply);
                         }
                         else {
-                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, ddgiVolume, bDDGIApply);
+                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply);
                         }
                         break;
                     }

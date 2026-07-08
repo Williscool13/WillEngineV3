@@ -641,6 +641,16 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ddgiI("Probe Count Y##ddgi", &ddgi.probeCountY, ddgiDefaults.probeCountY, 2, 32, "Probes along Y (vertical).");
             ddgiI("Probe Count Z##ddgi", &ddgi.probeCountZ, ddgiDefaults.probeCountZ, 2, 32, "Probes along Z.");
             ddgiF("Probe Spacing##ddgi", &ddgi.probeSpacing, ddgiDefaults.probeSpacing, 0.25f, 8.0f, "%.2f", "World-space distance between probes (meters); coverage = count * spacing per axis. Changing it restarts probe history.");
+            int cascadeCount = static_cast<int>(ddgi.cascadeCount);
+            if (Widgets::SliderInt("Cascade Count##ddgi", &cascadeCount, 1, 4, {.tooltip = "Concentric volumes with identical counts; each doubles the previous spacing, so range doubles per cascade for linear memory. Cascade 0 updates every frame, outer cascades round-robin one per frame (flat trace cost).", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.cascadeCount)})) {
+                ddgi.cascadeCount = static_cast<uint32_t>(cascadeCount);
+                changed = true;
+            }
+            ddgiF("Edge Blend Cells##ddgi", &ddgi.edgeBlendCells, ddgiDefaults.edgeBlendCells, 1.0f, 8.0f, "%.1f", "Width (in probe cells) of each cascade's edge fade into the next coarser cascade (and the outermost cascade's fade to skybox). Wider = softer, less visible cascade boundary; costs double-sampling in the band.");
+            if (ImGui::Checkbox("Scale Biases Per Cascade##ddgi", &ddgi.bScaleBiasPerCascade)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Multiply normal/view bias by each cascade's spacing scale (RTXGI-style). Off = all cascades sample at the same world-space bias, which can reduce fine-vs-coarse disagreement at cascade boundaries.");
+            }
 
             ImGui::SeparatorText("Trace");
             int raysPerProbe = static_cast<int>(ddgi.raysPerProbe);
@@ -648,10 +658,20 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ddgi.raysPerProbe = static_cast<uint32_t>(raysPerProbe);
                 changed = true;
             }
+            int outerRaysPerProbe = static_cast<int>(ddgi.outerRaysPerProbe);
+            if (Widgets::SliderInt("Outer Rays Per Probe##ddgi", &outerRaysPerProbe, 16, 256, {.tooltip = "Rays per probe for cascades past the first. Outer probes hold 2-8x coarser detail sampled through wide blending, so they tolerate fewer rays; costs slightly noisier visibility and slower relocation there.", .reset = true, .resetTo = 64.0})) {
+                ddgi.outerRaysPerProbe = static_cast<uint32_t>(outerRaysPerProbe);
+                changed = true;
+            }
+            if (ImGui::Checkbox("Outer Local Light NEE##ddgi", &ddgi.bOuterLocalNEE)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Sample one local light (with a shadow ray) at ray hits on outer cascades. Off = outer hits shade only sun + emissive + bounce feedback, halving their shadow rays; local lights are near-field, so their bounce through coarse probes is usually negligible.");
+            }
             if (ImGui::Checkbox("Infinite Bounce##ddgi", &ddgi.bInfiniteBounce)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Ray hits also sample last frame's probe atlas, so light keeps bouncing (one extra bounce lands per frame, damped by hysteresis). Also gives area/sphere lights indirect, since probes see their proxies directly.");
             }
+            ddgiF("Max Ray Radiance##ddgi", &ddgi.maxRayRadiance, ddgiDefaults.maxRayRadiance, 0.0f, 100.0f, "%.1f", "Firefly clamp: hit radiance above this (max channel) is scaled down before blending, taming NEE light-selection spikes and rare bright emissive hits. Dims indirect from very bright small sources. 0 = off. Default 20.");
 
             ImGui::SeparatorText("Blend");
             ddgiF("Hysteresis##ddgi", &ddgi.hysteresis, ddgiDefaults.hysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight. Higher = smoother but laggier probes; 0 = no history (raw per-frame estimate). Default 0.97.");

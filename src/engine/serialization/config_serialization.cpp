@@ -280,8 +280,14 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"probeCountY", p.probeCountY},
         {"probeCountZ", p.probeCountZ},
         {"probeSpacing", p.probeSpacing},
+        {"cascadeCount", p.cascadeCount},
+        {"edgeBlendCells", p.edgeBlendCells},
+        {"bScaleBiasPerCascade", p.bScaleBiasPerCascade},
         {"raysPerProbe", p.raysPerProbe},
+        {"outerRaysPerProbe", p.outerRaysPerProbe},
+        {"bOuterLocalNEE", p.bOuterLocalNEE},
         {"bInfiniteBounce", p.bInfiniteBounce},
+        {"maxRayRadiance", p.maxRayRadiance},
         {"hysteresis", p.hysteresis},
         {"irradianceGamma", p.irradianceGamma},
         {"irradianceThreshold", p.irradianceThreshold},
@@ -307,8 +313,14 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.probeCountY = dInt("probeCountY", p.probeCountY);
     p.probeCountZ = dInt("probeCountZ", p.probeCountZ);
     p.probeSpacing = dFloat("probeSpacing", p.probeSpacing);
+    p.cascadeCount = dUint("cascadeCount", p.cascadeCount);
+    p.edgeBlendCells = dFloat("edgeBlendCells", p.edgeBlendCells);
+    p.bScaleBiasPerCascade = dBool("bScaleBiasPerCascade", p.bScaleBiasPerCascade);
     p.raysPerProbe = dUint("raysPerProbe", p.raysPerProbe);
+    p.outerRaysPerProbe = dUint("outerRaysPerProbe", p.outerRaysPerProbe);
+    p.bOuterLocalNEE = dBool("bOuterLocalNEE", p.bOuterLocalNEE);
     p.bInfiniteBounce = dBool("bInfiniteBounce", p.bInfiniteBounce);
+    p.maxRayRadiance = dFloat("maxRayRadiance", p.maxRayRadiance);
     p.hysteresis = dFloat("hysteresis", p.hysteresis);
     p.irradianceGamma = dFloat("irradianceGamma", p.irradianceGamma);
     p.irradianceThreshold = dFloat("irradianceThreshold", p.irradianceThreshold);

@@ -27,7 +27,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         float iblIntensity,
                         uint32_t activeCheckerboardField,
                         float checkerboardResolveAccumSpeed,
-                        const DDGIVolumeParams& ddgiVolume,
                         bool bDDGIApply);
 
 void SetupReBLURDenoiser(RenderGraph& graph,
@@ -41,7 +40,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          float iblIntensity,
                          uint32_t activeCheckerboardField,
                          float checkerboardResolveAccumSpeed,
-                         const DDGIVolumeParams& ddgiVolume,
                          bool bDDGIApply);
 } // Render
 

@@ -4,6 +4,7 @@
 
 #include "render/passes/lighting_passes.h"
 
+#include "ddgi_passes.h"
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -60,7 +61,6 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
-                                        const DDGIVolumeParams& ddgiVolume,
                                         bool bDDGIApply,
                                         float clusterZNear,
                                         float clusterZFar)
@@ -69,8 +69,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
 
     const bool bClustered = graph.HasBuffer(SID("cluster_light_grid")) && graph.HasBuffer(SID("cluster_light_index_list"));
 
-    const bool bDDGI = bDDGIApply && graph.HasTexture(SID("ddgi_irradiance")) && graph.HasTexture(SID("ddgi_visibility"));
-    const bool bDDGIOffsets = bDDGI && graph.HasBuffer(SID("ddgi_probe_offsets"));
+    const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
 
     struct LightingEntry
     {
@@ -103,18 +102,14 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadSampledImage(targets.shadows);
     }
     if (bDDGI) {
-        lightingResolve.ReadSampledImage(SID("ddgi_irradiance"));
-        lightingResolve.ReadSampledImage(SID("ddgi_visibility"));
-    }
-    if (bDDGIOffsets) {
-        lightingResolve.ReadBuffer(SID("ddgi_probe_offsets"));
+        AddDDGISampleDependencies(graph, lightingResolve);
     }
     lightingResolve.WriteStorageImage(targets.colorOutput);
     lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
-            ddgiVolume, bDDGI, bDDGIOffsets, bClustered, clusterZNear, clusterZFar,
+            bDDGI, bClustered, clusterZNear, clusterZFar,
             buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -146,12 +141,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .renderExtent = {renderExtent[0], renderExtent[1]},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                     .iblIntensity = iblIntensity,
-                    .ddgiVolume = ddgiVolume,
-                    .ddgiIrradianceIndex = bDDGI ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_irradiance")) : ~0x0u,
-                    .ddgiVisibilityIndex = bDDGI ? graph.GetSampledImageViewDescriptorIndex(SID("ddgi_visibility")) : ~0x0u,
+                    .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                     .bDDGIApply = bDDGI ? 1u : 0u,
-                    .ddgiProbeOffsets = bDDGIOffsets ? graph.GetBufferAddress(SID("ddgi_probe_offsets")) : 0,
-                    .bDDGIOffsetsValid = bDDGIOffsets ? 1u : 0u,
                     .clusterLightGrid = bClustered ? graph.GetBufferAddress(SID("cluster_light_grid")) : 0,
                     .clusterLightIndexList = bClustered ? graph.GetBufferAddress(SID("cluster_light_index_list")) : 0,
                     .clusterZNear = clusterZNear,

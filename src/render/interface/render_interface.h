@@ -749,9 +749,15 @@ struct DDGIParams
     int32_t probeCountY{12};
     int32_t probeCountZ{24};
     float probeSpacing{1.5f};
+    uint32_t cascadeCount{4};
+    float edgeBlendCells{3.0f};
+    bool bScaleBiasPerCascade{true};
 
     uint32_t raysPerProbe{128};
+    uint32_t outerRaysPerProbe{64};
+    bool bOuterLocalNEE{false};
     bool bInfiniteBounce{true};
+    float maxRayRadiance{20.0f};
 
     float hysteresis{0.97f};
     float irradianceGamma{5.0f};

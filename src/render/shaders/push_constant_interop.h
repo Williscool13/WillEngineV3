@@ -521,14 +521,9 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t activeCheckerboardField;
     SHADER_PUBLIC uint32_t bCheckerboardPacked;
     SHADER_PUBLIC uint32_t pad0;
-    SHADER_PUBLIC DDGIVolumeParams ddgiVolume;
-    SHADER_PUBLIC uint32_t ddgiIrradianceIndex;
-    SHADER_PUBLIC uint32_t ddgiVisibilityIndex;
+    SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t bDDGIApply;
     SHADER_PUBLIC uint32_t pad1;
-    SHADER_PUBLIC SHADER_PTR(float4) ddgiProbeOffsets;
-    SHADER_PUBLIC uint32_t bDDGIOffsetsValid;
-    SHADER_PUBLIC uint32_t clusterPad0;
     SHADER_PUBLIC SHADER_PTR(uint2) clusterLightGrid;
     SHADER_PUBLIC SHADER_PTR(uint) clusterLightIndexList;
     SHADER_PUBLIC float clusterZNear;
@@ -564,13 +559,8 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC uint32_t pad0;
-    SHADER_PUBLIC DDGIVolumeParams ddgiVolume;
-    SHADER_PUBLIC uint32_t ddgiIrradianceIndex;
-    SHADER_PUBLIC uint32_t ddgiVisibilityIndex;
+    SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t bDDGIApply;
-    SHADER_PUBLIC uint32_t pad1;
-    SHADER_PUBLIC SHADER_PTR(float4) ddgiProbeOffsets;
-    SHADER_PUBLIC uint32_t bDDGIOffsetsValid;
     SHADER_PUBLIC uint32_t shadowsIndex;
 };
 
@@ -978,14 +968,17 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
     SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC SHADER_PTR(float4) probeOffsets;
+    SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) previousCascades;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
     SHADER_PUBLIC uint32_t bBounceOnly;
-    SHADER_PUBLIC uint32_t irradianceHistoryIndex;
-    SHADER_PUBLIC uint32_t visibilityHistoryIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t bOffsetsValid;
+    SHADER_PUBLIC uint32_t bLocalNEE;
+    SHADER_PUBLIC float maxRayRadiance;
+    SHADER_PUBLIC uint32_t pad1;
+    SHADER_PUBLIC uint32_t pad2;
 };
 
 SHADER_PUBLIC struct DDGIProbeBlendPushConstant

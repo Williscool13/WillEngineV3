@@ -26,6 +26,8 @@
 #include <imgui.h>
 #include <imgui_threaded_rendering.h>
 
+#include "passes/ddgi_passes.h"
+
 namespace AssetLoad
 {
 class GpuAssetUploadThread;
@@ -192,7 +194,7 @@ private:
     uint32_t rtGroundTruthDIAccumCount{0};
     uint32_t rtGroundTruthGIAccumCount{0};
     uint32_t rtGroundTruthFullAccumCount{0};
-    DDGIVolumeParams ddgiPreviousVolume{};
+    DDGICascades ddgiPreviousCascades{};
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};

@@ -77,9 +77,9 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
         }
     }
 
-    // NEE (analytic lights only)
+    // NEE (analytic lights only). Outer cascades skip it to save the shadow ray, keeping only sun + emissive + feedback)
     int analyticCount = pc.lightData->analyticLightCount;
-    if (analyticCount > 0) {
+    if (pc.bLocalNEE != 0 && analyticCount > 0) {
         uint rng = rngSeed;
         float rng0 = HashStep(rng);
         float2 xi;
@@ -131,9 +131,7 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
     }
 
     if (pc.bFeedbackValid != 0) {
-        DDGIVolumeParams previousVolume = pc.volume;
-        previousVolume.baseCell = pc.previousBaseCell;
-        float4 gi = DDGISampleIrradiance(worldPosition, N, rayDirection, previousVolume, pc.irradianceHistoryIndex, pc.visibilityHistoryIndex, pc.probeOffsets, pc.bOffsetsValid);
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades);
         radiance += diffuseColor * gi.rgb;
     }
     return radiance;
@@ -185,6 +183,11 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         } else if (q.CommittedTriangleFrontFace()) {
             uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
             float3 radiance = ShadeProbeRayHit(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), ray.Origin + direction * hitT, direction, rng);
+            // Firefly clamp
+            float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
+            if (pc.maxRayRadiance > 0.0 && maxChannel > pc.maxRayRadiance) {
+                radiance *= pc.maxRayRadiance / maxChannel;
+            }
             result = float4(radiance, hitT);
         } else {
             // Backface hits mark "probe likely inside geometry" with a shortened negative distance, classic DDGI convention.

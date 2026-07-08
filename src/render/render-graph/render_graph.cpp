@@ -2063,7 +2063,7 @@ void RenderGraph::CarryTextureToNextFrame(StringID textureId, StringID newTextur
     if (tex->physicalIndex != UINT32_MAX) {
         auto& phys = physicalResources[tex->physicalIndex];
         if (phys.IsAllocated()) {
-            ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & additionalUsage) == additionalUsage, "Existing physical texture usage is not a superset of required usage");
+            ENGINE_ASSERT(Renderer, (phys.dimensions.imageUsage & additionalUsage) == additionalUsage, "Existing physical texture usage is not a superset of required usage");
         }
     }
 

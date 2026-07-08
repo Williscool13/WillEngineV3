@@ -41,6 +41,7 @@ using float4x4 = glm::mat4;
 #endif // __SLANG__
 
 SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_RAYS_PER_PROBE = 256u;
+SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_CASCADES = 4u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_TILE = 8u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_INTERIOR = 6u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_VISIBILITY_TILE = 16u;
@@ -59,6 +60,33 @@ SHADER_PUBLIC struct DDGIVolumeParams
     SHADER_PUBLIC float viewBias;
     SHADER_PUBLIC float3 probeSpacing;
     SHADER_PUBLIC float irradianceGamma;
+    SHADER_PUBLIC float edgeFadeCells;
+    SHADER_PUBLIC float pad0;
+    SHADER_PUBLIC float pad1;
+    SHADER_PUBLIC float pad2;
+};
+
+/** One sampleable cascade: the volume it was built with plus the atlas/offsets it should be read through. Explicit pads keep the C++ size at the std430 array stride (96). */
+SHADER_PUBLIC struct DDGICascadeDescriptor
+{
+    SHADER_PUBLIC DDGIVolumeParams volume;
+    SHADER_PUBLIC SHADER_PTR(float4) probeOffsets;
+    SHADER_PUBLIC uint irradianceIndex;
+    SHADER_PUBLIC uint visibilityIndex;
+    SHADER_PUBLIC uint bOffsetsValid;
+    SHADER_PUBLIC uint bValid;
+    SHADER_PUBLIC uint pad0;
+    SHADER_PUBLIC uint pad1;
+};
+
+/** Per-frame cascade chain, finest first; consumers get one pointer to this instead of inline volume fields. */
+SHADER_PUBLIC struct DDGICascadeSetGPU
+{
+    SHADER_PUBLIC uint cascadeCount;
+    SHADER_PUBLIC uint pad0;
+    SHADER_PUBLIC uint pad1;
+    SHADER_PUBLIC uint pad2;
+    SHADER_PUBLIC DDGICascadeDescriptor cascades[DDGI_MAX_CASCADES];
 };
 
 #endif //WILL_ENGINE_DDGI_INTEROP_H

@@ -86,7 +86,7 @@ public static const float DDGI_PROBE_DEAD_BACKFACE_FRACTION = 0.35;
  * Irradiance lookup at a surface point: the 8 surrounding probes, weighted by trilinear position, soft backface (wrap lighting), and Chebyshev visibility from the distance atlas. cameraDirection points from the viewer toward the surface (bias direction).
  * Atlas args are rdgTexturesFloat4/rdgTexturesFloat2 descriptor indices (resource-typed params through module imports crash slangc's spirv emit).
  * probeOffsets (when bProbeOffsetsValid) holds per-slot relocation offsets in xyz and the backface fraction in w; relocated positions drive direction/distance/Chebyshev, trilinear stays on the lattice, dead probes are skipped.
- * Returns E/PI in rgb (Lambertian outgoing radiance = albedo * rgb); w in [0,1] fades to 0 over the window's outermost cell so callers can lerp to their fallback without a hard edge.
+ * Returns E/PI in rgb (Lambertian outgoing radiance = albedo * rgb); w in [0,1] fades to 0 over the window's outermost edgeFadeCells cells so callers can lerp to the next cascade or their fallback without a hard edge.
  */
 public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid)
 {
@@ -94,7 +94,7 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
     float3 gridCoord = biasedPosition / volume.probeSpacing;
 
     float3 edgeDistance = min(gridCoord - float3(volume.baseCell), float3(volume.baseCell + int3(volume.probeCount) - 1) - gridCoord);
-    float fade = saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)));
+    float fade = saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(volume.edgeFadeCells, 1.0));
     if (fade <= 0.0) {
         return float4(0.0);
     }
@@ -155,6 +155,37 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
     }
     float3 result = irradianceSum / weightSum;
     return float4(result * result, fade);
+}
+
+/**
+ * Cascade-chain lookup: front-to-back composite finest-first, so a fine cascade's edge fade (and dead-pocket zero-weight failures) fall through to the next coarser cascade.
+ * Returns the same contract as DDGISampleIrradiance; w is total coverage for the caller's fallback lerp and only drops below 1 outside every cascade's interior.
+ */
+[ForceInline] // the struct ptr fails to compile
+public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet)
+{
+    float3 color = float3(0.0);
+    float coverage = 0.0;
+    uint count = min(cascadeSet->cascadeCount, DDGI_MAX_CASCADES);
+    for (uint c = 0; c < count; ++c) {
+        DDGICascadeDescriptor desc = cascadeSet->cascades[c];
+        if (desc.bValid == 0) {
+            continue;
+        }
+        float4 gi = DDGISampleIrradiance(worldPosition, normal, cameraDirection, desc.volume, desc.irradianceIndex, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid);
+        if (gi.w <= 0.0) {
+            continue;
+        }
+        color += gi.rgb * gi.w * (1.0 - coverage);
+        coverage += gi.w * (1.0 - coverage);
+        if (coverage >= 0.999) {
+            break;
+        }
+    }
+    if (coverage <= 0.0) {
+        return float4(0.0);
+    }
+    return float4(color / coverage, coverage);
 }
 
 public float3 DDGISphericalFibonacci(uint index, uint count)

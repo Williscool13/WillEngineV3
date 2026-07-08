@@ -30,7 +30,6 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
-                                        const DDGIVolumeParams& ddgiVolume,
                                         bool bDDGIApply,
                                         float clusterZNear,
                                         float clusterZFar);
