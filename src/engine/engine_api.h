@@ -428,6 +428,8 @@ struct DebugState
     bool bClusterGridDebug{false};
     bool bDDGIBounceOnly{false};
     float ddgiProbeDebugExposure{1.0f};
+    int32_t ddgiProbeDebugCascade{-1};
+    bool bDDGIHideInactiveProbes{false};
     Core::ReSTIRParams restir{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};

@@ -505,7 +505,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, frameNumber, frameBuffer.bDDGIBounceOnly);
                 ddgiPreviousCascades = ddgiCascades;
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
-                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure);
+                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure, frameBuffer.ddgiProbeDebugCascade, frameBuffer.bDDGIHideInactiveProbes);
                 }
             }
 

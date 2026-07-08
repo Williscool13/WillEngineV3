@@ -243,13 +243,34 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SameLine();
         ImGui::Checkbox("Test Pattern##GPUDebug", &state->debug.bGPUDebugTestPattern);
         ImGui::SameLine();
-        ImGui::Checkbox("DDGI Probes##GPUDebug", &state->debug.bDDGIProbeDebug);
-        ImGui::SameLine();
         ImGui::Checkbox("Cluster Grid##GPUDebug", &state->debug.bClusterGridDebug);
+
+        ImGui::SeparatorText("DDGI Probes");
+        ImGui::Checkbox("Draw Probes##DDGIDebug", &state->debug.bDDGIProbeDebug);
         ImGui::SameLine();
-        ImGui::Checkbox("Bounce Only##GPUDebug", &state->debug.bDDGIBounceOnly);
+        ImGui::Checkbox("Bounce Only##DDGIDebug", &state->debug.bDDGIBounceOnly);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Zero skybox radiance in the DDGI trace (feedback also disabled); anything left in the probes is one-bounce surface shading (sun + local-light NEE at hits)");
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Hide Inactive##DDGIDebug", &state->debug.bDDGIHideInactiveProbes);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Skip classification-inactive probes in the debug view instead of drawing them flat blue.");
+        }
+        const char* cascadeLabels[] = {"All", "0", "1", "2", "3"};
+        int cascadeOptionCount = static_cast<int>(state->lighting.ddgi.cascadeCount) + 1;
+        if (cascadeOptionCount < 2) { cascadeOptionCount = 2; }
+        if (cascadeOptionCount > 5) { cascadeOptionCount = 5; }
+        if (state->debug.ddgiProbeDebugCascade + 1 >= cascadeOptionCount) {
+            state->debug.ddgiProbeDebugCascade = -1;
+        }
+        int cascadeChoice = state->debug.ddgiProbeDebugCascade + 1;
+        ImGui::SetNextItemWidth(80.0f);
+        if (ImGui::Combo("Cascade##DDGIDebug", &cascadeChoice, cascadeLabels, cascadeOptionCount)) {
+            state->debug.ddgiProbeDebugCascade = cascadeChoice - 1;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("All draws every cascade with an identification tint (0 white, 1 red, 2 green, 3 blue); picking one cascade draws only it, untinted.");
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(240.0f);
@@ -666,6 +687,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Outer Local Light NEE##ddgi", &ddgi.bOuterLocalNEE)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Sample one local light (with a shadow ray) at ray hits on outer cascades. Off = outer hits shade only sun + emissive + bounce feedback, halving their shadow rays; local lights are near-field, so their bounce through coarse probes is usually negligible.");
+            }
+            if (ImGui::Checkbox("Probe Classification##ddgi", &ddgi.bClassification)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Probes with no geometry within ~1.5 cells drop to 16 sentinel rays and freeze their atlas tiles (nothing within sampling reach reads them); a sentinel hit reactivates the probe with a temporal restart. Requires Relocation (classification rides that pass). Inactive probes draw flat blue in the probe debug view.");
             }
             if (ImGui::Checkbox("Infinite Bounce##ddgi", &ddgi.bInfiniteBounce)) { changed = true; }
             if (ImGui::IsItemHovered()) {

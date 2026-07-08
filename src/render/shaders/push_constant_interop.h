@@ -940,6 +940,12 @@ SHADER_PUBLIC struct DDGIProbeDebugPushConstant
     SHADER_PUBLIC uint32_t irradianceAtlasIndex;
     SHADER_PUBLIC uint32_t bOffsetsValid;
     SHADER_PUBLIC float probeDebugExposure;
+    SHADER_PUBLIC uint32_t packedTint;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
+    SHADER_PUBLIC uint32_t bActiveValid;
+    SHADER_PUBLIC uint32_t bHideInactive;
+    SHADER_PUBLIC uint32_t pad1;
+    SHADER_PUBLIC uint32_t pad2;
 };
 
 SHADER_PUBLIC struct ClusterGridDebugPushConstant
@@ -979,6 +985,9 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC float maxRayRadiance;
     SHADER_PUBLIC uint32_t pad1;
     SHADER_PUBLIC uint32_t pad2;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
+    SHADER_PUBLIC uint32_t bActiveValid;
+    SHADER_PUBLIC uint32_t pad3;
 };
 
 SHADER_PUBLIC struct DDGIProbeBlendPushConstant
@@ -997,6 +1006,9 @@ SHADER_PUBLIC struct DDGIProbeBlendPushConstant
     SHADER_PUBLIC float irradianceThreshold;
     SHADER_PUBLIC float brightnessThreshold;
     SHADER_PUBLIC uint32_t bRestartValid;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
+    SHADER_PUBLIC uint32_t bActiveValid;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct DDGIProbeRelocatePushConstant
@@ -1011,6 +1023,10 @@ SHADER_PUBLIC struct DDGIProbeRelocatePushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) restartOut;
     SHADER_PUBLIC uint32_t raysPerProbe;
     SHADER_PUBLIC float minFrontfaceDistance;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) activeIn;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) activeOut;
+    SHADER_PUBLIC uint32_t bActiveValid;
+    SHADER_PUBLIC uint32_t bClassify;
 };
 
 SHADER_PUBLIC struct EquirectToCubemapPushConstant

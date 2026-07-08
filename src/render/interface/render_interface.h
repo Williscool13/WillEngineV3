@@ -756,6 +756,7 @@ struct DDGIParams
     uint32_t raysPerProbe{128};
     uint32_t outerRaysPerProbe{64};
     bool bOuterLocalNEE{false};
+    bool bClassification{true};
     bool bInfiniteBounce{true};
     float maxRayRadiance{20.0f};
 
@@ -909,6 +910,8 @@ struct FrameBuffer
     bool bClusterGridDebug = false;
     bool bDDGIBounceOnly = false;
     float ddgiProbeDebugExposure = 1.0f;
+    int32_t ddgiProbeDebugCascade = -1;
+    bool bDDGIHideInactiveProbes = false;
     bool bLogRDG = false;
     ReSTIRParams restir{};
     DDGIParams ddgi{};

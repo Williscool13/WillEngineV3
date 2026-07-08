@@ -143,23 +143,28 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
 {
     uint rayIndex = dtid.x;
     uint probeIndex = dtid.y;
-    if (rayIndex >= pc.raysPerProbe) {
+    int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
+    int3 cell = DDGICellFromSlot(slot, pc.volume);
+    DDGIVolumeParams previousVolume = pc.volume;
+    previousVolume.baseCell = pc.previousBaseCell;
+    bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == cell);
+
+    // Inactive probes trace only the sentinel budget
+    uint rayBudget = pc.raysPerProbe;
+    if (pc.bActiveValid != 0 && bSameCellPrev && pc.probeActive[probeIndex] == 0) {
+        rayBudget = min(DDGI_SENTINEL_RAYS, pc.raysPerProbe);
+    }
+    if (rayIndex >= rayBudget) {
         return;
     }
 
-    int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
-    int3 cell = DDGICellFromSlot(slot, pc.volume);
     // The per-frame rotation doubles as relocation's direction search; found escapes persist in the carried offset.
-    float3 direction = DDGIRotate(DDGISphericalFibonacci(rayIndex, pc.raysPerProbe), pc.rayRotation);
+    float3 direction = DDGIRotate(DDGISphericalFibonacci(rayIndex, rayBudget), pc.rayRotation);
 
     // Relocation offsets are last frame's
     float3 origin = DDGIProbeWorldPosition(cell, pc.volume);
-    if (pc.bOffsetsValid != 0) {
-        DDGIVolumeParams previousVolume = pc.volume;
-        previousVolume.baseCell = pc.previousBaseCell;
-        if (all(DDGICellFromSlot(slot, previousVolume) == cell)) {
-            origin += pc.probeOffsets[probeIndex].xyz;
-        }
+    if (pc.bOffsetsValid != 0 && bSameCellPrev) {
+        origin += pc.probeOffsets[probeIndex].xyz;
     }
 
     RayDesc ray;
@@ -238,25 +243,37 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
     int2 tileOrigin = DDGIProbeTileOrigin(slot, pc.volume, DDGI_IRRADIANCE_TILE);
 
+    DDGIVolumeParams previousVolume = pc.volume;
+    previousVolume.baseCell = pc.previousBaseCell;
+    bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume));
+    bool bInactive = pc.bActiveValid != 0 && bSameCellPrev && pc.probeActive[probeIndex] == 0;
+    // Frozen inactive probe
+    bool bFrozen = bInactive && pc.bHistoryValid != 0;
+    uint rayBudget = bInactive ? min(DDGI_SENTINEL_RAYS, pc.raysPerProbe) : pc.raysPerProbe;
+
     uint threadIndex = gtid.y * DDGI_IRRADIANCE_TILE + gtid.x;
-    for (uint r = threadIndex; r < pc.raysPerProbe; r += DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE) {
-        gsRays[r] = pc.rayData[probeIndex * pc.raysPerProbe + r];
+    if (!bFrozen) {
+        for (uint r = threadIndex; r < rayBudget; r += DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE) {
+            gsRays[r] = pc.rayData[probeIndex * pc.raysPerProbe + r];
+        }
     }
     GroupMemoryBarrierWithGroupSync();
 
     int2 texel = int2(gtid.xy);
     bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_IRRADIANCE_INTERIOR));
-    if (bInterior) {
+    if (bInterior && bFrozen) {
+        gsTexels[threadIndex] = rdgTexturesFloat4[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rgb;
+    } else if (bInterior) {
         float3 texelDirection = DDGIOctTexelDirection(texel, DDGI_IRRADIANCE_INTERIOR);
         float3 radianceSum = float3(0.0);
         float weightSum = 0.0;
-        for (uint r = 0; r < pc.raysPerProbe; ++r) {
+        for (uint r = 0; r < rayBudget; ++r) {
             // Backface hits are excluded entirely (RTXGI); counting their weight darkens probes near geometry.
             float4 rayData = gsRays[r];
             if (rayData.w < 0.0) {
                 continue;
             }
-            float3 rayDirection = DDGIRotate(DDGISphericalFibonacci(r, pc.raysPerProbe), pc.rayRotation);
+            float3 rayDirection = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
             float weight = max(dot(texelDirection, rayDirection), 0.0);
             radianceSum += max(rayData.rgb, float3(0.0)) * weight;
             weightSum += weight;
@@ -267,9 +284,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
         result = pow(result, 1.0 / pc.volume.irradianceGamma);
 
         if (pc.bHistoryValid != 0) {
-            DDGIVolumeParams previousVolume = pc.volume;
-            previousVolume.baseCell = pc.previousBaseCell;
-            if (all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume))) {
+            if (bSameCellPrev) {
                 float3 previous = rdgTexturesFloat4[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rgb;
 
                 if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
@@ -313,39 +328,46 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
     int2 tileOrigin = DDGIProbeTileOrigin(slot, pc.volume, DDGI_VISIBILITY_TILE);
 
+    DDGIVolumeParams previousVolume = pc.volume;
+    previousVolume.baseCell = pc.previousBaseCell;
+    bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume));
+    bool bInactive = pc.bActiveValid != 0 && bSameCellPrev && pc.probeActive[probeIndex] == 0;
+    bool bFrozen = bInactive && pc.bHistoryValid != 0;
+    uint rayBudget = bInactive ? min(DDGI_SENTINEL_RAYS, pc.raysPerProbe) : pc.raysPerProbe;
+
     // abs() folds the negative backface marker back into a distance; the clamp bounds what Chebyshev ever compares against.
     float maxDistance = length(pc.volume.probeSpacing) * 1.5;
     uint threadIndex = gtid.y * DDGI_VISIBILITY_TILE + gtid.x;
-    for (uint r = threadIndex; r < pc.raysPerProbe; r += DDGI_VISIBILITY_TILE * DDGI_VISIBILITY_TILE) {
-        gsRayDistances[r] = min(abs(pc.rayData[probeIndex * pc.raysPerProbe + r].w), maxDistance);
+    if (!bFrozen) {
+        for (uint r = threadIndex; r < rayBudget; r += DDGI_VISIBILITY_TILE * DDGI_VISIBILITY_TILE) {
+            gsRayDistances[r] = min(abs(pc.rayData[probeIndex * pc.raysPerProbe + r].w), maxDistance);
+        }
     }
     GroupMemoryBarrierWithGroupSync();
 
     int2 texel = int2(gtid.xy);
     bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_VISIBILITY_INTERIOR));
-    if (bInterior) {
+    if (bInterior && bFrozen) {
+        gsVisTexels[threadIndex] = rdgTexturesFloat2[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rg;
+    } else if (bInterior) {
         float3 texelDirection = DDGIOctTexelDirection(texel, DDGI_VISIBILITY_INTERIOR);
         float2 momentsSum = float2(0.0);
         float weightSum = 0.0;
-        for (uint r = 0; r < pc.raysPerProbe; ++r) {
-            float3 rayDirection = DDGIRotate(DDGISphericalFibonacci(r, pc.raysPerProbe), pc.rayRotation);
+        for (uint r = 0; r < rayBudget; ++r) {
+            float3 rayDirection = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
             float weight = pow(max(dot(texelDirection, rayDirection), 0.0), pc.distanceExponent);
             momentsSum += float2(gsRayDistances[r], gsRayDistances[r] * gsRayDistances[r]) * weight;
             weightSum += weight;
         }
         float2 result = weightSum > 1e-4 ? momentsSum / weightSum : float2(0.0);
 
-        if (pc.bHistoryValid != 0) {
-            DDGIVolumeParams previousVolume = pc.volume;
-            previousVolume.baseCell = pc.previousBaseCell;
-            if (all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume))) {
-                float2 previous = rdgTexturesFloat2[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rg;
-                float hysteresis = pc.hysteresis;
-                if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
-                    hysteresis = max(hysteresis - 0.75, 0.0);
-                }
-                result = lerp(result, previous, hysteresis);
+        if (pc.bHistoryValid != 0 && bSameCellPrev) {
+            float2 previous = rdgTexturesFloat2[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rg;
+            float hysteresis = pc.hysteresis;
+            if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
+                hysteresis = max(hysteresis - 0.75, 0.0);
             }
+            result = lerp(result, previous, hysteresis);
         }
         gsVisTexels[threadIndex] = result;
     }
@@ -365,19 +387,21 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
     }
     int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
     int3 cell = DDGICellFromSlot(slot, pc.volume);
+    DDGIVolumeParams previousVolume = pc.volume;
+    previousVolume.baseCell = pc.previousBaseCell;
+    bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == cell);
 
     float3 offset = float3(0.0);
     float previousBackfaceFraction = -1.0;
-    if (pc.bOffsetsValid != 0) {
-        DDGIVolumeParams previousVolume = pc.volume;
-        previousVolume.baseCell = pc.previousBaseCell;
-        if (all(DDGICellFromSlot(slot, previousVolume) == cell)) {
-            float4 previous = pc.offsetsIn[probeIndex];
-            offset = previous.xyz;
-            previousBackfaceFraction = previous.w;
-        }
+    if (pc.bOffsetsValid != 0 && bSameCellPrev) {
+        float4 previous = pc.offsetsIn[probeIndex];
+        offset = previous.xyz;
+        previousBackfaceFraction = previous.w;
     }
     float3 previousOffset = offset;
+
+    bool bWasActive = !(pc.bActiveValid != 0 && bSameCellPrev && pc.activeIn[probeIndex] == 0);
+    uint rayBudget = bWasActive ? pc.raysPerProbe : min(DDGI_SENTINEL_RAYS, pc.raysPerProbe);
 
     uint backfaceCount = 0;
     float closestBackfaceDistance = 1e27;
@@ -386,7 +410,7 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
     uint closestFrontfaceIndex = 0xFFFFFFFF;
     float farthestFrontfaceDistance = 0.0;
     uint farthestFrontfaceIndex = 0xFFFFFFFF;
-    for (uint r = 0; r < pc.raysPerProbe; ++r) {
+    for (uint r = 0; r < rayBudget; ++r) {
         float4 rayData = pc.rayData[probeIndex * pc.raysPerProbe + r];
         if (rayData.x < 0.0) {
             continue;
@@ -411,42 +435,55 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
         }
     }
 
-    // RTXGI probe relocation
-    float backfaceFraction = float(backfaceCount) / float(max(pc.raysPerProbe, 1u));
-    float3 fullOffset = offset;
-    if (closestBackfaceIndex != 0xFFFFFFFF && backfaceFraction > 0.25) {
-        float3 backfaceDirection = DDGIRotate(DDGISphericalFibonacci(closestBackfaceIndex, pc.raysPerProbe), pc.rayRotation);
-        fullOffset = offset + backfaceDirection * (closestBackfaceDistance + pc.minFrontfaceDistance * 0.5);
-    } else if (closestFrontfaceDistance < pc.minFrontfaceDistance && farthestFrontfaceIndex != 0xFFFFFFFF) {
-        float3 closestDirection = DDGIRotate(DDGISphericalFibonacci(closestFrontfaceIndex, pc.raysPerProbe), pc.rayRotation);
-        float3 farthestDirection = DDGIRotate(DDGISphericalFibonacci(farthestFrontfaceIndex, pc.raysPerProbe), pc.rayRotation);
-        // Only move if the far direction actually opposes the wall, so the probe never pushes through the far side.
-        if (dot(closestDirection, farthestDirection) <= 0.0) {
-            // Deficit step, not RTXGI's min(farthest, 1): full-size jumps oscillate at this spacing.
-            fullOffset = offset + farthestDirection * min(pc.minFrontfaceDistance - closestFrontfaceDistance, farthestFrontfaceDistance);
-        }
-    } else if (closestFrontfaceDistance > pc.minFrontfaceDistance) {
-        float offsetLength = length(offset);
-        if (offsetLength > 1e-5) {
-            float moveBackMargin = min(closestFrontfaceDistance - pc.minFrontfaceDistance, offsetLength);
-            fullOffset = offset - (offset / offsetLength) * moveBackMargin;
-        }
-    }
-
-    // Cap at 45% of spacing (trilinear domain). reject rather than clamp so unreachable escapes freeze instead of wandering.
-    float3 normalizedOffset = fullOffset / pc.volume.probeSpacing;
-    if (dot(normalizedOffset, normalizedOffset) < 0.45 * 0.45) {
-        offset = fullOffset;
-    }
-
-    // A real move or dead-to-alive flip flags a temporal restart for next frame's blends, the first fed by rays from the new position.
+    float backfaceFraction = float(backfaceCount) / float(max(rayBudget, 1u));
     uint restart = 0;
-    if (previousBackfaceFraction >= 0.0) {
-        float3 movedNormalized = (offset - previousOffset) / pc.volume.probeSpacing;
-        bool bRevived = previousBackfaceFraction > DDGI_PROBE_DEAD_BACKFACE_FRACTION && backfaceFraction <= DDGI_PROBE_DEAD_BACKFACE_FRACTION;
-        if (dot(movedNormalized, movedNormalized) > 0.05 * 0.05 || bRevived) {
+    if (bWasActive) {
+        // RTXGI probe relocation
+        float3 fullOffset = offset;
+        if (closestBackfaceIndex != 0xFFFFFFFF && backfaceFraction > 0.25) {
+            float3 backfaceDirection = DDGIRotate(DDGISphericalFibonacci(closestBackfaceIndex, rayBudget), pc.rayRotation);
+            fullOffset = offset + backfaceDirection * (closestBackfaceDistance + pc.minFrontfaceDistance * 0.5);
+        } else if (closestFrontfaceDistance < pc.minFrontfaceDistance && farthestFrontfaceIndex != 0xFFFFFFFF) {
+            float3 closestDirection = DDGIRotate(DDGISphericalFibonacci(closestFrontfaceIndex, rayBudget), pc.rayRotation);
+            float3 farthestDirection = DDGIRotate(DDGISphericalFibonacci(farthestFrontfaceIndex, rayBudget), pc.rayRotation);
+            // Only move if the far direction actually opposes the wall, so the probe never pushes through the far side.
+            if (dot(closestDirection, farthestDirection) <= 0.0) {
+                // Deficit step, not RTXGI's min(farthest, 1): full-size jumps oscillate at this spacing.
+                fullOffset = offset + farthestDirection * min(pc.minFrontfaceDistance - closestFrontfaceDistance, farthestFrontfaceDistance);
+            }
+        } else if (closestFrontfaceDistance > pc.minFrontfaceDistance) {
+            float offsetLength = length(offset);
+            if (offsetLength > 1e-5) {
+                float moveBackMargin = min(closestFrontfaceDistance - pc.minFrontfaceDistance, offsetLength);
+                fullOffset = offset - (offset / offsetLength) * moveBackMargin;
+            }
+        }
+
+        // Cap at 45% of spacing (trilinear domain). reject rather than clamp so unreachable escapes freeze instead of wandering.
+        float3 normalizedOffset = fullOffset / pc.volume.probeSpacing;
+        if (dot(normalizedOffset, normalizedOffset) < 0.45 * 0.45) {
+            offset = fullOffset;
+        }
+
+        // A real move or dead-to-alive flip flags a temporal restart for next frame's blends, the first fed by rays from the new position.
+        if (previousBackfaceFraction >= 0.0) {
+            float3 movedNormalized = (offset - previousOffset) / pc.volume.probeSpacing;
+            bool bRevived = previousBackfaceFraction > DDGI_PROBE_DEAD_BACKFACE_FRACTION && backfaceFraction <= DDGI_PROBE_DEAD_BACKFACE_FRACTION;
+            if (dot(movedNormalized, movedNormalized) > 0.05 * 0.05 || bRevived) {
+                restart = 1;
+            }
+        }
+    } else {
+        backfaceFraction = max(previousBackfaceFraction, 0.0);
+    }
+
+    if (pc.bClassify != 0) {
+        float activeDistance = length(pc.volume.probeSpacing) * 1.5;
+        uint active = (backfaceCount > 0 || closestFrontfaceDistance < activeDistance) ? 1u : 0u;
+        if (!bWasActive && active != 0) {
             restart = 1;
         }
+        pc.activeOut[probeIndex] = active;
     }
     pc.restartOut[probeIndex] = restart;
     pc.offsetsOut[probeIndex] = float4(offset, backfaceFraction);
@@ -463,13 +500,21 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
     int3 cell = DDGICellFromSlot(slot, pc.volume);
     float3 position = DDGIProbeWorldPosition(cell, pc.volume);
     float radius = 0.08 * min(pc.volume.probeSpacing.x, min(pc.volume.probeSpacing.y, pc.volume.probeSpacing.z));
+    uint probeIndex = DDGIProbeIndexFromSlot(slot, pc.volume);
     if (pc.bOffsetsValid != 0) {
-        float4 probeOffset = pc.probeOffsets[DDGIProbeIndexFromSlot(slot, pc.volume)];
+        float4 probeOffset = pc.probeOffsets[probeIndex];
         position += probeOffset.xyz;
         if (probeOffset.w > DDGI_PROBE_DEAD_BACKFACE_FRACTION) {
             GPUDebugAddSphereFlat(pc.sphereArgs, pc.sphereBuffer, position, radius, float3(1.0, 0.0, 0.0));
             return;
         }
+    }
+
+    if (pc.bActiveValid != 0 && pc.probeActive[probeIndex] == 0) {
+        if (pc.bHideInactive == 0) {
+            GPUDebugAddSphereFlat(pc.sphereArgs, pc.sphereBuffer, position, radius, float3(0.15, 0.3, 0.9));
+        }
+        return;
     }
 
     // Least-squares L1 fit over the tile: E(n) ~ dc + dot(dir, n), with dir = 3 * mean(E * n) since mean(n n^T) = I/3 over the sphere.
@@ -490,10 +535,11 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
         }
     }
     float invCount = pc.probeDebugExposure / float(DDGI_IRRADIANCE_INTERIOR * DDGI_IRRADIANCE_INTERIOR);
-    dc *= invCount;
-    dirR *= 3.0 * invCount;
-    dirG *= 3.0 * invCount;
-    dirB *= 3.0 * invCount;
+    float3 tint = UnpackUnorm4x8(pc.packedTint).rgb;
+    dc *= invCount * tint;
+    dirR *= 3.0 * invCount * tint.r;
+    dirG *= 3.0 * invCount * tint.g;
+    dirB *= 3.0 * invCount * tint.b;
 
     GPUDebugAddSphere(pc.sphereArgs, pc.sphereBuffer, position, radius,
                       float4(dc.r, dirR), float4(dc.g, dirG), float4(dc.b, dirB));

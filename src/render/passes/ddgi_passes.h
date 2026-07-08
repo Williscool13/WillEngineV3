@@ -47,6 +47,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
  * them into the per-cascade octahedral atlases "ddgi_irradiance_<k>" (stored as pow(E, 1/irradianceGamma), hysteresis-blended in encoded space with RTXGI's change/brightness thresholds) and "ddgi_visibility_<k>" (mean/mean^2 ray distance for the Chebyshev occlusion test).
  * With params.bRelocation, a per-probe pass applies RTXGI relocation to this frame's ray distances and writes "ddgi_probe_offsets_<k>" (world offset xyz capped at 45% of spacing, backface fraction w); rays trace from last frame's carried offsets, samplers use this frame's and skip dead probes.
  * Teleports and dead-to-alive flips write a one-frame restart flag ("ddgi_probe_restart_<k>", carried) that drops the probe's blend hysteresis on the cascade's next update.
+ * With params.bClassification (rides the relocate pass, so it also needs bRelocation), the same pass classifies each probe by whether any ray hit geometry within ~1.5 cells ("ddgi_probe_active_<k>", carried); inactive probes trace only DDGI_SENTINEL_RAYS rays and their blends carry the history tiles through frozen, and a sentinel hit reactivates the probe via the restart flag.
  * Skipped cascades re-carry their history resources unchanged. Also uploads the DDGI_CASCADES_BUFFER descriptor chain (current-or-history per cascade) consumed via DDGISampleIrradianceCascaded, and DDGI_CASCADES_PREV_BUFFER for the trace feedback.
  * Slots invalidated by a window scroll, count/spacing change, or missing history restart fresh. No-op without the TLAS and geometry/material/light buffers.
  * @param graph
@@ -69,14 +70,16 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
 bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass);
 
 /**
- * Appends one debug sphere per probe per cascade at its relocated position, shaded with an L1 SH fit of the probe's decoded irradiance atlas tile; dead probes (backface fraction past the sampler's skip threshold) render flat red.
+ * Appends one debug sphere per probe per cascade at its relocated position, shaded with an L1 SH fit of the probe's decoded irradiance atlas tile; dead probes (backface fraction past the sampler's skip threshold) render flat red, classification-inactive probes flat blue.
  * Skipped cascades draw from their carried history atlas. Requires the GPU debug buffers; skip when the debug lock is active.
  * @param graph
  * @param pipelineManager
  * @param cascades
  * @param probeDebugExposure linear scale applied to the fitted probe irradiance so bright probes do not blow out to flat white in the debug view
+ * @param debugCascade -1 draws every cascade with a per-cascade identification tint (white/red/green/blue); 0-3 draws only that cascade, untinted
+ * @param bHideInactive skip classification-inactive probes entirely instead of drawing them flat blue
  */
-void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure);
+void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive);
 } // Render
 
 #endif //WILL_ENGINE_DDGI_PASSES_H

@@ -286,6 +286,7 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"raysPerProbe", p.raysPerProbe},
         {"outerRaysPerProbe", p.outerRaysPerProbe},
         {"bOuterLocalNEE", p.bOuterLocalNEE},
+        {"bClassification", p.bClassification},
         {"bInfiniteBounce", p.bInfiniteBounce},
         {"maxRayRadiance", p.maxRayRadiance},
         {"hysteresis", p.hysteresis},
@@ -319,6 +320,7 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.raysPerProbe = dUint("raysPerProbe", p.raysPerProbe);
     p.outerRaysPerProbe = dUint("outerRaysPerProbe", p.outerRaysPerProbe);
     p.bOuterLocalNEE = dBool("bOuterLocalNEE", p.bOuterLocalNEE);
+    p.bClassification = dBool("bClassification", p.bClassification);
     p.bInfiniteBounce = dBool("bInfiniteBounce", p.bInfiniteBounce);
     p.maxRayRadiance = dFloat("maxRayRadiance", p.maxRayRadiance);
     p.hysteresis = dFloat("hysteresis", p.hysteresis);
