@@ -10,7 +10,7 @@
     "irradianceGamma": 5.0,
     "irradianceThreshold": 1.0,
     "minFrontfaceDistance": 0.30000001192092896,
-    "normalBias": 0.10000000149011612,
+    "normalBias": 0.7307692170143127,
     "probeCountX": 24,
     "probeCountY": 12,
     "probeCountZ": 24,

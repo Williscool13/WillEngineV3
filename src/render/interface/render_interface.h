@@ -765,7 +765,6 @@ struct DDGIParams
 
     bool bRelocation{true};
     float minFrontfaceDistance{0.3f};
-    int32_t relocationIterations{1};
 };
 
 struct ViewFamily

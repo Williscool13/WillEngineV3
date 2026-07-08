@@ -908,7 +908,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ImGui::SetTooltip("Probes inside geometry step out through the nearest backface (capped at 45% of spacing); probes still buried past the cap are classified dead and skipped at sampling (drawn red in the probe debug view).");
             }
             ddgiF("Min Frontface Distance##ddgi", &ddgi.minFrontfaceDistance, ddgiDefaults.minFrontfaceDistance, 0.0f, 1.0f, "%.2f", "Meters of clearance relocation keeps between a probe and nearby geometry; probes closer than this to a wall get nudged away from it. Default 0.30.");
-            ddgiI("Relocation Iterations##ddgi", &ddgi.relocationIterations, ddgiDefaults.relocationIterations, 1, 8, "Relocation steps run per frame, each feeding the next its offset against this frame's ray distances (no re-trace). Higher = probes escape geometry in fewer frames, at a small extra compute cost. Default 1.");
 
             ImGui::Spacing();
             if (ImGui::Button("Reset DDGI")) {
