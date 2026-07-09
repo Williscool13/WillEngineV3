@@ -576,8 +576,8 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::Inline
             .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
             .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .dstAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
             .srcQueueFamilyIndex = context->transferQueueFamily,
             .dstQueueFamilyIndex = context->graphicsQueueFamily,
             .buffer = buffer,
@@ -627,7 +627,7 @@ void StaticModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunct
     const uint32_t vertexOffsetCount = outputModel->modelData.vertexPositionAllocation.offset / sizeof(VertexPosition);
     const uint32_t indexOffsetCount = outputModel->modelData.indexAllocation.offset / sizeof(uint32_t);
 
-    if (!context->bMaintenance9Enabled) {
+    {
         Core::InlineVector<VkBufferMemoryBarrier2, 8> acquireBarriers;
         for (const auto& op : outputModel->bufferAcquireOps) {
             acquireBarriers.PushBack(Render::VkHelpers::ToVkBarrier(op));

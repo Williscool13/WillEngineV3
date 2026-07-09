@@ -1669,6 +1669,14 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     const Clay_String renderFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(renderFpsText.Size()), .chars = renderFpsText.c_str()};
     const Clay_String gameFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(gameFpsText.Size()), .chars = gameFpsText.c_str()};
 
+    static constexpr const char* AA_MODE_NAMES[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
+    const char* aaModeName = AA_MODE_NAMES[static_cast<int32_t>(state->lighting.aaConfig.mode)];
+    const char* profileName = state->projectConfig.activeLightingProfile.IsEmpty() ? "(none)" : state->projectConfig.activeLightingProfile.c_str();
+    const auto profileText = Core::InlineString<80>::Format("Profile: %s", profileName);
+    const auto aaText = Core::InlineString<48>::Format("AA: %s", aaModeName);
+    const Clay_String profileString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(profileText.Size()), .chars = profileText.c_str()};
+    const Clay_String aaString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(aaText.Size()), .chars = aaText.c_str()};
+
     CLAY(CLAY_ID("FpsCounter"), {
          .layout = { .padding = CLAY_PADDING_ALL(8), .childGap = 4, .layoutDirection = CLAY_TOP_TO_BOTTOM },
          .backgroundColor = {0, 0, 0, 140},
@@ -1682,6 +1690,8 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
          }) {
         CLAY_TEXT(renderFpsString, { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
         CLAY_TEXT(gameFpsString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+        CLAY_TEXT(profileString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+        CLAY_TEXT(aaString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
     }
 
     Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);
