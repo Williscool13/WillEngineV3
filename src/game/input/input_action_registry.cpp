@@ -90,6 +90,11 @@ void RegisterInputActions(Engine::InputState& input)
     });
 
     // Gameplay
+    AddDefault(input, Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::F1));
+    AddDefault(input, Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR, Engine::InputContext::Menu, Engine::BindingSource::FromKey(Key::F1));
+    AddDefault(input, Actions::ACTION_LOAD_LIGHTING_PROFILE_STANDARD, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::F2));
+    AddDefault(input, Actions::ACTION_LOAD_LIGHTING_PROFILE_STANDARD, Engine::InputContext::Menu, Engine::BindingSource::FromKey(Key::F2));
+
     AddDefaultComposite2D(input, Actions::ACTION_MOVE, Engine::InputContext::Gameplay, {
         Engine::BindingSource::FromKey(Key::W),
         Engine::BindingSource::FromKey(Key::S),

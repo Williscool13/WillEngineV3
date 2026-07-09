@@ -31,6 +31,12 @@ void TimeManager::UpdateGame()
 
     currentTime.deltaTime = static_cast<float>(deltaMs) / 1000.0f;
 
+    const float dt = currentTime.deltaTime;
+    if (dt > 0.0f) {
+        smoothedGameDeltaTime = (smoothedGameDeltaTime <= 0.0f) ? dt : smoothedGameDeltaTime + (dt - smoothedGameDeltaTime) * 0.02f;
+    }
+    currentTime.gameFps = smoothedGameDeltaTime > 0.0f ? 1.0f / smoothedGameDeltaTime : 0.0f;
+
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime);
     currentTime.totalTime = static_cast<float>(elapsed.count()) / 1000.0f;
 

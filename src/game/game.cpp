@@ -380,9 +380,13 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::GatherLights(ctx, state, frameBuffer);
     Game::GatherRenderables(ctx, state, frameBuffer);
     Game::GatherTextRenderables(ctx, state, frameBuffer);
+#ifdef WILL_EDITOR
     if (state->debug.bEnableUI) {
         Game::GatherUIRenderables(ctx, state, frameBuffer);
     }
+#else
+    Game::GatherUIRenderables(ctx, state, frameBuffer);
+#endif
 
 #if WILL_EDITOR
     Game::DrawEditorInterface(ctx, state, frameBuffer);

@@ -19,6 +19,8 @@ inline const Engine::ActionHandle ACTION_DEBUG_PLAY_MUSIC{SID("Debug_PlayMusic")
 inline const Engine::ActionHandle ACTION_DEBUG_MUSIC_VOL_LOW{SID("Debug_MusicVolLow").id};
 inline const Engine::ActionHandle ACTION_DEBUG_MUSIC_VOL_FULL{SID("Debug_MusicVolFull").id};
 inline const Engine::ActionHandle ACTION_SCREENSHOT{SID("Screenshot").id};
+inline const Engine::ActionHandle ACTION_LOAD_LIGHTING_PROFILE_RESTIR{SID("LoadLightingProfile_ReSTIR").id};
+inline const Engine::ActionHandle ACTION_LOAD_LIGHTING_PROFILE_STANDARD{SID("LoadLightingProfile_Standard").id};
 
 inline const Engine::ActionHandle ACTION_EDITOR_CAM_LOOK_MODIFIER{SID("EditorCam_LookModifier").id};
 inline const Engine::ActionHandle ACTION_EDITOR_CAM_PAN_MODIFIER{SID("EditorCam_PanModifier").id};

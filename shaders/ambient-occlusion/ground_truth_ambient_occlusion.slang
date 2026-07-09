@@ -43,10 +43,6 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid
     const uint2 baseCoord = dtid.xy;
     const int2 screenPos = int2(baseCoord) * 2; // We process 2x2 pixels in MIP 0
 
-    if (screenPos.x > pc.sceneData->mainRenderTargetSize.x || screenPos.y > pc.sceneData->mainRenderTargetSize.y) {
-        return;
-    }
-
     float2 uv = float2(screenPos) * pc.sceneData->texelSize;
 
     float4 depths = rdgTexturesFloat[pc.inputDepth].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, int2(1, 1));

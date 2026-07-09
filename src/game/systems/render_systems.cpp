@@ -1533,6 +1533,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     Clay_BeginLayout();
 
+#if 0
     constexpr Clay_Color COLOR_LIGHT = Clay_Color{224, 215, 210, 255};
     constexpr Clay_Color COLOR_RED = Clay_Color{168, 66, 28, 255};
     constexpr Clay_Color COLOR_ORANGE = Clay_Color{225, 138, 50, 255};
@@ -1654,6 +1655,29 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                      }) {}
             }
         }
+    }
+#endif
+
+    // FPS counter, top-left: render thread FPS (EMA-smoothed in TimeManager::UpdateRender) and game-tick FPS (TimeManager::UpdateGame).
+    const Core::TimeFrame& tf = frameBuffer->timeFrame;
+    const auto renderFpsText = Core::InlineString<48>::Format("Render: %.0f FPS (%.2f ms)", tf.renderFps, tf.renderFps > 0.0f ? 1000.0f / tf.renderFps : 0.0f);
+    const auto gameFpsText = Core::InlineString<48>::Format("Game: %.0f FPS (%.2f ms)", tf.gameFps, tf.gameFps > 0.0f ? 1000.0f / tf.gameFps : 0.0f);
+    const Clay_String renderFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(renderFpsText.Size()), .chars = renderFpsText.c_str()};
+    const Clay_String gameFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(gameFpsText.Size()), .chars = gameFpsText.c_str()};
+
+    CLAY(CLAY_ID("FpsCounter"), {
+         .layout = { .padding = CLAY_PADDING_ALL(8), .childGap = 4, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+         .backgroundColor = {0, 0, 0, 140},
+         .cornerRadius = CLAY_CORNER_RADIUS(4),
+         .floating = {
+             .offset = { .x = 16, .y = 16 },
+             .zIndex = 100,
+             .attachPoints = { .element = CLAY_ATTACH_POINT_LEFT_TOP, .parent = CLAY_ATTACH_POINT_LEFT_TOP },
+             .attachTo = CLAY_ATTACH_TO_ROOT,
+             },
+         }) {
+        CLAY_TEXT(renderFpsString, { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+        CLAY_TEXT(gameFpsString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
     }
 
     Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);

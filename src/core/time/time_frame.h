@@ -14,6 +14,7 @@ struct TimeFrame
     float deltaTime;
     float totalTime;
     uint64_t frameCount;
+    float gameFps;
 
     float renderDeltaTime;
     float renderTotalTime;

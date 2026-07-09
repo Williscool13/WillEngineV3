@@ -109,24 +109,25 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
     denoise1.ReadSampledImage(SID("gtao_ao"));
     denoise1.ReadSampledImage(SID("gtao_edges"));
     denoise1.WriteStorageImage(SID("gtao_temp"));
-    denoise1.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        GTAODenoisePushConstant pc{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")) + sizeof(SceneData) * sceneIndex,
-            .rawAOIndex = graph.GetSampledImageViewDescriptorIndex(SID("gtao_ao")),
-            .edgeDataIndex = graph.GetSampledImageViewDescriptorIndex(SID("gtao_edges")),
-            .filteredAOIndex = graph.GetStorageImageViewDescriptorIndex(SID("gtao_temp")),
-            .denoiseBlurBeta = 1e4f,
-            .isFinalDenoisePass = 0,
-        };
+    denoise1.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
+            denoiseBlurBeta = gtaoConfig.denoiseBlurBeta](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            GTAODenoisePushConstant pc{
+                .sceneData = graph.GetBufferAddress(SID("scene_data")) + sizeof(SceneData) * sceneIndex,
+                .rawAOIndex = graph.GetSampledImageViewDescriptorIndex(SID("gtao_ao")),
+                .edgeDataIndex = graph.GetSampledImageViewDescriptorIndex(SID("gtao_edges")),
+                .filteredAOIndex = graph.GetStorageImageViewDescriptorIndex(SID("gtao_temp")),
+                .denoiseBlurBeta = denoiseBlurBeta,
+                .isFinalDenoisePass = 0,
+            };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gtao_denoise"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gtao_denoise"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-        uint32_t xDispatch = (width / 2 + GTAO_DENOISE_DISPATCH_X - 1) / GTAO_DENOISE_DISPATCH_X;
-        uint32_t yDispatch = (height + GTAO_DENOISE_DISPATCH_Y - 1) / GTAO_DENOISE_DISPATCH_Y;
-        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-    });
+            uint32_t xDispatch = (width / 2 + GTAO_DENOISE_DISPATCH_X - 1) / GTAO_DENOISE_DISPATCH_X;
+            uint32_t yDispatch = (height + GTAO_DENOISE_DISPATCH_Y - 1) / GTAO_DENOISE_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
 
     RenderPass& denoise2 = graph.AddPass(SID("GTAO Denoise 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AmbientOcclusion);
     denoise2.ReadSampledImage(SID("gtao_temp"));

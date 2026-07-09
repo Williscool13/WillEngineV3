@@ -1403,6 +1403,7 @@ void WillEngine::Run()
             rt.deltaTime += ct.deltaTime;
             rt.totalTime = ct.totalTime;
             rt.frameCount = ct.frameCount;
+            rt.gameFps = ct.gameFps;
             rt.renderDeltaTime = ct.renderDeltaTime;
             rt.renderTotalTime = ct.renderTotalTime;
             rt.renderFps = ct.renderFps;
