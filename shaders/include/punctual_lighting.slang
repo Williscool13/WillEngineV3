@@ -19,9 +19,10 @@ public struct PunctualLight
     public float3 upAxis;
     public float halfWidth;
     public float halfHeight;
+    public bool valid; // false = unsupported light type (e.g. triangle); ShadePunctual no-ops
 };
 
-/** World-space area/sphere LightInfo -> view-space PunctualLight. */
+/** World-space area/sphere LightInfo -> view-space PunctualLight. Triangle lights are NOT degenerated: right.w/up.w hold edge-vector components for them, not rect half-extents, so falling through to the rect path would silently misread them. Callers iterating a cluster's light list should skip LIGHT_TYPE_TRIANGLE entries before calling this (light_culling.slang already excludes them from cluster bins); this valid=false is a defensive backstop, not the primary filter. */
 public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
 {
     PunctualLight pl;
@@ -32,17 +33,20 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
     pl.upAxis = float3(0.0);
     pl.halfWidth = 0.0;
     pl.halfHeight = 0.0;
+    pl.dir = float3(0.0, 0.0, 1.0);
+    pl.effectiveIntensity = 0.0;
+    pl.sourceRadius = 0.0;
+    pl.oneSided = false;
+    pl.valid = true;
 
     if (light.type == LIGHT_TYPE_SPHERE)
     {
         float radius = light.right.w;
-        pl.dir = float3(0.0, 0.0, 1.0);
         // Lambertian sphere far-field = point of intensity L * projected area.
         pl.effectiveIntensity = light.intensity * PI * radius * radius;
         pl.sourceRadius = radius;
-        pl.oneSided = false;
     }
-    else
+    else if (light.type == LIGHT_TYPE_AREA)
     {
         float halfWidth = light.right.w;
         float halfHeight = light.up.w;
@@ -54,6 +58,11 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
         pl.upAxis = normalize(mul((float3x3)view, light.up.xyz));
         pl.halfWidth = halfWidth;
         pl.halfHeight = halfHeight;
+    }
+    else
+    {
+        // LIGHT_TYPE_TRIANGLE not supported by the punctual path.
+        pl.valid = false;
     }
     return pl;
 }
@@ -87,6 +96,8 @@ float3 RepresentativePointL(PunctualLight pl, float3 N, float3 V, float3 viewPos
 /** Shade a degenerated punctual light: Oren-Nayar diffuse + representative-point GGX specular. */
 public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos, float3 albedo, float metallic, float roughness, float3 F0)
 {
+    if (!pl.valid) { return float3(0.0); }
+
     float3 toLight = pl.pos - viewPos;
     float dist = length(toLight);
     if (dist >= pl.range) { return float3(0.0); }

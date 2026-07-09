@@ -30,7 +30,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         uint32_t activeCheckerboardField,
                         float checkerboardResolveAccumSpeed,
                         bool bDDGIApply,
-                        const Core::RTReflectionConfiguration& reflectionConfig)
+                        const Core::RTReflectionConfiguration& reflectionConfig,
+                        float brdfRoughnessMax)
 {
     const bool bCheckerboard = activeCheckerboardField != 0u;
     // NRD RELAX resolves checkerboard inside the prepass
@@ -564,8 +565,9 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     {
         const StringID gbufferTwo = targets.gbufferTwo;
         const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-        const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
-        const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET);
+        const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
+        const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
+        const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
         const StringID shadows = targets.shadows;
 
@@ -583,12 +585,12 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             AddDDGISampleDependencies(graph, pass);
         }
         if (bReflection) {
-            pass.ReadSampledImage(REFLECTION_SPEC_NOISY_TARGET);
+            pass.ReadSampledImage(reflectionTarget);
         }
         pass.WriteStorageImage(noisyInput);
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, bDDGI, shadows, bReflection, reflectionRoughnessMax](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -607,7 +609,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
-                .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET) : ~0x0u,
+                .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(reflectionTarget) : ~0x0u,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
@@ -630,7 +632,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          uint32_t activeCheckerboardField,
                          float checkerboardResolveAccumSpeed,
                          bool bDDGIApply,
-                         const Core::RTReflectionConfiguration& reflectionConfig)
+                         const Core::RTReflectionConfiguration& reflectionConfig,
+                         float brdfRoughnessMax)
 {
     const bool bCheckerboard = activeCheckerboardField != 0u;
     // NRD resolves checkerboard inside the prepass, so it must run when checkerboard is on
@@ -1127,8 +1130,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     {
         const StringID gbufferTwo = targets.gbufferTwo;
         const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-        const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
-        const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET);
+        const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
+        const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
+        const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
         const StringID shadows = targets.shadows;
 
@@ -1146,12 +1150,12 @@ void SetupReBLURDenoiser(RenderGraph& graph,
             AddDDGISampleDependencies(graph, pass);
         }
         if (bReflection) {
-            pass.ReadSampledImage(REFLECTION_SPEC_NOISY_TARGET);
+            pass.ReadSampledImage(reflectionTarget);
         }
         pass.WriteStorageImage(noisyInput);
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, bDDGI, shadows, bReflection, reflectionRoughnessMax](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, frameNumber, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .sceneDataIndex = 0,
@@ -1170,7 +1174,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
-                .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET) : ~0x0u,
+                .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(reflectionTarget) : ~0x0u,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));

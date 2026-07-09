@@ -32,7 +32,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const uint32_t reservoirBufferSize = pixelCount * static_cast<uint32_t>(sizeof(Reservoir));
-    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, restirParams.brdfRoughnessMax);
     const uint32_t reflectionBufferSize = pixelCount * static_cast<uint32_t>(sizeof(ReflectionHitDescriptor));
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
@@ -288,6 +288,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .activeCheckerboardField = field,
                 .bSunCandidateVisibility = (tlasIndex != ~0u && restirParams.bSunCandidateVisibility) ? 1u : 0u,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
+                .brdfRoughnessMax = restirParams.brdfRoughnessMax,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -631,13 +632,15 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                float iblIntensity,
                                uint64_t frameNumber,
                                bool bDDGIApply,
-                               const Core::RTReflectionConfiguration& reflectionConfig)
+                               const Core::RTReflectionConfiguration& reflectionConfig,
+                               float brdfRoughnessMax)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
-    const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET);
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
+    const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
+    const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
     RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -653,11 +656,11 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
         AddDDGISampleDependencies(graph, pass);
     }
     if (bReflection) {
-        pass.ReadSampledImage(REFLECTION_SPEC_NOISY_TARGET);
+        pass.ReadSampledImage(reflectionTarget);
     }
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, bDDGI, bReflection, reflectionRoughnessMax,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -679,7 +682,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
-                .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET) : ~0x0u,
+                .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(reflectionTarget) : ~0x0u,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));

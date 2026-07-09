@@ -14,6 +14,7 @@ import restir_common;
 import ddgi_common;
 import hit_shading_common;
 import random_common;
+import cluster_common;
 
 import bindless_declarations;
 
@@ -61,6 +62,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
     ReflectionHitDescriptor hit = pc.reflectionDescriptors[pixelIdx];
 
     float3 radiance = float3(0.0);
+    float hitTOut = 0.0;
     if (hit.hitT >= 0.0) {
         Instance inst = pc.instanceBuffer[hit.instanceID];
         uint rng = SeedRng(pixel, pc.frameIndex, 0xA17Fu);
@@ -74,18 +76,28 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
         ddgiPC.indexBuffer = pc.indexBuffer;
         ddgiPC.vertexAttrBuffer = pc.vertexAttrBuffer;
         ddgiPC.tlasIndex = pc.tlasIndex;
-        ddgiPC.bLocalNEE = pc.bLocalNEE;
         ddgiPC.previousCascades = pc.ddgiCascades;
         ddgiPC.bFeedbackValid = pc.bDDGIApply;
 
+        // Reuse the mirror pixel's own light cluster as the reflected hit's local-light candidate set: free lookup (same pixel/depth already in hand), accurate near the mirror, increasingly approximate as the reflection ray travels farther.
+        ClusterPunctualLights clusterLights = (ClusterPunctualLights)0;
+        if (pc.clusterLightGrid != nullptr) {
+            clusterLights.view = scene.view;
+            clusterLights.grid = pc.clusterLightGrid;
+            clusterLights.indexList = pc.clusterLightIndexList;
+            clusterLights.clusterIndex = ClusterIndexFromPixel(pixel, pc.renderExtent, viewSpaceDepth, pc.clusterZNear, pc.clusterZFar);
+        }
+
         float3 hitWorldPos = rayOrigin + hit.hitT * hit.rayDir;
-        radiance = ShadeProbeRayHit(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng);
+        radiance = ShadeProbeRayHitAnalytical(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, clusterLights);
+        hitTOut = hit.hitT;
     } else if (hit.hitT == REFLECTION_HIT_T_SKY && pc.skyboxIndex >= 0) {
         // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
         float3 skyDirection = float3(hit.rayDir.x, -hit.rayDir.y, hit.rayDir.z);
         radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+        hitTOut = 10000.0;
     }
-    // hit.hitT == REFLECTION_HIT_T_OWNED: leave radiance at 0, already covered by ReSTIR's own specular term.
+    // hit.hitT == REFLECTION_HIT_T_OWNED (or the NaN clear-sentinel): radiance and hitTOut stay 0, matching the "no hit" convention RELAX's temporal accumulation expects.
 
     radiance *= pc.intensity;
 
@@ -96,6 +108,14 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
     float3 specReflectance = max(F0 * envBRDF.x + envBRDF.y, float3(0.01, 0.01, 0.01));
     float3 demodulated = radiance / specReflectance;
 
-    float hitTOut = (hit.hitT >= 0.0) ? hit.hitT : 10000.0;
-    rdgStorageFloat4[pc.outputIndex][pixel] = float4(demodulated, hitTOut);
+    // Packed (rcoord) when a checkerboard-aware consumer (the reflection RELAX prepass) will resolve it; otherwise dense-duplicated to both fields so a direct .Load(pixel) fallback (denoiser off, or ReBLUR/plain modes) sees no holes. Matches lighting_pbr_restir.slang's writeCoord logic exactly.
+    float4 outColor = float4(demodulated, hitTOut);
+    uint2 writeCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? rcoord : pixel;
+    rdgStorageFloat4[pc.outputIndex][writeCoord] = outColor;
+    if (field != 0u && pc.bCheckerboardPacked == 0u) {
+        int2 o = OtherFieldPixel(pixel, field);
+        if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
+            rdgStorageFloat4[pc.outputIndex][uint2(o)] = outColor;
+        }
+    }
 }

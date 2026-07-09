@@ -551,6 +551,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             relax.framerateScale = denoiserFramerateScale;
             reblur.framerateScale = denoiserFramerateScale;
 
+            Core::RELAXParams reflectionRelax = restir.reflectionRelax;
+            reflectionRelax.framerateScale = denoiserFramerateScale;
+
             // Ground-truth reference overlays are orthogonal to LightingMode: when one is active it replaces the normal lighting path entirely.
             if (viewFamily.groundTruthMode != Core::GroundTruthMode::None) {
                 switch (viewFamily.groundTruthMode) {
@@ -601,17 +604,26 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                         SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection);
                         SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
-                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply);
+                        if (frameBuffer.reflection.bEnabled) {
+                            // Feeds the reflection shade pass's cluster-punctual local-light lookup (reuses the mirror pixel's own cluster as the reflected hit's candidate set).
+                            // Not accurate (gets worse the farther the "reflected point" is from the mirror, but it's good enough (however, no shadows nor AO).
+                            const float restirClusterZNear = viewFamily.mainView.currentViewData.nearPlane;
+                            SetupLightCullingPass(*renderGraph, pipelineManager, viewFamily, 0, restirClusterZNear, viewFamily.clusterZFar);
+                        }
+
+                        const bool bReflectionCheckerboardPacked = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX && frameBuffer.reflection.bDenoiserEnabled;
+                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, restir.brdfRoughnessMax);
                         const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                         if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection);
+                            SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection, restir.brdfRoughnessMax);
+                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection);
+                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax);
                         }
                         else {
-                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection);
+                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax);
                         }
                         break;
                     }

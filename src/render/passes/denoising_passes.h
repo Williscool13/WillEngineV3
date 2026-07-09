@@ -28,7 +28,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         uint32_t activeCheckerboardField,
                         float checkerboardResolveAccumSpeed,
                         bool bDDGIApply,
-                        const Core::RTReflectionConfiguration& reflectionConfig);
+                        const Core::RTReflectionConfiguration& reflectionConfig,
+                        float brdfRoughnessMax);
 
 void SetupReBLURDenoiser(RenderGraph& graph,
                          PipelineManager* pipelineManager,
@@ -42,7 +43,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          uint32_t activeCheckerboardField,
                          float checkerboardResolveAccumSpeed,
                          bool bDDGIApply,
-                         const Core::RTReflectionConfiguration& reflectionConfig);
+                         const Core::RTReflectionConfiguration& reflectionConfig,
+                         float brdfRoughnessMax);
 } // Render
 
 #endif //WILL_ENGINE_DENOISING_PASSES_H

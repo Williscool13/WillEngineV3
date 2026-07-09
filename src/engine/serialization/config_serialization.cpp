@@ -190,6 +190,7 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"boilingFilterStrength", p.boilingFilterStrength},
         {"bInitialVisibility", p.bInitialVisibility},
         {"bSunCandidateVisibility", p.bSunCandidateVisibility},
+        {"brdfRoughnessMax", p.brdfRoughnessMax},
         {"regirWClamp", p.regirWClamp},
         {"restirWClamp", p.restirWClamp},
         {"bEmissiveTriangleLights", p.bEmissiveTriangleLights},
@@ -206,6 +207,7 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"atrous", nlohmann::json{{"iterations", p.atrous.iterations}, {"sigmaLuminance", p.atrous.sigmaLuminance}, {"sigmaNormal", p.atrous.sigmaNormal}, {"sigmaDepth", p.atrous.sigmaDepth}}},
         {"svgf", nlohmann::json{{"alphaMin", p.svgf.alphaMin}, {"gradientThreshold", p.svgf.gradientThreshold}, {"sigmaLuminance", p.svgf.sigmaLuminance}, {"sigmaNormal", p.svgf.sigmaNormal}, {"sigmaDepth", p.svgf.sigmaDepth}, {"atrousIterations", p.svgf.atrousIterations}}},
         {"relax", RelaxToJson(p.relax)},
+        {"reflectionRelax", RelaxToJson(p.reflectionRelax)},
         {"reblur", ReblurToJson(p.reblur)},
     };
 }
@@ -231,6 +233,7 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
     p.bSunCandidateVisibility = getBool("bSunCandidateVisibility", p.bSunCandidateVisibility);
+    p.brdfRoughnessMax = r.contains("brdfRoughnessMax") && r["brdfRoughnessMax"].is_number() ? r["brdfRoughnessMax"].get<float>() : p.brdfRoughnessMax;
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
     p.bEmissiveTriangleLights = getBool("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
@@ -266,6 +269,9 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     }
     if (r.contains("relax") && r["relax"].is_object()) {
         RelaxFromJson(r["relax"], p.relax);
+    }
+    if (r.contains("reflectionRelax") && r["reflectionRelax"].is_object()) {
+        RelaxFromJson(r["reflectionRelax"], p.reflectionRelax);
     }
     if (r.contains("reblur") && r["reblur"].is_object()) {
         ReblurFromJson(r["reblur"], p.reblur);
@@ -339,6 +345,7 @@ nlohmann::json ToJson(const Core::RTReflectionConfiguration& p)
 {
     return {
         {"bEnabled", p.bEnabled},
+        {"bDenoiserEnabled", p.bDenoiserEnabled},
         {"roughnessMax", p.roughnessMax},
         {"intensity", p.intensity},
     };
@@ -349,6 +356,7 @@ void FromJson(const nlohmann::json& r, Core::RTReflectionConfiguration& p)
     auto rBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
     auto rFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
     p.bEnabled = rBool("bEnabled", p.bEnabled);
+    p.bDenoiserEnabled = rBool("bDenoiserEnabled", p.bDenoiserEnabled);
     p.roughnessMax = rFloat("roughnessMax", p.roughnessMax);
     p.intensity = rFloat("intensity", p.intensity);
 }

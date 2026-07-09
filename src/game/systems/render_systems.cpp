@@ -1721,9 +1721,9 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
          .backgroundColor = {0, 0, 0, 140},
          .cornerRadius = CLAY_CORNER_RADIUS(4),
          .floating = {
-             .offset = { .x = 16, .y = 16 },
+             .offset = { .x = 16, .y = -16 },
              .zIndex = 100,
-             .attachPoints = { .element = CLAY_ATTACH_POINT_LEFT_TOP, .parent = CLAY_ATTACH_POINT_LEFT_TOP },
+             .attachPoints = { .element = CLAY_ATTACH_POINT_LEFT_BOTTOM, .parent = CLAY_ATTACH_POINT_LEFT_BOTTOM },
              .attachTo = CLAY_ATTACH_TO_ROOT,
              },
          }) {

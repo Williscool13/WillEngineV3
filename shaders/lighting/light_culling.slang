@@ -23,8 +23,10 @@ void ComputeLightCulling(uniform LightCullingPushConstant pc, uint3 threadID : S
     uint indexOffset = clusterIndex * MAX_LIGHTS_PER_CLUSTER;
     uint count = 0u;
 
-    int lightCount = pc.lightData->lightCount;
-    for (int i = 0; i < lightCount; i++)
+    // [0, analyticLightCount) are the analytic (area/sphere) lights this pass supports. [analyticLightCount, lightCount) are emissive triangles.
+    // Triangle lights are unsupported by the punctual path clusters feed, so the loop stops before them entirely.
+    int analyticCount = pc.lightData->analyticLightCount;
+    for (int i = 0; i < analyticCount; i++)
     {
         LightInfo light = pc.lightData->lights[i];
         float3 centerVS = mul(scene.view, float4(light.position.xyz, 1.0)).xyz;

@@ -46,3 +46,11 @@ public float SqDistPointAABB(float3 p, float3 mn, float3 mx)
     float3 d = max(max(mn - p, p - mx), float3(0.0));
     return dot(d, d);
 }
+
+public struct ClusterPunctualLights
+{
+    public float4x4 view;
+    public uint2* grid;
+    public uint* indexList;
+    public uint clusterIndex;
+};

@@ -62,7 +62,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
-    int mBrdf = (roughness <= RESTIR_BRDF_ROUGHNESS_MAX) ? RESTIR_M_BRDF : 0;
+    int mBrdf = (roughness <= pc.brdfRoughnessMax) ? RESTIR_M_BRDF : 0;
 
     int lightCount = pc.lightData->lightCount;
 
@@ -165,8 +165,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             float uSelect = HashStep(h);
 
             float p_brdf_sample;
-            // Unclamped: direction is stable at roughness 0 (exact mirror), only pdf hits 0 there, already gated below.
-            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, li.roughness, p_brdf_sample);
+            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, p_brdf_sample);
 
             float p_hat_Xi = 0.0;
             int bestLightIdx = -1;
@@ -253,7 +252,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                 }
                 hitT = nearestT;
 #endif
-                if (hitLightIdx >= 0 && p_brdf_sample > 0.0) {
+                if (hitLightIdx >= 0) {
                     LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
                     Xi = bTriHit ? triXi : viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);

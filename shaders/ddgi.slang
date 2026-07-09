@@ -70,7 +70,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
             result = float4(-1.0, 0.0, 0.0, hitT);
         } else if (q.CommittedTriangleFrontFace()) {
             uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
-            float3 radiance = ShadeProbeRayHit(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), ray.Origin + direction * hitT, direction, rng);
+            float3 radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), ray.Origin + direction * hitT, direction, rng);
             // Firefly clamp
             float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
             if (pc.maxRayRadiance > 0.0 && maxChannel > pc.maxRayRadiance) {

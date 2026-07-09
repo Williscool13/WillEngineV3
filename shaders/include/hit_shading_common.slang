@@ -9,14 +9,16 @@ import bindless_declarations;
 import shader_functions;
 import packing_functions;
 import pbr_functions;
+import punctual_lighting;
+import cluster_common;
 import random_common;
 import shader_constants;
 
 // Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
 
-/** Radiance leaving a traced ray's hit surface toward the ray origin: Oren-Nayar diffuse lit by the sun and one uniformly picked local light (both shadow-ray tested), emissive, and the DDGI cascade chain's irradiance (infinite bounce / indirect). Indices are global (rebased at upload). */
-public float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed)
+/** NEE variant: sun + one uniformly picked local light, both shadow-ray tested, + emissive + DDGI feedback. Used by DDGI's own probe trace. */
+public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -120,6 +122,83 @@ public float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
             }
+        }
+    }
+
+    if (pc.bFeedbackValid != 0) {
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades);
+        radiance += diffuseColor * gi.rgb;
+    }
+    return radiance;
+}
+
+/** Analytical variant: sun (shadow-ray tested) + the caller's own cluster's punctual light sum (unshadowed, no selection noise) + emissive + DDGI feedback. Used by the reflection shade pass. */
+public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, ClusterPunctualLights clusterLights)
+{
+    Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
+
+    uint firstIndex = primitive.indexOffset + triangleIndex * 3;
+    VertexAttribute a0 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 0]];
+    VertexAttribute a1 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 1]];
+    VertexAttribute a2 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 2]];
+
+    float3 bary = float3(1.0 - barycentrics.x - barycentrics.y, barycentrics.x, barycentrics.y);
+    float3 normalOS = normalize(bary.x * DecodeNormal(a0) + bary.y * DecodeNormal(a1) + bary.z * DecodeNormal(a2));
+    float2 uv = bary.x * DecodeUV(a0) + bary.y * DecodeUV(a1) + bary.z * DecodeUV(a2);
+    float4 vertexColor = bary.x * DecodeColor(a0) + bary.y * DecodeColor(a1) + bary.z * DecodeColor(a2);
+
+    Model model = pc.modelBuffer[instance.modelIndex];
+    float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
+
+    MaterialProperties material = pc.materialBuffer[instance.materialIndex];
+    float4 albedo = material.colorFactor * vertexColor;
+    if (material.textureImageIndices.x >= 0) {
+        float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
+        albedo *= assetTextures[material.textureImageIndices.x].SampleLevel(assetSamplers[material.textureSamplerIndices.x], colorUV, HIT_SHADING_TEXTURE_LOD);
+    }
+    float3 emissive = material.emissiveFactor.rgb * material.emissiveFactor.w;
+    if (material.textureImageIndices.w >= 0) {
+        float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
+        emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
+    }
+    float3 diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
+    float roughness = max(material.metalRoughFactors.y, 0.045);
+    float3 V = -rayDirection;
+    float NoV = max(dot(N, V), 0.0);
+
+    float3 radiance = emissive;
+    DirectionalLightData sun = pc.lightData->directionalLight;
+    if (sun.directionIntensity.w > 0.0) {
+        float3 L = normalize(-sun.directionIntensity.xyz);
+        float NoL = dot(N, L);
+        if (NoL > 0.0) {
+            RayDesc shadowRay;
+            shadowRay.Origin = worldPosition + N * 0.05;
+            shadowRay.Direction = L;
+            shadowRay.TMin = 0.001;
+            shadowRay.TMax = 10000.0;
+
+            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
+            shadow.Proceed();
+            if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
+                radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
+            }
+        }
+    }
+
+    // Cluster-punctual: the caller's own screen pixel's light cluster, summed analytically (no shadow ray, no selection noise).
+    // Accurate near the caller's pixel; increasingly approximate the farther worldPosition is from it (e.g. a long reflection ray).
+    if (clusterLights.grid != nullptr) {
+        uint2 gridEntry = clusterLights.grid[clusterLights.clusterIndex];
+        float3 viewPos = mul(clusterLights.view, float4(worldPosition, 1.0)).xyz;
+        float3 viewN = normalize(mul((float3x3)clusterLights.view, N));
+        float3 viewV = normalize(mul((float3x3)clusterLights.view, V));
+        float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, material.metalRoughFactors.x);
+        for (uint j = 0; j < gridEntry.y; j++) {
+            uint lightIndex = clusterLights.indexList[gridEntry.x + j];
+            PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], clusterLights.view);
+            radiance += ShadePunctual(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
         }
     }
 

@@ -439,6 +439,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t activeCheckerboardField;
     SHADER_PUBLIC uint32_t bSunCandidateVisibility;
     SHADER_PUBLIC float reflectionRoughnessMax;
+    SHADER_PUBLIC float brdfRoughnessMax;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -584,6 +585,8 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
     SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
+    SHADER_PUBLIC SHADER_PTR(uint2) clusterLightGrid;
+    SHADER_PUBLIC SHADER_PTR(uint) clusterLightIndexList;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
@@ -597,7 +600,9 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC float roughnessMax;
     SHADER_PUBLIC float intensity;
     SHADER_PUBLIC uint32_t bDDGIApply;
-    SHADER_PUBLIC uint32_t bLocalNEE;
+    SHADER_PUBLIC float clusterZNear;
+    SHADER_PUBLIC float clusterZFar;
+    SHADER_PUBLIC uint32_t bCheckerboardPacked;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant

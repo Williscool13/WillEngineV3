@@ -690,6 +690,7 @@ struct ReSTIRParams
     /** Trace the sun candidate's shadow ray BEFORE it enters the fresh RIS: an occluded sun must not win
      *  and starve the pixel of signal (slow convergence at disocclusions in sun shadow). */
     bool bSunCandidateVisibility{true};
+    float brdfRoughnessMax{0.3f};
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};
@@ -737,6 +738,7 @@ struct ReSTIRParams
     SVGFParams svgf{};
 
     RELAXParams relax{};
+    RELAXParams reflectionRelax{};
 
     ReBLURParams reblur{};
 };
@@ -778,6 +780,7 @@ struct DDGIParams
 struct RTReflectionConfiguration
 {
     bool bEnabled{true};
+    bool bDenoiserEnabled{true};
 
     float roughnessMax{0.3f};
     float intensity{1.0f};
