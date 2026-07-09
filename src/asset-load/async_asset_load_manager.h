@@ -119,9 +119,9 @@ public:
         return textureLoadAllocator.GetCount();
     }
 
-    void QueueTransferDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
+    void QueueTransferDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore);
 
-    void QueueGraphicsDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
+    void QueueGraphicsDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore);
 
     // Drained by RenderThread each frame on the graphics queue
     moodycamel::ConcurrentQueue<GPUDispatchRequest> graphicsDispatchQueue;

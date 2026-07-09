@@ -39,8 +39,8 @@ void ProceduralModelLoadSlot::Initialize(
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
     Core::MemoryManager* _memoryManager,
-    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> transferDispatchCallback,
-    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore)> transferDispatchCallback,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore)> graphicsDispatchCallback,
     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
@@ -109,12 +109,16 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
     VkFence fence;
     VK_CHECK(vkCreateFence(loadSlot->context->device, &fenceInfo, nullptr, &fence));
 
+    VkSemaphoreCreateInfo uploadCompleteSemaphoreInfo = Render::VkHelpers::SemaphoreCreateInfo();
+    VkSemaphore uploadCompleteSemaphore;
+    VK_CHECK(vkCreateSemaphore(loadSlot->context->device, &uploadCompleteSemaphoreInfo, nullptr, &uploadCompleteSemaphore));
+
     auto submitAndWait = [&](bool reset) {
         ZoneScopedN("SubmitAndWait");
 
         VK_CHECK(vkEndCommandBuffer(cmd));
         std::binary_semaphore done(0);
-        loadSlot->_requestTransferDispatchCallback(cmd, fence, &done);
+        loadSlot->_requestTransferDispatchCallback(cmd, fence, &done, VK_NULL_HANDLE);
         done.acquire();
 
         if (reset) {
@@ -133,7 +137,7 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
 
     VK_CHECK(vkEndCommandBuffer(cmd));
     std::binary_semaphore done(0);
-    loadSlot->_requestTransferDispatchCallback(cmd, fence, &done);
+    loadSlot->_requestTransferDispatchCallback(cmd, fence, &done, uploadCompleteSemaphore);
     done.acquire();
 
     vkDestroyFence(loadSlot->context->device, fence, nullptr);
@@ -156,11 +160,13 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
         VkCommandBufferBeginInfo graphicsBeginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &graphicsBeginInfo));
 
+        VkSemaphore waitSemaphore = uploadCompleteSemaphore;
         auto graphicsSubmitAndWait = [&](bool reset) {
             ZoneScopedN("GraphicsSubmitAndWait");
             VK_CHECK(vkEndCommandBuffer(graphicsCmd));
             std::binary_semaphore done(0);
-            loadSlot->_requestGraphicsDispatchCallback(graphicsCmd, graphicsFence, &done);
+            loadSlot->_requestGraphicsDispatchCallback(graphicsCmd, graphicsFence, &done, waitSemaphore);
+            waitSemaphore = VK_NULL_HANDLE;
             done.acquire();
             if (reset) {
                 VK_CHECK(vkResetFences(loadSlot->context->device, 1, &graphicsFence));
@@ -175,6 +181,8 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
         vkDestroyFence(loadSlot->context->device, graphicsFence, nullptr);
         vkDestroyCommandPool(loadSlot->context->device, graphicsCommandPool, nullptr);
     }
+
+    vkDestroySemaphore(loadSlot->context->device, uploadCompleteSemaphore, nullptr);
 
     loadSlot->_notifyCallback(true, loadSlot->slotHandle, loadSlot->uploadStagingSlotHandle);
 }

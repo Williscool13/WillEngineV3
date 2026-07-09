@@ -192,12 +192,12 @@ void AssetGenerator::Join()
 
 void AssetGenerator::TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
 {
-    asyncAssetLoadManager->QueueTransferDispatch(cmd, fence, completionSignal);
+    asyncAssetLoadManager->QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
 }
 
 void AssetGenerator::GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
 {
-    renderThread->editorGPUDispatchQueue.enqueue({cmd, fence, completionSignal});
+    renderThread->editorGPUDispatchQueue.enqueue({cmd, fence, completionSignal, VK_NULL_HANDLE, VK_NULL_HANDLE});
 }
 
 void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath)

@@ -213,10 +213,13 @@ void RenderThread::ThreadMain()
         } {
             AssetLoad::GPUDispatchRequest req{};
             while (asyncAssetLoadManager->graphicsDispatchQueue.try_dequeue(req)) {
-                VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &req.cmd;
-                VK_CHECK(vkQueueSubmit(context->graphicsQueue, 1, &submitInfo, req.fence));
+                VkCommandBufferSubmitInfo cmdSubmitInfo = Render::VkHelpers::CommandBufferSubmitInfo(req.cmd);
+                VkSemaphoreSubmitInfo waitInfo = Render::VkHelpers::SemaphoreSubmitInfo(req.waitSemaphore, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
+                VkSemaphoreSubmitInfo signalInfo = Render::VkHelpers::SemaphoreSubmitInfo(req.signalSemaphore, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
+                const VkSemaphoreSubmitInfo* pWaitInfo = req.waitSemaphore != VK_NULL_HANDLE ? &waitInfo : nullptr;
+                const VkSemaphoreSubmitInfo* pSignalInfo = req.signalSemaphore != VK_NULL_HANDLE ? &signalInfo : nullptr;
+                VkSubmitInfo2 submitInfo = Render::VkHelpers::SubmitInfo(&cmdSubmitInfo, pWaitInfo, pSignalInfo);
+                VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, req.fence));
                 VK_CHECK(vkWaitForFences(context->device, 1, &req.fence, VK_TRUE, UINT64_MAX));
                 req.completionSignal->release();
             }
@@ -225,10 +228,13 @@ void RenderThread::ThreadMain()
         {
             AssetLoad::GPUDispatchRequest req{};
             while (editorGPUDispatchQueue.try_dequeue(req)) {
-                VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &req.cmd;
-                VK_CHECK(vkQueueSubmit(context->graphicsQueue, 1, &submitInfo, req.fence));
+                VkCommandBufferSubmitInfo cmdSubmitInfo = Render::VkHelpers::CommandBufferSubmitInfo(req.cmd);
+                VkSemaphoreSubmitInfo waitInfo = Render::VkHelpers::SemaphoreSubmitInfo(req.waitSemaphore, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
+                VkSemaphoreSubmitInfo signalInfo = Render::VkHelpers::SemaphoreSubmitInfo(req.signalSemaphore, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
+                const VkSemaphoreSubmitInfo* pWaitInfo = req.waitSemaphore != VK_NULL_HANDLE ? &waitInfo : nullptr;
+                const VkSemaphoreSubmitInfo* pSignalInfo = req.signalSemaphore != VK_NULL_HANDLE ? &signalInfo : nullptr;
+                VkSubmitInfo2 submitInfo = Render::VkHelpers::SubmitInfo(&cmdSubmitInfo, pWaitInfo, pSignalInfo);
+                VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, req.fence));
                 VK_CHECK(vkWaitForFences(context->device, 1, &req.fence, VK_TRUE, UINT64_MAX));
                 req.completionSignal->release();
             }

@@ -117,6 +117,8 @@ struct GPUDispatchRequest
     VkCommandBuffer cmd;
     VkFence fence;
     std::binary_semaphore* completionSignal;
+    VkSemaphore signalSemaphore;
+    VkSemaphore waitSemaphore;
 };
 
 struct StaticModelLoadRequest

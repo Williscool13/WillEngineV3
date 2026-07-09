@@ -20,6 +20,7 @@
 #include "render/pipelines/pipeline_data.h"
 #include "render/types/cubemap_asset.h"
 #include "render/vulkan/vk_context.h"
+#include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace AssetLoad
@@ -60,11 +61,11 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             &memoryManager,
-            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueTransferDispatch(cmd, fence, completionSignal);
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore) {
+                QueueTransferDispatch(cmd, fence, completionSignal, signalSemaphore);
             },
-            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueGraphicsDispatch(cmd, fence, completionSignal);
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore) {
+                QueueGraphicsDispatch(cmd, fence, completionSignal, waitSemaphore);
             },
             [this](bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnModelLoadComplete(success, modelSlotHandle, uploadStagingSlotHandle);
@@ -78,11 +79,11 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             &memoryManager,
-            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueTransferDispatch(cmd, fence, completionSignal);
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore) {
+                QueueTransferDispatch(cmd, fence, completionSignal, signalSemaphore);
             },
-            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueGraphicsDispatch(cmd, fence, completionSignal);
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore) {
+                QueueGraphicsDispatch(cmd, fence, completionSignal, waitSemaphore);
             },
             [this](bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnProceduralModelLoadComplete(success, slotHandle, uploadStagingSlotHandle);
@@ -107,7 +108,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueTransferDispatch(cmd, fence, completionSignal);
+                QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
             },
             [this](bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnTextureLoadComplete(success, textureSlotHandle, uploadStagingSlotHandle);
@@ -122,7 +123,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueTransferDispatch(cmd, fence, completionSignal);
+                QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
             },
             [this](bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnCubemapComplete(success, cubemapSlotHandle, uploadStagingSlotHandle);
@@ -141,7 +142,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             pipelineManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueGraphicsDispatch(cmd, fence, completionSignal);
+                QueueGraphicsDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
             },
             [this](bool success, ProceduralTextureSlotHandle slotHandle) {
                 OnProceduralTextureLoadComplete(success, slotHandle);
@@ -368,12 +369,14 @@ void AsyncAssetLoadManager::GPUDispatchThreadMain()
 
             size_t count = gpuDispatchQueue.try_dequeue_bulk(batch, MAX_BATCH);
             if (count > 0) {
-                VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
-                submitInfo.commandBufferCount = 1;
-
                 for (size_t i = 0; i < count; ++i) {
-                    submitInfo.pCommandBuffers = &batch[i].cmd;
-                    VK_CHECK(vkQueueSubmit(this->context->transferQueue, 1, &submitInfo, batch[i].fence));
+                    VkCommandBufferSubmitInfo cmdSubmitInfo = Render::VkHelpers::CommandBufferSubmitInfo(batch[i].cmd);
+                    VkSemaphoreSubmitInfo waitInfo = Render::VkHelpers::SemaphoreSubmitInfo(batch[i].waitSemaphore, VK_PIPELINE_STAGE_2_COPY_BIT);
+                    VkSemaphoreSubmitInfo signalInfo = Render::VkHelpers::SemaphoreSubmitInfo(batch[i].signalSemaphore, VK_PIPELINE_STAGE_2_COPY_BIT);
+                    const VkSemaphoreSubmitInfo* pWaitInfo = batch[i].waitSemaphore != VK_NULL_HANDLE ? &waitInfo : nullptr;
+                    const VkSemaphoreSubmitInfo* pSignalInfo = batch[i].signalSemaphore != VK_NULL_HANDLE ? &signalInfo : nullptr;
+                    VkSubmitInfo2 submitInfo = Render::VkHelpers::SubmitInfo(&cmdSubmitInfo, pWaitInfo, pSignalInfo);
+                    VK_CHECK(vkQueueSubmit2(this->context->transferQueue, 1, &submitInfo, batch[i].fence));
                     fenceBuf[i] = batch[i].fence;
                 }
 
@@ -563,16 +566,16 @@ bool AsyncAssetLoadManager::TryDequeueSamplerComplete(SamplerLoadComplete& outRe
     return samplerLoadCompleteQueue.try_dequeue(outResult);
 }
 
-void AsyncAssetLoadManager::QueueTransferDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
+void AsyncAssetLoadManager::QueueTransferDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore)
 {
-    gpuDispatchQueue.enqueue({cmd, fence, completionSignal});
+    gpuDispatchQueue.enqueue({cmd, fence, completionSignal, signalSemaphore, VK_NULL_HANDLE});
     gpuDispatchWorkCounter.fetch_add(1);
     gpuDispatchWakeCV.notify_one();
 }
 
-void AsyncAssetLoadManager::QueueGraphicsDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
+void AsyncAssetLoadManager::QueueGraphicsDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore)
 {
-    graphicsDispatchQueue.enqueue({cmd, fence, completionSignal});
+    graphicsDispatchQueue.enqueue({cmd, fence, completionSignal, VK_NULL_HANDLE, waitSemaphore});
 }
 
 void AsyncAssetLoadManager::RequestProceduralTextureLoad(Engine::Texture* texture, StringID pipelineId)
