@@ -1531,6 +1531,18 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
+static const char* DenoiserModeName(Core::ReSTIRParams::DenoiserMode mode)
+{
+    switch (mode) {
+        case Core::ReSTIRParams::DenoiserMode::None: return "None";
+        case Core::ReSTIRParams::DenoiserMode::ATrous: return "ATrous";
+        case Core::ReSTIRParams::DenoiserMode::ASVGF: return "ASVGF";
+        case Core::ReSTIRParams::DenoiserMode::RELAX: return "RELAX";
+        case Core::ReSTIRParams::DenoiserMode::ReBLUR: return "ReBLUR";
+    }
+    return "None";
+}
+
 void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     Clay_SetLayoutDimensions({static_cast<float>(ctx->windowContext.viewportWidth), static_cast<float>(ctx->windowContext.viewportHeight)});
@@ -1673,12 +1685,39 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     const char* aaModeName = AA_MODE_NAMES[static_cast<int32_t>(state->lighting.aaConfig.mode)];
     const char* profileName = state->projectConfig.activeLightingProfile.IsEmpty() ? "(none)" : state->projectConfig.activeLightingProfile.c_str();
     const auto profileText = Core::InlineString<80>::Format("Profile: %s", profileName);
-    const auto aaText = Core::InlineString<48>::Format("AA: %s", aaModeName);
+    const auto aaText = Core::InlineString<48>::Format("AA: %s | Denoiser: %s", aaModeName, DenoiserModeName(state->debug.restir.denoiserMode));
+
+    const auto renderWidth = static_cast<uint32_t>(static_cast<float>(ctx->windowContext.viewportWidth) * state->projectConfig.resolutionScale);
+    const auto renderHeight = static_cast<uint32_t>(static_cast<float>(ctx->windowContext.viewportHeight) * state->projectConfig.resolutionScale);
+    const auto resText = Core::InlineString<64>::Format("Res: %ux%u (%.0f%%)", renderWidth, renderHeight, state->projectConfig.resolutionScale * 100.0f);
+
+    const Core::PostProcessConfiguration& pp = state->lighting.postProcess;
+    Core::InlineString<160> ppSummary("PP:");
+    bool bAnyPPActive = false;
+    auto appendPPTag = [&](bool bEnabled, const char* tag) {
+        if (!bEnabled) { return; }
+        ppSummary.Append(bAnyPPActive ? ", " : " ");
+        ppSummary.Append(tag);
+        bAnyPPActive = true;
+    };
+    appendPPTag(state->lighting.gtaoConfig.bEnabled, "GTAO");
+    appendPPTag(pp.bExposureEnabled, "Exposure");
+    appendPPTag(pp.bBloomEnabled, "Bloom");
+    appendPPTag(pp.bColorGradingEnabled, "ColorGrade");
+    appendPPTag(pp.bVignetteAberrationEnabled, "Vignette");
+    appendPPTag(pp.bSharpeningEnabled, "Sharpen");
+    appendPPTag(pp.bPaniniEnabled, "Panini");
+    appendPPTag(pp.bFilmGrainEnabled, "FilmGrain");
+    appendPPTag(pp.bDitherEnabled, "Dither");
+    if (!bAnyPPActive) { ppSummary.Append(" None"); }
+
     const Clay_String profileString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(profileText.Size()), .chars = profileText.c_str()};
     const Clay_String aaString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(aaText.Size()), .chars = aaText.c_str()};
+    const Clay_String resString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(resText.Size()), .chars = resText.c_str()};
+    const Clay_String ppString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(ppSummary.Size()), .chars = ppSummary.c_str()};
 
     CLAY(CLAY_ID("FpsCounter"), {
-         .layout = { .padding = CLAY_PADDING_ALL(8), .childGap = 4, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+         .layout = { .sizing = { .width = CLAY_SIZING_FIXED(340) }, .padding = CLAY_PADDING_ALL(8), .childGap = 4, .layoutDirection = CLAY_TOP_TO_BOTTOM },
          .backgroundColor = {0, 0, 0, 140},
          .cornerRadius = CLAY_CORNER_RADIUS(4),
          .floating = {
@@ -1692,6 +1731,8 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
         CLAY_TEXT(gameFpsString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
         CLAY_TEXT(profileString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
         CLAY_TEXT(aaString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+        CLAY_TEXT(resString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+        CLAY_TEXT(ppString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
     }
 
     Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);

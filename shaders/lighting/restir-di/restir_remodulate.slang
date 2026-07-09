@@ -79,6 +79,11 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
             reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl) * pc.iblIntensity;
         }
 
+        if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
+            float3 tracedReflection = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb;
+            reflectionSpecular = tracedReflection * specReflectance;
+        }
+
         float gtao = 1.0;
         if (pc.shadowsIndex != ~0x0u) {
             gtao = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(pixel, 0)).y;

@@ -14,7 +14,7 @@ namespace Game
 {
 static void LoadLightingProfile(Engine::EngineState* state, const char* name)
 {
-    const bool loaded = Engine::Profiles::LoadLightingProfile(name, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi,
+    const bool loaded = Engine::Profiles::LoadLightingProfile(name, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection,
         state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
     if (loaded) {
         state->projectConfig.activeLightingProfile = Core::InlineString<64>(name);

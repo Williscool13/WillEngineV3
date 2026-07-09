@@ -12,6 +12,7 @@ import shader_functions;
 import packing_functions;
 import pbr_functions;
 import random_common;
+import hit_shading_common;
 
 // =============== Shader Summary ============
 // DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits shade sun + one NEE-sampled local light (shadow rays) + emissive plus last frame's probe irradiance (infinite bounce). Light-proxy hits carry no radiance (NEE owns direct light; probes hold pure bounce), only the hit distance for the visibility moments.
@@ -19,124 +20,6 @@ import random_common;
 // Blend visibility: same layout at 16x16 tiles; each texel integrates mean/mean^2 ray distance with a sharpened (pow distanceExponent) cosine lobe, for the Chebyshev occlusion test at sampling.
 // Relocate: one thread per probe applies RTXGI probe relocation to this frame's ray distances (light-proxy hits ignored), writing next frame's per-slot world offset (xyz, capped at 45% of spacing) and backface fraction (w, the sampler's dead-probe test).
 // Debug: one sphere per probe at its relocated position, L1 SH fitted from the probe's decoded atlas tile; dead probes render flat red.
-
-// Coarse fixed mip: probe irradiance is low frequency; keeps incoherent rays cache-friendly and pre-averages albedo.
-static const float DDGI_HIT_TEXTURE_LOD = 3.0;
-
-/** Radiance leaving the hit surface toward the probe: Oren-Nayar diffuse lit by the sun and one uniformly picked local light (both shadow-ray tested), emissive, and last frame's probe irradiance (infinite bounce). Indices are global (rebased at upload). */
-static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed)
-{
-    Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
-
-    uint firstIndex = primitive.indexOffset + triangleIndex * 3;
-    VertexAttribute a0 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 0]];
-    VertexAttribute a1 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 1]];
-    VertexAttribute a2 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 2]];
-
-    float3 bary = float3(1.0 - barycentrics.x - barycentrics.y, barycentrics.x, barycentrics.y);
-    float3 normalOS = normalize(bary.x * DecodeNormal(a0) + bary.y * DecodeNormal(a1) + bary.z * DecodeNormal(a2));
-    float2 uv = bary.x * DecodeUV(a0) + bary.y * DecodeUV(a1) + bary.z * DecodeUV(a2);
-    float4 vertexColor = bary.x * DecodeColor(a0) + bary.y * DecodeColor(a1) + bary.z * DecodeColor(a2);
-
-    Model model = pc.modelBuffer[instance.modelIndex];
-    float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
-
-    MaterialProperties material = pc.materialBuffer[instance.materialIndex];
-    float4 albedo = material.colorFactor * vertexColor;
-    if (material.textureImageIndices.x >= 0) {
-        float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
-        albedo *= assetTextures[material.textureImageIndices.x].SampleLevel(assetSamplers[material.textureSamplerIndices.x], colorUV, DDGI_HIT_TEXTURE_LOD);
-    }
-    float3 emissive = material.emissiveFactor.rgb * material.emissiveFactor.w;
-    if (material.textureImageIndices.w >= 0) {
-        float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
-        emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, DDGI_HIT_TEXTURE_LOD).rgb;
-    }
-    float3 diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    float roughness = max(material.metalRoughFactors.y, 0.045);
-    float3 V = -rayDirection;
-    float NoV = max(dot(N, V), 0.0);
-
-    float3 radiance = emissive;
-    DirectionalLightData sun = pc.lightData->directionalLight;
-    if (sun.directionIntensity.w > 0.0) {
-        float3 L = normalize(-sun.directionIntensity.xyz);
-        float NoL = dot(N, L);
-        if (NoL > 0.0) {
-            RayDesc shadowRay;
-            shadowRay.Origin = worldPosition + N * 0.05;
-            shadowRay.Direction = L;
-            shadowRay.TMin = 0.001;
-            shadowRay.TMax = 10000.0;
-
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
-            shadow.Proceed();
-            if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
-            }
-        }
-    }
-
-    // NEE (analytic lights only). Outer cascades skip it to save the shadow ray, keeping only sun + emissive + feedback)
-    int analyticCount = pc.lightData->analyticLightCount;
-    if (pc.bLocalNEE != 0 && analyticCount > 0) {
-        uint rng = rngSeed;
-        float rng0 = HashStep(rng);
-        float2 xi;
-        xi.x = HashStep(rng);
-        xi.y = HashStep(rng);
-        int lightIdx = clamp(int(rng0 * float(analyticCount)), 0, analyticCount - 1);
-        LightInfo light = pc.lightData->lights[lightIdx];
-
-        float3 lightSamplePos;
-        float lightArea;
-        if (light.type == LIGHT_TYPE_SPHERE) {
-            float radius = light.right.w;
-            float z = 1.0 - 2.0 * xi.x;
-            float rr = sqrt(max(1.0 - z * z, 0.0));
-            float phi = 2.0 * PI * xi.y;
-            lightSamplePos = light.position.xyz + radius * float3(rr * cos(phi), rr * sin(phi), z);
-            lightArea = 4.0 * PI * radius * radius;
-        } else {
-            lightSamplePos = light.position.xyz + light.right.xyz * (xi.x * 2.0 - 1.0) * light.right.w + light.up.xyz * (xi.y * 2.0 - 1.0) * light.up.w;
-            lightArea = 4.0 * light.right.w * light.up.w;
-        }
-
-        float3 toLight = lightSamplePos - worldPosition;
-        float lightDist = max(length(toLight), 1e-5);
-        float3 L = toLight / lightDist;
-        float cosShade = dot(N, L);
-        float cosLight = light.type == LIGHT_TYPE_SPHERE
-            ? max(dot(normalize(lightSamplePos - light.position.xyz), -L), 0.0)
-            : max(dot(-light.normal.xyz, L), 0.0);
-        float atten = LightRangeCull(lightDist, light.range);
-        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
-            float3 rayOrigin = worldPosition + N * 0.05;
-            float3 toLightShadow = lightSamplePos - rayOrigin;
-            float shadowDist = length(toLightShadow);
-
-            RayDesc shadowRay;
-            shadowRay.Origin = rayOrigin;
-            shadowRay.Direction = toLightShadow / shadowDist;
-            shadowRay.TMin = 0.001;
-            shadowRay.TMax = shadowDist - 0.05;
-
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
-            shadow.Proceed();
-            if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
-            }
-        }
-    }
-
-    if (pc.bFeedbackValid != 0) {
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades);
-        radiance += diffuseColor * gi.rgb;
-    }
-    return radiance;
-}
 
 [shader("compute")]
 [numthreads(64, 1, 1)]

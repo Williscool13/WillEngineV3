@@ -4,6 +4,7 @@ import constants_interop;
 import model_interop;
 import lights_interop;
 import restir_interop;
+import reflection_interop;
 import instance_mask_interop;
 
 import shader_functions;
@@ -164,7 +165,8 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             float uSelect = HashStep(h);
 
             float p_brdf_sample;
-            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, p_brdf_sample);
+            // Unclamped: direction is stable at roughness 0 (exact mirror), only pdf hits 0 there, already gated below.
+            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, li.roughness, p_brdf_sample);
 
             float p_hat_Xi = 0.0;
             int bestLightIdx = -1;
@@ -173,7 +175,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             float p_brdf_area = 0.0;
             LightVS bestVS = (LightVS)0;
 
-            if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0) {
+            if (dot(N, brdfL) > 0.0) {
                 int hitLightIdx = -1;
                 float hitT = 0.0;
                 bool bTriHit = false;
@@ -188,8 +190,11 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                 RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
                 q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_ALL, ray);
                 q.Proceed();
+
+                bool bReflEligible = roughness <= pc.reflectionRoughnessMax;
                 if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
                     Instance hitInst = pc.instanceBuffer[q.CommittedInstanceID()];
+                    bool bOwnedByReSTIR = false;
                     if (hitInst.emissiveTriLightBase != ~0u) {
                         uint idx = hitInst.emissiveTriLightBase + q.CommittedPrimitiveIndex();
                         if (idx < uint(lightCount)) {
@@ -200,14 +205,42 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                             triXi = tvs.center + bary.x * tvs.right + bary.y * tvs.up;
                             bTriHit = true;
                         }
+                        bOwnedByReSTIR = true;
                     } else {
                         uint hl = hitInst.lightIndex;
                         float t;
                         if (hl != ~0u && hl < uint(lightCount) && RayIntersectLight(UnpackLightVS(pc.lightVS[hl]), viewPosition, brdfL, t)) {
                             hitLightIdx = int(hl);
                             hitT = t;
+                            bOwnedByReSTIR = true;
                         }
                     }
+
+                    // Reflections piggyback this already-traced ray
+                    if (bReflEligible) {
+                        ReflectionHitDescriptor refl;
+                        refl.rayDir = ray.Direction;
+                        if (bOwnedByReSTIR) {
+                            refl.hitT = REFLECTION_HIT_T_OWNED;
+                            refl.bary = float2(0.0);
+                            refl.instanceID = ~0u;
+                            refl.primIndex = ~0u;
+                        } else {
+                            refl.hitT = q.CommittedRayT();
+                            refl.bary = q.CommittedTriangleBarycentrics();
+                            refl.instanceID = q.CommittedInstanceID();
+                            refl.primIndex = q.CommittedPrimitiveIndex();
+                        }
+                        pc.reflectionDescriptors[pixelIdx] = refl;
+                    }
+                } else if (bReflEligible) {
+                    ReflectionHitDescriptor refl;
+                    refl.rayDir = ray.Direction;
+                    refl.hitT = REFLECTION_HIT_T_SKY;
+                    refl.bary = float2(0.0);
+                    refl.instanceID = ~0u;
+                    refl.primIndex = ~0u;
+                    pc.reflectionDescriptors[pixelIdx] = refl;
                 }
 #else
                 float nearestT = 1e30;
@@ -220,7 +253,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                 }
                 hitT = nearestT;
 #endif
-                if (hitLightIdx >= 0) {
+                if (hitLightIdx >= 0 && p_brdf_sample > 0.0) {
                     LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
                     Xi = bTriHit ? triXi : viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);

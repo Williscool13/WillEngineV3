@@ -61,7 +61,7 @@ uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames)
     return ListProfiles("lighting", outNames, maxNames);
 }
 
-bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::GTAOConfiguration& gtao, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity, float& clusterZFar)
+bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::RTReflectionConfiguration& reflection, Core::GTAOConfiguration& gtao, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity, float& clusterZFar)
 {
     const nlohmann::json j = ReadProfileJson("lighting", name);
     if (!j.is_object()) {
@@ -76,6 +76,9 @@ bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Cor
     }
     if (j.contains("ddgi") && j["ddgi"].is_object()) {
         ConfigSerialization::FromJson(j["ddgi"], ddgi);
+    }
+    if (j.contains("reflection") && j["reflection"].is_object()) {
+        ConfigSerialization::FromJson(j["reflection"], reflection);
     }
     if (j.contains("gtao") && j["gtao"].is_object()) {
         ConfigSerialization::FromJson(j["gtao"], gtao);
@@ -95,12 +98,13 @@ bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Cor
     return true;
 }
 
-bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::GTAOConfiguration& gtao, StringID shadingOverride, StringID lightingOverride, float iblIntensity, float clusterZFar)
+bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::RTReflectionConfiguration& reflection, const Core::GTAOConfiguration& gtao, StringID shadingOverride, StringID lightingOverride, float iblIntensity, float clusterZFar)
 {
     nlohmann::json j;
     j["lightingMode"] = static_cast<uint32_t>(lightingMode);
     j["restir"] = ConfigSerialization::ToJson(restir);
     j["ddgi"] = ConfigSerialization::ToJson(ddgi);
+    j["reflection"] = ConfigSerialization::ToJson(reflection);
     j["gtao"] = ConfigSerialization::ToJson(gtao);
     j["iblIntensity"] = iblIntensity;
     j["clusterZFar"] = clusterZFar;

@@ -350,6 +350,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bDDGIHideInactiveProbes = state->debug.bDDGIHideInactiveProbes;
     frameBuffer->restir = state->debug.restir;
     frameBuffer->ddgi = state->lighting.ddgi;
+    frameBuffer->reflection = state->lighting.reflection;
     state->debug.restir.bResetReGIR = false;
     frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;
     frameBuffer->mainViewFamily.groundTruthMode = state->lighting.groundTruthMode;

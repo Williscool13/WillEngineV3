@@ -8,6 +8,7 @@
 #include "render/passes/geometry_passes.h"
 #include "render/passes/lighting_passes.h"
 #include "render/passes/restir_passes.h"
+#include "render/passes/reflection_passes.h"
 #include "render/passes/denoising_passes.h"
 #include "render/passes/ambient_occlusion_passes.h"
 #include "render/passes/shadow_passes.h"

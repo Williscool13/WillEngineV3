@@ -30,7 +30,7 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
     }
     Engine::WriteProjectConfig(cfg);
 }
@@ -54,7 +54,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -74,7 +74,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -326,6 +326,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Spatial W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirSpatialW, Core::DebugViewAspect::Depth);
             if (ImGui::Button("History Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirHistoryLightIdx, Core::DebugViewAspect::Depth);
             if (ImGui::Button("History W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirHistoryW, Core::DebugViewAspect::Depth);
+        }
+        if (ImGui::CollapsingHeader("RT Reflections Debug")) {
+            if (ImGui::Button("Raw Traced (Demodulated)")) setDebugTarget("reflection_spec_noisy", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
         if (ImGui::CollapsingHeader("G-Buffer")) {
             if (ImGui::Button("Depth")) setDebugTarget("depth_target", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
@@ -635,6 +638,26 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::Spacing();
             if (ImGui::Button("Reset GTAO")) {
                 gtao = Core::GTAOConfiguration{};
+                changed = true;
+            }
+        }
+
+        if (ImGui::CollapsingHeader("RT Reflections")) {
+            Core::RTReflectionConfiguration& reflection = state->lighting.reflection;
+            static const Core::RTReflectionConfiguration reflectionDefaults{};
+
+            if (ImGui::Checkbox("Enable RT Reflections", &reflection.bEnabled)) { changed = true; }
+
+            auto reflF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+            };
+
+            reflF("Roughness Max##reflection", &reflection.roughnessMax, reflectionDefaults.roughnessMax, 0.0f, 1.0f, "%.2f", "Surfaces rougher than this fall back to the prefiltered skybox reflection instead of being ray traced. Lower = only near-mirror surfaces get traced reflections, cheaper. Default 0.3.");
+            reflF("Intensity##reflection", &reflection.intensity, reflectionDefaults.intensity, 0.0f, 2.0f, "%.2f", "Multiplier on the traced reflection radiance before compositing. Default 1.0.");
+
+            ImGui::Spacing();
+            if (ImGui::Button("Reset RT Reflections")) {
+                reflection = Core::RTReflectionConfiguration{};
                 changed = true;
             }
         }

@@ -335,6 +335,24 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.minFrontfaceDistance = dFloat("minFrontfaceDistance", p.minFrontfaceDistance);
 }
 
+nlohmann::json ToJson(const Core::RTReflectionConfiguration& p)
+{
+    return {
+        {"bEnabled", p.bEnabled},
+        {"roughnessMax", p.roughnessMax},
+        {"intensity", p.intensity},
+    };
+}
+
+void FromJson(const nlohmann::json& r, Core::RTReflectionConfiguration& p)
+{
+    auto rBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
+    auto rFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
+    p.bEnabled = rBool("bEnabled", p.bEnabled);
+    p.roughnessMax = rFloat("roughnessMax", p.roughnessMax);
+    p.intensity = rFloat("intensity", p.intensity);
+}
+
 nlohmann::json ToJson(const Core::GTAOConfiguration& p)
 {
     return {

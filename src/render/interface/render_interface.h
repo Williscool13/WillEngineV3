@@ -775,6 +775,14 @@ struct DDGIParams
     float minFrontfaceDistance{0.3f};
 };
 
+struct RTReflectionConfiguration
+{
+    bool bEnabled{true};
+
+    float roughnessMax{0.3f};
+    float intensity{1.0f};
+};
+
 struct ViewFamily
 {
     ViewFamily() = default;
@@ -916,6 +924,7 @@ struct FrameBuffer
     bool bLogRDG = false;
     ReSTIRParams restir{};
     DDGIParams ddgi{};
+    RTReflectionConfiguration reflection{};
 
     bool bTakeScreenshot{false};
 };

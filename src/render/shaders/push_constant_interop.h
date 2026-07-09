@@ -22,6 +22,7 @@ import restir_interop;
 import relax_interop;
 import reblur_interop;
 import ddgi_interop;
+import reflection_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -35,6 +36,7 @@ import ddgi_interop;
 #include "relax_interop.h"
 #include "reblur_interop.h"
 #include "ddgi_interop.h"
+#include "reflection_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
@@ -86,6 +88,8 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint valueTransformationType;
     SHADER_PUBLIC uint outputImageIndex;
     SHADER_PUBLIC uint depthTextureIndex;
+    SHADER_PUBLIC uint checkerboardField;
+    SHADER_PUBLIC uint historyCheckerboardField;
 };
 
 SHADER_PUBLIC struct InstanceLODPushConstant
@@ -410,6 +414,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) genBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
+    SHADER_PUBLIC SHADER_PTR(ReflectionHitDescriptor) reflectionDescriptors;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
@@ -433,6 +438,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t bTemporalSearch;
     SHADER_PUBLIC uint32_t activeCheckerboardField;
     SHADER_PUBLIC uint32_t bSunCandidateVisibility;
+    SHADER_PUBLIC float reflectionRoughnessMax;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -562,6 +568,36 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t bDDGIApply;
     SHADER_PUBLIC uint32_t shadowsIndex;
+    SHADER_PUBLIC uint32_t reflectionIndex;
+    SHADER_PUBLIC float reflectionRoughnessMax;
+};
+
+SHADER_PUBLIC struct ReflectionShadePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ReflectionHitDescriptor) reflectionDescriptors;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
+    SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC int32_t skyboxIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t activeCheckerboardField;
+    SHADER_PUBLIC float roughnessMax;
+    SHADER_PUBLIC float intensity;
+    SHADER_PUBLIC uint32_t bDDGIApply;
+    SHADER_PUBLIC uint32_t bLocalNEE;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant

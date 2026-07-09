@@ -5,6 +5,7 @@
 #include "render/passes/restir_passes.h"
 
 #include "ddgi_passes.h"
+#include "reflection_passes.h"
 #include "render/render_config.h"
 #include "render/render_utils.h"
 #include "core/math/math_helpers.h"
@@ -26,10 +27,13 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        Core::Arena& arena,
                        uint64_t frameNumber,
                        const Core::ReSTIRParams& restirParams,
-                       uint32_t activeCheckerboardField)
+                       uint32_t activeCheckerboardField,
+                       const Core::RTReflectionConfiguration& reflectionConfig)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const uint32_t reservoirBufferSize = pixelCount * static_cast<uint32_t>(sizeof(Reservoir));
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
+    const uint32_t reflectionBufferSize = pixelCount * static_cast<uint32_t>(sizeof(ReflectionHitDescriptor));
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     // tlasIndex (and the carried prev-TLAS index) resolve inside the Execute lambdas: the AS resource's physical + RT descriptor are assigned during Compile, after pass setup.
@@ -218,6 +222,15 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const bool bHasPrevTlas = bConfidence && graph.HasBuffer(SID("rt_tlas_history"));
 
         graph.CreateBuffer(SID("restir_reservoir_base"), reservoirBufferSize, true);
+        if (reflectionRoughnessMax >= 0.0f) {
+            graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, reflectionBufferSize, true);
+
+            RenderPass& reflClearPass = graph.AddPass(SID("[Reflection] Clear Descriptors"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::ReSTIR);
+            reflClearPass.WriteTransferBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
+            reflClearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                vkCmdFillBuffer(cmd, graph.GetBufferHandle(REFLECTION_HIT_DESCRIPTORS_BUFFER), 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
+            });
+        }
 
         // Base candidate generation
         RenderPass& basePass = graph.AddPass(SID("[ReSTIR DI] Base"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
@@ -233,7 +246,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
         basePass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { basePass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         basePass.WriteBuffer(SID("restir_reservoir_base"));
-        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        if (reflectionRoughnessMax >= 0.0f) { basePass.WriteBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER); }
+        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, reflectionRoughnessMax, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_base_regir"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -250,6 +264,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .historyBuffer = 0,
                 .genBuffer = 0,
                 .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_base")),
+                .reflectionDescriptors = reflectionRoughnessMax >= 0.0f ? graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER) : 0,
                 .visibilityBufferIndex = ~0u,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
@@ -272,6 +287,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
                 .activeCheckerboardField = field,
                 .bSunCandidateVisibility = (tlasIndex != ~0u && restirParams.bSunCandidateVisibility) ? 1u : 0u,
+                .reflectionRoughnessMax = reflectionRoughnessMax,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -319,6 +335,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .historyBuffer = bHasHistory ? graph.GetBufferAddress(SID("restir_reservoir_history")) : 0,
                     .genBuffer = graph.GetBufferAddress(SID("restir_reservoir_base")),
                     .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
+                    .reflectionDescriptors = 0,
                     .visibilityBufferIndex = ~0u,
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
@@ -613,11 +630,14 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                uint32_t outputMode,
                                float iblIntensity,
                                uint64_t frameNumber,
-                               bool bDDGIApply)
+                               bool bDDGIApply,
+                               const Core::RTReflectionConfiguration& reflectionConfig)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
+    const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET);
 
     RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -632,9 +652,12 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     if (bDDGI) {
         AddDDGISampleDependencies(graph, pass);
     }
+    if (bReflection) {
+        pass.ReadSampledImage(REFLECTION_SPEC_NOISY_TARGET);
+    }
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, bDDGI,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, bDDGI, bReflection, reflectionRoughnessMax,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -656,6 +679,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
+                .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET) : ~0x0u,
+                .reflectionRoughnessMax = reflectionRoughnessMax,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

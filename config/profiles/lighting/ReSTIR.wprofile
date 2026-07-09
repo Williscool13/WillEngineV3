@@ -17,7 +17,7 @@
     "irradianceThreshold": 0.6000000238418579,
     "maxRayRadiance": 20.0,
     "minFrontfaceDistance": 0.15000000596046448,
-    "normalBias": 0.30000001192092896,
+    "normalBias": 0.5,
     "outerRaysPerProbe": 48,
     "probeCountX": 24,
     "probeCountY": 12,
@@ -42,6 +42,11 @@
   "iblIntensity": 1.0,
   "lightingMode": 1,
   "lightingShaderOverride": 7554520945661456859,
+  "reflection": {
+    "bEnabled": true,
+    "intensity": 1.0,
+    "roughnessMax": 0.30000001192092896
+  },
   "restir": {
     "adaptiveSpatialBoost": 3.0,
     "antilagStrength": 0.8971193432807922,

@@ -362,6 +362,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     // For non-TAAU AA passes
     Core::Array<uint32_t, 2> postAaExtent = renderExtent;
 
+    uint32_t debugReservoirCheckerboardField = 0u;
+
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
@@ -587,21 +589,23 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     case Core::LightingMode::ReSTIR:
                     {
                         const uint32_t restirCheckerboardField = restir.bCheckerboard ? ((static_cast<uint32_t>(frameNumber) & 1u) ? 1u : 2u) : 0u;
+                        debugReservoirCheckerboardField = restirCheckerboardField;
                         const uint32_t restirCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) ? 1u : 0u;
                         const float restirCheckerboardResolveSpeed = ComputeCheckerboardResolveAccumSpeed(viewFamily.aaConfig.mode, frameNumber, renderFps);
 
-                        SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField);
+                        SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection);
                         SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
+                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply);
                         const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                         if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply);
+                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply);
+                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection);
                         }
                         else {
-                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply);
+                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection);
                         }
                         break;
                     }
@@ -699,7 +703,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             switch (viewFamily.debugTransformationType) {
                 case DebugTransformationType::ReservoirLightIdx:
                 case DebugTransformationType::ReservoirGenerateW:
-                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_temporal"));
+                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_base"));
                     break;
                 case DebugTransformationType::ReservoirTemporalLightIdx:
                 case DebugTransformationType::ReservoirTemporalW:
@@ -721,6 +725,26 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Debug);
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.ReadSampledImage(targets.depthCopy);
+                switch (viewFamily.debugTransformationType) {
+                    case DebugTransformationType::ReservoirLightIdx:
+                    case DebugTransformationType::ReservoirGenerateW:
+                        debugVisPass.ReadBuffer(SID("restir_reservoir_base"));
+                        break;
+                    case DebugTransformationType::ReservoirTemporalLightIdx:
+                    case DebugTransformationType::ReservoirTemporalW:
+                        debugVisPass.ReadBuffer(SID("restir_reservoir_temporal"));
+                        break;
+                    case DebugTransformationType::ReservoirSpatialLightIdx:
+                    case DebugTransformationType::ReservoirSpatialW:
+                        debugVisPass.ReadBuffer(SID("restir_reservoir_spatial"));
+                        break;
+                    case DebugTransformationType::ReservoirHistoryLightIdx:
+                    case DebugTransformationType::ReservoirHistoryW:
+                        debugVisPass.ReadBuffer(SID("restir_reservoir_history"));
+                        break;
+                    default:
+                        break;
+                }
                 debugVisPass.WriteStorageImage(targets.colorOutput);
                 debugVisPass.Execute([&, debugTargetName, colorOutput = targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
                     const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
@@ -769,6 +793,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                     uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(colorOutput);
 
+
+                    const uint32_t historyCheckerboardField = debugReservoirCheckerboardField == 0u ? 0u : (3u - debugReservoirCheckerboardField);
+
                     DebugVisualizePushConstant pc{
                         .sceneData = renderGraph->TryGetBufferAddress(SCENE_DATA_BUFFER),
                         .vertexPosBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
@@ -780,11 +807,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .instanceBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                         .modelBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MODEL_BUFFER),
                         .materialBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                        .reservoirBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_temporal")),
+                        .reservoirBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_base")),
                         .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_temporal")),
                         .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_spatial")),
                         .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_history")),
-                        .srcExtent = {dims.width, dims.height},
+                        .srcExtent = {renderExtent[0], renderExtent[1]},
                         .dstExtent = {postAaExtent[0], postAaExtent[1]},
                         .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
                         .textureArrayIndex = textureArrayIndex,
@@ -792,6 +819,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .valueTransformationType = static_cast<uint32_t>(viewFamily.debugTransformationType),
                         .outputImageIndex = outputIndexIndex,
                         .depthTextureIndex = renderGraph->GetSampledImageViewDescriptorIndex(targets.depthCopy),
+                        .checkerboardField = debugReservoirCheckerboardField,
+                        .historyCheckerboardField = historyCheckerboardField,
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

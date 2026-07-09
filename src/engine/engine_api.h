@@ -342,6 +342,7 @@ struct LightingState
     Core::PostProcessConfiguration postProcess{};
     Core::SIGMAParams sigmaParams{};
     Core::DDGIParams ddgi{};
+    Core::RTReflectionConfiguration reflection{};
     float iblIntensity{1.0f};
     float clusterZFar{500.0f};
     CubemapHandle skybox{CubemapHandle::INVALID};
