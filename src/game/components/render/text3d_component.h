@@ -35,7 +35,7 @@ struct Text3DComponent
     float scale{1.0f};
     bool bSmoothNormals{true};
     Engine::MaterialID material{};
-    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, zw: reserved
+    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, z: exclude from DDGI (0=contributes, default), w: reserved
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 

@@ -54,6 +54,7 @@ struct MeshRuntime
     Engine::MeshPrimitiveStore::Range range{};
     Engine::StaticModelHandle modelHandle{};
     bool visible{true};
+    bool ddgiVisible{true};
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };

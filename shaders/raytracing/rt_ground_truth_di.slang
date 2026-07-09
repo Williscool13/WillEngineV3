@@ -1,6 +1,7 @@
 import common_interop;
 import push_constant_interop;
 import lights_interop;
+import instance_mask_interop;
 import bindless_declarations;
 import constants_interop;
 import shader_constants;
@@ -148,7 +149,7 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             shadowRay.TMax = shadowDist - 0.05;
 
             RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-            q.TraceRayInline(tlas, 0, 0x01, shadowRay);
+            q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
             q.Proceed();
 
             bool visible = (q.CommittedStatus() == COMMITTED_NOTHING);
@@ -195,7 +196,7 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 sunRay.TMax = 10000.0;
 
                 RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-                q.TraceRayInline(tlas, 0, 0x01, sunRay);
+                q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, sunRay);
                 q.Proceed();
 
                 if (q.CommittedStatus() == COMMITTED_NOTHING) {

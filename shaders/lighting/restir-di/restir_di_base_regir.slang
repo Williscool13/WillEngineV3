@@ -4,6 +4,7 @@ import constants_interop;
 import model_interop;
 import lights_interop;
 import restir_interop;
+import instance_mask_interop;
 
 import shader_functions;
 import pbr_functions;
@@ -185,7 +186,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                 ray.TMin = 0.001;
                 ray.TMax = 1e30;
                 RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-                q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0xFF, ray);
+                q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_ALL, ray);
                 q.Proceed();
                 if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
                     Instance hitInst = pc.instanceBuffer[q.CommittedInstanceID()];

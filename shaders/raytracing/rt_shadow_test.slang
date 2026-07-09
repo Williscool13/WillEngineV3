@@ -1,6 +1,7 @@
 import common_interop;
 import push_constant_interop;
 import bindless_declarations;
+import instance_mask_interop;
 
 import shader_functions;
 
@@ -31,7 +32,7 @@ void ComputeRTShadowTest(uint3 dtid : SV_DispatchThreadID, uniform RTShadowTestP
 
     //RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     RayQuery<> q;
-    q.TraceRayInline(tlas, 0, 0x01, ray);
+    q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
     q.Proceed();
 
     float4 result = float4(0.0, 0.0, 0.0, 1.0);

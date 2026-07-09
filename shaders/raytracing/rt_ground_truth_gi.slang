@@ -2,6 +2,7 @@ import common_interop;
 import model_interop;
 import push_constant_interop;
 import lights_interop;
+import instance_mask_interop;
 import bindless_declarations;
 import constants_interop;
 import shader_constants;
@@ -109,7 +110,7 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             shadowRay.TMax = 10000.0;
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(tlas, 0, 0x01, shadowRay);
+            shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
@@ -161,7 +162,7 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             shadowRay.TMax = shadowDist - 0.05;
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(tlas, 0, 0x01, shadowRay);
+            shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
@@ -266,7 +267,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             shadowRay.TMax = shadowDist - 0.05;
 
             RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-            q.TraceRayInline(tlas, 0, 0x01, shadowRay);
+            q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
             q.Proceed();
             if (q.CommittedStatus() == COMMITTED_NOTHING) {
                 float3 H = normalize(V + L);
@@ -303,7 +304,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 sunRay.TMax = 10000.0;
 
                 RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-                q.TraceRayInline(tlas, 0, 0x01, sunRay);
+                q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, sunRay);
                 q.Proceed();
                 if (q.CommittedStatus() == COMMITTED_NOTHING) {
                     float3 H = normalize(V + L);
@@ -346,9 +347,9 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
         ray.TMin = 0.001;
         ray.TMax = 10000.0;
 
-        // Mask 0x01: light proxies excluded, NEE owns all light emission.
+        // Light proxies excluded. NEE owns all light emission.
         RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-        q.TraceRayInline(tlas, 0, 0x01, ray);
+        q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
         q.Proceed();
 
         if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT) {

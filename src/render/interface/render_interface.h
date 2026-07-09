@@ -263,6 +263,7 @@ struct PrimitiveInstanceData
     uint64_t blasDeviceAddress{};
     uint32_t lightIndex{0xFFFFFFFFu};
     uint32_t emissiveTriLightBase{0xFFFFFFFFu};
+    bool ddgiVisible{true};
 };
 
 struct CustomShaderDraw

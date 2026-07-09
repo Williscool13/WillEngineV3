@@ -3,6 +3,7 @@ module restir_common;
 import shader_constants;
 import lights_interop;
 import restir_interop;
+import instance_mask_interop;
 import pbr_functions;
 import bindless_declarations;
 import constants_interop;
@@ -449,7 +450,7 @@ public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 wor
     shadowRay.TMin = 0.0;
     shadowRay.TMax = max(0.0, lightDist - 0.05);
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-    q.TraceRayInline(tlas, 0, 0x01, shadowRay);
+    q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
     q.Proceed();
     return q.CommittedStatus() == COMMITTED_NOTHING;
 }
@@ -520,7 +521,7 @@ public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 
     shadowRay.TMin = 0.0;
     shadowRay.TMax = 1e30;
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-    q.TraceRayInline(tlas, 0, 0x01, shadowRay);
+    q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
     q.Proceed();
     return q.CommittedStatus() == COMMITTED_NOTHING;
 }

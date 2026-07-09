@@ -285,13 +285,13 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::PhysicsMeshPendingKickoff(ctx, state);
 
     if (ctx->bAssetsChangedThisFrame || state->bPendingModelResolve) {
+        state->bPendingModelResolve = false;
         Game::StaticMeshLoadResolve(ctx, state);
         Game::StaticMeshPrimitiveLoadResolve(ctx, state);
         Game::ProceduralMeshLoadResolve(ctx, state);
         Game::SplineMeshLoadResolve(ctx, state);
         Game::Text3DLoadResolve(ctx, state);
         Game::PhysicsMeshLoadResolve(ctx, state);
-        state->bPendingModelResolve = false;
     }
     Game::PhysicsShapeCreationResolve(ctx, state);
     Game::PhysicsBodyCreationResolve(ctx, state);

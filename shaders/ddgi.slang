@@ -2,6 +2,7 @@ import model_interop;
 import push_constant_interop;
 import lights_interop;
 import ddgi_interop;
+import instance_mask_interop;
 import ddgi_common;
 import gpu_debug_draw;
 import bindless_declarations;
@@ -69,7 +70,7 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
             shadowRay.TMax = 10000.0;
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0x01, shadowRay);
+            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
@@ -122,7 +123,7 @@ static float3 ShadeProbeRayHit(DDGIProbeTracePushConstant pc, Instance instance,
             shadowRay.TMax = shadowDist - 0.05;
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0x01, shadowRay);
+            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
@@ -173,9 +174,8 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
     ray.TMin = 0.0;
     ray.TMax = 10000.0;
 
-    // Mask 0x03: scene + light proxies, so lights occlude and register in the visibility moments.
     RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-    q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, 0x03, ray);
+    q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI_PROBE_TRACE, ray);
     q.Proceed();
 
     float4 result;

@@ -10,10 +10,21 @@ end_header
     "modelFlags": [
       1.0,
       1.0,
-      0.0,
+      1.0,
       0.0
     ],
     "radius": 0.5,
+    "renderOffset": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "renderRotation": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
     "slices": 64,
     "stacks": 64,
     "type": 11
@@ -31,9 +42,9 @@ end_header
       1.0
     ],
     "translation": [
-      37.5,
-      0.75,
-      -21.5
+      5.976071834564209,
+      -2.9144086837768555,
+      -50.40599822998047
     ]
   },
   "2477833447507440368": {
@@ -44,10 +55,7 @@ end_header
     "name": "[PLAYER] Ball"
   },
   "5210556776496121574": {
-    "folderHierarchyNames": [
-      "Prefab Area",
-      ""
-    ]
+    "folderId": 0
   },
   "5740098829229280260": {
     "enhancedInternalEdgeRemoval": true,
@@ -81,6 +89,6 @@ end_header
   },
   "7294468376066398399": {
     "id": 7821607683974761419,
-    "sortOrder": 18200
+    "sortOrder": 18201
   }
 }

@@ -11,6 +11,7 @@ import common_interop;
 import constants_interop;
 import push_constant_interop;
 import lights_interop;
+import instance_mask_interop;
 import bindless_declarations;
 import packing_functions;
 
@@ -122,7 +123,7 @@ void ComputeRTSunShadow(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPus
     ray.TMax = 10000.0;
 
     RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-    q.TraceRayInline(tlas, 0, 0x01, ray);
+    q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
     q.Proceed();
 
     if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {

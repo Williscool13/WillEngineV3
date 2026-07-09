@@ -178,12 +178,17 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
     if (open) {
         bool visible = component.modelFlags.x != 0.0f;
         bool shadowCaster = component.modelFlags.y != 0.0f;
+        bool ddgiContribution = component.modelFlags.z == 0.0f;
         if (ImGui::Checkbox("Visible", &visible)) {
             component.modelFlags.x = visible ? 1.0f : 0.0f;
         }
         ImGui::SameLine();
         if (ImGui::Checkbox("Shadow Caster", &shadowCaster)) {
             component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("DDGI Contribution", &ddgiContribution)) {
+            component.modelFlags.z = ddgiContribution ? 0.0f : 1.0f;
         }
 
         auto* runtime = registry.try_get<MeshRuntime>(entity);

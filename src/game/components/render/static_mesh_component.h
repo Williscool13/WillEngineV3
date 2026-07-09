@@ -26,7 +26,7 @@ struct StaticMeshComponent
 
     struct MaterialOverride { uint32_t slot; Engine::MaterialID id; };
 
-    Vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, zw: reserved
+    Vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, z: exclude from DDGI (0=contributes, default), w: reserved
 
     Engine::ModelID modelId{};
     Core::InlineVector<MaterialOverride, MaxMaterialOverrides> materialOverrides{};

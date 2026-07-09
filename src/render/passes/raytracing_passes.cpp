@@ -15,6 +15,7 @@
 #include "render/pipelines/pipeline_data.h"
 #include "render/interface/render_interface.h"
 #include "render/shaders/push_constant_interop.h"
+#include "render/shaders/instance_mask_interop.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace Render
@@ -74,8 +75,10 @@ void SetupTLASBuild(RenderGraph& graph,
         VkAccelerationStructureInstanceKHR& inst = instanceData[instanceSlot++];
         inst.transform = transform;
         inst.instanceCustomIndex = static_cast<uint32_t>(i);
-        // Mask bit 0x01 = scene geometry (occluders), 0x02 = light proxy meshes
-        inst.mask = (src.lightIndex != 0xFFFFFFFFu) ? 0x02 : 0x01;
+        const bool isLightProxy = src.lightIndex != 0xFFFFFFFFu;
+        uint32_t mask = isLightProxy ? INSTANCE_MASK_LIGHT_PROXY : INSTANCE_MASK_OCCLUDER;
+        if (!isLightProxy && src.ddgiVisible) { mask |= INSTANCE_MASK_DDGI; }
+        inst.mask = static_cast<uint8_t>(mask);
         inst.instanceShaderBindingTableRecordOffset = 0;
         inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         inst.accelerationStructureReference = src.blasDeviceAddress;

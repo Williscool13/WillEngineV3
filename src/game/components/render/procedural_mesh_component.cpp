@@ -520,12 +520,17 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
     if (open) {
         bool visible = component.modelFlags.x != 0.0f;
         bool shadowCaster = component.modelFlags.y != 0.0f;
+        bool ddgiContribution = component.modelFlags.z == 0.0f;
         if (ImGui::Checkbox("Visible##proceduralmesh", &visible)) {
             component.modelFlags.x = visible ? 1.0f : 0.0f;
         }
         ImGui::SameLine();
         if (ImGui::Checkbox("Shadow Caster##proceduralmesh", &shadowCaster)) {
             component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("DDGI Contribution##proceduralmesh", &ddgiContribution)) {
+            component.modelFlags.z = ddgiContribution ? 0.0f : 1.0f;
         }
 
         if (std::holds_alternative<std::monostate>(component.params)) {
