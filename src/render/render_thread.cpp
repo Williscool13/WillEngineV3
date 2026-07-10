@@ -588,11 +588,14 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     {
                         const float clusterZNear = viewFamily.mainView.currentViewData.nearPlane;
                         const float clusterZFar = viewFamily.clusterZFar;
-                        SetupLightCullingPass(*renderGraph, pipelineManager, viewFamily, 0, clusterZNear, clusterZFar);
+                        SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0);
                         if (frameBuffer.bEnableGPUDebug && frameBuffer.bClusterGridDebug && !frameBuffer.bLockGPUDebug) {
                             SetupClusterGridDebug(*renderGraph, pipelineManager, 0, clusterZNear, clusterZFar);
                         }
-                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, clusterZNear, clusterZFar);
+                        if (frameBuffer.bEnableGPUDebug && frameBuffer.bWorldGridDebug && !frameBuffer.bLockGPUDebug) {
+                            SetupWorldGridDebug(*renderGraph, pipelineManager, 0, frameBuffer.worldGridDebugLevel);
+                        }
+                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply);
                         break;
                     }
                     case Core::LightingMode::ReSTIR:
@@ -605,10 +608,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection);
                         SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
                         if (frameBuffer.reflection.bEnabled) {
-                            // Feeds the reflection shade pass's cluster-punctual local-light lookup (reuses the mirror pixel's own cluster as the reflected hit's candidate set).
-                            // Not accurate (gets worse the farther the "reflected point" is from the mirror, but it's good enough (however, no shadows nor AO).
-                            const float restirClusterZNear = viewFamily.mainView.currentViewData.nearPlane;
-                            SetupLightCullingPass(*renderGraph, pipelineManager, viewFamily, 0, restirClusterZNear, viewFamily.clusterZFar);
+                            SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0);
                         }
 
                         const bool bReflectionCheckerboardPacked = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX && frameBuffer.reflection.bDenoiserEnabled;

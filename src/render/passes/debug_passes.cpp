@@ -206,4 +206,57 @@ void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager,
     });
 #endif
 }
+
+#ifdef WDEBUG
+static const StringID WORLD_GRID_DEBUG_PASS[WORLD_GRID_CASCADES] = {
+    SID("World Grid Debug 0"), SID("World Grid Debug 1"), SID("World Grid Debug 2"), SID("World Grid Debug 3"),
+    SID("World Grid Debug 4"), SID("World Grid Debug 5"), SID("World Grid Debug 6"), SID("World Grid Debug 7"),
+};
+
+// Cascade identification tints for the all-cascades debug view (unorm RGBA, low byte = red).
+static const uint32_t WORLD_GRID_CASCADE_TINT[WORLD_GRID_CASCADES] = {
+    0xFFFFFFFFu, 0xFF8C8CFFu, 0xFF8CFF8Cu, 0xFFFFB399u, 0xFFFF8CFFu, 0xFF8CFFFFu, 0xFFB3FF99u, 0xFF99B3FFu,
+};
+#endif
+
+void SetupWorldGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, uint32_t sceneIndex, int32_t debugLevel)
+{
+#ifdef WDEBUG
+    if (!graph.HasBuffer(GPU_DEBUG_ARGS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER)) {
+        return;
+    }
+
+    for (uint32_t level = 0; level < WORLD_GRID_CASCADES; ++level) {
+        if (debugLevel >= 0 && level != static_cast<uint32_t>(debugLevel)) {
+            continue;
+        }
+
+        const uint32_t packedTint = debugLevel < 0 ? WORLD_GRID_CASCADE_TINT[level] : 0xFFFFFFFFu;
+
+        RenderPass& pass = graph.AddPass(WORLD_GRID_DEBUG_PASS[level], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+        pass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
+        pass.WriteBuffer(GPU_DEBUG_SEGMENT_BUFFER);
+        pass.ReadBuffer(SCENE_DATA_BUFFER);
+        pass.Execute([pipelineManager, sceneIndex, level, packedTint](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_world_grid"));
+            if (!pipelineEntry) {
+                return;
+            }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            WorldGridDebugPushConstant pc{
+                .args = graph.GetBufferAddress(GPU_DEBUG_ARGS_BUFFER),
+                .segmentBuffer = graph.GetBufferAddress(GPU_DEBUG_SEGMENT_BUFFER),
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .sceneDataIndex = sceneIndex,
+                .level = level,
+                .packedTint = packedTint,
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            const uint32_t groups = (WORLD_GRID_CELLS_PER_CASCADE + 63u) / 64u;
+            vkCmdDispatch(cmd, groups, 1, 1);
+        });
+    }
+#endif
+}
 } // Render

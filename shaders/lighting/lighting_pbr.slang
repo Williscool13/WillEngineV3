@@ -9,7 +9,8 @@ import shader_functions;
 import pbr_functions;
 import packing_functions;
 import punctual_lighting;
-import cluster_common;
+import world_grid_interop;
+import binning_common;
 import visibility_lighting_common;
 
 import bindless_declarations;
@@ -39,6 +40,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
+    float3 worldPosition = mul(pc.sceneData[pc.sceneDataIndex].invView, float4(viewPosition, 1.0)).xyz;
 
     // Clamp roughness so D_GGX never produces 0/0 at NdotH=1 (degenerate delta lobe)
     float roughness = max(li.roughness, 0.045);
@@ -80,14 +82,14 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
         directLight += (diffusePl + specularPl) * nDotLpl * attenuation * pl.intensity * plColor;
     }
 
-    // Area / sphere lights degenerated to punctual sources, selected per froxel cluster.
-    if (pc.clusterLightGrid != 0)
+    // Area / sphere lights, selected per WorldGridBinning cell.
+    if (pc.worldGridBuffer != 0)
     {
-        uint cluster = ClusterIndexFromPixel(pixel, pc.renderExtent, viewSpaceDepth, pc.clusterZNear, pc.clusterZFar);
-        uint2 gridEntry = pc.clusterLightGrid[cluster];
+        WorldGridKey worldGridKey = WorldGridResolveCell(worldPosition, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz);
+        uint2 gridEntry = pc.worldGridBuffer[worldGridKey.cellIndex];
         for (uint j = 0; j < gridEntry.y; j++)
         {
-            uint lightIndex = pc.clusterLightIndexList[gridEntry.x + j];
+            uint lightIndex = pc.worldGridIndexList[gridEntry.x + j];
             PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], pc.sceneData[pc.sceneDataIndex].view);
             directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0);
         }
@@ -113,7 +115,6 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
             indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
         }
         if (pc.bDDGIApply != 0) {
-            float3 worldPosition = mul(pc.sceneData[pc.sceneDataIndex].invView, float4(viewPosition, 1.0)).xyz;
             float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
             float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
             // gi.w fades to the skybox fallback over the outermost cascade's edge.

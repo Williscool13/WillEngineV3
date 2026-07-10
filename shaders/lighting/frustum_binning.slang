@@ -1,11 +1,11 @@
 import push_constant_interop;
 import common_interop;
 import lights_interop;
-import cluster_common;
+import binning_common;
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
-void ComputeLightCulling(uniform LightCullingPushConstant pc, uint3 threadID : SV_DispatchThreadID)
+void ComputeFrustumBinning(uniform FrustumBinningPushConstant pc, uint3 threadID : SV_DispatchThreadID)
 {
     uint clusterIndex = threadID.x;
     if (clusterIndex >= CLUSTER_COUNT) { return; }

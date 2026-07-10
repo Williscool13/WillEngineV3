@@ -14,7 +14,7 @@ import restir_common;
 import ddgi_common;
 import hit_shading_common;
 import random_common;
-import cluster_common;
+import binning_common;
 
 import bindless_declarations;
 
@@ -79,17 +79,16 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
         ddgiPC.previousCascades = pc.ddgiCascades;
         ddgiPC.bFeedbackValid = pc.bDDGIApply;
 
-        // Reuse the mirror pixel's own light cluster as the reflected hit's local-light candidate set: free lookup (same pixel/depth already in hand), accurate near the mirror, increasingly approximate as the reflection ray travels farther.
-        ClusterPunctualLights clusterLights = (ClusterPunctualLights)0;
-        if (pc.clusterLightGrid != nullptr) {
-            clusterLights.view = scene.view;
-            clusterLights.grid = pc.clusterLightGrid;
-            clusterLights.indexList = pc.clusterLightIndexList;
-            clusterLights.clusterIndex = ClusterIndexFromPixel(pixel, pc.renderExtent, viewSpaceDepth, pc.clusterZNear, pc.clusterZFar);
+        WorldGridPunctualLights worldGridLights = (WorldGridPunctualLights)0;
+        if (pc.worldGridBuffer != nullptr) {
+            worldGridLights.view = scene.view;
+            worldGridLights.camPos = scene.cameraWorldPos.xyz;
+            worldGridLights.grid = pc.worldGridBuffer;
+            worldGridLights.indexList = pc.worldGridIndexList;
         }
 
         float3 hitWorldPos = rayOrigin + hit.hitT * hit.rayDir;
-        radiance = ShadeProbeRayHitAnalytical(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, clusterLights);
+        radiance = ShadeProbeRayHitAnalytical(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights);
         hitTOut = hit.hitT;
     } else if (hit.hitT == REFLECTION_HIT_T_SKY && pc.skyboxIndex >= 0) {
         // Matches the Y flip the visible skybox pass applies when sampling the cubemap.

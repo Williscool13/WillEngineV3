@@ -14,13 +14,19 @@ namespace Render
 {
 class PipelineManager;
 
-/** Culls the analytic light pool into the per-cluster light-index list for the default lighting resolve. */
-void SetupLightCullingPass(RenderGraph& graph,
-                           PipelineManager* pipelineManager,
-                           const Core::ViewFamily& viewFamily,
-                           uint32_t sceneIndex,
-                           float clusterZNear,
-                           float clusterZFar);
+/** Unused */
+void SetupFrustumBinningPass(RenderGraph& graph,
+                             PipelineManager* pipelineManager,
+                             const Core::ViewFamily& viewFamily,
+                             uint32_t sceneIndex,
+                             float clusterZNear,
+                             float clusterZFar);
+
+/** Camera-centered cascaded world-space grid, rebuilt every frame; see world_grid_interop.h for the cascade layout. */
+void SetupWorldGridBinningPass(RenderGraph& graph,
+                               PipelineManager* pipelineManager,
+                               const Core::ViewFamily& viewFamily,
+                               uint32_t sceneIndex);
 
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
@@ -30,9 +36,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
-                                        bool bDDGIApply,
-                                        float clusterZNear,
-                                        float clusterZFar);
+                                        bool bDDGIApply);
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,

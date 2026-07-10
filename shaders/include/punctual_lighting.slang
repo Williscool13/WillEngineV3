@@ -22,7 +22,7 @@ public struct PunctualLight
     public bool valid; // false = unsupported light type (e.g. triangle); ShadePunctual no-ops
 };
 
-/** World-space area/sphere LightInfo -> view-space PunctualLight. Triangle lights are NOT degenerated: right.w/up.w hold edge-vector components for them, not rect half-extents, so falling through to the rect path would silently misread them. Callers iterating a cluster's light list should skip LIGHT_TYPE_TRIANGLE entries before calling this (light_culling.slang already excludes them from cluster bins); this valid=false is a defensive backstop, not the primary filter. */
+/** World-space area/sphere LightInfo -> view-space PunctualLight. Triangle lights are NOT degenerated: right.w/up.w hold edge-vector components for them, not rect half-extents, so falling through to the rect path would silently misread them. Callers iterating a binned light list should skip LIGHT_TYPE_TRIANGLE entries before calling this (both frustum_binning.slang and world_grid_binning.slang already exclude them from their bins); this valid=false is a defensive backstop, not the primary filter. */
 public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
 {
     PunctualLight pl;

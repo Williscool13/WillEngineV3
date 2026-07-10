@@ -10,7 +10,7 @@ import shader_functions;
 import packing_functions;
 import pbr_functions;
 import punctual_lighting;
-import cluster_common;
+import binning_common;
 import random_common;
 import shader_constants;
 
@@ -132,8 +132,8 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
     return radiance;
 }
 
-/** Analytical variant: sun (shadow-ray tested) + the caller's own cluster's punctual light sum (unshadowed, no selection noise) + emissive + DDGI feedback. Used by the reflection shade pass. */
-public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, ClusterPunctualLights clusterLights)
+/** Used by the reflection shade pass. */
+public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -187,17 +187,16 @@ public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance
         }
     }
 
-    // Cluster-punctual: the caller's own screen pixel's light cluster, summed analytically (no shadow ray, no selection noise).
-    // Accurate near the caller's pixel; increasingly approximate the farther worldPosition is from it (e.g. a long reflection ray).
-    if (clusterLights.grid != nullptr) {
-        uint2 gridEntry = clusterLights.grid[clusterLights.clusterIndex];
-        float3 viewPos = mul(clusterLights.view, float4(worldPosition, 1.0)).xyz;
-        float3 viewN = normalize(mul((float3x3)clusterLights.view, N));
-        float3 viewV = normalize(mul((float3x3)clusterLights.view, V));
+    if (worldGridLights.grid != nullptr) {
+        WorldGridKey key = WorldGridResolveCell(worldPosition, worldGridLights.camPos);
+        uint2 gridEntry = worldGridLights.grid[key.cellIndex];
+        float3 viewPos = mul(worldGridLights.view, float4(worldPosition, 1.0)).xyz;
+        float3 viewN = normalize(mul((float3x3)worldGridLights.view, N));
+        float3 viewV = normalize(mul((float3x3)worldGridLights.view, V));
         float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, material.metalRoughFactors.x);
         for (uint j = 0; j < gridEntry.y; j++) {
-            uint lightIndex = clusterLights.indexList[gridEntry.x + j];
-            PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], clusterLights.view);
+            uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
+            PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], worldGridLights.view);
             radiance += ShadePunctual(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
         }
     }

@@ -427,6 +427,8 @@ struct DebugState
     bool bGPUDebugTestPattern{false};
     bool bDDGIProbeDebug{false};
     bool bClusterGridDebug{false};
+    bool bWorldGridDebug{false};
+    int32_t worldGridDebugLevel{0};
     bool bDDGIBounceOnly{false};
     float ddgiProbeDebugExposure{1.0f};
     int32_t ddgiProbeDebugCascade{-1};

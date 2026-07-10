@@ -35,9 +35,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-    const bool bClustered = graph.HasBuffer(SID("cluster_light_grid")) && graph.HasBuffer(SID("cluster_light_index_list"));
-    const float clusterZNear = viewFamily.mainView.currentViewData.nearPlane;
-    const float clusterZFar = viewFamily.clusterZFar;
+    const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
 
     graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
@@ -57,13 +55,13 @@ void SetupReflectionShadePass(RenderGraph& graph,
     pass.ReadSampledImage(targets.depthCopy);
     if (bHasTLAS) { pass.ReadTLASBuffer(RT_TLAS_BUFFER); }
     if (bDDGI) { AddDDGISampleDependencies(graph, pass); }
-    if (bClustered) {
-        pass.ReadBuffer(SID("cluster_light_grid"));
-        pass.ReadBuffer(SID("cluster_light_index_list"));
+    if (bWorldGrid) {
+        pass.ReadBuffer(SID("world_grid_light_grid"));
+        pass.ReadBuffer(SID("world_grid_index_list"));
     }
     pass.WriteStorageImage(REFLECTION_SPEC_NOISY_TARGET);
 
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bClustered, clusterZNear, clusterZFar, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, bCheckerboardPacked,
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bWorldGrid, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, bCheckerboardPacked,
             field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
 
@@ -78,8 +76,8 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
                 .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
-                .clusterLightGrid = bClustered ? graph.GetBufferAddress(SID("cluster_light_grid")) : 0,
-                .clusterLightIndexList = bClustered ? graph.GetBufferAddress(SID("cluster_light_index_list")) : 0,
+                .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
+                .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .sceneDataIndex = sceneIndex,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
@@ -93,8 +91,6 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .roughnessMax = reflectionRoughnessMax,
                 .intensity = intensity,
                 .bDDGIApply = bDDGI ? 1u : 0u,
-                .clusterZNear = clusterZNear,
-                .clusterZFar = clusterZFar,
                 .bCheckerboardPacked = bCheckerboardPacked ? 1u : 0u,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_shade"));

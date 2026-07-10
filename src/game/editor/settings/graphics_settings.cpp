@@ -244,6 +244,26 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::Checkbox("Test Pattern##GPUDebug", &state->debug.bGPUDebugTestPattern);
         ImGui::SameLine();
         ImGui::Checkbox("Cluster Grid##GPUDebug", &state->debug.bClusterGridDebug);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("FrustumBinning: screen-frustum-tied clusters. Only actually bound in ReSTIR mode (feeds the reflection pass); Default-mode shading uses World Grid instead.");
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("World Grid##GPUDebug", &state->debug.bWorldGridDebug);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("WorldGridBinning: camera-centered cascaded world-space grid used by Default-mode shading.");
+        }
+        {
+            const char* worldGridLevelLabels[] = {"All", "0", "1", "2", "3", "4", "5", "6", "7"};
+            int worldGridLevelChoice = state->debug.worldGridDebugLevel + 1;
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(80.0f);
+            if (ImGui::Combo("Level##WorldGridDebug", &worldGridLevelChoice, worldGridLevelLabels, static_cast<int>(std::size(worldGridLevelLabels)))) {
+                state->debug.worldGridDebugLevel = worldGridLevelChoice - 1;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("All draws every cascade with an identification tint; picking one cascade draws only it, untinted. 0 is the finest (32m) cascade, doubling per level.");
+            }
+        }
 
         ImGui::SeparatorText("DDGI Probes");
         ImGui::Checkbox("Draw Probes##DDGIDebug", &state->debug.bDDGIProbeDebug);

@@ -23,6 +23,7 @@ import relax_interop;
 import reblur_interop;
 import ddgi_interop;
 import reflection_interop;
+import world_grid_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -37,6 +38,7 @@ import reflection_interop;
 #include "reblur_interop.h"
 #include "ddgi_interop.h"
 #include "reflection_interop.h"
+#include "world_grid_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
@@ -531,13 +533,12 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t bDDGIApply;
     SHADER_PUBLIC uint32_t pad1;
-    SHADER_PUBLIC SHADER_PTR(uint2) clusterLightGrid;
-    SHADER_PUBLIC SHADER_PTR(uint) clusterLightIndexList;
-    SHADER_PUBLIC float clusterZNear;
-    SHADER_PUBLIC float clusterZFar;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
 };
 
-SHADER_PUBLIC struct LightCullingPushConstant
+// Unused: kept around alongside WorldGridBinningPushConstant.
+SHADER_PUBLIC struct FrustumBinningPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
@@ -546,6 +547,28 @@ SHADER_PUBLIC struct LightCullingPushConstant
     SHADER_PUBLIC float zNear;
     SHADER_PUBLIC float zFar;
     SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t pad0;
+};
+
+// No zNear/zFar: cascade selection is purely camera-relative (see binning_common.slang).
+SHADER_PUBLIC struct WorldGridBinningPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t pad0;
+};
+
+SHADER_PUBLIC struct WorldGridDebugPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(GPUDebugDrawArgs) args;
+    SHADER_PUBLIC SHADER_PTR(DebugLineSegment) segmentBuffer;
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t level;
+    SHADER_PUBLIC uint32_t packedTint;
     SHADER_PUBLIC uint32_t pad0;
 };
 
@@ -585,8 +608,8 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
     SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
-    SHADER_PUBLIC SHADER_PTR(uint2) clusterLightGrid;
-    SHADER_PUBLIC SHADER_PTR(uint) clusterLightIndexList;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
@@ -600,8 +623,6 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC float roughnessMax;
     SHADER_PUBLIC float intensity;
     SHADER_PUBLIC uint32_t bDDGIApply;
-    SHADER_PUBLIC float clusterZNear;
-    SHADER_PUBLIC float clusterZFar;
     SHADER_PUBLIC uint32_t bCheckerboardPacked;
 };
 
