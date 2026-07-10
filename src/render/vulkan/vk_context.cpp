@@ -4,6 +4,8 @@
 
 #include "vk_context.h"
 
+#include <cstring>
+
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 #include <SDL3/SDL.h>
@@ -47,6 +49,16 @@ static void VKAPI_PTR VmaDeviceFree(VmaAllocator, uint32_t, VkDeviceMemory, VkDe
 }
 #endif
 
+static bool IsKnownSyncvalFalsePositive(const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData)
+{
+    if (!pCallbackData->pMessage) {
+        return false;
+    }
+    // syncval bug, fixed upstream past Vulkan-ValidationLayers@224a7356f9, remove once SDK catches up
+    return strstr(pCallbackData->pMessage, "READ_RACING_WRITE") != nullptr
+        && strstr(pCallbackData->pMessage, "vkCmdBuildAccelerationStructuresKHR") != nullptr;
+}
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT type,
@@ -67,7 +79,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     }
 
 #ifdef WDEBUG
-    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+    if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) && !IsKnownSyncvalFalsePositive(pCallbackData)) {
         __debugbreak();
     }
 #endif

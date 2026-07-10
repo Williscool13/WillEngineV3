@@ -31,6 +31,11 @@ void ComputeWorldCacheShade(uint3 dtid: SV_DispatchThreadID, uniform WorldCacheS
 
     float3 radiance = ShadeWorldCacheCell(pc, instance, hit.primitiveIndex, bary, worldGridLights);
 
+    float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
+    if (pc.maxRadiance > 0.0 && maxChannel > pc.maxRadiance) {
+        radiance *= pc.maxRadiance / maxChannel;
+    }
+
     float3 previous = UnpackEmissiveRGBE(pc.cells[slot].packedRadiance);
     float3 blended = lerp(radiance, previous, WORLD_CACHE_RADIANCE_HYSTERESIS);
     pc.cells[slot].packedRadiance = PackEmissiveRGBE(blended);

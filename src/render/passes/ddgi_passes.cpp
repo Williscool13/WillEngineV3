@@ -191,6 +191,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         const uint32_t raysPerProbe = glm::clamp(k == 0 ? params.raysPerProbe : params.outerRaysPerProbe, 16u, DDGI_MAX_RAYS_PER_PROBE);
         const bool bLocalNEE = k == 0 || params.bOuterLocalNEE;
         const float maxRayRadiance = glm::max(params.maxRayRadiance, 0.0f);
+        const float bounceIntensity = glm::clamp(params.bounceIntensity, 0.0f, 1.0f);
 
         graph.CreateBuffer(DDGI_RAY_DATA[k], static_cast<VkDeviceSize>(probeCountTotal) * raysPerProbe * sizeof(glm::vec4), false);
 
@@ -229,7 +230,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (bActiveHistoryValid[k]) {
             tracePass.ReadBuffer(DDGI_ACTIVE_HISTORY[k]);
         }
-        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, bLocalNEE, maxRayRadiance, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber, bWorldCache = worldCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, bLocalNEE, maxRayRadiance, bounceIntensity, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber, bWorldCache = worldCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_trace"));
             if (!pipelineEntry) {
                 return;
@@ -261,6 +262,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .bLocalNEE = bLocalNEE ? 1u : 0u,
                 .maxRayRadiance = maxRayRadiance,
                 .bWorldCacheValid = bWorldCache ? 1u : 0u,
+                .bounceIntensity = bounceIntensity,
                 .probeActive = bActiveHistory ? graph.GetBufferAddress(activeHistoryId) : 0,
                 .bActiveValid = bActiveHistory ? 1u : 0u,
             };
@@ -342,7 +344,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .atlasOutIndex = graph.GetStorageImageViewDescriptorIndex(atlasId),
                 .atlasHistoryIndex = bHistory ? graph.GetSampledImageViewDescriptorIndex(atlasHistoryId) : 0u,
                 .raysPerProbe = raysPerProbe,
-                .hysteresis = glm::clamp(params.hysteresis, 0.0f, 0.995f),
+                .hysteresis = glm::clamp(params.visibilityHysteresis, 0.0f, 0.995f),
                 .distanceExponent = glm::max(params.distanceExponent, 1.0f),
                 .bRestartValid = bRestartHistory ? 1u : 0u,
                 .probeActive = bActiveHistory ? graph.GetBufferAddress(activeHistoryId) : 0,

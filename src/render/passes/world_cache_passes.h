@@ -39,9 +39,10 @@ struct WorldCacheFrame
  * @param graph
  * @param pipelineManager
  * @param frameNumber
+ * @param cameraPos current camera world position; carry-forward drops cells whose distance-implied LOD no longer matches their stored level
  * @return
  */
-WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber);
+WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos);
 
 /**
  * Shades every radiance cache marked active.
@@ -52,8 +53,10 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
  * @param bDDGIFeedbackValid
  * @param skyboxIndex indirect-diffuse fallback for cells outside DDGI's coverage; -1 disables it
  * @param iblIntensity
+ * @param maxRadiance firefly clamp applied before blending into the cell, so a single outlier sample can't drag the EMA toward it; 0 disables it
+ * @param bounceIntensity sub-unity scale on the DDGI feedback term, bounding the cache<->DDGI loop gain
  */
-void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity);
+void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity);
 
 /**
  * Carries this frame's cache buffers into history. Call last.

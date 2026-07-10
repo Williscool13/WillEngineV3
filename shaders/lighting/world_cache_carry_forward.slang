@@ -15,9 +15,15 @@ void ComputeWorldCacheCarryForward(uint3 dtid: SV_DispatchThreadID, uniform Worl
     if (checksum == WORLD_CACHE_HASH_EMPTY) { return; }
 
     WorldCacheCell cell = pc.prevCells[i];
-    if (pc.frameIndex - cell.lastTouched >= WORLD_CACHE_LRU_THRESHOLD) { return; }
+    uint age = pc.frameIndex - cell.lastTouched;
+    if (age >= WORLD_CACHE_LRU_THRESHOLD) { return; }
 
     WorldCacheKey key = WorldCacheUnpackKey(pc.prevKeys[i]);
+
+    // LOD revalidation
+    uint impliedLevel = WorldCacheLevelFromDistance(distance(WorldCacheCellCenterFromKey(key), pc.cameraPos.xyz));
+    if (uint(abs(int(key.level) - int(impliedLevel))) >= WORLD_CACHE_LOD_REVALIDATE_MARGIN) { return; }
+
     bool isNew;
     uint slot = WorldCacheHashInsert(pc.nextEntries, pc.nextKeys, key, isNew);
     if (slot == WORLD_CACHE_HASH_INVALID) { return; }

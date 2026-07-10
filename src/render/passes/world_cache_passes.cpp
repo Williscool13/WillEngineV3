@@ -12,7 +12,7 @@
 
 namespace Render
 {
-WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber)
+WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos)
 {
     graph.CreateBuffer(WORLD_CACHE_ENTRIES, WORLD_CACHE_ENTRIES_BYTES, false);
     graph.CreateBuffer(WORLD_CACHE_KEYS, WORLD_CACHE_KEYS_BYTES, false);
@@ -23,9 +23,11 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     RenderPass& clearPass = graph.AddPass(SID("World Cache Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Lighting);
     clearPass.WriteTransferBuffer(WORLD_CACHE_ENTRIES);
     clearPass.WriteTransferBuffer(WORLD_CACHE_ACTIVE);
+    clearPass.WriteTransferBuffer(WORLD_CACHE_CELLS);
     clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_ENTRIES), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_ACTIVE), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_CELLS), 0, VK_WHOLE_SIZE, 0);
     });
 
     const bool bHistoryValid = graph.HasBuffer(WORLD_CACHE_ENTRIES_HISTORY) && graph.HasBuffer(WORLD_CACHE_KEYS_HISTORY) && graph.HasBuffer(WORLD_CACHE_CELLS_HISTORY);
@@ -37,7 +39,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
         carryPass.ReadWriteBuffer(WORLD_CACHE_ENTRIES);
         carryPass.ReadWriteBuffer(WORLD_CACHE_KEYS);
         carryPass.ReadWriteBuffer(WORLD_CACHE_CELLS);
-        carryPass.Execute([pipelineManager, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        carryPass.Execute([pipelineManager, frameNumber, cameraPos](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("world_cache_carry_forward"));
             if (!pipelineEntry) {
                 return;
@@ -51,6 +53,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
                 .nextEntries = graph.GetBufferAddress(WORLD_CACHE_ENTRIES),
                 .nextKeys = graph.GetBufferAddress(WORLD_CACHE_KEYS),
                 .nextCells = graph.GetBufferAddress(WORLD_CACHE_CELLS),
+                .cameraPos = glm::vec4(cameraPos, 0.0f),
                 .frameIndex = static_cast<uint32_t>(frameNumber),
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -76,7 +79,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     return WorldCacheFrame{.bValid = true};
 }
 
-void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity)
+void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity)
 {
     if (!frame.bValid) {
         return;
@@ -108,9 +111,9 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
         pass.ReadBuffer(SID("world_grid_index_list"));
     }
     if (bFeedback) {
-        pass.ReadBuffer(DDGI_CASCADES_BUFFER);
+        AddDDGISampleDependencies(graph, pass);
     }
-    pass.Execute([pipelineManager, sceneIndex, bWorldGrid, bFeedback, skyboxIndex, iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, sceneIndex, bWorldGrid, bFeedback, skyboxIndex, iblIntensity, maxRadiance, bounceIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("world_cache_shade"));
         if (!pipelineEntry) {
             return;
@@ -138,6 +141,8 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
             .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
             .skyboxIndex = skyboxIndex,
             .iblIntensity = iblIntensity,
+            .maxRadiance = maxRadiance,
+            .bounceIntensity = bounceIntensity,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         const uint32_t groups = (WORLD_CACHE_HASH_CAPACITY + 63u) / 64u;

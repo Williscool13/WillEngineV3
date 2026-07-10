@@ -520,10 +520,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber);
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
-                const WorldCacheFrame worldCache = SetupWorldCacheBegin(*renderGraph, pipelineManager, frameNumber);
+                const WorldCacheFrame worldCache = SetupWorldCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos);
                 SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, frameNumber, frameBuffer.bDDGIBounceOnly, worldCache);
                 ddgiPreviousCascades = ddgiCascades;
-                SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, true, viewFamily.skyboxIndex, viewFamily.iblIntensity);
+                const bool bWorldCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.bDDGIBounceOnly;
+                SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, bWorldCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity);
                 SetupWorldCacheEnd(*renderGraph, worldCache);
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
                     SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure, frameBuffer.ddgiProbeDebugCascade, frameBuffer.bDDGIHideInactiveProbes);

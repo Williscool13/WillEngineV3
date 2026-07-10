@@ -17,7 +17,7 @@ import world_cache_hash;
 import world_cache_interop;
 
 // =============== Shader Summary ============
-// DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits shade sun + one NEE-sampled local light (shadow rays) + emissive plus last frame's probe irradiance (infinite bounce). Light-proxy hits carry no radiance (NEE owns direct light; probes hold pure bounce), only the hit distance for the visibility moments.
+// DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits key+read the world radiance cache (last frame's shaded value; NEE shading only as a fallback when the cache has no slot for the hit). Light-proxy hits carry no radiance, only the hit distance for the visibility moments.
 // Blend: one thread group per probe tile; each interior texel cosine-integrates the probe's rays into octahedral irradiance stored as pow(E, 1/gamma), hysteresis-blended in that perceptual space with RTXGI's change/brightness thresholds. Slots whose lattice cell changed since last frame (window scroll) or with no history start fresh. Border texels copy wrapped interior texels so bilinear taps stay seamless.
 // Blend visibility: same layout at 16x16 tiles; each texel integrates mean/mean^2 ray distance with a sharpened (pow distanceExponent) cosine lobe, for the Chebyshev occlusion test at sampling.
 // Relocate: one thread per probe applies RTXGI probe relocation to this frame's ray distances (light-proxy hits ignored), writing next frame's per-slot world offset (xyz, capped at 45% of spacing) and backface fraction (w, the sampler's dead-probe test).
@@ -72,17 +72,11 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
             result = float4(-1.0, 0.0, 0.0, hitT);
         } else if (q.CommittedTriangleFrontFace()) {
             float3 hitWorldPos = ray.Origin + direction * hitT;
-            uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
-            float3 hitNormal;
-            float3 radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, rng, hitNormal);
-            // Firefly clamp
-            float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
-            if (pc.maxRayRadiance > 0.0 && maxChannel > pc.maxRayRadiance) {
-                radiance *= pc.maxRayRadiance / maxChannel;
-            }
-            result = float4(radiance, hitT);
+            float3 radiance = float3(0.0);
+            bool bCacheRead = false;
 
             if (pc.bWorldCacheValid != 0) {
+                float3 hitNormal = DecodeHitNormal(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
                 float3 approxCameraPos = (float3(pc.volume.baseCell) + float3(pc.volume.probeCount) * 0.5) * pc.volume.probeSpacing;
                 WorldCacheKey wcKey = WorldCacheComputeKey(hitWorldPos, hitNormal, approxCameraPos);
                 bool isNew;
@@ -91,16 +85,34 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                     if (isNew) {
                         pc.worldCache->cells[wcSlot].packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey);
                     }
+                    radiance = UnpackEmissiveRGBE(pc.worldCache->cells[wcSlot].packedRadiance);
+                    bCacheRead = true;
                     pc.worldCache->cells[wcSlot].lastTouched = pc.frameIndex;
-                    pc.worldCache->active[wcSlot] = 1u;
-                    WorldCacheHitDescriptor wcHit;
-                    wcHit.instanceID = q.CommittedInstanceID();
-                    wcHit.primitiveIndex = q.CommittedPrimitiveIndex();
-                    wcHit.packedBary = PackUnorm2x16(q.CommittedTriangleBarycentrics());
-                    wcHit.pad = 0u;
-                    pc.worldCache->descriptors[wcSlot] = wcHit;
+
+                    uint prevActive;
+                    InterlockedExchange(pc.worldCache->active[wcSlot], 1u, prevActive);
+                    if (prevActive == 0u) {
+                        WorldCacheHitDescriptor wcHit;
+                        wcHit.instanceID = q.CommittedInstanceID();
+                        wcHit.primitiveIndex = q.CommittedPrimitiveIndex();
+                        wcHit.packedBary = PackUnorm2x16(q.CommittedTriangleBarycentrics());
+                        wcHit.pad = 0u;
+                        pc.worldCache->descriptors[wcSlot] = wcHit;
+                    }
                 }
             }
+
+            if (!bCacheRead) {
+                uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
+                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, rng);
+            }
+
+            // Firefly clamp
+            float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
+            if (pc.maxRayRadiance > 0.0 && maxChannel > pc.maxRayRadiance) {
+                radiance *= pc.maxRayRadiance / maxChannel;
+            }
+            result = float4(radiance, hitT);
         } else {
             // Backface hits mark "probe likely inside geometry" with a shortened negative distance, classic DDGI convention.
             result = float4(0.0, 0.0, 0.0, -0.2 * hitT);

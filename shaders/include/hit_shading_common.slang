@@ -18,8 +18,22 @@ import constants_interop;
 // Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
 
-/** NEE variant: sun + one uniformly picked local light, both shadow-ray tested, + emissive + DDGI feedback. Used by DDGI's own probe trace. */
-public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, out float3 outNormal)
+/** Geometry-only normal decode, no material/lighting work. Used to key the world cache before deciding whether a full shade is even needed. */
+public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+{
+    Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
+    uint firstIndex = primitive.indexOffset + triangleIndex * 3;
+    VertexAttribute a0 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 0]];
+    VertexAttribute a1 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 1]];
+    VertexAttribute a2 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 2]];
+    float3 bary = float3(1.0 - barycentrics.x - barycentrics.y, barycentrics.x, barycentrics.y);
+    float3 normalOS = normalize(bary.x * DecodeNormal(a0) + bary.y * DecodeNormal(a1) + bary.z * DecodeNormal(a2));
+    Model model = pc.modelBuffer[instance.modelIndex];
+    return normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
+}
+
+/** NEE variant: sun + one uniformly picked local light, both shadow-ray tested, + emissive + DDGI feedback. Fallback for DDGI probe rays when the world cache has no slot for the hit. */
+public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -35,7 +49,6 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
 
     Model model = pc.modelBuffer[instance.modelIndex];
     float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
-    outNormal = N;
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
     float4 albedo = material.colorFactor * vertexColor;
@@ -129,7 +142,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
 
     if (pc.bFeedbackValid != 0) {
         float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades);
-        radiance += diffuseColor * gi.rgb;
+        radiance += diffuseColor * gi.rgb * pc.bounceIntensity;
     }
     return radiance;
 }
@@ -290,7 +303,7 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
     }
     if (pc.bFeedbackValid != 0) {
         float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades);
-        indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+        indirectDiffuse = lerp(indirectDiffuse, gi.rgb * pc.bounceIntensity, gi.w);
     }
     radiance += diffuseColor * indirectDiffuse;
     return radiance;

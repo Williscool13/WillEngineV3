@@ -582,6 +582,7 @@ SHADER_PUBLIC struct WorldCacheCarryForwardPushConstant
     SHADER_PUBLIC SHADER_PTR(uint) nextEntries;
     SHADER_PUBLIC SHADER_PTR(uint2) nextKeys;
     SHADER_PUBLIC SHADER_PTR(WorldCacheCell) nextCells;
+    SHADER_PUBLIC float4 cameraPos;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t pad0;
 };
@@ -608,6 +609,8 @@ SHADER_PUBLIC struct WorldCacheShadePushConstant
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC float maxRadiance;
+    SHADER_PUBLIC float bounceIntensity;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -1104,7 +1107,7 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC uint32_t bLocalNEE;
     SHADER_PUBLIC float maxRayRadiance;
     SHADER_PUBLIC uint32_t bWorldCacheValid;
-    SHADER_PUBLIC uint32_t pad2;
+    SHADER_PUBLIC float bounceIntensity;
     SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
     SHADER_PUBLIC uint32_t bActiveValid;
     SHADER_PUBLIC uint32_t pad3;

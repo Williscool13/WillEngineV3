@@ -294,8 +294,10 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"bOuterLocalNEE", p.bOuterLocalNEE},
         {"bClassification", p.bClassification},
         {"bInfiniteBounce", p.bInfiniteBounce},
+        {"bounceIntensity", p.bounceIntensity},
         {"maxRayRadiance", p.maxRayRadiance},
         {"hysteresis", p.hysteresis},
+        {"visibilityHysteresis", p.visibilityHysteresis},
         {"irradianceGamma", p.irradianceGamma},
         {"irradianceThreshold", p.irradianceThreshold},
         {"brightnessThreshold", p.brightnessThreshold},
@@ -328,8 +330,10 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.bOuterLocalNEE = dBool("bOuterLocalNEE", p.bOuterLocalNEE);
     p.bClassification = dBool("bClassification", p.bClassification);
     p.bInfiniteBounce = dBool("bInfiniteBounce", p.bInfiniteBounce);
+    p.bounceIntensity = dFloat("bounceIntensity", p.bounceIntensity);
     p.maxRayRadiance = dFloat("maxRayRadiance", p.maxRayRadiance);
     p.hysteresis = dFloat("hysteresis", p.hysteresis);
+    p.visibilityHysteresis = dFloat("visibilityHysteresis", p.visibilityHysteresis);
     p.irradianceGamma = dFloat("irradianceGamma", p.irradianceGamma);
     p.irradianceThreshold = dFloat("irradianceThreshold", p.irradianceThreshold);
     p.brightnessThreshold = dFloat("brightnessThreshold", p.brightnessThreshold);

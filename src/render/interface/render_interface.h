@@ -761,9 +761,11 @@ struct DDGIParams
     bool bOuterLocalNEE{false};
     bool bClassification{true};
     bool bInfiniteBounce{true};
+    float bounceIntensity{0.75f};
     float maxRayRadiance{20.0f};
 
-    float hysteresis{0.97f};
+    float hysteresis{0.5f};
+    float visibilityHysteresis{0.97f};
     float irradianceGamma{5.0f};
     float irradianceThreshold{0.25f};
     float brightnessThreshold{0.10f};
