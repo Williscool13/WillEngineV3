@@ -24,6 +24,7 @@ import reblur_interop;
 import ddgi_interop;
 import reflection_interop;
 import world_grid_interop;
+import world_cache_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -39,6 +40,7 @@ import world_grid_interop;
 #include "ddgi_interop.h"
 #include "reflection_interop.h"
 #include "world_grid_interop.h"
+#include "world_cache_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
@@ -572,6 +574,42 @@ SHADER_PUBLIC struct WorldGridDebugPushConstant
     SHADER_PUBLIC uint32_t pad0;
 };
 
+SHADER_PUBLIC struct WorldCacheCarryForwardPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(uint) prevEntries;
+    SHADER_PUBLIC SHADER_PTR(uint2) prevKeys;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) prevCells;
+    SHADER_PUBLIC SHADER_PTR(uint) nextEntries;
+    SHADER_PUBLIC SHADER_PTR(uint2) nextKeys;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) nextCells;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t pad0;
+};
+
+SHADER_PUBLIC struct WorldCacheShadePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(uint) active;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheHitDescriptor) descriptors;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cells;
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
+    SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) previousCascades;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t bFeedbackValid;
+    SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC int32_t skyboxIndex;
+    SHADER_PUBLIC float iblIntensity;
+};
+
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -975,6 +1013,7 @@ SHADER_PUBLIC struct GPUDebugBuildIndirectPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(GPUDebugDrawArgs) args;
     SHADER_PUBLIC SHADER_PTR(GPUDebugSphereArgs) sphereArgs;
+    SHADER_PUBLIC SHADER_PTR(GPUDebugCubeArgs) cubeArgs;
 };
 
 SHADER_PUBLIC struct GPUDebugTestPatternPushConstant
@@ -991,6 +1030,24 @@ SHADER_PUBLIC struct GPUDebugSphereDrawPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(DebugSphereInstance) instanceBuffer;
     SHADER_PUBLIC uint32_t sceneDataIndex;
+};
+
+SHADER_PUBLIC struct GPUDebugCubeDrawPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(DebugCubeInstance) instanceBuffer;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+};
+
+SHADER_PUBLIC struct WorldCacheDebugPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(GPUDebugCubeArgs) cubeArgs;
+    SHADER_PUBLIC SHADER_PTR(DebugCubeInstance) cubeBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) entries;
+    SHADER_PUBLIC SHADER_PTR(uint2) keys;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cells;
+    SHADER_PUBLIC float exposure;
+    SHADER_PUBLIC int32_t bucketFilter;
 };
 
 SHADER_PUBLIC struct DDGIProbeDebugPushConstant
@@ -1037,6 +1094,7 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC SHADER_PTR(float4) probeOffsets;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) previousCascades;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheBuffers) worldCache;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
@@ -1045,7 +1103,7 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC uint32_t bOffsetsValid;
     SHADER_PUBLIC uint32_t bLocalNEE;
     SHADER_PUBLIC float maxRayRadiance;
-    SHADER_PUBLIC uint32_t pad1;
+    SHADER_PUBLIC uint32_t bWorldCacheValid;
     SHADER_PUBLIC uint32_t pad2;
     SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
     SHADER_PUBLIC uint32_t bActiveValid;

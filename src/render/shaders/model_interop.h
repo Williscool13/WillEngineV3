@@ -82,6 +82,22 @@ SHADER_PUBLIC struct DebugSphereInstance
     SHADER_PUBLIC float4 shB;
 };
 
+SHADER_PUBLIC struct GPUDebugCubeArgs
+{
+    SHADER_PUBLIC uint32_t vertexCount;
+    SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t firstVertex;
+    SHADER_PUBLIC uint32_t firstInstance;
+    SHADER_PUBLIC uint32_t capacity;
+};
+
+SHADER_PUBLIC struct DebugCubeInstance
+{
+    SHADER_PUBLIC float3 center;
+    SHADER_PUBLIC float halfExtent;
+    SHADER_PUBLIC float4 color;
+};
+
 
 SHADER_PUBLIC struct VertexPosition
 {

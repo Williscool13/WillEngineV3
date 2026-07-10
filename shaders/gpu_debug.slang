@@ -6,6 +6,9 @@ import lights_interop;
 import world_grid_interop;
 import binning_common;
 import packing_functions;
+import world_cache_hash;
+import shader_functions;
+import world_cache_interop;
 
 // =============== Shader Summary ============
 // GPU debug draw support: converts the appended segment count into mesh-task indirect args, plus a test pattern producer (reference for real producers).
@@ -21,6 +24,7 @@ void ComputeGPUDebugBuildIndirect(uniform GPUDebugBuildIndirectPushConstant pc)
     pc.args->groupCountZ = 1;
 
     pc.sphereArgs->instanceCount = min(pc.sphereArgs->instanceCount, pc.sphereArgs->capacity);
+    pc.cubeArgs->instanceCount = min(pc.cubeArgs->instanceCount, pc.cubeArgs->capacity);
 }
 
 [shader("compute")]
@@ -83,4 +87,22 @@ void ComputeGPUDebugWorldGrid(uint3 tid: SV_DispatchThreadID, uniform WorldGridD
 
     float4 color = UnpackUnorm4x8(pc.packedTint);
     GPUDebugAddOBB(pc.args, pc.segmentBuffer, center, float3(he, 0.0, 0.0), float3(0.0, he, 0.0), float3(0.0, 0.0, he), 0.02, color);
+}
+
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void ComputeGPUDebugWorldCache(uint3 tid: SV_DispatchThreadID, uniform WorldCacheDebugPushConstant pc)
+{
+    uint slot = tid.x;
+    if (slot >= WORLD_CACHE_HASH_CAPACITY) { return; }
+    if (pc.entries[slot] == WORLD_CACHE_HASH_EMPTY) { return; }
+
+    WorldCacheKey key = WorldCacheUnpackKey(pc.keys[slot]);
+    if (pc.bucketFilter >= 0 && int(key.normalBucket) != pc.bucketFilter) { return; }
+
+    float halfExtent = WorldCacheCellSizeAtLevel(key.level) * 0.45;
+    float3 center = WorldCacheCellCenterFromKey(key) + WorldCacheBucketNormal(key.normalBucket) * halfExtent * 0.5;
+
+    float3 radiance = UnpackEmissiveRGBE(pc.cells[slot].packedRadiance) * pc.exposure;
+    GPUDebugAddCube(pc.cubeArgs, pc.cubeBuffer, center, halfExtent, float4(radiance, 1.0));
 }

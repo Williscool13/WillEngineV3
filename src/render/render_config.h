@@ -69,6 +69,10 @@ inline const StringID GPU_DEBUG_SPHERE_ARGS_BUFFER = SID("gpu_debug_sphere_args"
 inline const StringID GPU_DEBUG_SPHERE_INSTANCE_BUFFER = SID("gpu_debug_sphere_instances");
 inline constexpr uint32_t GPU_DEBUG_MAX_SPHERES = 65536;
 inline constexpr uint32_t GPU_DEBUG_SPHERE_VERTEX_COUNT = 16 * 32 * 6;
+inline const StringID GPU_DEBUG_CUBE_ARGS_BUFFER = SID("gpu_debug_cube_args");
+inline const StringID GPU_DEBUG_CUBE_INSTANCE_BUFFER = SID("gpu_debug_cube_instances");
+inline constexpr uint32_t GPU_DEBUG_MAX_CUBES = 131072;
+inline constexpr uint32_t GPU_DEBUG_CUBE_VERTEX_COUNT = 6 * 6;
 
 inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
 inline constexpr int32_t RDG_MAX_PASSES = 256;

@@ -247,7 +247,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("FrustumBinning: screen-frustum-tied clusters. Only actually bound in ReSTIR mode (feeds the reflection pass); Default-mode shading uses World Grid instead.");
         }
-        ImGui::SameLine();
+
         ImGui::Checkbox("World Grid##GPUDebug", &state->debug.bWorldGridDebug);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("WorldGridBinning: camera-centered cascaded world-space grid used by Default-mode shading.");
@@ -262,6 +262,26 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("All draws every cascade with an identification tint; picking one cascade draws only it, untinted. 0 is the finest (32m) cascade, doubling per level.");
+            }
+        }
+
+        ImGui::Checkbox("World Cache##GPUDebug", &state->debug.bWorldCacheDebug);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("World radiance cache: one solid cube per occupied hash-table cell, colored by decoded radiance (black = occupied but not yet shaded). Cube size follows the cell's LOD; shrunk slightly so neighbors don't merge.");
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(200.0f);
+        Widgets::SliderFloat("Cache Exposure##GPUDebug", &state->debug.worldCacheDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the world cache debug cubes so bright cells do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
+        {
+            const char* bucketLabels[] = {"All", "+X", "-X", "+Y", "-Y", "+Z", "-Z"};
+            int bucketChoice = state->debug.worldCacheDebugBucket + 1;
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(80.0f);
+            if (ImGui::Combo("Direction##WorldCacheDebug", &bucketChoice, bucketLabels, static_cast<int>(std::size(bucketLabels)))) {
+                state->debug.worldCacheDebugBucket = bucketChoice - 1;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("All draws every normal bucket; picking one draws only cells whose normal bucket matches (front/back separation only, not fine direction).");
             }
         }
 

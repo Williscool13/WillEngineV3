@@ -13,6 +13,8 @@ import packing_functions;
 import pbr_functions;
 import random_common;
 import hit_shading_common;
+import world_cache_hash;
+import world_cache_interop;
 
 // =============== Shader Summary ============
 // DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits shade sun + one NEE-sampled local light (shadow rays) + emissive plus last frame's probe irradiance (infinite bounce). Light-proxy hits carry no radiance (NEE owns direct light; probes hold pure bounce), only the hit distance for the visibility moments.
@@ -69,14 +71,36 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
             // -1 in x tags a light-proxy hit so relocation can ignore it; blending clamps it back to black.
             result = float4(-1.0, 0.0, 0.0, hitT);
         } else if (q.CommittedTriangleFrontFace()) {
+            float3 hitWorldPos = ray.Origin + direction * hitT;
             uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
-            float3 radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), ray.Origin + direction * hitT, direction, rng);
+            float3 hitNormal;
+            float3 radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, rng, hitNormal);
             // Firefly clamp
             float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
             if (pc.maxRayRadiance > 0.0 && maxChannel > pc.maxRayRadiance) {
                 radiance *= pc.maxRayRadiance / maxChannel;
             }
             result = float4(radiance, hitT);
+
+            if (pc.bWorldCacheValid != 0) {
+                float3 approxCameraPos = (float3(pc.volume.baseCell) + float3(pc.volume.probeCount) * 0.5) * pc.volume.probeSpacing;
+                WorldCacheKey wcKey = WorldCacheComputeKey(hitWorldPos, hitNormal, approxCameraPos);
+                bool isNew;
+                uint wcSlot = WorldCacheHashInsert(pc.worldCache->entries, pc.worldCache->keys, wcKey, isNew);
+                if (wcSlot != WORLD_CACHE_HASH_INVALID) {
+                    if (isNew) {
+                        pc.worldCache->cells[wcSlot].packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey);
+                    }
+                    pc.worldCache->cells[wcSlot].lastTouched = pc.frameIndex;
+                    pc.worldCache->active[wcSlot] = 1u;
+                    WorldCacheHitDescriptor wcHit;
+                    wcHit.instanceID = q.CommittedInstanceID();
+                    wcHit.primitiveIndex = q.CommittedPrimitiveIndex();
+                    wcHit.packedBary = PackUnorm2x16(q.CommittedTriangleBarycentrics());
+                    wcHit.pad = 0u;
+                    pc.worldCache->descriptors[wcSlot] = wcHit;
+                }
+            }
         } else {
             // Backface hits mark "probe likely inside geometry" with a shortened negative distance, classic DDGI convention.
             result = float4(0.0, 0.0, 0.0, -0.2 * hitT);

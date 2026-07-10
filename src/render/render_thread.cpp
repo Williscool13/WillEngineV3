@@ -507,13 +507,29 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupTLASBuild(*renderGraph, context, viewFamily, renderExtent, frameResourceLimits);
 
+            const bool bNeedsWorldGrid = viewFamily.lightingMode == Core::LightingMode::Default
+                                         || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled)
+                                         || frameBuffer.ddgi.bEnabled;
+            if (bNeedsWorldGrid) {
+                SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0);
+                if (frameBuffer.bEnableGPUDebug && frameBuffer.bWorldGridDebug && !frameBuffer.bLockGPUDebug) {
+                    SetupWorldGridDebug(*renderGraph, pipelineManager, 0, frameBuffer.worldGridDebugLevel);
+                }
+            }
+
             const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber);
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
-                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, frameNumber, frameBuffer.bDDGIBounceOnly);
+                const WorldCacheFrame worldCache = SetupWorldCacheBegin(*renderGraph, pipelineManager, frameNumber);
+                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, frameNumber, frameBuffer.bDDGIBounceOnly, worldCache);
                 ddgiPreviousCascades = ddgiCascades;
+                SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, true, viewFamily.skyboxIndex, viewFamily.iblIntensity);
+                SetupWorldCacheEnd(*renderGraph, worldCache);
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
                     SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure, frameBuffer.ddgiProbeDebugCascade, frameBuffer.bDDGIHideInactiveProbes);
+                }
+                if (frameBuffer.bEnableGPUDebug && frameBuffer.bWorldCacheDebug && !frameBuffer.bLockGPUDebug) {
+                    SetupWorldCacheDebug(*renderGraph, pipelineManager, worldCache, frameBuffer.worldCacheDebugExposure, frameBuffer.worldCacheDebugBucket);
                 }
             }
 
@@ -588,12 +604,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     {
                         const float clusterZNear = viewFamily.mainView.currentViewData.nearPlane;
                         const float clusterZFar = viewFamily.clusterZFar;
-                        SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0);
                         if (frameBuffer.bEnableGPUDebug && frameBuffer.bClusterGridDebug && !frameBuffer.bLockGPUDebug) {
                             SetupClusterGridDebug(*renderGraph, pipelineManager, 0, clusterZNear, clusterZFar);
-                        }
-                        if (frameBuffer.bEnableGPUDebug && frameBuffer.bWorldGridDebug && !frameBuffer.bLockGPUDebug) {
-                            SetupWorldGridDebug(*renderGraph, pipelineManager, 0, frameBuffer.worldGridDebugLevel);
                         }
                         SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply);
                         break;
@@ -607,9 +619,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                         SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection);
                         SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
-                        if (frameBuffer.reflection.bEnabled) {
-                            SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0);
-                        }
 
                         const bool bReflectionCheckerboardPacked = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX && frameBuffer.reflection.bDenoiserEnabled;
                         SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, restir.brdfRoughnessMax);

@@ -346,6 +346,9 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bClusterGridDebug = state->debug.bClusterGridDebug;
     frameBuffer->bWorldGridDebug = state->debug.bWorldGridDebug;
     frameBuffer->worldGridDebugLevel = state->debug.worldGridDebugLevel;
+    frameBuffer->bWorldCacheDebug = state->debug.bWorldCacheDebug;
+    frameBuffer->worldCacheDebugExposure = state->debug.worldCacheDebugExposure;
+    frameBuffer->worldCacheDebugBucket = state->debug.worldCacheDebugBucket;
     frameBuffer->bDDGIBounceOnly = state->debug.bDDGIBounceOnly;
     frameBuffer->ddgiProbeDebugExposure = state->debug.ddgiProbeDebugExposure;
     frameBuffer->ddgiProbeDebugCascade = state->debug.ddgiProbeDebugCascade;

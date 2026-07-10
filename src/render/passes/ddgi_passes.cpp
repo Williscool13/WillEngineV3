@@ -118,7 +118,7 @@ static void AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName
     });
 }
 
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, uint64_t frameNumber, bool bBounceOnly)
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) {
         return;
@@ -204,6 +204,14 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         tracePass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
         tracePass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
         tracePass.WriteBuffer(DDGI_RAY_DATA[k]);
+        if (worldCache.bValid) {
+            tracePass.ReadBuffer(WORLD_CACHE_BUFFERS_CURRENT);
+            tracePass.ReadWriteBuffer(WORLD_CACHE_ENTRIES);
+            tracePass.ReadWriteBuffer(WORLD_CACHE_KEYS);
+            tracePass.ReadWriteBuffer(WORLD_CACHE_CELLS);
+            tracePass.ReadWriteBuffer(WORLD_CACHE_ACTIVE);
+            tracePass.ReadWriteBuffer(WORLD_CACHE_DESCRIPTORS);
+        }
         if (bFeedback) {
             tracePass.ReadBuffer(DDGI_CASCADES_PREV_BUFFER);
             for (uint32_t j = 0; j < cascades.count; ++j) {
@@ -221,7 +229,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (bActiveHistoryValid[k]) {
             tracePass.ReadBuffer(DDGI_ACTIVE_HISTORY[k]);
         }
-        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, bLocalNEE, maxRayRadiance, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, bLocalNEE, maxRayRadiance, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber, bWorldCache = worldCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_trace"));
             if (!pipelineEntry) {
                 return;
@@ -243,6 +251,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
                 .probeOffsets = bOffsetsHistory ? graph.GetBufferAddress(offsetsHistoryId) : 0,
                 .previousCascades = bFeedback ? graph.GetBufferAddress(DDGI_CASCADES_PREV_BUFFER) : 0,
+                .worldCache = bWorldCache ? graph.GetBufferAddress(WORLD_CACHE_BUFFERS_CURRENT) : 0,
                 .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
                 .skyboxIndex = skyboxIndex,
                 .raysPerProbe = raysPerProbe,
@@ -251,6 +260,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .bOffsetsValid = bOffsetsHistory ? 1u : 0u,
                 .bLocalNEE = bLocalNEE ? 1u : 0u,
                 .maxRayRadiance = maxRayRadiance,
+                .bWorldCacheValid = bWorldCache ? 1u : 0u,
                 .probeActive = bActiveHistory ? graph.GetBufferAddress(activeHistoryId) : 0,
                 .bActiveValid = bActiveHistory ? 1u : 0u,
             };

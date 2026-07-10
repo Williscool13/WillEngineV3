@@ -91,6 +91,20 @@ public void GPUDebugAddSphereFlat(GPUDebugSphereArgs* sphereArgs, DebugSphereIns
     GPUDebugAddSphere(sphereArgs, instances, center, radius, float4(color.r, 0.0, 0.0, 0.0), float4(color.g, 0.0, 0.0, 0.0), float4(color.b, 0.0, 0.0, 0.0));
 }
 
+public void GPUDebugAddCube(GPUDebugCubeArgs* cubeArgs, DebugCubeInstance* instances, float3 center, float halfExtent, float4 color)
+{
+    uint slot;
+    InterlockedAdd(cubeArgs[0].instanceCount, 1, slot);
+    if (slot >= cubeArgs[0].capacity) {
+        return;
+    }
+    DebugCubeInstance inst;
+    inst.center = center;
+    inst.halfExtent = halfExtent;
+    inst.color = color;
+    instances[slot] = inst;
+}
+
 /** Axes are half-extent-scaled: center +- ax +- ay +- az spans the box. */
 public void GPUDebugAddOBB(GPUDebugDrawArgs* args, DebugLineSegment* segments, float3 center, float3 ax, float3 ay, float3 az, float width, float4 color)
 {

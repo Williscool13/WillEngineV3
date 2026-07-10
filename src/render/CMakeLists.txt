@@ -100,6 +100,9 @@ add_library(render STATIC
         passes/ddgi_passes.cpp
         passes/ddgi_passes.h
         shaders/ddgi_interop.h
+        passes/world_cache_passes.cpp
+        passes/world_cache_passes.h
+        shaders/world_cache_interop.h
         post-processing/post_processing.cpp
         post-processing/post_processing.h
         renderer_types.h

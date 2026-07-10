@@ -24,11 +24,14 @@ void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, co
         graph.CreateBuffer(GPU_DEBUG_SEGMENT_BUFFER, GPU_DEBUG_MAX_SEGMENTS * sizeof(DebugLineSegment), false);
         graph.CreateBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER, sizeof(GPUDebugSphereArgs), false);
         graph.CreateBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER, GPU_DEBUG_MAX_SPHERES * sizeof(DebugSphereInstance), false);
+        graph.CreateBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER, sizeof(GPUDebugCubeArgs), false);
+        graph.CreateBuffer(GPU_DEBUG_CUBE_INSTANCE_BUFFER, GPU_DEBUG_MAX_CUBES * sizeof(DebugCubeInstance), false);
     }
 
     RenderPass& clearPass = graph.AddPass(SID("GPU Debug Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Debug);
     clearPass.WriteTransferBuffer(GPU_DEBUG_ARGS_BUFFER);
     clearPass.WriteTransferBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
+    clearPass.WriteTransferBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
     clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const GPUDebugDrawArgs args{
             .groupCountX = 0,
@@ -47,6 +50,15 @@ void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, co
             .capacity = GPU_DEBUG_MAX_SPHERES,
         };
         vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(GPU_DEBUG_SPHERE_ARGS_BUFFER), 0, sizeof(GPUDebugSphereArgs), &sphereArgs);
+
+        const GPUDebugCubeArgs cubeArgs{
+            .vertexCount = GPU_DEBUG_CUBE_VERTEX_COUNT,
+            .instanceCount = 0,
+            .firstVertex = 0,
+            .firstInstance = 0,
+            .capacity = GPU_DEBUG_MAX_CUBES,
+        };
+        vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(GPU_DEBUG_CUBE_ARGS_BUFFER), 0, sizeof(GPUDebugCubeArgs), &cubeArgs);
     });
 
     if (bTestPattern) {
@@ -87,6 +99,7 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
         RenderPass& buildIndirectPass = graph.AddPass(SID("GPU Debug Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
         buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
         buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
+        buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
         buildIndirectPass.Execute([pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_build_indirect"));
             if (!pipelineEntry) {
@@ -97,6 +110,7 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
             GPUDebugBuildIndirectPushConstant pc{
                 .args = graph.GetBufferAddress(GPU_DEBUG_ARGS_BUFFER),
                 .sphereArgs = graph.GetBufferAddress(GPU_DEBUG_SPHERE_ARGS_BUFFER),
+                .cubeArgs = graph.GetBufferAddress(GPU_DEBUG_CUBE_ARGS_BUFFER),
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
@@ -114,10 +128,13 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
     drawPass.ReadIndirectBuffer(GPU_DEBUG_ARGS_BUFFER);
     drawPass.ReadBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER);
     drawPass.ReadIndirectBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
+    drawPass.ReadBuffer(GPU_DEBUG_CUBE_INSTANCE_BUFFER);
+    drawPass.ReadIndirectBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
     drawPass.Execute([pipelineManager, width = renderExtent[0], height = renderExtent[1], bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* linePipeline = pipelineManager->GetPipelineEntry(SID("debug_render_gpu"));
         const PipelineEntry* spherePipeline = pipelineManager->GetPipelineEntry(SID("debug_sphere"));
-        if (!linePipeline && !spherePipeline) {
+        const PipelineEntry* cubePipeline = pipelineManager->GetPipelineEntry(SID("debug_cube"));
+        if (!linePipeline && !spherePipeline && !cubePipeline) {
             return;
         }
 
@@ -151,6 +168,19 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
             vkCmdDrawIndirect(cmd, graph.GetBufferHandle(GPU_DEBUG_SPHERE_ARGS_BUFFER), offsetof(GPUDebugSphereArgs, vertexCount), 1, sizeof(GPUDebugSphereArgs));
         }
 
+        if (cubePipeline) {
+            GPUDebugCubeDrawPushConstant cubePush{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .instanceBuffer = graph.GetBufferAddress(GPU_DEBUG_CUBE_INSTANCE_BUFFER),
+                .sceneDataIndex = 0,
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, cubePipeline->pipeline);
+            vkCmdPushConstants(cmd, cubePipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDebugCubeDrawPushConstant), &cubePush);
+
+            vkCmdDrawIndirect(cmd, graph.GetBufferHandle(GPU_DEBUG_CUBE_ARGS_BUFFER), offsetof(GPUDebugCubeArgs, vertexCount), 1, sizeof(GPUDebugCubeArgs));
+        }
+
         if (linePipeline) {
             GPUDebugDrawPushConstant pushConstants{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
@@ -172,6 +202,8 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
     graph.CarryBufferToNextFrame(GPU_DEBUG_SEGMENT_BUFFER, GPU_DEBUG_SEGMENT_BUFFER, 0);
     graph.CarryBufferToNextFrame(GPU_DEBUG_SPHERE_ARGS_BUFFER, GPU_DEBUG_SPHERE_ARGS_BUFFER, 0);
     graph.CarryBufferToNextFrame(GPU_DEBUG_SPHERE_INSTANCE_BUFFER, GPU_DEBUG_SPHERE_INSTANCE_BUFFER, 0);
+    graph.CarryBufferToNextFrame(GPU_DEBUG_CUBE_ARGS_BUFFER, GPU_DEBUG_CUBE_ARGS_BUFFER, 0);
+    graph.CarryBufferToNextFrame(GPU_DEBUG_CUBE_INSTANCE_BUFFER, GPU_DEBUG_CUBE_INSTANCE_BUFFER, 0);
 #endif
 }
 void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, uint32_t sceneIndex, float clusterZNear, float clusterZFar)

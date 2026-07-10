@@ -429,6 +429,9 @@ struct DebugState
     bool bClusterGridDebug{false};
     bool bWorldGridDebug{false};
     int32_t worldGridDebugLevel{0};
+    bool bWorldCacheDebug{false};
+    float worldCacheDebugExposure{1.0f};
+    int32_t worldCacheDebugBucket{-1};
     bool bDDGIBounceOnly{false};
     float ddgiProbeDebugExposure{1.0f};
     int32_t ddgiProbeDebugCascade{-1};

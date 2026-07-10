@@ -465,6 +465,10 @@ void PipelineManager::RegisterPipelines()
                             sizeof(FrustumBinningPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("world_grid_binning"), src / "world_grid_binning.spv", "ComputeWorldGridBinning",
                             sizeof(WorldGridBinningPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("world_cache_carry_forward"), src / "world_cache_carry_forward.spv", "ComputeWorldCacheCarryForward",
+                            sizeof(WorldCacheCarryForwardPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("world_cache_shade"), src / "world_cache_shade.spv", "ComputeWorldCacheShade",
+                            sizeof(WorldCacheShadePushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("gpu_debug_build_indirect"), src / "gpu_debug.spv", "ComputeGPUDebugBuildIndirect",
                             sizeof(GPUDebugBuildIndirectPushConstant), PipelineCategory::Critical);
@@ -472,6 +476,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ClusterGridDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gpu_debug_world_grid"), src / "gpu_debug.spv", "ComputeGPUDebugWorldGrid",
                             sizeof(WorldGridDebugPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gpu_debug_world_cache"), src / "gpu_debug.spv", "ComputeGPUDebugWorldCache",
+                            sizeof(WorldCacheDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gpu_debug_test_pattern"), src / "gpu_debug.spv", "ComputeGPUDebugTestPattern",
                             sizeof(GPUDebugTestPatternPushConstant), PipelineCategory::Critical);
 
@@ -1028,6 +1034,35 @@ void PipelineManager::RegisterPipelines()
             SID("debug_sphere"),
             builder,
             sizeof(GPUDebugSphereDrawPushConstant),
+            VK_SHADER_STAGE_VERTEX_BIT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    // Debug Cube Render (indirect, GPU-appended instances)
+    {
+        builder.AddShaderStage(src / "debug_cube.spv", VK_SHADER_STAGE_VERTEX_BIT, "VertexDebugCube");
+        builder.AddShaderStage(src / "debug_cube.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentDebugCube");
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        VkPipelineColorBlendAttachmentState cubeBlendState{
+            .blendEnable = VK_FALSE,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+
+        builder.SetupBlending(&cubeBlendState, 1);
+
+        VkFormat cubeColorFormats[1] = {
+            COLOR_ATTACHMENT_FORMAT,
+        };
+        builder.SetupRenderer(cubeColorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("debug_cube"),
+            builder,
+            sizeof(GPUDebugCubeDrawPushConstant),
             VK_SHADER_STAGE_VERTEX_BIT,
             PipelineCategory::Critical
         );
