@@ -6,7 +6,6 @@
 
 #include "ddgi_passes.h"
 #include "reflection_passes.h"
-#include "world_cache_passes.h"
 #include "render/render_config.h"
 #include "render/render_utils.h"
 #include "core/math/math_helpers.h"
@@ -633,14 +632,12 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                float iblIntensity,
                                uint64_t frameNumber,
                                bool bDDGIApply,
-                               bool bWorldCacheIndirect,
                                const Core::RTReflectionConfiguration& reflectionConfig,
                                float brdfRoughnessMax)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-    const bool bWorldCache = bDDGI && bWorldCacheIndirect && graph.HasBuffer(WORLD_CACHE_BUFFERS_CURRENT) && graph.HasBuffer(WORLD_CACHE_ENTRIES) && graph.HasBuffer(WORLD_CACHE_CELLS);
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
     const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
     const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
@@ -658,17 +655,12 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     if (bDDGI) {
         AddDDGISampleDependencies(graph, pass);
     }
-    if (bWorldCache) {
-        pass.ReadBuffer(WORLD_CACHE_BUFFERS_CURRENT);
-        pass.ReadBuffer(WORLD_CACHE_ENTRIES);
-        pass.ReadBuffer(WORLD_CACHE_CELLS);
-    }
     if (bReflection) {
         pass.ReadSampledImage(reflectionTarget);
     }
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, bDDGI, bWorldCache, bReflection, reflectionRoughnessMax, reflectionTarget,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -692,7 +684,6 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
                 .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(reflectionTarget) : ~0x0u,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
-                .worldCache = bWorldCache ? graph.GetBufferAddress(WORLD_CACHE_BUFFERS_CURRENT) : 0,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

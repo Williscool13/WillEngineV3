@@ -772,7 +772,6 @@ struct DDGIParams
     float distanceExponent{50.0f};
 
     bool bApplyToLighting{true};
-    bool bPerPixelCache{false};
     float normalBias{0.1f};
     float viewBias{0.3f};
 
@@ -784,6 +783,7 @@ struct RTReflectionConfiguration
 {
     bool bEnabled{true};
     bool bDenoiserEnabled{true};
+    bool bScreenSpaceLighting{true};
 
     float roughnessMax{0.3f};
     float intensity{1.0f};

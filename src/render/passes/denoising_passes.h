@@ -28,7 +28,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         uint32_t activeCheckerboardField,
                         float checkerboardResolveAccumSpeed,
                         bool bDDGIApply,
-                        bool bWorldCacheIndirect,
                         const Core::RTReflectionConfiguration& reflectionConfig,
                         float brdfRoughnessMax);
 
@@ -44,7 +43,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          uint32_t activeCheckerboardField,
                          float checkerboardResolveAccumSpeed,
                          bool bDDGIApply,
-                         bool bWorldCacheIndirect,
                          const Core::RTReflectionConfiguration& reflectionConfig,
                          float brdfRoughnessMax);
 } // Render

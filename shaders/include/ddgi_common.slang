@@ -82,6 +82,9 @@ public float2 DDGIAtlasUV(int3 slot, float3 direction, DDGIVolumeParams volume, 
 // Probes whose rays hit this many backfaces are inside geometry beyond what relocation could fix; the sampler and debug viz treat them as dead.
 public static const float DDGI_PROBE_DEAD_BACKFACE_FRACTION = 0.35;
 
+// Non-escape relocation moves below this fraction of spacing are skipped (rotation-noise jitter, not convergence); matches the temporal-restart threshold so every applied move restarts the blends.
+public static const float DDGI_RELOCATE_DEADBAND = 0.05;
+
 /**
  * Irradiance lookup at a surface point: the 8 surrounding probes, weighted by trilinear position, soft backface (wrap lighting), and Chebyshev visibility from the distance atlas. cameraDirection points from the viewer toward the surface (bias direction).
  * Atlas args are rdgTexturesFloat4/rdgTexturesFloat2 descriptor indices (resource-typed params through module imports crash slangc's spirv emit).

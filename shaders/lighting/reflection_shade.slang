@@ -88,7 +88,33 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
         }
 
         float3 hitWorldPos = rayOrigin + hit.hitT * hit.rayDir;
-        radiance = ShadeProbeRayHitAnalytical(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights);
+
+        // Prefer last frame's lit color at the hit (fully shadowed lighting); analytic fallback shades local lights with no visibility.
+        bool bShaded = false;
+        if (pc.litHistoryIndex != ~0u) {
+            float4 prevClip = mul(scene.prevViewProj, float4(hitWorldPos, 1.0));
+            if (prevClip.w > 0.0) {
+                float2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
+                if (all(prevUV >= float2(0.0)) && all(prevUV <= float2(1.0))) {
+                    int2 prevPixel = clamp(int2(prevUV * float2(pc.renderExtent)), int2(0, 0), int2(pc.renderExtent) - int2(1, 1));
+                    float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(prevPixel, 0)).r;
+                    if (prevRawDepth > 0.0) {
+                        float prevViewDepth = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+                        if (abs(prevViewDepth - prevClip.w) <= 0.03 * prevClip.w + 0.05) {
+                            float3 hitN = DecodeHitNormal(ddgiPC, inst, hit.primIndex, hit.bary);
+                            float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0)).r)));
+                            if (dot(hitN, prevWorldN) > 0.5) {
+                                radiance = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(prevPixel, 0)).rgb;
+                                bShaded = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!bShaded) {
+            radiance = ShadeProbeRayHitAnalytical(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights);
+        }
         hitTOut = hit.hitT;
     } else if (hit.hitT == REFLECTION_HIT_T_SKY && pc.skyboxIndex >= 0) {
         // Matches the Y flip the visible skybox pass applies when sampling the cubemap.

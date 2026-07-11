@@ -537,7 +537,6 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t pad1;
     SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheBuffers) worldCache;
 };
 
 // Unused: kept around alongside WorldGridBinningPushConstant.
@@ -636,7 +635,6 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t shadowsIndex;
     SHADER_PUBLIC uint32_t reflectionIndex;
     SHADER_PUBLIC float reflectionRoughnessMax;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheBuffers) worldCache;
 };
 
 SHADER_PUBLIC struct ReflectionShadePushConstant
@@ -667,6 +665,9 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC float intensity;
     SHADER_PUBLIC uint32_t bDDGIApply;
     SHADER_PUBLIC uint32_t bCheckerboardPacked;
+    SHADER_PUBLIC uint32_t litHistoryIndex;
+    SHADER_PUBLIC uint32_t depthHistoryIndex;
+    SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant

@@ -303,7 +303,6 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"brightnessThreshold", p.brightnessThreshold},
         {"distanceExponent", p.distanceExponent},
         {"bApplyToLighting", p.bApplyToLighting},
-        {"bPerPixelCache", p.bPerPixelCache},
         {"normalBias", p.normalBias},
         {"viewBias", p.viewBias},
         {"bRelocation", p.bRelocation},
@@ -340,7 +339,6 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.brightnessThreshold = dFloat("brightnessThreshold", p.brightnessThreshold);
     p.distanceExponent = dFloat("distanceExponent", p.distanceExponent);
     p.bApplyToLighting = dBool("bApplyToLighting", p.bApplyToLighting);
-    p.bPerPixelCache = dBool("bPerPixelCache", p.bPerPixelCache);
     p.normalBias = dFloat("normalBias", p.normalBias);
     p.viewBias = dFloat("viewBias", p.viewBias);
     p.bRelocation = dBool("bRelocation", p.bRelocation);
@@ -352,6 +350,7 @@ nlohmann::json ToJson(const Core::RTReflectionConfiguration& p)
     return {
         {"bEnabled", p.bEnabled},
         {"bDenoiserEnabled", p.bDenoiserEnabled},
+        {"bScreenSpaceLighting", p.bScreenSpaceLighting},
         {"roughnessMax", p.roughnessMax},
         {"intensity", p.intensity},
     };
@@ -363,6 +362,7 @@ void FromJson(const nlohmann::json& r, Core::RTReflectionConfiguration& p)
     auto rFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
     p.bEnabled = rBool("bEnabled", p.bEnabled);
     p.bDenoiserEnabled = rBool("bDenoiserEnabled", p.bDenoiserEnabled);
+    p.bScreenSpaceLighting = rBool("bScreenSpaceLighting", p.bScreenSpaceLighting);
     p.roughnessMax = rFloat("roughnessMax", p.roughnessMax);
     p.intensity = rFloat("intensity", p.intensity);
 }

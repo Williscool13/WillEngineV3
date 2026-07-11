@@ -36,6 +36,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
+    const bool bScreenSpace = reflectionConfig.bScreenSpaceLighting && graph.HasTexture(SID("lit_color_history")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
 
     graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
@@ -59,9 +60,14 @@ void SetupReflectionShadePass(RenderGraph& graph,
         pass.ReadBuffer(SID("world_grid_light_grid"));
         pass.ReadBuffer(SID("world_grid_index_list"));
     }
+    if (bScreenSpace) {
+        pass.ReadSampledImage(SID("lit_color_history"));
+        pass.ReadSampledImage(SID("depth_history"));
+        pass.ReadSampledImage(SID("gbuffer_one_history"));
+    }
     pass.WriteStorageImage(REFLECTION_SPEC_NOISY_TARGET);
 
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bWorldGrid, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, bCheckerboardPacked,
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bWorldGrid, bScreenSpace, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, bCheckerboardPacked,
             field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
 
@@ -92,6 +98,9 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .intensity = intensity,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .bCheckerboardPacked = bCheckerboardPacked ? 1u : 0u,
+                .litHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(SID("lit_color_history")) : ~0u,
+                .depthHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : ~0u,
+                .gbufferOneHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0u,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_shade"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

@@ -229,8 +229,7 @@ public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance
 }
 
 // V = N (NoV = 1): no single ray direction to use, and this value gets read back from every direction later.
-// outIndirectDiffuse = the indirect term WITHOUT bounceIntensity damping, for the per-pixel read.
-public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, WorldGridPunctualLights worldGridLights, out float3 outIndirectDiffuse)
+public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, WorldGridPunctualLights worldGridLights)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -307,11 +306,9 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
     if (pc.skyboxIndex >= 0) {
         indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], N) * pc.iblIntensity;
     }
-    outIndirectDiffuse = indirectDiffuse;
     if (pc.bFeedbackValid != 0) {
         float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades);
         indirectDiffuse = lerp(indirectDiffuse, gi.rgb * pc.bounceIntensity, gi.w);
-        outIndirectDiffuse = lerp(outIndirectDiffuse, gi.rgb, gi.w);
     }
     radiance += diffuseColor * indirectDiffuse;
     return radiance;

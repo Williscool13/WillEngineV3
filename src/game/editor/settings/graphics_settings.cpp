@@ -764,6 +764,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             if (ImGui::Checkbox("Enable RT Reflections", &reflection.bEnabled)) { changed = true; }
             if (ImGui::Checkbox("Enable Reflection Denoiser", &reflection.bDenoiserEnabled)) { changed = true; }
+            if (ImGui::Checkbox("Screen-Space Hit Lighting", &reflection.bScreenSpaceLighting)) { changed = true; }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reproject the reflection hit into last frame's lit image and reuse that fully shadowed color; falls back to unshadowed analytic hit shading when the hit is off-screen or occluded."); }
 
             auto reflF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
                 if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
@@ -800,11 +802,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Apply To Lighting##ddgi", &ddgi.bApplyToLighting)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Use the probes as the indirect diffuse in lighting (replaces the skybox irradiance where the volume covers). Off = probes still update, for A/B and the debug viz.");
-            }
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Per-Pixel Cache##ddgi", &ddgi.bPerPixelCache)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Cache-first indirect diffuse: each pixel blends the 8 world-cache cells around it (trilinear, pos+normal key); missing cells hand their weight to the probe sample. Full coverage skips the probe lookup entirely. Requires Apply To Lighting.");
             }
 
             ImGui::SeparatorText("Volume");

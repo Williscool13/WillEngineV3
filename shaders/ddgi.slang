@@ -86,6 +86,8 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                     if (isNew) {
                         packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey);
                         pc.worldCache->cells[wcSlot].packedRadiance = packedRadiance;
+                        // Seed counts as one accumulated sample so the first real shade replaces half of it.
+                        pc.worldCache->cells[wcSlot].changeStreak = 1u << 16u;
                     }
 
                     if (packedRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
@@ -363,10 +365,12 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
     uint restart = 0;
     if (bWasActive) {
         // RTXGI probe relocation
+        bool bEscape = false;
         float3 fullOffset = offset;
         if (closestBackfaceIndex != 0xFFFFFFFF && backfaceFraction > 0.25) {
             float3 backfaceDirection = DDGIRotate(DDGISphericalFibonacci(closestBackfaceIndex, rayBudget), pc.rayRotation);
             fullOffset = offset + backfaceDirection * (closestBackfaceDistance + pc.minFrontfaceDistance * 0.5);
+            bEscape = true;
         } else if (closestFrontfaceDistance < pc.minFrontfaceDistance && farthestFrontfaceIndex != 0xFFFFFFFF) {
             float3 closestDirection = DDGIRotate(DDGISphericalFibonacci(closestFrontfaceIndex, rayBudget), pc.rayRotation);
             float3 farthestDirection = DDGIRotate(DDGISphericalFibonacci(farthestFrontfaceIndex, rayBudget), pc.rayRotation);
@@ -386,14 +390,18 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
         // Cap at 45% of spacing (trilinear domain). reject rather than clamp so unreachable escapes freeze instead of wandering.
         float3 normalizedOffset = fullOffset / pc.volume.probeSpacing;
         if (dot(normalizedOffset, normalizedOffset) < 0.45 * 0.45) {
-            offset = fullOffset;
+            // Frontface-only branches chase a rotation-dependent target; sub-deadband moves are jitter, not convergence. Escapes always apply.
+            float3 deltaNormalized = (fullOffset - offset) / pc.volume.probeSpacing;
+            if (bEscape || dot(deltaNormalized, deltaNormalized) > DDGI_RELOCATE_DEADBAND * DDGI_RELOCATE_DEADBAND) {
+                offset = fullOffset;
+            }
         }
 
         // A real move or dead-to-alive flip flags a temporal restart for next frame's blends, the first fed by rays from the new position.
         if (previousBackfaceFraction >= 0.0) {
             float3 movedNormalized = (offset - previousOffset) / pc.volume.probeSpacing;
             bool bRevived = previousBackfaceFraction > DDGI_PROBE_DEAD_BACKFACE_FRACTION && backfaceFraction <= DDGI_PROBE_DEAD_BACKFACE_FRACTION;
-            if (dot(movedNormalized, movedNormalized) > 0.05 * 0.05 || bRevived) {
+            if (dot(movedNormalized, movedNormalized) > DDGI_RELOCATE_DEADBAND * DDGI_RELOCATE_DEADBAND || bRevived) {
                 restart = 1;
             }
         }
