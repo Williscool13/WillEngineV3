@@ -12,9 +12,8 @@ import common_interop;
 [numthreads(64, 1, 1)]
 void ComputeWorldCacheShade(uint3 dtid: SV_DispatchThreadID, uniform WorldCacheShadePushConstant pc)
 {
-    uint slot = dtid.x;
-    if (slot >= WORLD_CACHE_HASH_CAPACITY) { return; }
-    if (pc.active[slot] == 0u) { return; }
+    if (dtid.x >= pc.activeCount[0]) { return; }
+    uint slot = pc.activeList[dtid.x];
 
     WorldCacheHitDescriptor hit = pc.descriptors[slot];
     float2 bary = UnpackUnorm2x16(hit.packedBary);

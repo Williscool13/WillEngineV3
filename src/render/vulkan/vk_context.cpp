@@ -54,9 +54,15 @@ static bool IsKnownSyncvalFalsePositive(const VkDebugUtilsMessengerCallbackDataE
     if (!pCallbackData->pMessage) {
         return false;
     }
+
+    if (strstr(pCallbackData->pMessage, "READ_RACING_WRITE") != nullptr && strstr(pCallbackData->pMessage, "vkCmdBuildAccelerationStructuresKHR") != nullptr) {
+        return true;
+    }
+    if (strstr(pCallbackData->pMessage, "WRITE_RACING_READ") != nullptr && strstr(pCallbackData->pMessage, "vkCmdCopyBuffer") != nullptr) {
+        return true;
+    }
     // syncval bug, fixed upstream past Vulkan-ValidationLayers@224a7356f9, remove once SDK catches up
-    return strstr(pCallbackData->pMessage, "READ_RACING_WRITE") != nullptr
-        && strstr(pCallbackData->pMessage, "vkCmdBuildAccelerationStructuresKHR") != nullptr;
+    return false;
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(

@@ -2,7 +2,7 @@ import model_interop;
 import push_constant_interop;
 import lights_interop;
 import ddgi_interop;
-import instance_mask_interop;
+import instance_mask_interop;   
 import ddgi_common;
 import gpu_debug_draw;
 import bindless_declarations;
@@ -96,15 +96,24 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                     }
                     pc.worldCache->cells[wcSlot].lastTouched = pc.frameIndex;
 
-                    uint prevActive;
-                    InterlockedExchange(pc.worldCache->active[wcSlot], 1u, prevActive);
-                    if (prevActive == 0u) {
-                        WorldCacheHitDescriptor wcHit;
-                        wcHit.instanceID = q.CommittedInstanceID();
-                        wcHit.primitiveIndex = q.CommittedPrimitiveIndex();
-                        wcHit.packedBary = PackUnorm2x16(q.CommittedTriangleBarycentrics());
-                        wcHit.pad = 0u;
-                        pc.worldCache->descriptors[wcSlot] = wcHit;
+                    uint shadeInterval = WORLD_CACHE_SHADE_INTERVAL + (wcSlot & 3u);
+                    if (isNew || pc.frameIndex - pc.worldCache->cells[wcSlot].lastShaded >= shadeInterval) {
+                        uint prevActive;
+                        InterlockedExchange(pc.worldCache->active[wcSlot], 1u, prevActive);
+                        if (prevActive == 0u) {
+                            uint listIndex;
+                            InterlockedAdd(pc.worldCache->activeCount[0], 1u, listIndex);
+                            if (listIndex < WORLD_CACHE_SHADE_BUDGET) {
+                                pc.worldCache->activeList[listIndex] = wcSlot;
+                                pc.worldCache->cells[wcSlot].lastShaded = pc.frameIndex;
+                                WorldCacheHitDescriptor wcHit;
+                                wcHit.instanceID = q.CommittedInstanceID();
+                                wcHit.primitiveIndex = q.CommittedPrimitiveIndex();
+                                wcHit.packedBary = PackUnorm2x16(q.CommittedTriangleBarycentrics());
+                                wcHit.pad = 0u;
+                                pc.worldCache->descriptors[wcSlot] = wcHit;
+                            }
+                        }
                     }
                 }
             }
@@ -129,7 +138,8 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         if (pc.skyboxIndex >= 0 && pc.bBounceOnly == 0) {
             // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
             float3 skyDirection = float3(direction.x, -direction.y, direction.z);
-            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+            // Mip 4 is roughenss 0 prefiltered. Reduces flickering from high frequency variance.
+            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 4).rgb;
         }
         result = float4(radiance, 10000.0);
     }

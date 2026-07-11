@@ -213,6 +213,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             tracePass.ReadWriteBuffer(WORLD_CACHE_KEYS);
             tracePass.ReadWriteBuffer(WORLD_CACHE_CELLS);
             tracePass.ReadWriteBuffer(WORLD_CACHE_ACTIVE);
+            tracePass.ReadWriteBuffer(WORLD_CACHE_ACTIVE_LIST);
+            tracePass.ReadWriteBuffer(WORLD_CACHE_ACTIVE_COUNT);
             tracePass.ReadWriteBuffer(WORLD_CACHE_DESCRIPTORS);
         }
         if (bFeedback) {

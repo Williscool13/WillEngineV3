@@ -354,11 +354,17 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/restir_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/regir_hash.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/gpu_debug_draw.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/ddgi_common.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/world_cache_hash.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sobol_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/relax_utils.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/reblur_utils.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/reblur_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sigma_utils.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/hit_shading_common.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/binning_common.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/punctual_lighting.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/limits_declarations.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sobol_directions.slang")
 
 file(GLOB INTEROP_DEP_FILES CONFIGURE_DEPENDS
         "${CMAKE_SOURCE_DIR}/src/render/shaders/*.h"

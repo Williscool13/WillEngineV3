@@ -587,9 +587,16 @@ SHADER_PUBLIC struct WorldCacheCarryForwardPushConstant
     SHADER_PUBLIC uint32_t pad0;
 };
 
+SHADER_PUBLIC struct WorldCacheBuildIndirectPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(uint) activeCount;
+    SHADER_PUBLIC SHADER_PTR(uint) indirectArgs;
+};
+
 SHADER_PUBLIC struct WorldCacheShadePushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(uint) active;
+    SHADER_PUBLIC SHADER_PTR(uint) activeList;
+    SHADER_PUBLIC SHADER_PTR(uint) activeCount;
     SHADER_PUBLIC SHADER_PTR(WorldCacheHitDescriptor) descriptors;
     SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cells;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;

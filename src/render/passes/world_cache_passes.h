@@ -19,6 +19,9 @@ inline const StringID WORLD_CACHE_KEYS_HISTORY = SID("world_cache_keys_history")
 inline const StringID WORLD_CACHE_CELLS = SID("world_cache_cells");
 inline const StringID WORLD_CACHE_CELLS_HISTORY = SID("world_cache_cells_history");
 inline const StringID WORLD_CACHE_ACTIVE = SID("world_cache_active");
+inline const StringID WORLD_CACHE_ACTIVE_LIST = SID("world_cache_active_list");
+inline const StringID WORLD_CACHE_ACTIVE_COUNT = SID("world_cache_active_count");
+inline const StringID WORLD_CACHE_SHADE_ARGS = SID("world_cache_shade_args");
 inline const StringID WORLD_CACHE_DESCRIPTORS = SID("world_cache_descriptors");
 inline const StringID WORLD_CACHE_BUFFERS_CURRENT = SID("world_cache_buffers_current");
 
@@ -26,6 +29,8 @@ inline constexpr VkDeviceSize WORLD_CACHE_ENTRIES_BYTES = static_cast<VkDeviceSi
 inline constexpr VkDeviceSize WORLD_CACHE_KEYS_BYTES = static_cast<VkDeviceSize>(WORLD_CACHE_HASH_CAPACITY) * sizeof(uint2);
 inline constexpr VkDeviceSize WORLD_CACHE_CELLS_BYTES = static_cast<VkDeviceSize>(WORLD_CACHE_HASH_CAPACITY) * sizeof(WorldCacheCell);
 inline constexpr VkDeviceSize WORLD_CACHE_DESCRIPTORS_BYTES = static_cast<VkDeviceSize>(WORLD_CACHE_HASH_CAPACITY) * sizeof(WorldCacheHitDescriptor);
+inline constexpr VkDeviceSize WORLD_CACHE_ACTIVE_LIST_BYTES = static_cast<VkDeviceSize>(WORLD_CACHE_SHADE_BUDGET) * sizeof(uint32_t);
+inline constexpr VkDeviceSize WORLD_CACHE_SHADE_ARGS_BYTES = 3u * sizeof(uint32_t);
 
 /** Gates every world-cache consumer this frame. */
 struct WorldCacheFrame
@@ -45,7 +50,7 @@ struct WorldCacheFrame
 WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos);
 
 /**
- * Shades every radiance cache marked active.
+ * Shades the frame's armed cells via budgeted indirect dispatch over the compact active list.
  * @param graph
  * @param pipelineManager
  * @param frame

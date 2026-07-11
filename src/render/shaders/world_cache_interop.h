@@ -54,6 +54,8 @@ SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_NORMAL_BUCKETS = 6u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_LRU_THRESHOLD = 60u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_LOD_REVALIDATE_MARGIN = 2u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_ACCUM_FRAMES = 25u; // count-based blend cap; steady state keeps 24/25 of history (matches the old 0.96 hysteresis)
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_SHADE_INTERVAL = 8u;
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_SHADE_BUDGET = 20480u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_RADIANCE_UNSHADED = 0xFFFFFFFFu;
 SHADER_PUBLIC SHADER_CONST float WORLD_CACHE_CHANGE_THRESHOLD = 0.35; // relative luma delta that counts toward a change streak
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_CHANGE_STREAK = 3u; // consecutive same-direction large deltas before the EMA history is dumped
@@ -62,6 +64,7 @@ SHADER_PUBLIC struct WorldCacheCell
 {
     SHADER_PUBLIC uint packedRadiance; // RGB9E5, outgoing radiosity for probe-ray read-back
     SHADER_PUBLIC uint lastTouched;
+    SHADER_PUBLIC uint lastShaded;
     SHADER_PUBLIC uint changeStreak; // bits 0-7 consecutive large-delta touches, bit 8 last delta direction, bits 16-23 accumulated shade count
 };
 
@@ -80,6 +83,8 @@ SHADER_PUBLIC struct WorldCacheBuffers
     SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cells;
     SHADER_PUBLIC SHADER_PTR(uint) active;
     SHADER_PUBLIC SHADER_PTR(WorldCacheHitDescriptor) descriptors;
+    SHADER_PUBLIC SHADER_PTR(uint) activeList;
+    SHADER_PUBLIC SHADER_PTR(uint) activeCount;
 };
 
 #endif //WILL_ENGINE_WORLD_CACHE_INTEROP_H
