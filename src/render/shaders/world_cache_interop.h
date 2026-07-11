@@ -54,10 +54,12 @@ SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_NORMAL_BUCKETS = 6u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_LRU_THRESHOLD = 60u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_LOD_REVALIDATE_MARGIN = 2u;
 SHADER_PUBLIC SHADER_CONST float WORLD_CACHE_RADIANCE_HYSTERESIS = 0.96;
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_RADIANCE_UNSHADED = 0xFFFFFFFFu;
 
 SHADER_PUBLIC struct WorldCacheCell
 {
-    SHADER_PUBLIC uint packedRadiance; // RGB9E5
+    SHADER_PUBLIC uint packedRadiance; // RGB9E5, outgoing radiosity for probe-ray read-back
+    SHADER_PUBLIC uint packedIrradiance; // RGB9E5, undamped indirect irradiance for the per-pixel cache-first read
     SHADER_PUBLIC uint lastTouched;
 };
 

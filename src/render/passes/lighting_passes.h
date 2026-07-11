@@ -36,7 +36,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
-                                        bool bDDGIApply);
+                                        bool bDDGIApply,
+                                        bool bWorldCacheIndirect);
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,

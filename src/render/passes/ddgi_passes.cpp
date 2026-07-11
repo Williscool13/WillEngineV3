@@ -36,8 +36,10 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
 
     DDGICascades cascades{};
     cascades.count = glm::clamp(params.cascadeCount, 1u, DDGI_MAX_CASCADES);
+
+    const uint32_t updatedCascade = cascades.count == 1 || frameNumber % 2 == 0 ? 0u : 1u + static_cast<uint32_t>((frameNumber / 2) % (cascades.count - 1));
     for (uint32_t k = 0; k < cascades.count; ++k) {
-        cascades.bUpdated[k] = k == 0 || (cascades.count > 1 && k == 1 + static_cast<uint32_t>(frameNumber % (cascades.count - 1)));
+        cascades.bUpdated[k] = k == updatedCascade;
 
         const float cascadeScale = static_cast<float>(1u << k);
         const float biasScale = params.bScaleBiasPerCascade ? cascadeScale : 1.0f;
@@ -118,7 +120,7 @@ static void AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName
     });
 }
 
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache)
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) {
         return;
@@ -230,7 +232,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (bActiveHistoryValid[k]) {
             tracePass.ReadBuffer(DDGI_ACTIVE_HISTORY[k]);
         }
-        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, bLocalNEE, maxRayRadiance, bounceIntensity, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber, bWorldCache = worldCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, iblIntensity, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, bLocalNEE, maxRayRadiance, bounceIntensity, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber, bWorldCache = worldCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_trace"));
             if (!pipelineEntry) {
                 return;
@@ -265,6 +267,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .bounceIntensity = bounceIntensity,
                 .probeActive = bActiveHistory ? graph.GetBufferAddress(activeHistoryId) : 0,
                 .bActiveValid = bActiveHistory ? 1u : 0u,
+                .iblIntensity = iblIntensity,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (raysPerProbe + 63) / 64, probeCountTotal, 1);

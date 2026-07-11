@@ -82,11 +82,16 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                 bool isNew;
                 uint wcSlot = WorldCacheHashInsert(pc.worldCache->entries, pc.worldCache->keys, wcKey, isNew);
                 if (wcSlot != WORLD_CACHE_HASH_INVALID) {
+                    uint packedRadiance = pc.worldCache->cells[wcSlot].packedRadiance;
                     if (isNew) {
-                        pc.worldCache->cells[wcSlot].packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey);
+                        packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey);
+                        pc.worldCache->cells[wcSlot].packedRadiance = packedRadiance;
                     }
-                    radiance = UnpackEmissiveRGBE(pc.worldCache->cells[wcSlot].packedRadiance);
-                    bCacheRead = true;
+
+                    if (packedRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
+                        radiance = UnpackEmissiveRGBE(packedRadiance);
+                        bCacheRead = true;
+                    }
                     pc.worldCache->cells[wcSlot].lastTouched = pc.frameIndex;
 
                     uint prevActive;

@@ -6,6 +6,7 @@
     "bEnabled": true,
     "bInfiniteBounce": true,
     "bOuterLocalNEE": false,
+    "bPerPixelCache": false,
     "bRelocation": true,
     "bScaleBiasPerCascade": true,
     "bounceIntensity": 0.75,
@@ -13,11 +14,11 @@
     "cascadeCount": 4,
     "distanceExponent": 50.0,
     "edgeBlendCells": 3.96610164642334,
-    "hysteresis": 0.9800000190734863,
+    "hysteresis": 0.9950000047683716,
     "irradianceGamma": 5.0,
     "irradianceThreshold": 0.6000000238418579,
     "maxRayRadiance": 20.0,
-    "minFrontfaceDistance": 0.15000000596046448,
+    "minFrontfaceDistance": 0.20000000298023224,
     "normalBias": 0.5,
     "outerRaysPerProbe": 40,
     "probeCountX": 32,
@@ -25,7 +26,8 @@
     "probeCountZ": 32,
     "probeSpacing": 1.5,
     "raysPerProbe": 80,
-    "viewBias": 0.496610164642334
+    "viewBias": 0.496610164642334,
+    "visibilityHysteresis": 0.9650501608848572
   },
   "gtao": {
     "bEnabled": true,

@@ -27,7 +27,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_ENTRIES), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_ACTIVE), 0, VK_WHOLE_SIZE, 0);
-        vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_CELLS), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_CELLS), 0, VK_WHOLE_SIZE, WORLD_CACHE_RADIANCE_UNSHADED);
     });
 
     const bool bHistoryValid = graph.HasBuffer(WORLD_CACHE_ENTRIES_HISTORY) && graph.HasBuffer(WORLD_CACHE_KEYS_HISTORY) && graph.HasBuffer(WORLD_CACHE_CELLS_HISTORY);

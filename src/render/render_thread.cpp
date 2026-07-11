@@ -519,9 +519,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber);
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
+            const bool bWorldCacheIndirect = bDDGIApply && frameBuffer.ddgi.bPerPixelCache;
             if (frameBuffer.ddgi.bEnabled) {
                 const WorldCacheFrame worldCache = SetupWorldCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos);
-                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, frameNumber, frameBuffer.bDDGIBounceOnly, worldCache);
+                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.bDDGIBounceOnly, worldCache);
                 ddgiPreviousCascades = ddgiCascades;
                 const bool bWorldCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.bDDGIBounceOnly;
                 SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, bWorldCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity);
@@ -608,7 +609,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         if (frameBuffer.bEnableGPUDebug && frameBuffer.bClusterGridDebug && !frameBuffer.bLockGPUDebug) {
                             SetupClusterGridDebug(*renderGraph, pipelineManager, 0, clusterZNear, clusterZFar);
                         }
-                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply);
+                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, bWorldCacheIndirect);
                         break;
                     }
                     case Core::LightingMode::ReSTIR:
@@ -627,13 +628,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                         if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
                             SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection, restir.brdfRoughnessMax);
-                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax);
+                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, bWorldCacheIndirect, frameBuffer.reflection, restir.brdfRoughnessMax);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax);
+                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, bWorldCacheIndirect, frameBuffer.reflection, restir.brdfRoughnessMax);
                         }
                         else {
-                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax);
+                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, bWorldCacheIndirect, frameBuffer.reflection, restir.brdfRoughnessMax);
                         }
                         break;
                     }

@@ -103,6 +103,7 @@ void ComputeGPUDebugWorldCache(uint3 tid: SV_DispatchThreadID, uniform WorldCach
     float halfExtent = WorldCacheCellSizeAtLevel(key.level) * 0.45;
     float3 center = WorldCacheCellCenterFromKey(key) + WorldCacheBucketNormal(key.normalBucket) * halfExtent * 0.5;
 
-    float3 radiance = UnpackEmissiveRGBE(pc.cells[slot].packedRadiance) * pc.exposure;
+    uint packed = pc.cells[slot].packedRadiance;
+    float3 radiance = packed == WORLD_CACHE_RADIANCE_UNSHADED ? float3(0.0) : UnpackEmissiveRGBE(packed) * pc.exposure;
     GPUDebugAddCube(pc.cubeArgs, pc.cubeBuffer, center, halfExtent, float4(radiance, 1.0));
 }

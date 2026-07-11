@@ -12,6 +12,8 @@ import punctual_lighting;
 import world_grid_interop;
 import binning_common;
 import visibility_lighting_common;
+import world_cache_interop;
+import world_cache_hash;
 
 import bindless_declarations;
 
@@ -115,10 +117,19 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
             indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
         }
         if (pc.bDDGIApply != 0) {
-            float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
-            float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
-            // gi.w fades to the skybox fallback over the outermost cascade's edge.
-            indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+            float3 cacheIrradiance = float3(0.0);
+            float cacheCoverage = 0.0;
+            if (pc.worldCache != nullptr) {
+                cacheCoverage = WorldCacheSampleIrradiance(pc.worldCache->entries, pc.worldCache->cells, worldPosition, worldN, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, cacheIrradiance);
+            }
+            if (cacheCoverage < 0.999) {
+                float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
+                float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
+
+                indirectDiffuse = cacheIrradiance + lerp(indirectDiffuse, gi.rgb, gi.w) * (1.0 - cacheCoverage);
+            } else {
+                indirectDiffuse = cacheIrradiance;
+            }
         }
 
         float3 reflectionSpecular = float3(0.0);

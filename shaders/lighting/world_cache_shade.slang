@@ -29,14 +29,26 @@ void ComputeWorldCacheShade(uint3 dtid: SV_DispatchThreadID, uniform WorldCacheS
         worldGridLights.indexList = pc.worldGridIndexList;
     }
 
-    float3 radiance = ShadeWorldCacheCell(pc, instance, hit.primitiveIndex, bary, worldGridLights);
+    float3 indirectDiffuse;
+    float3 radiance = ShadeWorldCacheCell(pc, instance, hit.primitiveIndex, bary, worldGridLights, indirectDiffuse);
 
     float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
     if (pc.maxRadiance > 0.0 && maxChannel > pc.maxRadiance) {
         radiance *= pc.maxRadiance / maxChannel;
     }
 
-    float3 previous = UnpackEmissiveRGBE(pc.cells[slot].packedRadiance);
-    float3 blended = lerp(radiance, previous, WORLD_CACHE_RADIANCE_HYSTERESIS);
-    pc.cells[slot].packedRadiance = PackEmissiveRGBE(blended);
+    uint packedPrevious = pc.cells[slot].packedRadiance;
+    float3 blended = radiance;
+    if (packedPrevious != WORLD_CACHE_RADIANCE_UNSHADED) {
+        float3 previous = UnpackEmissiveRGBE(packedPrevious);
+        blended = lerp(radiance, previous, WORLD_CACHE_RADIANCE_HYSTERESIS);
+    }
+    pc.cells[slot].packedRadiance = min(PackEmissiveRGBE(blended), WORLD_CACHE_RADIANCE_UNSHADED - 1u);
+
+    uint packedPreviousIrradiance = pc.cells[slot].packedIrradiance;
+    float3 blendedIrradiance = indirectDiffuse;
+    if (packedPreviousIrradiance != WORLD_CACHE_RADIANCE_UNSHADED) {
+        blendedIrradiance = lerp(indirectDiffuse, UnpackEmissiveRGBE(packedPreviousIrradiance), WORLD_CACHE_RADIANCE_HYSTERESIS);
+    }
+    pc.cells[slot].packedIrradiance = min(PackEmissiveRGBE(blendedIrradiance), WORLD_CACHE_RADIANCE_UNSHADED - 1u);
 }

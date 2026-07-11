@@ -303,6 +303,7 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"brightnessThreshold", p.brightnessThreshold},
         {"distanceExponent", p.distanceExponent},
         {"bApplyToLighting", p.bApplyToLighting},
+        {"bPerPixelCache", p.bPerPixelCache},
         {"normalBias", p.normalBias},
         {"viewBias", p.viewBias},
         {"bRelocation", p.bRelocation},
@@ -339,6 +340,7 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.brightnessThreshold = dFloat("brightnessThreshold", p.brightnessThreshold);
     p.distanceExponent = dFloat("distanceExponent", p.distanceExponent);
     p.bApplyToLighting = dBool("bApplyToLighting", p.bApplyToLighting);
+    p.bPerPixelCache = dBool("bPerPixelCache", p.bPerPixelCache);
     p.normalBias = dFloat("normalBias", p.normalBias);
     p.viewBias = dFloat("viewBias", p.viewBias);
     p.bRelocation = dBool("bRelocation", p.bRelocation);

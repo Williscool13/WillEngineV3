@@ -54,6 +54,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                float iblIntensity,
                                uint64_t frameNumber,
                                bool bDDGIApply,
+                               bool bWorldCacheIndirect,
                                const Core::RTReflectionConfiguration& reflectionConfig,
                                float brdfRoughnessMax);
 } // Render

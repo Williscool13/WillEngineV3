@@ -32,7 +32,7 @@
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,
   "bAutoSaveProjectConfig": false,
-  "bLimitFps": true,
+  "bLimitFps": false,
   "defaultScene": "New Scene",
   "editorCameraFovDegrees": 70.0,
   "editorCameraNearPlane": 0.10000000149011612,

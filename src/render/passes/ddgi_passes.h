@@ -50,11 +50,12 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
  * @param cascades
  * @param previous cascades used last frame, for scroll/resize invalidation and feedback sampling
  * @param skyboxIndex
+ * @param iblIntensity skybox ambient fallback for hash-miss hits outside DDGI coverage, matching the cache shade's indirect term
  * @param frameNumber
  * @param bBounceOnly debug: zero skybox radiance (and disable feedback) so probes show only one-bounce surface shading
  * @param worldCache this frame's world radiance cache buffers; trace populates it as a side effect when valid
  */
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache);
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache);
 
 /**
  * Declares the pass dependencies for sampling the cascade chain. Returns false when the chain doesn't exist this frame.
