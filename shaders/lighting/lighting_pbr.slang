@@ -12,6 +12,7 @@ import punctual_lighting;
 import world_grid_interop;
 import binning_common;
 import visibility_lighting_common;
+import gi_gather_common;
 
 import bindless_declarations;
 
@@ -105,20 +106,25 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
 
     // DDGI probe diffuse
     float3 ibl = 0.0;
+    float3 indirectDiffuse = float3(0.0);
     {
         float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
         float3 kD_ibl = (1.0 - F_ibl) * (1.0 - li.metallic);
         float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
 
-        float3 indirectDiffuse = float3(0.0);
-        if (pc.skyboxIndex >= 0) {
-            indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
-        }
-        if (pc.bDDGIApply != 0) {
-            float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
-            float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
-            // gi.w fades to the skybox fallback over the outermost cascade's edge.
-            indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+        if (pc.giGatherMode != 0u) {
+            // Gather already contains the skybox and probe fallbacks.
+            indirectDiffuse = GIGatherIndirectDiffuse(pc.giShRIndex, pc.giShGIndex, pc.giShBIndex, uv, worldN);
+        } else {
+            if (pc.skyboxIndex >= 0) {
+                indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+            }
+            if (pc.bDDGIApply != 0) {
+                float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
+                float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
+                // gi.w fades to the skybox fallback over the outermost cascade's edge.
+                indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+            }
         }
 
         float3 reflectionSpecular = float3(0.0);
@@ -129,5 +135,8 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
     }
 
     float3 finalColor = directLight + ibl + li.emissiveRGB;
+    if (pc.giGatherMode >= 2u) {
+        finalColor = GIGatherDebugColor(pc.giDataIndex, pixel, pc.giGatherMode, indirectDiffuse);
+    }
     rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor, 1.0);
 }

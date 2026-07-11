@@ -5,6 +5,7 @@
 #include "render/passes/lighting_passes.h"
 
 #include "ddgi_passes.h"
+#include "final_gather_passes.h"
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -96,13 +97,15 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
-                                        bool bDDGIApply)
+                                        bool bDDGIApply,
+                                        uint32_t giGatherMode)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
 
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
+    const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_SH_R);
 
     struct LightingEntry
     {
@@ -137,12 +140,18 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     if (bDDGI) {
         AddDDGISampleDependencies(graph, lightingResolve);
     }
+    if (bGIGather) {
+        lightingResolve.ReadSampledImage(GI_GATHER_SH_R);
+        lightingResolve.ReadSampledImage(GI_GATHER_SH_G);
+        lightingResolve.ReadSampledImage(GI_GATHER_SH_B);
+        lightingResolve.ReadSampledImage(GI_GATHER_DATA);
+    }
     lightingResolve.WriteStorageImage(targets.colorOutput);
     lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
-            bDDGI, bWorldGrid,
+            bDDGI, bWorldGrid, bGIGather, giGatherMode,
             buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -178,6 +187,11 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .bDDGIApply = bDDGI ? 1u : 0u,
                     .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
                     .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
+                    .giShRIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_R) : ~0x0u,
+                    .giShGIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_G) : ~0x0u,
+                    .giShBIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_B) : ~0x0u,
+                    .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
+                    .giGatherMode = bGIGather ? giGatherMode : 0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

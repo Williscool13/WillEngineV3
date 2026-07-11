@@ -365,6 +365,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/binning_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/punctual_lighting.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/limits_declarations.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/sobol_directions.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/gi_gather_common.slang")
 
 file(GLOB INTEROP_DEP_FILES CONFIGURE_DEPENDS
         "${CMAKE_SOURCE_DIR}/src/render/shaders/*.h"

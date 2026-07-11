@@ -7,6 +7,7 @@ import pbr_functions;
 import restir_common;
 import ddgi_interop;
 import ddgi_common;
+import gi_gather_common;
 
 static const float BILATERAL_DEPTH_SIGMA = 0.01;
 static const float BILATERAL_NORMAL_POWER = 32.0;
@@ -63,15 +64,19 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
         float3 kD_ibl = (1.0 - F_ibl) * (1.0 - metallic);
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
 
-        if (pc.skyboxIndex >= 0) {
-            indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
-        }
-        if (pc.bDDGIApply != 0) {
-            float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-            float3 cameraDirection = normalize(mul(float3x3(scene.invView), viewPosition));
-            float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
-            // gi.w fades to the skybox fallback over the outermost cascade's edge.
-            indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+        if (pc.giGatherMode != 0u) {
+            indirectDiffuse = GIGatherIndirectDiffuse(pc.giShRIndex, pc.giShGIndex, pc.giShBIndex, uv, worldN);
+        } else {
+            if (pc.skyboxIndex >= 0) {
+                indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+            }
+            if (pc.bDDGIApply != 0) {
+                float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+                float3 cameraDirection = normalize(mul(float3x3(scene.invView), viewPosition));
+                float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
+                // gi.w fades to the skybox fallback over the outermost cascade's edge.
+                indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+            }
         }
 
         float3 reflectionSpecular = float3(0.0);
@@ -101,6 +106,9 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
         finalColor = indirectDiffuse;
     } else {
         finalColor = diffuse * albedo + specular * specReflectance + ibl + emissive;
+    }
+    if (pc.giGatherMode >= 2u) {
+        finalColor = GIGatherDebugColor(pc.giDataIndex, pixel, pc.giGatherMode, indirectDiffuse);
     }
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(finalColor, 1.0);
 }

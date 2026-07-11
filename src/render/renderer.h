@@ -19,6 +19,7 @@
 #include "render/passes/raytracing_passes.h"
 #include "render/passes/debug_passes.h"
 #include "render/passes/ddgi_passes.h"
+#include "render/passes/final_gather_passes.h"
 
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"

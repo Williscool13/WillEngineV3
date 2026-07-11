@@ -103,6 +103,8 @@ add_library(render STATIC
         passes/world_cache_passes.cpp
         passes/world_cache_passes.h
         shaders/world_cache_interop.h
+        passes/final_gather_passes.cpp
+        passes/final_gather_passes.h
         post-processing/post_processing.cpp
         post-processing/post_processing.h
         renderer_types.h

@@ -5,6 +5,7 @@
 #include "render/passes/restir_passes.h"
 
 #include "ddgi_passes.h"
+#include "final_gather_passes.h"
 #include "reflection_passes.h"
 #include "render/render_config.h"
 #include "render/render_utils.h"
@@ -633,11 +634,13 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                uint64_t frameNumber,
                                bool bDDGIApply,
                                const Core::RTReflectionConfiguration& reflectionConfig,
-                               float brdfRoughnessMax)
+                               float brdfRoughnessMax,
+                               uint32_t giGatherMode)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
+    const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_SH_R);
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
     const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
     const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
@@ -658,9 +661,15 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     if (bReflection) {
         pass.ReadSampledImage(reflectionTarget);
     }
+    if (bGIGather) {
+        pass.ReadSampledImage(GI_GATHER_SH_R);
+        pass.ReadSampledImage(GI_GATHER_SH_G);
+        pass.ReadSampledImage(GI_GATHER_SH_B);
+        pass.ReadSampledImage(GI_GATHER_DATA);
+    }
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -684,6 +693,11 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
                 .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(reflectionTarget) : ~0x0u,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
+                .giShRIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_R) : ~0x0u,
+                .giShGIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_G) : ~0x0u,
+                .giShBIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_B) : ~0x0u,
+                .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
+                .giGatherMode = bGIGather ? giGatherMode : 0u,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

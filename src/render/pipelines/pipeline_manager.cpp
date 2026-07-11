@@ -471,6 +471,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(WorldCacheShadePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("world_cache_build_indirect"), src / "world_cache_build_indirect.spv", "ComputeWorldCacheBuildIndirect",
                             sizeof(WorldCacheBuildIndirectPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gi_gather"), src / "gi_gather.spv", "ComputeGIGather",
+                            sizeof(GIGatherPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("gpu_debug_build_indirect"), src / "gpu_debug.spv", "ComputeGPUDebugBuildIndirect",
                             sizeof(GPUDebugBuildIndirectPushConstant), PipelineCategory::Critical);

@@ -772,6 +772,7 @@ struct DDGIParams
     float distanceExponent{50.0f};
 
     bool bApplyToLighting{true};
+    bool bFinalGather{false};
     float normalBias{0.1f};
     float viewBias{0.3f};
 
@@ -932,6 +933,8 @@ struct FrameBuffer
     float ddgiProbeDebugExposure = 1.0f;
     int32_t ddgiProbeDebugCascade = -1;
     bool bDDGIHideInactiveProbes = false;
+    // 0 = off, 1 = irradiance, 2 = tiers, 3 = hit distance
+    int32_t giGatherDebugMode = 0;
     bool bLogRDG = false;
     ReSTIRParams restir{};
     DDGIParams ddgi{};

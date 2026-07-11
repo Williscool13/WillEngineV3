@@ -316,6 +316,16 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SetNextItemWidth(240.0f);
         Widgets::SliderFloat("Probe Exposure##GPUDebug", &state->debug.ddgiProbeDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
 
+        ImGui::SeparatorText("GI Diffuse Gather");
+        {
+            const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance"};
+            ImGui::SetNextItemWidth(120.0f);
+            ImGui::Combo("View##GIGatherDebug", &state->debug.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)));
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Fullscreen final-gather view; runs the gather even when it is not applied to lighting. Irradiance = raw gather evaluated at the pixel normal. Tiers = where each ray resolved: green cache hit, blue probe fallback, yellow sky, red backface. Hit Distance = hitT grayscale.");
+            }
+        }
+
         ImGui::Separator();
 
         ImGui::BeginDisabled(true);
@@ -802,6 +812,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Apply To Lighting##ddgi", &ddgi.bApplyToLighting)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Use the probes as the indirect diffuse in lighting (replaces the skybox irradiance where the volume covers). Off = probes still update, for A/B and the debug viz.");
+            }
+            if (ImGui::Checkbox("GI Diffuse Gather##ddgi", &ddgi.bFinalGather)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("TDA-style resolve: one cosine ray per half-res pixel reads the world radiance cache at its hit (probes as fallback, skybox on miss) instead of sampling probes at the pixel. Raw and undenoised for now. Debug views live in the Debug View window.");
             }
 
             ImGui::SeparatorText("Volume");

@@ -353,6 +353,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->ddgiProbeDebugExposure = state->debug.ddgiProbeDebugExposure;
     frameBuffer->ddgiProbeDebugCascade = state->debug.ddgiProbeDebugCascade;
     frameBuffer->bDDGIHideInactiveProbes = state->debug.bDDGIHideInactiveProbes;
+    frameBuffer->giGatherDebugMode = state->debug.giGatherDebugMode;
     frameBuffer->restir = state->debug.restir;
     frameBuffer->ddgi = state->lighting.ddgi;
     frameBuffer->reflection = state->lighting.reflection;

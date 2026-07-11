@@ -537,6 +537,12 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t pad1;
     SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
+    SHADER_PUBLIC uint32_t giShRIndex;
+    SHADER_PUBLIC uint32_t giShGIndex;
+    SHADER_PUBLIC uint32_t giShBIndex;
+    SHADER_PUBLIC uint32_t giDataIndex;
+    SHADER_PUBLIC uint32_t giGatherMode;
+    SHADER_PUBLIC uint32_t pad2;
 };
 
 // Unused: kept around alongside WorldGridBinningPushConstant.
@@ -620,6 +626,34 @@ SHADER_PUBLIC struct WorldCacheShadePushConstant
     SHADER_PUBLIC float bounceIntensity;
 };
 
+SHADER_PUBLIC struct GIGatherPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
+    SHADER_PUBLIC SHADER_PTR(uint) cacheEntries;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cacheCells;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
+    SHADER_PUBLIC uint2 gatherExtent;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t shRIndex;
+    SHADER_PUBLIC uint32_t shGIndex;
+    SHADER_PUBLIC uint32_t shBIndex;
+    SHADER_PUBLIC uint32_t dataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC int32_t skyboxIndex;
+    SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC uint32_t bCascadesValid;
+};
+
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -642,6 +676,12 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t shadowsIndex;
     SHADER_PUBLIC uint32_t reflectionIndex;
     SHADER_PUBLIC float reflectionRoughnessMax;
+    SHADER_PUBLIC uint32_t giShRIndex;
+    SHADER_PUBLIC uint32_t giShGIndex;
+    SHADER_PUBLIC uint32_t giShBIndex;
+    SHADER_PUBLIC uint32_t giDataIndex;
+    SHADER_PUBLIC uint32_t giGatherMode;
+    SHADER_PUBLIC uint32_t pad1;
 };
 
 SHADER_PUBLIC struct ReflectionShadePushConstant

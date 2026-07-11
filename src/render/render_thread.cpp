@@ -600,6 +600,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 }
             }
             else {
+                uint32_t giGatherMode = 0u;
+                const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.giGatherDebugMode);
+                if (frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || giGatherDebug != 0u)) {
+                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber);
+                    if (giGather.bValid) {
+                        giGatherMode = giGatherDebug != 0u ? giGatherDebug + 1u : 1u;
+                    }
+                }
+
                 switch (viewFamily.lightingMode) {
                     case Core::LightingMode::Default:
                     {
@@ -608,7 +617,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         if (frameBuffer.bEnableGPUDebug && frameBuffer.bClusterGridDebug && !frameBuffer.bLockGPUDebug) {
                             SetupClusterGridDebug(*renderGraph, pipelineManager, 0, clusterZNear, clusterZFar);
                         }
-                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply);
+                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, giGatherMode);
                         break;
                     }
                     case Core::LightingMode::ReSTIR:
@@ -627,13 +636,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                         if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
                             SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection, restir.brdfRoughnessMax);
-                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax);
+                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax, giGatherMode);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax);
+                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax, giGatherMode);
                         }
                         else {
-                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax);
+                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, restir.brdfRoughnessMax, giGatherMode);
                         }
                         break;
                     }

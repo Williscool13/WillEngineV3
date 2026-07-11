@@ -55,7 +55,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                uint64_t frameNumber,
                                bool bDDGIApply,
                                const Core::RTReflectionConfiguration& reflectionConfig,
-                               float brdfRoughnessMax);
+                               float brdfRoughnessMax,
+                               uint32_t giGatherMode);
 } // Render
 
 #endif //WILL_ENGINE_RESTIR_PASSES_H
