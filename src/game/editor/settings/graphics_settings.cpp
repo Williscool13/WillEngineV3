@@ -16,6 +16,7 @@
 #include "engine/profiles/profile_library.h"
 
 #include "render/shaders/restir_features_macros.h"
+#include "render/shaders/ddgi_interop.h"
 
 namespace Game
 {
@@ -30,7 +31,7 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
     }
     Engine::WriteProjectConfig(cfg);
 }
@@ -54,7 +55,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -74,7 +75,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.clusterZFar);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -829,7 +830,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ddgiI("Probe Count Z##ddgi", &ddgi.probeCountZ, ddgiDefaults.probeCountZ, 2, 32, "Probes along Z.");
             ddgiF("Probe Spacing##ddgi", &ddgi.probeSpacing, ddgiDefaults.probeSpacing, 0.25f, 8.0f, "%.2f", "World-space distance between probes (meters); coverage = count * spacing per axis. Changing it restarts probe history.");
             int cascadeCount = static_cast<int>(ddgi.cascadeCount);
-            if (Widgets::SliderInt("Cascade Count##ddgi", &cascadeCount, 1, 4, {.tooltip = "Concentric volumes with identical counts; each doubles the previous spacing, so range doubles per cascade for linear memory. Cascade 0 updates every frame, outer cascades round-robin one per frame (flat trace cost).", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.cascadeCount)})) {
+            if (Widgets::SliderInt("Cascade Count##ddgi", &cascadeCount, 1, static_cast<int>(DDGI_MAX_CASCADES), {.tooltip = "Concentric volumes with identical counts; each doubles the previous spacing, so range doubles per cascade for linear memory. Cascade 0 updates every frame, outer cascades round-robin one per frame (flat trace cost).", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.cascadeCount)})) {
                 ddgi.cascadeCount = static_cast<uint32_t>(cascadeCount);
                 changed = true;
             }
@@ -893,13 +894,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (bDefaultMode) {
             ImGui::SeparatorText("Default Rendering");
-
-            if (ImGui::CollapsingHeader("Clustered Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
-                if (Widgets::SliderFloat("Cluster Z Far##cluster", &state->lighting.clusterZFar, 10.0f, 5000.0f,
-                                         {.format = "%.0f", .tooltip = "Far cutoff of the froxel light-cull grid. The 24 depth slices are log-distributed from the camera near plane to here; raise to cover local lights on distant geometry. Larger = clusters longer along view-Z (slightly coarser culling). Past it, surfaces get sun + IBL + DDGI only.", .reset = true, .resetTo = 500.0})) {
-                    changed = true;
-                }
-            }
 
             if (ImGui::CollapsingHeader("SIGMA Shadow Denoiser")) {
                 Core::SIGMAParams& sigma = state->lighting.sigmaParams;

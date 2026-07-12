@@ -23,7 +23,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
     // Pass 1: Edge Detection
-    RenderPass& edgePass = graph.AddPass(SID("SMAA Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
+    RenderPass& edgePass = graph.AddPass(SID("SMAA Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     edgePass.ReadBuffer(SID("scene_data"));
     edgePass.ReadSampledImage(targets.colorOutput);
     edgePass.ReadSampledImage(targets.depthCopy);
@@ -60,7 +60,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
         });
 
     // Pass 2: Blend Weight Calculation
-    RenderPass& blendPass = graph.AddPass(SID("SMAA Blend Weight"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
+    RenderPass& blendPass = graph.AddPass(SID("SMAA Blend Weight"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     blendPass.ReadBuffer(SID("scene_data"));
     blendPass.ReadSampledImage(SID("smaa_edges"));
     blendPass.WriteStorageImage(SID("smaa_blend"));
@@ -83,7 +83,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     });
 
     // Pass 3: Neighborhood Blending
-    RenderPass& neighborhoodPass = graph.AddPass(SID("SMAA Neighborhood Blend"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
+    RenderPass& neighborhoodPass = graph.AddPass(SID("SMAA Neighborhood Blend"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     neighborhoodPass.ReadBuffer(SID("scene_data"));
     neighborhoodPass.ReadSampledImage(targets.colorOutput);
     neighborhoodPass.ReadSampledImage(SID("smaa_blend"));
@@ -123,7 +123,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
     // Pass 1: Edge Detection
-    RenderPass& edgePass = graph.AddPass(SID("SMAA T2X Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
+    RenderPass& edgePass = graph.AddPass(SID("SMAA T2X Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     edgePass.ReadBuffer(SID("scene_data"));
     edgePass.ReadSampledImage(targets.colorOutput);
     edgePass.ReadSampledImage(targets.depthCopy);
@@ -160,7 +160,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
         });
 
     // Pass 2: Blend Weight Calculation
-    RenderPass& blendPass = graph.AddPass(SID("SMAA T2X Blend Weight"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
+    RenderPass& blendPass = graph.AddPass(SID("SMAA T2X Blend Weight"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     blendPass.ReadBuffer(SID("scene_data"));
     blendPass.ReadSampledImage(SID("smaa_edges"));
     blendPass.WriteStorageImage(SID("smaa_blend"));
@@ -183,7 +183,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     });
 
     // Pass 3: Neighborhood Blending
-    RenderPass& neighborhoodPass = graph.AddPass(SID("SMAA T2X Neighborhood Blend"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
+    RenderPass& neighborhoodPass = graph.AddPass(SID("SMAA T2X Neighborhood Blend"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     neighborhoodPass.ReadBuffer(SID("scene_data"));
     neighborhoodPass.ReadSampledImage(targets.colorOutput);
     neighborhoodPass.ReadSampledImage(SID("smaa_blend"));
@@ -213,7 +213,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     // Pass 4: Temporal Resolve
     graph.CreateTexture(SID("smaa_t2x_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-    RenderPass& resolvePass = graph.AddPass(SID("SMAA T2X Temporal Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
+    RenderPass& resolvePass = graph.AddPass(SID("SMAA T2X Temporal Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     resolvePass.ReadBuffer(SID("scene_data"));
     resolvePass.ReadSampledImage(SID("smaa_t2x_current"));
     resolvePass.ReadSampledImage(SID("smaa_t2x_history"));
@@ -252,7 +252,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     graph.CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
     if (!graph.HasTexture(SID("taa_history")) || !graph.HasTexture(SID("gbuffer_one_history")) || !graph.HasTexture(SID("depth_history"))) {
-        RenderPass& taaPass = graph.AddPass(SID("TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::ResourceCategory::AntiAliasing);
+        RenderPass& taaPass = graph.AddPass(SID("TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::AntiAliasing);
         taaPass.ReadCopyImage(targets.colorOutput);
         taaPass.WriteCopyImage(SID("taa_current"));
         taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -286,7 +286,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
 
     const Core::TAAConfiguration& taaConfig = viewFamily.aaConfig.taa;
 
-    RenderPass& taaPass = graph.AddPass(SID("TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
+    RenderPass& taaPass = graph.AddPass(SID("TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     taaPass.ReadBuffer(SID("scene_data"));
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.depthCopy);
@@ -345,7 +345,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
     const bool bHasHistory = graph.HasTexture(SID("donut_taa_feedback_history"));
     const Core::DonutTAAConfiguration& donutConfig = viewFamily.aaConfig.donutTaa;
 
-    RenderPass& taaPass = graph.AddPass(SID("Donut TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AntiAliasing);
+    RenderPass& taaPass = graph.AddPass(SID("Donut TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     taaPass.ReadBuffer(SID("scene_data"));
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.gbufferOne);

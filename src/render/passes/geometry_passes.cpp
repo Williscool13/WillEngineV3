@@ -65,7 +65,7 @@ void SetupGeometryPass(RenderGraph& graph,
             graph.CreateBuffer(meshletCountDispatchArgs, sizeof(InstancingMeshletDispatchIndirect), false);
             graph.CreateBuffer(compactedMeshletDispatchArgs, sizeof(InstancingCompactedMeshletDispatchIndirect), false);
 
-            RenderPass& clearDispatchArgs = graph.AddPass(SID("Clear Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::ResourceCategory::Geometry);
+            RenderPass& clearDispatchArgs = graph.AddPass(SID("Clear Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::Geometry);
             clearDispatchArgs.WriteTransferBuffer(compactedMeshletDispatchArgs);
             clearDispatchArgs.Execute([compactedMeshletDispatchArgs](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 vkCmdFillBuffer(cmd, graph.GetBufferHandle(compactedMeshletDispatchArgs), 0, VK_WHOLE_SIZE, 0);
@@ -74,7 +74,7 @@ void SetupGeometryPass(RenderGraph& graph,
 
         // Instance Visibility/LOD
         {
-            RenderPass& instanceLODPass = graph.AddPass(SID("Instance Visibility/LOD Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+            RenderPass& instanceLODPass = graph.AddPass(SID("Instance Visibility/LOD Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             instanceLODPass.ReadBuffer(SCENE_DATA_BUFFER);
             instanceLODPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
             instanceLODPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
@@ -110,7 +110,7 @@ void SetupGeometryPass(RenderGraph& graph,
         {
             uint32_t level1BlockCount = (instanceCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
-            RenderPass& upsweep1Pass = graph.AddPass(SID("Prefix Sum Upsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+            RenderPass& upsweep1Pass = graph.AddPass(SID("Prefix Sum Upsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             upsweep1Pass.ReadBuffer(instanceMeshletOffsets);
             upsweep1Pass.WriteBuffer(level1Sums);
             upsweep1Pass.WriteBuffer(level1BlockSums);
@@ -132,7 +132,7 @@ void SetupGeometryPass(RenderGraph& graph,
             uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
             if (level2BlockCount > 1) {
-                RenderPass& upsweep2Pass = graph.AddPass(SID("Prefix Sum Upsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                RenderPass& upsweep2Pass = graph.AddPass(SID("Prefix Sum Upsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
                 upsweep2Pass.ReadBuffer(level1BlockSums);
                 upsweep2Pass.WriteBuffer(level2Sums);
                 upsweep2Pass.WriteBuffer(level2BlockSums);
@@ -151,7 +151,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     vkCmdDispatch(cmd, level2BlockCount, 1, 1);
                 });
 
-                RenderPass& scanBlocksPass = graph.AddPass(SID("Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                RenderPass& scanBlocksPass = graph.AddPass(SID("Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
                 scanBlocksPass.ReadBuffer(level2BlockSums);
                 scanBlocksPass.WriteBuffer(scannedLevel2BlockSums);
                 scanBlocksPass.Execute([level2BlockSums, scannedLevel2BlockSums, pipelineManager, level2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -167,7 +167,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     vkCmdDispatch(cmd, 1, 1, 1);
                 });
 
-                RenderPass& downsweep1Pass = graph.AddPass(SID("Prefix Sum Downsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                RenderPass& downsweep1Pass = graph.AddPass(SID("Prefix Sum Downsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
                 downsweep1Pass.ReadBuffer(scannedLevel2BlockSums);
                 downsweep1Pass.ReadWriteBuffer(level2Sums);
                 downsweep1Pass.Execute([scannedLevel2BlockSums, level2Sums, pipelineManager, level1BlockCount, level2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -184,7 +184,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 });
             }
             else {
-                RenderPass& scanBlocksPass = graph.AddPass(SID("Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                RenderPass& scanBlocksPass = graph.AddPass(SID("Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
                 scanBlocksPass.ReadBuffer(level1BlockSums);
                 scanBlocksPass.WriteBuffer(scannedLevel2BlockSums);
                 scanBlocksPass.Execute([level1BlockSums, scannedLevel2BlockSums, pipelineManager, level1BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -201,7 +201,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 });
             }
 
-            RenderPass& downsweep2Pass = graph.AddPass(SID("Prefix Sum Downsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+            RenderPass& downsweep2Pass = graph.AddPass(SID("Prefix Sum Downsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             downsweep2Pass.ReadBuffer(level1Sums);
             if (level2BlockCount > 1) {
                 downsweep2Pass.ReadBuffer(level2Sums);
@@ -226,7 +226,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 });
 
             RenderPass& totalMeshletCalculator = graph.AddPass(
-                SID("Total Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                SID("Total Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             totalMeshletCalculator.ReadBuffer(instanceMeshletOffsets);
             totalMeshletCalculator.WriteBuffer(meshletCountDispatchArgs);
             totalMeshletCalculator.Execute([instanceMeshletOffsets, meshletCountDispatchArgs, pipelineManager, instanceCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -246,7 +246,7 @@ void SetupGeometryPass(RenderGraph& graph,
         // Expand Instance to Meshlet
         {
             RenderPass& expandInstancesToMeshlets = graph.AddPass(
-                SID("Expand Instance To Meshlet"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                SID("Expand Instance To Meshlet"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             expandInstancesToMeshlets.ReadBuffer(SCENE_DATA_BUFFER);
             expandInstancesToMeshlets.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
             expandInstancesToMeshlets.ReadBuffer(instanceMeshletOffsets);
@@ -281,7 +281,7 @@ void SetupGeometryPass(RenderGraph& graph,
             uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
             RenderPass& meshletUpsweep1Pass = graph.AddPass(
-                SID("Meshlet Visibility Prefix Sum Upsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                SID("Meshlet Visibility Prefix Sum Upsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             meshletUpsweep1Pass.ReadBuffer(intermediateMeshlets);
             meshletUpsweep1Pass.WriteBuffer(meshletLevel1Sums);
             meshletUpsweep1Pass.WriteBuffer(meshletLevel1BlockSums);
@@ -306,7 +306,7 @@ void SetupGeometryPass(RenderGraph& graph,
 
             if (meshletLevel2BlockCount > 1) {
                 RenderPass& meshletUpsweep2Pass = graph.AddPass(
-                    SID("Meshlet Visibility Prefix Sum Upsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                    SID("Meshlet Visibility Prefix Sum Upsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
                 meshletUpsweep2Pass.ReadBuffer(meshletLevel1BlockSums);
                 meshletUpsweep2Pass.WriteBuffer(meshletLevel2Sums);
                 meshletUpsweep2Pass.WriteBuffer(meshletLevel2BlockSums);
@@ -327,7 +327,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     });
 
                 RenderPass& meshletScanBlocksPass = graph.AddPass(
-                    SID("Meshlet Visibility Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                    SID("Meshlet Visibility Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
                 meshletScanBlocksPass.ReadBuffer(meshletLevel2BlockSums);
                 meshletScanBlocksPass.WriteBuffer(meshletScannedLevel2BlockSums);
                 meshletScanBlocksPass.Execute([meshletLevel2BlockSums, meshletScannedLevel2BlockSums, pipelineManager, meshletLevel2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -344,7 +344,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 });
 
                 RenderPass& meshletDownsweep1Pass = graph.AddPass(
-                    SID("Meshlet Visibility Prefix Sum Downsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                    SID("Meshlet Visibility Prefix Sum Downsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
                 meshletDownsweep1Pass.ReadBuffer(meshletScannedLevel2BlockSums);
                 meshletDownsweep1Pass.ReadWriteBuffer(meshletLevel2Sums);
                 meshletDownsweep1Pass.Execute([meshletScannedLevel2BlockSums, meshletLevel2Sums, pipelineManager, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -362,7 +362,7 @@ void SetupGeometryPass(RenderGraph& graph,
             }
             else {
                 RenderPass& meshletScanBlocksPass = graph.AddPass(
-                    SID("Meshlet Visibility Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                    SID("Meshlet Visibility Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
                 meshletScanBlocksPass.ReadBuffer(meshletLevel1BlockSums);
                 meshletScanBlocksPass.WriteBuffer(meshletScannedLevel2BlockSums);
                 meshletScanBlocksPass.Execute([meshletLevel1BlockSums, meshletScannedLevel2BlockSums, pipelineManager, meshletLevel1BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -380,7 +380,7 @@ void SetupGeometryPass(RenderGraph& graph,
             }
 
             RenderPass& meshletDownsweep2Pass = graph.AddPass(
-                SID("Meshlet Visibility Prefix Sum Downsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                SID("Meshlet Visibility Prefix Sum Downsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             meshletDownsweep2Pass.ReadBuffer(meshletLevel1Sums);
             meshletDownsweep2Pass.ReadBuffer(intermediateMeshlets);
             if (meshletLevel2BlockCount > 1) {
@@ -412,7 +412,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 });
 
             RenderPass& compactedDispatchCalc = graph.AddPass(
-                SID("Compacted Meshlet Dispatch Calculation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+                SID("Compacted Meshlet Dispatch Calculation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             compactedDispatchCalc.ReadWriteBuffer(compactedMeshletDispatchArgs);
             compactedDispatchCalc.Execute([compactedMeshletDispatchArgs, pipelineManager, highestMeshletCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 CompactedMeshletDispatchPushConstant pc{
@@ -427,7 +427,7 @@ void SetupGeometryPass(RenderGraph& graph,
             });
         }
 
-        RenderPass& maxMeshletCount = graph.AddPass(SID("Max Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+        RenderPass& maxMeshletCount = graph.AddPass(SID("Max Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
         maxMeshletCount.ReadBuffer(meshletCountDispatchArgs);
         maxMeshletCount.ReadWriteBuffer(SID("readback_buffer"));
         maxMeshletCount.Execute([&, pipelineManager, bufferSrc = meshletCountDispatchArgs](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -445,7 +445,7 @@ void SetupGeometryPass(RenderGraph& graph,
 
     RenderPass& instancedMeshShading = graph.AddPass(
         SID("Instanced Mesh Shading"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-                                       VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::ResourceCategory::Geometry);
+                                       VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::RenderCategory::Geometry);
     instancedMeshShading.WriteColorAttachment(targets.visibility);
     instancedMeshShading.WriteColorAttachment(targets.gbufferOne);
     instancedMeshShading.WriteColorAttachment(targets.stableId);
@@ -510,7 +510,7 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               const RenderTargets& targets,
                                               uint32_t sceneIndex)
 {
-    RenderPass& visBarDer = graph.AddPass(SID("Visibility Barycentric Derivative"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+    RenderPass& visBarDer = graph.AddPass(SID("Visibility Barycentric Derivative"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     visBarDer.ReadSampledImage(targets.visibility);
     visBarDer.ReadBuffer(SCENE_DATA_BUFFER);
     visBarDer.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
@@ -560,7 +560,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
-    RenderPass& boundsPass = graph.AddPass(SID("Shade Bucketing Bounds"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+    RenderPass& boundsPass = graph.AddPass(SID("Shade Bucketing Bounds"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     boundsPass.ReadSampledImage(targets.visibility);
     boundsPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     boundsPass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
@@ -581,7 +581,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
             vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
         });
 
-    RenderPass& resolvePass = graph.AddPass(SID("Shade Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+    RenderPass& resolvePass = graph.AddPass(SID("Shade Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     resolvePass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
     resolvePass.Execute([&, pipelineManager, materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         ShadeBucketingResolvePushConstant pc{
@@ -594,7 +594,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
         vkCmdDispatch(cmd, (materialCount + 255) / 256, 1, 1);
     });
 
-    RenderPass& lightResolvePass = graph.AddPass(SID("Light Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+    RenderPass& lightResolvePass = graph.AddPass(SID("Light Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     lightResolvePass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightResolvePass.Execute([&, pipelineManager, lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         LightingBucketingResolvePushConstant pc{
@@ -608,7 +608,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     });
 
     // Technically not "critical", used for stats. But since we write to readback_buffer, it becomes critical.
-    RenderPass& dispatchCountPass = graph.AddPass(SID("Bucket Dispatch Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+    RenderPass& dispatchCountPass = graph.AddPass(SID("Bucket Dispatch Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     dispatchCountPass.ReadBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
     dispatchCountPass.ReadBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     dispatchCountPass.ReadWriteBuffer(SID("readback_buffer"));
@@ -654,7 +654,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
         return a.fragmentShader < b.fragmentShader;
     });
 
-    RenderPass& visShading = graph.AddPass(SID("Visibility Shading"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+    RenderPass& visShading = graph.AddPass(SID("Visibility Shading"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     visShading.ReadSampledImage(targets.visibility);
     visShading.ReadStorageImage(targets.barycentric);
     visShading.ReadStorageImage(targets.derivatives);
@@ -727,7 +727,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
                                        uint32_t sceneIndex,
                                        Core::Arena& arena)
 {
-    RenderPass& bucketVisualizePass = graph.AddPass(SID("Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+    RenderPass& bucketVisualizePass = graph.AddPass(SID("Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     bucketVisualizePass.ReadSampledImage(targets.visibility);
     bucketVisualizePass.ReadStorageImage(targets.barycentric);
     bucketVisualizePass.ReadStorageImage(targets.derivatives);
@@ -786,7 +786,7 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                      const RenderTargets& targets,
                                      uint32_t sceneIndex)
 {
-    RenderPass& lightBucketVisualizePass = graph.AddPass(SID("Light Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Geometry);
+    RenderPass& lightBucketVisualizePass = graph.AddPass(SID("Light Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     lightBucketVisualizePass.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferOne);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferTwo);

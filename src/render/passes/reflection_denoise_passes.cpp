@@ -157,7 +157,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
     graph.CreateBuffer(SID("refl_relax_constants"), sizeof(RelaxDiffuseSpecularConstants));
     UploadAllocation rcAlloc = graph.AllocateTransient(sizeof(RelaxDiffuseSpecularConstants));
     memcpy(rcAlloc.ptr, &rc, sizeof(RelaxDiffuseSpecularConstants)); {
-        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, ResourceCategory::Untagged);
+        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Untagged);
         pass.WriteTransferBuffer(SID("refl_relax_constants"));
         pass.Execute([offset = rcAlloc.offset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkBufferCopy2 region{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = offset, .dstOffset = 0, .size = sizeof(RelaxDiffuseSpecularConstants)};
@@ -184,7 +184,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         graph.CreateTexture(SID("refl_relax_viewz"), viewZInfo, {std::nullopt}, true);
         graph.CarryTextureToNextFrame(SID("refl_relax_viewz"), SID("refl_relax_viewz_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
-        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
@@ -207,7 +207,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
     {
         graph.CreateTexture(SID("refl_relax_tiles"), tilesInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(SID("refl_relax_tiles"));
@@ -229,7 +229,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         graph.CreateTexture(SID("refl_relax_spec_prepass"), colorInfo, {std::nullopt}, true);
         graph.CreateTexture(SID("refl_relax_diff_prepass"), colorInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
         pass.ReadSampledImage(depth);
@@ -281,7 +281,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         const StringID specIn = bPrepass ? SID("refl_relax_spec_prepass") : specInput;
         const StringID diffIn = bPrepass ? SID("refl_relax_diff_prepass") : diffInput;
 
-        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -360,7 +360,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
 
     // Pass 4: History Fix
     {
-        auto& pass = graph.AddPass(SID("[Reflection ReLAX] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[Reflection ReLAX] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -397,7 +397,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         const StringID clampSpecOut = params.enableAntiFirefly ? SID("refl_relax_atrous_spec_0") : SID("refl_relax_spec_hist");
         const StringID clampDiffOut = params.enableAntiFirefly ? SID("refl_relax_atrous_diff_0") : SID("refl_relax_diff_hist");
 
-        auto& pass = graph.AddPass(SID("[Reflection ReLAX] History Clamping"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[Reflection ReLAX] History Clamping"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
         pass.ReadSampledImage(depth);
@@ -446,7 +446,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
 
     // Pass 6: Anti-Firefly
     if (params.enableAntiFirefly) {
-        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[Reflection ReLAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -493,7 +493,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
 
             const Core::InlineString<32> passName = Core::InlineString<32>::Format("[Reflection ReLAX] ATrous %d", i);
 
-            auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+            auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
             pass.ReadBuffer(SID("refl_relax_constants"));
             pass.ReadSampledImage(SID("refl_relax_tiles"));
             pass.ReadSampledImage(gbufferOne);

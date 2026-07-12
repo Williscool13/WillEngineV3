@@ -28,7 +28,7 @@ void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, co
         graph.CreateBuffer(GPU_DEBUG_CUBE_INSTANCE_BUFFER, GPU_DEBUG_MAX_CUBES * sizeof(DebugCubeInstance), false);
     }
 
-    RenderPass& clearPass = graph.AddPass(SID("GPU Debug Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Debug);
+    RenderPass& clearPass = graph.AddPass(SID("GPU Debug Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::Debug);
     clearPass.WriteTransferBuffer(GPU_DEBUG_ARGS_BUFFER);
     clearPass.WriteTransferBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
     clearPass.WriteTransferBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
@@ -62,7 +62,7 @@ void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, co
     });
 
     if (bTestPattern) {
-        RenderPass& testPass = graph.AddPass(SID("GPU Debug Test Pattern"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+        RenderPass& testPass = graph.AddPass(SID("GPU Debug Test Pattern"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
         testPass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
         testPass.WriteBuffer(GPU_DEBUG_SEGMENT_BUFFER);
         testPass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
@@ -96,7 +96,7 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
     }
 
     if (!bLocked) {
-        RenderPass& buildIndirectPass = graph.AddPass(SID("GPU Debug Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+        RenderPass& buildIndirectPass = graph.AddPass(SID("GPU Debug Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
         buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
         buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
         buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
@@ -117,7 +117,7 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
         });
     }
 
-    RenderPass& drawPass = graph.AddPass(SID("GPU Debug Draw"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, ResourceCategory::Debug);
+    RenderPass& drawPass = graph.AddPass(SID("GPU Debug Draw"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, RenderCategory::Debug);
     drawPass.WriteColorAttachment(targetImage);
     const bool bHasDepth = graph.HasTexture(depthTarget);
     if (bHasDepth) {
@@ -213,7 +213,7 @@ void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager,
         return;
     }
 
-    RenderPass& pass = graph.AddPass(SID("Cluster Grid Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+    RenderPass& pass = graph.AddPass(SID("Cluster Grid Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
     pass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
     pass.WriteBuffer(GPU_DEBUG_SEGMENT_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -265,7 +265,7 @@ void SetupWorldGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, u
 
         const uint32_t packedTint = debugLevel < 0 ? WORLD_GRID_CASCADE_TINT[level] : 0xFFFFFFFFu;
 
-        RenderPass& pass = graph.AddPass(WORLD_GRID_DEBUG_PASS[level], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+        RenderPass& pass = graph.AddPass(WORLD_GRID_DEBUG_PASS[level], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
         pass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
         pass.WriteBuffer(GPU_DEBUG_SEGMENT_BUFFER);
         pass.ReadBuffer(SCENE_DATA_BUFFER);

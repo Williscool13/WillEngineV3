@@ -15,7 +15,7 @@ struct TextureResource;
 class RenderPass
 {
 public:
-    RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages, ResourceCategory category, Core::Arena* arena);
+    RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages, RenderCategory category, Core::Arena* arena);
 
     // Write
     RenderPass& WriteStorageImage(StringID textureId, TextureInfo texInfo = {});
@@ -91,7 +91,7 @@ public:
 
     StringID renderPassId;
     VkPipelineStageFlags2 stages;
-    ResourceCategory category{ResourceCategory::Untagged};
+    RenderCategory category{RenderCategory::Untagged};
 
 public: // DAG compile-time fields
     uint32_t passIndex{UINT_MAX};

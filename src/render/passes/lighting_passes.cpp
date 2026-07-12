@@ -29,7 +29,7 @@ void SetupFrustumBinningPass(RenderGraph& graph,
     graph.CreateBuffer(SID("cluster_light_grid"), gridBytes, false);
     graph.CreateBuffer(SID("cluster_light_index_list"), indexBytes, false);
 
-    RenderPass& cull = graph.AddPass(SID("Frustum Binning"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
+    RenderPass& cull = graph.AddPass(SID("Frustum Binning"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::FrustumBinning);
     cull.ReadBuffer(SCENE_DATA_BUFFER);
     cull.ReadBuffer(LIGHT_DATA_BUFFER);
     cull.WriteBuffer(SID("cluster_light_grid"));
@@ -66,7 +66,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
     graph.CreateBuffer(SID("world_grid_light_grid"), gridBytes, false);
     graph.CreateBuffer(SID("world_grid_index_list"), indexBytes, false);
 
-    RenderPass& binning = graph.AddPass(SID("World Grid Binning"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
+    RenderPass& binning = graph.AddPass(SID("World Grid Binning"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::WorldGridBinning);
     binning.ReadBuffer(SCENE_DATA_BUFFER);
     binning.ReadBuffer(LIGHT_DATA_BUFFER);
     binning.WriteBuffer(SID("world_grid_light_grid"));
@@ -120,7 +120,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         buckets[idx++] = {bucketIndex, shader};
     }
 
-    RenderPass& lightingResolve = graph.AddPass(SID("Visibility Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
+    RenderPass& lightingResolve = graph.AddPass(SID("Visibility Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::LightingResolve);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
     if (bWorldGrid) {
@@ -215,14 +215,14 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
     }
 
     if (bReset) {
-        RenderPass& clearPass = graph.AddPass(SID("GT Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::ResourceCategory::Lighting);
+        RenderPass& clearPass = graph.AddPass(SID("GT Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::GroundTruth);
         clearPass.WriteTransferBuffer(SID("gt_accum"));
         clearPass.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("gt_accum")), 0, VK_WHOLE_SIZE, 0);
         });
     }
 
-    RenderPass& pass = graph.AddPass(SID("Ground Truth Lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
+    RenderPass& pass = graph.AddPass(SID("Ground Truth Lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::GroundTruth);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(SID("light_data"));
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
@@ -292,7 +292,7 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
     if (graph.HasTexture(SID("sigma_shadow"))) { shadowTex = SID("sigma_shadow"); }
     if (graph.HasTexture(SID("sigma_stabilized"))) { shadowTex = SID("sigma_stabilized"); }
 
-    RenderPass& pass = graph.AddPass(SID("Directional Lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Lighting);
+    RenderPass& pass = graph.AddPass(SID("Directional Lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);

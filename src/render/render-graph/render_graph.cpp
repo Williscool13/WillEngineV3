@@ -39,6 +39,7 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
 {
     ENGINE_ASSERT(Renderer, context != nullptr, "RenderGraph requires a valid VulkanContext");
     ENGINE_ASSERT(Renderer, context->allocator != nullptr, "RenderGraph requires an initialized VMA allocator");
+    gpuTimestampQuery.Init(context);
     for (int32_t i = 0; i < uploadArenas.Size(); ++i) {
         VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bufferInfo.usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
@@ -71,8 +72,15 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
     }
 }
 
+GPUProfileSnapshot RenderGraph::CollectGPUProfile(uint32_t frameIndex)
+{
+    lastGpuProfile = gpuTimestampQuery.Collect(context->device, frameIndex);
+    return lastGpuProfile;
+}
+
 RenderGraph::~RenderGraph()
 {
+    gpuTimestampQuery.Destroy(context->device);
     for (auto& phys : physicalResources) {
         DestroyPhysicalResource(phys);
     }
@@ -96,7 +104,7 @@ RenderGraph::~RenderGraph()
     }
 }
 
-RenderPass& RenderGraph::AddPass(StringID passId, VkPipelineStageFlags2 stages, ResourceCategory category)
+RenderPass& RenderGraph::AddPass(StringID passId, VkPipelineStageFlags2 stages, RenderCategory category)
 {
     auto* pass = new(arena->AllocRaw(sizeof(RenderPass), alignof(RenderPass))) RenderPass(*this, passId, stages, category, arena);
     passes.PushBack(pass);
@@ -1292,6 +1300,8 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         LOG_INFO(Renderer, "=== RenderGraph Execution ===");
     }
 
+    gpuTimestampQuery.BeginFrame(cmd, currentFrameIndex);
+
     auto GetPhysical = [this](uint32_t texIndex) -> PhysicalResource& {
         return physicalResources[textures[texIndex].physicalIndex];
     };
@@ -1359,10 +1369,21 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 label.pLabelName = pass->renderPassId.ToString();
                 allocFns.cmdBeginDebugUtilsLabel(cmd, &label);
 #endif
+                gpuTimestampQuery.BeginPass(cmd, currentFrameIndex, pass->category);
                 pass->executeFunc(cmd, context, *this);
+                gpuTimestampQuery.EndPass(cmd, currentFrameIndex);
 #ifdef WDEBUG
                 allocFns.cmdEndDebugUtilsLabel(cmd);
 #endif
+            }
+        }
+    }
+
+    if (bDebugLogging) {
+        LOG_INFO(Renderer, "[GPU PROFILE] Total {:.3f} ms", lastGpuProfile.totalMs);
+        for (uint32_t bit = 0; bit < RENDER_CATEGORY_BIT_COUNT; ++bit) {
+            if (lastGpuProfile.leafMs[bit] > 0.0f) {
+                LOG_INFO(Renderer, "  {}: {:.3f} ms", RENDER_CATEGORY_NAMES[bit], lastGpuProfile.leafMs[bit]);
             }
         }
     }
@@ -1658,7 +1679,7 @@ void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsVie
     buf->bIsViewportScaled = bIsViewportScaled;
 }
 
-void RenderGraph::CreateTLAS(StringID name, VkDeviceSize asSize, ResourceCategory category)
+void RenderGraph::CreateTLAS(StringID name, VkDeviceSize asSize, RenderCategory category)
 {
     BufferResource* buf = GetOrCreateBuffer(name);
 
@@ -2751,9 +2772,9 @@ VRAMReport RenderGraph::GenerateVramReport() const
 
     // Logical VRAM (no aliasing)
     // Sum declared sizes per category. Resources with multiple category bits are counted in each.
-    auto AddLogicalBytes = [&](ResourceCategory cat, VkDeviceSize bytes) {
+    auto AddLogicalBytes = [&](RenderCategory cat, VkDeviceSize bytes) {
         const auto mask = static_cast<uint64_t>(cat);
-        for (uint32_t bit = 0; bit < RESOURCE_CATEGORY_BIT_COUNT; ++bit) {
+        for (uint32_t bit = 0; bit < RENDER_CATEGORY_BIT_COUNT; ++bit) {
             if (mask & (1ull << bit)) {
                 report.logical[bit] += bytes;
             }
@@ -2795,7 +2816,7 @@ VRAMReport RenderGraph::GenerateVramReport() const
         const auto popCount = static_cast<uint32_t>(std::popcount(mask));
 
         if (popCount == 1) {
-            for (uint32_t bit = 0; bit < RESOURCE_CATEGORY_BIT_COUNT; ++bit) {
+            for (uint32_t bit = 0; bit < RENDER_CATEGORY_BIT_COUNT; ++bit) {
                 if (mask & (1ull << bit)) {
                     report.physicalExclusive[bit] += size;
                     break;
@@ -2806,6 +2827,13 @@ VRAMReport RenderGraph::GenerateVramReport() const
             report.physicalSharedPoolBytes += size;
             report.sharedPoolCategories |= phys.category;
         }
+    }
+
+    // Roll leaf-level totals up into their parent RenderCategoryGroup for the tree breakdown.
+    for (uint32_t bit = 0; bit < RENDER_CATEGORY_BIT_COUNT; ++bit) {
+        const auto group = static_cast<uint32_t>(RENDER_CATEGORY_GROUP_OF[bit]);
+        report.logicalGroup[group] += report.logical[bit];
+        report.physicalExclusiveGroup[group] += report.physicalExclusive[bit];
     }
 
     return report;

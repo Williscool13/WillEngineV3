@@ -30,7 +30,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
     graph.CreateTexture(SID("gtao_temp"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("gtao_filtered"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
-    RenderPass& depthPrepass = graph.AddPass(SID("GTAO Depth Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AmbientOcclusion);
+    RenderPass& depthPrepass = graph.AddPass(SID("GTAO Depth Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AmbientOcclusion);
     depthPrepass.ReadBuffer(SID("scene_data"));
     depthPrepass.ReadSampledImage(targets.depthCopy);
     depthPrepass.WriteStorageImage(SID("gtao_depth"));
@@ -61,7 +61,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-    RenderPass& gtaoMainPass = graph.AddPass(SID("GTAO Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AmbientOcclusion);
+    RenderPass& gtaoMainPass = graph.AddPass(SID("GTAO Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AmbientOcclusion);
     gtaoMainPass.ReadSampledImage(SID("gtao_depth"));
     gtaoMainPass.ReadSampledImage(targets.gbufferOne);
     gtaoMainPass.WriteStorageImage(SID("gtao_ao"));
@@ -105,7 +105,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-    RenderPass& denoise1 = graph.AddPass(SID("GTAO Denoise 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AmbientOcclusion);
+    RenderPass& denoise1 = graph.AddPass(SID("GTAO Denoise 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AmbientOcclusion);
     denoise1.ReadSampledImage(SID("gtao_ao"));
     denoise1.ReadSampledImage(SID("gtao_edges"));
     denoise1.WriteStorageImage(SID("gtao_temp"));
@@ -129,7 +129,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-    RenderPass& denoise2 = graph.AddPass(SID("GTAO Denoise 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::AmbientOcclusion);
+    RenderPass& denoise2 = graph.AddPass(SID("GTAO Denoise 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AmbientOcclusion);
     denoise2.ReadSampledImage(SID("gtao_temp"));
     denoise2.ReadSampledImage(SID("gtao_edges"));
     denoise2.WriteStorageImage(SID("gtao_filtered"));

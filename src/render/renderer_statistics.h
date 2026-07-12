@@ -8,6 +8,8 @@
 #include <mutex>
 #include <cstdint>
 
+#include "render/render-graph/render_graph_resources.h"
+
 namespace Render
 {
 struct RendererStatistics
@@ -25,6 +27,9 @@ struct RendererStatistics
     uint64_t computeInvocations{};
     uint64_t clippingInvocations{};
     uint64_t clippingPrimitives{};
+
+    // Per-category GPU pass timing (always-on)
+    GPUProfileSnapshot gpuProfile{};
 };
 
 /**

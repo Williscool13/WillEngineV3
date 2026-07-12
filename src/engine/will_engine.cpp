@@ -264,7 +264,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineState->projectConfig = ReadProjectConfig();
         engineState->lighting.aaConfig = engineState->projectConfig.aaConfig;
         if (!engineState->projectConfig.activeLightingProfile.IsEmpty()) {
-            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.ddgi, engineState->lighting.reflection, engineState->lighting.gtaoConfig, engineState->debug.shadingShaderOverride, engineState->debug.lightingShaderOverride, engineState->lighting.iblIntensity, engineState->lighting.clusterZFar);
+            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.ddgi, engineState->lighting.reflection, engineState->lighting.gtaoConfig, engineState->debug.shadingShaderOverride, engineState->debug.lightingShaderOverride, engineState->lighting.iblIntensity);
         }
         if (!engineState->projectConfig.activePostProcessProfile.IsEmpty()) {
             Profiles::LoadPostProcessProfile(engineState->projectConfig.activePostProcessProfile.c_str(), engineState->lighting.postProcess);
@@ -411,6 +411,71 @@ void WillEngine::Initialize(Utils::Logger* logger)
     }
 #endif
 }
+
+#if WILL_EDITOR
+/** Shared two-level tree renderer for both the VRAM report and the GPU pass-timing report: a row per RenderCategoryGroup with its total, expandable to the RenderCategory leaves rolled into it. */
+static void DrawCategoryGroupTree(const char* tableId, const double* leafValues, const double* groupValues, double total, const char* fmt)
+{
+    constexpr ImGuiTableFlags flags = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+    if (!ImGui::BeginTable(tableId, 3, flags)) { return; }
+    ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 80.f);
+    ImGui::TableSetupColumn("% of Total", ImGuiTableColumnFlags_WidthFixed, 80.f);
+    ImGui::TableHeadersRow();
+
+    auto Row = [&](bool bTree, const char* name, double value, bool* pOpen) -> bool {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        bool bOpen = false;
+        if (bTree) {
+            bOpen = ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_SpanFullWidth);
+        }
+        else {
+            ImGui::Indent();
+            ImGui::TextUnformatted(name);
+            ImGui::Unindent();
+        }
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(fmt, value);
+        ImGui::TableSetColumnIndex(2);
+        if (total > 0.0) { ImGui::Text("%.1f%%", 100.0 * value / total); }
+        else { ImGui::TextUnformatted("-"); }
+        if (pOpen) { *pOpen = bOpen; }
+        return bOpen;
+    };
+
+    for (uint32_t group = 0; group < Render::RENDER_CATEGORY_GROUP_COUNT; ++group) {
+        if (groupValues[group] <= 0.0) { continue; }
+
+        // Groups with exactly one contributing leaf render as a flat row (no expand arrow needed).
+        uint32_t leafCount = 0;
+        for (uint32_t bit = 0; bit < Render::RENDER_CATEGORY_BIT_COUNT; ++bit) {
+            if (static_cast<uint32_t>(Render::RENDER_CATEGORY_GROUP_OF[bit]) == group && leafValues[bit] > 0.0) {
+                ++leafCount;
+            }
+        }
+
+        if (leafCount <= 1) {
+            Row(false, Render::RENDER_CATEGORY_GROUP_NAMES[group], groupValues[group], nullptr);
+            continue;
+        }
+
+        bool bOpen = false;
+        Row(true, Render::RENDER_CATEGORY_GROUP_NAMES[group], groupValues[group], &bOpen);
+        if (bOpen) {
+            for (uint32_t bit = 0; bit < Render::RENDER_CATEGORY_BIT_COUNT; ++bit) {
+                if (static_cast<uint32_t>(Render::RENDER_CATEGORY_GROUP_OF[bit]) == group && leafValues[bit] > 0.0) {
+                    ImGui::Indent();
+                    Row(false, Render::RENDER_CATEGORY_NAMES[bit], leafValues[bit], nullptr);
+                    ImGui::Unindent();
+                }
+            }
+            ImGui::TreePop();
+        }
+    }
+    ImGui::EndTable();
+}
+#endif
 
 void WillEngine::EditorImgui()
 {
@@ -765,20 +830,8 @@ void WillEngine::EditorImgui()
 
                 ImGui::SeparatorText("VRAM Attribution");
                 {
-                    static int vramCategoryFilter = 0;
                     static Render::VRAMReport vramSnapshot{};
 
-                    const char* filterPreview = (vramCategoryFilter == 0) ? "All" : Render::RESOURCE_CATEGORY_NAMES[vramCategoryFilter - 1];
-                    if (ImGui::BeginCombo("Category##vram_filter", filterPreview)) {
-                        if (ImGui::Selectable("All", vramCategoryFilter == 0)) { vramCategoryFilter = 0; }
-                        for (int i = 0; i < static_cast<int>(Render::RESOURCE_CATEGORY_BIT_COUNT); ++i) {
-                            if (ImGui::Selectable(Render::RESOURCE_CATEGORY_NAMES[i], vramCategoryFilter == i + 1)) {
-                                vramCategoryFilter = i + 1;
-                            }
-                        }
-                        ImGui::EndCombo();
-                    }
-                    ImGui::SameLine();
                     if (ImGui::SmallButton("Refresh##vram")) {
                         renderThread->RequestVRAMReport();
                     }
@@ -789,77 +842,59 @@ void WillEngine::EditorImgui()
                     const Render::VRAMReport& vram = vramSnapshot;
                     auto fmtMB = [](VkDeviceSize bytes) -> double { return static_cast<double>(bytes) / (1024.0 * 1024.0); };
 
-                    constexpr ImGuiTableFlags vramTableFlags = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
-
-                    ImGui::Spacing();
-                    ImGui::TextUnformatted("Logical (pre-alias, declared demand)");
-                    if (ImGui::BeginTable("##vram_logical", 3, vramTableFlags)) {
-                        ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch);
-                        ImGui::TableSetupColumn("MB", ImGuiTableColumnFlags_WidthFixed, 70.f);
-                        ImGui::TableSetupColumn("% of Total", ImGuiTableColumnFlags_WidthFixed, 80.f);
-                        ImGui::TableHeadersRow();
-
-                        auto LogicalRow = [&](const char* name, VkDeviceSize bytes) {
-                            ImGui::TableNextRow();
-                            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(name);
-                            ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f", fmtMB(bytes));
-                            ImGui::TableSetColumnIndex(2);
-                            if (vram.logicalTotal > 0) { ImGui::Text("%.1f%%", 100.0 * static_cast<double>(bytes) / static_cast<double>(vram.logicalTotal)); }
-                            else { ImGui::TextUnformatted("-"); }
-                        };
-
-                        if (vramCategoryFilter == 0) {
-                            for (uint32_t i = 0; i < Render::RESOURCE_CATEGORY_BIT_COUNT; ++i) {
-                                if (vram.logical[i] > 0) { LogicalRow(Render::RESOURCE_CATEGORY_NAMES[i], vram.logical[i]); }
-                            }
-                            LogicalRow("Total", vram.logicalTotal);
-                        } else {
-                            const uint32_t idx = static_cast<uint32_t>(vramCategoryFilter - 1);
-                            LogicalRow(Render::RESOURCE_CATEGORY_NAMES[idx], vram.logical[idx]);
-                        }
-                        ImGui::EndTable();
+                    double logicalLeafMB[Render::RENDER_CATEGORY_BIT_COUNT];
+                    double logicalGroupMB[Render::RENDER_CATEGORY_GROUP_COUNT];
+                    double physicalLeafMB[Render::RENDER_CATEGORY_BIT_COUNT];
+                    double physicalGroupMB[Render::RENDER_CATEGORY_GROUP_COUNT];
+                    for (uint32_t i = 0; i < Render::RENDER_CATEGORY_BIT_COUNT; ++i) {
+                        logicalLeafMB[i] = fmtMB(vram.logical[i]);
+                        physicalLeafMB[i] = fmtMB(vram.physicalExclusive[i]);
+                    }
+                    for (uint32_t g = 0; g < Render::RENDER_CATEGORY_GROUP_COUNT; ++g) {
+                        logicalGroupMB[g] = fmtMB(vram.logicalGroup[g]);
+                        physicalGroupMB[g] = fmtMB(vram.physicalExclusiveGroup[g]);
                     }
 
                     ImGui::Spacing();
-                    ImGui::TextUnformatted("Physical (post-alias, committed)");
-                    if (ImGui::BeginTable("##vram_physical", 3, vramTableFlags)) {
-                        ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch);
-                        ImGui::TableSetupColumn("MB", ImGuiTableColumnFlags_WidthFixed, 70.f);
-                        ImGui::TableSetupColumn("% of Total", ImGuiTableColumnFlags_WidthFixed, 80.f);
-                        ImGui::TableHeadersRow();
+                    ImGui::Text("Logical (pre-alias, declared demand) -- Total: %.2f MB", fmtMB(vram.logicalTotal));
+                    DrawCategoryGroupTree("##vram_logical_tree", logicalLeafMB, logicalGroupMB, fmtMB(vram.logicalTotal), "%.2f");
 
-                        auto PhysRow = [&](const char* name, VkDeviceSize bytes) {
-                            ImGui::TableNextRow();
-                            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(name);
-                            ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f", fmtMB(bytes));
-                            ImGui::TableSetColumnIndex(2);
-                            if (vram.physicalTotal > 0) { ImGui::Text("%.1f%%", 100.0 * static_cast<double>(bytes) / static_cast<double>(vram.physicalTotal)); }
-                            else { ImGui::TextUnformatted("-"); }
-                        };
-
-                        if (vramCategoryFilter == 0) {
-                            for (uint32_t i = 0; i < Render::RESOURCE_CATEGORY_BIT_COUNT; ++i) {
-                                if (vram.physicalExclusive[i] > 0) { PhysRow(Render::RESOURCE_CATEGORY_NAMES[i], vram.physicalExclusive[i]); }
+                    ImGui::Spacing();
+                    ImGui::Text("Physical (post-alias, committed) -- Total: %.2f MB", fmtMB(vram.physicalTotal));
+                    DrawCategoryGroupTree("##vram_physical_tree", physicalLeafMB, physicalGroupMB, fmtMB(vram.physicalTotal), "%.2f");
+                    if (vram.physicalSharedPoolBytes > 0) {
+                        char sharedLabel[272] = "Shared [";
+                        int written = static_cast<int>(strlen(sharedLabel));
+                        const uint64_t mask = static_cast<uint64_t>(vram.sharedPoolCategories);
+                        for (uint32_t i = 0; i < Render::RENDER_CATEGORY_BIT_COUNT; ++i) {
+                            if (mask & (1ull << i)) {
+                                written += snprintf(sharedLabel + written, sizeof(sharedLabel) - written, written > 8 ? ", %s" : "%s", Render::RENDER_CATEGORY_NAMES[i]);
                             }
-                            if (vram.physicalSharedPoolBytes > 0) {
-                                char sharedLabel[272] = "Shared [";
-                                int written = static_cast<int>(strlen(sharedLabel));
-                                const uint64_t mask = static_cast<uint64_t>(vram.sharedPoolCategories);
-                                for (uint32_t i = 0; i < Render::RESOURCE_CATEGORY_BIT_COUNT; ++i) {
-                                    if (mask & (1ull << i)) {
-                                        written += snprintf(sharedLabel + written, sizeof(sharedLabel) - written, written > 8 ? ", %s" : "%s", Render::RESOURCE_CATEGORY_NAMES[i]);
-                                    }
-                                }
-                                snprintf(sharedLabel + written, sizeof(sharedLabel) - written, "]");
-                                PhysRow(sharedLabel, vram.physicalSharedPoolBytes);
-                            }
-                            PhysRow("Total", vram.physicalTotal);
-                        } else {
-                            const uint32_t idx = static_cast<uint32_t>(vramCategoryFilter - 1);
-                            PhysRow(Render::RESOURCE_CATEGORY_NAMES[idx], vram.physicalExclusive[idx]);
                         }
-                        ImGui::EndTable();
+                        snprintf(sharedLabel + written, sizeof(sharedLabel) - written, "]");
+                        ImGui::Text("%s: %.2f MB", sharedLabel, fmtMB(vram.physicalSharedPoolBytes));
                     }
+                }
+
+                ImGui::SeparatorText("GPU Pass Timing");
+                {
+                    static bool bFreezeGPUProfile = false;
+                    static Render::GPUProfileSnapshot frozenGpuProfile{};
+
+                    ImGui::Checkbox("Freeze##gpu_profile", &bFreezeGPUProfile);
+                    if (!bFreezeGPUProfile) {
+                        frozenGpuProfile = renderThread->GetRendererStatistics().gpuProfile;
+                    }
+                    const Render::GPUProfileSnapshot& profile = frozenGpuProfile;
+
+                    double leafMs[Render::RENDER_CATEGORY_BIT_COUNT];
+                    double groupMs[Render::RENDER_CATEGORY_GROUP_COUNT];
+                    for (uint32_t i = 0; i < Render::RENDER_CATEGORY_BIT_COUNT; ++i) { leafMs[i] = profile.leafMs[i]; }
+                    for (uint32_t g = 0; g < Render::RENDER_CATEGORY_GROUP_COUNT; ++g) { groupMs[g] = profile.groupMs[g]; }
+
+                    ImGui::Spacing();
+                    ImGui::Text("GPU Frame Time -- Total: %.3f ms", profile.totalMs);
+                    DrawCategoryGroupTree("##gpu_profile_tree", leafMs, groupMs, profile.totalMs, "%.3f");
                 }
             }
         } // bMemoryOpen + outer block

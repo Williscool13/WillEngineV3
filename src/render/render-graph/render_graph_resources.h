@@ -29,63 +29,146 @@ using TransientImageHandle = Core::Handle<TextureResource>;
 struct BufferResource;
 using TransientASHandle = Core::Handle<BufferResource>;
 
-enum class ResourceCategory : uint64_t
+enum class RenderCategory : uint64_t
 {
     Untagged = 0,
-    Geometry = 1ull << 0,
-    Lighting = 1ull << 1,
-    Denoising = 1ull << 2,
-    AmbientOcclusion = 1ull << 3,
-    Shadow = 1ull << 4,
-    Scene = 1ull << 5,
-    AntiAliasing = 1ull << 6,
-    UI = 1ull << 7,
-    PostProcessing = 1ull << 8,
-    Debug = 1ull << 9,
-    ReSTIR = 1ull << 10,
+    Geometry            = 1ull << 0,
+    WorldGridBinning    = 1ull << 1,
+    FrustumBinning      = 1ull << 2,
+    LightingResolve     = 1ull << 3,
+    WorldCache          = 1ull << 4,
+    DDGI                = 1ull << 5,
+    GroundTruth         = 1ull << 6,
+    FinalGather         = 1ull << 7,
+    AmbientOcclusion    = 1ull << 8,
+    DirectionalLighting = 1ull << 9,
+    ReSTIRDI            = 1ull << 10,
+    ReGIR               = 1ull << 11,
+    ReLAX               = 1ull << 12,
+    ReBLUR              = 1ull << 13,
+    ReflectionsShade    = 1ull << 14,
+    ReflectionsDenoise  = 1ull << 15,
+    AntiAliasing        = 1ull << 16,
+    PostProcessing      = 1ull << 17,
+    Scene               = 1ull << 18,
+    UI                  = 1ull << 19,
+    Debug               = 1ull << 20,
 };
 
-inline constexpr uint32_t RESOURCE_CATEGORY_BIT_COUNT = 11;
-inline constexpr const char* RESOURCE_CATEGORY_NAMES[RESOURCE_CATEGORY_BIT_COUNT] = {
+inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 21;
+inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = {
     "Geometry",
-    "Lighting",
-    "Denoising",
+    "WorldGridBinning",
+    "FrustumBinning",
+    "LightingResolve",
+    "WorldCache",
+    "DDGI",
+    "GroundTruth",
+    "FinalGather",
     "AmbientOcclusion",
-    "Shadow",
-    "Scene",
+    "DirectionalLighting",
+    "ReSTIRDI",
+    "ReGIR",
+    "ReLAX",
+    "ReBLUR",
+    "ReflectionsShade",
+    "ReflectionsDenoise",
     "AntiAliasing",
-    "UI",
     "PostProcessing",
+    "Scene",
+    "UI",
     "Debug",
-    "ReSTIR",
 };
 
-inline ResourceCategory operator|(ResourceCategory a, ResourceCategory b)
+inline RenderCategory operator|(RenderCategory a, RenderCategory b)
 {
-    return static_cast<ResourceCategory>(static_cast<uint64_t>(a) | static_cast<uint64_t>(b));
+    return static_cast<RenderCategory>(static_cast<uint64_t>(a) | static_cast<uint64_t>(b));
 }
 
-inline ResourceCategory& operator|=(ResourceCategory& a, ResourceCategory b)
+inline RenderCategory& operator|=(RenderCategory& a, RenderCategory b)
 {
     a = a | b;
     return a;
 }
 
-inline bool HasResourceCategory(ResourceCategory flags, ResourceCategory check)
+inline bool HasResourceCategory(RenderCategory flags, RenderCategory check)
 {
     return (static_cast<uint64_t>(flags) & static_cast<uint64_t>(check)) != 0;
 }
 
+enum class RenderCategoryGroup : uint8_t
+{
+    Untagged,
+    Geometry,
+    Lighting,
+    ReSTIR,
+    Reflections,
+    PostProcessing,
+    Scene,
+    UI,
+    Debug,
+    Count,
+};
+
+inline constexpr uint32_t RENDER_CATEGORY_GROUP_COUNT = static_cast<uint32_t>(RenderCategoryGroup::Count);
+inline constexpr const char* RENDER_CATEGORY_GROUP_NAMES[RENDER_CATEGORY_GROUP_COUNT] = {
+    "Untagged",
+    "Geometry",
+    "Lighting",
+    "ReSTIR",
+    "Reflections",
+    "PostProcessing",
+    "Scene",
+    "UI",
+    "Debug",
+};
+
+// Indexed by leaf bit position (matches RenderCategory declaration order above).
+inline constexpr RenderCategoryGroup RENDER_CATEGORY_GROUP_OF[RENDER_CATEGORY_BIT_COUNT] = {
+    /*Geometry*/ RenderCategoryGroup::Geometry,
+    /*WorldGridBinning*/ RenderCategoryGroup::Lighting,
+    /*FrustumBinning*/ RenderCategoryGroup::Lighting,
+    /*LightingResolve*/ RenderCategoryGroup::Lighting,
+    /*WorldCache*/ RenderCategoryGroup::Lighting,
+    /*DDGI*/ RenderCategoryGroup::Lighting,
+    /*GroundTruth*/ RenderCategoryGroup::Lighting,
+    /*FinalGather*/ RenderCategoryGroup::Lighting,
+    /*AmbientOcclusion*/ RenderCategoryGroup::Lighting,
+    /*DirectionalLighting*/ RenderCategoryGroup::Lighting,
+    /*ReSTIRDI*/ RenderCategoryGroup::ReSTIR,
+    /*ReGIR*/ RenderCategoryGroup::ReSTIR,
+    /*ReLAX*/ RenderCategoryGroup::ReSTIR,
+    /*ReBLUR*/ RenderCategoryGroup::ReSTIR,
+    /*ReflectionsShade*/ RenderCategoryGroup::Reflections,
+    /*ReflectionsDenoise*/ RenderCategoryGroup::Reflections,
+    /*AntiAliasing*/ RenderCategoryGroup::PostProcessing,
+    /*PostProcessing*/ RenderCategoryGroup::PostProcessing,
+    /*Scene*/ RenderCategoryGroup::Scene,
+    /*UI*/ RenderCategoryGroup::UI,
+    /*Debug*/ RenderCategoryGroup::Debug,
+};
+
 struct VRAMReport
 {
-    VkDeviceSize logical[RESOURCE_CATEGORY_BIT_COUNT]{};
+    VkDeviceSize logical[RENDER_CATEGORY_BIT_COUNT]{};
     VkDeviceSize logicalTotal{0};
 
-    VkDeviceSize physicalExclusive[RESOURCE_CATEGORY_BIT_COUNT]{};
+    VkDeviceSize physicalExclusive[RENDER_CATEGORY_BIT_COUNT]{};
     VkDeviceSize physicalSharedPoolBytes{0};
     VkDeviceSize physicalTotal{0};
 
-    ResourceCategory sharedPoolCategories{ResourceCategory::Untagged};
+    RenderCategory sharedPoolCategories{RenderCategory::Untagged};
+
+    VkDeviceSize logicalGroup[RENDER_CATEGORY_GROUP_COUNT]{};
+    VkDeviceSize physicalExclusiveGroup[RENDER_CATEGORY_GROUP_COUNT]{};
+};
+
+/** Per-frame GPU pass timing, bucketed by RenderCategory leaf and rolled up into RenderCategoryGroup, in milliseconds. */
+struct GPUProfileSnapshot
+{
+    float leafMs[RENDER_CATEGORY_BIT_COUNT]{};
+    float groupMs[RENDER_CATEGORY_GROUP_COUNT]{};
+    float totalMs{0.0f};
 };
 
 enum class DepthAccessType
@@ -223,7 +306,7 @@ struct PhysicalResource
     Core::InlineString<> debugName{};
     Core::InlineString<1024> usageChain{};
 
-    ResourceCategory category{ResourceCategory::Untagged};
+    RenderCategory category{RenderCategory::Untagged};
 
     ResourceDimensions dimensions;
     PipelineEvent event;
@@ -289,7 +372,7 @@ struct TextureResource
     uint32_t physicalIndex = UINT32_MAX;
     bool bCanUseAliasedTexture = true;
 
-    ResourceCategory category{ResourceCategory::Untagged};
+    RenderCategory category{RenderCategory::Untagged};
 
     std::optional<VkClearValue> clear{std::nullopt};
     bool bIsViewportScaled = false;
@@ -325,7 +408,7 @@ struct BufferResource
 
     uint32_t carriedCount = 0;
 
-    ResourceCategory category{ResourceCategory::Untagged};
+    RenderCategory category{RenderCategory::Untagged};
 
     BufferInfo bufferInfo = {};
     VkBufferUsageFlags accumulatedUsage = 0;

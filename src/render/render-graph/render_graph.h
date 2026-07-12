@@ -16,6 +16,7 @@
 #include "render/interface/render_interface.h"
 #include "render/vulkan/vk_resources.h"
 #include "render/render_config.h"
+#include "render/vulkan/vk_gpu_timestamp_query.h"
 #include "render_graph_resources.h"
 
 namespace Render
@@ -137,7 +138,7 @@ public: // Resource registration
     void CarryBufferToNextFrame(StringID bufferId, StringID newBufferId, VkBufferUsageFlags additionalUsage);
 
 public: // Pass setup
-    RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages, ResourceCategory category);
+    RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages, RenderCategory category);
 
 public: // Resource queries
     bool HasTexture(StringID textureId);
@@ -251,7 +252,7 @@ public: // Persistent Per-FIF Buffers
     void WriteAccelerationStructureDescriptor(StringID name, VkAccelerationStructureKHR handle);
 
 public:
-    void CreateTLAS(StringID name, VkDeviceSize asSize, ResourceCategory category = ResourceCategory::Untagged);
+    void CreateTLAS(StringID name, VkDeviceSize asSize, RenderCategory category = RenderCategory::Untagged);
 
     VkAccelerationStructureKHR GetAccelerationStructureHandle(StringID name);
 
@@ -268,6 +269,10 @@ public: // Readback
     [[nodiscard]] VkBuffer GetReadback() const { return meshletCountReadbacks[currentFrameIndex].buffer; }
 
     [[nodiscard]] ReadbackStruct* GetReadbackData() const { return static_cast<ReadbackStruct*>(meshletCountReadbacks[currentFrameIndex].mappedData); }
+
+public: // GPU pass timing
+    /** Reads the previous use of this frame-in-flight slot; call once per frame before Execute (mirrors PipelineStatsQueryPool::Collect). */
+    GPUProfileSnapshot CollectGPUProfile(uint32_t frameIndex);
 
 private:
     friend class RenderPass;
@@ -330,6 +335,8 @@ private:
     Core::Array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
     Core::Array<TransientReadback, Core::FRAME_BUFFER_COUNT> meshletCountReadbacks{};
     Core::InlineVector<PersistentBufferSlots, 8> persistentBuffers{};
+    GPUTimestampQueryPool gpuTimestampQuery{};
+    GPUProfileSnapshot lastGpuProfile{};
 
     bool bRemoveSwapchainPhysicals{false};
     bool bDestroyViewportAssociated{false};

@@ -112,6 +112,8 @@ add_library(render STATIC
         render_utils.cpp
         vulkan/vk_pipeline_stats.cpp
         vulkan/vk_pipeline_stats.h
+        vulkan/vk_gpu_timestamp_query.cpp
+        vulkan/vk_gpu_timestamp_query.h
         descriptors/procedural_texture_generate_resources.cpp
         passes/raytracing_passes.cpp
 )

@@ -19,7 +19,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
 
     const bool bHasText = !viewFamily.uiGlyphQuads.IsEmpty() && graph.HasBuffer(UI_GLYPH_QUAD_BUFFER);
 
-    RenderPass& uiPass = graph.AddPass(SID("UI Render"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::ResourceCategory::UI);
+    RenderPass& uiPass = graph.AddPass(SID("UI Render"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::UI);
     if (bHasText) { uiPass.ReadBuffer(UI_GLYPH_QUAD_BUFFER); }
     uiPass.WriteColorAttachment(targetImage);
     uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager, bHasText](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -165,7 +165,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
 
 void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint64_t selectedStableId)
 {
-    RenderPass& outlinePass = graph.AddPass(SID("Selection Outline"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::UI);
+    RenderPass& outlinePass = graph.AddPass(SID("Selection Outline"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::UI);
     outlinePass.ReadStorageImage(targets.stableId);
     outlinePass.WriteStorageImage(targets.colorOutput);
     outlinePass.Execute([&, pipelineManager, renderExtent, selectedStableId, stableId = targets.stableId, outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {

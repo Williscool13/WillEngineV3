@@ -12,22 +12,22 @@
 
 namespace Render
 {
-static const StringID DDGI_IRRADIANCE[DDGI_MAX_CASCADES] = {SID("ddgi_irradiance_0"), SID("ddgi_irradiance_1"), SID("ddgi_irradiance_2"), SID("ddgi_irradiance_3")};
-static const StringID DDGI_IRRADIANCE_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_irradiance_history_0"), SID("ddgi_irradiance_history_1"), SID("ddgi_irradiance_history_2"), SID("ddgi_irradiance_history_3")};
-static const StringID DDGI_VISIBILITY[DDGI_MAX_CASCADES] = {SID("ddgi_visibility_0"), SID("ddgi_visibility_1"), SID("ddgi_visibility_2"), SID("ddgi_visibility_3")};
-static const StringID DDGI_VISIBILITY_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_visibility_history_0"), SID("ddgi_visibility_history_1"), SID("ddgi_visibility_history_2"), SID("ddgi_visibility_history_3")};
-static const StringID DDGI_OFFSETS[DDGI_MAX_CASCADES] = {SID("ddgi_probe_offsets_0"), SID("ddgi_probe_offsets_1"), SID("ddgi_probe_offsets_2"), SID("ddgi_probe_offsets_3")};
-static const StringID DDGI_OFFSETS_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_probe_offsets_history_0"), SID("ddgi_probe_offsets_history_1"), SID("ddgi_probe_offsets_history_2"), SID("ddgi_probe_offsets_history_3")};
-static const StringID DDGI_RESTART[DDGI_MAX_CASCADES] = {SID("ddgi_probe_restart_0"), SID("ddgi_probe_restart_1"), SID("ddgi_probe_restart_2"), SID("ddgi_probe_restart_3")};
-static const StringID DDGI_RESTART_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_probe_restart_history_0"), SID("ddgi_probe_restart_history_1"), SID("ddgi_probe_restart_history_2"), SID("ddgi_probe_restart_history_3")};
-static const StringID DDGI_ACTIVE[DDGI_MAX_CASCADES] = {SID("ddgi_probe_active_0"), SID("ddgi_probe_active_1"), SID("ddgi_probe_active_2"), SID("ddgi_probe_active_3")};
-static const StringID DDGI_ACTIVE_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_probe_active_history_0"), SID("ddgi_probe_active_history_1"), SID("ddgi_probe_active_history_2"), SID("ddgi_probe_active_history_3")};
-static const StringID DDGI_RAY_DATA[DDGI_MAX_CASCADES] = {SID("ddgi_ray_data_0"), SID("ddgi_ray_data_1"), SID("ddgi_ray_data_2"), SID("ddgi_ray_data_3")};
-static const StringID DDGI_TRACE_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Trace 0"), SID("DDGI Probe Trace 1"), SID("DDGI Probe Trace 2"), SID("DDGI Probe Trace 3")};
-static const StringID DDGI_BLEND_IRRADIANCE_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Blend Irradiance 0"), SID("DDGI Blend Irradiance 1"), SID("DDGI Blend Irradiance 2"), SID("DDGI Blend Irradiance 3")};
-static const StringID DDGI_BLEND_VISIBILITY_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Blend Visibility 0"), SID("DDGI Blend Visibility 1"), SID("DDGI Blend Visibility 2"), SID("DDGI Blend Visibility 3")};
-static const StringID DDGI_RELOCATE_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Relocate 0"), SID("DDGI Probe Relocate 1"), SID("DDGI Probe Relocate 2"), SID("DDGI Probe Relocate 3")};
-static const StringID DDGI_DEBUG_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Debug 0"), SID("DDGI Probe Debug 1"), SID("DDGI Probe Debug 2"), SID("DDGI Probe Debug 3")};
+static const StringID DDGI_IRRADIANCE[DDGI_MAX_CASCADES] = {SID("ddgi_irradiance_0"), SID("ddgi_irradiance_1"), SID("ddgi_irradiance_2"), SID("ddgi_irradiance_3"), SID("ddgi_irradiance_4"), SID("ddgi_irradiance_5"), SID("ddgi_irradiance_6"), SID("ddgi_irradiance_7"), SID("ddgi_irradiance_8"), SID("ddgi_irradiance_9"), SID("ddgi_irradiance_10"), SID("ddgi_irradiance_11"), SID("ddgi_irradiance_12"), SID("ddgi_irradiance_13"), SID("ddgi_irradiance_14"), SID("ddgi_irradiance_15")};
+static const StringID DDGI_IRRADIANCE_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_irradiance_history_0"), SID("ddgi_irradiance_history_1"), SID("ddgi_irradiance_history_2"), SID("ddgi_irradiance_history_3"), SID("ddgi_irradiance_history_4"), SID("ddgi_irradiance_history_5"), SID("ddgi_irradiance_history_6"), SID("ddgi_irradiance_history_7"), SID("ddgi_irradiance_history_8"), SID("ddgi_irradiance_history_9"), SID("ddgi_irradiance_history_10"), SID("ddgi_irradiance_history_11"), SID("ddgi_irradiance_history_12"), SID("ddgi_irradiance_history_13"), SID("ddgi_irradiance_history_14"), SID("ddgi_irradiance_history_15")};
+static const StringID DDGI_VISIBILITY[DDGI_MAX_CASCADES] = {SID("ddgi_visibility_0"), SID("ddgi_visibility_1"), SID("ddgi_visibility_2"), SID("ddgi_visibility_3"), SID("ddgi_visibility_4"), SID("ddgi_visibility_5"), SID("ddgi_visibility_6"), SID("ddgi_visibility_7"), SID("ddgi_visibility_8"), SID("ddgi_visibility_9"), SID("ddgi_visibility_10"), SID("ddgi_visibility_11"), SID("ddgi_visibility_12"), SID("ddgi_visibility_13"), SID("ddgi_visibility_14"), SID("ddgi_visibility_15")};
+static const StringID DDGI_VISIBILITY_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_visibility_history_0"), SID("ddgi_visibility_history_1"), SID("ddgi_visibility_history_2"), SID("ddgi_visibility_history_3"), SID("ddgi_visibility_history_4"), SID("ddgi_visibility_history_5"), SID("ddgi_visibility_history_6"), SID("ddgi_visibility_history_7"), SID("ddgi_visibility_history_8"), SID("ddgi_visibility_history_9"), SID("ddgi_visibility_history_10"), SID("ddgi_visibility_history_11"), SID("ddgi_visibility_history_12"), SID("ddgi_visibility_history_13"), SID("ddgi_visibility_history_14"), SID("ddgi_visibility_history_15")};
+static const StringID DDGI_OFFSETS[DDGI_MAX_CASCADES] = {SID("ddgi_probe_offsets_0"), SID("ddgi_probe_offsets_1"), SID("ddgi_probe_offsets_2"), SID("ddgi_probe_offsets_3"), SID("ddgi_probe_offsets_4"), SID("ddgi_probe_offsets_5"), SID("ddgi_probe_offsets_6"), SID("ddgi_probe_offsets_7"), SID("ddgi_probe_offsets_8"), SID("ddgi_probe_offsets_9"), SID("ddgi_probe_offsets_10"), SID("ddgi_probe_offsets_11"), SID("ddgi_probe_offsets_12"), SID("ddgi_probe_offsets_13"), SID("ddgi_probe_offsets_14"), SID("ddgi_probe_offsets_15")};
+static const StringID DDGI_OFFSETS_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_probe_offsets_history_0"), SID("ddgi_probe_offsets_history_1"), SID("ddgi_probe_offsets_history_2"), SID("ddgi_probe_offsets_history_3"), SID("ddgi_probe_offsets_history_4"), SID("ddgi_probe_offsets_history_5"), SID("ddgi_probe_offsets_history_6"), SID("ddgi_probe_offsets_history_7"), SID("ddgi_probe_offsets_history_8"), SID("ddgi_probe_offsets_history_9"), SID("ddgi_probe_offsets_history_10"), SID("ddgi_probe_offsets_history_11"), SID("ddgi_probe_offsets_history_12"), SID("ddgi_probe_offsets_history_13"), SID("ddgi_probe_offsets_history_14"), SID("ddgi_probe_offsets_history_15")};
+static const StringID DDGI_RESTART[DDGI_MAX_CASCADES] = {SID("ddgi_probe_restart_0"), SID("ddgi_probe_restart_1"), SID("ddgi_probe_restart_2"), SID("ddgi_probe_restart_3"), SID("ddgi_probe_restart_4"), SID("ddgi_probe_restart_5"), SID("ddgi_probe_restart_6"), SID("ddgi_probe_restart_7"), SID("ddgi_probe_restart_8"), SID("ddgi_probe_restart_9"), SID("ddgi_probe_restart_10"), SID("ddgi_probe_restart_11"), SID("ddgi_probe_restart_12"), SID("ddgi_probe_restart_13"), SID("ddgi_probe_restart_14"), SID("ddgi_probe_restart_15")};
+static const StringID DDGI_RESTART_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_probe_restart_history_0"), SID("ddgi_probe_restart_history_1"), SID("ddgi_probe_restart_history_2"), SID("ddgi_probe_restart_history_3"), SID("ddgi_probe_restart_history_4"), SID("ddgi_probe_restart_history_5"), SID("ddgi_probe_restart_history_6"), SID("ddgi_probe_restart_history_7"), SID("ddgi_probe_restart_history_8"), SID("ddgi_probe_restart_history_9"), SID("ddgi_probe_restart_history_10"), SID("ddgi_probe_restart_history_11"), SID("ddgi_probe_restart_history_12"), SID("ddgi_probe_restart_history_13"), SID("ddgi_probe_restart_history_14"), SID("ddgi_probe_restart_history_15")};
+static const StringID DDGI_ACTIVE[DDGI_MAX_CASCADES] = {SID("ddgi_probe_active_0"), SID("ddgi_probe_active_1"), SID("ddgi_probe_active_2"), SID("ddgi_probe_active_3"), SID("ddgi_probe_active_4"), SID("ddgi_probe_active_5"), SID("ddgi_probe_active_6"), SID("ddgi_probe_active_7"), SID("ddgi_probe_active_8"), SID("ddgi_probe_active_9"), SID("ddgi_probe_active_10"), SID("ddgi_probe_active_11"), SID("ddgi_probe_active_12"), SID("ddgi_probe_active_13"), SID("ddgi_probe_active_14"), SID("ddgi_probe_active_15")};
+static const StringID DDGI_ACTIVE_HISTORY[DDGI_MAX_CASCADES] = {SID("ddgi_probe_active_history_0"), SID("ddgi_probe_active_history_1"), SID("ddgi_probe_active_history_2"), SID("ddgi_probe_active_history_3"), SID("ddgi_probe_active_history_4"), SID("ddgi_probe_active_history_5"), SID("ddgi_probe_active_history_6"), SID("ddgi_probe_active_history_7"), SID("ddgi_probe_active_history_8"), SID("ddgi_probe_active_history_9"), SID("ddgi_probe_active_history_10"), SID("ddgi_probe_active_history_11"), SID("ddgi_probe_active_history_12"), SID("ddgi_probe_active_history_13"), SID("ddgi_probe_active_history_14"), SID("ddgi_probe_active_history_15")};
+static const StringID DDGI_RAY_DATA[DDGI_MAX_CASCADES] = {SID("ddgi_ray_data_0"), SID("ddgi_ray_data_1"), SID("ddgi_ray_data_2"), SID("ddgi_ray_data_3"), SID("ddgi_ray_data_4"), SID("ddgi_ray_data_5"), SID("ddgi_ray_data_6"), SID("ddgi_ray_data_7"), SID("ddgi_ray_data_8"), SID("ddgi_ray_data_9"), SID("ddgi_ray_data_10"), SID("ddgi_ray_data_11"), SID("ddgi_ray_data_12"), SID("ddgi_ray_data_13"), SID("ddgi_ray_data_14"), SID("ddgi_ray_data_15")};
+static const StringID DDGI_TRACE_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Trace 0"), SID("DDGI Probe Trace 1"), SID("DDGI Probe Trace 2"), SID("DDGI Probe Trace 3"), SID("DDGI Probe Trace 4"), SID("DDGI Probe Trace 5"), SID("DDGI Probe Trace 6"), SID("DDGI Probe Trace 7"), SID("DDGI Probe Trace 8"), SID("DDGI Probe Trace 9"), SID("DDGI Probe Trace 10"), SID("DDGI Probe Trace 11"), SID("DDGI Probe Trace 12"), SID("DDGI Probe Trace 13"), SID("DDGI Probe Trace 14"), SID("DDGI Probe Trace 15")};
+static const StringID DDGI_BLEND_IRRADIANCE_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Blend Irradiance 0"), SID("DDGI Blend Irradiance 1"), SID("DDGI Blend Irradiance 2"), SID("DDGI Blend Irradiance 3"), SID("DDGI Blend Irradiance 4"), SID("DDGI Blend Irradiance 5"), SID("DDGI Blend Irradiance 6"), SID("DDGI Blend Irradiance 7"), SID("DDGI Blend Irradiance 8"), SID("DDGI Blend Irradiance 9"), SID("DDGI Blend Irradiance 10"), SID("DDGI Blend Irradiance 11"), SID("DDGI Blend Irradiance 12"), SID("DDGI Blend Irradiance 13"), SID("DDGI Blend Irradiance 14"), SID("DDGI Blend Irradiance 15")};
+static const StringID DDGI_BLEND_VISIBILITY_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Blend Visibility 0"), SID("DDGI Blend Visibility 1"), SID("DDGI Blend Visibility 2"), SID("DDGI Blend Visibility 3"), SID("DDGI Blend Visibility 4"), SID("DDGI Blend Visibility 5"), SID("DDGI Blend Visibility 6"), SID("DDGI Blend Visibility 7"), SID("DDGI Blend Visibility 8"), SID("DDGI Blend Visibility 9"), SID("DDGI Blend Visibility 10"), SID("DDGI Blend Visibility 11"), SID("DDGI Blend Visibility 12"), SID("DDGI Blend Visibility 13"), SID("DDGI Blend Visibility 14"), SID("DDGI Blend Visibility 15")};
+static const StringID DDGI_RELOCATE_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Relocate 0"), SID("DDGI Probe Relocate 1"), SID("DDGI Probe Relocate 2"), SID("DDGI Probe Relocate 3"), SID("DDGI Probe Relocate 4"), SID("DDGI Probe Relocate 5"), SID("DDGI Probe Relocate 6"), SID("DDGI Probe Relocate 7"), SID("DDGI Probe Relocate 8"), SID("DDGI Probe Relocate 9"), SID("DDGI Probe Relocate 10"), SID("DDGI Probe Relocate 11"), SID("DDGI Probe Relocate 12"), SID("DDGI Probe Relocate 13"), SID("DDGI Probe Relocate 14"), SID("DDGI Probe Relocate 15")};
+static const StringID DDGI_DEBUG_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Debug 0"), SID("DDGI Probe Debug 1"), SID("DDGI Probe Debug 2"), SID("DDGI Probe Debug 3"), SID("DDGI Probe Debug 4"), SID("DDGI Probe Debug 5"), SID("DDGI Probe Debug 6"), SID("DDGI Probe Debug 7"), SID("DDGI Probe Debug 8"), SID("DDGI Probe Debug 9"), SID("DDGI Probe Debug 10"), SID("DDGI Probe Debug 11"), SID("DDGI Probe Debug 12"), SID("DDGI Probe Debug 13"), SID("DDGI Probe Debug 14"), SID("DDGI Probe Debug 15")};
 
 DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const DDGICascades& previous, uint64_t frameNumber)
 {
@@ -98,7 +98,7 @@ struct DDGICascadeDescSources
 static void AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName, StringID bufferId, const DDGICascadeDescSources* sources)
 {
     graph.CreateBuffer(bufferId, sizeof(DDGICascadeSetGPU), false);
-    RenderPass& pass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Lighting);
+    RenderPass& pass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::DDGI);
     pass.WriteTransferBuffer(bufferId);
     pass.Execute([sources, bufferId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DDGICascadeSetGPU set{};
@@ -197,7 +197,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
 
         graph.CreateBuffer(DDGI_RAY_DATA[k], static_cast<VkDeviceSize>(probeCountTotal) * raysPerProbe * sizeof(glm::vec4), false);
 
-        RenderPass& tracePass = graph.AddPass(DDGI_TRACE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+        RenderPass& tracePass = graph.AddPass(DDGI_TRACE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
         tracePass.ReadTLASBuffer(RT_TLAS_BUFFER);
         tracePass.ReadBuffer(LIGHT_DATA_BUFFER);
         tracePass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
@@ -280,7 +280,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         graph.CreateTexture(DDGI_IRRADIANCE[k], TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, atlasWidth, atlasHeight, 1}, {std::nullopt}, false);
         graph.CreateTexture(DDGI_VISIBILITY[k], TextureInfo{VK_FORMAT_R16G16_SFLOAT, volume.probeCount.x * volume.probeCount.y * DDGI_VISIBILITY_TILE, volume.probeCount.z * DDGI_VISIBILITY_TILE, 1}, {std::nullopt}, false);
 
-        RenderPass& blendPass = graph.AddPass(DDGI_BLEND_IRRADIANCE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+        RenderPass& blendPass = graph.AddPass(DDGI_BLEND_IRRADIANCE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
         blendPass.ReadBuffer(DDGI_RAY_DATA[k]);
         blendPass.WriteStorageImage(DDGI_IRRADIANCE[k]);
         if (bHistoryValid[k]) {
@@ -320,7 +320,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             vkCmdDispatch(cmd, probeCountTotal, 1, 1);
         });
 
-        RenderPass& visibilityPass = graph.AddPass(DDGI_BLEND_VISIBILITY_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+        RenderPass& visibilityPass = graph.AddPass(DDGI_BLEND_VISIBILITY_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
         visibilityPass.ReadBuffer(DDGI_RAY_DATA[k]);
         visibilityPass.WriteStorageImage(DDGI_VISIBILITY[k]);
         if (bHistoryValid[k]) {
@@ -365,7 +365,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             graph.CreateBuffer(DDGI_OFFSETS[k], static_cast<VkDeviceSize>(probeCountTotal) * sizeof(glm::vec4), false);
             graph.CreateBuffer(DDGI_RESTART[k], static_cast<VkDeviceSize>(probeCountTotal) * sizeof(uint32_t), false);
 
-            RenderPass& relocatePass = graph.AddPass(DDGI_RELOCATE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+            RenderPass& relocatePass = graph.AddPass(DDGI_RELOCATE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
             relocatePass.ReadBuffer(DDGI_RAY_DATA[k]);
             relocatePass.WriteBuffer(DDGI_OFFSETS[k]);
             relocatePass.WriteBuffer(DDGI_RESTART[k]);
@@ -470,7 +470,12 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass)
 }
 
 // Cascade identification tints for the all-cascades debug view (unorm RGBA, low byte = red): white, warm red, green, blue.
-static const uint32_t DDGI_CASCADE_TINT[DDGI_MAX_CASCADES] = {0xFFFFFFFFu, 0xFF8C8CFFu, 0xFF8CFF8Cu, 0xFFFFB399u};
+static const uint32_t DDGI_CASCADE_TINT[DDGI_MAX_CASCADES] = {
+    0xFFFFFFFFu, 0xFF8C8CFFu, 0xFF8CFF8Cu, 0xFFFFB399u,
+    0xFF99FFFFu, 0xFFFF99FFu, 0xFFFFFF99u, 0xFFB399FFu,
+    0xFF99B3FFu, 0xFFB3FF99u, 0xFF99FFB3u, 0xFFFF99B3u,
+    0xFFCCCCCCu, 0xFFCC99FFu, 0xFF99CCFFu, 0xFFFFCC99u,
+};
 
 void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive)
 {
@@ -493,7 +498,7 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
         const bool bActive = graph.HasBuffer(activeId);
         const DDGIVolumeParams& volume = cascades.volumes[k];
 
-        RenderPass& pass = graph.AddPass(DDGI_DEBUG_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+        RenderPass& pass = graph.AddPass(DDGI_DEBUG_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
         pass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
         pass.WriteBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER);
         pass.ReadSampledImage(atlasId);

@@ -36,13 +36,13 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
     }
     graph.CarryBufferToNextFrame(SID("luminance_buffer"), SID("luminance_buffer"), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-    auto& clearPass = graph.AddPass(SID("[Exposure] Clear Histogram"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::ResourceCategory::PostProcessing);
+    auto& clearPass = graph.AddPass(SID("[Exposure] Clear Histogram"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
     clearPass.WriteTransferBuffer(SID("luminance_histogram"));
     clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("luminance_histogram")), 0, VK_WHOLE_SIZE, 0);
     });
 
-    auto& histogramPass = graph.AddPass(SID("[Exposure] Build Histogram"), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    auto& histogramPass = graph.AddPass(SID("[Exposure] Build Histogram"), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     histogramPass.ReadSampledImage(input);
     histogramPass.ReadWriteBuffer(SID("luminance_histogram"));
     histogramPass.Execute([width, height, input, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -67,7 +67,7 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    auto& exposurePass = graph.AddPass(SID("[Exposure] Calculate Exposure"), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    auto& exposurePass = graph.AddPass(SID("[Exposure] Calculate Exposure"), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     exposurePass.ReadBuffer(SID("luminance_histogram"));
     exposurePass.ReadWriteBuffer(SID("luminance_buffer"));
     exposurePass.Execute([width, height, pipelines, adaptationRate, deltaTime](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -108,7 +108,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
     const uint32_t numMips = numDownsamples + 1;
     graph.CreateTexture(SID("bloom_chain"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, numMips}, CLEAR_COLOR_EMPTY, true);
 
-    RenderPass& thresholdPass = graph.AddPass(SID("[Bloom] Threshold"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& thresholdPass = graph.AddPass(SID("[Bloom] Threshold"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     thresholdPass.ReadSampledImage(input);
     thresholdPass.ReadWriteImage(SID("bloom_chain"));
     thresholdPass.Execute([width, height, input, pipelines, bloomThreshold, bloomSoftThreshold, bloomClamp](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -135,7 +135,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
 
         Core::InlineString<32> passName;
         passName.len = snprintf(passName.buf, 32, "[Bloom] Downsample %u", i);
-        RenderPass& downsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+        RenderPass& downsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
         downsamplePass.ReadWriteImage(SID("bloom_chain"));
         downsamplePass.Execute([mipWidth, mipHeight, srcMip = i, dstMip = i + 1, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BloomDownsamplePushConstant pc{
@@ -160,7 +160,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
 
         Core::InlineString<32> passName;
         passName.len = snprintf(passName.buf, 32, "[Bloom] Upsample %d", i);
-        RenderPass& upsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+        RenderPass& upsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
         upsamplePass.ReadWriteImage(SID("bloom_chain"));
         upsamplePass.Execute([mipWidth, mipHeight, dstMip = i, lowerMip = i + 1, pipelines, bloomRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BloomUpsamplePushConstant pc{
@@ -193,7 +193,7 @@ StringID PPSharpening(PostProcessContext& ctx, StringID input)
     float sharpness = ctx.config.sharpeningStrength;
 
     graph.CreateTexture(SID("sharpening_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
-    RenderPass& sharpeningPass = graph.AddPass(SID("[Sharpening] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& sharpeningPass = graph.AddPass(SID("[Sharpening] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     sharpeningPass.ReadBuffer(SID("scene_data"));
     sharpeningPass.ReadSampledImage(input);
     sharpeningPass.WriteStorageImage(SID("sharpening_output"));
@@ -248,7 +248,7 @@ StringID PPTonemap(PostProcessContext& ctx, StringID input)
 
     // todo: add support for HDR swapchain
     graph.CreateTexture(SID("tonemap_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
-    RenderPass& tonemapPass = graph.AddPass(SID("[Tonemap] SDR"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& tonemapPass = graph.AddPass(SID("[Tonemap] SDR"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     tonemapPass.ReadSampledImage(input);
     if (bBloomEnabled) { tonemapPass.ReadSampledImage(SID("bloom_chain")); }
     if (bExposureEnabled) { tonemapPass.ReadBuffer(SID("luminance_buffer")); }
@@ -297,7 +297,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     graph.CreateTexture(SID("motion_blur_tiled_neighbor_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("motion_blur_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
 
-    RenderPass& motionBlurTiledMaxPass = graph.AddPass(SID("[Motion Blur] Tiled Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& motionBlurTiledMaxPass = graph.AddPass(SID("[Motion Blur] Tiled Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     motionBlurTiledMaxPass.ReadBuffer(SID("scene_data"));
     motionBlurTiledMaxPass.ReadSampledImage(velocity);
     motionBlurTiledMaxPass.WriteStorageImage(SID("motion_blur_tiled_max"));
@@ -317,7 +317,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    RenderPass& motionBlurNeighborMax = graph.AddPass(SID("[Motion Blur] Neighbor Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& motionBlurNeighborMax = graph.AddPass(SID("[Motion Blur] Neighbor Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     motionBlurNeighborMax.ReadSampledImage(SID("motion_blur_tiled_max"));
     motionBlurNeighborMax.WriteStorageImage(SID("motion_blur_tiled_neighbor_max"));
     motionBlurNeighborMax.Execute([blurTiledX, blurTiledY, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -335,7 +335,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    RenderPass& motionBlurReconstructionPass = graph.AddPass(SID("[Motion Blur] Reconstruction"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& motionBlurReconstructionPass = graph.AddPass(SID("[Motion Blur] Reconstruction"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     motionBlurReconstructionPass.ReadBuffer(SID("scene_data"));
     motionBlurReconstructionPass.ReadSampledImage(input);
     motionBlurReconstructionPass.ReadSampledImage(velocity);
@@ -379,7 +379,7 @@ StringID PPColorGrading(PostProcessContext& ctx, StringID input)
     float tint = ctx.config.colorGradingTint;
 
     graph.CreateTexture(SID("color_grading_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
-    RenderPass& colorGradingPass = graph.AddPass(SID("[Color Grading] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& colorGradingPass = graph.AddPass(SID("[Color Grading] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     colorGradingPass.ReadBuffer(SID("scene_data"));
     colorGradingPass.ReadSampledImage(input);
     colorGradingPass.WriteStorageImage(SID("color_grading_output"));
@@ -419,7 +419,7 @@ StringID PPVignetteAberration(PostProcessContext& ctx, StringID input)
     float vignetteSmoothness = ctx.config.vignetteSmoothness;
 
     graph.CreateTexture(SID("vignette_aberration_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
-    RenderPass& vignetteAberrationPass = graph.AddPass(SID("[Vignette] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& vignetteAberrationPass = graph.AddPass(SID("[Vignette] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     vignetteAberrationPass.ReadBuffer(SID("scene_data"));
     vignetteAberrationPass.ReadSampledImage(input);
     vignetteAberrationPass.WriteStorageImage(SID("vignette_aberration_output"));
@@ -458,7 +458,7 @@ StringID PPPanini(PostProcessContext& ctx, StringID input)
     float paniniStrength = ctx.config.paniniStrength;
 
     graph.CreateTexture(SID("panini_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
-    RenderPass& paniniPass = graph.AddPass(SID("[Panini] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& paniniPass = graph.AddPass(SID("[Panini] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     paniniPass.ReadBuffer(SID("scene_data"));
     paniniPass.ReadSampledImage(input);
     paniniPass.WriteStorageImage(SID("panini_output"));
@@ -495,7 +495,7 @@ StringID PPFilmGrain(PostProcessContext& ctx, StringID input)
     uint32_t frameIndex = static_cast<uint32_t>(ctx.frameNumber);
 
     graph.CreateTexture(SID("post_process_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
-    RenderPass& filmGrainPass = graph.AddPass(SID("[Film Grain] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& filmGrainPass = graph.AddPass(SID("[Film Grain] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     filmGrainPass.ReadBuffer(SID("scene_data"));
     filmGrainPass.ReadSampledImage(input);
     filmGrainPass.WriteStorageImage(SID("post_process_output"));
@@ -530,7 +530,7 @@ StringID PPDither(PostProcessContext& ctx, StringID input)
     float ditherStrength = ctx.config.ditherStrength;
 
     graph.CreateTexture(SID("dither_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
-    RenderPass& ditherPass = graph.AddPass(SID("[Dither] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::PostProcessing);
+    RenderPass& ditherPass = graph.AddPass(SID("[Dither] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     ditherPass.ReadSampledImage(input);
     ditherPass.WriteStorageImage(SID("dither_output"));
     ditherPass.Execute([width, height, input, pipelines, ditherStrength, frameIndex = static_cast<float>(ctx.frameNumber)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {

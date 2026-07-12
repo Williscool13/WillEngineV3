@@ -21,7 +21,7 @@ void SetupShadowsResolve(RenderGraph& graph,
                          uint32_t sceneIndex)
 {
     graph.CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
+    RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
 
     bool bHasGTAO = graph.HasTexture(SID("gtao_filtered"));
     if (bHasGTAO) {
@@ -65,7 +65,7 @@ static void AddSigmaBlurPass(RenderGraph& graph,
                              StringID depth,
                              StringID gbufferOne)
 {
-    RenderPass& pass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
+    RenderPass& pass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
     pass.ReadBuffer(SID("scene_data"));
     pass.ReadBuffer(SID("light_data"));
     pass.ReadSampledImage(inputTex);
@@ -125,7 +125,7 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
     graph.CreateTexture(SID("sigma_tiles"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, tilesX, tilesY, 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("sigma_tiles_smoothed"), TextureInfo{VK_FORMAT_R8G8_UNORM, tilesX, tilesY, 1}, {std::nullopt}, true);
 
-    RenderPass& classify = graph.AddPass(SID("[SIGMA] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
+    RenderPass& classify = graph.AddPass(SID("[SIGMA] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
     classify.ReadBuffer(SID("scene_data"));
     classify.ReadSampledImage(SID("rt_sun_shadow"));
     classify.ReadSampledImage(sigmaDepth);
@@ -148,7 +148,7 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
             vkCmdDispatch(cmd, tilesX, tilesY, 1);
         });
 
-    RenderPass& smooth = graph.AddPass(SID("[SIGMA] Smooth Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
+    RenderPass& smooth = graph.AddPass(SID("[SIGMA] Smooth Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
     smooth.ReadSampledImage(SID("sigma_tiles"));
     smooth.WriteStorageImage(SID("sigma_tiles_smoothed"));
     smooth.Execute([pipelineManager, tilesX, tilesY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -196,7 +196,7 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
 
     const bool bHasHistory = graph.HasTexture(SID("sigma_stabilized_prev")) && graph.HasTexture(SID("sigma_history_length_prev"));
 
-    RenderPass& pass = graph.AddPass(SID("[SIGMA] Shadow Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::ResourceCategory::Shadow);
+    RenderPass& pass = graph.AddPass(SID("[SIGMA] Shadow Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
     pass.ReadBuffer(SID("scene_data"));
     pass.ReadSampledImage(shadowTex);
     pass.ReadSampledImage(SID("sigma_tiles_smoothed"));

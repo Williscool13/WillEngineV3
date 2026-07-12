@@ -23,7 +23,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     graph.CreateBuffer(WORLD_CACHE_SHADE_ARGS, WORLD_CACHE_SHADE_ARGS_BYTES, false);
     graph.CreateBuffer(WORLD_CACHE_DESCRIPTORS, WORLD_CACHE_DESCRIPTORS_BYTES, false);
 
-    RenderPass& clearPass = graph.AddPass(SID("World Cache Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Lighting);
+    RenderPass& clearPass = graph.AddPass(SID("World Cache Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::WorldCache);
     clearPass.WriteTransferBuffer(WORLD_CACHE_ENTRIES);
     clearPass.WriteTransferBuffer(WORLD_CACHE_ACTIVE);
     clearPass.WriteTransferBuffer(WORLD_CACHE_ACTIVE_COUNT);
@@ -39,7 +39,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
 
     const bool bHistoryValid = graph.HasBuffer(WORLD_CACHE_ENTRIES_HISTORY) && graph.HasBuffer(WORLD_CACHE_KEYS_HISTORY) && graph.HasBuffer(WORLD_CACHE_CELLS_HISTORY);
     if (bHistoryValid) {
-        RenderPass& carryPass = graph.AddPass(SID("World Cache Carry Forward"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+        RenderPass& carryPass = graph.AddPass(SID("World Cache Carry Forward"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::WorldCache);
         carryPass.ReadBuffer(WORLD_CACHE_ENTRIES_HISTORY);
         carryPass.ReadBuffer(WORLD_CACHE_KEYS_HISTORY);
         carryPass.ReadBuffer(WORLD_CACHE_CELLS_HISTORY);
@@ -70,7 +70,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     }
 
     graph.CreateBuffer(WORLD_CACHE_BUFFERS_CURRENT, sizeof(WorldCacheBuffers), false);
-    RenderPass& bundlePass = graph.AddPass(SID("World Cache Buffers Upload"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Lighting);
+    RenderPass& bundlePass = graph.AddPass(SID("World Cache Buffers Upload"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::WorldCache);
     bundlePass.WriteTransferBuffer(WORLD_CACHE_BUFFERS_CURRENT);
     bundlePass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const WorldCacheBuffers buffers{
@@ -101,7 +101,7 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
     const bool bFeedback = bDDGIFeedbackValid && graph.HasBuffer(DDGI_CASCADES_BUFFER);
 
-    RenderPass& indirectPass = graph.AddPass(SID("World Cache Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    RenderPass& indirectPass = graph.AddPass(SID("World Cache Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::WorldCache);
     indirectPass.ReadWriteBuffer(WORLD_CACHE_ACTIVE_COUNT);
     indirectPass.WriteBuffer(WORLD_CACHE_SHADE_ARGS);
     indirectPass.Execute([pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -119,7 +119,7 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
         vkCmdDispatch(cmd, 1, 1, 1);
     });
 
-    RenderPass& pass = graph.AddPass(SID("World Cache Shade"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    RenderPass& pass = graph.AddPass(SID("World Cache Shade"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::WorldCache);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(WORLD_CACHE_ACTIVE_LIST);
     pass.ReadBuffer(WORLD_CACHE_ACTIVE_COUNT);
@@ -196,7 +196,7 @@ void SetupWorldCacheDebug(RenderGraph& graph, PipelineManager* pipelineManager, 
         return;
     }
 
-    RenderPass& pass = graph.AddPass(SID("World Cache Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Debug);
+    RenderPass& pass = graph.AddPass(SID("World Cache Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
     pass.ReadWriteBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
     pass.WriteBuffer(GPU_DEBUG_CUBE_INSTANCE_BUFFER);
     pass.ReadBuffer(WORLD_CACHE_ENTRIES);

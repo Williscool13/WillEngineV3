@@ -9,7 +9,7 @@
 
 namespace Render
 {
-RenderPass::RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages, ResourceCategory category, Core::Arena* arena)
+RenderPass::RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages, RenderCategory category, Core::Arena* arena)
     : graph(renderGraph), renderPassId(std::move(passId)), stages(stages), category(category),
       inEdges(arena, 4), outEdges(arena, 4),
       colorAttachments(arena, 4),

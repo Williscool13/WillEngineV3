@@ -53,7 +53,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     // Transform all lights (area + sphere) to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
     graph.CreateBuffer(SID("restir_lights_vs"), MAX_LIGHTS * sizeof(LightVSData), true);
 
-    RenderPass& transformPass = graph.AddPass(SID("[ReSTIR DI] Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    RenderPass& transformPass = graph.AddPass(SID("[ReSTIR DI] Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     transformPass.ReadBuffer(SCENE_DATA_BUFFER);
     transformPass.ReadBuffer(SID("light_data"));
     transformPass.WriteBuffer(SID("restir_lights_vs"));
@@ -88,7 +88,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
         const bool bHasPrev = !restirParams.bResetReGIR && graph.HasBuffer(SID("regir_hash_entries_prev")) && graph.HasBuffer(SID("regir_hash_reservoirs_prev"));
 
-        RenderPass& clearPass = graph.AddPass(SID("[ReGIR] Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::ReSTIR);
+        RenderPass& clearPass = graph.AddPass(SID("[ReGIR] Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::ReGIR);
         clearPass.WriteTransferBuffer(SID("regir_hash_entries"));
         clearPass.WriteTransferBuffer(SID("regir_active_count"));
         clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -96,7 +96,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("regir_active_count")), 0, VK_WHOLE_SIZE, 0);
         });
 
-        RenderPass& touchPass = graph.AddPass(SID("[ReGIR] Touch"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& touchPass = graph.AddPass(SID("[ReGIR] Touch"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
         touchPass.ReadBuffer(SCENE_DATA_BUFFER);
         touchPass.ReadSampledImage(targets.depthCopy);
         touchPass.WriteBuffer(SID("regir_hash_entries"));
@@ -119,7 +119,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, (fullW + 7) / 8, (fullH + 7) / 8, 1);
         });
 
-        RenderPass& indirectPass = graph.AddPass(SID("[ReGIR] Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& indirectPass = graph.AddPass(SID("[ReGIR] Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
         indirectPass.ReadBuffer(SID("regir_active_count"));
         indirectPass.WriteBuffer(SID("regir_fill_indirect"));
         indirectPass.Execute([pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -138,7 +138,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
         // Presample tiles
         {
-            RenderPass& presamplePass = graph.AddPass(SID("[ReGIR] Presample Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+            RenderPass& presamplePass = graph.AddPass(SID("[ReGIR] Presample Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
             presamplePass.ReadBuffer(LIGHT_ALIAS_BUFFER);
             presamplePass.WriteBuffer(SID("regir_tiles"));
             presamplePass.Execute([pipelineManager, frameNumber, fillLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -158,7 +158,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             });
         }
 
-        RenderPass& regirFillPass = graph.AddPass(SID("[ReGIR] Fill"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& regirFillPass = graph.AddPass(SID("[ReGIR] Fill"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
         regirFillPass.ReadBuffer(SCENE_DATA_BUFFER);
         regirFillPass.ReadBuffer(SID("light_data"));
         regirFillPass.ReadBuffer(SID("restir_lights_vs"));
@@ -226,7 +226,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         if (reflectionRoughnessMax >= 0.0f) {
             graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, reflectionBufferSize, true);
 
-            RenderPass& reflClearPass = graph.AddPass(SID("[Reflection] Clear Descriptors"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::ReSTIR);
+            RenderPass& reflClearPass = graph.AddPass(SID("[Reflection] Clear Descriptors"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::ReflectionsDenoise);
             reflClearPass.WriteTransferBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
             reflClearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 vkCmdFillBuffer(cmd, graph.GetBufferHandle(REFLECTION_HIT_DESCRIPTORS_BUFFER), 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
@@ -234,7 +234,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         }
 
         // Base candidate generation
-        RenderPass& basePass = graph.AddPass(SID("[ReSTIR DI] Base"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& basePass = graph.AddPass(SID("[ReSTIR DI] Base"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         basePass.ReadBuffer(SCENE_DATA_BUFFER);
         basePass.ReadBuffer(SID("light_data"));
         basePass.ReadBuffer(SID("restir_lights_vs"));
@@ -301,7 +301,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
         if (bTemporalReuse) {
             // Temporal reuse
-            RenderPass& temporalPass = graph.AddPass(SID("[ReSTIR DI] Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+            RenderPass& temporalPass = graph.AddPass(SID("[ReSTIR DI] Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
             temporalPass.ReadBuffer(SCENE_DATA_BUFFER);
             temporalPass.ReadBuffer(SID("light_data"));
             temporalPass.ReadBuffer(SID("restir_lights_vs"));
@@ -375,7 +375,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     if (bConfidence) {
         const bool bHasPrevConfidence = graph.HasTexture(SID("restir_confidence_prev"));
 
-        RenderPass& gradientPass = graph.AddPass(SID("[ReSTIR DI] Confidence Gradient"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& gradientPass = graph.AddPass(SID("[ReSTIR DI] Confidence Gradient"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         gradientPass.ReadSampledImage(SID("restir_signal"));
         gradientPass.WriteStorageImage(SID("restir_gradient"));
         gradientPass.Execute([&, pipelineManager, renderExtent, gradientExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -392,7 +392,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, (gradientExtent[0] + 7) / 8, (gradientExtent[1] + 7) / 8, 1);
         });
 
-        RenderPass& resolvePass = graph.AddPass(SID("[ReSTIR DI] Confidence Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& resolvePass = graph.AddPass(SID("[ReSTIR DI] Confidence Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         resolvePass.ReadSampledImage(SID("restir_gradient"));
         if (bHasPrevConfidence) { resolvePass.ReadSampledImage(SID("restir_confidence_prev")); }
         resolvePass.ReadSampledImage(targets.gbufferOne);
@@ -426,7 +426,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     if (restirParams.boilingFilterStrength > 0.0f) {
         graph.CreateBuffer(SID("restir_reservoir_boiled"), reservoirBufferSize, true);
 
-        RenderPass& boilingPass = graph.AddPass(SID("[ReSTIR DI] Boiling Filter"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& boilingPass = graph.AddPass(SID("[ReSTIR DI] Boiling Filter"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         boilingPass.ReadBuffer(reuseBuffer);
         boilingPass.WriteBuffer(SID("restir_reservoir_boiled"));
         boilingPass.Execute([&, pipelineManager, renderExtent, inBuffer = reuseBuffer, strength = restirParams.boilingFilterStrength, field = activeCheckerboardField](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -478,7 +478,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
         const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReSTIR DI] Spatial %u", i);
 
-        RenderPass& spatialPass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        RenderPass& spatialPass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         spatialPass.ReadBuffer(SCENE_DATA_BUFFER);
         spatialPass.ReadBuffer(SID("light_data"));
         spatialPass.ReadBuffer(SID("restir_lights_vs"));
@@ -559,7 +559,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
         buckets[idx++] = {bucketIndex, shader};
     }
 
-    RenderPass& lightingResolve = graph.AddPass(SID("[ReSTIR DI] Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    RenderPass& lightingResolve = graph.AddPass(SID("[ReSTIR DI] Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
     if (graph.HasBuffer(SID("restir_reservoir_final"))) {
@@ -645,7 +645,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
     const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
-    RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadSampledImage(targets.intermediateOne);
     pass.ReadSampledImage(targets.intermediateTwo);

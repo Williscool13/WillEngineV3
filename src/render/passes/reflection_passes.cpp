@@ -41,7 +41,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
 
     graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-    RenderPass& pass = graph.AddPass(SID("[Reflection] Shade"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+    RenderPass& pass = graph.AddPass(SID("[Reflection] Shade"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);

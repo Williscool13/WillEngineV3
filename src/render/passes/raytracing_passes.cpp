@@ -87,7 +87,7 @@ void SetupTLASBuild(RenderGraph& graph,
     const size_t instanceBufferSize = limits.highestTLASInstanceCount * sizeof(VkAccelerationStructureInstanceKHR);
     graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, 16, false, false);
 
-    RenderPass& uploadPass = graph.AddPass(SID("RT Upload TLAS Instances"), VK_PIPELINE_STAGE_2_COPY_BIT, ResourceCategory::Untagged);
+    RenderPass& uploadPass = graph.AddPass(SID("RT Upload TLAS Instances"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Untagged);
     uploadPass.WriteTransferBuffer(RT_TLAS_INSTANCE_BUFFER);
     uploadPass.Execute([srcOffset = instanceUpload.offset, totalSize = instanceDataSize](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkBufferCopy2 copy{
@@ -109,7 +109,7 @@ void SetupTLASBuild(RenderGraph& graph,
     const VkDeviceSize scratchAlignment = VulkanContext::deviceInfo.accelerationStructureProps.minAccelerationStructureScratchOffsetAlignment;
     graph.CreateBufferAligned(RT_TLAS_SCRATCH_BUFFER, scratchSize, scratchAlignment, false);
 
-    RenderPass& buildPass = graph.AddPass(SID("RT Build TLAS"), VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, ResourceCategory::Untagged);
+    RenderPass& buildPass = graph.AddPass(SID("RT Build TLAS"), VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, RenderCategory::Untagged);
     buildPass.ReadASInputBuffer(RT_TLAS_INSTANCE_BUFFER);
     buildPass.WriteTLASBuffer(RT_TLAS_BUFFER);
     buildPass.WriteScratchBuffer(RT_TLAS_SCRATCH_BUFFER);
@@ -146,7 +146,7 @@ void SetupRTShadowTest(RenderGraph& graph,
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
 
-    RenderPass& pass = graph.AddPass(SID("RT Shadow Test"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Untagged);
+    RenderPass& pass = graph.AddPass(SID("RT Shadow Test"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Untagged);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);
@@ -193,7 +193,7 @@ void SetupRTSunShadow(RenderGraph& graph,
         graph.CreateTexture(SID("rt_sun_gbuffer"), TextureInfo{VK_FORMAT_R32G32B32A32_UINT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
     }
 
-    RenderPass& pass = graph.AddPass(SID("[SIGMA] RT Sun Shadow"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Shadow);
+    RenderPass& pass = graph.AddPass(SID("[SIGMA] RT Sun Shadow"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DirectionalLighting);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
@@ -254,14 +254,14 @@ void SetupRTGroundTruthDI(RenderGraph& graph,
     }
 
     if (bReset) {
-        RenderPass& clearPass = graph.AddPass(SID("RT GT DI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Lighting);
+        RenderPass& clearPass = graph.AddPass(SID("RT GT DI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
         clearPass.WriteTransferBuffer(SID("rt_gt_di_accum"));
         clearPass.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("rt_gt_di_accum")), 0, VK_WHOLE_SIZE, 0);
         });
     }
 
-    RenderPass& pass = graph.AddPass(SID("RT Ground Truth DI"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    RenderPass& pass = graph.AddPass(SID("RT Ground Truth DI"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GroundTruth);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(SID("light_data"));
@@ -323,14 +323,14 @@ void SetupRTGroundTruthGI(RenderGraph& graph,
     }
 
     if (bReset) {
-        RenderPass& clearPass = graph.AddPass(SID("RT GT GI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Lighting);
+        RenderPass& clearPass = graph.AddPass(SID("RT GT GI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
         clearPass.WriteTransferBuffer(SID("rt_gt_gi_accum"));
         clearPass.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("rt_gt_gi_accum")), 0, VK_WHOLE_SIZE, 0);
         });
     }
 
-    RenderPass& pass = graph.AddPass(SID("RT Ground Truth GI"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    RenderPass& pass = graph.AddPass(SID("RT Ground Truth GI"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GroundTruth);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(SID("light_data"));
@@ -404,14 +404,14 @@ void SetupRTGroundTruthFull(RenderGraph& graph,
     }
 
     if (bReset) {
-        RenderPass& clearPass = graph.AddPass(SID("RT GT Full Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, ResourceCategory::Lighting);
+        RenderPass& clearPass = graph.AddPass(SID("RT GT Full Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
         clearPass.WriteTransferBuffer(SID("rt_gt_full_accum"));
         clearPass.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("rt_gt_full_accum")), 0, VK_WHOLE_SIZE, 0);
         });
     }
 
-    RenderPass& pass = graph.AddPass(SID("RT Ground Truth Full"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    RenderPass& pass = graph.AddPass(SID("RT Ground Truth Full"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GroundTruth);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(SID("light_data"));

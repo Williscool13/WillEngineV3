@@ -174,7 +174,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     graph.CreateBuffer(SID("relax_constants"), sizeof(RelaxDiffuseSpecularConstants));
     UploadAllocation rcAlloc = graph.AllocateTransient(sizeof(RelaxDiffuseSpecularConstants));
     memcpy(rcAlloc.ptr, &rc, sizeof(RelaxDiffuseSpecularConstants)); {
-        auto& pass = graph.AddPass(SID("[ReLAX] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, ResourceCategory::Untagged);
+        auto& pass = graph.AddPass(SID("[ReLAX] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Untagged);
         pass.WriteTransferBuffer(SID("relax_constants"));
         pass.Execute([offset = rcAlloc.offset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkBufferCopy2 region{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = offset, .dstOffset = 0, .size = sizeof(RelaxDiffuseSpecularConstants)};
@@ -202,7 +202,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         graph.CreateTexture(SID("relax_viewz"), viewZInfo, {std::nullopt}, true);
         graph.CarryTextureToNextFrame(SID("relax_viewz"), SID("relax_viewz_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReLAX] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
@@ -225,7 +225,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     {
         graph.CreateTexture(SID("relax_tiles"), tilesInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReLAX] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(SID("relax_tiles"));
@@ -248,7 +248,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         graph.CreateTexture(SID("relax_spec_prepass"), colorInfo, {std::nullopt}, true);
         graph.CreateTexture(SID("relax_diff_prepass"), colorInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReLAX] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(depth);
@@ -304,7 +304,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const StringID specIn = bPrepass ? SID("relax_spec_prepass") : specInput;
         const StringID diffIn = bPrepass ? SID("relax_diff_prepass") : diffInput;
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReLAX] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -386,7 +386,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     // Pass 4: History Fix. Filters the slow history but writes the responsive (fast) textures in place,
     // only at short-history pixels; clamping then promotes the fixed responsive value into the slow output.
     {
-        auto& pass = graph.AddPass(SID("[ReLAX] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReLAX] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -428,7 +428,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const StringID clampSpecOut = params.enableAntiFirefly ? SID("relax_atrous_spec_0") : SID("relax_spec_hist");
         const StringID clampDiffOut = params.enableAntiFirefly ? SID("relax_atrous_diff_0") : SID("relax_diff_hist");
 
-        auto& pass = graph.AddPass(SID("[ReLAX] History Clamping"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReLAX] History Clamping"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(depth);
@@ -478,7 +478,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     // Pass 6: Anti-Firefly. RCRS filter from the clamped slow history (in the history-fix scratch) into relax_*_hist, so the firefly-suppressed result is what gets carried as next frame's history (matches NRD's Copy + Anti-Firefly writing into SPEC/DIFF_ILLUM_PREV).
     // Distinct input/output textures: the shared-memory preload reads a border from neighboring workgroups, so in-place filtering would race.
     if (params.enableAntiFirefly) {
-        auto& pass = graph.AddPass(SID("[ReLAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReLAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(SID("relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -525,7 +525,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
             const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReLAX] ATrous %d", i);
 
-            auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+            auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
             pass.ReadBuffer(SID("relax_constants"));
             pass.ReadSampledImage(SID("relax_tiles"));
             pass.ReadSampledImage(gbufferOne);
@@ -574,7 +574,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
         const StringID shadows = targets.shadows;
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReLAX] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
@@ -776,7 +776,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     graph.CreateBuffer(SID("reblur_constants"), sizeof(ReblurDiffuseSpecularConstants));
     UploadAllocation rcAlloc = graph.AllocateTransient(sizeof(ReblurDiffuseSpecularConstants));
     memcpy(rcAlloc.ptr, &rc, sizeof(ReblurDiffuseSpecularConstants)); {
-        auto& pass = graph.AddPass(SID("[ReBLUR] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, ResourceCategory::Untagged);
+        auto& pass = graph.AddPass(SID("[ReBLUR] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Untagged);
         pass.WriteTransferBuffer(SID("reblur_constants"));
         pass.Execute([offset = rcAlloc.offset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkBufferCopy2 region{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = offset, .dstOffset = 0, .size = sizeof(ReblurDiffuseSpecularConstants)};
@@ -802,7 +802,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         graph.CreateTexture(SID("reblur_viewz"), viewZInfo, {std::nullopt}, true);
         graph.CarryTextureToNextFrame(SID("reblur_viewz"), SID("reblur_viewz_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
-        auto& pass = graph.AddPass(SID("[ReBLUR] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReBLUR] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
@@ -825,7 +825,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     {
         graph.CreateTexture(SID("reblur_tiles"), tilesInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[ReBLUR] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReBLUR] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(depth);
         pass.WriteStorageImage(SID("reblur_tiles"));
@@ -846,7 +846,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     graph.CreateTexture(SID("reblur_spec_packed"), colorInfo, {std::nullopt}, true);
     graph.CreateTexture(SID("reblur_diff_packed"), colorInfo, {std::nullopt}, true);
     {
-        auto& pass = graph.AddPass(SID("[ReBLUR] Pack"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReBLUR] Pack"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
@@ -876,7 +876,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         graph.CreateTexture(SID("reblur_spec_prepass"), colorInfo, {std::nullopt}, true);
         graph.CreateTexture(SID("reblur_diff_prepass"), colorInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[ReBLUR] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReBLUR] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(SID("reblur_tiles"));
         pass.ReadSampledImage(depth);
@@ -946,7 +946,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
     // Pass 4: Temporal accumulation
     {
-        auto& pass = graph.AddPass(SID("[ReBLUR] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReBLUR] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(SID("reblur_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -1018,7 +1018,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
     // Pass 5: History fix
     {
-        auto& pass = graph.AddPass(SID("[ReBLUR] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReBLUR] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(SID("reblur_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -1057,7 +1057,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
     // Passes 6 & 7: Blur and Post-Blur (one pipeline, isPostBlur toggles radius). Post-blur output is the carried slow history.
     auto addBlur = [&](StringID passName, StringID specSrc, StringID diffSrc, StringID specDst, StringID diffDst, uint32_t isPostBlur) {
-        auto& pass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(SID("reblur_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -1092,7 +1092,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     // Pass 8: Temporal stabilization (luma-only stabilized ping-pong, surface + virtual motion via the DATA2
     // occlusion bits, antilag feedback written into the carried internal data, final RGB into intermediates)
     {
-        auto& pass = graph.AddPass(SID("[ReBLUR] Temporal Stabilization"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReBLUR] Temporal Stabilization"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SID("reblur_constants"));
         pass.ReadSampledImage(SID("reblur_tiles"));
         pass.ReadSampledImage(gbufferOne);
@@ -1148,7 +1148,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
         const StringID shadows = targets.shadows;
 
-        auto& pass = graph.AddPass(SID("[ReBLUR] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::ReSTIR);
+        auto& pass = graph.AddPass(SID("[ReBLUR] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);

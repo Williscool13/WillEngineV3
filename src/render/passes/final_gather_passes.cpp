@@ -33,7 +33,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     const bool bScreenSpace = graph.HasTexture(SID("lit_color_history")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
     const bool bEmissiveIsDI = viewFamily.lightingMode == Core::LightingMode::ReSTIR;
 
-    RenderPass& pass = graph.AddPass(SID("GI Diffuse Gather"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    RenderPass& pass = graph.AddPass(SID("GI Diffuse Gather"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(WORLD_CACHE_ENTRIES);
@@ -116,7 +116,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             const StringID dstShG = direction == 0 ? GI_GATHER_TMP_SH_G : GI_GATHER_SH_G;
             const StringID dstShB = direction == 0 ? GI_GATHER_TMP_SH_B : GI_GATHER_SH_B;
 
-            RenderPass& blur = graph.AddPass(direction == 0 ? SID("GI Diffuse Denoise H") : SID("GI Diffuse Denoise V"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+            RenderPass& blur = graph.AddPass(direction == 0 ? SID("GI Diffuse Denoise H") : SID("GI Diffuse Denoise V"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
             blur.ReadBuffer(SCENE_DATA_BUFFER);
             blur.ReadSampledImage(targets.gbufferOne);
             blur.ReadSampledImage(targets.depthCopy);
@@ -162,7 +162,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateTexture(GI_GATHER_RESOLVED, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     const bool bTemporal = graph.HasTexture(GI_GATHER_HISTORY) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
 
-    RenderPass& upscale = graph.AddPass(SID("GI Diffuse Upscale"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ResourceCategory::Lighting);
+    RenderPass& upscale = graph.AddPass(SID("GI Diffuse Upscale"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
     upscale.ReadBuffer(SCENE_DATA_BUFFER);
     upscale.ReadSampledImage(targets.gbufferOne);
     upscale.ReadSampledImage(targets.depthCopy);
