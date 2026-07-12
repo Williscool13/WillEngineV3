@@ -105,6 +105,36 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
         float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
         float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 
+        if (pc.bSkipRay != 0u) {
+            float3 radiance = float3(0.0);
+            uint tier;
+            WorldCacheKey key = WorldCacheComputeKey(worldPosition, worldN, scene.cameraWorldPos.xyz);
+            uint slot = WorldCacheHashFind(pc.cacheEntries, key);
+            uint packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : WORLD_CACHE_RADIANCE_UNSHADED;
+            if (packedRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
+                radiance = UnpackEmissiveRGBE(packedRadiance);
+                tier = GI_GATHER_TIER_CACHE;
+            } else {
+                float3 indirectDiffuse = float3(0.0);
+                if (pc.skyboxIndex >= 0) {
+                    indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+                }
+                if (pc.bCascadesValid != 0) {
+                    float3 cameraDirection = normalize(mul((float3x3)scene.invView, viewPosition));
+                    float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
+                    indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+                }
+                // No hit material to modulate by; the shading pixel's own albedo is applied once downstream (matches the non-gather DDGI path).
+                radiance = indirectDiffuse;
+                tier = GI_GATHER_TIER_PROBE;
+            }
+
+            radiance = min(radiance, float3(GI_GATHER_MAX_RADIANCE));
+            shR = float4(radiance.r, 0.0, 0.0, 0.0);
+            shG = float4(radiance.g, 0.0, 0.0, 0.0);
+            shB = float4(radiance.b, 0.0, 0.0, 0.0);
+            data = float2(0.0, float(tier));
+        } else {
         uint rng = SeedRng(gatherPixel, pc.frameIndex, 0x61FAu);
         float u1 = HashStep(rng);
         float u2 = HashStep(rng);
@@ -206,6 +236,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
         shG = float4(radiance.g * l0, radiance.g * l1);
         shB = float4(radiance.b * l0, radiance.b * l1);
         data = float2(hitT, float(tier));
+        }
     }
 
     rdgStorageFloat4[pc.shRIndex][gatherPixel] = shR;

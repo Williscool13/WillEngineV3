@@ -11,6 +11,7 @@ import gi_gather_common;
 static const float2 GI_UPSCALE_POISSON[4] = { float2(-0.75, -0.25), float2(0.25, -0.75), float2(0.75, 0.25), float2(-0.25, 0.75) };
 static const float GI_UPSCALE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_UPSCALE_NORMAL_POWER = 32.0;
+static const float GI_UPSCALE_PARALLAX_REJECT_PIXELS = 64.0;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -84,14 +85,21 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                 float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(prevPixel, 0)).r;
                 if (prevRawDepth > 0.0) {
                     float prevViewDepth = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-                    if (abs(prevViewDepth - prevClip.w) <= 0.03 * prevClip.w + 0.05) {
-                        float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0)).r)));
-                        if (dot(worldN, prevWorldN) > 0.5) {
-                            float4 history = rdgTexturesFloat4[pc.historyIndex].Load(int3(prevPixel, 0));
-                            float n = min(history.a, GI_GATHER_MAX_ACCUM - 1.0);
-                            result = (n * history.rgb + current) / (n + 1.0);
-                            accum = n + 1.0;
-                        }
+                    float planeDist = abs(prevViewDepth - prevClip.w);
+                    float planeConfidence = saturate(1.0 - planeDist / (0.03 * prevClip.w + 0.05));
+
+                    float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0)).r)));
+                    float normalConfidence = saturate((dot(worldN, prevWorldN) - 0.5) / 0.5);
+
+                    float2 motionPixels = (prevUV - uv) * float2(pc.renderExtent);
+                    float parallaxConfidence = saturate(1.0 - length(motionPixels) / GI_UPSCALE_PARALLAX_REJECT_PIXELS);
+
+                    float confidence = planeConfidence * normalConfidence * parallaxConfidence;
+                    if (confidence > 0.0) {
+                        float4 history = rdgTexturesFloat4[pc.historyIndex].Load(int3(prevPixel, 0));
+                        float n = min(history.a, GI_GATHER_MAX_ACCUM - 1.0) * confidence;
+                        result = (n * history.rgb + current) / (n + 1.0);
+                        accum = n + 1.0;
                     }
                 }
             }

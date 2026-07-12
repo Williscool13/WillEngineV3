@@ -654,6 +654,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t depthHistoryIndex;
     SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
     SHADER_PUBLIC uint32_t bEmissiveIsDI;
+    SHADER_PUBLIC uint32_t bSkipRay;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -673,6 +674,10 @@ SHADER_PUBLIC struct GIDenoisePushConstant
     SHADER_PUBLIC uint32_t dstShBIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t direction;
+    SHADER_PUBLIC uint32_t historyIndex;
+    SHADER_PUBLIC uint32_t depthHistoryIndex;
+    SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
+    SHADER_PUBLIC uint32_t bHistoryValid;
 };
 
 SHADER_PUBLIC struct GIUpscalePushConstant

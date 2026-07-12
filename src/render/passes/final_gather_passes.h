@@ -46,9 +46,10 @@ struct FinalGatherFrame
  * @param sceneIndex
  * @param frameNumber
  * @param bDenoise
+ * @param bSkipRay Skip the cosine ray entirely; sample the world radiance cache at the pixel's own surface point (probes as fallback) instead.
  * @return
  */
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise);
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, bool bSkipRay);
 } // Render
 
 #endif //WILL_ENGINE_FINAL_GATHER_PASSES_H

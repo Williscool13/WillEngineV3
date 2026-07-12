@@ -823,6 +823,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Separable bilateral blur on the gather SH before compositing (normal/depth/hit-distance edge stopping). Off = raw 1spp signal, for A/B.");
             }
+            if (ImGui::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Skips the per-pixel cosine ray entirely: samples the world radiance cache at the pixel's own surface point (probes as fallback, skybox on miss) instead of tracing. No ray noise, but resolution is capped by the cache's cell size (blockier); still runs through the same denoise/upscale/temporal pipeline. Best for clean/simply-textured scenes where the ray's 1spp noise isn't worth it.");
+            }
 
             ImGui::SeparatorText("Volume");
             ddgiI("Probe Count X##ddgi", &ddgi.probeCountX, ddgiDefaults.probeCountX, 2, 32, "Probes along X. The volume is a camera-following rolling window; changing counts restarts probe history.");

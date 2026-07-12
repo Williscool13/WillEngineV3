@@ -9,8 +9,10 @@ import gi_gather_common;
 // Separable bilateral gaussian over the gather SH (H then V via pc.direction); FP16 groupshared preload, weights from plane-distance/normal/hitT deltas.
 
 static const int GI_DENOISE_RADIUS = 4;
+static const int GI_DENOISE_MAX_STEP = 3;
+static const int GI_DENOISE_TILE_RADIUS = GI_DENOISE_RADIUS * GI_DENOISE_MAX_STEP;
 static const int GI_DENOISE_GROUP = 16;
-static const int GI_DENOISE_TILE = GI_DENOISE_GROUP + 2 * GI_DENOISE_RADIUS;
+static const int GI_DENOISE_TILE = GI_DENOISE_GROUP + 2 * GI_DENOISE_TILE_RADIUS;
 static const float GI_DENOISE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_DENOISE_NORMAL_POWER = 32.0;
 static const float GI_DENOISE_HITT_SENSITIVITY = 3.0;
@@ -32,7 +34,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
 
     uint threadIndex = gtid.y * GI_DENOISE_GROUP + gtid.x;
     for (uint t = threadIndex; t < uint(GI_DENOISE_TILE * GI_DENOISE_GROUP); t += GI_DENOISE_GROUP * GI_DENOISE_GROUP) {
-        int along = int(t % GI_DENOISE_TILE) - GI_DENOISE_RADIUS;
+        int along = int(t % GI_DENOISE_TILE) - GI_DENOISE_TILE_RADIUS;
         int across = int(t / GI_DENOISE_TILE);
         int2 pos = groupOrigin + (horizontal ? int2(along, across) : int2(across, along));
         bool inside = all(pos >= int2(0)) && all(pos < int2(pc.gatherExtent));
@@ -59,7 +61,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
 
     uint along = horizontal ? gtid.x : gtid.y;
     uint across = horizontal ? gtid.y : gtid.x;
-    uint centerIdx = across * GI_DENOISE_TILE + along + GI_DENOISE_RADIUS;
+    uint centerIdx = across * GI_DENOISE_TILE + along + GI_DENOISE_TILE_RADIUS;
 
     float4 sumR = UnpackHalf2x16Pair(sShR[centerIdx]);
     float4 sumG = UnpackHalf2x16Pair(sShG[centerIdx]);
@@ -73,16 +75,43 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, centerUv, centerViewZ);
         float invPlaneSigma = 1.0 / (GI_DENOISE_PLANE_DIST_SIGMA * abs(centerViewZ));
 
+        // Reproject to last frame's accumulated count at this pixel: fresh/disoccluded (low count) gets a wider dilation step, converged pixels shrink toward step=1.
+        float historyCount = 0.0;
+        if (pc.bHistoryValid != 0u) {
+            float3 worldNormal = normalize(mul((float3x3)scene.invView, centerNormal));
+            float3 worldPos = mul(scene.invView, float4(centerXv, 1.0)).xyz;
+            float4 prevClip = mul(scene.prevViewProj, float4(worldPos, 1.0));
+            if (prevClip.w > 0.0) {
+                float2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
+                if (all(prevUV >= float2(0.0)) && all(prevUV <= float2(1.0))) {
+                    int2 prevPixel = clamp(int2(prevUV * float2(pc.renderExtent)), int2(0), int2(pc.renderExtent) - int2(1));
+                    float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(prevPixel, 0)).r;
+                    if (prevRawDepth > 0.0) {
+                        float prevViewDepth = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+                        if (abs(prevViewDepth - prevClip.w) <= 0.03 * prevClip.w + 0.05) {
+                            float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0)).r)));
+                            if (dot(worldNormal, prevWorldN) > 0.5) {
+                                historyCount = rdgTexturesFloat4[pc.historyIndex].Load(int3(prevPixel, 0)).a;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        float radiusScale = 1.0 / (1.0 + min(historyCount, GI_GATHER_MAX_ACCUM));
+        int step = clamp(int(round(1.0 + float(GI_DENOISE_MAX_STEP - 1) * radiusScale)), 1, GI_DENOISE_MAX_STEP);
+
         const int2 dir = horizontal ? int2(1, 0) : int2(0, 1);
         float sumW = 1.0;
         [unroll]
         for (int d = -GI_DENOISE_RADIUS; d <= GI_DENOISE_RADIUS; d++) {
             if (d == 0) { continue; }
-            uint idx = uint(int(centerIdx) + d);
+            int tapOffset = d * step;
+            uint idx = uint(int(centerIdx) + tapOffset);
             float tapViewZ = sViewZ[idx];
             if (tapViewZ == 0.0) { continue; }
 
-            uint2 tapFull = GIGatherRepresentativePixel(uint2(int2(gatherPixel) + dir * d), pc.frameIndex, pc.renderExtent);
+            uint2 tapFull = GIGatherRepresentativePixel(uint2(int2(gatherPixel) + dir * tapOffset), pc.frameIndex, pc.renderExtent);
             float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
             float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
             float3 tapNormal = UnpackNormalOct16(sNormal[idx]);
