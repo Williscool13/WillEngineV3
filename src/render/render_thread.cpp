@@ -603,7 +603,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 uint32_t giGatherMode = 0u;
                 const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.giGatherDebugMode);
                 if (frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || giGatherDebug != 0u)) {
-                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber);
+                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise);
                     if (giGather.bValid) {
                         giGatherMode = giGatherDebug != 0u ? giGatherDebug + 1u : 1u;
                     }
@@ -703,7 +703,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupGPUDebugDraw(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, frameBuffer.bLockGPUDebug);
         }
 
-        if (viewFamily.groundTruthMode == Core::GroundTruthMode::None && viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting) {
+        const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
+        const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || frameBuffer.giGatherDebugMode != 0);
+        if (viewFamily.groundTruthMode == Core::GroundTruthMode::None && (bReflectionScreenSpace || bGIGatherScreenSpace)) {
             renderGraph->CarryTextureToNextFrame(targets.colorOutput, SID("lit_color_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
         }
 

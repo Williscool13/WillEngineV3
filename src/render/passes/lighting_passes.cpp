@@ -105,7 +105,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
 
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-    const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_SH_R);
+    const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
 
     struct LightingEntry
     {
@@ -141,9 +141,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         AddDDGISampleDependencies(graph, lightingResolve);
     }
     if (bGIGather) {
-        lightingResolve.ReadSampledImage(GI_GATHER_SH_R);
-        lightingResolve.ReadSampledImage(GI_GATHER_SH_G);
-        lightingResolve.ReadSampledImage(GI_GATHER_SH_B);
+        lightingResolve.ReadSampledImage(GI_GATHER_RESOLVED);
         lightingResolve.ReadSampledImage(GI_GATHER_DATA);
     }
     lightingResolve.WriteStorageImage(targets.colorOutput);
@@ -187,9 +185,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .bDDGIApply = bDDGI ? 1u : 0u,
                     .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
                     .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
-                    .giShRIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_R) : ~0x0u,
-                    .giShGIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_G) : ~0x0u,
-                    .giShBIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_B) : ~0x0u,
+                    .giResolvedIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_RESOLVED) : ~0x0u,
                     .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
                     .giGatherMode = bGIGather ? giGatherMode : 0u,
                 };

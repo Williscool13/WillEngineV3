@@ -113,8 +113,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
         float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
 
         if (pc.giGatherMode != 0u) {
-            // Gather already contains the skybox and probe fallbacks.
-            indirectDiffuse = GIGatherIndirectDiffuse(pc.giShRIndex, pc.giShGIndex, pc.giShBIndex, uv, worldN);
+            indirectDiffuse = rdgTexturesFloat4[pc.giResolvedIndex].Load(int3(pixel, 0)).rgb;
         } else {
             if (pc.skyboxIndex >= 0) {
                 indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
@@ -136,7 +135,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
 
     float3 finalColor = directLight + ibl + li.emissiveRGB;
     if (pc.giGatherMode >= 2u) {
-        finalColor = GIGatherDebugColor(pc.giDataIndex, pixel, pc.giGatherMode, indirectDiffuse);
+        finalColor = GIGatherDebugColor(pc.giDataIndex, pc.giResolvedIndex, pixel, pc.giGatherMode, indirectDiffuse);
     }
     rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor, 1.0);
 }

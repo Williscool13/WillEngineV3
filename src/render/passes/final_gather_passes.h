@@ -21,6 +21,14 @@ inline const StringID GI_GATHER_SH_R = SID("gi_gather_sh_r");
 inline const StringID GI_GATHER_SH_G = SID("gi_gather_sh_g");
 inline const StringID GI_GATHER_SH_B = SID("gi_gather_sh_b");
 inline const StringID GI_GATHER_DATA = SID("gi_gather_data");
+inline const StringID GI_GATHER_RAW_SH_R = SID("gi_gather_raw_sh_r");
+inline const StringID GI_GATHER_RAW_SH_G = SID("gi_gather_raw_sh_g");
+inline const StringID GI_GATHER_RAW_SH_B = SID("gi_gather_raw_sh_b");
+inline const StringID GI_GATHER_TMP_SH_R = SID("gi_gather_tmp_sh_r");
+inline const StringID GI_GATHER_TMP_SH_G = SID("gi_gather_tmp_sh_g");
+inline const StringID GI_GATHER_TMP_SH_B = SID("gi_gather_tmp_sh_b");
+inline const StringID GI_GATHER_RESOLVED = SID("gi_gather_resolved");
+inline const StringID GI_GATHER_HISTORY = SID("gi_gather_history");
 
 /** Gates the composite passes' gather read this frame. */
 struct FinalGatherFrame
@@ -37,9 +45,10 @@ struct FinalGatherFrame
  * @param targets
  * @param sceneIndex
  * @param frameNumber
+ * @param bDenoise
  * @return
  */
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber);
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise);
 } // Render
 
 #endif //WILL_ENGINE_FINAL_GATHER_PASSES_H

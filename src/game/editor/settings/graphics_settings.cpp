@@ -318,11 +318,11 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::SeparatorText("GI Diffuse Gather");
         {
-            const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance"};
+            const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation"};
             ImGui::SetNextItemWidth(120.0f);
             ImGui::Combo("View##GIGatherDebug", &state->debug.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)));
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Fullscreen final-gather view; runs the gather even when it is not applied to lighting. Irradiance = raw gather evaluated at the pixel normal. Tiers = where each ray resolved: green cache hit, blue probe fallback, yellow sky, red backface. Hit Distance = hitT grayscale.");
+                ImGui::SetTooltip("Fullscreen final-gather view; runs the gather even when it is not applied to lighting. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where each ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history).");
             }
         }
 
@@ -815,7 +815,12 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             if (ImGui::Checkbox("GI Diffuse Gather##ddgi", &ddgi.bFinalGather)) { changed = true; }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("TDA-style resolve: one cosine ray per half-res pixel reads the world radiance cache at its hit (probes as fallback, skybox on miss) instead of sampling probes at the pixel. Raw and undenoised for now. Debug views live in the Debug View window.");
+                ImGui::SetTooltip("TDA-style resolve: one cosine ray per half-res pixel reads last frame's screen at its hit, then the world radiance cache (probes as fallback, skybox on miss) instead of sampling probes at the pixel. Debug views live in the Debug View window.");
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Denoise##gigather", &ddgi.bFinalGatherDenoise)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Separable bilateral blur on the gather SH before compositing (normal/depth/hit-distance edge stopping). Off = raw 1spp signal, for A/B.");
             }
 
             ImGui::SeparatorText("Volume");

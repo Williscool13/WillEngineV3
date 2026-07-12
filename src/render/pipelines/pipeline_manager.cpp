@@ -473,6 +473,10 @@ void PipelineManager::RegisterPipelines()
                             sizeof(WorldCacheBuildIndirectPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gi_gather"), src / "gi_gather.spv", "ComputeGIGather",
                             sizeof(GIGatherPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gi_denoise"), src / "gi_denoise.spv", "ComputeGIDenoise",
+                            sizeof(GIDenoisePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gi_upscale"), src / "gi_upscale.spv", "ComputeGIUpscale",
+                            sizeof(GIUpscalePushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("gpu_debug_build_indirect"), src / "gpu_debug.spv", "ComputeGPUDebugBuildIndirect",
                             sizeof(GPUDebugBuildIndirectPushConstant), PipelineCategory::Critical);

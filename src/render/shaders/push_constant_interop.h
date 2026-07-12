@@ -537,9 +537,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t pad1;
     SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
-    SHADER_PUBLIC uint32_t giShRIndex;
-    SHADER_PUBLIC uint32_t giShGIndex;
-    SHADER_PUBLIC uint32_t giShBIndex;
+    SHADER_PUBLIC uint32_t giResolvedIndex;
     SHADER_PUBLIC uint32_t giDataIndex;
     SHADER_PUBLIC uint32_t giGatherMode;
     SHADER_PUBLIC uint32_t pad2;
@@ -652,6 +650,48 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC uint32_t bCascadesValid;
+    SHADER_PUBLIC uint32_t litHistoryIndex;
+    SHADER_PUBLIC uint32_t depthHistoryIndex;
+    SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
+    SHADER_PUBLIC uint32_t bEmissiveIsDI;
+};
+
+SHADER_PUBLIC struct GIDenoisePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 gatherExtent;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t dataIndex;
+    SHADER_PUBLIC uint32_t srcShRIndex;
+    SHADER_PUBLIC uint32_t srcShGIndex;
+    SHADER_PUBLIC uint32_t srcShBIndex;
+    SHADER_PUBLIC uint32_t dstShRIndex;
+    SHADER_PUBLIC uint32_t dstShGIndex;
+    SHADER_PUBLIC uint32_t dstShBIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t direction;
+};
+
+SHADER_PUBLIC struct GIUpscalePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 gatherExtent;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t shRIndex;
+    SHADER_PUBLIC uint32_t shGIndex;
+    SHADER_PUBLIC uint32_t shBIndex;
+    SHADER_PUBLIC uint32_t historyIndex;
+    SHADER_PUBLIC uint32_t depthHistoryIndex;
+    SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t bHistoryValid;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -676,9 +716,7 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t shadowsIndex;
     SHADER_PUBLIC uint32_t reflectionIndex;
     SHADER_PUBLIC float reflectionRoughnessMax;
-    SHADER_PUBLIC uint32_t giShRIndex;
-    SHADER_PUBLIC uint32_t giShGIndex;
-    SHADER_PUBLIC uint32_t giShBIndex;
+    SHADER_PUBLIC uint32_t giResolvedIndex;
     SHADER_PUBLIC uint32_t giDataIndex;
     SHADER_PUBLIC uint32_t giGatherMode;
     SHADER_PUBLIC uint32_t pad1;

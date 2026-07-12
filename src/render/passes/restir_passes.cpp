@@ -640,7 +640,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-    const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_SH_R);
+    const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
     const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
     const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
@@ -662,9 +662,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
         pass.ReadSampledImage(reflectionTarget);
     }
     if (bGIGather) {
-        pass.ReadSampledImage(GI_GATHER_SH_R);
-        pass.ReadSampledImage(GI_GATHER_SH_G);
-        pass.ReadSampledImage(GI_GATHER_SH_B);
+        pass.ReadSampledImage(GI_GATHER_RESOLVED);
         pass.ReadSampledImage(GI_GATHER_DATA);
     }
     pass.WriteStorageImage(targets.colorOutput);
@@ -693,9 +691,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
                 .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(reflectionTarget) : ~0x0u,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
-                .giShRIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_R) : ~0x0u,
-                .giShGIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_G) : ~0x0u,
-                .giShBIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SH_B) : ~0x0u,
+                .giResolvedIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_RESOLVED) : ~0x0u,
                 .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
             };
