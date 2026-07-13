@@ -17,6 +17,8 @@
 #include "game/input/game_actions.h"
 #include "game/editor/editor_scene_browser.h"
 #include "game/editor/editor_materials.h"
+#include "game/editor/editor_multi_edit.h"
+#include "game/component-registry/editor_gizmo_helpers.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "game/systems/scene_system.h"
@@ -75,7 +77,7 @@ void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> e
     }
 }
 
-void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount)
+void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3&, int transformCount)
 {
     auto& entities = state->editor.selectedEntities;
     ImGui::Text("%zu entities selected", entities.Size());
@@ -110,8 +112,17 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
             buf[sizeof(buf) - 1] = '\0';
 
             if (ImGui::InputText("Name##multi", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                const bool hasToken = MultiEdit::ContainsNameToken(buf);
+                int index = 0;
                 for (auto e : entities) {
-                    state->registry.get<Component::NameComponent>(e).name = Core::InlineString<256>(buf);
+                    auto& name = state->registry.get<Component::NameComponent>(e).name;
+                    if (hasToken) {
+                        MultiEdit::ExpandNameTemplate(name, buf, index, state->rng);
+                    }
+                    else {
+                        name = Core::InlineString<256>(buf);
+                    }
+                    ++index;
                 }
                 MarkEntitiesModified(state, entities);
             }
@@ -121,79 +132,12 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     }
 
-    // Folder
-    if (ImGui::CollapsingHeader("Folder##multi_folder", ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool allHaveFolder = true;
-        bool sameFolder = true;
-        StringID firstFolderId;
-        bool first = true;
-        for (auto e : entities) {
-            auto* fc = state->registry.try_get<Component::EntityFolderComponent>(e);
-            if (!fc) {
-                allHaveFolder = false;
-                break;
-            }
-            if (first) {
-                firstFolderId = fc->folderId;
-                first = false;
-            }
-            else if (fc->folderId != firstFolderId) {
-                sameFolder = false;
-            }
-        }
-
-        if (allHaveFolder) {
-            auto anchorView = state->registry.view<Component::SceneFolderComponent>();
-            const char* display = "...";
-            if (sameFolder) {
-                display = "(None)";
-                if (firstFolderId.IsValid()) {
-                    for (auto a : anchorView) {
-                        if (anchorView.get<Component::SceneFolderComponent>(a).folderId == firstFolderId) {
-                            display = anchorView.get<Component::SceneFolderComponent>(a).name.c_str();
-                            break;
-                        }
-                    }
-                }
-            }
-
-            ImGui::Text("Folder");
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::BeginCombo("##multi_folder", display)) {
-                if (ImGui::Selectable("(None)", sameFolder && !firstFolderId.IsValid())) {
-                    for (auto e : entities) {
-                        state->registry.get_or_emplace<Component::EntityFolderComponent>(e).folderId = StringID();
-                    }
-                    MarkEntitiesModified(state, entities);
-                }
-                for (auto a : anchorView) {
-                    const auto& fc = anchorView.get<Component::SceneFolderComponent>(a);
-                    if (const auto* sc = state->registry.try_get<Component::SceneComponent>(a); sc && sc->sceneId != state->currentSceneId) {
-                        continue;
-                    }
-                    Core::ShortString label;
-                    if (fc.parentFolder.IsValid()) { label.Append("    "); }
-                    label.Append(fc.name);
-                    if (ImGui::Selectable(label.c_str(), sameFolder && firstFolderId == fc.folderId)) {
-                        for (auto e : entities) {
-                            state->registry.get_or_emplace<Component::EntityFolderComponent>(e).folderId = fc.folderId;
-                        }
-                        MarkEntitiesModified(state, entities);
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-        else {
-            ImGui::TextDisabled("Not all entities have EntityFolderComponent");
-        }
-    }
-
     // Transform
     if (transformCount > 0 && ImGui::CollapsingHeader("Transform##multi_transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool allSameRot = true, allSameScale = true;
+        glm::vec3 firstTrans{}, firstEuler{}, firstScale{};
         glm::quat firstRot{};
-        glm::vec3 firstScale{};
+        glm::bvec3 sameTrans{true, true, true};
+        bool allSameRot = true, allSameScale = true;
         bool first = true;
         for (auto e : entities) {
             auto* tf = state->registry.try_get<Component::TransformComponent>(e);
@@ -201,11 +145,18 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
                 continue;
             }
             if (first) {
+                firstTrans = tf->translation;
                 firstRot = tf->rotation;
+                firstEuler = glm::degrees(glm::eulerAngles(tf->rotation));
                 firstScale = tf->scale;
                 first = false;
             }
             else {
+                for (int a = 0; a < 3; ++a) {
+                    if (glm::abs(tf->translation[a] - firstTrans[a]) > 1e-4f) {
+                        sameTrans[a] = false;
+                    }
+                }
                 if (glm::dot(firstRot, tf->rotation) < 0.9999f) {
                     allSameRot = false;
                 }
@@ -215,65 +166,65 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
             }
         }
 
-        // Translation (on the centroid)
-        glm::vec3 editCentroid = centroid;
-        if (ImGui::DragFloat3("Translation##multi", &editCentroid.x, 0.1f)) {
-            glm::vec3 delta = editCentroid - centroid;
+        const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float labelColW = ImGui::CalcTextSize("Translation").x + ImGui::GetStyle().ItemSpacing.x;
+
+        auto applyAxis = [&](int axis, const MultiEdit::FieldResult& r, auto&& get, auto&& set) {
+            if (r.action == MultiEdit::FieldAction::None) {
+                return;
+            }
+            int index = 0;
             for (auto e : entities) {
-                if (auto* tf = state->registry.try_get<Component::TransformComponent>(e)) {
-                    tf->translation += delta;
-                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(e);
+                auto* tf = state->registry.try_get<Component::TransformComponent>(e);
+                if (!tf) {
+                    continue;
                 }
+                const float cur = get(*tf, axis);
+                if (r.action == MultiEdit::FieldAction::Drag) {
+                    set(*tf, axis, cur + r.dragDelta);
+                }
+                else {
+                    float v;
+                    if (MultiEdit::EvaluateFloatField(r.expr, cur, index, state->rng, v)) {
+                        set(*tf, axis, v);
+                    }
+                }
+                state->registry.emplace_or_replace<Component::DirtyTransformTag>(e);
+                ++index;
             }
             MarkEntitiesModified(state, entities);
-        }
+        };
 
-        // Rotation
-        if (allSameRot) {
-            glm::vec3 euler = glm::degrees(glm::eulerAngles(firstRot));
-            if (ImGui::DragFloat3("Rotation##multi", &euler.x, 0.5f)) {
-                glm::quat newRot = glm::quat(glm::radians(euler));
-                for (auto e : entities) {
-                    if (auto* tf = state->registry.try_get<Component::TransformComponent>(e)) {
-                        tf->rotation = newRot;
-                        state->registry.emplace_or_replace<Component::DirtyTransformTag>(e);
-                    }
+        auto drawRow = [&](const char* label, const char* idBase, const glm::vec3& value, const glm::bvec3& same, float speed, auto&& get, auto&& set) {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(label);
+            ImGui::SameLine(labelColW);
+            const float fieldW = (ImGui::GetContentRegionAvail().x - 2.0f * spacing) / 3.0f;
+            const ImU32 colors[3] = {Editor::COLOR_AXIS_X, Editor::COLOR_AXIS_Y, Editor::COLOR_AXIS_Z};
+            for (int a = 0; a < 3; ++a) {
+                if (a > 0) {
+                    ImGui::SameLine(0, spacing);
                 }
-                MarkEntitiesModified(state, entities);
+                const auto id = Core::InlineString<32>::Format("%s%d", idBase, a);
+                const MultiEdit::FieldResult r = MultiEdit::ScalarField(id.c_str(), colors[a], value[a], !same[a], speed, fieldW);
+                applyAxis(a, r, get, set);
             }
-        }
-        else {
-            ImGui::BeginDisabled();
-            glm::vec3 dummy{0};
-            ImGui::DragFloat3("Rotation##multi", &dummy.x, 0.5f);
-            ImGui::EndDisabled();
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("Mixed rotations");
-            }
-        }
+        };
 
-        // Scale
-        if (allSameScale) {
-            glm::vec3 scale = firstScale;
-            if (ImGui::DragFloat3("Scale##multi", &scale.x, 0.01f)) {
-                for (auto e : entities) {
-                    if (auto* tf = state->registry.try_get<Component::TransformComponent>(e)) {
-                        tf->scale = scale;
-                        state->registry.emplace_or_replace<Component::DirtyTransformTag>(e);
-                    }
-                }
-                MarkEntitiesModified(state, entities);
-            }
-        }
-        else {
-            ImGui::BeginDisabled();
-            glm::vec3 dummy{0};
-            ImGui::DragFloat3("Scale##multi", &dummy.x, 0.01f);
-            ImGui::EndDisabled();
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("Mixed scales");
-            }
-        }
+        auto getT = [](Component::TransformComponent& tf, int a) { return tf.translation[a]; };
+        auto setT = [](Component::TransformComponent& tf, int a, float v) { tf.translation[a] = v; };
+        auto getS = [](Component::TransformComponent& tf, int a) { return tf.scale[a]; };
+        auto setS = [](Component::TransformComponent& tf, int a, float v) { tf.scale[a] = v; };
+        auto getR = [](Component::TransformComponent& tf, int a) { return glm::degrees(glm::eulerAngles(tf.rotation))[a]; };
+        auto setR = [](Component::TransformComponent& tf, int a, float v) {
+            glm::vec3 e = glm::degrees(glm::eulerAngles(tf.rotation));
+            e[a] = v;
+            tf.rotation = glm::quat(glm::radians(e));
+        };
+
+        drawRow("Translation", "mt_t", firstTrans, sameTrans, 0.1f, getT, setT);
+        drawRow("Rotation", "mt_r", firstEuler, glm::bvec3(allSameRot), 0.5f, getR, setR);
+        drawRow("Scale", "mt_s", firstScale, glm::bvec3(allSameScale), 0.01f, getS, setS);
     }
 }
 

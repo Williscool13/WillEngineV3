@@ -16,6 +16,8 @@ set(GAME_SOURCES
         editor/editor_scene_browser.h
         editor/editor_materials.cpp
         editor/editor_materials.h
+        editor/editor_multi_edit.cpp
+        editor/editor_multi_edit.h
 
         fwd_components.h
 

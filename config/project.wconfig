@@ -27,7 +27,7 @@
     }
   },
   "activeInputProfile": "",
-  "activeLightingProfile": "ReSTIR",
+  "activeLightingProfile": "Standard",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,
