@@ -33,6 +33,12 @@ void InputManager::ProcessEvent(const SDL_Event& event)
             break;
         }
 
+        case SDL_EVENT_TEXT_INPUT:
+        {
+            currentInput.textInput.Append(event.text.text);
+            break;
+        }
+
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
         {
@@ -164,6 +170,7 @@ void InputManager::FrameReset()
     currentInput.mouseYDelta = 0.0f;
     currentInput.mouseWheelDelta.x = 0;
     currentInput.mouseWheelDelta.y = 0;
+    currentInput.textInput.Clear();
 }
 
 void InputManager::UpdateWindowExtent(const uint32_t w, const uint32_t h)

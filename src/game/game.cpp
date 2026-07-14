@@ -28,6 +28,7 @@
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
 #include "editor/editor_systems.h"
+#include "editor/editor_console.h"
 #include "systems/physics_system.h"
 #include "gameplay/player/physics_player_controller.h"
 #include "systems/common_systems.h"
@@ -401,6 +402,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 #endif
 
 #ifdef WDEBUG
+    Game::Console::Draw(ctx, state);
     Game::DebugRender(ctx, state, frameBuffer);
     Game::DebugRenderPhysics(ctx, state, frameBuffer);
 #endif

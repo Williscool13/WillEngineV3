@@ -18,6 +18,8 @@ set(GAME_SOURCES
         editor/editor_materials.h
         editor/editor_multi_edit.cpp
         editor/editor_multi_edit.h
+        editor/editor_console.cpp
+        editor/editor_console.h
 
         fwd_components.h
 

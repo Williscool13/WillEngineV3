@@ -81,6 +81,7 @@ struct EngineContext
     void (*internStringFn)(uint64_t, const char*);
     const char* (*resolveStringIdFn)(uint64_t);
     Core::InlineFunction<void(bool)> setCursorHiddenFn;
+    Core::InlineFunction<void(bool)> setTextInputActiveFn;
 
     // Imgui
     ImGuiContext* imguiContext;

@@ -127,7 +127,7 @@ struct ComponentRegistry
 
 enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On, Selected };
 enum class LightDebugDrawMode : uint8_t { None, Selected, All };
-enum class InputContext : uint8_t { Editor, Menu, Gameplay };
+enum class InputContext : uint8_t { Editor, Menu, Gameplay, Console };
 
 struct RuntimeSceneMetadata
 {
@@ -305,6 +305,20 @@ struct ActionBinding
     }
 };
 
+struct TextInputState
+{
+    Core::InlineString<32> chars{};
+    bool submit{false};
+    bool backspace{false};
+    bool deleteForward{false};
+    bool left{false};
+    bool right{false};
+    bool home{false};
+    bool end{false};
+    bool up{false};
+    bool down{false};
+};
+
 struct InputState
 {
     InputState() = default;
@@ -321,6 +335,7 @@ struct InputState
     bool bBindingsDirty{false};
 
     Vec2 mousePositionAbsolute{};
+    TextInputState textInput{};
 
     [[nodiscard]] const Core::ActionState& GetActionState(ActionHandle action) const
     {

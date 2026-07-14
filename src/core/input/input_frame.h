@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include "core/containers/array.h"
+#include "core/containers/inline_string.h"
 #include "core/types/math.h"
 
 namespace Core
@@ -97,10 +98,12 @@ struct InputFrame
     float mouseYDelta{0.0f};
     Vec2 mouseWheelDelta{};
 
+    // UTF-8 characters typed this frame (SDL_EVENT_TEXT_INPUT)
+    InlineString<32> textInput{};
+
     bool isCursorActive{false};
     bool isWindowInputFocus{false};
 
-    // Helper accessors
     [[nodiscard]] const ButtonState& GetKey(Key k) const { return keys[static_cast<size_t>(k)]; }
     [[nodiscard]] const ButtonState& GetMouse(MouseButton btn) const { return mouseButtons[static_cast<size_t>(btn)]; }
     [[nodiscard]] const ButtonState& GetGamepadButton(GamepadButton btn) const { return gamepadButtons[static_cast<size_t>(btn)]; }

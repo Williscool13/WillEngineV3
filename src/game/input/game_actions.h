@@ -41,6 +41,7 @@ inline const Engine::ActionHandle ACTION_ESCAPE{SID("Escape").id};
 inline const Engine::ActionHandle ACTION_BEGIN_RENAME{SID("BeginRename").id};
 inline const Engine::ActionHandle ACTION_FOCUS_SELECTION{SID("FocusSelection").id};
 inline const Engine::ActionHandle ACTION_VIEWPORT_SELECT{SID("ViewportSelect").id};
+inline const Engine::ActionHandle ACTION_TOGGLE_CONSOLE{SID("ToggleConsole").id};
 
 inline const Engine::ActionHandle ACTION_DEBUG_VIEW_1{SID("DebugView_1").id};
 inline const Engine::ActionHandle ACTION_DEBUG_VIEW_2{SID("DebugView_2").id};

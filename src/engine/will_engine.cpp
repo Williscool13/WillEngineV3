@@ -306,6 +306,14 @@ void WillEngine::Initialize(Utils::Logger* logger)
                 SDL_SetWindowRelativeMouseMode(window, false);
             }
         };
+        engineContext->setTextInputActiveFn = [this](bool active) {
+            if (active) {
+                SDL_StartTextInput(window);
+            }
+            else {
+                SDL_StopTextInput(window);
+            }
+        };
 #if DEBUG
         engineContext->internStringFn = [](uint64_t hash, const char* str) { DBG_InternString(hash, str); };
         engineContext->resolveStringIdFn = [](uint64_t hash) { return DBG_ResolveStringId(hash); };
@@ -1259,25 +1267,27 @@ void WillEngine::EditorImgui()
         ImGui::Separator();
 
         if (ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar)) {
-            ImGuiListClipper clipper;
-            auto filtered = Core::ArenaFixedVector<int32_t>(&engineContext->editorArena.Get(), entryCount);
-            for (int i = 0; i < entryCount; i++) {
-                const auto& entry = entries[i];
-                bool levelPass = false;
-                for (int l = 0; l < kLevelCount; l++) {
-                    if (entry.level == kLevels[l] && levelFilter[l]) {
-                        levelPass = true;
-                        break;
+            if (entryCount > 0) {
+                ImGuiListClipper clipper;
+                auto filtered = Core::ArenaFixedVector<int32_t>(&engineContext->editorArena.Get(), entryCount);
+                for (int i = 0; i < entryCount; i++) {
+                    const auto& entry = entries[i];
+                    bool levelPass = false;
+                    for (int l = 0; l < kLevelCount; l++) {
+                        if (entry.level == kLevels[l] && levelFilter[l]) {
+                            levelPass = true;
+                            break;
+                        }
                     }
+                    if (levelPass && categoryFilter[static_cast<int>(entry.category)])
+                        filtered.PushBack(i);
                 }
-                if (levelPass && categoryFilter[static_cast<int>(entry.category)])
-                    filtered.PushBack(i);
-            }
 
-            clipper.Begin(static_cast<int>(filtered.Size()));
-            while (clipper.Step()) {
-                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                    ImGui::TextUnformatted(entries[filtered[i]].message.c_str());
+                clipper.Begin(static_cast<int>(filtered.Size()));
+                while (clipper.Step()) {
+                    for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+                        ImGui::TextUnformatted(entries[filtered[i]].message.c_str());
+                    }
                 }
             }
 
