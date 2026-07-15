@@ -27,6 +27,7 @@
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
+#include "logging/engine_assert.h"
 #include "logging/engine_logger.h"
 #include "physics/physics_system.h"
 #include "platform/file_utils.h"
@@ -334,6 +335,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     {
         ZoneScopedN("PrepareGameFunctions");
 #ifdef GAME_STATIC
+        gameFunctions.gameGetStateSize = &GameGetStateSize;
         gameFunctions.gameStartup = &GameStartup;
         gameFunctions.gameLoad = &GameLoad;
         gameFunctions.gameUpdate = &GameUpdate;
@@ -345,6 +347,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         gameFunctions.gameHotReloadLoad = &GameHotReloadLoad;
 #else
         if (gameDll.Load("game.dll", "game_temp.dll")) {
+            gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetStateSizeFunc>("GameGetStateSize");
             gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
             gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
             gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
@@ -359,6 +362,11 @@ void WillEngine::Initialize(Utils::Logger* logger)
             gameFunctions.Stub();
         }
 #endif
+
+        engineContext->gameStateSize = gameFunctions.gameGetStateSize();
+        if (engineContext->gameStateSize > 0) {
+            engineContext->gameState = memoryManager.PersistentAllocRaw(engineContext->gameStateSize, Core::AllocTag::GameState);
+        }
 
         gameFunctions.gameStartup(engineContext, engineState);
         gameFunctions.gameLoad(engineContext, engineState);
@@ -382,6 +390,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
                     SPDLOG_DEBUG("Game lib was hot-reloaded");
                 // Fallthrough
                 case Platform::DllLoadResponse::NoChanges:
+                    gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetStateSizeFunc>("GameGetStateSize");
                     gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
                     gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
                     gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
@@ -396,6 +405,11 @@ void WillEngine::Initialize(Utils::Logger* logger)
                     gameFunctions.Stub();
                     SPDLOG_DEBUG("Game lib failed to be hot-reloaded");
                     break;
+            }
+
+            if (reloadResponse != Platform::DllLoadResponse::FailedToLoad) {
+                const size_t reloadedStateSize = gameFunctions.gameGetStateSize();
+                ENGINE_ASSERT(Engine, reloadedStateSize == engineContext->gameStateSize, "GameState size changed across hot reload ({} -> {} bytes) - layout changed, full restart required", engineContext->gameStateSize, reloadedStateSize);
             }
 
             // Reconnect observers and restore snapshot; skips default scene load.
@@ -836,14 +850,12 @@ void WillEngine::EditorImgui()
                     ImGui::EndTable();
                 }
 
-                ImGui::SeparatorText("VRAM Attribution");
-                {
+                ImGui::SeparatorText("VRAM Attribution"); {
                     static Render::VRAMReport vramSnapshot{};
 
                     if (ImGui::SmallButton("Refresh##vram")) {
                         renderThread->RequestVRAMReport();
-                    }
-                    {
+                    } {
                         Render::VRAMReport fresh = renderThread->GetVRAMReport();
                         if (fresh.physicalTotal > 0) { vramSnapshot = fresh; }
                     }
@@ -884,8 +896,7 @@ void WillEngine::EditorImgui()
                     }
                 }
 
-                ImGui::SeparatorText("GPU Pass Timing");
-                {
+                ImGui::SeparatorText("GPU Pass Timing"); {
                     static bool bFreezeGPUProfile = false;
                     static Render::GPUProfileSnapshot frozenGpuProfile{};
 
@@ -1471,6 +1482,9 @@ void WillEngine::Run()
                 Core::FrameBuffer* frameBufferFramesInFlightAgo = engineRenderSynchronization->GetFrameBufferMinusFIF();
                 engineContext->lastKnownStableIdUnderCursor = frameBufferFramesInFlightAgo->stableIdUnderCursor;
 
+                const Render::WorldCacheStatistics wcStats = renderThread->GetRendererStatistics().worldCache;
+                engineContext->worldCacheStats = {wcStats.occupiedSlots, wcStats.cellsCarried, wcStats.cellsEvicted, wcStats.insertsFailed, wcStats.cellsShaded};
+
                 Core::FrameBuffer* currentFrameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
                 ImDrawDataSnapshot* currentImguiSnapshot = engineRenderSynchronization->GetCurrentImguiSnapshot();
                 currentFrameBuffer->currentFrameBuffer = engineRenderSynchronization->currentRenderFrame;
@@ -1583,6 +1597,10 @@ void WillEngine::Cleanup()
 
     gameFunctions.gameUnload(engineContext, engineState);
     gameFunctions.gameShutdown(engineContext, engineState);
+    if (engineContext->gameState) {
+        memoryManager.PersistentFree(engineContext->gameState);
+        engineContext->gameState = nullptr;
+    }
     engineState->~EngineState();
     scheduler->ShutdownNow();
     engineContext->scheduler = nullptr;

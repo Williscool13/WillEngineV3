@@ -28,7 +28,8 @@
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
 #include "editor/editor_systems.h"
-#include "editor/editor_console.h"
+#include "console/console.h"
+#include "game_state.h"
 #include "logging/game_log_category.h"
 #include "systems/physics_system.h"
 #include "gameplay/player/physics_player_controller.h"
@@ -62,9 +63,16 @@ static void CreateCameras(Engine::EngineState* state, Vec3 editorPos, Quat edito
     gameCameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
 }
 
+GAME_API size_t GameGetStateSize()
+{
+    return sizeof(Game::GameState);
+}
+
 GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_TRACE("Game Start Up");
+
+    new (ctx->gameState) Game::GameState();
 
     constexpr Vec3 defaultCameraPos{0.0f, 3.0f, 5.0f};
     const Quat defaultCameraRot = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - defaultCameraPos), WORLD_UP);
@@ -112,6 +120,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
+    Game::Console::RegisterBuiltinCommands();
     Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
@@ -139,7 +148,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->inputContext != Engine::InputContext::Editor) {
+    if (Game::IsPlaying(state)) {
         Game::PlayStop(ctx, state);
     }
 
@@ -190,6 +199,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
     Game::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
+    Game::Console::RegisterBuiltinCommands();
     Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
@@ -223,9 +233,11 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     Game::FunctionKeyUpdate(ctx, state);
 
-    if (state->debug.bEnableUI) {
-        Game::UpdateUIPointerState(ctx, state);
-    }
+    Game::UpdateUIPointerState(ctx, state);
+
+#ifdef WDEBUG
+    Game::Console::Update(ctx, state);
+#endif
 
     // Gameplay simulation runs only while playing AND game-focused
     if (state->inputContext == Engine::InputContext::Gameplay) {
@@ -378,13 +390,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::GatherLights(ctx, state, frameBuffer);
     Game::GatherRenderables(ctx, state, frameBuffer);
     Game::GatherTextRenderables(ctx, state, frameBuffer);
-#ifdef WILL_EDITOR
-    if (state->debug.bEnableUI) {
-        Game::GatherUIRenderables(ctx, state, frameBuffer);
-    }
-#else
     Game::GatherUIRenderables(ctx, state, frameBuffer);
-#endif
 
 #if WILL_EDITOR
     Game::DrawEditorInterface(ctx, state, frameBuffer);
@@ -393,7 +399,6 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 #endif
 
 #ifdef WDEBUG
-    Game::Console::Draw(ctx, state);
     Game::DebugRender(ctx, state, frameBuffer);
     Game::DebugRenderPhysics(ctx, state, frameBuffer);
 #endif
@@ -419,4 +424,6 @@ GAME_API void GameUnload(Engine::EngineContext* ctx, Engine::EngineState* state)
 GAME_API void GameShutdown(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_TRACE("Game Shutdown");
+
+    ctx->GetGameState<Game::GameState>()->~GameState();
 }

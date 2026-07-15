@@ -56,6 +56,8 @@ inline const Engine::ActionHandle ACTION_DEBUG_VIEW_0{SID("DebugView_0").id};
 
 inline const Engine::ActionHandle ACTION_UI_POINTER_DOWN{SID("UI_PointerDown").id};
 inline const Engine::ActionHandle ACTION_UI_SCROLL{SID("UI_Scroll").id};
+inline const Engine::ActionHandle ACTION_UI_PAGE_UP{SID("UI_PageUp").id};
+inline const Engine::ActionHandle ACTION_UI_PAGE_DOWN{SID("UI_PageDown").id};
 } // Game::Actions
 
 #endif //WILL_ENGINE_GAME_ACTIONS_H

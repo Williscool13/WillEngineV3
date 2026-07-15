@@ -7,6 +7,8 @@
 #include <tracy/Tracy.hpp>
 
 #include "scene_system.h"
+#include "game/console/console.h"
+#include "game/ui/ui_zindex.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/arena_vector.h"
 #include "engine/include/engine_context.h"
@@ -852,8 +854,7 @@ void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state
     const bool bIsMouseDown = state->input.GetActionState(Actions::ACTION_UI_POINTER_DOWN).down;
     Clay_SetPointerState(Clay_Vector2{mousePos.x - viewportOffsetX, mousePos.y - viewportOffsetY}, bIsMouseDown);
 
-    const Vec2 scroll = state->input.GetActionState(Actions::ACTION_UI_SCROLL).axis;
-    Clay_UpdateScrollContainers(true, Clay_Vector2{scroll.x, scroll.y}, state->timeFrame->deltaTime);
+    state->input.uiScrollAccum += state->input.GetActionState(Actions::ACTION_UI_SCROLL).axis;
 }
 
 void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
@@ -1547,8 +1548,18 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
 {
     Clay_SetLayoutDimensions({static_cast<float>(ctx->windowContext.viewportWidth), static_cast<float>(ctx->windowContext.viewportHeight)});
 
+    Clay_UpdateScrollContainers(true, Clay_Vector2{state->input.uiScrollAccum.x, state->input.uiScrollAccum.y}, frameBuffer->timeFrame.deltaTime);
+    state->input.uiScrollAccum = {};
+
     Clay_BeginLayout();
 
+#ifdef WDEBUG
+    Game::Console::Draw(ctx, state);
+#endif
+
+#if WILL_EDITOR
+    if (state->debug.bEnableUI) {
+#endif
 #if 0
     constexpr Clay_Color COLOR_LIGHT = Clay_Color{224, 215, 210, 255};
     constexpr Clay_Color COLOR_RED = Clay_Color{168, 66, 28, 255};
@@ -1664,7 +1675,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                      .floating = {
                      .offset = { .x = -6, .y = thumbY },
                      .parentId = Clay_GetElementId(CLAY_STRING("ScrollList")).id,
-                     .zIndex = 1,
+                     .zIndex = UI::ZIndex::LIST_DECORATION,
                      .attachPoints = { .element = CLAY_ATTACH_POINT_RIGHT_TOP, .parent = CLAY_ATTACH_POINT_RIGHT_TOP },
                      .attachTo = CLAY_ATTACH_TO_PARENT,
                      },
@@ -1722,7 +1733,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
          .cornerRadius = CLAY_CORNER_RADIUS(4),
          .floating = {
              .offset = { .x = 16, .y = -16 },
-             .zIndex = 100,
+             .zIndex = UI::ZIndex::HUD_OVERLAY,
              .attachPoints = { .element = CLAY_ATTACH_POINT_LEFT_BOTTOM, .parent = CLAY_ATTACH_POINT_LEFT_BOTTOM },
              .attachTo = CLAY_ATTACH_TO_ROOT,
              },
@@ -1734,6 +1745,9 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
         CLAY_TEXT(resString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
         CLAY_TEXT(ppString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
     }
+#if WILL_EDITOR
+    } // state->debug.bEnableUI
+#endif
 
     Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);
 

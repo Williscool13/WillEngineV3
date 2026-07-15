@@ -27,12 +27,15 @@ struct Context
 {
     uint32_t activeId{0};
     int32_t caret{0};
+
+    float backspaceRepeatTimer{0.0f};
+    float deleteRepeatTimer{0.0f};
+    float leftRepeatTimer{0.0f};
+    float rightRepeatTimer{0.0f};
 };
 
 bool IsFocused(const Context& ui, Clay_ElementId id);
 void ClearFocus(Context& ui, Clay_ElementId id);
-
-// ---- Behaviors: headless interaction primitives, no rendering of their own ----
 
 /** Persisted per draggable element: press position/value and whether the drag threshold has been crossed. */
 struct DragState
@@ -65,6 +68,7 @@ struct TextFieldStyle
     Clay_Color backgroundFocused{50, 50, 60, 255};
     Clay_Color textColor{230, 230, 230, 255};
     Clay_Color caretColor{255, 255, 255, 255};
+    int16_t caretZIndex{1};
 };
 
 struct TextFieldResult
@@ -73,10 +77,10 @@ struct TextFieldResult
     bool changed{false};
 };
 
-/**
- * Single-line text field. Declares its own Clay element (background + text + caret) and edits buf in place from state->input.textInput. Guarded by IsFocused.
- */
+/** Click-to-focus/position and text editing (insert/backspace/delete/arrows/home/end/submit) against buf in place. */
 TextFieldResult TextField(Engine::EngineContext* ctx, Engine::EngineState* state, Context& ui, Clay_ElementId id, char* buf, size_t cap, const TextFieldStyle& style = {});
+/** Declares the field's Clay element (background + text + caret) reflecting the already-updated buf/ui. */
+void TextFieldDraw(Engine::EngineContext* ctx, Engine::EngineState* state, const Context& ui, Clay_ElementId id, const char* buf, const TextFieldStyle& style = {});
 
 struct ButtonStyle
 {
@@ -87,7 +91,10 @@ struct ButtonStyle
     Clay_Color textColor{220, 220, 220, 255};
 };
 
-bool Button(Engine::EngineState* state, Clay_ElementId id, const char* label, const ButtonStyle& style = {});
+/** Hit-test + click. */
+bool Button(Engine::EngineState* state, Clay_ElementId id);
+/** Declares the button's Clay element, hover-tinted. */
+void ButtonDraw(Engine::EngineState* state, Clay_ElementId id, const char* label, const ButtonStyle& style = {});
 
 enum class ToggleAction { None, Toggled, Soloed };
 
@@ -105,7 +112,9 @@ struct ToggleButtonStyle
  * Checkbox styled as a button: persistent on/off. Reports intent only, caller applies it since only it knows the sibling set.
  * Click -> Toggled. Shift+click -> Soloed. Caller always treating Toggled as solo too turns the same group into a radio group.
  */
-ToggleAction ToggleButton(Engine::EngineState* state, Clay_ElementId id, const char* label, bool active, const ToggleButtonStyle& style = {});
+ToggleAction ToggleButton(Engine::EngineState* state, Clay_ElementId id);
+/** Declares the toggle button's Clay element, active/hover-tinted. */
+void ToggleButtonDraw(Engine::EngineState* state, Clay_ElementId id, const char* label, bool active, const ToggleButtonStyle& style = {});
 
 struct TitleBarStyle
 {
@@ -120,10 +129,10 @@ struct TitleBarResult
     bool clicked{false};
 };
 
-/**
- * A window's drag handle. Renders a labeled strip and drives DragBehavior against the caller-owned window position.
- */
-TitleBarResult TitleBar(Engine::EngineState* state, Clay_ElementId id, const char* title, DragState& drag, Vec2& windowPosition, const TitleBarStyle& style = {});
+/** A window's drag handle: drives DragBehavior against the caller-owned window position. */
+TitleBarResult TitleBar(Engine::EngineState* state, Clay_ElementId id, DragState& drag, Vec2& windowPosition);
+/** Declares the title bar's Clay element (label strip). */
+void TitleBarDraw(Engine::EngineState* state, Clay_ElementId id, const char* title, const TitleBarStyle& style = {});
 
 // ---- Containers ----
 

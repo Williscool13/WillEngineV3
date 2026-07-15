@@ -310,9 +310,13 @@ struct TextInputState
     Core::InlineString<32> chars{};
     bool submit{false};
     bool backspace{false};
+    bool backspaceDown{false};
     bool deleteForward{false};
+    bool deleteForwardDown{false};
     bool left{false};
+    bool leftDown{false};
     bool right{false};
+    bool rightDown{false};
     bool home{false};
     bool end{false};
     bool up{false};
@@ -336,6 +340,9 @@ struct InputState
 
     Vec2 mousePositionAbsolute{};
     TextInputState textInput{};
+
+    // Just something to get clay to work with my decoupled game/render.
+    Vec2 uiScrollAccum{};
 
     [[nodiscard]] const Core::ActionState& GetActionState(ActionHandle action) const
     {
@@ -508,6 +515,9 @@ struct EngineState
 
     BuiltinAssets builtinAssets{};
 
+    // Engine Features
+    InputState input;
+
     // Gameplay
     StringID currentSceneId{0};
     Core::InlineString<128> currentSceneName{};
@@ -518,7 +528,6 @@ struct EngineState
     LightingState lighting;
     EditorState editor;
     DebugState debug;
-    InputState input;
     ProjectConfig projectConfig{};
 };
 

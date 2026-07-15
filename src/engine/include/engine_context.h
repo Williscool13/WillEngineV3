@@ -61,6 +61,16 @@ struct WindowContext
     uint32_t viewportOffsetY;
 };
 
+
+struct WorldCacheStatsSnapshot
+{
+    uint32_t occupiedSlots{};
+    uint32_t cellsCarried{};
+    uint32_t cellsEvicted{};
+    uint32_t insertsFailed{};
+    uint32_t cellsShaded{};
+};
+
 struct EngineContext
 {
     WindowContext windowContext{};
@@ -100,6 +110,8 @@ struct EngineContext
     /** Set when any model/font finished loading or a model/font was reclaimed this frame; gates the per-frame asset-resolve block. */
     bool bAssetsChangedThisFrame{false};
 
+    WorldCacheStatsSnapshot worldCacheStats{};
+
 
     // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded)
     // handles are opaque uint64_t (VkSampler, VkImageView, VkDescriptorSet)
@@ -108,6 +120,17 @@ struct EngineContext
 
     bool bShouldRescanResources{false};
     std::atomic<bool> bShouldRescanMaterials{false};
+
+    /**
+     * Opaque, engine-allocated (persistent, sized via GameGetStateSize) storage for game-defined persistent state -
+     * the engine never interprets it, only owns the memory so it survives game DLL hot-reload. Game code placement-
+     * constructs its own type into it once (GameStartup) and destructs it once (GameShutdown); see GetGameState().
+     */
+    void* gameState{nullptr};
+    size_t gameStateSize{0};
+
+    template<typename T>
+    T* GetGameState() { return static_cast<T*>(gameState); }
 };
 } // Engine
 

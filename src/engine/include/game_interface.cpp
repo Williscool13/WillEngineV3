@@ -9,6 +9,11 @@
 namespace Core
 {
 
+size_t StubGetStateSize()
+{
+    return 0;
+}
+
 void StubStartup(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_WARN("Game DLL not loaded - stub Startup");

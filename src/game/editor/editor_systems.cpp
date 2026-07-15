@@ -244,7 +244,7 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    if (state->inputContext != Engine::InputContext::Editor) {
+    if (IsPlaying(state)) {
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
         if (!popupOpen && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
             if (state->inputContext == Engine::InputContext::Gameplay) {
@@ -537,7 +537,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
 static void DrawGameplayWindow(Engine::EngineState* state)
 {
     if (ImGui::Begin("Gameplay")) {
-        if (state->inputContext != Engine::InputContext::Editor) {
+        if (IsPlaying(state)) {
             ImGui::Text("Checkpoint ID:       %llu", state->currentCheckpointId.id);
             ImGui::Text("Checkpoint Priority: %d", state->currentCheckpointPriority);
         }
@@ -690,7 +690,7 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
-        if (state->inputContext != Engine::InputContext::Editor) {
+        if (IsPlaying(state)) {
             if (ImGui::Button("Stop")) {
                 PlayStop(ctx, state);
             }

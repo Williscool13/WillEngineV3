@@ -16,6 +16,7 @@ namespace Core
 {
 struct FrameBuffer;
 
+using GameGetStateSizeFunc = size_t(*)();
 using GameStartUpFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameLoadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameUpdateFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
@@ -25,6 +26,8 @@ using GameUnloadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameHotReloadSaveFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameHotReloadLoadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameShutdownFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
+
+size_t StubGetStateSize();
 
 void StubStartup(Engine::EngineContext* ctx, Engine::EngineState* state);
 
@@ -42,6 +45,7 @@ void StubShutdown(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 struct GameAPI
 {
+    GameGetStateSizeFunc gameGetStateSize;
     GameStartUpFunc gameStartup;
     GameLoadFunc gameLoad;
     GameUpdateFunc gameUpdate;
@@ -54,6 +58,7 @@ struct GameAPI
 
     void Stub()
     {
+        gameGetStateSize = StubGetStateSize;
         gameStartup = StubStartup;
         gameLoad = StubLoad;
         gameUpdate = StubUpdate;
@@ -79,6 +84,14 @@ struct GameAPI
 
 extern "C"
 {
+
+/**
+* Called once, before GameStartup, so the engine can reserve GameState's persistent storage.
+* Engine owned memory, should return same value across hot-reload or an engine assert will be tripped.
+ * @return
+ */
+GAME_API size_t GameGetStateSize();
+
 /**
  * Called once when the application starts. Will not be called again during hot-reload.
  * @param ctx

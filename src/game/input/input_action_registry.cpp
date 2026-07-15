@@ -88,6 +88,8 @@ void RegisterInputActions(Engine::InputState& input)
         Engine::BindingSource::FromMouseWheelX(),
         Engine::BindingSource::FromMouseWheelY()
     });
+    AddDefaultAllContexts(input, Actions::ACTION_UI_PAGE_UP, Engine::BindingSource::FromKey(Key::PAGEUP));
+    AddDefaultAllContexts(input, Actions::ACTION_UI_PAGE_DOWN, Engine::BindingSource::FromKey(Key::PAGEDOWN));
 
     // Gameplay
     AddDefault(input, Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::F1));

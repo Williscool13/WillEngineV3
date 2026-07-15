@@ -15,9 +15,13 @@ void ResolveInputActions(const Core::InputFrame& frame, InputContext context, In
     input.textInput.chars = frame.textInput;
     input.textInput.submit = frame.GetKey(Core::Key::RETURN).pressed;
     input.textInput.backspace = frame.GetKey(Core::Key::BACKSPACE).pressed;
+    input.textInput.backspaceDown = frame.GetKey(Core::Key::BACKSPACE).down;
     input.textInput.deleteForward = frame.GetKey(Core::Key::DEL).pressed;
+    input.textInput.deleteForwardDown = frame.GetKey(Core::Key::DEL).down;
     input.textInput.left = frame.GetKey(Core::Key::LEFT).pressed;
+    input.textInput.leftDown = frame.GetKey(Core::Key::LEFT).down;
     input.textInput.right = frame.GetKey(Core::Key::RIGHT).pressed;
+    input.textInput.rightDown = frame.GetKey(Core::Key::RIGHT).down;
     input.textInput.home = frame.GetKey(Core::Key::HOME).pressed;
     input.textInput.end = frame.GetKey(Core::Key::END).pressed;
     input.textInput.up = frame.GetKey(Core::Key::UP).pressed;

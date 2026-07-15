@@ -19,11 +19,13 @@ set(GAME_SOURCES
         editor/editor_materials.h
         editor/editor_multi_edit.cpp
         editor/editor_multi_edit.h
-        editor/editor_console.cpp
-        editor/editor_console.h
 
         ui/game_ui.cpp
         ui/game_ui.h
+        ui/ui_zindex.h
+
+        console/console.cpp
+        console/console.h
 
         logging/game_log_category.h
         logging/game_log.h
