@@ -1,5 +1,6 @@
 set(GAME_SOURCES
         game.cpp
+        game_state.h
 
 
         systems/camera_system.cpp

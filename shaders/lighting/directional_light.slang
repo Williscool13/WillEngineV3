@@ -61,7 +61,8 @@ void ComputeDirectionalLight(uniform DirectionalLightPushConstant pc, uint3 thre
         visibility = rdgTexturesFloat2[pc.shadowIndex].Load(int3(pixel, 0)).r;
     } else {
         // Joint bilateral upsample of the half-res shadow, guided by this full-res pixel's depth + normal.
-        float2 hp = uv * float2(pc.shadowExtent) - 0.5;
+        // Map full-res pixel to half-res grid via the exact integer decimation (rt_sun_shadow uses pixel*pixelScale); parity-independent, unlike floored shadowExtent.
+        float2 hp = (float2(pixel) + 0.5) / float(pc.pixelScale) - 0.5;
         int2 base = int2(floor(hp));
         float2 f = hp - float2(base);
         int2 maxCoord = int2(pc.shadowExtent) - 1;

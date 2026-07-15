@@ -12,6 +12,15 @@
 
 namespace Render
 {
+struct WorldCacheStatistics
+{
+    uint32_t occupiedSlots{};
+    uint32_t cellsCarried{};
+    uint32_t cellsEvicted{};
+    uint32_t insertsFailed{};
+    uint32_t cellsShaded{};
+};
+
 struct RendererStatistics
 {
     // Geometry pass
@@ -20,6 +29,9 @@ struct RendererStatistics
     // Visibility bucketing
     uint32_t shadingDispatches{};
     uint32_t lightingDispatches{};
+
+    // World radiance cache occupancy (multi-frame readback latency)
+    WorldCacheStatistics worldCache{};
 
     // Pipeline statistics (whole-frame query)
     uint64_t meshInvocations{};

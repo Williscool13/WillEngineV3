@@ -185,6 +185,13 @@ inline void DestroyComponent(Engine::EngineState* state, entt::entity entity, St
 void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+/** True while a PIE session (Gameplay or its paused Menu) is active. Not just "!= Editor" - Console is a third,
+ *  orthogonal modal state that can overlay either Editor or a play session, so it must not count as "playing". */
+inline bool IsPlaying(const Engine::EngineState* state)
+{
+    return state->inputContext == Engine::InputContext::Gameplay || state->inputContext == Engine::InputContext::Menu;
+}
 } // Game
 
 #endif //WILL_ENGINE_SCENE_SYSTEM_H

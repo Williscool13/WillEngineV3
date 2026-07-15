@@ -29,7 +29,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint64_t frameNumber,
                        const Core::ReSTIRParams& restirParams,
                        uint32_t activeCheckerboardField,
-                       const Core::RTReflectionConfiguration& reflectionConfig)
+                       const Core::RTReflectionConfiguration& reflectionConfig,
+                       bool bResetHistory)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const uint32_t reservoirBufferSize = pixelCount * static_cast<uint32_t>(sizeof(Reservoir));
@@ -51,7 +52,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     const Core::Array<uint32_t, 2> gradientExtent = {(renderExtent[0] + GRAD_FACTOR - 1u) / GRAD_FACTOR, (renderExtent[1] + GRAD_FACTOR - 1u) / GRAD_FACTOR};
 
     // Transform all lights (area + sphere) to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
-    graph.CreateBuffer(SID("restir_lights_vs"), MAX_LIGHTS * sizeof(LightVSData), true);
+    graph.CreateBuffer(SID("restir_lights_vs"), MAX_LIGHTS * sizeof(LightVSData), false);
 
     RenderPass& transformPass = graph.AddPass(SID("[ReSTIR DI] Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     transformPass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -207,7 +208,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             graph.CreateBuffer(SID("restir_reservoir_temporal"), reservoirBufferSize, true);
         }
 
-        const bool bHasHistory = graph.HasBuffer(SID("restir_reservoir_history"));
+        const bool bHasHistory = graph.HasBuffer(SID("restir_reservoir_history")) && !bResetHistory;
         const bool bHasPrevVis = bShadowVis && graph.HasTexture(SID("restir_shadow_vis_prev"));
         if (bShadowVis) {
             graph.CreateTexture(SID("restir_shadow_vis"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
@@ -280,9 +281,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .prevTlasIndex = ~0u,
                 .prevShadowVisIndex = ~0u,
                 .shadowVisIndex = ~0u,
-                .confidenceIndex = ~0u,
                 .signalIndex = ~0u,
-                .confidenceStrength = 0.0f,
                 .bPermutationSampling = 0u,
                 .antilagStrength = 0.0f,
                 .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
@@ -352,14 +351,13 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .prevTlasIndex = prevTlasIndex,
                     .prevShadowVisIndex = bHasPrevVis ? graph.GetSampledImageViewDescriptorIndex(SID("restir_shadow_vis_prev")) : ~0u,
                     .shadowVisIndex = bShadowVis ? graph.GetStorageImageViewDescriptorIndex(SID("restir_shadow_vis")) : ~0u,
-                    .confidenceIndex = ~0u,
                     .signalIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex(SID("restir_signal")) : ~0u,
-                    .confidenceStrength = restirParams.confidenceStrength,
                     .bPermutationSampling = restirParams.bPermutationSampling ? 1u : 0u,
                     .antilagStrength = restirParams.antilagStrength,
                     .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
                     .bTemporalSearch = restirParams.bTemporalSearch ? 1u : 0u,
                     .activeCheckerboardField = field,
+                    .finalWClamp = (restirParams.spatialPasses == 0u) ? restirParams.restirWClamp : 0.0f,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

@@ -29,6 +29,13 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     if (pixel.x >= pc.renderExtent.x) {
         // Odd-width phantom column: past extent but still in the aliased buffer; keep initialized.
         pc.outputBuffer[reservoirCoord.y * stride + reservoirCoord.x] = ReservoirEmpty();
+        uint2 orphan = uint2(pc.renderExtent.x - 1u, pixel.y);
+#if RESTIR_ENABLE_ANTILAG
+        if (pc.shadowVisIndex != ~0u) { rdgStorageFloat[pc.shadowVisIndex][orphan] = 1.0; }
+#endif
+#if RESTIR_ENABLE_CONFIDENCE
+        if (pc.signalIndex != ~0u) { rdgStorageFloat2[pc.signalIndex][orphan] = float2(0.0, 0.0); }
+#endif
         return;
     }
 
@@ -162,7 +169,6 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     float Mc = (r_gen.lightIdx != ~0u) ? float(r_gen.M) : 0.0;
     clampedHistoryM = validHistoryReservoir ? min(history.M, pc.mCap) : 0u;
     float Mi = float(clampedHistoryM);
-    float mFactorHist = 1.0;
 
     if (r_gen.lightIdx != ~0u) {
         float pGen_cur = EvalReservoirPHat(r_gen.lightIdx, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
@@ -184,7 +190,6 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     if (validHistoryReservoir) {
         float pHist_cur = EvalReservoirPHat(history.lightIdx, history.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
         float pHist_hist = EvalReservoirPHat(history.lightIdx, history.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
-        mFactorHist = (pHist_hist > 0.0) ? saturate(pHist_cur / pHist_hist) : 1.0;
 
         float denomHist = Mi * pHist_hist + Mc * pHist_cur;
         float misHist = (denomHist > 0.0) ? (Mi * pHist_hist) / denomHist : 0.0;
@@ -203,7 +208,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     }
 #endif
 
-    combined.M = r_gen.M + uint(float(clampedHistoryM) * mFactorHist + 0.5);
+    combined.M = r_gen.M + clampedHistoryM;
 
     float winnerVisibility = 1.0;
 #if RESTIR_ENABLE_CONFIDENCE
@@ -225,6 +230,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         p_hat_winner = EvalReservoirPHatVisibility(combined.lightIdx, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, scene.invView, pc.lightData->directionalLight, pc.lightVS, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize);
 #endif
         ReservoirFinalise(combined, accum_combined, p_hat_winner, 1.0);
+        if (pc.finalWClamp > 0.0) { combined.W = min(combined.W, pc.finalWClamp); }
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
 
 #if RESTIR_ENABLE_CONFIDENCE

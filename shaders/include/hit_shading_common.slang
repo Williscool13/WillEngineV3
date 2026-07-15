@@ -14,6 +14,7 @@ import binning_common;
 import random_common;
 import shader_constants;
 import constants_interop;
+import world_cache_interop;
 
 // Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
@@ -32,8 +33,8 @@ public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, 
     return normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
 }
 
-/** NEE variant: sun + one uniformly picked local light, both shadow-ray tested, + emissive + DDGI feedback. Fallback for DDGI probe rays when the world cache has no slot for the hit. */
-public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed)
+/** Fallback for DDGI probe rays when the world cache has no slot for the hit: sun (shadow-ray tested) + emissive + the in-cell clustered local lights (deterministic, unshadowed, matching the world-cache shade the value stands in for) + IBL/DDGI feedback. */
+public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -87,56 +88,18 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         }
     }
 
-    // NEE (analytic lights only). Outer cascades skip it to save the shadow ray, keeping only sun + emissive + feedback)
-    int analyticCount = pc.lightData->analyticLightCount;
-    if (pc.bLocalNEE != 0 && analyticCount > 0) {
-        uint rng = rngSeed;
-        float rng0 = HashStep(rng);
-        float2 xi;
-        xi.x = HashStep(rng);
-        xi.y = HashStep(rng);
-        int lightIdx = clamp(int(rng0 * float(analyticCount)), 0, analyticCount - 1);
-        LightInfo light = pc.lightData->lights[lightIdx];
-
-        float3 lightSamplePos;
-        float lightArea;
-        if (light.type == LIGHT_TYPE_SPHERE) {
-            float radius = light.right.w;
-            float z = 1.0 - 2.0 * xi.x;
-            float rr = sqrt(max(1.0 - z * z, 0.0));
-            float phi = 2.0 * PI * xi.y;
-            lightSamplePos = light.position.xyz + radius * float3(rr * cos(phi), rr * sin(phi), z);
-            lightArea = 4.0 * PI * radius * radius;
-        } else {
-            lightSamplePos = light.position.xyz + light.right.xyz * (xi.x * 2.0 - 1.0) * light.right.w + light.up.xyz * (xi.y * 2.0 - 1.0) * light.up.w;
-            lightArea = 4.0 * light.right.w * light.up.w;
-        }
-
-        float3 toLight = lightSamplePos - worldPosition;
-        float lightDist = max(length(toLight), 1e-5);
-        float3 L = toLight / lightDist;
-        float cosShade = dot(N, L);
-        float cosLight = light.type == LIGHT_TYPE_SPHERE
-            ? max(dot(normalize(lightSamplePos - light.position.xyz), -L), 0.0)
-            : max(dot(-light.normal.xyz, L), 0.0);
-        float atten = LightRangeCull(lightDist, light.range);
-        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
-            float3 rayOrigin = worldPosition + N * 0.05;
-            float3 toLightShadow = lightSamplePos - rayOrigin;
-            float shadowDist = length(toLightShadow);
-
-            RayDesc shadowRay;
-            shadowRay.Origin = rayOrigin;
-            shadowRay.Direction = toLightShadow / shadowDist;
-            shadowRay.TMin = 0.001;
-            shadowRay.TMax = shadowDist - 0.05;
-
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
-            shadow.Proceed();
-            if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
-            }
+    // Local lights via the world-space clustered grid; matches ShadeWorldCacheCell so cache-miss fallbacks agree with the cache value they stand in for.
+    if (pc.bLocalNEE != 0 && worldGridLights.grid != nullptr) {
+        WorldGridKey key = WorldGridResolveCell(worldPosition, worldGridLights.camPos);
+        uint2 gridEntry = worldGridLights.grid[key.cellIndex];
+        float3 viewPos = mul(worldGridLights.view, float4(worldPosition, 1.0)).xyz;
+        float3 viewN = normalize(mul((float3x3)worldGridLights.view, N));
+        float3 viewV = normalize(mul((float3x3)worldGridLights.view, V));
+        float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, material.metalRoughFactors.x);
+        for (uint j = 0; j < gridEntry.y; j++) {
+            uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
+            PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], worldGridLights.view);
+            radiance += ShadePunctual(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
         }
     }
 
@@ -228,8 +191,23 @@ public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance
     return radiance;
 }
 
+/** Uniformly sample a ray direction inside the sun's angular cone (half-angle = angularRadius) around the mean direction. */
+static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float u1, float u2)
+{
+    float cosThetaMax = cos(angularRadius);
+    float cosTheta = lerp(1.0, cosThetaMax, u1);
+    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
+    float phi = 6.28318530718 * u2;
+
+    float3 w = toLight;
+    float3 up = abs(w.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 t = normalize(cross(up, w));
+    float3 b = cross(w, t);
+    return normalize(sinTheta * cos(phi) * t + sinTheta * sin(phi) * b + cosTheta * w);
+}
+
 // V = N (NoV = 1): no single ray direction to use, and this value gets read back from every direction later.
-public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, WorldGridPunctualLights worldGridLights)
+public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, uint rngSeed, WorldGridPunctualLights worldGridLights)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -273,17 +251,30 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
         float3 L = normalize(-sun.directionIntensity.xyz);
         float NoL = dot(N, L);
         if (NoL > 0.0) {
-            RayDesc shadowRay;
-            shadowRay.Origin = worldPosition + N * 0.05;
-            shadowRay.Direction = L;
-            shadowRay.TMin = 0.001;
-            shadowRay.TMax = 10000.0;
+            // Zero angular radius makes every cone sample identical; one ray suffices.
+            uint sampleCount = sun.angularRadius > 0.0 ? WORLD_CACHE_SUN_SAMPLES : 1u;
+            float sunVisibility = 0.0;
+            for (uint s = 0u; s < sampleCount; s++) {
+                uint rng = rngSeed ^ (s * 0x9E3779B9u);
+                float u1 = HashStep(rng);
+                float u2 = HashStep(rng);
 
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
-            shadow.Proceed();
-            if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
+                RayDesc shadowRay;
+                shadowRay.Origin = worldPosition + N * 0.05;
+                shadowRay.Direction = SampleSunConeDirection(L, sun.angularRadius, u1, u2);
+                shadowRay.TMin = 0.001;
+                shadowRay.TMax = 10000.0;
+
+                RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+                shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
+                shadow.Proceed();
+                if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
+                    sunVisibility += 1.0;
+                }
+            }
+            sunVisibility /= float(sampleCount);
+            if (sunVisibility > 0.0) {
+                radiance += sunVisibility * diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
             }
         }
     }
@@ -298,7 +289,7 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
         for (uint j = 0; j < gridEntry.y; j++) {
             uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
             PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], worldGridLights.view);
-            radiance += ShadePunctual(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
+            radiance += ShadePunctualDiffuse(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
         }
     }
 

@@ -13,6 +13,8 @@ import relax_utils;
 import reblur_utils;
 import restir_common;
 
+static const float REBLUR_PRE_PASS_FRACTION_SCALE = 2.0;
+
 int2 CheckerboardShiftFull(int2 samplePos, uint cbField, uint counter, uint frameIndex, int rectSizeX)
 {
     if (cbField == 2u) { return samplePos; }
@@ -111,7 +113,7 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
             w *= RelaxComputeWeight(normalAngle, normalWeightParam, 0.0);
             if (w > 1e-4) {
                 float4 s = rdgTexturesFloat4[pc.diffInputIndex].Load(int3(CheckerboardSignalPos(samplePos, rc.gCheckerboard, uint(i), rc.gFrameIndex, int(rc.gRectSize.x)), 0));
-                w *= lerp(rc.gMinHitDistanceWeight, 1.0, RelaxComputeExponentialWeight(s.a, hitDistanceWeightParams.x, hitDistanceWeightParams.y));
+                w *= rc.gMinHitDistanceWeight * REBLUR_PRE_PASS_FRACTION_SCALE + RelaxComputeExponentialWeight(s.a, hitDistanceWeightParams.x, hitDistanceWeightParams.y);
                 w *= RelaxGetGaussianWeight(offset.z);
                 diffSum += s * w;
                 weightSum += w;
@@ -156,7 +158,7 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
         float normalWeightParam = RelaxGetNormalWeightParam2(centerRoughness, 0.5 * rc.gLobeAngleFraction);
         float2 hitDistanceWeightParams = ReblurGetHitDistanceWeightParams(specSum.a, 1.0 / 9.0, centerRoughness);
         float2 roughnessWeightParams = RelaxGetRoughnessWeightParams(centerRoughness, rc.gRoughnessFraction);
-        float specMinHitDistanceWeight = specSum.a == 0.0 ? 1.0 : rc.gMinHitDistanceWeight * smc;
+        float specMinHitDistanceWeight = rc.gMinHitDistanceWeight * REBLUR_PRE_PASS_FRACTION_SCALE * smc;
 
         // Miss center must init to NRD_INF so an all-miss result stores 0, not a bogus value.
         float minHitT = specSum.a == 0.0 ? NRD_INF : specSum.a;
@@ -189,7 +191,8 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
                 minHitT = min(minHitT, s.a == 0.0 ? NRD_INF : s.a);
             }
 
-            w *= lerp(specMinHitDistanceWeight, 1.0, RelaxComputeExponentialWeight(s.a, hitDistanceWeightParams.x, hitDistanceWeightParams.y));
+            // Miss center uses uniform weight so it doesn't reject bright neighbors used for hitDist tracking.
+            w *= specSum.a == 0.0 ? 1.0 : (specMinHitDistanceWeight + RelaxComputeExponentialWeight(s.a, hitDistanceWeightParams.x, hitDistanceWeightParams.y));
             w *= RelaxGetGaussianWeight(offset.z);
 
             float d = length(sampleWorldPos - centerWorldPos);

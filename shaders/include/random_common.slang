@@ -25,3 +25,14 @@ public float BlueNoiseAngle(uint2 pixel, uint frameIndex)
     float n = InterleavedGradientNoise(float2(pixel) + 5.588238 * float(frameIndex & 63u));
     return n * 6.28318530718;
 }
+
+/** Texture-free temporally-progressive 2D sample in [0, 1)^2: an R2 (plastic-constant) rank-1 lattice advances the pair across frames (low-discrepancy per pixel), Cranley-Patterson rotated by two independent per-pixel hash offsets. IGN offsets are unusable here: their diagonal isoline structure correlates neighbouring pixels' sequences into visible cross-hatching. */
+public float2 SpatioTemporalBlueNoise2D(uint2 pixel, uint frameIndex)
+{
+    const float2 R2 = float2(0.7548776662466927, 0.5698402909980532);
+    float2 seq = frac(R2 * float(frameIndex & 63u));
+    uint h = SeedRng(pixel, 0u, 0x9E3779B9u);
+    float o1 = HashStep(h);
+    float o2 = HashStep(h);
+    return frac(seq + float2(o1, o2));
+}

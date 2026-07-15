@@ -6,11 +6,11 @@ import shader_functions;
 import packing_functions;
 import gi_gather_common;
 
-// Separable bilateral gaussian over the gather SH (H then V via pc.direction); FP16 groupshared preload, weights from plane-distance/normal/hitT deltas.
+// Separable bilateral gaussian over the gather SH, iterated a-trous (H then V via pc.direction, stride via pc.stepSize); FP16 groupshared preload, weights from plane-distance/normal/hitT deltas.
 
-static const int GI_DENOISE_RADIUS = 4;
-static const int GI_DENOISE_MAX_STEP = 3;
-static const int GI_DENOISE_TILE_RADIUS = GI_DENOISE_RADIUS * GI_DENOISE_MAX_STEP;
+static const int GI_DENOISE_RADIUS = 2;
+static const int GI_DENOISE_MAX_STRIDE = 4;
+static const int GI_DENOISE_TILE_RADIUS = GI_DENOISE_RADIUS * GI_DENOISE_MAX_STRIDE;
 static const int GI_DENOISE_GROUP = 16;
 static const int GI_DENOISE_TILE = GI_DENOISE_GROUP + 2 * GI_DENOISE_TILE_RADIUS;
 static const float GI_DENOISE_PLANE_DIST_SIGMA = 0.01;
@@ -43,14 +43,16 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         uint2 fullPixel = GIGatherRepresentativePixel(uint2(p), pc.frameIndex, pc.renderExtent);
         float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
         uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
-        bool valid = inside && depth > 0.0 && (gt1.w & 1u) != 0u;
+        float2 data = rdgTexturesFloat2[pc.dataIndex].Load(int3(p, 0)).xy;
+        // Backface samples carry no radiance; excluding them here removes them as taps and reduces the center to a passthrough.
+        bool valid = inside && depth > 0.0 && (gt1.w & 1u) != 0u && uint(data.y + 0.5) != GI_GATHER_TIER_BACKFACE;
 
         sShR[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcShRIndex].Load(int3(p, 0)));
         sShG[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcShGIndex].Load(int3(p, 0)));
         sShB[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcShBIndex].Load(int3(p, 0)));
         sNormal[t] = gt1.r;
         sViewZ[t] = valid ? ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd) : 0.0;
-        sHitT[t] = rdgTexturesFloat2[pc.dataIndex].Load(int3(p, 0)).x;
+        sHitT[t] = data.x;
     }
     GroupMemoryBarrierWithGroupSync();
 
@@ -70,36 +72,17 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
     if (centerViewZ != 0.0) {
         float3 centerNormal = UnpackNormalOct16(sNormal[centerIdx]);
         float centerHitT = sHitT[centerIdx];
+        if (pc.stepSize == 1u) {
+            // Stabilize the edge-stop reference against 1spp hitT variance. First iteration only, later iterations read already-filtered SH.
+            float hitL = sViewZ[centerIdx - 1] != 0.0 ? sHitT[centerIdx - 1] : centerHitT;
+            float hitR = sViewZ[centerIdx + 1] != 0.0 ? sHitT[centerIdx + 1] : centerHitT;
+            centerHitT = min(centerHitT, min(hitL, hitR));
+        }
         uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.frameIndex, pc.renderExtent);
         float2 centerUv = (float2(centerFull) + 0.5) / float2(pc.renderExtent);
         float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, centerUv, centerViewZ);
         float invPlaneSigma = 1.0 / (GI_DENOISE_PLANE_DIST_SIGMA * abs(centerViewZ));
-
-        // Reproject to last frame's accumulated count at this pixel: fresh/disoccluded (low count) gets a wider dilation step, converged pixels shrink toward step=1.
-        float historyCount = 0.0;
-        if (pc.bHistoryValid != 0u) {
-            float3 worldNormal = normalize(mul((float3x3)scene.invView, centerNormal));
-            float3 worldPos = mul(scene.invView, float4(centerXv, 1.0)).xyz;
-            float4 prevClip = mul(scene.prevViewProj, float4(worldPos, 1.0));
-            if (prevClip.w > 0.0) {
-                float2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
-                if (all(prevUV >= float2(0.0)) && all(prevUV <= float2(1.0))) {
-                    int2 prevPixel = clamp(int2(prevUV * float2(pc.renderExtent)), int2(0), int2(pc.renderExtent) - int2(1));
-                    float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(prevPixel, 0)).r;
-                    if (prevRawDepth > 0.0) {
-                        float prevViewDepth = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-                        if (abs(prevViewDepth - prevClip.w) <= 0.03 * prevClip.w + 0.05) {
-                            float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0)).r)));
-                            if (dot(worldNormal, prevWorldN) > 0.5) {
-                                historyCount = rdgTexturesFloat4[pc.historyIndex].Load(int3(prevPixel, 0)).a;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        float radiusScale = 1.0 / (1.0 + min(historyCount, GI_GATHER_MAX_ACCUM));
-        int step = clamp(int(round(1.0 + float(GI_DENOISE_MAX_STEP - 1) * radiusScale)), 1, GI_DENOISE_MAX_STEP);
+        int step = clamp(int(pc.stepSize), 1, GI_DENOISE_MAX_STRIDE);
 
         const int2 dir = horizontal ? int2(1, 0) : int2(0, 1);
         float sumW = 1.0;

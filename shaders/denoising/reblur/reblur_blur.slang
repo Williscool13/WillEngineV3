@@ -127,7 +127,10 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
                 weightSum += w;
             }
         }
-        rdgStorageFloat4[pc.outDiffIndex][pixelPos] = sum / weightSum;
+
+        float4 outDiff = sum / weightSum;
+        outDiff.w = diffCenter.w;
+        rdgStorageFloat4[pc.outDiffIndex][pixelPos] = outDiff;
     }
 
     // ---------------- Specular blur (anisotropic world-space kernel) ----------------
@@ -199,6 +202,9 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
                 weightSum += w;
             }
         }
-        rdgStorageFloat4[pc.outSpecIndex][pixelPos] = sum / weightSum;
+
+        float4 outSpec = sum / weightSum;
+        outSpec.w = specCenter.w;
+        rdgStorageFloat4[pc.outSpecIndex][pixelPos] = outSpec;
     }
 }

@@ -33,6 +33,11 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
 float ComputeCheckerboardResolveAccumSpeed(Core::AntiAliasingMode aaMode, uint64_t frameNumber, float renderFps);
 
 /**
+ * NRD's per-frame max camera-jitter delta in pixels (0 when not jittering).
+ */
+float ComputeRelaxJitterDelta(Core::AntiAliasingMode aaMode, uint64_t frameNumber);
+
+/**
  * Clean up some invalid fields in the view family. E.g. materials w/out compiled shaders (at the time of draw)
  * @param viewFamily
  * @param pipelineManager used to validate shader pipeline existence

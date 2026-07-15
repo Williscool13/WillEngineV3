@@ -53,12 +53,15 @@ SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_MAX_LEVEL = 8u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_NORMAL_BUCKETS = 6u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_LRU_THRESHOLD = 60u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_LOD_REVALIDATE_MARGIN = 2u;
-SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_ACCUM_FRAMES = 25u; // count-based blend cap; steady state keeps 24/25 of history (matches the old 0.96 hysteresis)
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_ACCUM_FRAMES = 6u; // count-based blend cap; steady state keeps 5/6 of history; shorter tau paid for by WORLD_CACHE_SUN_SAMPLES variance reduction
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_SHADE_INTERVAL = 8u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_SHADE_BUDGET = 20480u;
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_SUN_SAMPLES = 4u; // independent cone-sampled sun visibility rays averaged per cell shade
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_WARMSTART_SEED_CAP = 6u; // count a re-keyed cell inherits from its warm-start source; ~half WORLD_CACHE_ACCUM_FRAMES so a coarser parent estimate can't fully dominate
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_RADIANCE_UNSHADED = 0xFFFFFFFFu;
-SHADER_PUBLIC SHADER_CONST float WORLD_CACHE_CHANGE_THRESHOLD = 0.35; // relative luma delta that counts toward a change streak
-SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_CHANGE_STREAK = 3u; // consecutive same-direction large deltas before the EMA history is dumped
+SHADER_PUBLIC SHADER_CONST float WORLD_CACHE_CHANGE_THRESHOLD = 0.35; // max-channel relative delta that counts toward a change streak
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_CHANGE_STREAK = 3u; // consecutive same-direction large deltas before accumulated history is cut
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_DUMP_KEEP_COUNT = 2u; // count a streak dump clamps to
 
 SHADER_PUBLIC struct WorldCacheCell
 {
@@ -76,6 +79,15 @@ SHADER_PUBLIC struct WorldCacheHitDescriptor
     SHADER_PUBLIC uint pad;
 };
 
+// Per-frame occupancy/insert counters, atomically accumulated on the GPU and read back for the cache-capacity audit.
+SHADER_PUBLIC struct WorldCacheStats
+{
+    SHADER_PUBLIC uint occupiedSlots; // non-empty slots walked by carry-forward (previous frame's live set)
+    SHADER_PUBLIC uint cellsCarried; // survivors re-inserted into this frame's table
+    SHADER_PUBLIC uint cellsEvicted; // survivors dropped (LRU age, LOD revalidation, or failed re-insert)
+    SHADER_PUBLIC uint insertsFailed; // full-probe insert failures from both trace and carry-forward
+};
+
 SHADER_PUBLIC struct WorldCacheBuffers
 {
     SHADER_PUBLIC SHADER_PTR(uint) entries;
@@ -85,6 +97,7 @@ SHADER_PUBLIC struct WorldCacheBuffers
     SHADER_PUBLIC SHADER_PTR(WorldCacheHitDescriptor) descriptors;
     SHADER_PUBLIC SHADER_PTR(uint) activeList;
     SHADER_PUBLIC SHADER_PTR(uint) activeCount;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheStats) stats;
 };
 
 #endif //WILL_ENGINE_WORLD_CACHE_INTEROP_H

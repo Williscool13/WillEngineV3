@@ -16,7 +16,7 @@ public static const int SIGMA_BORDER = 2;             // 5x5 dense kernel half-w
 public static const float SIGMA_TS_SIGMA_SCALE = 3.0; // variance clamp width in temporal stabilization
 public static const float SIGMA_MAX_ACCUM_FRAME_NUM = 7.0;
 public static const float SIGMA_PLANE_DIST_SENSITIVITY = 0.005;
-public static const float SIGMA_DISOCCLUSION_THRESHOLD = 0.01;
+public static const float SIGMA_DISOCCLUSION_THRESHOLD = 0.02;
 
 /** NRD g_Special8: 8-tap sparse Poisson kernel, .xy in [-1,1], .z gaussian weight. */
 public static const float3 SIGMA_SPECIAL8[8] = {
@@ -150,4 +150,10 @@ public float SigmaFrustumSize(float2 ndcToViewMul, float viewZ, uint2 renderExte
 {
     float pixelSize = SigmaPixelSize(ndcToViewMul, viewZ, renderExtent.y);
     return float(min(renderExtent.x, renderExtent.y)) * pixelSize;
+}
+
+/** Disocclusion threshold with the REBLUR/RELAX 1/NoV slope scale (stock SIGMA uses NoV=1). */
+public float SigmaDisocclusionThreshold(float frustumSize, float NoV)
+{
+    return frustumSize * saturate(SIGMA_DISOCCLUSION_THRESHOLD / max(0.05, NoV));
 }

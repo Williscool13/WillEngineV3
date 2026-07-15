@@ -123,7 +123,8 @@ float LoadSurfaceMotionBasedPrevData(
     historyLength = 255.0 * RelaxBilinearWeightedFloat(prevHistLengths.x, prevHistLengths.y, prevHistLengths.z, prevHistLengths.w, bilinearCustomWeights);
 
     float4 prevHitTs = rdgTexturesFloat[prevSpecHitDistIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
-    prevReflectionHitT = max(0.001, RelaxBilinearWeightedFloat(prevHitTs.x, prevHitTs.y, prevHitTs.z, prevHitTs.w, bilinearCustomWeights));
+    // On history reset relax_spec_hit_dist is an unwritten same-frame aliased transient; source current hitT so the accumulation lerp is a no-op instead of blending garbage.
+    prevReflectionHitT = (rc.gResetHistory != 0) ? currentReflectionHitT : max(0.001, RelaxBilinearWeightedFloat(prevHitTs.x, prevHitTs.y, prevHitTs.z, prevHitTs.w, bilinearCustomWeights));
 
     float reprojectionFound = bicubicFootprintValid > 0 ? 2.0 : 1.0;
     footprintQuality = bicubicFootprintValid > 0 ? 1.0 : dot(bilinearCustomWeights, 1.0);
@@ -188,7 +189,8 @@ float LoadVirtualMotionBasedPrevData(
         prevSpecResponsiveIllum = max(specFastResult, 0);
 
         float2 uvVMB = prevUVVMB * rc.gRectSizePrev * rc.gResourceSizeInvPrev;
-        prevReflectionHitT = max(0.001, rdgTexturesFloat[prevSpecHitDistIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvVMB, 0).r);
+        // On reset skip the unwritten same-frame aliased read; keep the finite gDenoisingRange not-found default to avoid NaN in confidence math.
+        prevReflectionHitT = (rc.gResetHistory != 0) ? rc.gDenoisingRange : max(0.001, rdgTexturesFloat[prevSpecHitDistIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvVMB, 0).r);
 
         float4 prevNR = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvVMB, 0));
         prevNormal = prevNR.xyz;
@@ -552,7 +554,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
 
     float4 accSpecVMB;
     accSpecVMB.rgb = lerp(prevSpecIllumVMB.rgb, specularIllumination.rgb, specVMBAlpha);
-    accSpecVMB.a = lerp(prevReflectionHitTVMB, specularIllumination.a, max(specVMBHitTAlpha, 0.1));
+    accSpecVMB.a = (rc.gResetHistory != 0) ? specularIllumination.a : lerp(prevReflectionHitTVMB, specularIllumination.a, max(specVMBHitTAlpha, 0.1));
     float accSpecM2VMB = lerp(prevSpecIllumVMB.a, spec2ndMoment, specVMBAlpha);
     float3 accSpecVMBResponsive = lerp(prevSpecResponsiveVMB.rgb, specularIllumination.xyz, specVMBResponsiveAlpha);
 

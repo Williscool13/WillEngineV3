@@ -63,8 +63,9 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         return;
     }
     bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->lightCount);
+    bool centerHasSample = center.lightIdx != ~0u;
 
-    float Mc = validCenter ? float(center.M) : 0.0;
+    float Mc = centerHasSample ? float(center.M) : 0.0;
 
     float p_hat_center_atCenter = 0.0;
     if (validCenter) {
@@ -78,7 +79,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
     float centerMisAccum = 0.0;
     uint neighborCount = 0;
-    combined.M = validCenter ? center.M : 0u;
+    combined.M = centerHasSample ? center.M : 0u;
 
 #if RESTIR_ENABLE_SPATIAL_DILATE
     float convergence = saturate(Mc / float(max(pc.adaptiveMReference, 1u)));
@@ -125,7 +126,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         uint2 nrPos = PixelPosToReservoirPos(uint2(neighborPixel), field);
         Reservoir neighbor = pc.inputBuffer[nrPos.y * stride + nrPos.x];
         if (isnan(neighbor.W) || isinf(neighbor.W)) { neighbor = ReservoirEmpty(); }
-        if (neighbor.lightIdx == ~0u || neighbor.lightIdx == LIGHT_IDX_SUN || neighbor.lightIdx >= uint(pc.lightData->lightCount)) {
+        if (neighbor.lightIdx == ~0u || neighbor.lightIdx == LIGHT_IDX_SUN || neighbor.lightIdx >= uint(pc.lightData->lightCount) || neighbor.M == 0u) {
             continue;
         }
         if (validCenter && center.M >= 4u && neighbor.M < 2u) {

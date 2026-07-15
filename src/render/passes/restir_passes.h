@@ -31,7 +31,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint64_t frameNumber,
                        const Core::ReSTIRParams& restirParams,
                        uint32_t activeCheckerboardField,
-                       const Core::RTReflectionConfiguration& reflectionConfig);
+                       const Core::RTReflectionConfiguration& reflectionConfig,
+                       bool bResetHistory);
 
 void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     PipelineManager* pipelineManager,

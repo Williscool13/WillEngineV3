@@ -378,6 +378,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     statisticsManager.scratch.visibleMeshletCount = readbackData->meshletCount;
     statisticsManager.scratch.shadingDispatches = readbackData->shadingDispatches;
     statisticsManager.scratch.lightingDispatches = readbackData->lightingDispatches;
+    statisticsManager.scratch.worldCache.occupiedSlots = readbackData->wcOccupied;
+    statisticsManager.scratch.worldCache.cellsCarried = readbackData->wcCarried;
+    statisticsManager.scratch.worldCache.cellsEvicted = readbackData->wcEvicted;
+    statisticsManager.scratch.worldCache.insertsFailed = readbackData->wcInsertsFailed;
+    statisticsManager.scratch.worldCache.cellsShaded = readbackData->wcShaded;
 
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);
@@ -527,6 +532,19 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 const bool bWorldCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.bDDGIBounceOnly;
                 SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, bWorldCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity);
                 SetupWorldCacheEnd(*renderGraph, worldCache);
+                if (worldCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
+                    RenderPass& wcStatsReadback = renderGraph->AddPass(SID("World Cache Stats Readback"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::WorldCache);
+                    wcStatsReadback.ReadTransferBuffer(WORLD_CACHE_STATS);
+                    wcStatsReadback.ReadTransferBuffer(WORLD_CACHE_ACTIVE_COUNT);
+                    wcStatsReadback.WriteTransferBuffer(SID("readback_buffer"));
+                    wcStatsReadback.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                        const VkBuffer dst = graph.GetBufferHandle(SID("readback_buffer"));
+                        const VkBufferCopy statsCopy{0, offsetof(ReadbackStruct, wcOccupied), sizeof(WorldCacheStats)};
+                        vkCmdCopyBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_STATS), dst, 1, &statsCopy);
+                        const VkBufferCopy shadedCopy{0, offsetof(ReadbackStruct, wcShaded), sizeof(uint32_t)};
+                        vkCmdCopyBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_ACTIVE_COUNT), dst, 1, &shadedCopy);
+                    });
+                }
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
                     SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure, frameBuffer.ddgiProbeDebugCascade, frameBuffer.bDDGIHideInactiveProbes);
                 }
@@ -565,7 +583,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             Core::RELAXParams relax = restir.relax;
             Core::ReBLURParams reblur = restir.reblur;
             const float renderFps = frameBuffer.timeFrame.renderFps;
-            const float denoiserFramerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.1f, 4.0f);
+            const float denoiserFramerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.25f, 4.0f);
             relax.framerateScale = denoiserFramerateScale;
             reblur.framerateScale = denoiserFramerateScale;
 
@@ -604,7 +622,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 uint32_t giGatherMode = 0u;
                 const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.giGatherDebugMode);
                 if (frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || giGatherDebug != 0u)) {
-                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bGatherSkipRay);
+                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bGatherSkipRay, giGatherDebug != 0u);
                     if (giGather.bValid) {
                         giGatherMode = giGatherDebug != 0u ? giGatherDebug + 1u : 1u;
                     }
@@ -627,7 +645,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         const uint32_t restirCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) ? 1u : 0u;
                         const float restirCheckerboardResolveSpeed = ComputeCheckerboardResolveAccumSpeed(viewFamily.aaConfig.mode, frameNumber, renderFps);
 
-                        SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection);
+                        const bool bResetReSTIRHistory = (previousRestirCheckerboardField == 0u) != (restirCheckerboardField == 0u);
+                        previousRestirCheckerboardField = restirCheckerboardField;
+                        SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection, bResetReSTIRHistory);
                         SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
 
                         const bool bReflectionCheckerboardPacked = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX && frameBuffer.reflection.bDenoiserEnabled;
@@ -690,6 +710,29 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
         }*/
 
+        // Snapshot the lit HDR composite BEFORE any overlay/debug/text/sprite pass so the gather's screen tier reads GI, not UI glyphs or debug lines carried into lit_color_history.
+        const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
+        const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || frameBuffer.giGatherDebugMode != 0);
+        const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && (bReflectionScreenSpace || bGIGatherScreenSpace);
+        if (bSnapshotLitColor) {
+            renderGraph->CreateTexture(SID("lit_color_preoverlay"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+            auto& snapshotPass = renderGraph->AddPass(SID("Lit Color Snapshot"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
+            snapshotPass.ReadSampledImage(targets.colorOutput);
+            snapshotPass.WriteStorageImage(SID("lit_color_preoverlay"));
+            snapshotPass.Execute([src = targets.colorOutput, dst = SID("lit_color_preoverlay"),
+                    w = renderExtent[0], h = renderExtent[1], &pipelineManager = pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                    const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("color_copy"));
+                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+                    ColorCopyPushConstant pc{
+                        .srcIndex = graph.GetSampledImageViewDescriptorIndex(src),
+                        .dstIndex = graph.GetStorageImageViewDescriptorIndex(dst),
+                        .extents = {w, h},
+                    };
+                    vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                    vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
+                });
+        }
+
         SetupTextForwardPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
         SetupSpritesPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
 
@@ -703,10 +746,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupGPUDebugDraw(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, frameBuffer.bLockGPUDebug);
         }
 
-        const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
-        const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || frameBuffer.giGatherDebugMode != 0);
-        if (viewFamily.groundTruthMode == Core::GroundTruthMode::None && (bReflectionScreenSpace || bGIGatherScreenSpace)) {
-            renderGraph->CarryTextureToNextFrame(targets.colorOutput, SID("lit_color_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+        if (bSnapshotLitColor) {
+            renderGraph->CarryTextureToNextFrame(SID("lit_color_preoverlay"), SID("lit_color_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
         }
 
         switch (viewFamily.aaConfig.mode) {

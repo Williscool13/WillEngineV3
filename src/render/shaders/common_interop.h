@@ -129,6 +129,12 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t lightingDispatches;
     SHADER_PUBLIC uint32_t _pad0;
     SHADER_PUBLIC uint64_t selectedStableId;
+    SHADER_PUBLIC uint32_t wcOccupied;
+    SHADER_PUBLIC uint32_t wcCarried;
+    SHADER_PUBLIC uint32_t wcEvicted;
+    SHADER_PUBLIC uint32_t wcInsertsFailed;
+    SHADER_PUBLIC uint32_t wcShaded;
+    SHADER_PUBLIC uint32_t _pad1;
 };
 
 SHADER_PUBLIC struct DrawMeshTasksIndirectCommand

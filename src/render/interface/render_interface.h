@@ -555,15 +555,15 @@ struct RELAXParams
 {
     // General
     float denoisingRange{1000.f};
-    float disocclusionThreshold{0.005f};
+    float disocclusionThreshold{0.01f};
     float depthThreshold{0.003f};
     float framerateScale{1.f};
 
     // Accumulation
     float specMaxAccumFrames{32.f};
-    float specMaxFastAccumFrames{4.f};
+    float specMaxFastAccumFrames{6.f};
     float diffMaxAccumFrames{32.f};
-    float diffMaxFastAccumFrames{4.f};
+    float diffMaxFastAccumFrames{6.f};
     float historyAccelerationAmount{1.f};
 
     // Prepass
@@ -572,19 +572,19 @@ struct RELAXParams
     float minHitDistanceWeight{0.f};
 
     // A-Trous / edge stopping
-    int32_t atrousIterations{3};
+    int32_t atrousIterations{5};
     float spatialVarianceEstimationHistoryThreshold{3.f};
     float lobeAngleFraction{0.5f};
     float roughnessFraction{0.15f};
     float specLobeAngleSlack{0.15f};
-    float specPhiLuminance{2.f};
+    float specPhiLuminance{1.f};
     float diffPhiLuminance{2.f};
-    float diffMaxLuminanceRelativeDifference{3.f};
-    float specMaxLuminanceRelativeDifference{3.f};
-    float luminanceEdgeStoppingRelaxation{0.5f};
+    float diffMaxLuminanceRelativeDifference{100.f};
+    float specMaxLuminanceRelativeDifference{100.f};
+    float luminanceEdgeStoppingRelaxation{1.f};
     float normalEdgeStoppingRelaxation{0.3f};
-    float roughnessEdgeStoppingRelaxation{0.3f};
-    float specVarianceBoost{1.f};
+    float roughnessEdgeStoppingRelaxation{1.f};
+    float specVarianceBoost{0.f};
     bool roughnessEdgeStoppingEnabled{true};
 
     // History fix
@@ -606,7 +606,7 @@ struct SIGMAParams
 {
     bool bHalfRes{false};
     bool enablePostBlur{true};
-    float historyWeight{1.0f};
+    float historyWeight{0.8f};
     float maxKernelPixels{32.f};
     float penumbraScale{1.f};
 };
@@ -699,7 +699,7 @@ struct ReSTIRParams
     float emissiveTriRangeMultiplier{8.0f};
     int32_t emissiveTriMaxPerPrimitive{1024};
     // Temporal-gradient antilag confidence (RELAX only)
-    bool bEnableConfidence{false};
+    bool bEnableConfidence{true};
     float confidenceStrength{0.75f};
     float confidenceSensitivity{3.0f};
     float confidenceDarknessBias{0.01f};
@@ -764,7 +764,7 @@ struct DDGIParams
     float bounceIntensity{0.75f};
     float maxRayRadiance{20.0f};
 
-    float hysteresis{0.5f};
+    float hysteresis{0.97f};
     float visibilityHysteresis{0.97f};
     float irradianceGamma{5.0f};
     float irradianceThreshold{0.25f};

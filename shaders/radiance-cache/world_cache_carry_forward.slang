@@ -14,18 +14,31 @@ void ComputeWorldCacheCarryForward(uint3 dtid: SV_DispatchThreadID, uniform Worl
     uint checksum = pc.prevEntries[i];
     if (checksum == WORLD_CACHE_HASH_EMPTY) { return; }
 
+    uint prevStat;
+    InterlockedAdd(pc.stats->occupiedSlots, 1u, prevStat);
+
     WorldCacheCell cell = pc.prevCells[i];
     uint age = pc.frameIndex - cell.lastTouched;
-    if (age >= WORLD_CACHE_LRU_THRESHOLD) { return; }
+    if (age >= WORLD_CACHE_LRU_THRESHOLD) {
+        InterlockedAdd(pc.stats->cellsEvicted, 1u, prevStat);
+        return;
+    }
 
     WorldCacheKey key = WorldCacheUnpackKey(pc.prevKeys[i]);
 
     // LOD revalidation
     uint impliedLevel = WorldCacheLevelFromDistance(distance(WorldCacheCellCenterFromKey(key), pc.cameraPos.xyz));
-    if (uint(abs(int(key.level) - int(impliedLevel))) >= WORLD_CACHE_LOD_REVALIDATE_MARGIN) { return; }
+    if (uint(abs(int(key.level) - int(impliedLevel))) >= WORLD_CACHE_LOD_REVALIDATE_MARGIN) {
+        InterlockedAdd(pc.stats->cellsEvicted, 1u, prevStat);
+        return;
+    }
 
     bool isNew;
-    uint slot = WorldCacheHashInsert(pc.nextEntries, pc.nextKeys, key, isNew);
-    if (slot == WORLD_CACHE_HASH_INVALID) { return; }
+    uint slot = WorldCacheHashInsert(pc.nextEntries, pc.nextKeys, pc.stats, key, isNew);
+    if (slot == WORLD_CACHE_HASH_INVALID) {
+        InterlockedAdd(pc.stats->cellsEvicted, 1u, prevStat);
+        return;
+    }
     pc.nextCells[slot] = cell;
+    InterlockedAdd(pc.stats->cellsCarried, 1u, prevStat);
 }

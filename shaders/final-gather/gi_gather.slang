@@ -21,13 +21,6 @@ import gi_gather_common;
 static const float GI_GATHER_MAX_RADIANCE = 20.0;
 static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
 
-static const uint GI_GATHER_TIER_SCREEN = 0u;
-static const uint GI_GATHER_TIER_CACHE = 1u;
-static const uint GI_GATHER_TIER_PROBE = 2u;
-static const uint GI_GATHER_TIER_SKY = 3u;
-static const uint GI_GATHER_TIER_BACKFACE = 4u;
-static const uint GI_GATHER_TIER_INVALID = 5u;
-
 static float3 SampleCosineHemisphere(float3 n, float u1, float u2)
 {
     float r = sqrt(u1);
@@ -36,6 +29,15 @@ static float3 SampleCosineHemisphere(float3 n, float u1, float u2)
     float3 t = normalize(cross(up, n));
     float3 b = cross(n, t);
     return normalize(r * cos(phi) * t + r * sin(phi) * b + sqrt(max(1.0 - u1, 0.0)) * n);
+}
+
+static float3 GIGatherViewPosAt(GIGatherPushConstant pc, SceneData scene, int2 px)
+{
+    px = clamp(px, int2(0), int2(pc.renderExtent) - 1);
+    float d = rdgTexturesFloat[pc.depthIndex].Load(int3(px, 0)).r;
+    float vd = ScreenToViewSpaceDepth(d, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    float2 uv = (float2(px) + 0.5) / float2(pc.renderExtent);
+    return CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, vd);
 }
 
 struct GatherHitSurface
@@ -108,12 +110,23 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
         if (pc.bSkipRay != 0u) {
             float3 radiance = float3(0.0);
             uint tier;
-            WorldCacheKey key = WorldCacheComputeKey(worldPosition, worldN, scene.cameraWorldPos.xyz);
-            uint slot = WorldCacheHashFind(pc.cacheEntries, key);
+            int2 basePx = int2(pixel);
+            float3 vR = GIGatherViewPosAt(pc, scene, basePx + int2(1, 0));
+            float3 vL = GIGatherViewPosAt(pc, scene, basePx - int2(1, 0));
+            float3 vD = GIGatherViewPosAt(pc, scene, basePx + int2(0, 1));
+            float3 vU = GIGatherViewPosAt(pc, scene, basePx - int2(0, 1));
+            float3 ddxV = abs(vR.z - viewPosition.z) < abs(vL.z - viewPosition.z) ? (vR - viewPosition) : (viewPosition - vL);
+            float3 ddyV = abs(vD.z - viewPosition.z) < abs(vU.z - viewPosition.z) ? (vD - viewPosition) : (viewPosition - vU);
+            float3 geoN = normalize(mul((float3x3)scene.invView, normalize(cross(ddxV, ddyV))));
+            if (dot(geoN, worldN) < 0.0) { geoN = -geoN; }
+            WorldCacheKey key = WorldCacheComputeKey(worldPosition, geoN, scene.cameraWorldPos.xyz);
+            uint slot = WorldCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition);
             uint packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : WORLD_CACHE_RADIANCE_UNSHADED;
             if (packedRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
                 radiance = UnpackEmissiveRGBE(packedRadiance);
                 tier = GI_GATHER_TIER_CACHE;
+                // Reader keeps the cell resident: probe rays alone can let a gather-consumed sparse cell age past the LRU window.
+                pc.cacheCells[slot].lastTouched = pc.frameIndex;
             } else {
                 float3 indirectDiffuse = float3(0.0);
                 if (pc.skyboxIndex >= 0) {
@@ -135,10 +148,8 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
             shB = float4(radiance.b, 0.0, 0.0, 0.0);
             data = float2(0.0, float(tier));
         } else {
-        uint rng = SeedRng(gatherPixel, pc.frameIndex, 0x61FAu);
-        float u1 = HashStep(rng);
-        float u2 = HashStep(rng);
-        float3 direction = SampleCosineHemisphere(worldN, u1, u2);
+        float2 xi = SpatioTemporalBlueNoise2D(gatherPixel, pc.frameIndex);
+        float3 direction = SampleCosineHemisphere(worldN, xi.x, xi.y);
 
         RayDesc ray;
         ray.Origin = worldPosition + worldN * 0.05;
@@ -169,38 +180,52 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                     if (prevClip.w > 0.0) {
                         float2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
                         if (all(prevUV >= float2(0.0)) && all(prevUV <= float2(1.0))) {
-                            int2 prevPixel = clamp(int2(prevUV * float2(pc.renderExtent)), int2(0), int2(pc.renderExtent) - int2(1));
-                            float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(prevPixel, 0)).r;
-                            if (prevRawDepth > 0.0) {
+                            // Validity-weighted bilinear: every gate applies per corner, so a specular or disoccluded texel contributes nothing instead of bleeding its spike into the blend.
+                            float2 texelPos = prevUV * float2(pc.renderExtent) - 0.5;
+                            int2 base = int2(floor(texelPos));
+                            float2 f = texelPos - float2(base);
+                            float3 sum = float3(0.0);
+                            float sumW = 0.0;
+                            [unroll]
+                            for (uint c = 0; c < 4; c++) {
+                                int2 offset = int2(int(c & 1u), int((c >> 1u) & 1u));
+                                float w = (offset.x != 0 ? f.x : 1.0 - f.x) * (offset.y != 0 ? f.y : 1.0 - f.y);
+                                if (w <= 0.0) { continue; }
+                                int2 corner = clamp(base + offset, int2(0), int2(pc.renderExtent) - int2(1));
+                                float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(corner, 0)).r;
+                                if (prevRawDepth <= 0.0) { continue; }
                                 float prevViewDepth = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-                                if (abs(prevViewDepth - prevClip.w) <= 0.03 * prevClip.w + 0.05) {
-                                    uint4 prevGt1 = rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0));
-                                    float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(prevGt1.r)));
-                                    float prevRoughness;
-                                    float prevMetallic;
-                                    UnpackPBR(prevGt1.b, prevRoughness, prevMetallic);
-                                    // Specular-dominant pixels carry view-dependent radiance (a mirror shows the light source itself); fall through to the diffuse-only tiers.
-                                    if (dot(hit.normal, prevWorldN) > 0.5 && prevMetallic < 0.5 && prevRoughness > GI_GATHER_SCREEN_MIN_ROUGHNESS) {
-                                        radiance = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(prevPixel, 0)).rgb;
-                                        tier = GI_GATHER_TIER_SCREEN;
-                                        bResolved = true;
-                                    }
-                                }
+                                if (abs(prevViewDepth - prevClip.w) > GI_GATHER_DISOCCLUSION_SENSITIVITY * abs(scene.ndcToViewMul.y) * prevClip.w) { continue; }
+                                uint4 prevGt1 = rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(corner, 0));
+                                float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(prevGt1.r)));
+                                float prevRoughness;
+                                float prevMetallic;
+                                UnpackPBR(prevGt1.b, prevRoughness, prevMetallic);
+                                // Specular-dominant pixels carry view-dependent radiance (a mirror shows the light source itself); fall through to the diffuse-only tiers.
+                                if (dot(hit.normal, prevWorldN) <= 0.5 || prevMetallic >= 0.5 || prevRoughness <= GI_GATHER_SCREEN_MIN_ROUGHNESS) { continue; }
+                                sum += rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(corner, 0)).rgb * w;
+                                sumW += w;
+                            }
+                            if (sumW > 1e-3) {
+                                radiance = sum / sumW;
+                                tier = GI_GATHER_TIER_SCREEN;
+                                bResolved = true;
                             }
                         }
                     }
                 }
 
                 if (!bResolved) {
-                    uint packedRadiance = WORLD_CACHE_RADIANCE_UNSHADED;
-                    if (!bSkipEmission) {
-                        WorldCacheKey key = WorldCacheComputeKey(hitWorldPos, hit.normal, scene.cameraWorldPos.xyz);
-                        uint slot = WorldCacheHashFind(pc.cacheEntries, key);
-                        packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : WORLD_CACHE_RADIANCE_UNSHADED;
-                    }
+                    WorldCacheKey key = WorldCacheComputeKey(hitWorldPos, hit.normal, scene.cameraWorldPos.xyz);
+                    uint slot = WorldCacheHashFindLodTolerant(pc.cacheEntries, key, hitWorldPos);
+                    uint packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : WORLD_CACHE_RADIANCE_UNSHADED;
                     if (packedRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
                         radiance = UnpackEmissiveRGBE(packedRadiance);
+                        if (bSkipEmission) {
+                            radiance = max(radiance - hit.emissive, float3(0.0));
+                        }
                         tier = GI_GATHER_TIER_CACHE;
+                        pc.cacheCells[slot].lastTouched = pc.frameIndex;
                     } else {
                         // No light loop at fallback hits; their own direct light is missing (TDA's same trade).
                         float3 indirectDiffuse = float3(0.0);

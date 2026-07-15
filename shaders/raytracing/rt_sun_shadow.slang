@@ -48,6 +48,7 @@ void ComputeRTSunShadow(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPus
 
     // Map this (possibly half-res) output pixel to a silhouette-correct full-res source pixel (inlined quad selection). At full res this is the identity.
     int2 fullPixel;
+    uint quadSel = 0u;
     if (pc.pixelScale == 1u) {
         fullPixel = int2(pixel);
     } else {
@@ -55,25 +56,12 @@ void ComputeRTSunShadow(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPus
         float2 quadUV = (float2(quadBase) + 1.0) / float2(scene.mainRenderTargetSize);
         float4 quadZ = rdgTexturesFloat[pc.depthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUV);
         float4 quadZL = scene.depthLinearizeMult / (scene.depthLinearizeAdd - quadZ);
-        float quadZMin = min(min(quadZL.x, quadZL.y), min(quadZL.z, quadZL.w));
-        float quadZMax = max(max(quadZL.x, quadZL.y), max(quadZL.z, quadZL.w));
-        bool quadUniform = (quadZMax - quadZMin) <= QUAD_UNIFORM_DEPTH_THRESHOLD * max(quadZMax, 1e-4);
-        if (quadUniform) {
-            uint4 quadN = rdgTexturesUInt4[pc.gbufferOneIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUV);
-            float3 quadN0 = UnpackNormalOct16(quadN.x);
-            float quadMinDot = min(min(dot(quadN0, UnpackNormalOct16(quadN.y)), dot(quadN0, UnpackNormalOct16(quadN.z))), dot(quadN0, UnpackNormalOct16(quadN.w)));
-            quadUniform = quadMinDot >= QUAD_UNIFORM_NORMAL_DOT_THRESHOLD;
-        }
-        uint quadSel;
-        if (quadUniform) {
-            quadSel = (pixel.x + pixel.y * 2u + pc.frameIndex) & 3u;
-        } else {
-            quadSel = 3u;
-            float quadBest = quadZL.w;
-            if (quadZL.z < quadBest) { quadBest = quadZL.z; quadSel = 2u; }
-            if (quadZL.x < quadBest) { quadBest = quadZL.x; quadSel = 1u; }
-            if (quadZL.y < quadBest) { quadBest = quadZL.y; quadSel = 0u; }
-        }
+        // Always the closest corner: the represented point must be frame-stable, or the SIGMA temporal viewZ test rejects history every frame on sloped quads.
+        // Gather component layout: w=(0,0), z=(1,0), x=(0,1), y=(1,1).
+        float quadBest = quadZL.w;
+        if (quadZL.z < quadBest) { quadBest = quadZL.z; quadSel = 1u; }
+        if (quadZL.x < quadBest) { quadBest = quadZL.x; quadSel = 2u; }
+        if (quadZL.y < quadBest) { quadBest = quadZL.y; quadSel = 3u; }
         fullPixel = int2(quadBase + uint2(quadSel & 1u, (quadSel >> 1u) & 1u));
     }
 
@@ -82,7 +70,10 @@ void ComputeRTSunShadow(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPus
 
     if (pc.pixelScale > 1u) {
         rdgStorageFloat[pc.outputDepthIndex][pixel] = depth;
-        rdgStorageUInt4[pc.outputGbufferIndex][pixel] = gt1;
+        uint4 auxGt1 = gt1;
+        // .a is unused by all aux consumers; carries the corner id so the temporal pass can rebuild the corner's true UV.
+        auxGt1.a = quadSel;
+        rdgStorageUInt4[pc.outputGbufferIndex][pixel] = auxGt1;
     }
 
     if (depth <= 0.0) {

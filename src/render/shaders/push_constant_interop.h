@@ -433,9 +433,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t prevTlasIndex;
     SHADER_PUBLIC uint32_t prevShadowVisIndex;
     SHADER_PUBLIC uint32_t shadowVisIndex;
-    SHADER_PUBLIC uint32_t confidenceIndex;
     SHADER_PUBLIC uint32_t signalIndex;
-    SHADER_PUBLIC float confidenceStrength;
     SHADER_PUBLIC uint32_t bPermutationSampling;
     SHADER_PUBLIC float antilagStrength;
     SHADER_PUBLIC uint32_t bInitialVisibility;
@@ -444,6 +442,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t bSunCandidateVisibility;
     SHADER_PUBLIC float reflectionRoughnessMax;
     SHADER_PUBLIC float brdfRoughnessMax;
+    SHADER_PUBLIC float finalWClamp;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -589,6 +588,7 @@ SHADER_PUBLIC struct WorldCacheCarryForwardPushConstant
     SHADER_PUBLIC float4 cameraPos;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheStats) stats;
 };
 
 SHADER_PUBLIC struct WorldCacheBuildIndirectPushConstant
@@ -674,10 +674,7 @@ SHADER_PUBLIC struct GIDenoisePushConstant
     SHADER_PUBLIC uint32_t dstShBIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t direction;
-    SHADER_PUBLIC uint32_t historyIndex;
-    SHADER_PUBLIC uint32_t depthHistoryIndex;
-    SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
-    SHADER_PUBLIC uint32_t bHistoryValid;
+    SHADER_PUBLIC uint32_t stepSize;
 };
 
 SHADER_PUBLIC struct GIUpscalePushConstant
@@ -697,6 +694,7 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t bHistoryValid;
+    SHADER_PUBLIC uint32_t dataIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -1191,18 +1189,18 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC SHADER_PTR(float4) probeOffsets;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) previousCascades;
     SHADER_PUBLIC SHADER_PTR(WorldCacheBuffers) worldCache;
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
     SHADER_PUBLIC uint32_t bBounceOnly;
     SHADER_PUBLIC uint32_t frameIndex;
-    SHADER_PUBLIC uint32_t bOffsetsValid;
     SHADER_PUBLIC uint32_t bLocalNEE;
     SHADER_PUBLIC float maxRayRadiance;
-    SHADER_PUBLIC uint32_t bWorldCacheValid;
     SHADER_PUBLIC float bounceIntensity;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
-    SHADER_PUBLIC uint32_t bActiveValid;
     SHADER_PUBLIC float iblIntensity;
 };
 
@@ -1632,6 +1630,13 @@ SHADER_PUBLIC struct DepthCopyPushConstant
     SHADER_PUBLIC uint2 extents;
 };
 
+SHADER_PUBLIC struct ColorCopyPushConstant
+{
+    SHADER_PUBLIC uint32_t srcIndex;
+    SHADER_PUBLIC uint32_t dstIndex;
+    SHADER_PUBLIC uint2 extents;
+};
+
 SHADER_PUBLIC struct RTShadowTestPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -1767,6 +1772,7 @@ SHADER_PUBLIC struct SigmaTemporalPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t tilesIndex;
     SHADER_PUBLIC float stabilizationStrength;
+    SHADER_PUBLIC uint32_t pixelScale;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

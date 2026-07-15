@@ -22,6 +22,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     graph.CreateBuffer(WORLD_CACHE_ACTIVE_COUNT, sizeof(uint32_t), false);
     graph.CreateBuffer(WORLD_CACHE_SHADE_ARGS, WORLD_CACHE_SHADE_ARGS_BYTES, false);
     graph.CreateBuffer(WORLD_CACHE_DESCRIPTORS, WORLD_CACHE_DESCRIPTORS_BYTES, false);
+    graph.CreateBuffer(WORLD_CACHE_STATS, sizeof(WorldCacheStats), false);
 
     RenderPass& clearPass = graph.AddPass(SID("World Cache Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::WorldCache);
     clearPass.WriteTransferBuffer(WORLD_CACHE_ENTRIES);
@@ -29,12 +30,14 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     clearPass.WriteTransferBuffer(WORLD_CACHE_ACTIVE_COUNT);
     clearPass.WriteTransferBuffer(WORLD_CACHE_SHADE_ARGS);
     clearPass.WriteTransferBuffer(WORLD_CACHE_CELLS);
+    clearPass.WriteTransferBuffer(WORLD_CACHE_STATS);
     clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_ENTRIES), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_ACTIVE), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_ACTIVE_COUNT), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_SHADE_ARGS), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_CELLS), 0, VK_WHOLE_SIZE, WORLD_CACHE_RADIANCE_UNSHADED);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_STATS), 0, VK_WHOLE_SIZE, 0);
     });
 
     const bool bHistoryValid = graph.HasBuffer(WORLD_CACHE_ENTRIES_HISTORY) && graph.HasBuffer(WORLD_CACHE_KEYS_HISTORY) && graph.HasBuffer(WORLD_CACHE_CELLS_HISTORY);
@@ -46,6 +49,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
         carryPass.ReadWriteBuffer(WORLD_CACHE_ENTRIES);
         carryPass.ReadWriteBuffer(WORLD_CACHE_KEYS);
         carryPass.ReadWriteBuffer(WORLD_CACHE_CELLS);
+        carryPass.ReadWriteBuffer(WORLD_CACHE_STATS);
         carryPass.Execute([pipelineManager, frameNumber, cameraPos](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("world_cache_carry_forward"));
             if (!pipelineEntry) {
@@ -62,6 +66,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
                 .nextCells = graph.GetBufferAddress(WORLD_CACHE_CELLS),
                 .cameraPos = glm::vec4(cameraPos, 0.0f),
                 .frameIndex = static_cast<uint32_t>(frameNumber),
+                .stats = graph.GetBufferAddress(WORLD_CACHE_STATS),
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             const uint32_t groups = (WORLD_CACHE_HASH_CAPACITY + 63u) / 64u;
@@ -81,6 +86,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
             .descriptors = graph.GetBufferAddress(WORLD_CACHE_DESCRIPTORS),
             .activeList = graph.GetBufferAddress(WORLD_CACHE_ACTIVE_LIST),
             .activeCount = graph.GetBufferAddress(WORLD_CACHE_ACTIVE_COUNT),
+            .stats = graph.GetBufferAddress(WORLD_CACHE_STATS),
         };
         vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_BUFFERS_CURRENT), 0, sizeof(buffers), &buffers);
     });
@@ -93,6 +99,8 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
     if (!frame.bValid) {
         return;
     }
+
+    bounceIntensity = glm::clamp(bounceIntensity, 0.0f, 1.0f);
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(LIGHT_DATA_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER)
         || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)
         || !graph.HasBuffer(GEOMETRY_INDEX_BUFFER) || !graph.HasBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER) || !graph.HasBuffer(GEOMETRY_VERTEX_POSITION_BUFFER)) {

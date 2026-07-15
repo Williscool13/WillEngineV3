@@ -53,7 +53,8 @@ void MeshGeometryVisibilityBuffer(
     uint3 gtid : SV_GroupThreadID,
     uniform VisibilityBufferAccumulatePushConstant pc)
 {
-    uint globalMeshletIndex = gid.x + gid.y * (MAX_MESH_WORK_GROUP_COUNT_X / 2);
+    // Row width must match ComputeCompactedMeshletDispatch's grid layout (instancing.slang), which dispatches rows of (limit / 2) + 1.
+    uint globalMeshletIndex = gid.x + gid.y * ((MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1);
 
     if (globalMeshletIndex >= pc.compactedDispatchBuffer->totalVisibleMeshlets) {
         SetMeshOutputCounts(0, 0);

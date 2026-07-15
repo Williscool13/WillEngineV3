@@ -24,6 +24,7 @@ import shader_functions;
 static const float REBLUR_FIREFLY_SUPPRESSOR_MAX_RELATIVE_INTENSITY = 38.0;
 static const float REBLUR_FIREFLY_SUPPRESSOR_RADIUS_SCALE = 0.1;
 static const float REBLUR_FIREFLY_SUPPRESSOR_FAST_RELATIVE_INTENSITY = 4.0;
+static const float REBLUR_ALMOST_ZERO_ANGLE = 0.01745240643728351; // cos(89 deg)
 
 static const int TA_BORDER = 1;
 static const int TA_GROUP_X = 8;
@@ -83,6 +84,16 @@ float LoadSurfaceMotionBasedPrevData(
     float slopeScale = 1.0 / lerp(lerp(0.05, 1.0, NoV), 1.0, saturate(smbParallaxInPixelsMax / 30.0));
     float4 smbDisocclusionThreshold = saturate(disocclusionThreshold * slopeScale) * frustumSize;
     smbDisocclusionThreshold *= RelaxIsInScreenBilinear(float2(bilinearOrigin), rc.gRectSizePrev);
+
+    float smallParallax = MLLinearStep(0.25, 0.0, smbParallaxInPixelsMax);
+    float thresholdAngle = REBLUR_ALMOST_ZERO_ANGLE - 0.25 * smallParallax;
+    int3 pn = int3(bilinearOrigin, 0);
+    float3 pn00 = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].Load(pn)).xyz;
+    float3 pn10 = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].Load(pn + int3(1, 0, 0))).xyz;
+    float3 pn01 = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].Load(pn + int3(0, 1, 0))).xyz;
+    float3 pn11 = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].Load(pn + int3(1, 1, 0))).xyz;
+    float4 smbNoN2x2 = float4(dot(pn00, currentNormal), dot(pn10, currentNormal), dot(pn01, currentNormal), dot(pn11, currentNormal));
+    smbDisocclusionThreshold *= float4(smbNoN2x2 > thresholdAngle);
     smbDisocclusionThreshold -= NRD_EPS;
 
     float3 prevViewPos = MLAffineTransform(rc.gWorldToViewPrev, prevWorldPos);
@@ -92,10 +103,10 @@ float LoadSurfaceMotionBasedPrevData(
     float3 pd2 = abs(prevVZ01.xyw - prevViewPos.zzz);
     float3 pd3 = abs(prevVZ11.xyz - prevViewPos.zzz);
 
-    float3 tv0 = step(pd0, smbDisocclusionThreshold.x);
-    float3 tv1 = step(pd1, smbDisocclusionThreshold.y);
-    float3 tv2 = step(pd2, smbDisocclusionThreshold.z);
-    float3 tv3 = step(pd3, smbDisocclusionThreshold.w);
+    float3 tv0 = step(pd0, smbDisocclusionThreshold.x) * float3(prevVZ00.yzw < rc.gDenoisingRange);
+    float3 tv1 = step(pd1, smbDisocclusionThreshold.y) * float3(prevVZ10.xzw < rc.gDenoisingRange);
+    float3 tv2 = step(pd2, smbDisocclusionThreshold.z) * float3(prevVZ01.xyw < rc.gDenoisingRange);
+    float3 tv3 = step(pd3, smbDisocclusionThreshold.w) * float3(prevVZ11.xyz < rc.gDenoisingRange);
 
     float bicubicFootprintValid = dot(tv0 + tv1 + tv2 + tv3, 1.0) > 11.5 ? 1.0 : 0.0;
     float4 bilinearTapsValid = float4(tv0.z, tv1.y, tv2.y, tv3.x);
@@ -103,11 +114,6 @@ float LoadSurfaceMotionBasedPrevData(
     float2 prevNrUv = (float2(bilinearOrigin) + 1.0) * rc.gResourceSizeInvPrev;
     float3 prevNormalFlat = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], prevNrUv, 0)).xyz;
     prevNormalFlatOut = prevNormalFlat;
-    if (dot(currentNormal, prevNormalFlat) < 0.0)
-    {
-        bilinearTapsValid = 0;
-        bicubicFootprintValid = 0;
-    }
 
     MLBilinear bilinear;
     bilinear.origin = float2(bilinearOrigin);
@@ -578,7 +584,6 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     vmbSpecAccumSpeed = min(vmbSpecAccumSpeed, maxFrameNum.y);
 
     // Fallback between smb and vmb driven by their accumulated frame counts.
-    float virtualHistoryAmountUnbiased = virtualHistoryAmount;
     float fallbackMagic = vmbSpecAccumSpeed > smbSpecAccumSpeed ? 8.0 : 0.5;
     virtualHistoryAmount *= 1.0 + (vmbSpecAccumSpeed - smbSpecAccumSpeed) / (fallbackMagic * max(vmbSpecAccumSpeed, smbSpecAccumSpeed) + 1.0);
     virtualHistoryAmount = saturate(virtualHistoryAmount);
@@ -613,14 +618,16 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     float specLumaClamped = min(specLumaResult, ReblurGetLuma(specHistory) * specMaxRelativeIntensity);
     specLumaClamped = lerp(specLumaResult, specLumaClamped, specAntifireflyFactor);
     specResult = ReblurChangeLuma(specResult, specLumaClamped);
+    // Required for the hit-distance edge-stop weight (blur pass) to work: clamp accumulated .w spikes.
+    float specHitDistMaxRelativeIntensity = 1.2 + 1.0 / (specAccumSpeed + 1.0);
+    specResult.w = lerp(specResult.w, min(specResult.w, specHistory.w * specHitDistMaxRelativeIntensity), specAntifireflyFactor);
 
-    // --- Specular fast history (luma; per-lobe confidences, unbiased virtual amount) ---
-    float smbSpecFastNonLinear = ReblurGetNonLinearAccumSpeed(smbSpecAccumSpeed, rc.gMaxFastAccumulatedFrameNum, surfaceHistoryConfidence, specHasData, rc.gCheckerboardResolveAccumSpeed);
-    float vmbSpecFastNonLinear = ReblurGetNonLinearAccumSpeed(vmbSpecAccumSpeed, rc.gMaxFastAccumulatedFrameNum, virtualHistoryConfidence, specHasData, rc.gCheckerboardResolveAccumSpeed);
+    // --- Specular fast history (luma; blend confidence + fast history once, then one non-linear speed) ---
+    float specHistoryConfidence = lerp(surfaceHistoryConfidence, virtualHistoryConfidence, virtualHistoryAmount);
+    float specFastNonLinear = ReblurGetNonLinearAccumSpeed(specAccumSpeed, rc.gMaxFastAccumulatedFrameNum, specHistoryConfidence, specHasData, rc.gCheckerboardResolveAccumSpeed);
+    float specFastHistory = lerp(prevSpecResponsiveSMB, prevSpecResponsiveVMB, virtualHistoryAmount);
     float currentSpecLuma = ReblurGetLuma(specularIllumination);
-    float smbSpecFast = lerp(prevSpecResponsiveSMB, currentSpecLuma, smbSpecFastNonLinear);
-    float vmbSpecFast = lerp(prevSpecResponsiveVMB, currentSpecLuma, vmbSpecFastNonLinear);
-    float specFastResult = lerp(smbSpecFast, vmbSpecFast, virtualHistoryAmountUnbiased);
+    float specFastResult = lerp(specFastHistory, currentSpecLuma, specFastNonLinear);
     float specFastClamped = min(specFastResult, ReblurGetLuma(specHistory) * specMaxRelativeIntensity * REBLUR_FIREFLY_SUPPRESSOR_FAST_RELATIVE_INTENSITY);
     specFastResult = lerp(specFastResult, specFastClamped, specAntifireflyFactor);
 
@@ -644,6 +651,9 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     float diffLumaClamped = min(diffLumaResult, ReblurGetLuma(diffHistory) * diffMaxRelativeIntensity);
     diffLumaClamped = lerp(diffLumaResult, diffLumaClamped, diffAntifireflyFactor);
     diffResult = ReblurChangeLuma(diffResult, diffLumaClamped);
+    // Required for the hit-distance edge-stop weight (blur pass) to work: clamp accumulated .w spikes.
+    float diffHitDistMaxRelativeIntensity = 1.2 + 1.0 / (diffAccumSpeed + 1.0);
+    diffResult.w = lerp(diffResult.w, min(diffResult.w, diffHistory.w * diffHitDistMaxRelativeIntensity), diffAntifireflyFactor);
 
     // --- Diffuse fast history (luma; plain curve, no confidence) ---
     float diffFastAccumSpeed = min(diffAccumSpeed, rc.gMaxFastAccumulatedFrameNum);

@@ -90,8 +90,16 @@ void ComputeSigmaShadowTemporal(uniform SigmaTemporalPushConstant pc, uint3 tid 
     float sigma = sqrt(max(0.0, m2 - m1 * m1));
 
     // Reproject previous stabilized shadow.
-    float3 worldPos = ReconstructWorldPosition(scene.invViewProj, pixelUv, rawDepth);
-    float2 velocity = UnpackMotionVectors(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0)).g) * 0.5;
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
+    float2 surfUv = pixelUv;
+    if (pc.pixelScale > 1u) {
+        // Half res: rawDepth belongs to the selected full-res corner, so reconstruct at the corner's true UV, not the half-res texel center.
+        uint quadSel = gt1.a & 3u;
+        uint2 fullPixel = pixel * pc.pixelScale + uint2(quadSel & 1u, (quadSel >> 1u) & 1u);
+        surfUv = (float2(fullPixel) + 0.5) / scene.mainRenderTargetSize;
+    }
+    float3 worldPos = ReconstructWorldPosition(scene.invViewProj, surfUv, rawDepth);
+    float2 velocity = UnpackMotionVectors(gt1.g) * 0.5;
     float2 smbPixelUv = pixelUv + velocity;
 
     float historyLength = 0.0;
@@ -102,6 +110,9 @@ void ComputeSigmaShadowTemporal(uniform SigmaTemporalPushConstant pc, uint3 tid 
     {
         float expectedPrevViewZ = -(mul(scene.prevView, float4(worldPos, 1.0)).z);
         float frustumSize = SigmaFrustumSize(scene.ndcToViewMul, centerViewZ, pc.renderExtent);
+        float3 Xv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, surfUv, centerViewZ);
+        float3 Nv = normalize(UnpackNormalOct16(gt1.r));
+        float NoV = abs(dot(Nv, normalize(-Xv)));
 
         MLBilinear f = MLGetBilinearFilter(smbPixelUv, float2(pc.renderExtent));
         int2 maxCoord = int2(pc.renderExtent) - 1;
@@ -119,7 +130,7 @@ void ComputeSigmaShadowTemporal(uniform SigmaTemporalPushConstant pc, uint3 tid 
         float4 prevAccum = float4(UnpackHistoryLength(p00), UnpackHistoryLength(p10), UnpackHistoryLength(p01), UnpackHistoryLength(p11));
 
         float4 inScreen = RelaxIsInScreenBilinear(f.origin, float2(pc.renderExtent));
-        float4 threshold = SIGMA_DISOCCLUSION_THRESHOLD * frustumSize * inScreen - NRD_EPS;
+        float4 threshold = SigmaDisocclusionThreshold(frustumSize, NoV) * inScreen - NRD_EPS;
         float4 planeDist = abs(prevViewZ - expectedPrevViewZ);
         float4 occlusion = step(planeDist, threshold);
 

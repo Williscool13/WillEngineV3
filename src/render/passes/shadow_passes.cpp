@@ -227,6 +227,7 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
                 .sceneDataIndex = sceneIndex,
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("sigma_tiles_smoothed")),
                 .stabilizationStrength = sigma.historyWeight,
+                .pixelScale = sigma.bHalfRes ? 2u : 1u,
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

@@ -15,6 +15,8 @@ import random_common;
 import hit_shading_common;
 import world_cache_hash;
 import world_cache_interop;
+import binning_common;
+import common_interop;
 
 // =============== Shader Summary ============
 // DDGI probe volume passes. Trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits key+read the world radiance cache (last frame's shaded value; NEE shading only as a fallback when the cache has no slot for the hit). Light-proxy hits carry no radiance, only the hit distance for the visibility moments.
@@ -37,7 +39,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
 
     // Inactive probes trace only the sentinel budget
     uint rayBudget = pc.raysPerProbe;
-    if (pc.bActiveValid != 0 && bSameCellPrev && pc.probeActive[probeIndex] == 0) {
+    if (pc.probeActive != nullptr && bSameCellPrev && pc.probeActive[probeIndex] == 0) {
         rayBudget = min(DDGI_SENTINEL_RAYS, pc.raysPerProbe);
     }
     if (rayIndex >= rayBudget) {
@@ -49,7 +51,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
 
     // Relocation offsets are last frame's
     float3 origin = DDGIProbeWorldPosition(cell, pc.volume);
-    if (pc.bOffsetsValid != 0 && bSameCellPrev) {
+    if (pc.probeOffsets != nullptr && bSameCellPrev) {
         origin += pc.probeOffsets[probeIndex].xyz;
     }
 
@@ -74,20 +76,21 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
             float3 hitWorldPos = ray.Origin + direction * hitT;
             float3 radiance = float3(0.0);
             bool bCacheRead = false;
+            SceneData scene = pc.sceneData[0];
 
-            if (pc.bWorldCacheValid != 0) {
+            if (pc.worldCache != nullptr) {
                 float3 hitNormal = DecodeHitNormal(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
-                float3 approxCameraPos = (float3(pc.volume.baseCell) + float3(pc.volume.probeCount) * 0.5) * pc.volume.probeSpacing;
-                WorldCacheKey wcKey = WorldCacheComputeKey(hitWorldPos, hitNormal, approxCameraPos);
+                WorldCacheKey wcKey = WorldCacheComputeKey(hitWorldPos, hitNormal, scene.cameraWorldPos.xyz);
                 bool isNew;
-                uint wcSlot = WorldCacheHashInsert(pc.worldCache->entries, pc.worldCache->keys, wcKey, isNew);
+                uint wcSlot = WorldCacheHashInsert(pc.worldCache->entries, pc.worldCache->keys, pc.worldCache->stats, wcKey, isNew);
                 if (wcSlot != WORLD_CACHE_HASH_INVALID) {
                     uint packedRadiance = pc.worldCache->cells[wcSlot].packedRadiance;
                     if (isNew) {
-                        packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey);
+                        uint seedCount;
+                        packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey, seedCount);
                         pc.worldCache->cells[wcSlot].packedRadiance = packedRadiance;
-                        // Seed counts as one accumulated sample so the first real shade replaces half of it.
-                        pc.worldCache->cells[wcSlot].changeStreak = 1u << 16u;
+                        // Inherit the warm-start source's accumulation count so a re-keyed shell keeps its smoothing instead of a 50/50 first shade.
+                        pc.worldCache->cells[wcSlot].changeStreak = seedCount << 16u;
                     }
 
                     if (packedRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
@@ -120,7 +123,14 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
 
             if (!bCacheRead) {
                 uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
-                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, rng);
+                WorldGridPunctualLights worldGridLights = (WorldGridPunctualLights)0;
+                if (pc.worldGridBuffer != nullptr) {
+                    worldGridLights.view = scene.view;
+                    worldGridLights.camPos = scene.cameraWorldPos.xyz;
+                    worldGridLights.grid = pc.worldGridBuffer;
+                    worldGridLights.indexList = pc.worldGridIndexList;
+                }
+                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, rng, worldGridLights);
             }
 
             // Firefly clamp
@@ -138,8 +148,8 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         if (pc.skyboxIndex >= 0 && pc.bBounceOnly == 0) {
             // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
             float3 skyDirection = float3(direction.x, -direction.y, direction.z);
-            // Mip 4 is roughenss 0 prefiltered. Reduces flickering from high frequency variance.
-            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 4).rgb;
+            // Mip 4 is the roughness-1.0 (blurriest) prefiltered level. Reduces flickering from high frequency variance.
+            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 4).rgb * pc.iblIntensity;
         }
         result = float4(radiance, 10000.0);
     }
@@ -228,8 +238,9 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
                     result = lerp(result, previous, max(pc.hysteresis - 0.75, 0.0));
                 } else {
                     float hysteresis = pc.hysteresis;
-                    if (DDGIMaxComponent(result - previous) > pc.irradianceThreshold) {
-                        hysteresis = max(hysteresis - 0.75, 0.0);
+                    if (DDGIMaxComponent(previous - result) > pc.irradianceThreshold) {
+                        // Never fully discard history here; a 1spp update is too noisy to trust alone.
+                        hysteresis = max(hysteresis - 0.75, 0.1);
                     }
                     float3 delta = result - previous;
                     if (DDGIMaxComponent(delta) > pc.brightnessThreshold) {

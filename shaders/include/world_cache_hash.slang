@@ -108,9 +108,34 @@ public uint WorldCacheHashFind(uint* entries, WorldCacheKey key)
     return WORLD_CACHE_HASH_INVALID;
 }
 
+// Exact-level find with +/-1 LOD tolerance: a surface that just crossed a LOD ring reads the surviving neighbour-level cell (still smoothed) until its own-level cell converges, instead of the raw probe tier.
+public uint WorldCacheHashFindLodTolerant(uint* entries, WorldCacheKey key, float3 worldPos)
+{
+    uint slot = WorldCacheHashFind(entries, key);
+    if (slot != WORLD_CACHE_HASH_INVALID) { return slot; }
+
+    if (key.level > 0u) {
+        WorldCacheKey finer = key;
+        finer.level = key.level - 1u;
+        float fcs = WorldCacheCellSizeAtLevel(finer.level);
+        finer.cellPos = int3(floor(worldPos / fcs));
+        slot = WorldCacheHashFind(entries, finer);
+        if (slot != WORLD_CACHE_HASH_INVALID) { return slot; }
+    }
+
+    if (key.level < WORLD_CACHE_MAX_LEVEL) {
+        WorldCacheKey coarser = key;
+        coarser.level = key.level + 1u;
+        coarser.cellPos = key.cellPos >> 1;
+        slot = WorldCacheHashFind(entries, coarser);
+    }
+    return slot;
+}
+
 // isNew true only when this call claimed a previously-empty slot; caller must init that slot's payload.
 // Checksum-only match below: comparing keys[] here too would race the CAS winner's same-dispatch write to it.
-public uint WorldCacheHashInsert(uint* entries, uint2* keys, WorldCacheKey key, out bool isNew)
+// stats: full-probe failures bump stats->insertsFailed; shared by trace and carry-forward inserts.
+public uint WorldCacheHashInsert(uint* entries, uint2* keys, WorldCacheStats* stats, WorldCacheKey key, out bool isNew)
 {
     uint slot = WorldCacheHashSlot(key);
     uint cs = WorldCacheChecksum(key);
@@ -126,13 +151,16 @@ public uint WorldCacheHashInsert(uint* entries, uint2* keys, WorldCacheKey key, 
         }
         if (prev == cs) { return s; }
     }
+    uint prevFail;
+    InterlockedAdd(stats->insertsFailed, 1u, prevFail);
     return WORLD_CACHE_HASH_INVALID;
 }
 
 // Seeds a newly-created cell from whichever adjacent LOD already has data, instead of starting black.
 // Parent (level+1) is a single lookup, one candidate. Children (level-1) are up to 8, averaged if found.
-public uint WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, WorldCacheKey key)
+public uint WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, WorldCacheKey key, out uint seedCount)
 {
+    seedCount = 0u;
     if (key.level < WORLD_CACHE_MAX_LEVEL) {
         WorldCacheKey parentKey = key;
         parentKey.level = key.level + 1u;
@@ -141,6 +169,7 @@ public uint WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, Wo
         if (parentSlot != WORLD_CACHE_HASH_INVALID) {
             uint packed = cells[parentSlot].packedRadiance;
             if (packed != WORLD_CACHE_RADIANCE_UNSHADED) {
+                seedCount = min((cells[parentSlot].changeStreak >> 16u) & 0xFFu, WORLD_CACHE_WARMSTART_SEED_CAP);
                 return packed;
             }
         }
@@ -149,6 +178,7 @@ public uint WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, Wo
     if (key.level > 0u) {
         float3 sum = float3(0.0);
         uint found = 0u;
+        uint minChildCount = WORLD_CACHE_ACCUM_FRAMES;
         WorldCacheKey childKey = key;
         childKey.level = key.level - 1u;
         for (uint i = 0u; i < 8u; i++) {
@@ -158,11 +188,13 @@ public uint WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, Wo
                 uint packed = cells[childSlot].packedRadiance;
                 if (packed != WORLD_CACHE_RADIANCE_UNSHADED) {
                     sum += UnpackEmissiveRGBE(packed);
+                    minChildCount = min(minChildCount, (cells[childSlot].changeStreak >> 16u) & 0xFFu);
                     found++;
                 }
             }
         }
         if (found > 0u) {
+            seedCount = min(minChildCount, WORLD_CACHE_WARMSTART_SEED_CAP);
             return min(PackEmissiveRGBE(sum / float(found)), WORLD_CACHE_RADIANCE_UNSHADED - 1u);
         }
     }

@@ -24,6 +24,7 @@ inline const StringID WORLD_CACHE_ACTIVE_COUNT = SID("world_cache_active_count")
 inline const StringID WORLD_CACHE_SHADE_ARGS = SID("world_cache_shade_args");
 inline const StringID WORLD_CACHE_DESCRIPTORS = SID("world_cache_descriptors");
 inline const StringID WORLD_CACHE_BUFFERS_CURRENT = SID("world_cache_buffers_current");
+inline const StringID WORLD_CACHE_STATS = SID("world_cache_stats");
 
 inline constexpr VkDeviceSize WORLD_CACHE_ENTRIES_BYTES = static_cast<VkDeviceSize>(WORLD_CACHE_HASH_CAPACITY) * sizeof(uint32_t);
 inline constexpr VkDeviceSize WORLD_CACHE_KEYS_BYTES = static_cast<VkDeviceSize>(WORLD_CACHE_HASH_CAPACITY) * sizeof(uint2);

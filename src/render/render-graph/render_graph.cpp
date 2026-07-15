@@ -1477,6 +1477,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         ZoneScopedN("CarryoverCapture");
         for (TextureFrameCarryover& carryover : textureCarryovers) {
             if (const TextureResource* tex = GetTexture(carryover.srcName)) {
+                if (!tex->HasPhysical()) { continue; }
                 const PhysicalResource& phys = physicalResources[tex->physicalIndex];
                 carryover.physicalImage = phys.image;
                 carryover.textInfo = tex->textureInfo;
@@ -1486,6 +1487,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         }
         for (BufferFrameCarryover& carryover : bufferCarryovers) {
             if (const BufferResource* buf = GetBuffer(carryover.srcName)) {
+                if (!buf->HasPhysical()) { continue; }
                 const PhysicalResource& phys = physicalResources[buf->physicalIndex];
                 carryover.buffer = phys.buffer;
                 carryover.bufferInfo = buf->bufferInfo;
@@ -1573,7 +1575,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         for (auto& carryover : textureCarryovers) {
             uint32_t physicalIndex = UINT32_MAX;
             for (uint32_t i = 0; i < physicalResources.Size(); i++) {
-                if (physicalResources[i].image == carryover.physicalImage) {
+                if (carryover.physicalImage != VK_NULL_HANDLE && physicalResources[i].image == carryover.physicalImage) {
                     physicalIndex = i;
                     break;
                 }
@@ -1605,7 +1607,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         for (auto& carryover : bufferCarryovers) {
             uint32_t physicalIndex = UINT32_MAX;
             for (uint32_t i = 0; i < physicalResources.Size(); i++) {
-                if (physicalResources[i].buffer == carryover.buffer) {
+                if (carryover.buffer != VK_NULL_HANDLE && physicalResources[i].buffer == carryover.buffer) {
                     physicalIndex = i;
                     break;
                 }

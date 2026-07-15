@@ -12,6 +12,7 @@
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_config.h"
 #include "render/shaders/relax_interop.h"
+#include "render/render-view/render_view_helpers.h"
 
 namespace Render
 {
@@ -117,8 +118,10 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
     rc.gSpecMaxFastAccumulatedFrameNum = params.specMaxFastAccumFrames;
     rc.gDiffMaxAccumulatedFrameNum = params.diffMaxAccumFrames;
     rc.gDiffMaxFastAccumulatedFrameNum = params.diffMaxFastAccumFrames;
-    rc.gDisocclusionThreshold = params.disocclusionThreshold;
-    rc.gDisocclusionThresholdAlternate = params.disocclusionThreshold * 2.0f;
+    const float jitterDelta = ComputeRelaxJitterDelta(viewFamily.aaConfig.mode, frameNumber);
+    const float disocclusionThresholdBonus = (1.0f + jitterDelta) / static_cast<float>(height);
+    rc.gDisocclusionThreshold = params.disocclusionThreshold + disocclusionThresholdBonus;
+    rc.gDisocclusionThresholdAlternate = params.disocclusionThreshold * 2.0f + disocclusionThresholdBonus;
     rc.gDenoisingRange = params.denoisingRange;
     rc.gDepthThreshold = params.depthThreshold;
     rc.gRoughnessFraction = params.roughnessFraction;

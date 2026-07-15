@@ -43,7 +43,7 @@ void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 t
         return;
     }
 
-    LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, pc.lightingIndex, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, pc.shadowsIndex);
+    LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, pc.lightingIndex, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
         return;
     }
@@ -158,6 +158,12 @@ void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 t
             // half its value and trips the miss paths in the ReBLUR prepass.
             rdgStorageFloat4[pc.primaryOutputImageIndex][uint2(o)] = diffPacked;
             rdgStorageFloat4[pc.secondaryOutputImageIndex][uint2(o)] = specPacked;
+        }
+        // Odd-width orphan: on phantom rows the inactive rightmost column has no active partner writing into it; the last active column (x-2) fills it here.
+        if ((pc.renderExtent.x & 1u) != 0u && pixel.x == pc.renderExtent.x - 2u && ((pixel.y + field) & 1u) == 1u) {
+            uint2 orphan = uint2(pc.renderExtent.x - 1u, pixel.y);
+            rdgStorageFloat4[pc.primaryOutputImageIndex][orphan] = diffPacked;
+            rdgStorageFloat4[pc.secondaryOutputImageIndex][orphan] = specPacked;
         }
     }
 }

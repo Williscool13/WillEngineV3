@@ -546,6 +546,9 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("depth_copy"), src / "depth_copy.spv", "ComputeDepthCopy",
                             sizeof(DepthCopyPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("color_copy"), src / "color_copy.spv", "ComputeColorCopy",
+                            sizeof(ColorCopyPushConstant), PipelineCategory::Critical);
+
     RegisterComputePipeline(SID("gtao_depth_prepass"), src / "ground_truth_ambient_occlusion.spv", "ComputeGTAODepthPrepass",
                             sizeof(GTAODepthPrepassPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gtao_main"), src / "ground_truth_ambient_occlusion.spv", "ComputeGTAOMain",
