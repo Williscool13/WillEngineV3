@@ -60,4 +60,21 @@ void EngineLogger::RegisterLoggersForDLL(LogCategory defaultCategory) const
     }
     spdlog::set_default_logger(categoryLoggers[static_cast<int>(defaultCategory)]);
 }
+
+spdlog::logger* EngineLogger::RegisterGameSubCategory(const char* name)
+{
+    if (const auto existing = spdlog::get(name)) {
+        return existing.get();
+    }
+
+    const auto& engineLoggerSinks = categoryLoggers[0]->sinks();
+    auto logger = std::make_shared<spdlog::logger>(name, engineLoggerSinks.begin(), engineLoggerSinks.end());
+    logger->set_level(spdlog::default_logger()->level());
+    logger->flush_on(spdlog::level::warn);
+    spdlog::register_or_replace(logger);
+
+    imguiSink->RegisterGameSubCategory(name);
+
+    return logger.get();
+}
 }

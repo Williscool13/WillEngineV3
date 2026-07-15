@@ -29,6 +29,7 @@
 #include "systems/camera_system.h"
 #include "editor/editor_systems.h"
 #include "editor/editor_console.h"
+#include "logging/game_log_category.h"
 #include "systems/physics_system.h"
 #include "gameplay/player/physics_player_controller.h"
 #include "systems/common_systems.h"
@@ -37,6 +38,7 @@
 #include "engine/asset_manager.h"
 #include "systems/scene_system.h"
 #include "clay/clay.h"
+#include "engine/resources/font/font_metrics.h"
 
 
 extern "C"
@@ -101,20 +103,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     Clay_SetMeasureTextFunction([](Clay_StringSlice text, Clay_TextElementConfig* config, void* userData) -> Clay_Dimensions {
         auto* fc = static_cast<UIFontContext*>(userData);
-        const Engine::Font* font = fc->assetManager->GetFont(fc->handle);
-        if (!font) { return {0.0f, static_cast<float>(config->fontSize)}; }
-        const float scale = static_cast<float>(config->fontSize) / font->header.emSize;
-        float width = 0.0f;
-        for (int32_t i = 0; i < text.length; ++i) {
-            const uint32_t cp = static_cast<unsigned char>(text.chars[i]);
-            const Engine::WGlyphInfo* g = fc->assetManager->GetGlyph(fc->handle, cp);
-            if (!g) {
-                width += config->fontSize * 0.25f;
-                continue;
-            }
-            width += g->advance * scale;
-            if (i < text.length - 1) { width += config->letterSpacing; }
-        }
+        const float width = Engine::MeasureText(fc->assetManager, fc->handle, text.chars, text.length, config->fontSize, config->letterSpacing);
         const float height = config->lineHeight > 0 ? static_cast<float>(config->lineHeight) : static_cast<float>(config->fontSize);
         return {width, height};
     }, &uiFontCtx);
@@ -122,6 +111,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     Audio::AudioManager::RegisterAudio();
     Game::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
+    Game::RegisterLogCategories(ctx->engineLogger);
     Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
@@ -199,6 +189,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 
     Game::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
+    Game::RegisterLogCategories(ctx->engineLogger);
     Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);

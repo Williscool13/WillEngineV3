@@ -28,6 +28,9 @@ public:
 
     void RegisterLoggersForDLL(LogCategory defaultCategory) const;
 
+    /** Registers a Game sub-category logger (e.g. "Player", "UI"). Asserts name doesn't collide with an engine LogCategory. */
+    spdlog::logger* RegisterGameSubCategory(const char* name);
+
 private:
     ImGuiSink* imguiSink;
     Core::Array<std::shared_ptr<spdlog::logger>, static_cast<size_t>(LogCategory::Count)> categoryLoggers;

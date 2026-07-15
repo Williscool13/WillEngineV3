@@ -16,6 +16,7 @@
 #include "game/components/core_components.h"
 #include "game/components/physics/physics_components.h"
 #include "game/components/physics/physics_body_component.h"
+#include "game/logging/game_log.h"
 #include "game/systems/scene_system.h"
 #include "physics/physics_system.h"
 
@@ -65,6 +66,7 @@ void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool 
 
     if (jumpRequested && grounded) {
         bodyInterface.AddImpulse(bodyId, JPH::Vec3(0.0f, jumpImpulse, 0.0f));
+        WLOG_INFO(Player, "Jump");
     }
 }
 

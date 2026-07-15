@@ -21,6 +21,12 @@ set(GAME_SOURCES
         editor/editor_console.cpp
         editor/editor_console.h
 
+        ui/game_ui.cpp
+        ui/game_ui.h
+
+        logging/game_log_category.h
+        logging/game_log.h
+
         fwd_components.h
 
         components/camera_components.cpp
