@@ -133,6 +133,25 @@ float XeGTAO_FastACos(float inX) {
     return (inX >= 0) ? res : PI - res;
 }
 
+// Rotation matrix taking unit vector 'from' to unit vector 'to' (Moller-Hughes); XeGTAO only ever calls it with from = (0,0,-1).
+float3x3 XeGTAO_RotFromToMatrix(float3 from, float3 to) {
+    const float e = dot(from, to);
+    if (abs(e) > 1.0 - 0.0003) {
+        return float3x3(1, 0, 0, 0, 1, 0, 0, 0, 1);
+    }
+    const float3 v = cross(from, to);
+    const float h = 1.0 / (1.0 + e);
+    const float hvx = h * v.x;
+    const float hvz = h * v.z;
+    const float hvxy = hvx * v.y;
+    const float hvxz = hvx * v.z;
+    const float hvyz = hvz * v.y;
+    return float3x3(
+        e + hvx * v.x, hvxy - v.z, hvxz + v.y,
+        hvxy + v.z, e + h * v.y * v.y, hvyz - v.x,
+        hvxz - v.y, hvyz + v.x, e + hvz * v.z);
+}
+
 uint XE_GTAO_HilbertIndex(uint posX, uint posY) {
     uint index = 0u;
     for (uint curLevel = XE_HILBERT_WIDTH / 2u; curLevel > 0u; curLevel /= 2u) {
@@ -241,6 +260,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
         visibility = 1.0;
         visibility = saturate(visibility / XE_GTAO_OCCLUSION_TERM_SCALE);
         rdgStorageFloat[pc.aoOutputIndex][screenPos] = visibility;
+        rdgStorageUInt[pc.bentNormalIndex][screenPos] = PackNormalOct16(viewNormal);
         return;
     }
 
@@ -248,6 +268,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
 
     float sliceCount = pc.sliceCount;
     float stepsPerSlice = pc.stepsPerSlice;
+    float3 bentNormal = float3(0.0);
 
     for (float slice = 0; slice < sliceCount; slice++) {
         float sliceK = (slice + noiseSlice) / sliceCount;
@@ -329,6 +350,11 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
         float iarc1 = (cosNorm + 2.0 * h1 * sin(n) - cos(2.0 * h1 - n)) / 4.0;
         float localVisibility = projectedNormalVecLength * (iarc0 + iarc1);
         visibility += localVisibility;
+
+        float t0 = (6.0 * sin(h0 - n) - sin(3.0 * h0 - n) + 6.0 * sin(h1 - n) - sin(3.0 * h1 - n) + 16.0 * sin(n) - 3.0 * (sin(h0 + n) + sin(h1 + n))) / 12.0;
+        float t1 = (-cos(3.0 * h0 - n) - cos(3.0 * h1 - n) + 8.0 * cos(n) - 3.0 * (cos(h0 + n) + cos(h1 + n))) / 12.0;
+        float3 localBentNormal = float3(directionVec.x * t0, directionVec.y * t0, t1);
+        bentNormal += mul(XeGTAO_RotFromToMatrix(float3(0.0, 0.0, 1.0), viewVec), localBentNormal) * projectedNormalVecLength;
     }
 
     visibility /= sliceCount;
@@ -337,6 +363,10 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
 
     visibility = saturate(visibility / XE_GTAO_OCCLUSION_TERM_SCALE);
     rdgStorageFloat[pc.aoOutputIndex][screenPos] = visibility;
+
+    float bentLengthSq = dot(bentNormal, bentNormal);
+    bentNormal = bentLengthSq > 1e-8 ? bentNormal / sqrt(bentLengthSq) : viewNormal;
+    rdgStorageUInt[pc.bentNormalIndex][screenPos] = PackNormalOct16(bentNormal);
 }
 
 // ==================== GTAO Denoise Pass ===============================

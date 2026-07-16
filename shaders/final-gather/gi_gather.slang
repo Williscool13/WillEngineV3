@@ -20,6 +20,7 @@ import gi_gather_common;
 
 static const float GI_GATHER_MAX_RADIANCE = 20.0;
 static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
+static const float GI_GATHER_NEAR_FIELD_METERS = 0.25;
 
 static float3 SampleCosineHemisphere(float3 n, float u1, float u2)
 {
@@ -244,6 +245,8 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
             }
             tier = GI_GATHER_TIER_SKY;
         }
+
+        radiance *= saturate(hitT / GI_GATHER_NEAR_FIELD_METERS);
 
         // Prescaled so eval at n is sh.x + dot(sh.yzw, n) = E/pi; the NoD clamp bounds the 1/pdf weight (eval amplification capped ~1.5x).
         radiance = min(radiance, float3(GI_GATHER_MAX_RADIANCE));

@@ -26,6 +26,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
     graph.CreateTexture(SID("gtao_depth"), TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 5}, {std::nullopt}, true);
     graph.CreateTexture(SID("gtao_ao"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("gtao_edges"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture(SID("gtao_bent_normals"), TextureInfo{VK_FORMAT_R32_UINT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     // Denoise pass(es) - typically run 2-3 times for better quality
     graph.CreateTexture(SID("gtao_temp"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(SID("gtao_filtered"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
@@ -66,6 +67,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
     gtaoMainPass.ReadSampledImage(targets.gbufferOne);
     gtaoMainPass.WriteStorageImage(SID("gtao_ao"));
     gtaoMainPass.WriteStorageImage(SID("gtao_edges"));
+    gtaoMainPass.WriteStorageImage(SID("gtao_bent_normals"));
     gtaoMainPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex, frameNumber,
             normal = targets.gbufferOne,
             effectRadius = gtaoConfig.effectRadius,
@@ -94,6 +96,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
                 .sliceCount = sliceCount,
                 .stepsPerSlice = stepsPerSlice,
                 .noiseIndex = static_cast<uint32_t>(frameNumber % 64),
+                .bentNormalIndex = graph.GetStorageImageViewDescriptorIndex(SID("gtao_bent_normals")),
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gtao_main"));

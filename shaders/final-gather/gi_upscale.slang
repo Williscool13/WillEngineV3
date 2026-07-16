@@ -34,6 +34,11 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float3 centerNormal = UnpackNormalOct16(gt1.r);
     float3 worldN = normalize(mul((float3x3)scene.invView, centerNormal));
+
+    float3 evalN = worldN;
+    if (pc.bentNormalIndex != ~0x0u) {
+        evalN = normalize(mul((float3x3)scene.invView, UnpackNormalOct16(rdgTexturesUInt[pc.bentNormalIndex].Load(int3(pixel, 0)))));
+    }
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float centerViewZ = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, centerViewZ);
@@ -44,15 +49,16 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float4 shG = float4(0.0);
     float4 shB = float4(0.0);
     float sumW = 0.0;
-    float4 bestShR = float4(0.0);
-    float4 bestShG = float4(0.0);
-    float4 bestShB = float4(0.0);
-    float bestW = -1.0;
+    float4 fbShR = float4(0.0);
+    float4 fbShG = float4(0.0);
+    float4 fbShB = float4(0.0);
+    float fbW = 0.0;
     float3 irrM1 = float3(0.0);
     float3 irrM2 = float3(0.0);
     float clampTaps = 0.0;
     float2 halfCoord = (float2(pixel) + 0.5) * 0.5;
     int2 footprintBase = int2(floor(halfCoord - 0.5));
+    float2 footprintFrac = halfCoord - 0.5 - float2(footprintBase);
     bool bAnyBackfaceTap = false;
     [unroll]
     for (uint i = 0; i < 4; i++) {
@@ -79,7 +85,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
         float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
         float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
-        float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, worldN), tapShG.x + dot(tapShG.yzw, worldN), tapShB.x + dot(tapShB.yzw, worldN)), float3(0.0));
+        float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0));
         irrM1 += tapIrr;
         irrM2 += tapIrr * tapIrr;
         clampTaps += 1.0;
@@ -87,12 +93,12 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         shG += tapShG * w;
         shB += tapShB * w;
         sumW += w;
-        if (w > bestW) {
-            bestW = w;
-            bestShR = tapShR;
-            bestShG = tapShG;
-            bestShB = tapShB;
-        }
+        float2 bw2 = lerp(1.0 - footprintFrac, footprintFrac, float2(float(i & 1u), float(i >> 1u)));
+        float bw = bw2.x * bw2.y;
+        fbShR += tapShR * bw;
+        fbShG += tapShG * bw;
+        fbShB += tapShB * bw;
+        fbW += bw;
     }
 
     float3 worldPos = mul(scene.invView, float4(centerXv, 1.0)).xyz;
@@ -101,18 +107,19 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float3 current;
     if (sumW > 1e-4) {
         float invW = 1.0 / sumW;
-        current = max(float3(shR.x + dot(shR.yzw, worldN), shG.x + dot(shG.yzw, worldN), shB.x + dot(shB.yzw, worldN)) * invW, float3(0.0));
-    } else if (bestW >= 0.0) {
-        // All taps low-weight but a valid surface neighbor exists: take the best-matching tap, not an unguarded bilinear that would blend zero SH from background texels.
-        current = max(float3(bestShR.x + dot(bestShR.yzw, worldN), bestShG.x + dot(bestShG.yzw, worldN), bestShB.x + dot(bestShB.yzw, worldN)), float3(0.0));
+        current = max(float3(shR.x + dot(shR.yzw, evalN), shG.x + dot(shG.yzw, evalN), shB.x + dot(shB.yzw, evalN)) * invW, float3(0.0));
+    } else if (fbW > 1e-4) {
+        // All taps guide-rejected but valid geometry exists (sub-half-res features: slots, trim): bilinear over the valid taps only. A single best tap is quad-constant and shows as 2x2 blocks; bilinear is continuous, and backface/sky texels never enter (validity-gated above).
+        float invW = 1.0 / fbW;
+        current = max(float3(fbShR.x + dot(fbShR.yzw, evalN), fbShG.x + dot(fbShG.yzw, evalN), fbShB.x + dot(fbShB.yzw, evalN)) * invW, float3(0.0));
     } else if (!bAnyBackfaceTap) {
         current = float3(0.0);
         if (pc.skyboxIndex >= 0) {
-            current = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+            current = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], evalN) * pc.iblIntensity;
         }
         if (pc.bCascadesValid != 0) {
             float3 cameraDirection = normalize(mul((float3x3)scene.invView, centerXv));
-            float4 gi = DDGISampleIrradianceCascaded(worldPos, worldN, cameraDirection, pc.ddgiCascades);
+            float4 gi = DDGISampleIrradianceCascaded(worldPos, evalN, cameraDirection, pc.ddgiCascades);
             current = gi.rgb * gi.w + current * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPos, pc.ddgiCascades)));
         }
     } else {

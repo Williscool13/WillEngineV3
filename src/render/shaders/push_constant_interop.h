@@ -701,6 +701,7 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC uint32_t bCascadesValid;
     SHADER_PUBLIC uint32_t aoIndex;
+    SHADER_PUBLIC uint32_t bentNormalIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -1065,6 +1066,7 @@ SHADER_PUBLIC struct GTAOMainPushConstant
     SHADER_PUBLIC float sliceCount;
     SHADER_PUBLIC float stepsPerSlice;
     SHADER_PUBLIC uint32_t noiseIndex;
+    SHADER_PUBLIC uint32_t bentNormalIndex;
 };
 
 SHADER_PUBLIC struct GTAODenoisePushConstant

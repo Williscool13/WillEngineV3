@@ -189,10 +189,14 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     if (bAO) {
         upscale.ReadSampledImage(SID("shadows_resolve_target"));
     }
+    const bool bBentNormals = graph.HasTexture(SID("gtao_bent_normals"));
+    if (bBentNormals) {
+        upscale.ReadSampledImage(SID("gtao_bent_normals"));
+    }
     const bool bUpscaleCascades = AddDDGISampleDependencies(graph, upscale);
     upscale.WriteStorageImage(GI_GATHER_RESOLVED);
 
-    upscale.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, bTemporal, bAO, bUpscaleCascades,
+    upscale.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, bTemporal, bAO, bBentNormals, bUpscaleCascades,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_upscale"));
@@ -223,6 +227,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .iblIntensity = iblIntensity,
             .bCascadesValid = bUpscaleCascades ? 1u : 0u,
             .aoIndex = bAO ? graph.GetSampledImageViewDescriptorIndex(SID("shadows_resolve_target")) : ~0x0u,
+            .bentNormalIndex = bBentNormals ? graph.GetSampledImageViewDescriptorIndex(SID("gtao_bent_normals")) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);

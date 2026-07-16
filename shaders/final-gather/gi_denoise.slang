@@ -108,7 +108,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             w *= exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
             w *= pow(saturate(dot(centerNormal, tapNormal)), GI_DENOISE_NORMAL_POWER);
             if (centerHitT >= 0.0 && tapHitT >= 0.0) {
-                w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 1e-3));
+                w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 0.25));
             }
             // GTAO steering: receiver-occlusion disparity marks corner/contact texels the plane/normal/hitT guides can't separate.
             w *= exp2(-20.0 * abs(sAO[idx] - sAO[centerIdx]));
