@@ -53,7 +53,8 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         sShB[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcShBIndex].Load(int3(p, 0)));
         sNormal[t] = gt1.r;
         sViewZ[t] = valid ? ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd) : 0.0;
-        sHitT[t] = data.x;
+        // Sky misses opt out of the hitT guide (sentinel -1): a miss is a legit 0-radiance sample of the same integral as a neighboring hit, but hitT=10000 vs metres walls them off; with no IBL that blocks exactly the smoothing the outdoor speckle needs.
+        sHitT[t] = uint(data.y + 0.5) == GI_GATHER_TIER_SKY ? -1.0 : data.x;
         sAO[t] = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(fullPixel, 0)).y : 1.0;
     }
     GroupMemoryBarrierWithGroupSync();
@@ -76,8 +77,8 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         float centerHitT = sHitT[centerIdx];
         if (pc.stepSize == 1u) {
             // Stabilize the edge-stop reference against 1spp hitT variance. First iteration only, later iterations read already-filtered SH.
-            float hitL = sViewZ[centerIdx - 1] != 0.0 ? sHitT[centerIdx - 1] : centerHitT;
-            float hitR = sViewZ[centerIdx + 1] != 0.0 ? sHitT[centerIdx + 1] : centerHitT;
+            float hitL = sViewZ[centerIdx - 1] != 0.0 && sHitT[centerIdx - 1] >= 0.0 ? sHitT[centerIdx - 1] : centerHitT;
+            float hitR = sViewZ[centerIdx + 1] != 0.0 && sHitT[centerIdx + 1] >= 0.0 ? sHitT[centerIdx + 1] : centerHitT;
             centerHitT = min(centerHitT, min(hitL, hitR));
         }
         uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.frameIndex, pc.renderExtent);
@@ -106,7 +107,9 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             float w = exp(-0.66 * r * r);
             w *= exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
             w *= pow(saturate(dot(centerNormal, tapNormal)), GI_DENOISE_NORMAL_POWER);
-            w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 1e-3));
+            if (centerHitT >= 0.0 && tapHitT >= 0.0) {
+                w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 1e-3));
+            }
             // GTAO steering: receiver-occlusion disparity marks corner/contact texels the plane/normal/hitT guides can't separate.
             w *= exp2(-20.0 * abs(sAO[idx] - sAO[centerIdx]));
 
