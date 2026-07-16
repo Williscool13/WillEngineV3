@@ -199,6 +199,8 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                                 UnpackPBR(prevGt1.b, prevRoughness, prevMetallic);
                                 // Specular-dominant pixels carry view-dependent radiance (a mirror shows the light source itself); fall through to the diffuse-only tiers.
                                 if (dot(hit.normal, prevWorldN) <= 0.5 || prevMetallic >= 0.5 || prevRoughness <= GI_GATHER_SCREEN_MIN_ROUGHNESS) { continue; }
+                                // Emitter texel: rays through a light proxy hit the surface just behind it and reproject onto the emitter's own pixels, importing its glow.
+                                if ((prevGt1.w & 2u) != 0u) { continue; }
                                 sum += rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(corner, 0)).rgb * w;
                                 sumW += w;
                             }

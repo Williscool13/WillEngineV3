@@ -16,6 +16,7 @@ static const int GI_DENOISE_TILE = GI_DENOISE_GROUP + 2 * GI_DENOISE_TILE_RADIUS
 static const float GI_DENOISE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_DENOISE_NORMAL_POWER = 32.0;
 static const float GI_DENOISE_HITT_SENSITIVITY = 3.0;
+static const float GI_DENOISE_FIREFLY_LUMA_SCALE = 4.0;
 
 groupshared uint2 sShR[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared uint2 sShG[GI_DENOISE_TILE * GI_DENOISE_GROUP];
@@ -80,6 +81,25 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             float hitL = sViewZ[centerIdx - 1] != 0.0 && sHitT[centerIdx - 1] >= 0.0 ? sHitT[centerIdx - 1] : centerHitT;
             float hitR = sViewZ[centerIdx + 1] != 0.0 && sHitT[centerIdx + 1] >= 0.0 ? sHitT[centerIdx + 1] : centerHitT;
             centerHitT = min(centerHitT, min(hitL, hitR));
+
+            // Anti-firefly: a 1spp ray that lands on a tiny ultra-bright patch (e.g. an area light's floor-contact strip, radiance clamped only at 20) is spatially isolated
+            float centerLuma = dot(float3(sumR.x, sumG.x, sumB.x), float3(0.2126, 0.7152, 0.0722));
+            float maxNeighborLuma = -1.0;
+            [unroll]
+            for (int d = -GI_DENOISE_RADIUS; d <= GI_DENOISE_RADIUS; d++) {
+                if (d == 0) { continue; }
+                uint idx = uint(int(centerIdx) + d);
+                if (sViewZ[idx] == 0.0) { continue; }
+                float3 tapL0 = float3(UnpackHalf2x16Pair(sShR[idx]).x, UnpackHalf2x16Pair(sShG[idx]).x, UnpackHalf2x16Pair(sShB[idx]).x);
+                maxNeighborLuma = max(maxNeighborLuma, dot(tapL0, float3(0.2126, 0.7152, 0.0722)));
+            }
+            float lumaCap = maxNeighborLuma * GI_DENOISE_FIREFLY_LUMA_SCALE + 1e-3;
+            if (maxNeighborLuma >= 0.0 && centerLuma > lumaCap) {
+                float fireflyScale = lumaCap / centerLuma;
+                sumR *= fireflyScale;
+                sumG *= fireflyScale;
+                sumB *= fireflyScale;
+            }
         }
         uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.frameIndex, pc.renderExtent);
         float2 centerUv = (float2(centerFull) + 0.5) / float2(pc.renderExtent);
