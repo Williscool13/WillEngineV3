@@ -105,7 +105,7 @@ void ComputeRTSunShadow(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPus
     // Bias along the surface normal (not toward the camera, which slides the directional shadow sideways across the surface),
     // scaled by camera distance so a coarsely-reconstructed far position clears itself without anchoring the shadow off-place.
     float camDist = length(scene.cameraWorldPos.xyz - worldPos);
-    float originBias = max(0.05, camDist * 0.001);
+    float originBias = max(0.002, camDist * 0.001);
 
     RayDesc ray;
     ray.Origin = worldPos + worldN * originBias;

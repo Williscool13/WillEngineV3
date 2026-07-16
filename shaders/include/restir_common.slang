@@ -440,7 +440,8 @@ public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 wor
 {
     // Normal-direction offset scaled by distance (slope-scaled by caller); no NoL division (that's for
     // along-the-ray offsets, not this case).
-    float bias = max(0.05, worldTexelSize);
+    // shadow erosion, which eats contact shadows up close.
+    float bias = max(0.002, worldTexelSize);
     float3 rayOrigin = worldShadingPos + worldN * bias;
     float3 toLight = worldyStar - rayOrigin;
     float lightDist = length(toLight);
@@ -513,7 +514,7 @@ public float EvalSunPHat(float3 LsunView, float3 V, float3 N, float3 albedo, flo
 public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize)
 {
     // Matches the SIGMA sun trace: distance-scaled normal offset, no NoL division.
-    float bias = max(0.05, worldTexelSize);
+    float bias = max(0.002, worldTexelSize);
     float3 rayOrigin = worldShadingPos + worldN * bias;
     RayDesc shadowRay;
     shadowRay.Origin = rayOrigin;
