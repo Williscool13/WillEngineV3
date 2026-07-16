@@ -76,7 +76,8 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
 
     float expectedPrevViewZ = centerViewZ + UnpackViewZDelta(gt1.w);
     float frustumSize = abs(scene.ndcToViewMul.y) * abs(centerViewZ);
-    float disocclusionThreshold = saturate(GI_GATHER_DISOCCLUSION_SENSITIVITY / lerp(0.05, 1.0, NoV)) * frustumSize;
+    // Flat plane-distance tolerance: the compared |dz|*NoV already projects out slant, and the NRD-style 1/lerp(0.05,1,NoV) expansion inflated the accepted raw mismatch to ~2x viewZ at grazing (ground history never rejected).
+    float disocclusionThreshold = GI_GATHER_DISOCCLUSION_SENSITIVITY * frustumSize;
 
     float2 prevPos = historyUv * float2(renderExtent) - 0.5;
     int2 origin = int2(floor(prevPos));
@@ -107,7 +108,8 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
             continue;
         }
         float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[gbufferOneHistoryIndex].Load(int3(tap, 0)).r)));
-        if (dot(worldN, prevWorldN) <= 0.0) {
+        // 60 degrees, matching the tier-0 screen gate: the plane test is blind to old surfaces CROSSING the current plane (buried pillar faces at ground level), and those arrive with perpendicular normals (dot ~ 0).
+        if (dot(worldN, prevWorldN) < 0.5) {
             continue;
         }
         float4 history = rdgTexturesFloat4[historyIndex].Load(int3(tap, 0));
