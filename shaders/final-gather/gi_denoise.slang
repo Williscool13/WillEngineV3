@@ -23,6 +23,7 @@ groupshared uint2 sShB[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared uint sNormal[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sViewZ[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sHitT[GI_DENOISE_TILE * GI_DENOISE_GROUP];
+groupshared float sAO[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 
 [shader("compute")]
 [numthreads(GI_DENOISE_GROUP, GI_DENOISE_GROUP, 1)]
@@ -53,6 +54,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         sNormal[t] = gt1.r;
         sViewZ[t] = valid ? ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd) : 0.0;
         sHitT[t] = data.x;
+        sAO[t] = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(fullPixel, 0)).y : 1.0;
     }
     GroupMemoryBarrierWithGroupSync();
 
@@ -105,6 +107,8 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             w *= exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
             w *= pow(saturate(dot(centerNormal, tapNormal)), GI_DENOISE_NORMAL_POWER);
             w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 1e-3));
+            // GTAO steering: receiver-occlusion disparity marks corner/contact texels the plane/normal/hitT guides can't separate.
+            w *= exp2(-20.0 * abs(sAO[idx] - sAO[centerIdx]));
 
             sumR += UnpackHalf2x16Pair(sShR[idx]) * w;
             sumG += UnpackHalf2x16Pair(sShG[idx]) * w;

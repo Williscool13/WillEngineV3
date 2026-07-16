@@ -2,6 +2,22 @@ module world_cache_hash;
 
 import world_cache_interop;
 import shader_functions;
+import packing_functions;
+
+public bool WorldCacheRadianceShaded(uint2 packed)
+{
+    return (packed.y >> 16u) != 0xFFFFu;
+}
+
+public float3 WorldCacheUnpackRadiance(uint2 packed)
+{
+    return UnpackHalf2x16Pair(packed).rgb;
+}
+
+public uint2 WorldCachePackRadiance(float3 radiance)
+{
+    return PackHalf2x16Pair(float4(radiance, 0.0));
+}
 
 public struct WorldCacheKey
 {
@@ -158,18 +174,20 @@ public uint WorldCacheHashInsert(uint* entries, uint2* keys, WorldCacheStats* st
 
 // Seeds a newly-created cell from whichever adjacent LOD already has data, instead of starting black.
 // Parent (level+1) is a single lookup, one candidate. Children (level-1) are up to 8, averaged if found.
-public uint WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, WorldCacheKey key, out uint seedCount)
+public uint2 WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, WorldCacheKey key, out uint seedCount, out uint seedEmissive)
 {
     seedCount = 0u;
+    seedEmissive = 0u;
     if (key.level < WORLD_CACHE_MAX_LEVEL) {
         WorldCacheKey parentKey = key;
         parentKey.level = key.level + 1u;
         parentKey.cellPos = key.cellPos >> 1;
         uint parentSlot = WorldCacheHashFind(entries, parentKey);
         if (parentSlot != WORLD_CACHE_HASH_INVALID) {
-            uint packed = cells[parentSlot].packedRadiance;
-            if (packed != WORLD_CACHE_RADIANCE_UNSHADED) {
+            uint2 packed = cells[parentSlot].packedRadiance;
+            if (WorldCacheRadianceShaded(packed)) {
                 seedCount = min((cells[parentSlot].changeStreak >> 16u) & 0xFFu, WORLD_CACHE_WARMSTART_SEED_CAP);
+                seedEmissive = cells[parentSlot].packedEmissive;
                 return packed;
             }
         }
@@ -177,6 +195,7 @@ public uint WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, Wo
 
     if (key.level > 0u) {
         float3 sum = float3(0.0);
+        float3 emissiveSum = float3(0.0);
         uint found = 0u;
         uint minChildCount = WORLD_CACHE_ACCUM_FRAMES;
         WorldCacheKey childKey = key;
@@ -185,9 +204,10 @@ public uint WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, Wo
             childKey.cellPos = key.cellPos * 2 + int3(i & 1u, (i >> 1u) & 1u, (i >> 2u) & 1u);
             uint childSlot = WorldCacheHashFind(entries, childKey);
             if (childSlot != WORLD_CACHE_HASH_INVALID) {
-                uint packed = cells[childSlot].packedRadiance;
-                if (packed != WORLD_CACHE_RADIANCE_UNSHADED) {
-                    sum += UnpackEmissiveRGBE(packed);
+                uint2 packed = cells[childSlot].packedRadiance;
+                if (WorldCacheRadianceShaded(packed)) {
+                    sum += WorldCacheUnpackRadiance(packed);
+                    emissiveSum += UnpackEmissiveRGBE(cells[childSlot].packedEmissive);
                     minChildCount = min(minChildCount, (cells[childSlot].changeStreak >> 16u) & 0xFFu);
                     found++;
                 }
@@ -195,9 +215,10 @@ public uint WorldCacheWarmStartRadiance(uint* entries, WorldCacheCell* cells, Wo
         }
         if (found > 0u) {
             seedCount = min(minChildCount, WORLD_CACHE_WARMSTART_SEED_CAP);
-            return min(PackEmissiveRGBE(sum / float(found)), WORLD_CACHE_RADIANCE_UNSHADED - 1u);
+            seedEmissive = PackEmissiveRGBE(emissiveSum / float(found));
+            return WorldCachePackRadiance(sum / float(found));
         }
     }
 
-    return WORLD_CACHE_RADIANCE_UNSHADED;
+    return uint2(WORLD_CACHE_RADIANCE_UNSHADED, WORLD_CACHE_RADIANCE_UNSHADED);
 }

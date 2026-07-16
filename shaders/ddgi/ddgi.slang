@@ -84,17 +84,19 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                 bool isNew;
                 uint wcSlot = WorldCacheHashInsert(pc.worldCache->entries, pc.worldCache->keys, pc.worldCache->stats, wcKey, isNew);
                 if (wcSlot != WORLD_CACHE_HASH_INVALID) {
-                    uint packedRadiance = pc.worldCache->cells[wcSlot].packedRadiance;
+                    uint2 packedRadiance = pc.worldCache->cells[wcSlot].packedRadiance;
                     if (isNew) {
                         uint seedCount;
-                        packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey, seedCount);
+                        uint seedEmissive;
+                        packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey, seedCount, seedEmissive);
                         pc.worldCache->cells[wcSlot].packedRadiance = packedRadiance;
+                        pc.worldCache->cells[wcSlot].packedEmissive = seedEmissive;
                         // Inherit the warm-start source's accumulation count so a re-keyed shell keeps its smoothing instead of a 50/50 first shade.
                         pc.worldCache->cells[wcSlot].changeStreak = seedCount << 16u;
                     }
 
-                    if (packedRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
-                        radiance = UnpackEmissiveRGBE(packedRadiance);
+                    if (WorldCacheRadianceShaded(packedRadiance)) {
+                        radiance = WorldCacheUnpackRadiance(packedRadiance) + UnpackEmissiveRGBE(pc.worldCache->cells[wcSlot].packedEmissive);
                         bCacheRead = true;
                     }
                     pc.worldCache->cells[wcSlot].lastTouched = pc.frameIndex;

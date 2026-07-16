@@ -712,8 +712,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         // Snapshot the lit HDR composite BEFORE any overlay/debug/text/sprite pass so the gather's screen tier reads GI, not UI glyphs or debug lines carried into lit_color_history.
         const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
-        const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || frameBuffer.giGatherDebugMode != 0);
-        const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && (bReflectionScreenSpace || bGIGatherScreenSpace);
+        const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bFinalGather;
+        const bool bLitColorIsScene = frameBuffer.giGatherDebugMode == 0 && frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
+        const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace);
         if (bSnapshotLitColor) {
             renderGraph->CreateTexture(SID("lit_color_preoverlay"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
             auto& snapshotPass = renderGraph->AddPass(SID("Lit Color Snapshot"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);

@@ -1,5 +1,8 @@
 module random_common;
 
+import bindless_declarations;
+import constants_interop;
+
 /** Canonical per-pixel/per-frame RNG seed: hashes pixel coord, frame index, and a per-stream salt. */
 public uint SeedRng(uint2 pixel, uint frameIndex, uint salt)
 {
@@ -26,13 +29,11 @@ public float BlueNoiseAngle(uint2 pixel, uint frameIndex)
     return n * 6.28318530718;
 }
 
-/** Texture-free temporally-progressive 2D sample in [0, 1)^2: an R2 (plastic-constant) rank-1 lattice advances the pair across frames (low-discrepancy per pixel), Cranley-Patterson rotated by two independent per-pixel hash offsets. IGN offsets are unusable here: their diagonal isoline structure correlates neighbouring pixels' sequences into visible cross-hatching. */
+/** Temporally-progressive 2D sample in [0, 1)^2: an R2 (plastic-constant) rank-1 lattice advances the pair across frames (low-discrepancy per pixel), Cranley-Patterson rotated by spatially-BLUE per-pixel offsets from the baked mask. White hash offsets let neighbouring texels clump directions within a frame (low-frequency flicker the spatial filters pass); IGN's diagonal isolines cross-hatch. */
 public float2 SpatioTemporalBlueNoise2D(uint2 pixel, uint frameIndex)
 {
     const float2 R2 = float2(0.7548776662466927, 0.5698402909980532);
     float2 seq = frac(R2 * float(frameIndex & 63u));
-    uint h = SeedRng(pixel, 0u, 0x9E3779B9u);
-    float o1 = HashStep(h);
-    float o2 = HashStep(h);
-    return frac(seq + float2(o1, o2));
+    float2 offsets = assetTextures[BLUE_NOISE_BINDLESS_INDEX].Load(int3(int2(pixel & BLUE_NOISE_SIZE_MASK), 0)).rg;
+    return frac(seq + offsets);
 }

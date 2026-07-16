@@ -44,7 +44,7 @@ struct GatherHitSurface
 {
     float3 normal;
     float3 diffuseColor;
-    float3 emissive;
+    bool bEmissive;
 };
 
 static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
@@ -66,16 +66,10 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
         albedo *= assetTextures[material.textureImageIndices.x].SampleLevel(assetSamplers[material.textureSamplerIndices.x], colorUV, HIT_SHADING_TEXTURE_LOD);
     }
-    float3 emissive = material.emissiveFactor.rgb * material.emissiveFactor.w;
-    if (material.textureImageIndices.w >= 0) {
-        float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
-        emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
-    }
-
     GatherHitSurface s;
     s.normal = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
     s.diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    s.emissive = emissive;
+    s.bEmissive = any(material.emissiveFactor.rgb * material.emissiveFactor.w > float3(0.0));
     return s;
 }
 
@@ -121,9 +115,11 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
             if (dot(geoN, worldN) < 0.0) { geoN = -geoN; }
             WorldCacheKey key = WorldCacheComputeKey(worldPosition, geoN, scene.cameraWorldPos.xyz);
             uint slot = WorldCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition);
-            uint packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : WORLD_CACHE_RADIANCE_UNSHADED;
-            if (packedRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
-                radiance = UnpackEmissiveRGBE(packedRadiance);
+            uint2 packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(WORLD_CACHE_RADIANCE_UNSHADED, WORLD_CACHE_RADIANCE_UNSHADED);
+            uint cellCount = slot != WORLD_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
+            // Count gate: a count-1 cell is one bary-jittered point; the probe tier is smoother while cells stream in.
+            if (WorldCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
+                radiance = WorldCacheUnpackRadiance(packedRadiance);
                 tier = GI_GATHER_TIER_CACHE;
                 // Reader keeps the cell resident: probe rays alone can let a gather-consumed sparse cell age past the LRU window.
                 pc.cacheCells[slot].lastTouched = pc.frameIndex;
@@ -135,7 +131,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                 if (pc.bCascadesValid != 0) {
                     float3 cameraDirection = normalize(mul((float3x3)scene.invView, viewPosition));
                     float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
-                    indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+                    indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.ddgiCascades)));
                 }
                 // No hit material to modulate by; the shading pixel's own albedo is applied once downstream (matches the non-gather DDGI path).
                 radiance = indirectDiffuse;
@@ -171,11 +167,10 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                 float3 hitWorldPos = ray.Origin + direction * hitT;
                 GatherHitSurface hit = DecodeGatherHit(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
 
-                bool bSkipEmission = pc.bEmissiveIsDI != 0u && instance.emissiveTriLightBase != ~0x0u;
-
                 // Tier 0: last frame's on-screen lit color at the hit, when visible and geometry agrees (mirrors reflection_shade).
+                // Emission never rides the gather (emissive DI belongs to ReSTIR tri-lights, absent otherwise by design; probes carry the bounce), and lit history at an emitter contains its glow.
                 bool bResolved = false;
-                if (!bSkipEmission && pc.litHistoryIndex != ~0x0u) {
+                if (!hit.bEmissive && pc.litHistoryIndex != ~0x0u) {
                     float4 prevClip = mul(scene.prevViewProj, float4(hitWorldPos, 1.0));
                     if (prevClip.w > 0.0) {
                         float2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
@@ -218,12 +213,10 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                 if (!bResolved) {
                     WorldCacheKey key = WorldCacheComputeKey(hitWorldPos, hit.normal, scene.cameraWorldPos.xyz);
                     uint slot = WorldCacheHashFindLodTolerant(pc.cacheEntries, key, hitWorldPos);
-                    uint packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : WORLD_CACHE_RADIANCE_UNSHADED;
-                    if (packedRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
-                        radiance = UnpackEmissiveRGBE(packedRadiance);
-                        if (bSkipEmission) {
-                            radiance = max(radiance - hit.emissive, float3(0.0));
-                        }
+                    uint2 packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(WORLD_CACHE_RADIANCE_UNSHADED, WORLD_CACHE_RADIANCE_UNSHADED);
+                    uint cellCount = slot != WORLD_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
+                    if (WorldCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
+                        radiance = WorldCacheUnpackRadiance(packedRadiance);
                         tier = GI_GATHER_TIER_CACHE;
                         pc.cacheCells[slot].lastTouched = pc.frameIndex;
                     } else {
@@ -234,9 +227,9 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                         }
                         if (pc.bCascadesValid != 0) {
                             float4 gi = DDGISampleIrradianceCascaded(hitWorldPos, hit.normal, direction, pc.ddgiCascades);
-                            indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+                            indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(hitWorldPos, pc.ddgiCascades)));
                         }
-                        radiance = hit.diffuseColor * indirectDiffuse + (bSkipEmission ? float3(0.0) : hit.emissive);
+                        radiance = hit.diffuseColor * indirectDiffuse;
                         tier = GI_GATHER_TIER_PROBE;
                     }
                 }

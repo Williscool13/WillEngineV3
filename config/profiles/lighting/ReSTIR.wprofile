@@ -1,11 +1,11 @@
 {
-  "clusterZFar": 500.0,
   "ddgi": {
     "bApplyToLighting": true,
     "bClassification": true,
     "bEnabled": true,
-    "bFinalGather": false,
+    "bFinalGather": true,
     "bFinalGatherDenoise": true,
+    "bGatherSkipRay": false,
     "bInfiniteBounce": true,
     "bOuterLocalNEE": false,
     "bRelocation": true,
@@ -13,9 +13,9 @@
     "bounceIntensity": 0.75,
     "brightnessThreshold": 0.10000000149011612,
     "cascadeCount": 6,
-    "distanceExponent": 10.0,
+    "distanceExponent": 50.0,
     "edgeBlendCells": 3.96610164642334,
-    "hysteresis": 0.9800000190734863,
+    "hysteresis": 0.9700000286102295,
     "irradianceGamma": 5.0,
     "irradianceThreshold": 0.25,
     "maxRayRadiance": 20.0,
@@ -28,7 +28,7 @@
     "probeSpacing": 1.5,
     "raysPerProbe": 80,
     "viewBias": 0.24749164283275604,
-    "visibilityHysteresis": 0.9650501608848572
+    "visibilityHysteresis": 0.9700000286102295
   },
   "gtao": {
     "bEnabled": true,
@@ -64,7 +64,7 @@
     },
     "bAdaptiveSpatial": true,
     "bCheckerboard": true,
-    "bEmissiveTriangleLights": true,
+    "bEmissiveTriangleLights": false,
     "bEnableAntilag": true,
     "bEnableConfidence": false,
     "bEnableTemporal": true,
@@ -80,7 +80,7 @@
     "confidenceStrength": 0.75,
     "denoiserMode": 3,
     "emissiveTriMaxPerPrimitive": 256,
-    "emissiveTriRangeMultiplier": 48.369232177734375,
+    "emissiveTriRangeMultiplier": 8.0,
     "reblur": {
       "antilagLuminanceSensitivity": 3.0,
       "antilagLuminanceSigmaScale": 2.0,

@@ -41,6 +41,11 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
 void CreateSpriteTextures(Core::MemoryManager* memoryManager,
                           Core::Path outputPointLightPath,
                           Engine::TextureID pointLightTextureId);
+
+/** 128x128 RG8 spatial blue noise (void-and-cluster ranks, independent channels) for Cranley-Patterson ray-direction offsets. */
+void CreateBlueNoiseTexture(Core::MemoryManager* memoryManager,
+                            Core::Path outputPath,
+                            Engine::TextureID textureId);
 } // Editor
 
 #endif //WILL_ENGINE_MISCELLANEOUS_ASSET_GENERATE_H

@@ -53,11 +53,11 @@ SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_MAX_LEVEL = 8u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_NORMAL_BUCKETS = 6u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_LRU_THRESHOLD = 60u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_LOD_REVALIDATE_MARGIN = 2u;
-SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_ACCUM_FRAMES = 6u; // count-based blend cap; steady state keeps 5/6 of history; shorter tau paid for by WORLD_CACHE_SUN_SAMPLES variance reduction
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_ACCUM_FRAMES = 16u; // count-based blend cap; the change-streak dump owns responsiveness, so the window only has to own variance (SHARC runs 30+)
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_SHADE_INTERVAL = 8u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_SHADE_BUDGET = 20480u;
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_SUN_SAMPLES = 4u; // independent cone-sampled sun visibility rays averaged per cell shade
-SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_WARMSTART_SEED_CAP = 6u; // count a re-keyed cell inherits from its warm-start source; ~half WORLD_CACHE_ACCUM_FRAMES so a coarser parent estimate can't fully dominate
+SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_WARMSTART_SEED_CAP = 8u; // count a re-keyed cell inherits from its warm-start source; ~half WORLD_CACHE_ACCUM_FRAMES so a coarser parent estimate can't fully dominate
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_RADIANCE_UNSHADED = 0xFFFFFFFFu;
 SHADER_PUBLIC SHADER_CONST float WORLD_CACHE_CHANGE_THRESHOLD = 0.35; // max-channel relative delta that counts toward a change streak
 SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_CHANGE_STREAK = 3u; // consecutive same-direction large deltas before accumulated history is cut
@@ -65,7 +65,8 @@ SHADER_PUBLIC SHADER_CONST uint WORLD_CACHE_DUMP_KEEP_COUNT = 2u; // count a str
 
 SHADER_PUBLIC struct WorldCacheCell
 {
-    SHADER_PUBLIC uint packedRadiance; // RGB9E5, outgoing radiosity for probe-ray read-back
+    SHADER_PUBLIC uint2 packedRadiance; // fp16x3 non-emissive outgoing radiosity (RGB9E5 EMA round-trips quantize chroma); .y high half 0xFFFF = unshaded, matching the 0xFFFFFFFF clear fill
+    SHADER_PUBLIC uint packedEmissive; // RGB9E5
     SHADER_PUBLIC uint lastTouched;
     SHADER_PUBLIC uint lastShaded;
     SHADER_PUBLIC uint changeStreak; // bits 0-7 consecutive large-delta touches, bit 8 last delta direction, bits 16-23 accumulated shade count

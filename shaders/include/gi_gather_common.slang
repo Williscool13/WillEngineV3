@@ -37,6 +37,33 @@ public struct GIGatherHistory
     public float quality;
 };
 
+/** 5-tap Catmull-Rom (no corners, NRD form) over the RGBA16F history; rgb only, count stays with the validity-gated bilinear. */
+static float3 GIGatherSampleHistoryCatmullRom(uint historyIndex, float2 samplePos, float2 invSize)
+{
+    const float sharpness = 0.5;
+    float2 centerPos = floor(samplePos - 0.5) + 0.5;
+    float2 f = saturate(samplePos - centerPos);
+    float2 w0 = f * (f * (-sharpness * f + 2.0 * sharpness) - sharpness);
+    float2 w1 = f * (f * ((2.0 - sharpness) * f - (3.0 - sharpness))) + 1.0;
+    float2 w2 = f * (f * (-(2.0 - sharpness) * f + (3.0 - 2.0 * sharpness)) + sharpness);
+    float2 w3 = f * (f * (sharpness * f - sharpness));
+    float2 w12 = w1 + w2;
+    float2 tc = w2 / w12;
+    float4 w = float4(w12.x * w0.y, w0.x * w12.y, w12.x * w12.y, w3.x * w12.y);
+    float w4 = w12.x * w3.y;
+    float sum = dot(w, 1.0) + w4;
+    float4 uv01 = (centerPos.xyxy + float4(tc.x, -1.0, -1.0, tc.y)) * invSize.xyxy;
+    float4 uv23 = (centerPos.xyxy + float4(tc.x, tc.y, 2.0, tc.y)) * invSize.xyxy;
+    float2 uv4 = (centerPos + float2(tc.x, 2.0)) * invSize;
+    SamplerState lin = rdgSamplers[RDG_LINEAR_SAMPLER_INDEX];
+    float3 color = rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv01.xy, 0).rgb * w.x;
+    color += rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv01.zw, 0).rgb * w.y;
+    color += rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv23.xy, 0).rgb * w.z;
+    color += rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv23.zw, 0).rgb * w.w;
+    color += rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv4, 0).rgb * w4;
+    return color / sum;
+}
+
 /** MV-reprojected 2x2 bilinear history fetch with per-tap depth/backface validity and weight renormalization. quality is the surviving bilinear weight; 0 means no usable history. */
 public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
 {
@@ -58,6 +85,8 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
     const int2 tapOffsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
 
     float3 colorSum = float3(0.0);
+    float3 colorMin = float3(1e5);
+    float3 colorMax = float3(-1e5);
     float countSum = 0.0;
     float weightSum = 0.0;
     [unroll]
@@ -83,6 +112,8 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
         }
         float4 history = rdgTexturesFloat4[historyIndex].Load(int3(tap, 0));
         colorSum += history.rgb * bilinearW[i];
+        colorMin = min(colorMin, history.rgb);
+        colorMax = max(colorMax, history.rgb);
         countSum += history.a * bilinearW[i];
         weightSum += bilinearW[i];
     }
@@ -92,6 +123,9 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
         result.color = colorSum * invW;
         result.count = countSum * invW;
         result.quality = saturate(weightSum);
+        if (weightSum > 0.999) {
+            result.color = clamp(GIGatherSampleHistoryCatmullRom(historyIndex, prevPos + 0.5, 1.0 / float2(renderExtent)), colorMin, colorMax);
+        }
     }
     return result;
 }

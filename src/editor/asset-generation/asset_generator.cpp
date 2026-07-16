@@ -303,6 +303,11 @@ void AssetGenerator::GenerateSMAATextures(const Core::Path& parentDirectory)
                        Engine::TextureID(textureIdRng()));
 }
 
+void AssetGenerator::GenerateBlueNoiseTexture(const Core::Path& outputFile)
+{
+    CreateBlueNoiseTexture(memoryManager, outputFile, Engine::TextureID(textureIdRng()));
+}
+
 void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle)
 {
     ZoneScoped;

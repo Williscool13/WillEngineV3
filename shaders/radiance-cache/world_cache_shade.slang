@@ -31,23 +31,29 @@ void ComputeWorldCacheShade(uint3 dtid: SV_DispatchThreadID, uniform WorldCacheS
 
     // lastShaded holds this shade event's queue frame; salting with it decorrelates events even if the hit bary repeats.
     uint rngSeed = SeedRng(uint2(slot, hit.packedBary), pc.cells[slot].lastShaded, 0x5CACEu);
-    float3 radiance = ShadeWorldCacheCell(pc, instance, hit.primitiveIndex, bary, rngSeed, worldGridLights);
+    float3 emissive;
+    float3 radiance = ShadeWorldCacheCell(pc, instance, hit.primitiveIndex, bary, rngSeed, worldGridLights, emissive);
 
     float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
     if (pc.maxRadiance > 0.0 && maxChannel > pc.maxRadiance) {
         radiance *= pc.maxRadiance / maxChannel;
     }
+    float maxEmissive = max(emissive.r, max(emissive.g, emissive.b));
+    if (pc.maxRadiance > 0.0 && maxEmissive > pc.maxRadiance) {
+        emissive *= pc.maxRadiance / maxEmissive;
+    }
 
-    uint packedPreviousRadiance = pc.cells[slot].packedRadiance;
+    uint2 packedPreviousRadiance = pc.cells[slot].packedRadiance;
 
     // Same-direction streak = real change; alternating large deltas = representative variance, keep smoothing.
     // A same-state run of penumbra picks is indistinguishable from a real step, so a dump only clamps the count: bounded move per dump, repeated dumps walk a real step across in a few shades.
     float3 blended = radiance;
+    float3 blendedEmissive = emissive;
     uint streak = 0u;
     uint direction = 0u;
     uint count = 0u;
-    if (packedPreviousRadiance != WORLD_CACHE_RADIANCE_UNSHADED) {
-        float3 previous = UnpackEmissiveRGBE(packedPreviousRadiance);
+    if (WorldCacheRadianceShaded(packedPreviousRadiance)) {
+        float3 previous = WorldCacheUnpackRadiance(packedPreviousRadiance);
         float previousLuma = dot(previous, float3(0.2126, 0.7152, 0.0722));
         float3 channelDelta = radiance - previous;
         float lumaDelta = dot(channelDelta, float3(0.2126, 0.7152, 0.0722));
@@ -65,7 +71,9 @@ void ComputeWorldCacheShade(uint3 dtid: SV_DispatchThreadID, uniform WorldCacheS
             count = min(count, WORLD_CACHE_DUMP_KEEP_COUNT);
         }
         blended = lerp(radiance, previous, float(count) / float(count + 1u));
+        blendedEmissive = lerp(emissive, UnpackEmissiveRGBE(pc.cells[slot].packedEmissive), float(count) / float(count + 1u));
     }
-    pc.cells[slot].packedRadiance = min(PackEmissiveRGBE(blended), WORLD_CACHE_RADIANCE_UNSHADED - 1u);
+    pc.cells[slot].packedRadiance = WorldCachePackRadiance(blended);
+    pc.cells[slot].packedEmissive = PackEmissiveRGBE(blendedEmissive);
     pc.cells[slot].changeStreak = streak | (direction << 8u) | ((count + 1u) << 16u);
 }

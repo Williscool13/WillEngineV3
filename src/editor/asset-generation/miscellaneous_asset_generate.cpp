@@ -385,6 +385,71 @@ void CreateBRDFLookupTable(
     vkDestroyCommandPool(context->device, graphicsCommandPool, nullptr);
 }
 
+static void GenerateBlueNoiseRanks(uint32_t size, uint32_t seed, Core::MemoryManager* memoryManager, uint8_t* out, uint32_t stride, uint32_t channel)
+{
+    const uint32_t count = size * size;
+    auto energy = Core::HeapArray<float>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, count);
+    auto placed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, count);
+    memset(energy.Data(), 0, count * sizeof(float));
+    memset(placed.Data(), 0, count);
+
+    constexpr float sigma = 1.9f;
+    constexpr int kernelRadius = 10;
+    float kernel[2 * kernelRadius + 1][2 * kernelRadius + 1];
+    for (int dy = -kernelRadius; dy <= kernelRadius; dy++) {
+        for (int dx = -kernelRadius; dx <= kernelRadius; dx++) {
+            kernel[dy + kernelRadius][dx + kernelRadius] = expf(-float(dx * dx + dy * dy) / (2.0f * sigma * sigma));
+        }
+    }
+
+    uint32_t rng = seed;
+    for (uint32_t rank = 0; rank < count; rank++) {
+        rng ^= rng << 13u;
+        rng ^= rng >> 17u;
+        rng ^= rng << 5u;
+        // Randomized scan start breaks energy ties without biasing early ranks toward the origin.
+        const uint32_t offset = rng & (count - 1u);
+        uint32_t best = 0;
+        float bestEnergy = 3.4e38f;
+        for (uint32_t i = 0; i < count; i++) {
+            const uint32_t p = (i + offset) & (count - 1u);
+            if (placed[p] == 0 && energy[p] < bestEnergy) {
+                bestEnergy = energy[p];
+                best = p;
+            }
+        }
+        placed[best] = 1;
+        out[best * stride + channel] = static_cast<uint8_t>((rank * 255u + (count - 1u) / 2u) / (count - 1u));
+
+        const int bx = static_cast<int>(best % size);
+        const int by = static_cast<int>(best / size);
+        for (int dy = -kernelRadius; dy <= kernelRadius; dy++) {
+            const uint32_t y = static_cast<uint32_t>((by + dy + static_cast<int>(size)) % static_cast<int>(size));
+            for (int dx = -kernelRadius; dx <= kernelRadius; dx++) {
+                const uint32_t x = static_cast<uint32_t>((bx + dx + static_cast<int>(size)) % static_cast<int>(size));
+                energy[y * size + x] += kernel[dy + kernelRadius][dx + kernelRadius];
+            }
+        }
+    }
+}
+
+void CreateBlueNoiseTexture(Core::MemoryManager* memoryManager, Core::Path outputPath, Engine::TextureID textureId)
+{
+    if (outputPath.Exists()) {
+        LOG_INFO(Asset, "Skipping blue noise generation, file already exists: {}", outputPath.c_str());
+        return;
+    }
+
+    constexpr uint32_t BLUE_NOISE_SIZE = 128;
+    auto pixels = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, BLUE_NOISE_SIZE * BLUE_NOISE_SIZE * 2);
+    GenerateBlueNoiseRanks(BLUE_NOISE_SIZE, 0x9E3779B9u, memoryManager, pixels.Data(), 2, 0);
+    GenerateBlueNoiseRanks(BLUE_NOISE_SIZE, 0x85EBCA6Bu, memoryManager, pixels.Data(), 2, 1);
+
+    WriteRawBytesWTexture(memoryManager, outputPath.c_str(), textureId, "blue_noise",
+                          VK_FORMAT_R8G8_UNORM, BLUE_NOISE_SIZE, BLUE_NOISE_SIZE,
+                          pixels.Data(), BLUE_NOISE_SIZE * BLUE_NOISE_SIZE * 2);
+}
+
 void CreateSMAATextures(Core::MemoryManager* memoryManager,
                         Core::Path outputAreaPath,
                         Core::Path outputSearchPath,

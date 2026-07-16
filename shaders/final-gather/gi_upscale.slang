@@ -4,11 +4,12 @@ import bindless_declarations;
 import constants_interop;
 import shader_functions;
 import packing_functions;
+import pbr_functions;
 import gi_gather_common;
+import ddgi_common;
 
-// Full-res resolve: 4-tap Poisson bilateral upsample of the gather SH evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection.
+// Full-res resolve: bilateral upsample of the gather SH from the pixel's nearest 2x2 half-res footprint (the own texel is always among the taps), evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection.
 
-static const float2 GI_UPSCALE_POISSON[4] = { float2(-0.75, -0.25), float2(0.25, -0.75), float2(0.75, 0.25), float2(-0.25, 0.75) };
 static const float GI_UPSCALE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_UPSCALE_NORMAL_POWER = 32.0;
 static const float GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS = 1.5;
@@ -37,6 +38,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float centerViewZ = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, centerViewZ);
     float invPlaneSigma = 1.0 / (GI_UPSCALE_PLANE_DIST_SIGMA * abs(centerViewZ));
+    float centerAO = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(pixel, 0)).y : 1.0;
 
     float4 shR = float4(0.0);
     float4 shG = float4(0.0);
@@ -46,15 +48,21 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float4 bestShG = float4(0.0);
     float4 bestShB = float4(0.0);
     float bestW = -1.0;
+    float3 irrM1 = float3(0.0);
+    float3 irrM2 = float3(0.0);
+    float clampTaps = 0.0;
     float2 halfCoord = (float2(pixel) + 0.5) * 0.5;
+    int2 footprintBase = int2(floor(halfCoord - 0.5));
+    bool bAnyBackfaceTap = false;
     [unroll]
     for (uint i = 0; i < 4; i++) {
-        int2 tap = clamp(int2(floor(halfCoord + GI_UPSCALE_POISSON[i])), int2(0), int2(pc.gatherExtent) - 1);
+        int2 tap = clamp(footprintBase + int2(int(i & 1u), int(i >> 1u)), int2(0), int2(pc.gatherExtent) - 1);
         uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.frameIndex, pc.renderExtent);
         float tapDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(tapFull, 0)).r;
         uint4 tapGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tapFull, 0));
         float tapTier = rdgTexturesFloat2[pc.dataIndex].Load(int3(tap, 0)).y;
-        if (tapDepth <= 0.0 || (tapGt1.w & 1u) == 0u || uint(tapTier + 0.5) == GI_GATHER_TIER_BACKFACE) { continue; }
+        if (tapDepth <= 0.0 || (tapGt1.w & 1u) == 0u) { continue; }
+        if (uint(tapTier + 0.5) == GI_GATHER_TIER_BACKFACE) { bAnyBackfaceTap = true; continue; }
 
         float tapViewZ = ScreenToViewSpaceDepth(tapDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
         float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
@@ -63,10 +71,18 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
 
         float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
         w *= pow(saturate(dot(centerNormal, tapNormal)), GI_UPSCALE_NORMAL_POWER);
+        if (pc.aoIndex != ~0x0u) {
+            float tapAO = rdgTexturesFloat2[pc.aoIndex].Load(int3(tapFull, 0)).y;
+            w *= exp2(-20.0 * abs(tapAO - centerAO));
+        }
 
         float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
         float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
         float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
+        float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, worldN), tapShG.x + dot(tapShG.yzw, worldN), tapShB.x + dot(tapShB.yzw, worldN)), float3(0.0));
+        irrM1 += tapIrr;
+        irrM2 += tapIrr * tapIrr;
+        clampTaps += 1.0;
         shR += tapShR * w;
         shG += tapShG * w;
         shB += tapShB * w;
@@ -79,6 +95,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
     }
 
+    float3 worldPos = mul(scene.invView, float4(centerXv, 1.0)).xyz;
+
     bool bHasCurrent = true;
     float3 current;
     if (sumW > 1e-4) {
@@ -87,8 +105,17 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     } else if (bestW >= 0.0) {
         // All taps low-weight but a valid surface neighbor exists: take the best-matching tap, not an unguarded bilinear that would blend zero SH from background texels.
         current = max(float3(bestShR.x + dot(bestShR.yzw, worldN), bestShG.x + dot(bestShG.yzw, worldN), bestShB.x + dot(bestShB.yzw, worldN)), float3(0.0));
+    } else if (!bAnyBackfaceTap) {
+        current = float3(0.0);
+        if (pc.skyboxIndex >= 0) {
+            current = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+        }
+        if (pc.bCascadesValid != 0) {
+            float3 cameraDirection = normalize(mul((float3x3)scene.invView, centerXv));
+            float4 gi = DDGISampleIrradianceCascaded(worldPos, worldN, cameraDirection, pc.ddgiCascades);
+            current = gi.rgb * gi.w + current * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPos, pc.ddgiCascades)));
+        }
     } else {
-        // No valid half-res neighbor at all this frame (e.g. every tap backfaced): no information, hold history instead of blending zero in.
         current = float3(0.0);
         bHasCurrent = false;
     }
@@ -101,32 +128,48 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         if (history.quality > 0.0) {
             float n = min(history.count, GI_GATHER_MAX_ACCUM - 1.0) * history.quality;
 
-            float3 worldPos = mul(scene.invView, float4(centerXv, 1.0)).xyz;
-            float4 prevClip = mul(scene.prevViewProj, float4(worldPos, 1.0));
-            if (prevClip.w > 0.0) {
-                // prevJitter * 0.5 removes the jitter baked into prevViewProj so the camera-only delta matches the jitter-free MV convention
-                float2 staticDeltaUv = ((prevClip.xy / prevClip.w) * 0.5 + 0.5) - uv + scene.prevJitter * 0.5;
-                float neighborhoodMotionPixels = 0.0;
+            float neighborhoodMotionPixels = 0.0;
+            [unroll]
+            for (int oy = -1; oy <= 1; oy++) {
                 [unroll]
-                for (int oy = -1; oy <= 1; oy++) {
-                    [unroll]
-                    for (int ox = -1; ox <= 1; ox++) {
-                        int2 tap = clamp(int2(pixel) + int2(ox, oy) * 2, int2(0), int2(pc.renderExtent) - int2(1));
-                        uint4 tapGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tap, 0));
-                        if ((tapGt1.w & 1u) == 0u) {
-                            continue;
-                        }
-                        float2 tapMvUv = UnpackMotionVectors(tapGt1.g) * 0.5;
-                        neighborhoodMotionPixels = max(neighborhoodMotionPixels, length((tapMvUv - staticDeltaUv) * float2(pc.renderExtent)));
+                for (int ox = -1; ox <= 1; ox++) {
+                    int2 tap = clamp(int2(pixel) + int2(ox, oy) * 2, int2(0), int2(pc.renderExtent) - int2(1));
+                    uint4 tapGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tap, 0));
+                    if ((tapGt1.w & 1u) == 0u) {
+                        continue;
                     }
+                    float tapDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(tap, 0)).r;
+                    if (tapDepth <= 0.0) {
+                        continue;
+                    }
+                    float2 tapUv = (float2(tap) + 0.5) / float2(pc.renderExtent);
+                    float tapViewZ = ScreenToViewSpaceDepth(tapDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+                    float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
+                    float4 tapPrevClip = mul(scene.prevViewProj, float4(mul(scene.invView, float4(tapXv, 1.0)).xyz, 1.0));
+                    if (tapPrevClip.w <= 0.0) {
+                        continue;
+                    }
+
+                    float2 tapStaticDeltaUv = ((tapPrevClip.xy / tapPrevClip.w) * 0.5 + 0.5) - tapUv - scene.jitter * 0.5 + scene.prevJitter * 0.5;
+                    float2 tapMvUv = UnpackMotionVectors(tapGt1.g) * 0.5;
+                    neighborhoodMotionPixels = max(neighborhoodMotionPixels, length((tapMvUv - tapStaticDeltaUv) * float2(pc.renderExtent)));
                 }
-                // Neighborhood object-motion reset: anything moving nearby caps history so indirect shadowing re-converges instead of trailing the mover
-                if (neighborhoodMotionPixels > GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {
-                    n = min(n, GI_UPSCALE_MOVING_MAX_ACCUM);
-                }
+            }
+            // Neighborhood object-motion reset: anything moving nearby caps history so indirect shadowing re-converges instead of trailing the mover
+            if (neighborhoodMotionPixels > GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {
+                n = min(n, GI_UPSCALE_MOVING_MAX_ACCUM);
             }
 
             if (bHasCurrent) {
+                if (clampTaps > 1.5) {
+                    float3 mean = irrM1 / clampTaps;
+                    float3 dev = sqrt(max(irrM2 / clampTaps - mean * mean, float3(0.0)));
+
+                    float3 devFloor = max(dev * 4.0, abs(history.color) * 0.4 + float3(4e-4));
+                    float3 histDist = abs(history.color - current) / devFloor;
+                    float3 closest = clamp(history.color, current - devFloor, current + devFloor);
+                    history.color = lerp(history.color, closest, smoothstep(float3(1.0), float3(3.0), histDist));
+                }
                 result = (n * history.color + current) / (n + 1.0);
                 accum = n + 1.0;
             } else {

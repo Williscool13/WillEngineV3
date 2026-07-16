@@ -8,7 +8,7 @@
     "distanceExponent": 50.0,
     "hysteresis": 0.9700000286102295,
     "irradianceGamma": 5.0,
-    "irradianceThreshold": 0.5099149942398071,
+    "irradianceThreshold": 0.25,
     "minFrontfaceDistance": 0.30000001192092896,
     "normalBias": 0.10000000149011612,
     "probeCountX": 24,

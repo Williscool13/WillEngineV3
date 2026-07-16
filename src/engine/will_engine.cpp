@@ -999,6 +999,7 @@ void WillEngine::EditorImgui()
             DXGI_FORMAT_BC7_UNORM_SRGB);
         assetGenerator->GenerateBRDFLUT(assets / "textures/brdf_lut.wtexture");
         assetGenerator->GenerateSMAATextures(assets / "textures");
+        assetGenerator->GenerateBlueNoiseTexture(assets / "textures/blue_noise.wtexture");
         assetGenerator->RequestFontGenerate(
             assets / "fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf",
             assets / "fonts/Roboto/Roboto.wsfont");
@@ -1122,6 +1123,7 @@ void WillEngine::EditorImgui()
                     DXGI_FORMAT_BC7_UNORM_SRGB);
                 assetGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
                 assetGenerator->GenerateSMAATextures(Platform::GetAssetPath() / "textures");
+                assetGenerator->GenerateBlueNoiseTexture(Platform::GetAssetPath() / "textures/blue_noise.wtexture");
             }
 
             if (ImGui::Button("Generate Roboto")) {

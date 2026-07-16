@@ -88,7 +88,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         }
     }
 
-    // Local lights via the world-space clustered grid; matches ShadeWorldCacheCell so cache-miss fallbacks agree with the cache value they stand in for.
+    // Local lights via the world-space clustered grid; matches ShadeWorldCacheCell (diffuse-only) so cache-miss fallbacks agree with the cache value they stand in for.
     if (pc.bLocalNEE != 0 && worldGridLights.grid != nullptr) {
         WorldGridKey key = WorldGridResolveCell(worldPosition, worldGridLights.camPos);
         uint2 gridEntry = worldGridLights.grid[key.cellIndex];
@@ -99,7 +99,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         for (uint j = 0; j < gridEntry.y; j++) {
             uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
             PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], worldGridLights.view);
-            radiance += ShadePunctual(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
+            radiance += ShadePunctualDiffuse(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
         }
     }
 
@@ -109,7 +109,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
     }
     if (pc.bFeedbackValid != 0) {
         float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades);
-        indirectDiffuse = lerp(indirectDiffuse, gi.rgb * pc.bounceIntensity, gi.w);
+        indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.previousCascades)));
     }
     radiance += diffuseColor * indirectDiffuse;
     return radiance;
@@ -207,7 +207,8 @@ static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float 
 }
 
 // V = N (NoV = 1): no single ray direction to use, and this value gets read back from every direction later.
-public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, uint rngSeed, WorldGridPunctualLights worldGridLights)
+// Returns the non-emissive radiosity; own emission goes out separately so the cell EMA/streak never sees bary-jitter on/off emissive texels.
+public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, uint rngSeed, WorldGridPunctualLights worldGridLights, out float3 outEmissive)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -245,7 +246,8 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
     float3 V = N;
     float NoV = 1.0;
 
-    float3 radiance = emissive;
+    outEmissive = emissive;
+    float3 radiance = float3(0.0);
     DirectionalLightData sun = pc.lightData->directionalLight;
     if (sun.directionIntensity.w > 0.0) {
         float3 L = normalize(-sun.directionIntensity.xyz);
@@ -299,7 +301,7 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
     }
     if (pc.bFeedbackValid != 0) {
         float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades);
-        indirectDiffuse = lerp(indirectDiffuse, gi.rgb * pc.bounceIntensity, gi.w);
+        indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.previousCascades)));
     }
     radiance += diffuseColor * indirectDiffuse;
     return radiance;

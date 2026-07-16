@@ -121,8 +121,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
             if (pc.bDDGIApply != 0) {
                 float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
                 float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
-                // gi.w fades to the skybox fallback over the outermost cascade's edge.
-                indirectDiffuse = lerp(indirectDiffuse, gi.rgb, gi.w);
+                indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.ddgiCascades)));
             }
         }
 
