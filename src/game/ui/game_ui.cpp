@@ -199,7 +199,7 @@ void TextFieldDraw(Engine::EngineContext* ctx, Engine::EngineState* state, const
         if (focused) {
             const float caretX = TEXT_FIELD_PAD_X + Engine::MeasureText(ctx->assetManager, state->uiFont, buf, ui.caret, style.fontSize);
             CLAY(CLAY_ID_LOCAL("Caret"), {
-                 .layout = { .sizing = { CLAY_SIZING_FIXED(2), CLAY_SIZING_FIXED(style.fontSize) } },
+                 .layout = { .sizing = { CLAY_SIZING_FIXED(2), CLAY_SIZING_FIXED(style.fontSize * CARET_HEIGHT_SCALE) } },
                  .backgroundColor = style.caretColor,
                  .floating = {
                      .offset = {caretX, 0},

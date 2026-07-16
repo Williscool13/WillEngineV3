@@ -10,6 +10,8 @@
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
 #include "engine/logging/engine_logger.h"
+#include "game/components/camera_components.h"
+#include "game/components/core_components.h"
 #include "game/game_state.h"
 #include "game/input/game_actions.h"
 #include "game/ui/game_ui.h"
@@ -202,6 +204,53 @@ static void PageScroll(Clay_ElementId id, float direction)
 constexpr float MIN_WINDOW_WIDTH = 400.0f;
 constexpr float MIN_WINDOW_HEIGHT = 250.0f;
 
+static void UpdateLogFilters(Engine::EngineContext* ctx, Engine::EngineState* state, ConsoleState& c)
+{
+    if (!c.bLogFiltersInit) {
+        for (bool& f : c.logLevelFilter) { f = true; }
+        c.logLevelFilter[0] = false;
+        for (bool& f : c.logCategoryFilter) { f = true; }
+        for (bool& f : c.gameSubCategoryFilter) { f = true; }
+        c.bLogFiltersInit = true;
+    }
+
+    for (int i = 0; i < ConsoleState::LOG_LEVEL_COUNT; ++i) {
+        const UI::ToggleAction action = UI::ToggleButton(state, CLAY_IDI("Console_LogLevel", i));
+        if (action == UI::ToggleAction::Toggled) {
+            c.logLevelFilter[i] = !c.logLevelFilter[i];
+        }
+        else if (action == UI::ToggleAction::Soloed) {
+            for (bool& f : c.logLevelFilter) { f = false; }
+            c.logLevelFilter[i] = true;
+        }
+    }
+
+    for (int i = 0; i < static_cast<int>(Engine::LogCategory::Count); ++i) {
+        const UI::ToggleAction action = UI::ToggleButton(state, CLAY_IDI("Console_LogCategory", i));
+        if (action == UI::ToggleAction::Toggled) {
+            c.logCategoryFilter[i] = !c.logCategoryFilter[i];
+        }
+        else if (action == UI::ToggleAction::Soloed) {
+            for (bool& f : c.logCategoryFilter) { f = false; }
+            c.logCategoryFilter[i] = true;
+        }
+    }
+
+    if (ctx->engineLogger) {
+        const auto subCategoryNames = ctx->engineLogger->GetImGuiSink()->GetGameSubCategoryNames();
+        for (int i = 0; i < static_cast<int>(subCategoryNames.Size()) && i < ConsoleState::MAX_GAME_SUBCATEGORIES; ++i) {
+            const UI::ToggleAction action = UI::ToggleButton(state, CLAY_IDI("Console_LogGameSubCategory", i));
+            if (action == UI::ToggleAction::Toggled) {
+                c.gameSubCategoryFilter[i] = !c.gameSubCategoryFilter[i];
+            }
+            else if (action == UI::ToggleAction::Soloed) {
+                for (bool& f : c.gameSubCategoryFilter) { f = false; }
+                c.gameSubCategoryFilter[i] = true;
+            }
+        }
+    }
+}
+
 static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ConsoleState& c = GetConsole(ctx);
@@ -252,6 +301,9 @@ static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         c.activeTab = 1;
     }
+    if (UI::ToggleButton(state, CLAY_ID("Console_Wrap")) != UI::ToggleAction::None) {
+        c.bWrapOutput = !c.bWrapOutput;
+    }
 
     const Clay_ElementId activeContentId = c.activeTab == 0 ? CLAY_ID("Console_Output") : CLAY_ID("Console_Log");
     if (state->input.GetActionState(Actions::ACTION_UI_PAGE_UP).pressed) {
@@ -265,6 +317,7 @@ static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         UpdateConsoleTabScroll(c);
     }
     else {
+        UpdateLogFilters(ctx, state, c);
         UpdateLogTabScroll(c);
     }
 
@@ -287,9 +340,28 @@ static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     c.windowSize.y = std::max(c.windowSize.y, MIN_WINDOW_HEIGHT);
 }
 
+static void SnapEditorCameraToGameCamera(Engine::EngineState* state)
+{
+    auto gameCamView = state->registry.view<Component::GameCameraTag, Component::TransformComponent>();
+    auto editorCamView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+    if (gameCamView.front() == entt::null || editorCamView.front() == entt::null) {
+        return;
+    }
+    const auto& gameT = gameCamView.get<Component::TransformComponent>(gameCamView.front());
+    auto& editorT = editorCamView.get<Component::TransformComponent>(editorCamView.front());
+    editorT.translation = gameT.translation;
+    editorT.rotation = gameT.rotation;
+}
+
 void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ConsoleState& c = GetConsole(ctx);
+
+    if (c.bOwnsContext && state->inputContext != Engine::InputContext::Console) {
+        c.bOpen = false;
+        c.bOwnsContext = false;
+        ctx->setTextInputActiveFn(false);
+    }
 
     if (state->input.GetActionState(Actions::ACTION_TOGGLE_CONSOLE).pressed) {
         c.bOpen = !c.bOpen;
@@ -309,6 +381,9 @@ void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     if (c.bOpen && !c.bOwnsContext) {
         c.prevContext = state->inputContext;
+        if (c.prevContext == Engine::InputContext::Gameplay) {
+            SnapEditorCameraToGameCamera(state);
+        }
         state->inputContext = Engine::InputContext::Console;
         ctx->setCursorHiddenFn(false);
         ctx->setTextInputActiveFn(true); // SDL text input is off by default; without this, no SDL_EVENT_TEXT_INPUT ever fires
@@ -322,31 +397,80 @@ void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-static void DrawConsoleTab(Engine::EngineContext* ctx)
+static void DrawConsoleTab(Engine::EngineContext* ctx, const ConsoleState& c)
 {
+    const Clay_TextElementConfigWrapMode wrapMode = c.bWrapOutput ? CLAY_TEXT_WRAP_WORDS : CLAY_TEXT_WRAP_NONE;
+
     CLAY(CLAY_ID("Console_Output"), {
          .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(4), .childGap = 2, .layoutDirection = CLAY_TOP_TO_BOTTOM },
          .backgroundColor = {20, 20, 24, 255},
-         .clip = { .vertical = true, .childOffset = Clay_GetScrollOffset() },
+         .clip = { .horizontal = !c.bWrapOutput, .vertical = true, .childOffset = Clay_GetScrollOffset() },
          }) {
-        for (auto& line : GetConsole(ctx).lines) {
+        for (auto& line : c.lines) {
             const Clay_String text{.isStaticallyAllocated = false, .length = static_cast<int32_t>(line.Size()), .chars = line.c_str()};
-            CLAY_TEXT(text, { .textColor = {220, 220, 220, 255}, .fontSize = 14 });
+            CLAY_TEXT(text, { .textColor = {220, 220, 220, 255}, .fontSize = 14, .wrapMode = wrapMode });
         }
     }
 }
 
-static void DrawLogTab(Engine::EngineContext* ctx)
+constexpr Clay_Color LOG_LAYER_ACTIVE_COLOR = {70, 165, 150, 255};
+
+static void DrawLogFilters(Engine::EngineContext* ctx, Engine::EngineState* state, const ConsoleState& c)
 {
-    CLAY(CLAY_ID("Console_Log"), {
-         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(4), .childGap = 2, .layoutDirection = CLAY_TOP_TO_BOTTOM },
-         .backgroundColor = {20, 20, 24, 255},
-         .clip = { .vertical = true, .childOffset = Clay_GetScrollOffset() },
-         }) {
-        if (ctx->engineLogger) {
-            for (const auto& entry : ctx->engineLogger->GetImGuiSink()->GetEntries()) {
-                const Clay_String text{.isStaticallyAllocated = false, .length = static_cast<int32_t>(entry.message.Size()), .chars = entry.message.c_str()};
-                CLAY_TEXT(text, { .textColor = LevelColor(entry.level), .fontSize = 14 });
+    static constexpr const char* LEVEL_NAMES[ConsoleState::LOG_LEVEL_COUNT] = {"Trace", "Debug", "Info", "Warn", "Error", "Critical"};
+
+    CLAY(CLAY_ID("Console_LogLevelRow"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIT(0) }, .childGap = 4 } }) {
+        for (int i = 0; i < ConsoleState::LOG_LEVEL_COUNT; ++i) {
+            const auto level = static_cast<spdlog::level::level_enum>(i);
+            UI::ToggleButtonDraw(state, CLAY_IDI("Console_LogLevel", i), LEVEL_NAMES[i], c.logLevelFilter[i], { .activeColor = LevelColor(level) });
+        }
+    }
+
+    CLAY(CLAY_ID("Console_LogCategoryRow"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIT(0) }, .childGap = 4 } }) {
+        for (int i = 0; i < static_cast<int>(Engine::LogCategory::Count); ++i) {
+            UI::ToggleButtonDraw(state, CLAY_IDI("Console_LogCategory", i), Engine::kCategoryNames[i], c.logCategoryFilter[i], { .activeColor = LOG_LAYER_ACTIVE_COLOR });
+        }
+    }
+
+    if (!ctx->engineLogger) { return; }
+    const auto subCategoryNames = ctx->engineLogger->GetImGuiSink()->GetGameSubCategoryNames();
+    if (subCategoryNames.Size() == 0) { return; }
+
+    CLAY(CLAY_ID("Console_LogGameSubCategoryRow"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIT(0) }, .padding = {16, 0, 0, 0}, .childGap = 4 } }) {
+        for (int i = 0; i < static_cast<int>(subCategoryNames.Size()) && i < ConsoleState::MAX_GAME_SUBCATEGORIES; ++i) {
+            UI::ToggleButtonDraw(state, CLAY_IDI("Console_LogGameSubCategory", i), subCategoryNames[i].c_str(), c.gameSubCategoryFilter[i], { .activeColor = LOG_LAYER_ACTIVE_COLOR });
+        }
+    }
+}
+
+static void DrawLogTab(Engine::EngineContext* ctx, Engine::EngineState* state, const ConsoleState& c)
+{
+    const Clay_TextElementConfigWrapMode wrapMode = c.bWrapOutput ? CLAY_TEXT_WRAP_WORDS : CLAY_TEXT_WRAP_NONE;
+
+    CLAY(CLAY_ID("Console_LogTab"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) }, .childGap = 4, .layoutDirection = CLAY_TOP_TO_BOTTOM } }) {
+        DrawLogFilters(ctx, state, c);
+
+        CLAY(CLAY_ID("Console_Log"), {
+             .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(4), .childGap = 2, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+             .backgroundColor = {20, 20, 24, 255},
+             .clip = { .horizontal = !c.bWrapOutput, .vertical = true, .childOffset = Clay_GetScrollOffset() },
+             }) {
+            if (ctx->engineLogger) {
+                for (const auto& entry : ctx->engineLogger->GetImGuiSink()->GetEntries()) {
+                    if (!c.logLevelFilter[static_cast<int>(entry.level)]) { continue; }
+
+                    const bool hasSubCategory = entry.category == Engine::LogCategory::Game && entry.gameSubCategory >= 0
+                        && entry.gameSubCategory < ConsoleState::MAX_GAME_SUBCATEGORIES;
+                    if (hasSubCategory) {
+                        if (!c.gameSubCategoryFilter[entry.gameSubCategory]) { continue; }
+                    }
+                    else if (!c.logCategoryFilter[static_cast<int>(entry.category)]) {
+                        continue;
+                    }
+
+                    const Clay_String text{.isStaticallyAllocated = false, .length = static_cast<int32_t>(entry.message.Size()), .chars = entry.message.c_str()};
+                    CLAY_TEXT(text, { .textColor = LevelColor(entry.level), .fontSize = 14, .wrapMode = wrapMode });
+                }
             }
         }
     }
@@ -354,14 +478,16 @@ static void DrawLogTab(Engine::EngineContext* ctx)
 
 constexpr uint16_t RESIZE_HANDLE_SIZE = 14;
 constexpr uint16_t RESIZE_HANDLE_OFFSET = 2;
-constexpr uint16_t RESIZE_HANDLE_CLEARANCE = RESIZE_HANDLE_SIZE + RESIZE_HANDLE_OFFSET + 4;
+constexpr uint16_t WRAP_TOGGLE_HEIGHT = 22;
+constexpr uint16_t WRAP_TOGGLE_GAP = 6;
+constexpr uint16_t BOTTOM_CONTROLS_CLEARANCE = RESIZE_HANDLE_OFFSET + WRAP_TOGGLE_HEIGHT + 4;
 
 static void DrawWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ConsoleState& c = GetConsole(ctx);
 
     UI::Panel window(CLAY_ID("Console_Window"), {
-         .layout = { .sizing = { CLAY_SIZING_FIXED(c.windowSize.x), CLAY_SIZING_FIXED(c.windowSize.y) }, .padding = {0, 0, 0, RESIZE_HANDLE_CLEARANCE}, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+         .layout = { .sizing = { CLAY_SIZING_FIXED(c.windowSize.x), CLAY_SIZING_FIXED(c.windowSize.y) }, .padding = {0, 0, 0, BOTTOM_CONTROLS_CLEARANCE}, .layoutDirection = CLAY_TOP_TO_BOTTOM },
          .backgroundColor = {28, 28, 34, 245},
          .cornerRadius = CLAY_CORNER_RADIUS(4),
          .floating = {
@@ -381,10 +507,10 @@ static void DrawWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     CLAY(CLAY_ID("Console_Content"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) }, .padding = {6, 6, 4, 4} } }) {
         if (c.activeTab == 0) {
-            DrawConsoleTab(ctx);
+            DrawConsoleTab(ctx, c);
         }
         else {
-            DrawLogTab(ctx);
+            DrawLogTab(ctx, state, c);
         }
     }
 
@@ -403,6 +529,17 @@ static void DrawWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
              .attachTo = CLAY_ATTACH_TO_PARENT,
              },
          }) {}
+
+    CLAY(CLAY_ID("Console_WrapFloating"), {
+         .floating = {
+             .offset = { -static_cast<float>(RESIZE_HANDLE_OFFSET + RESIZE_HANDLE_SIZE + WRAP_TOGGLE_GAP), -static_cast<float>(RESIZE_HANDLE_OFFSET) },
+             .zIndex = static_cast<int16_t>(UI::ZIndex::CONSOLE_WINDOW + 10),
+             .attachPoints = { .element = CLAY_ATTACH_POINT_RIGHT_BOTTOM, .parent = CLAY_ATTACH_POINT_RIGHT_BOTTOM },
+             .attachTo = CLAY_ATTACH_TO_PARENT,
+             },
+         }) {
+        UI::ToggleButtonDraw(state, CLAY_ID("Console_Wrap"), "Wrap", c.bWrapOutput);
+    }
 }
 
 void Draw(Engine::EngineContext* ctx, Engine::EngineState* state)

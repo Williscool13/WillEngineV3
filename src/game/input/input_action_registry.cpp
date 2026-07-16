@@ -151,6 +151,18 @@ void RegisterInputActions(Engine::InputState& input)
     AddDefaultAllContexts(input, Actions::ACTION_TOGGLE_CONSOLE, Engine::BindingSource::FromKey(Key::BACKTICK));
     AddDefault(input, Actions::ACTION_TOGGLE_CONSOLE, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::BACKTICK));
     AddDefault(input, Actions::ACTION_ESCAPE, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::ESCAPE));
+    AddDefault(input, Actions::ACTION_UI_POINTER_DOWN, Engine::InputContext::Console, Engine::BindingSource::FromMouse(MouseButton::LMB));
+    AddDefaultStick(input, Actions::ACTION_UI_SCROLL, Engine::InputContext::Console, {
+        Engine::BindingSource::FromMouseWheelX(),
+        Engine::BindingSource::FromMouseWheelY()
+    });
+    AddDefault(input, Actions::ACTION_UI_PAGE_UP, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::PAGEUP));
+    AddDefault(input, Actions::ACTION_UI_PAGE_DOWN, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::PAGEDOWN));
+    AddDefault(input, Actions::ACTION_MODIFIER_CTRL, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::LCTRL));
+    AddDefault(input, Actions::ACTION_MODIFIER_CTRL, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::RCTRL));
+    AddDefault(input, Actions::ACTION_MODIFIER_SHIFT, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::LSHIFT));
+    AddDefault(input, Actions::ACTION_MODIFIER_SHIFT, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::RSHIFT));
+    AddDefault(input, Actions::ACTION_SCREENSHOT, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::F10));
 
     AddDefault(input, Actions::ACTION_DEBUG_VIEW_1, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_1));
     AddDefault(input, Actions::ACTION_DEBUG_VIEW_2, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_2));

@@ -11,6 +11,7 @@
 #include "core/containers/span.h"
 #include "core/types/math.h"
 #include "engine/engine_api.h"
+#include "engine/logging/log_category.h"
 #include "game/ui/game_ui.h"
 
 namespace Engine
@@ -28,6 +29,8 @@ struct ConsoleState
 {
     static constexpr size_t MAX_LINES = 512;
     static constexpr size_t MAX_HISTORY = 64;
+    static constexpr int LOG_LEVEL_COUNT = 6;
+    static constexpr int MAX_GAME_SUBCATEGORIES = 32; // matches ImGuiSink::gameSubCategoryNames capacity
 
     bool bOpen{false};
     bool bOwnsContext{false};
@@ -40,6 +43,13 @@ struct ConsoleState
     bool bLogScrollToBottom{false};
     bool bLogAtBottom{true};
     float logLastContentHeight{0.0f};
+
+    bool bWrapOutput{true};
+
+    bool bLogFiltersInit{false};
+    bool logLevelFilter[LOG_LEVEL_COUNT]{};
+    bool logCategoryFilter[static_cast<int>(Engine::LogCategory::Count)]{};
+    bool gameSubCategoryFilter[MAX_GAME_SUBCATEGORIES]{};
 
     int32_t historyPos{-1};
     int32_t activeTab{0};

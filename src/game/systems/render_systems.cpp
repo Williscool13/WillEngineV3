@@ -1544,6 +1544,22 @@ static const char* DenoiserModeName(Core::ReSTIRParams::DenoiserMode mode)
     return "None";
 }
 
+static void AppendDiffuseGIModeText(Core::InlineString<48>& out, const Engine::LightingState& lighting)
+{
+    if (lighting.groundTruthMode == Core::GroundTruthMode::GI || lighting.groundTruthMode == Core::GroundTruthMode::Full) {
+        out.Append("Ground Truth");
+        return;
+    }
+    if (!lighting.ddgi.bEnabled) {
+        out.Append("Off");
+        return;
+    }
+    out.Append("DDGI");
+    if (lighting.ddgi.bFinalGather) {
+        out.Append(" + Final Gather");
+    }
+}
+
 void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     Clay_SetLayoutDimensions({static_cast<float>(ctx->windowContext.viewportWidth), static_cast<float>(ctx->windowContext.viewportHeight)});
@@ -1697,6 +1713,8 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     const char* profileName = state->projectConfig.activeLightingProfile.IsEmpty() ? "(none)" : state->projectConfig.activeLightingProfile.c_str();
     const auto profileText = Core::InlineString<80>::Format("Profile: %s", profileName);
     const auto aaText = Core::InlineString<48>::Format("AA: %s | Denoiser: %s", aaModeName, DenoiserModeName(state->debug.restir.denoiserMode));
+    Core::InlineString<48> giText("Diffuse GI: ");
+    AppendDiffuseGIModeText(giText, state->lighting);
 
     const auto renderWidth = static_cast<uint32_t>(static_cast<float>(ctx->windowContext.viewportWidth) * state->projectConfig.resolutionScale);
     const auto renderHeight = static_cast<uint32_t>(static_cast<float>(ctx->windowContext.viewportHeight) * state->projectConfig.resolutionScale);
@@ -1724,6 +1742,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     const Clay_String profileString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(profileText.Size()), .chars = profileText.c_str()};
     const Clay_String aaString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(aaText.Size()), .chars = aaText.c_str()};
+    const Clay_String giString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(giText.Size()), .chars = giText.c_str()};
     const Clay_String resString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(resText.Size()), .chars = resText.c_str()};
     const Clay_String ppString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(ppSummary.Size()), .chars = ppSummary.c_str()};
 
@@ -1742,6 +1761,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
         CLAY_TEXT(gameFpsString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
         CLAY_TEXT(profileString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
         CLAY_TEXT(aaString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+        CLAY_TEXT(giString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
         CLAY_TEXT(resString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
         CLAY_TEXT(ppString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
     }

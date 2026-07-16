@@ -50,7 +50,17 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                 case Core::UICommandType::ScissorPush:
                 {
                     const Core::UIScissorCommand& s = drawCmd.scissor;
-                    const VkRect2D scissor{{s.x, static_cast<int32_t>(height) - s.y - static_cast<int32_t>(s.height)}, {s.width, s.height}};
+                    int32_t x = s.x;
+                    int32_t y = static_cast<int32_t>(height) - s.y - static_cast<int32_t>(s.height);
+                    int32_t w = static_cast<int32_t>(s.width);
+                    int32_t h = static_cast<int32_t>(s.height);
+                    if (x < 0) { w += x; x = 0; }
+                    if (y < 0) { h += y; y = 0; }
+                    if (x + w > static_cast<int32_t>(width)) { w = static_cast<int32_t>(width) - x; }
+                    if (y + h > static_cast<int32_t>(height)) { h = static_cast<int32_t>(height) - y; }
+                    w = w > 0 ? w : 0;
+                    h = h > 0 ? h : 0;
+                    const VkRect2D scissor{{x, y}, {static_cast<uint32_t>(w), static_cast<uint32_t>(h)}};
                     vkCmdSetScissor(cmd, 0, 1, &scissor);
                     break;
                 }
