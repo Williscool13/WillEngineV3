@@ -93,9 +93,14 @@ static const float DDGI_VISIBILITY_VARIANCE_CAP = 0.3;
  * probeOffsets (when bProbeOffsetsValid) holds per-slot relocation offsets in xyz and the backface fraction in w; relocated positions drive direction/distance/Chebyshev, trilinear stays on the lattice, dead probes are skipped.
  * Returns E/PI in rgb (Lambertian outgoing radiance = albedo * rgb); w in [0,1] combines the window edge fade with a weight-support confidence (dead-probe pockets report low w), so callers can blend to the next cascade or their fallback without a hard edge.
  */
-public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid)
+public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid, float maxBias)
 {
-    float3 biasedPosition = worldPosition + normal * volume.normalBias - cameraDirection * volume.viewBias;
+    float3 biasOffset = normal * volume.normalBias - cameraDirection * volume.viewBias;
+    float biasLength = length(biasOffset);
+    if (biasLength > maxBias) {
+        biasOffset *= maxBias / biasLength;
+    }
+    float3 biasedPosition = worldPosition + biasOffset;
     float3 gridCoord = biasedPosition / volume.probeSpacing;
 
     float3 edgeDistance = min(gridCoord - float3(volume.baseCell), float3(volume.baseCell + int3(volume.probeCount) - 1) - gridCoord);
@@ -109,6 +114,7 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
 
     float3 irradianceSum = float3(0.0);
     float weightSum = 0.0;
+    float trueWeightSum = 0.0;
     for (uint i = 0; i < 8; ++i) {
         int3 offset = int3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
         int3 cell = baseCell + offset;
@@ -134,12 +140,15 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         float3 biasedToProbe = probePosition - biasedPosition;
         float distanceToProbe = length(biasedToProbe);
         float2 moments = rdgTexturesFloat2[visibilityAtlasIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, -biasedToProbe / max(distanceToProbe, 1e-6), volume, DDGI_VISIBILITY_TILE, DDGI_VISIBILITY_INTERIOR), 0);
+        float chebRatio = 1.0;
         if (distanceToProbe > moments.x) {
             float cappedStd = DDGI_VISIBILITY_VARIANCE_CAP * moments.x;
             float variance = min(abs(moments.x * moments.x - moments.y), cappedStd * cappedStd);
             float d = distanceToProbe - moments.x;
             float chebyshev = variance / (variance + d * d);
-            weight *= max(chebyshev * chebyshev * chebyshev, 0.05);
+            float cheb3 = chebyshev * chebyshev * chebyshev;
+            weight *= max(cheb3, 0.05);
+            chebRatio = cheb3 / max(cheb3, 0.05);
         }
 
         weight = max(weight, 1e-6);
@@ -155,12 +164,15 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         // Blend in half-gamma space and square after the weighted sum: perceptual interpolation between probes (RTXGI).
         irradianceSum += weight * pow(max(encoded, float3(0.0)), volume.irradianceGamma * 0.5);
         weightSum += weight;
+        trueWeightSum += weight * chebRatio;
     }
     if (weightSum <= 1e-6) {
         return float4(0.0);
     }
     float3 result = irradianceSum / weightSum;
-    return float4(result * result, fade * saturate(weightSum / 0.02));
+
+    float confidence = saturate(trueWeightSum / weightSum);
+    return float4(result * result * confidence, fade * saturate(weightSum / 0.02));
 }
 
 /**
@@ -168,7 +180,7 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
  * Returns the same contract as DDGISampleIrradiance; w is total coverage for the caller's fallback blend, dropping below 1 outside every cascade's interior and in weight-starved dead pockets.
  */
 [ForceInline] // the struct ptr fails to compile
-public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet)
+public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet, float maxBias)
 {
     float3 color = float3(0.0);
     float coverage = 0.0;
@@ -178,7 +190,7 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
         if (desc.bValid == 0) {
             continue;
         }
-        float4 gi = DDGISampleIrradiance(worldPosition, normal, cameraDirection, desc.volume, desc.irradianceIndex, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid);
+        float4 gi = DDGISampleIrradiance(worldPosition, normal, cameraDirection, desc.volume, desc.irradianceIndex, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid, maxBias);
         if (gi.w <= 0.0) {
             continue;
         }

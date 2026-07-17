@@ -76,7 +76,7 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
             if (pc.bDDGIApply != 0) {
                 float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
                 float3 cameraDirection = normalize(mul(float3x3(scene.invView), viewPosition));
-                float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades);
+                float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition));
                 indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.ddgiCascades)));
             }
         }

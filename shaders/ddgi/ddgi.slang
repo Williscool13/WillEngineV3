@@ -132,7 +132,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                     worldGridLights.grid = pc.worldGridBuffer;
                     worldGridLights.indexList = pc.worldGridIndexList;
                 }
-                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, rng, worldGridLights);
+                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, rng, worldGridLights, 0.75 * hitT);
             }
 
             // Firefly clamp

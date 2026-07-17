@@ -15,6 +15,7 @@ import random_common;
 import shader_constants;
 import constants_interop;
 import world_cache_interop;
+import world_cache_hash;
 
 // Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
@@ -71,7 +72,7 @@ public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, 
 }
 
 /** Fallback for DDGI probe rays when the world cache has no slot for the hit: sun (shadow-ray tested) + emissive + the in-cell clustered local lights (occlusion per GI_NEE_LOCAL_SHADOW_RAYS, matching the world-cache shade the value stands in for) + IBL/DDGI feedback. */
-public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights)
+public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -153,7 +154,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], N) * pc.iblIntensity;
     }
     if (pc.bFeedbackValid != 0) {
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades);
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades, maxBias);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.previousCascades)));
     }
     radiance += diffuseColor * indirectDiffuse;
@@ -161,7 +162,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
 }
 
 /** Used by the reflection shade pass. */
-public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights)
+public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -230,7 +231,7 @@ public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance
     }
 
     if (pc.bFeedbackValid != 0) {
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades);
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades, maxBias);
         radiance += diffuseColor * gi.rgb;
     }
     return radiance;
@@ -352,8 +353,9 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
     if (pc.skyboxIndex >= 0) {
         indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], N) * pc.iblIntensity;
     }
-    if (pc.bFeedbackValid != 0) {
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades);
+    if (pc.bFeedbackValid != 0)
+        float cellSize = WorldCacheCellSizeAtLevel(WorldCacheLevelFromDistance(distance(worldPosition, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz)));
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, cellSize);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.previousCascades)));
     }
     radiance += diffuseColor * indirectDiffuse;

@@ -113,7 +113,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
             }
         }
         if (!bShaded) {
-            radiance = ShadeProbeRayHitAnalytical(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights);
+            radiance = ShadeProbeRayHitAnalytical(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT);
         }
         hitTOut = hit.hitT;
     } else if (hit.hitT == REFLECTION_HIT_T_SKY && pc.skyboxIndex >= 0) {

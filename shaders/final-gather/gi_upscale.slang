@@ -119,7 +119,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
         if (pc.bCascadesValid != 0) {
             float3 cameraDirection = normalize(mul((float3x3)scene.invView, centerXv));
-            float4 gi = DDGISampleIrradianceCascaded(worldPos, evalN, cameraDirection, pc.ddgiCascades);
+            float4 gi = DDGISampleIrradianceCascaded(worldPos, evalN, cameraDirection, pc.ddgiCascades, length(centerXv));
             current = gi.rgb * gi.w + current * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPos, pc.ddgiCascades)));
         }
     } else {
