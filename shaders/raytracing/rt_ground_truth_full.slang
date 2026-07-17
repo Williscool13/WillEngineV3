@@ -362,7 +362,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
         if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT) {
             if (pc.skyboxIndex >= 0) {
                 float3 skyDirection = float3(bs.direction.x, -bs.direction.y, bs.direction.z);
-                indirect += throughput * assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+                indirect += throughput * assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb * pc.iblIntensity;
             }
             break;
         }

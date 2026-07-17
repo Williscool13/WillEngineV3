@@ -1693,7 +1693,7 @@ SHADER_PUBLIC struct RTGroundTruthGIPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t accumulationCount;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC uint2 renderExtent;
 };
 

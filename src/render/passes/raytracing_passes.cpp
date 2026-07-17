@@ -345,7 +345,7 @@ void SetupRTGroundTruthGI(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.WriteStorageImage(targets.colorOutput);
-    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex,
+    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_gi"));
@@ -371,6 +371,7 @@ void SetupRTGroundTruthGI(RenderGraph& graph,
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .accumulationCount = accumulationCount,
+            .iblIntensity = iblIntensity,
             .renderExtent = {renderExtent[0], renderExtent[1]},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -426,7 +427,7 @@ void SetupRTGroundTruthFull(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.WriteStorageImage(targets.colorOutput);
-    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex,
+    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_full"));
@@ -452,6 +453,7 @@ void SetupRTGroundTruthFull(RenderGraph& graph,
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .accumulationCount = accumulationCount,
+            .iblIntensity = iblIntensity,
             .renderExtent = {renderExtent[0], renderExtent[1]},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

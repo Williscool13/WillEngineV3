@@ -356,7 +356,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             if (pc.skyboxIndex >= 0) {
                 // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
                 float3 skyDirection = float3(direction.x, -direction.y, direction.z);
-                indirect += throughput * assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+                indirect += throughput * assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb * pc.iblIntensity;
             }
             break;
         }
