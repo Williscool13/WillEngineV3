@@ -51,6 +51,8 @@ struct Text3DShapeSource
     float tracking{0.0f};
     float scale{1.0f};
     bool bSmoothNormals{true};
+    Engine::Text3DAlign align{Engine::Text3DAlign::Left};
+    Engine::Text3DAnchor anchor{Engine::Text3DAnchor::Baseline};
     bool bPrecise{false};
 
     bool IsValid() const { return fontId.IsValid() && text.Size() > 0; }

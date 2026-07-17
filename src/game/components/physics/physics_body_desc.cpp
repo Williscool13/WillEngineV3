@@ -228,6 +228,8 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     t3["tracking"] = shape.text3DSource.tracking;
                     t3["scale"] = shape.text3DSource.scale;
                     t3["smoothNormals"] = shape.text3DSource.bSmoothNormals;
+                    t3["align"] = static_cast<uint8_t>(shape.text3DSource.align);
+                    t3["anchor"] = static_cast<uint8_t>(shape.text3DSource.anchor);
                     t3["precise"] = shape.text3DSource.bPrecise;
                     shapeJson["text3DSource"] = t3;
                 }
@@ -667,6 +669,8 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                     src.tracking = t3.value("tracking", 0.0f);
                     src.scale = t3.value("scale", 1.0f);
                     src.bSmoothNormals = t3.value("smoothNormals", true);
+                    src.align = static_cast<Engine::Text3DAlign>(t3.value("align", static_cast<uint8_t>(Engine::Text3DAlign::Left)));
+                    src.anchor = static_cast<Engine::Text3DAnchor>(t3.value("anchor", static_cast<uint8_t>(Engine::Text3DAnchor::Baseline)));
                     src.bPrecise = t3.value("precise", false);
                     shape.text3DSource = src;
                 }

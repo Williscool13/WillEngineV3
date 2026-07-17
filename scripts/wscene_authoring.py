@@ -190,15 +190,22 @@ def add_procedural(entity, ptype_idx, fields, motion=0, friction=0.5, restitutio
     }
     return entity
 
-def add_text3d(entity, text, font_id, depth=0.2, flatness=0.0005, tracking=0.05, scale=1.0, smooth=True, precise=False, motion=0):
+ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT = 0, 1, 2
+ANCHOR_BASELINE, ANCHOR_TOP, ANCHOR_CENTER, ANCHOR_BOTTOM = 0, 1, 2, 3
+
+def add_text3d(entity, text, font_id, depth=0.2, flatness=0.0005, tracking=0.05, scale=1.0, smooth=True, precise=False, motion=0,
+               align=ALIGN_LEFT, anchor=ANCHOR_BASELINE):
     """Physics shape for Text3D is a box-per-glyph Compound unless precise=True (concave
-    TriangleMesh, Static/Kinematic only). font_id must come from an existing scene/asset."""
+    TriangleMesh, Static/Kinematic only). font_id must come from an existing scene/asset.
+    text breaks lines on '\\n'; align/anchor place the block relative to the entity origin."""
     entity[TEXT3D] = {"depth": depth, "flatness": flatness, "fontId": font_id, **RENDER_DEFAULTS,
-                       "scale": scale, "smoothNormals": smooth, "text": text, "tracking": tracking}
+                       "scale": scale, "smoothNormals": smooth, "text": text, "tracking": tracking,
+                       "align": align, "anchor": anchor}
     shape = {"type": 3, "offset": [0.0, 0.0, 0.0], "rotation": [1.0, 0.0, 0.0, 0.0],
              "bakedScaleX": 1.0, "bakedScaleY": 1.0, "bakedScaleZ": 1.0, "meshSourceModelId": 0, "proceduralType": 0,
              "text3DSource": {"fontId": font_id, "text": text, "depth": depth, "flatness": flatness,
-                               "tracking": tracking, "scale": scale, "smoothNormals": smooth, "precise": precise}}
+                               "tracking": tracking, "scale": scale, "smoothNormals": smooth, "precise": precise,
+                               "align": align, "anchor": anchor}}
     entity[PHYSICS] = {"motionType": motion, "mass": 1.0, "friction": 0.5, "restitution": 0.0, "motionQuality": 0,
                         "layerOverride": 65535, "enhancedInternalEdgeRemoval": False, "isSensor": False, "shapes": [shape]}
     return entity

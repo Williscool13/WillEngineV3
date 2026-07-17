@@ -79,6 +79,8 @@ add_library(engine STATIC
         resources/font/font.h
         resources/font/font_format.cpp
         resources/font/font_format.h
+        resources/font/text3d_layout.cpp
+        resources/font/text3d_layout.h
 )
 
 target_include_directories(engine PRIVATE

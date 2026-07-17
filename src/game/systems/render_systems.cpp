@@ -712,7 +712,7 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
 
         if (textComponent.text.Size() > 0) {
             auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
-            runtime.modelHandle = ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals);
+            runtime.modelHandle = ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor);
             if (runtime.modelHandle.IsValid()) {
                 state->registry.emplace_or_replace<Component::Text3DLoadingTag>(entity);
                 state->bPendingModelResolve = true;

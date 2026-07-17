@@ -86,6 +86,8 @@ void Component::Text3DComponent::Serialize(const Text3DComponent& comp, nlohmann
     json["tracking"] = comp.tracking;
     json["scale"] = comp.scale;
     json["smoothNormals"] = comp.bSmoothNormals;
+    json["align"] = static_cast<uint8_t>(comp.align);
+    json["anchor"] = static_cast<uint8_t>(comp.anchor);
     json["material"] = comp.material.id;
     json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
     json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
@@ -101,6 +103,8 @@ void Component::Text3DComponent::Deserialize(Text3DComponent& comp, const nlohma
     comp.tracking = json["tracking"].get<float>();
     comp.scale = json["scale"].get<float>();
     if (json.contains("smoothNormals")) { comp.bSmoothNormals = json["smoothNormals"].get<bool>(); }
+    if (json.contains("align")) { comp.align = static_cast<Engine::Text3DAlign>(json["align"].get<uint8_t>()); }
+    if (json.contains("anchor")) { comp.anchor = static_cast<Engine::Text3DAnchor>(json["anchor"].get<uint8_t>()); }
     comp.material = Engine::MaterialID(json["material"].get<uint64_t>());
     if (json.contains("modelFlags")) {
         const auto& f = json["modelFlags"];
@@ -169,7 +173,8 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     strncpy_s(buf, comp.text.c_str(), sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     bool dirty = false;
-    if (ImGui::InputText("Text##text3dfield", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+    ImGui::InputTextMultiline("Text##text3dfield", buf, sizeof(buf), ImVec2(0.0f, ImGui::GetTextLineHeight() * 4.0f));
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
         comp.text = Core::InlineString<256>(buf);
         dirty = true;
     }
@@ -180,6 +185,21 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     dirty |= ImGui::IsItemDeactivatedAfterEdit();
     ImGui::DragFloat("Tracking", &comp.tracking, 0.005f, -1.0f, 1.0f, "%.3f");
     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+
+    const char* alignLabels[] = {"Left", "Center", "Right"};
+    int alignIdx = static_cast<int>(comp.align);
+    if (ImGui::Combo("Align", &alignIdx, alignLabels, IM_ARRAYSIZE(alignLabels))) {
+        comp.align = static_cast<Engine::Text3DAlign>(alignIdx);
+        dirty = true;
+    }
+
+    const char* anchorLabels[] = {"Baseline", "Top", "Center", "Bottom"};
+    int anchorIdx = static_cast<int>(comp.anchor);
+    if (ImGui::Combo("Anchor", &anchorIdx, anchorLabels, IM_ARRAYSIZE(anchorLabels))) {
+        comp.anchor = static_cast<Engine::Text3DAnchor>(anchorIdx);
+        dirty = true;
+    }
+
     ImGui::DragFloat("Flatness", &comp.flatness, 0.0005f, 0.0005f, 0.1f, "%.4f");
     dirty |= ImGui::IsItemDeactivatedAfterEdit();
     dirty |= ImGui::Checkbox("Smooth Normals", &comp.bSmoothNormals);

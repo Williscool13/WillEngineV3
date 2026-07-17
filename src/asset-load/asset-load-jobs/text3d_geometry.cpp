@@ -9,6 +9,7 @@
 
 #include "earcut/earcut.hpp"
 #include "engine/resources/font/font.h"
+#include "engine/resources/font/text3d_layout.h"
 
 namespace AssetLoad
 {
@@ -125,15 +126,6 @@ static bool PointInPolygon(EcPoint p, const EcPoint* pts, size_t n)
     }
     return inside;
 }
-
-static int32_t FindGlyphIndex(const Engine::Font& font, uint32_t codepoint)
-{
-    const uint32_t count = std::min(static_cast<uint32_t>(font.glyphs.Size()), static_cast<uint32_t>(font.glyphContourRanges.Size()));
-    for (uint32_t i = 0; i < count; ++i) {
-        if (font.glyphs[i].codepoint == codepoint) { return static_cast<int32_t>(i); }
-    }
-    return -1;
-}
 } // namespace Text3DDetail
 } // namespace AssetLoad
 
@@ -184,18 +176,20 @@ bool BuildText3DGeometry(const Engine::Font& font, const Engine::Text3DParams& p
         outVertices.PushBack(v);
     };
 
-    float penX = 0.0f;
-    for (size_t i = 0; i < params.text.Size(); ++i) {
-        const uint32_t cp = static_cast<uint8_t>(params.text.c_str()[i]);
-        const int32_t gi = FindGlyphIndex(font, cp);
-        if (gi < 0) { continue; }
+    Engine::Text3DGlyphPlacements placements;
+    Engine::LayoutText3D(font, params, placements);
 
-        const Engine::WGlyphContourRange& gcr = font.glyphContourRanges[gi];
+    for (uint32_t p = 0; p < placements.Size(); ++p) {
+        const float penX = placements[p].penX;
+        const float penY = placements[p].penY;
+
+        const Engine::WGlyphContourRange& gcr = font.glyphContourRanges[placements[p].glyphIndex];
         if (gcr.contourCount > 0) {
             ringPts.Clear();
             rings.Clear();
 
-            // Flatten contours, baking the pen offset into x.
+            // Flatten contours, baking the pen offset in. Doing it here (not at vertex push) keeps the offset a rigid
+            // translation ahead of winding/hole classification, which both depend only on relative position.
             for (uint32_t c = 0; c < gcr.contourCount; ++c) {
                 const Engine::WContourRange& cr = font.contourRanges[gcr.firstContour + c];
                 tmpRing.Clear();
@@ -213,7 +207,7 @@ bool BuildText3DGeometry(const Engine::Font& font, const Engine::Text3DParams& p
                 info.count = static_cast<uint32_t>(tmpRing.Size());
                 info.area = SignedArea(tmpRing.Data(), tmpRing.Size());
                 for (uint32_t k = 0; k < tmpRing.Size(); ++k) {
-                    ringPts.PushBack({tmpRing[k].x + penX, tmpRing[k].y});
+                    ringPts.PushBack({tmpRing[k].x + penX, tmpRing[k].y + penY});
                 }
                 rings.PushBack(info);
             }
@@ -372,8 +366,6 @@ bool BuildText3DGeometry(const Engine::Font& font, const Engine::Text3DParams& p
                 }
             }
         }
-
-        penX += font.glyphs[gi].advance + params.tracking;
     }
 
     return !outVertices.IsEmpty() && !outIndices.IsEmpty();

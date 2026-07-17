@@ -390,7 +390,7 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
     return handle;
 }
 
-StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals)
+StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor)
 {
     assert(!IsFontFrozen(fontId) && "LoadText3DModel called with a frozen font. You should freeze-gate (IsFontFrozen) before generating");
 
@@ -403,6 +403,10 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&tracking), sizeof(tracking), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&scale), sizeof(scale), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bSmoothNormals), sizeof(bSmoothNormals), hash);
+    const uint8_t alignByte = static_cast<uint8_t>(align);
+    hash = fnv1a64(&alignByte, sizeof(alignByte), hash);
+    const uint8_t anchorByte = static_cast<uint8_t>(anchor);
+    hash = fnv1a64(&anchorByte, sizeof(anchorByte), hash);
 
     ModelID textModelId{hash};
 
@@ -442,6 +446,8 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
     params.tracking = tracking;
     params.scale = scale;
     params.bSmoothNormals = bSmoothNormals;
+    params.align = align;
+    params.anchor = anchor;
     params.font = GetFont(fontHandle);
 
     static int32_t text3DCounter = 0;
@@ -686,7 +692,7 @@ PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceMode
     return handle;
 }
 
-PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, bool bPrecise)
+PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, bool bPrecise)
 {
     assert(!IsFontFrozen(fontId) && "LoadText3DCollider called with a frozen font. Freeze-gate (IsFontFrozen) before generating");
 
@@ -698,6 +704,10 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&tracking), sizeof(tracking), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&scale), sizeof(scale), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bSmoothNormals), sizeof(bSmoothNormals), hash);
+    const uint8_t alignByte = static_cast<uint8_t>(align);
+    hash = fnv1a64(&alignByte, sizeof(alignByte), hash);
+    const uint8_t anchorByte = static_cast<uint8_t>(anchor);
+    hash = fnv1a64(&anchorByte, sizeof(anchorByte), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bPrecise), sizeof(bPrecise), hash);
     const PhysicsColliderKind kind = bPrecise ? PhysicsColliderKind::TriangleMesh : PhysicsColliderKind::Compound;
     const uint8_t kindByte = static_cast<uint8_t>(kind);
@@ -740,6 +750,8 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
     params.tracking = tracking;
     params.scale = scale;
     params.bSmoothNormals = bSmoothNormals;
+    params.align = align;
+    params.anchor = anchor;
     params.font = GetFont(fontHandle);
 
     static int32_t text3DColliderCounter = 0;

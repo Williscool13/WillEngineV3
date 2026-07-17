@@ -422,9 +422,27 @@ struct SpiralStaircaseParams
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
     , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams>;
 
+/** Horizontal placement of each line relative to the model origin. */
+enum class Text3DAlign : uint8_t
+{
+    Left = 0,
+    Center = 1,
+    Right = 2,
+};
+
+/** Vertical placement of the text block relative to the model origin. Baseline puts the first line's baseline at y=0. */
+enum class Text3DAnchor : uint8_t
+{
+    Baseline = 0,
+    Top = 1,
+    Center = 2,
+    Bottom = 3,
+};
+
 /**
  * Input for an extruded 3D-text model.
  * `depth`/`scale`/`flatness` are consumed at generation time; `flatness` is an EM-space tolerance.
+ * `text` breaks lines on '\n'; line spacing comes from the font's lineHeight.
  */
 struct Text3DParams
 {
@@ -436,6 +454,8 @@ struct Text3DParams
     float tracking{0.0f};
     float scale{1.0f};
     bool bSmoothNormals{true};
+    Text3DAlign align{Text3DAlign::Left};
+    Text3DAnchor anchor{Text3DAnchor::Baseline};
 
     // Font the generation job reads; kept alive by the requesting component (not a model-owned ref, so font hot-reload can evict cleanly).
     const Font* font{nullptr};

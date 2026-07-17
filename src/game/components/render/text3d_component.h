@@ -34,6 +34,8 @@ struct Text3DComponent
     float tracking{0.0f};
     float scale{1.0f};
     bool bSmoothNormals{true};
+    Engine::Text3DAlign align{Engine::Text3DAlign::Left};
+    Engine::Text3DAnchor anchor{Engine::Text3DAnchor::Baseline};
     Engine::MaterialID material{};
     glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, z: exclude from DDGI (0=contributes, default), w: reserved
     glm::vec3 renderOffset{0.0f};
