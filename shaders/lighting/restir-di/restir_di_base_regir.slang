@@ -228,7 +228,8 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                     if (bReflEligible) {
                         ReflectionHitDescriptor refl;
                         refl.rayDir = ray.Direction;
-                        if (bOwnedByReSTIR) {
+                        // Defer low roughness light reflections to specular GI
+                        if (bOwnedByReSTIR && roughness > RESTIR_MIRROR_ROUGHNESS_MAX) {
                             refl.hitT = REFLECTION_HIT_T_OWNED;
                             refl.bary = float2(0.0);
                             refl.instanceID = ~0u;

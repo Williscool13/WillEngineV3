@@ -1,11 +1,11 @@
 {
-  "clusterZFar": 500.0,
   "ddgi": {
     "bApplyToLighting": true,
     "bClassification": true,
     "bEnabled": true,
-    "bFinalGather": false,
+    "bFinalGather": true,
     "bFinalGatherDenoise": true,
+    "bGatherSkipRay": false,
     "bInfiniteBounce": true,
     "bOuterLocalNEE": false,
     "bRelocation": true,
@@ -15,7 +15,7 @@
     "cascadeCount": 6,
     "distanceExponent": 50.0,
     "edgeBlendCells": 3.96610164642334,
-    "hysteresis": 0.97,
+    "hysteresis": 0.9700000286102295,
     "irradianceGamma": 5.0,
     "irradianceThreshold": 0.25,
     "maxRayRadiance": 20.0,

@@ -124,14 +124,19 @@ void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 t
                 float3 commonTerm = s.cosShade * LightGeometryTerm(s) * vs.intensity * alColor * s.attenuation * r.W;
 
                 diffuseRadiance += diffuseAl * commonTerm;
-                float3 specContribution = specularAl * commonTerm;
-                specularRadiance += specContribution;
 
-                float specLum = dot(specContribution, float3(0.2126, 0.7152, 0.0722));
-                if (specLum > bestSpecLum)
+                // Defer low roughness light reflections to specular GI
+                if (roughness > RESTIR_MIRROR_ROUGHNESS_MAX)
                 {
-                    bestSpecLum = specLum;
-                    hitDistance = s.dist;
+                    float3 specContribution = specularAl * commonTerm;
+                    specularRadiance += specContribution;
+
+                    float specLum = dot(specContribution, float3(0.2126, 0.7152, 0.0722));
+                    if (specLum > bestSpecLum)
+                    {
+                        bestSpecLum = specLum;
+                        hitDistance = s.dist;
+                    }
                 }
             }
         }

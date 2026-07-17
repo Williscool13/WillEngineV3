@@ -423,7 +423,9 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
     if (s.cosShade <= 0.0 || s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
     const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
     float3 H = normalize(V + s.L);
-    float D = D_GGX(N, H, roughness);
+
+    // Defer low roughness light reflections to specular GI
+    float D = (roughness <= RESTIR_MIRROR_ROUGHNESS_MAX) ? 0.0 : D_GGX(N, H, roughness);
     float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
     // Max-channel (not luminance): must match EvalCellLightTarget, avoids chromatic fireflies from saturated colors.
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
@@ -568,7 +570,9 @@ public float GGXPdf(float3 N, float3 V, float3 L, float roughness)
     float VdotH = max(dot(V, H), 0.0001);
     float a = roughness * roughness;
     float a2 = a * a;
-    float D = a2 / (PI * max(pow(NdotH * NdotH * (a2 - 1.0) + 1.0, 2.0), 0.0001));
+    // Floor must sit below t^2 at min roughness (a2^2). A larger floor underclaims the pdf and over-weights BRDF candidates in MIS.
+    float t = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    float D = a2 / (PI * max(t * t, 1e-15));
     return D * NdotH / (4.0 * VdotH);
 }
 
@@ -592,7 +596,8 @@ public float3 ImportanceSampleGGX(float2 xi, float3 N, float3 V, float roughness
 
     float NdotH = max(dot(N, H), 0.0);
     float VdotH = max(dot(V, H), 0.0001);
-    float D = a2 / (PI * max(pow(NdotH * NdotH * (a2 - 1.0) + 1.0, 2.0), 0.0001));
+    float t = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    float D = a2 / (PI * max(t * t, 1e-15));
     pdf = D * NdotH / (4.0 * VdotH);
 
     return L;

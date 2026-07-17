@@ -734,6 +734,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 });
         }
 
+#if WILL_EDITOR
+        debugCursorReadback.litTexture = targets.colorOutput;
+#endif
+
         SetupTextForwardPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
         SetupSpritesPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
 
@@ -777,6 +781,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
 #if WILL_EDITOR
+        if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < outputExtent[0] &&
+            frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent[1]) {
+            debugCursorReadback.pixel[0] = std::min(renderExtent[0] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[0]) * renderExtent[0] / static_cast<float>(outputExtent[0]))));
+            debugCursorReadback.pixel[1] = std::min(renderExtent[1] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[1]) * renderExtent[1] / static_cast<float>(outputExtent[1]))));
+        } else {
+            debugCursorReadback.litTexture = StringID{};
+        }
         resourceManager->debugReadback.ScheduleCopies(*renderGraph, SID("debug_readback_buffer"));
 
         if (!viewFamily.debugResourceName.IsEmpty()) {
@@ -1190,6 +1201,37 @@ void RenderThread::RegisterDebugReadbacks()
     {
         LightingDispatchParameters data[16];
     };
+    struct CursorLitPixel
+    {
+        uint16_t rgba[4];
+    };
+
+    resourceManager->debugReadback.Register<CursorLitPixel>(
+        "Cursor Lit HDR",
+        [this](RenderGraph& graph, StringID dst, size_t dstOffset) {
+            const StringID lit = debugCursorReadback.litTexture;
+            if (lit == StringID{} || !graph.HasTexture(lit)) { return; }
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Cursor Lit"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
+            pass.ReadCopyImage(lit);
+            pass.WriteTransferBuffer(dst);
+            pass.Execute([this, lit, dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                VkBufferImageCopy region{};
+                region.bufferOffset = dstOffset;
+                region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                region.imageOffset = {static_cast<int32_t>(debugCursorReadback.pixel[0]), static_cast<int32_t>(debugCursorReadback.pixel[1]), 0};
+                region.imageExtent = {1, 1, 1};
+                vkCmdCopyImageToBuffer(cmd, graph.GetImageHandle(lit), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, graph.GetBufferHandle(dst), 1, &region);
+            });
+        },
+        [this](const CursorLitPixel& d) {
+            const glm::vec2 rg = glm::unpackHalf2x16(static_cast<uint32_t>(d.rgba[0]) | (static_cast<uint32_t>(d.rgba[1]) << 16u));
+            const glm::vec2 ba = glm::unpackHalf2x16(static_cast<uint32_t>(d.rgba[2]) | (static_cast<uint32_t>(d.rgba[3]) << 16u));
+            const float luminance = 0.2126f * rg.x + 0.7152f * rg.y + 0.0722f * ba.x;
+            ImGui::Text("Pixel (%u, %u)", debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]);
+            ImGui::Text("HDR: %.5f  %.5f  %.5f  (A %.3f)", rg.x, rg.y, ba.x, ba.y);
+            ImGui::Text("Luminance: %.5f", luminance);
+        }
+    );
 
     resourceManager->debugReadback.Register<ShadeDispatchReadback>(
         "Shade Dispatch Parameters",

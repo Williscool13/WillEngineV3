@@ -201,6 +201,15 @@ private:
     bool bRenderRequestsRecreate{false};
     bool bFrozenVisibility{false};
 
+#if WILL_EDITOR
+    struct DebugCursorReadback
+    {
+        StringID litTexture{};
+        uint32_t pixel[2]{};
+    };
+    DebugCursorReadback debugCursorReadback{};
+#endif
+
 private:
     RenderScreenCapture* screenCapture{};
 };
