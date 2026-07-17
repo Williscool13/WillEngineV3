@@ -163,6 +163,13 @@ public: // Resource queries
 
     uint32_t GetStorageImageViewDescriptorIndex(StringID textureId, uint32_t mipLevel = 0);
 
+    /**
+     * Capture variants for passes that bake handles into a bundle for downstream consumers without accessing the resource themselves (No usage/aliasing validation).
+     */
+    uint32_t PeekSampledImageViewDescriptorIndex(StringID textureId);
+
+    VkDeviceAddress PeekBufferAddress(StringID bufferId);
+
     uint32_t GetDepthOnlySampledImageViewDescriptorIndex(StringID textureId);
 
     uint32_t GetStencilOnlyStorageImageViewDescriptorIndex(StringID textureId);
@@ -175,6 +182,12 @@ public: // Resource queries
     [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager; }
 
     PipelineEvent GetBufferState(StringID bufferId);
+
+    /**
+     * If true render graph will not execute and the application will be requested to shut down.
+     * @return
+     */
+    [[nodiscard]] bool IsFrameCorrupted() const { return bFrameCorrupted; }
 
 public: // VRAM reporting
     VRAMReport GenerateVramReport() const;
@@ -277,6 +290,12 @@ public: // GPU pass timing
 private:
     friend class RenderPass;
     friend class RenderGraphInspector;
+
+    void ValidatePassDeclaresTexture(uint32_t textureIndex);
+    void ValidatePassDeclaresBuffer(uint32_t bufferIndex);
+    const RenderPass* currentRecordingPass{};
+    bool bFrameCorrupted{};
+
     VulkanContext* context;
     ResourceManager* resourceManager;
     Core::TlsfAllocator* alloc;

@@ -79,14 +79,14 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     bundlePass.WriteTransferBuffer(WORLD_CACHE_BUFFERS_CURRENT);
     bundlePass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const WorldCacheBuffers buffers{
-            .entries = graph.GetBufferAddress(WORLD_CACHE_ENTRIES),
-            .keys = graph.GetBufferAddress(WORLD_CACHE_KEYS),
-            .cells = graph.GetBufferAddress(WORLD_CACHE_CELLS),
-            .active = graph.GetBufferAddress(WORLD_CACHE_ACTIVE),
-            .descriptors = graph.GetBufferAddress(WORLD_CACHE_DESCRIPTORS),
-            .activeList = graph.GetBufferAddress(WORLD_CACHE_ACTIVE_LIST),
-            .activeCount = graph.GetBufferAddress(WORLD_CACHE_ACTIVE_COUNT),
-            .stats = graph.GetBufferAddress(WORLD_CACHE_STATS),
+            .entries = graph.PeekBufferAddress(WORLD_CACHE_ENTRIES),
+            .keys = graph.PeekBufferAddress(WORLD_CACHE_KEYS),
+            .cells = graph.PeekBufferAddress(WORLD_CACHE_CELLS),
+            .active = graph.PeekBufferAddress(WORLD_CACHE_ACTIVE),
+            .descriptors = graph.PeekBufferAddress(WORLD_CACHE_DESCRIPTORS),
+            .activeList = graph.PeekBufferAddress(WORLD_CACHE_ACTIVE_LIST),
+            .activeCount = graph.PeekBufferAddress(WORLD_CACHE_ACTIVE_COUNT),
+            .stats = graph.PeekBufferAddress(WORLD_CACHE_STATS),
         };
         vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_BUFFERS_CURRENT), 0, sizeof(buffers), &buffers);
     });

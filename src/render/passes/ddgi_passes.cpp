@@ -110,9 +110,9 @@ static void AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName
             }
             DDGICascadeDescriptor& desc = set.cascades[k];
             desc.volume = source.volume;
-            desc.irradianceIndex = graph.GetSampledImageViewDescriptorIndex(source.irradiance);
-            desc.visibilityIndex = graph.GetSampledImageViewDescriptorIndex(source.visibility);
-            desc.probeOffsets = source.offsets != StringID{} ? graph.GetBufferAddress(source.offsets) : 0;
+            desc.irradianceIndex = graph.PeekSampledImageViewDescriptorIndex(source.irradiance);
+            desc.visibilityIndex = graph.PeekSampledImageViewDescriptorIndex(source.visibility);
+            desc.probeOffsets = source.offsets != StringID{} ? graph.PeekBufferAddress(source.offsets) : 0;
             desc.bOffsetsValid = source.offsets != StringID{} ? 1u : 0u;
             desc.bValid = 1u;
         }

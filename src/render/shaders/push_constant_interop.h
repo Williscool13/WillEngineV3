@@ -1417,6 +1417,7 @@ SHADER_PUBLIC struct RelaxGenerateViewZPushConstant
     SHADER_PUBLIC uint32_t viewZIndex;
     SHADER_PUBLIC uint32_t normalRoughnessIndex;
     SHADER_PUBLIC uint32_t outViewZIndex;
+    SHADER_PUBLIC uint32_t outGuideIndex;
 };
 
 SHADER_PUBLIC struct RelaxClassifyTilesPushConstant
@@ -1502,8 +1503,7 @@ SHADER_PUBLIC struct RelaxAtrousPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
     SHADER_PUBLIC uint32_t tilesIndex;
-    SHADER_PUBLIC uint32_t normalRoughnessIndex;
-    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t guideIndex;
     SHADER_PUBLIC uint32_t historyLengthIndex;
     SHADER_PUBLIC uint32_t specVarIndex;
     SHADER_PUBLIC uint32_t diffVarIndex;

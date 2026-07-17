@@ -1296,6 +1296,8 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 {
     ZoneScoped;
 
+    bFrameCorrupted = false;
+
     if (bDebugLogging) {
         LOG_INFO(Renderer, "=== RenderGraph Execution ===");
     }
@@ -1370,7 +1372,9 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 allocFns.cmdBeginDebugUtilsLabel(cmd, &label);
 #endif
                 gpuTimestampQuery.BeginPass(cmd, currentFrameIndex, pass->category);
+                currentRecordingPass = pass;
                 pass->executeFunc(cmd, context, *this);
+                currentRecordingPass = nullptr;
                 gpuTimestampQuery.EndPass(cmd, currentFrameIndex);
 #ifdef WDEBUG
                 allocFns.cmdEndDebugUtilsLabel(cmd);
@@ -1963,7 +1967,41 @@ const VkImageAspectFlags RenderGraph::GetImageAspect(StringID textureId)
     return physicalResources[tex.physicalIndex].aspect;
 }
 
+void RenderGraph::ValidatePassDeclaresTexture(uint32_t textureIndex)
+{
+#ifdef WDEBUG
+    if (currentRecordingPass == nullptr || currentRecordingPass->DeclaresTexture(textureIndex)) {
+        return;
+    }
+    LOG_ERROR(Renderer, "[RDG] Pass '{}' fetched texture '{}' without declaring it (lifetimes/aliasing/barriers are wrong); frame marked corrupted", currentRecordingPass->renderPassId.ToString(), textures[textureIndex].textureId.ToString());
+    bFrameCorrupted = true;
+#endif
+}
+
+void RenderGraph::ValidatePassDeclaresBuffer(uint32_t bufferIndex)
+{
+#ifdef WDEBUG
+    if (currentRecordingPass == nullptr || currentRecordingPass->DeclaresBuffer(bufferIndex)) {
+        return;
+    }
+    LOG_ERROR(Renderer, "[RDG] Pass '{}' fetched buffer '{}' without declaring it (lifetimes/aliasing/barriers are wrong); frame marked corrupted", currentRecordingPass->renderPassId.ToString(), buffers[bufferIndex].bufferId.ToString());
+    bFrameCorrupted = true;
+#endif
+}
+
 uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(StringID textureId)
+{
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
+    ValidatePassDeclaresTexture(*idx);
+
+    auto& tex = textures[*idx];
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
+
+    return physicalResources[tex.physicalIndex].sampledDescriptorHandle.index;
+}
+
+uint32_t RenderGraph::PeekSampledImageViewDescriptorIndex(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
     ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
@@ -1978,6 +2016,7 @@ uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(StringID textureId, uin
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
     ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
+    ValidatePassDeclaresTexture(*idx);
 
     auto& tex = textures[*idx];
     ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
@@ -1989,6 +2028,7 @@ uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(StringID textu
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
     ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
+    ValidatePassDeclaresTexture(*idx);
 
     auto& tex = textures[*idx];
     ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
@@ -2006,6 +2046,7 @@ uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(StringID tex
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
     ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
+    ValidatePassDeclaresTexture(*idx);
 
     auto& tex = textures[*idx];
     ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
@@ -2023,6 +2064,7 @@ VkBuffer RenderGraph::GetBufferHandle(StringID bufferId)
 {
     uint32_t* idx = bufferNameToIndex.Find(bufferId);
     ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
+    ValidatePassDeclaresBuffer(*idx);
 
     auto& buf = buffers[*idx];
     ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
@@ -2034,6 +2076,7 @@ VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
 {
     uint32_t* idx = bufferNameToIndex.Find(bufferId);
     ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
+    ValidatePassDeclaresBuffer(*idx);
 
     auto& buf = buffers[*idx];
     ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
@@ -2048,6 +2091,23 @@ VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
     return phys.bufferAddress;
 }
 
+VkDeviceAddress RenderGraph::PeekBufferAddress(StringID bufferId)
+{
+    uint32_t* idx = bufferNameToIndex.Find(bufferId);
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
+
+    auto& buf = buffers[*idx];
+    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
+
+    auto& phys = physicalResources[buf.physicalIndex];
+
+    if (!phys.addressRetrieved) {
+        phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);
+        phys.addressRetrieved = true;
+    }
+    return phys.bufferAddress;
+}
+
 VkDeviceAddress RenderGraph::TryGetBufferAddress(StringID bufferId)
 {
     uint32_t* idx = bufferNameToIndex.Find(bufferId);
@@ -2055,6 +2115,7 @@ VkDeviceAddress RenderGraph::TryGetBufferAddress(StringID bufferId)
 
     auto& buf = buffers[*idx];
     if (!buf.HasPhysical()) { return 0; }
+    ValidatePassDeclaresBuffer(*idx);
 
     auto& phys = physicalResources[buf.physicalIndex];
 
@@ -2265,6 +2326,7 @@ uint32_t RenderGraph::GetAccelerationStructureDescriptorIndex(StringID name)
 {
     const BufferResource* buf = GetBuffer(name);
     if (!buf || !buf->HasPhysical()) { return ~0u; }
+    ValidatePassDeclaresBuffer(buf->index);
     const PhysicalResource& phys = physicalResources[buf->physicalIndex];
     return phys.asDescriptorHandle.IsValid() ? phys.asDescriptorHandle.index : ~0u;
 }

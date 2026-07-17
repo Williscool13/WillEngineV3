@@ -544,6 +544,36 @@ public float RelaxLoadViewZ(uint texIdx, int2 pixel, float depthLinearizeMult, f
     return ScreenToViewSpaceDepth(raw, depthLinearizeMult, depthLinearizeAdd);
 }
 
+// Packed geometry guide for the RELAX chain: one 8-byte texel per pixel replaces the per-tap gbuffer uint4 + raw depth loads and their decode (view-to-world mul, PBR unpack, depth linearize).
+// x = oct12 world normal | unorm8 roughness (>= stock NRD's 8-10 bit normal-roughness encodings), y = f32 viewZ bits.
+public uint2 RelaxPackGuide(float3 worldNormal, float roughness, float viewZ)
+{
+    float3 p = worldNormal / (abs(worldNormal.x) + abs(worldNormal.y) + abs(worldNormal.z));
+    float2 e = p.z >= 0.0 ? p.xy : (1.0 - abs(p.yx)) * float2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
+    uint2 q = uint2((e * 0.5 + 0.5) * 4095.0 + 0.5);
+    uint r8 = uint(saturate(roughness) * 255.0 + 0.5);
+    return uint2(q.x | (q.y << 12) | (r8 << 24), asuint(viewZ));
+}
+
+public float4 RelaxUnpackGuideNormalRoughness(uint packed)
+{
+    float2 e = float2(packed & 0xFFFu, (packed >> 12) & 0xFFFu) / 4095.0 * 2.0 - 1.0;
+    float3 n = float3(e, 1.0 - abs(e.x) - abs(e.y));
+    float t = saturate(-n.z);
+    n.x += n.x >= 0.0 ? -t : t;
+    n.y += n.y >= 0.0 ? -t : t;
+    return float4(normalize(n), float(packed >> 24) / 255.0);
+}
+
+public void RelaxLoadGuide(uint guideIndex, int2 pixel, out float3 normal, out float roughness, out float viewZ)
+{
+    uint2 g = rdgTexturesUInt2[guideIndex].Load(int3(pixel, 0)).xy;
+    float4 nr = RelaxUnpackGuideNormalRoughness(g.x);
+    normal = nr.xyz;
+    roughness = nr.w;
+    viewZ = asfloat(g.y);
+}
+
 public float4 RelaxGatherViewZ(uint texIdx, float2 uv, float depthLinearizeMult, float depthLinearizeAdd)
 {
     float4 raw = rdgTexturesFloat[texIdx].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);

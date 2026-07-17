@@ -16,7 +16,6 @@ import restir_common;
 void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_DispatchThreadID)
 {
     RelaxDiffuseSpecularConstants* rc = pc.constants;
-    float3x3 viewToWorld = (float3x3)rc.gViewToWorld;
     int stepSize = int(pc.stepSize);
 
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
@@ -24,15 +23,14 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
         return;
 
     int2 fullPixel = pixelPos;
-    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+    float3 centerNormal;
+    float centerRoughness;
+    float centerViewZ;
+    RelaxLoadGuide(pc.guideIndex, fullPixel, centerNormal, centerRoughness, centerViewZ);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
         return;
 
     float2 pixelUv = (float2(pixelPos) + 0.5) * rc.gRectSizeInv;
-
-    float4 centerNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(fullPixel, 0)), viewToWorld);
-    float3 centerNormal = centerNR.rgb;
-    float centerRoughness = centerNR.a;
     float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
 
     bool isFirstAtrousPass = (stepSize == 1);
@@ -57,8 +55,10 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             {
                 int2 p = clamp(pixelPos + int2(cx, cy), int2(0, 0), rc.gRectSize - int2(1, 1));
                 int2 tapFullPixel = p;
-                float3 sampleNormal = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(tapFullPixel, 0)), viewToWorld).rgb;
-                float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, tapFullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+                float3 sampleNormal;
+                float sampleTapRoughness;
+                float sampleViewZ;
+                RelaxLoadGuide(pc.guideIndex, tapFullPixel, sampleNormal, sampleTapRoughness, sampleViewZ);
                 float depthW = RelaxGetBilateralWeight(abs(sampleViewZ), abs(centerViewZ));
                 float normalW = RelaxComputeWeight(MLAcosApproxPositive(dot(centerNormal, sampleNormal)), normalWeightParam, 0.0);
                 float w = depthW * normalW;
@@ -179,10 +179,10 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             float kernel = kernelWeights[abs(i)] * kernelWeights[abs(j)];
 
             int2 pFull = p;
-            float4 sampleNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(pFull, 0)), viewToWorld);
-            float3 sampleNormal = sampleNR.rgb;
-            float sampleRoughness = sampleNR.a;
-            float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, pFull, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+            float3 sampleNormal;
+            float sampleRoughness;
+            float sampleViewZ;
+            RelaxLoadGuide(pc.guideIndex, pFull, sampleNormal, sampleRoughness, sampleViewZ);
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(p, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
             float geometryW = RelaxGetPlaneDistanceWeightAtrous(centerWorldPos, centerNormal, sampleWorldPos, depthThreshold);

@@ -1294,7 +1294,7 @@ void WillEngine::Run()
             inputManager->ProcessEvent(e);
         }
 
-        if (inputManager->IsQuitRequested()) {
+        if (inputManager->IsQuitRequested() || renderThread->IsShutdownRequestedByRender()) {
             renderThread->RequestShutdown();
             break;
         }

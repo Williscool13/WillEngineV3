@@ -89,6 +89,10 @@ public:
         return *this;
     }
 
+    /** Whether this pass declared any read/write on the given logical texture/buffer index*/
+    [[nodiscard]] bool DeclaresTexture(uint32_t textureIndex) const;
+    [[nodiscard]] bool DeclaresBuffer(uint32_t bufferIndex) const;
+
     StringID renderPassId;
     VkPipelineStageFlags2 stages;
     RenderCategory category{RenderCategory::Untagged};

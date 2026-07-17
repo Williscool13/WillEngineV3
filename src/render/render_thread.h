@@ -101,6 +101,9 @@ public:
 
     void RequestShutdown();
 
+    /** Set by the render thread when it detects an unrecoverable frame fault (e.g. undeclared RDG resource access)*/
+    [[nodiscard]] bool IsShutdownRequestedByRender() const { return bRenderRequestsShutdown.load(std::memory_order_relaxed); }
+
     void Join();
 
     void ThreadMain();
@@ -164,6 +167,7 @@ private:
 
     // Threading
     std::atomic<bool> bShouldExit{false};
+    std::atomic<bool> bRenderRequestsShutdown{false};
     std::jthread thisThread;
 
     // Owning

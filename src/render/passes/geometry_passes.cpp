@@ -76,6 +76,7 @@ void SetupGeometryPass(RenderGraph& graph,
         {
             RenderPass& instanceLODPass = graph.AddPass(SID("Instance Visibility/LOD Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             instanceLODPass.ReadBuffer(SCENE_DATA_BUFFER);
+            instanceLODPass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
             instanceLODPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
             instanceLODPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
             instanceLODPass.WriteBuffer(instanceMeshletOffsets);
@@ -249,6 +250,9 @@ void SetupGeometryPass(RenderGraph& graph,
                 SID("Expand Instance To Meshlet"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             expandInstancesToMeshlets.ReadBuffer(SCENE_DATA_BUFFER);
             expandInstancesToMeshlets.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+            expandInstancesToMeshlets.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+            expandInstancesToMeshlets.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+            expandInstancesToMeshlets.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
             expandInstancesToMeshlets.ReadBuffer(instanceMeshletOffsets);
             expandInstancesToMeshlets.ReadIndirectBuffer(meshletCountDispatchArgs);
             expandInstancesToMeshlets.WriteBuffer(intermediateMeshlets);
@@ -454,6 +458,11 @@ void SetupGeometryPass(RenderGraph& graph,
     instancedMeshShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     instancedMeshShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     instancedMeshShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    instancedMeshShading.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+    instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
+    instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
+    instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
+    instancedMeshShading.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
     instancedMeshShading.ReadBuffer(visibleMeshlets);
     instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
     instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
@@ -563,6 +572,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     RenderPass& boundsPass = graph.AddPass(SID("Shade Bucketing Bounds"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     boundsPass.ReadSampledImage(targets.visibility);
     boundsPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    boundsPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     boundsPass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
     boundsPass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     boundsPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],

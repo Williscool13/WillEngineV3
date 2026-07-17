@@ -567,6 +567,8 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadBuffer(SID("restir_lights_vs"));
     }
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+    lightingResolve.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    lightingResolve.ReadSampledImage(targets.visibility);
     lightingResolve.ReadSampledImage(targets.gbufferOne);
     lightingResolve.ReadSampledImage(targets.gbufferTwo);
     lightingResolve.ReadSampledImage(targets.depthCopy);

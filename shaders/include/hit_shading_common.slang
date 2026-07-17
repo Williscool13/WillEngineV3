@@ -353,7 +353,7 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
     if (pc.skyboxIndex >= 0) {
         indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], N) * pc.iblIntensity;
     }
-    if (pc.bFeedbackValid != 0)
+    if (pc.bFeedbackValid != 0) {
         float cellSize = WorldCacheCellSizeAtLevel(WorldCacheLevelFromDistance(distance(worldPosition, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz)));
         float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, cellSize);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.previousCascades)));

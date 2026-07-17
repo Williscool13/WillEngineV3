@@ -122,6 +122,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
 
     RenderPass& lightingResolve = graph.AddPass(SID("Visibility Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::LightingResolve);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
+    lightingResolve.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
     if (bWorldGrid) {
         lightingResolve.ReadBuffer(SID("world_grid_light_grid"));
@@ -131,6 +132,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
     }
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+    lightingResolve.ReadSampledImage(targets.visibility);
     lightingResolve.ReadSampledImage(targets.gbufferOne);
     lightingResolve.ReadSampledImage(targets.gbufferTwo);
     lightingResolve.ReadSampledImage(targets.depthCopy);

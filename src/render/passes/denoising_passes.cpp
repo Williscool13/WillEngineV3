@@ -200,22 +200,25 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     const TextureInfo tilesInfo{VK_FORMAT_R8_UNORM, tilesW, tilesH, 1};
     const TextureInfo viewZInfo{VK_FORMAT_R32_SFLOAT, width, height, 1};
 
-    // Pass 0: Generate half-res linearized viewZ (necessary cause of GatherRed)
+    // Pass 0: Generate half-res linearized viewZ (necessary cause of GatherRed) + the packed guide the filter chain taps
     {
         graph.CreateTexture(SID("relax_viewz"), viewZInfo, {std::nullopt}, true);
         graph.CarryTextureToNextFrame(SID("relax_viewz"), SID("relax_viewz_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+        graph.CreateTexture(SID("relax_guide"), TextureInfo{VK_FORMAT_R32G32_UINT, width, height, 1}, {std::nullopt}, true);
 
         auto& pass = graph.AddPass(SID("[ReLAX] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SID("relax_constants"));
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
         pass.WriteStorageImage(SID("relax_viewz"));
+        pass.WriteStorageImage(SID("relax_guide"));
         pass.Execute([pipelineManager, depth, gbufferOne, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxGenerateViewZPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("relax_constants")),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_viewz")),
+                .outGuideIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_guide")),
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_generate_viewz"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -531,8 +534,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
             pass.ReadBuffer(SID("relax_constants"));
             pass.ReadSampledImage(SID("relax_tiles"));
-            pass.ReadSampledImage(gbufferOne);
-            pass.ReadSampledImage(depth);
+            pass.ReadSampledImage(SID("relax_guide"));
             pass.ReadSampledImage(SID("relax_history_length"));
             pass.ReadSampledImage(SID("relax_spec_reproj_confidence"));
             pass.ReadSampledImage(specIn);
@@ -540,13 +542,12 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.WriteStorageImage(specOut);
             pass.WriteStorageImage(diffOut);
 
-            pass.Execute([pipelineManager, gbufferOne, depth,
+            pass.Execute([pipelineManager,
                     specIn, diffIn, specOut, diffOut, stepSize, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     RelaxAtrousPushConstant pc{
                         .constants = graph.GetBufferAddress(SID("relax_constants")),
                         .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
-                        .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                        .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                        .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_guide")),
                         .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_history_length")),
                         .specVarIndex = graph.GetSampledImageViewDescriptorIndex(specIn),
                         .diffVarIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),

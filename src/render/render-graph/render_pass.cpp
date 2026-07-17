@@ -302,4 +302,48 @@ RenderPass& RenderPass::ReadASInputBuffer(const StringID bufferId)
     bufferASInputReads.PushBack(resource->index);
     return *this;
 }
+
+static bool ListContains(const Core::ArenaVector<uint32_t>& list, uint32_t value)
+{
+    for (uint32_t entry : list) {
+        if (entry == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool RenderPass::DeclaresTexture(uint32_t textureIndex) const
+{
+    if (depthStencilAttachment == textureIndex) {
+        return true;
+    }
+    return ListContains(colorAttachments, textureIndex)
+           || ListContains(storageImageReads, textureIndex)
+           || ListContains(storageImageWrites, textureIndex)
+           || ListContains(sampledImageReads, textureIndex)
+           || ListContains(imageReadWrite, textureIndex)
+           || ListContains(clearImageWrites, textureIndex)
+           || ListContains(blitImageReads, textureIndex)
+           || ListContains(blitImageWrites, textureIndex)
+           || ListContains(copyImageReads, textureIndex)
+           || ListContains(copyImageWrites, textureIndex)
+           || ListContains(autoClearTextures, textureIndex);
+}
+
+bool RenderPass::DeclaresBuffer(uint32_t bufferIndex) const
+{
+    return ListContains(bufferReads, bufferIndex)
+           || ListContains(bufferWrites, bufferIndex)
+           || ListContains(bufferReadWrite, bufferIndex)
+           || ListContains(bufferTransferReads, bufferIndex)
+           || ListContains(bufferTransferWrites, bufferIndex)
+           || ListContains(bufferIndexRead, bufferIndex)
+           || ListContains(bufferIndirectReads, bufferIndex)
+           || ListContains(bufferIndirectCountReads, bufferIndex)
+           || ListContains(bufferTLASWrites, bufferIndex)
+           || ListContains(bufferTLASReads, bufferIndex)
+           || ListContains(bufferScratchWrites, bufferIndex)
+           || ListContains(bufferASInputReads, bufferIndex);
+}
 } // Render

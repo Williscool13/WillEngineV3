@@ -63,6 +63,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
         });
 
     RenderPass& gtaoMainPass = graph.AddPass(SID("GTAO Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AmbientOcclusion);
+    gtaoMainPass.ReadBuffer(SCENE_DATA_BUFFER);
     gtaoMainPass.ReadSampledImage(SID("gtao_depth"));
     gtaoMainPass.ReadSampledImage(targets.gbufferOne);
     gtaoMainPass.WriteStorageImage(SID("gtao_ao"));
@@ -109,6 +110,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
         });
 
     RenderPass& denoise1 = graph.AddPass(SID("GTAO Denoise 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AmbientOcclusion);
+    denoise1.ReadBuffer(SCENE_DATA_BUFFER);
     denoise1.ReadSampledImage(SID("gtao_ao"));
     denoise1.ReadSampledImage(SID("gtao_edges"));
     denoise1.WriteStorageImage(SID("gtao_temp"));
@@ -133,6 +135,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
         });
 
     RenderPass& denoise2 = graph.AddPass(SID("GTAO Denoise 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AmbientOcclusion);
+    denoise2.ReadBuffer(SCENE_DATA_BUFFER);
     denoise2.ReadSampledImage(SID("gtao_temp"));
     denoise2.ReadSampledImage(SID("gtao_edges"));
     denoise2.WriteStorageImage(SID("gtao_filtered"));

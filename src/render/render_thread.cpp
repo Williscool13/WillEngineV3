@@ -312,6 +312,19 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         break;
         case SUCCESS:
         {
+#ifdef WDEBUG
+            if (renderGraph->IsFrameCorrupted()) {
+                LOG_CRITICAL(Renderer, "[RDG] Frame recorded with undeclared resource accesses (see errors above); dropping submission and requesting engine shutdown");
+                VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+                VkSubmitInfo2 submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+                submitInfo.waitSemaphoreInfoCount = 1;
+                submitInfo.pWaitSemaphoreInfos = &swapchainSemaphoreWaitInfo;
+                VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
+                VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
+                bRenderRequestsShutdown.store(true, std::memory_order_relaxed);
+                break;
+            }
+#endif
             //
             {
                 ZoneScopedN("QueueSubmit");
