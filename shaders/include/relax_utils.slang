@@ -574,6 +574,11 @@ public void RelaxLoadGuide(uint guideIndex, int2 pixel, out float3 normal, out f
     viewZ = asfloat(g.y);
 }
 
+public float RelaxLoadGuideViewZ(uint guideIndex, int2 pixel)
+{
+    return asfloat(rdgTexturesUInt2[guideIndex].Load(int3(pixel, 0)).y);
+}
+
 public float4 RelaxGatherViewZ(uint texIdx, float2 uv, float depthLinearizeMult, float depthLinearizeAdd)
 {
     float4 raw = rdgTexturesFloat[texIdx].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);

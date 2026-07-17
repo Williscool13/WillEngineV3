@@ -45,7 +45,6 @@ int2 CheckerboardSignalPos(int2 samplePos, uint cbField, uint counter, uint fram
 void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_DispatchThreadID)
 {
     RelaxDiffuseSpecularConstants* rc = pc.constants;
-    float3x3 viewToWorld = (float3x3)rc.gViewToWorld;
 
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
@@ -54,7 +53,10 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
     }
 
     int2 fullPixel = pixelPos;
-    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+    float3 centerNormal;
+    float centerRoughness;
+    float centerViewZ;
+    RelaxLoadGuide(pc.guideIndex, fullPixel, centerNormal, centerRoughness, centerViewZ);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
     {
         return;
@@ -66,16 +68,13 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
     float2 cbWeights = float2(1.0, 1.0);
     if (rc.gDiffCheckerboard != 2u || rc.gSpecCheckerboard != 2u)
     {
-        float zL = RelaxLoadViewZ(pc.viewZIndex, int2(max(pixelPos.x - 1, 0), pixelPos.y), rc.depthLinearizeMult, rc.depthLinearizeAdd);
-        float zR = RelaxLoadViewZ(pc.viewZIndex, int2(min(pixelPos.x + 1, rc.gRectSize.x - 1), pixelPos.y), rc.depthLinearizeMult, rc.depthLinearizeAdd);
+        float zL = RelaxLoadGuideViewZ(pc.guideIndex, int2(max(pixelPos.x - 1, 0), pixelPos.y));
+        float zR = RelaxLoadGuideViewZ(pc.guideIndex, int2(min(pixelPos.x + 1, rc.gRectSize.x - 1), pixelPos.y));
         cbWeights = saturate(1.0 - abs(float2(zL, zR) - centerViewZ) / max(abs(centerViewZ) * 0.02, 1e-5));
         cbWeights.x = (!RelaxIsInDenoisingRange(zL, rc.gDenoisingRange) || pixelPos.x < 1) ? 0.0 : cbWeights.x;
         cbWeights.y = (!RelaxIsInDenoisingRange(zR, rc.gDenoisingRange) || pixelPos.x > rc.gRectSize.x - 2) ? 0.0 : cbWeights.y;
     }
 
-    float4 centerNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(fullPixel, 0)), viewToWorld);
-    float3 centerNormal = centerNR.xyz;
-    float centerRoughness = centerNR.w;
     float3 centerWorldPos = RelaxGetCurrentWorldPosFromPixelPos(pixelPos, centerViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
     // Kernel rotation - use Bayer4x4 for FRAME mode
@@ -127,13 +126,15 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
 
             int2 samplePos = int2(samplePosF);
             int2 sampleFullPos = CheckerboardShiftFull(samplePos, rc.gDiffCheckerboard, uint(i), rc.gFrameIndex, int(rc.gRectSize.x));
-            float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+            float3 sampleNormal;
+            float sampleRoughness;
+            float sampleViewZ;
+            RelaxLoadGuide(pc.guideIndex, sampleFullPos, sampleNormal, sampleRoughness, sampleViewZ);
             if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange))
             {
                 continue;
             }
 
-            float3 sampleNormal = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(sampleFullPos, 0)), viewToWorld).xyz;
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(sampleFullPos, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
             float w = RelaxGetPlaneDistanceWeight(centerWorldPos, centerNormal, planeDistanceCenterZ, sampleWorldPos, rc.gDepthThreshold);
@@ -210,17 +211,19 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
 
             int2 samplePos = int2(samplePosF);
             int2 sampleFullPos = CheckerboardShiftFull(samplePos, rc.gSpecCheckerboard, uint(i), rc.gFrameIndex, int(rc.gRectSize.x));
-            float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+            float3 sampleNormal;
+            float sampleRoughness;
+            float sampleViewZ;
+            RelaxLoadGuide(pc.guideIndex, sampleFullPos, sampleNormal, sampleRoughness, sampleViewZ);
             if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange))
             {
                 continue;
             }
 
-            float4 sampleNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(sampleFullPos, 0)), viewToWorld);
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(sampleFullPos, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
-            float w = RelaxComputeWeight(sampleNR.w, roughnessWeightParams.x, roughnessWeightParams.y);
-            float normalAngle = MLAcosApproxPositive(dot(centerNormal, sampleNR.xyz));
+            float w = RelaxComputeWeight(sampleRoughness, roughnessWeightParams.x, roughnessWeightParams.y);
+            float normalAngle = MLAcosApproxPositive(dot(centerNormal, sampleNormal));
             w *= RelaxComputeWeight(normalAngle, normalWeightParam, 0.0);
             w *= RelaxGetPlaneDistanceWeight(centerWorldPos, centerNormal, planeDistanceCenterZ, sampleWorldPos, rc.gDepthThreshold);
 

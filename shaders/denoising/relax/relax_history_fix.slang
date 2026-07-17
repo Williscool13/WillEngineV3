@@ -21,30 +21,28 @@ float GetDiffuseNormalWeight(float3 centerNormal, float3 pointNormal, float powe
 void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos : SV_DispatchThreadID)
 {
     RelaxDiffuseSpecularConstants* rc = pc.constants;
-    float3x3 viewToWorld = (float3x3)rc.gViewToWorld;
 
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
         return;
 
-    int2 fullPixel = pixelPos;
-    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
-    float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
-
-    if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
-        return;
-
     // NRD topology: the outputs are the RESPONSIVE (fast) textures, written in place ONLY at short-history
     // pixels; elsewhere they keep TA's responsive value (early-out without writing, like NRD RELAX_HistoryFix).
     // History clamping then promotes the fixed responsive value into the slow output at short-history pixels.
+    float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
     if (historyLength > rc.gHistoryFixFrameNum || rc.gHistoryFixFrameNum == 1.0)
     {
         return;
     }
 
-    float4 centerNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(fullPixel, 0)), viewToWorld);
-    float3 centerNormal = centerNR.rgb;
-    float centerRoughness = centerNR.a;
+    int2 fullPixel = pixelPos;
+    float3 centerNormal;
+    float centerRoughness;
+    float centerViewZ;
+    RelaxLoadGuide(pc.guideIndex, fullPixel, centerNormal, centerRoughness, centerViewZ);
+    if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
+        return;
+
     float3 centerWorldPos = RelaxGetCurrentWorldPosFromPixelPos(pixelPos, centerViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
     float3 centerV = -normalize(centerWorldPos);
     float depthThreshold = rc.gDepthThreshold * (rc.gOrthoMode == 0 ? centerViewZ : 1.0);
@@ -75,8 +73,10 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
             samplePosInt = int2(uv * float2(rc.gRectSize));
             int2 sampleFullPos = samplePosInt;
 
-            float3 sampleNormal = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(sampleFullPos, 0)), viewToWorld).rgb;
-            float sampleViewZ = RelaxLoadViewZ(pc.viewZIndex, sampleFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+            float3 sampleNormal;
+            float sampleRoughness;
+            float sampleViewZ;
+            RelaxLoadGuide(pc.guideIndex, sampleFullPos, sampleNormal, sampleRoughness, sampleViewZ);
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(samplePosInt, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
             float geometryW = RelaxGetPlaneDistanceWeightAtrous(centerWorldPos, centerNormal, sampleWorldPos, depthThreshold);

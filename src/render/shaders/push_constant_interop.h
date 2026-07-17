@@ -1431,8 +1431,7 @@ SHADER_PUBLIC struct RelaxPrepassPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
     SHADER_PUBLIC uint32_t tilesIndex;
-    SHADER_PUBLIC uint32_t viewZIndex;
-    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t guideIndex;
     SHADER_PUBLIC uint32_t specInputIndex;
     SHADER_PUBLIC uint32_t diffInputIndex;
     SHADER_PUBLIC uint32_t specOutIndex;
@@ -1470,8 +1469,7 @@ SHADER_PUBLIC struct RelaxHistoryFixPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
     SHADER_PUBLIC uint32_t tilesIndex;
-    SHADER_PUBLIC uint32_t normalRoughnessIndex;
-    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t guideIndex;
     SHADER_PUBLIC uint32_t historyLengthIndex;
     SHADER_PUBLIC uint32_t specIndex;
     SHADER_PUBLIC uint32_t diffIndex;

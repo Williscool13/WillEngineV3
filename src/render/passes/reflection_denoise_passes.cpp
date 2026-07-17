@@ -238,17 +238,15 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         auto& pass = graph.AddPass(SID("[Reflection ReLAX] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
-        pass.ReadSampledImage(depth);
-        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(SID("refl_relax_guide"));
         pass.ReadSampledImage(specInput);
         pass.WriteStorageImage(SID("refl_relax_spec_prepass"));
         pass.WriteStorageImage(SID("refl_relax_diff_prepass"));
-        pass.Execute([pipelineManager, depth, gbufferOne, specInput, diffInput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, specInput, diffInput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxPrepassPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("refl_relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_tiles")),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_guide")),
                 .specInputIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
                 .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("refl_relax_spec_prepass")),
@@ -369,19 +367,17 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         auto& pass = graph.AddPass(SID("[Reflection ReLAX] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
-        pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(SID("refl_relax_guide"));
         pass.ReadSampledImage(SID("refl_relax_history_length"));
         pass.ReadSampledImage(SID("refl_relax_spec_illum"));
         pass.ReadSampledImage(SID("refl_relax_diff_illum"));
         pass.ReadWriteImage(SID("refl_relax_spec_fast"));
         pass.ReadWriteImage(SID("refl_relax_diff_fast"));
-        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxHistoryFixPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("refl_relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_tiles")),
-                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_guide")),
                 .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_history_length")),
                 .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_spec_illum")),
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_diff_illum")),
