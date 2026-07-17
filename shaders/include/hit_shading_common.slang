@@ -19,6 +19,43 @@ import world_cache_interop;
 // Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
 
+// Local-light NEE occlusion in cache-cell + probe-hit shading
+#define GI_NEE_LOCAL_SHADOW_RAYS 0
+
+#if GI_NEE_LOCAL_SHADOW_RAYS
+/** One jittered occlusion ray toward the light's source extent; the cell/probe EMA turns the per-frame 0/1 into penumbra. */
+static float LocalLightShadowVisibility(RaytracingAccelerationStructure tlas, float3 worldPosition, float3 N, LightInfo light, inout uint rng)
+{
+    float u1 = HashStep(rng);
+    float u2 = HashStep(rng);
+    float3 target = light.position.xyz;
+    if (light.type == LIGHT_TYPE_AREA) {
+        target += light.right.xyz * light.right.w * (2.0 * u1 - 1.0) + light.up.xyz * light.up.w * (2.0 * u2 - 1.0);
+    } else {
+        float z = 1.0 - 2.0 * u1;
+        float s = sqrt(max(1.0 - z * z, 0.0));
+        float phi = 6.28318530718 * u2;
+        target += light.right.w * float3(s * cos(phi), s * sin(phi), z);
+    }
+    float3 toLight = target - worldPosition;
+    float lightDist = length(toLight);
+    if (lightDist <= 0.1) {
+        return 1.0;
+    }
+
+    RayDesc shadowRay;
+    shadowRay.Origin = worldPosition + N * 0.05;
+    shadowRay.Direction = toLight / lightDist;
+    shadowRay.TMin = 0.001;
+    shadowRay.TMax = max(lightDist - 0.05, 0.001);
+
+    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+    shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_DDGI, shadowRay);
+    shadow.Proceed();
+    return shadow.CommittedStatus() == COMMITTED_NOTHING ? 1.0 : 0.0;
+}
+#endif
+
 /** Geometry-only normal decode, no material/lighting work. Used to key the world cache before deciding whether a full shade is even needed. */
 public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
 {
@@ -33,7 +70,7 @@ public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, 
     return normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
 }
 
-/** Fallback for DDGI probe rays when the world cache has no slot for the hit: sun (shadow-ray tested) + emissive + the in-cell clustered local lights (deterministic, unshadowed, matching the world-cache shade the value stands in for) + IBL/DDGI feedback. */
+/** Fallback for DDGI probe rays when the world cache has no slot for the hit: sun (shadow-ray tested) + emissive + the in-cell clustered local lights (occlusion per GI_NEE_LOCAL_SHADOW_RAYS, matching the world-cache shade the value stands in for) + IBL/DDGI feedback. */
 public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
@@ -98,8 +135,16 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, material.metalRoughFactors.x);
         for (uint j = 0; j < gridEntry.y; j++) {
             uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
-            PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], worldGridLights.view);
-            radiance += ShadePunctualDiffuse(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
+            LightInfo lightInfo = pc.lightData->lights[lightIndex];
+            PunctualLight punctual = DegenerateLight(lightInfo, worldGridLights.view);
+            float3 contribution = ShadePunctualDiffuse(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
+#if GI_NEE_LOCAL_SHADOW_RAYS
+            if (any(contribution > float3(0.0))) {
+                uint rng = rngSeed ^ ((lightIndex + 1u) * 0x85EBCA6Bu);
+                contribution *= LocalLightShadowVisibility(rdgAccelerationStructures[pc.tlasIndex], worldPosition, N, lightInfo, rng);
+            }
+#endif
+            radiance += contribution;
         }
     }
 
@@ -290,8 +335,16 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
         float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, material.metalRoughFactors.x);
         for (uint j = 0; j < gridEntry.y; j++) {
             uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
-            PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], worldGridLights.view);
-            radiance += ShadePunctualDiffuse(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
+            LightInfo lightInfo = pc.lightData->lights[lightIndex];
+            PunctualLight punctual = DegenerateLight(lightInfo, worldGridLights.view);
+            float3 contribution = ShadePunctualDiffuse(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
+#if GI_NEE_LOCAL_SHADOW_RAYS
+            if (any(contribution > float3(0.0))) {
+                uint rng = rngSeed ^ ((lightIndex + 1u) * 0x85EBCA6Bu);
+                contribution *= LocalLightShadowVisibility(rdgAccelerationStructures[pc.tlasIndex], worldPosition, N, lightInfo, rng);
+            }
+#endif
+            radiance += contribution;
         }
     }
 

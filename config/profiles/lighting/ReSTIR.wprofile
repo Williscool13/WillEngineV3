@@ -155,7 +155,7 @@
     },
     "regirWClamp": 0.0,
     "relax": {
-      "atrousIterations": 5,
+      "atrousIterations": 4,
       "denoisingRange": 2000.0,
       "depthThreshold": 0.003000000026077032,
       "diffBlurRadius": 30.0,

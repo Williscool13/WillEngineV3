@@ -16,6 +16,8 @@ import gi_gather_common;
 
 import bindless_declarations;
 
+#define GI_SKY_SPECULAR_OCCLUSION 1
+
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
@@ -128,6 +130,11 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
         float3 reflectionSpecular = float3(0.0);
         if (pc.skyboxIndex >= 0) {
             reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl) * pc.iblIntensity;
+#if GI_SKY_SPECULAR_OCCLUSION
+            // The diffuse GI already resolves local sky reachability, reuse for specular
+            float3 skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+            reflectionSpecular *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
+#endif
         }
         ibl = (kD_ibl * indirectDiffuse * li.albedo.xyz + reflectionSpecular) * gtao;
     }

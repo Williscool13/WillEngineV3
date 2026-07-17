@@ -621,7 +621,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             else {
                 uint32_t giGatherMode = 0u;
                 const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.giGatherDebugMode);
-                if (frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || giGatherDebug != 0u)) {
+                if (frameBuffer.ddgi.bEnabled && ((frameBuffer.ddgi.bFinalGather && bDDGIApply) || giGatherDebug != 0u)) {
                     const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bGatherSkipRay, giGatherDebug != 0u);
                     if (giGather.bValid) {
                         giGatherMode = giGatherDebug != 0u ? giGatherDebug + 1u : 1u;

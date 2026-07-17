@@ -15,6 +15,8 @@ static const float BILATERAL_MATERIAL_SIGMA = 0.1;
 static const float BILATERAL_SPATIAL_SIGMA = 1.0;
 static const float BILATERAL_MIN_WEIGHT = 1e-6;
 
+#define GI_SKY_SPECULAR_OCCLUSION 1
+
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : SV_DispatchThreadID)
@@ -82,6 +84,11 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
         float3 reflectionSpecular = float3(0.0);
         if (pc.skyboxIndex >= 0) {
             reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl) * pc.iblIntensity;
+#if GI_SKY_SPECULAR_OCCLUSION
+            // The diffuse GI already resolves local sky reachability, reuse for specular
+            float3 skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+            reflectionSpecular *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
+#endif
         }
 
         if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
