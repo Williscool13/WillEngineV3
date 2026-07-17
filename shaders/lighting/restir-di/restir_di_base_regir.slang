@@ -135,9 +135,13 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                 LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
                 float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
                 if (pSelect > 0.0) {
-                    float uU = HashStep(h);
-                    float uV = HashStep(h);
-                    float3 Xi = SampleLightSurface(vs, viewPosition, uU, uV);
+                    float2 xiLight;
+                    if (i == 0) {
+                        xiLight = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 3u);
+                    } else {
+                        xiLight = float2(HashStep(h), HashStep(h));
+                    }
+                    float3 Xi = SampleLightSurface(vs, viewPosition, xiLight.x, xiLight.y);
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                     float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
                     float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
@@ -160,12 +164,17 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
         }
 
         for (int i = 0; i < mBrdf; i++) {
-            float uXi0 = HashStep(h);
-            float uXi1 = HashStep(h);
+            // The STBN sequence yields one well-placed pair per pixel per frame; extra rays stay white.
+            float2 xiBrdf;
+            if (i == 0) {
+                xiBrdf = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 2u);
+            } else {
+                xiBrdf = float2(HashStep(h), HashStep(h));
+            }
             float uSelect = HashStep(h);
 
             float p_brdf_sample;
-            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, p_brdf_sample);
+            float3 brdfL = ImportanceSampleGGX(xiBrdf, N, V, roughness, p_brdf_sample);
 
             float p_hat_Xi = 0.0;
             int bestLightIdx = -1;
@@ -279,10 +288,9 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
 
     if (pc.lightData->directionalLight.directionIntensity.w > 0.0) {
         DirectionalLightData sun = pc.lightData->directionalLight;
-        float su1 = HashStep(h);
-        float su2 = HashStep(h);
+        float2 xiSun = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 4u);
         float p_cone;
-        float3 sunDirWorld = SampleSunConeDirection(SunDirectionWorld(sun), sun.angularRadius, su1, su2, p_cone);
+        float3 sunDirWorld = SampleSunConeDirection(SunDirectionWorld(sun), sun.angularRadius, xiSun.x, xiSun.y, p_cone);
         float3 sunDirView = normalize(mul((float3x3)scene.view, sunDirWorld));
         float p_hat_sun = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, SunRadiance(sun));
         float w_sun = (p_cone > 0.0) ? (p_hat_sun / p_cone) : 0.0;

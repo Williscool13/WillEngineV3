@@ -95,10 +95,8 @@ void ComputeRTSunShadow(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPus
         return;
     }
 
-    uint rng = SeedRng(pixel, pc.frameIndex, 0x515A4Bu);
-    float u1 = HashStep(rng);
-    float u2 = HashStep(rng);
-    float3 rayDir = SampleSunConeDirection(toLight, pc.lightData->directionalLight.angularRadius, u1, u2);
+    float2 xi = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 1u);
+    float3 rayDir = SampleSunConeDirection(toLight, pc.lightData->directionalLight.angularRadius, xi.x, xi.y);
 
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
