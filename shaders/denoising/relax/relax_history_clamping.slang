@@ -18,28 +18,38 @@ static const int HC_GROUP_Y = 8;
 static const int HC_BUFFER_X = HC_GROUP_X + HC_BORDER * 2;
 static const int HC_BUFFER_Y = HC_GROUP_Y + HC_BORDER * 2;
 
-groupshared float4 s_SpecResponsiveYCoCg[HC_BUFFER_Y][HC_BUFFER_X];
-groupshared float4 s_SpecNoisy_IsValid[HC_BUFFER_Y][HC_BUFFER_X];
-groupshared float4 s_DiffResponsiveYCoCg[HC_BUFFER_Y][HC_BUFFER_X];
-groupshared float4 s_DiffNoisy_IsValid[HC_BUFFER_Y][HC_BUFFER_X];
+// f16-packed (4 halves per uint2) to halve LDS and lift occupancy; the signals are RGBA16F-resident anyway.
+groupshared uint2 s_SpecResponsiveYCoCg[HC_BUFFER_Y][HC_BUFFER_X];
+groupshared uint2 s_SpecNoisy_IsValid[HC_BUFFER_Y][HC_BUFFER_X];
+groupshared uint2 s_DiffResponsiveYCoCg[HC_BUFFER_Y][HC_BUFFER_X];
+groupshared uint2 s_DiffNoisy_IsValid[HC_BUFFER_Y][HC_BUFFER_X];
+
+uint2 HCPack(float4 v)
+{
+    return uint2(f32tof16(v.x) | (f32tof16(v.y) << 16), f32tof16(v.z) | (f32tof16(v.w) << 16));
+}
+
+float4 HCUnpack(uint2 p)
+{
+    return float4(f16tof32(p.x & 0xFFFFu), f16tof32(p.x >> 16), f16tof32(p.y & 0xFFFFu), f16tof32(p.y >> 16));
+}
 
 void HCPreload(uint2 sharedPos, int2 globalPos, RelaxDiffuseSpecularConstants* rc,
-    uint viewZIndex, uint normalRoughnessIndex, uint specFastIndex, uint diffFastIndex, uint specNoisyIndex, uint diffNoisyIndex)
+    uint viewZIndex, uint specFastIndex, uint diffFastIndex, uint specNoisyIndex, uint diffNoisyIndex)
 {
     globalPos = clamp(globalPos, int2(0, 0), rc.gRectSize - 1);
     float viewZ = rdgTexturesFloat[viewZIndex].Load(int3(globalPos, 0)).r;
-    viewZ = ScreenToViewSpaceDepth(viewZ, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     float isValid = float(RelaxIsInDenoisingRange(viewZ, rc.gDenoisingRange));
 
     float4 specFast = rdgTexturesFloat4[specFastIndex].Load(int3(globalPos, 0));
-    s_SpecResponsiveYCoCg[sharedPos.y][sharedPos.x] = float4(MLRgbToYCoCg(specFast.rgb), specFast.a);
+    s_SpecResponsiveYCoCg[sharedPos.y][sharedPos.x] = HCPack(float4(MLRgbToYCoCg(specFast.rgb), specFast.a));
     float3 specNoisy = rdgTexturesFloat4[specNoisyIndex].Load(int3(globalPos, 0)).xyz;
-    s_SpecNoisy_IsValid[sharedPos.y][sharedPos.x] = float4(specNoisy, isValid);
+    s_SpecNoisy_IsValid[sharedPos.y][sharedPos.x] = HCPack(float4(specNoisy, isValid));
 
     float4 diffFast = rdgTexturesFloat4[diffFastIndex].Load(int3(globalPos, 0));
-    s_DiffResponsiveYCoCg[sharedPos.y][sharedPos.x] = float4(MLRgbToYCoCg(diffFast.rgb), diffFast.a);
+    s_DiffResponsiveYCoCg[sharedPos.y][sharedPos.x] = HCPack(float4(MLRgbToYCoCg(diffFast.rgb), diffFast.a));
     float3 diffNoisy = rdgTexturesFloat4[diffNoisyIndex].Load(int3(globalPos, 0)).xyz;
-    s_DiffNoisy_IsValid[sharedPos.y][sharedPos.x] = float4(diffNoisy, isValid);
+    s_DiffNoisy_IsValid[sharedPos.y][sharedPos.x] = HCPack(float4(diffNoisy, isValid));
 }
 
 [shader("compute")]
@@ -58,7 +68,7 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
             uint virtualIndex = threadIndex + stage * HC_GROUP_X * HC_GROUP_Y;
             uint2 newId = uint2(virtualIndex % HC_BUFFER_X, virtualIndex / HC_BUFFER_X);
             if (stage == 0 || virtualIndex < HC_BUFFER_X * HC_BUFFER_Y)
-                HCPreload(newId, groupBase + int2(newId), rc, pc.viewZIndex, pc.normalRoughnessIndex, pc.specFastIndex, pc.diffFastIndex, pc.specNoisyIndex, pc.diffNoisyIndex);
+                HCPreload(newId, groupBase + int2(newId), rc, pc.viewZIndex, pc.specFastIndex, pc.diffFastIndex, pc.specNoisyIndex, pc.diffNoisyIndex);
         }
     }
     GroupMemoryBarrierWithGroupSync();
@@ -67,7 +77,8 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
         return;
 
     uint2 sharedCenter = uint2(threadPos) + HC_BORDER;
-    if (s_SpecNoisy_IsValid[sharedCenter.y][sharedCenter.x].w == 0.0)
+    float4 specNoisyCenter = HCUnpack(s_SpecNoisy_IsValid[sharedCenter.y][sharedCenter.x]);
+    if (specNoisyCenter.w == 0.0)
         return;
 
     float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
@@ -86,22 +97,23 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
         for (int dy = -2; dy <= 2; dy++)
         {
             uint2 si = sharedCenter + uint2(dx, dy);
-            float w = s_SpecNoisy_IsValid[si.y][si.x].w;
+            float4 specNoisyV = HCUnpack(s_SpecNoisy_IsValid[si.y][si.x]);
+            float w = specNoisyV.w;
             if (w != 0.0)
             {
-                float3 specYCoCg = s_SpecResponsiveYCoCg[si.y][si.x].rgb;
+                float3 specYCoCg = HCUnpack(s_SpecResponsiveYCoCg[si.y][si.x]).rgb;
                 specResponsiveM1 += specYCoCg;
                 specResponsiveM2 += specYCoCg * specYCoCg;
 
-                float3 specNoisy = s_SpecNoisy_IsValid[si.y][si.x].rgb;
+                float3 specNoisy = specNoisyV.rgb;
                 specNoisyM1 += specNoisy;
                 specNoisyM2 += MLLuminance(specNoisy) * MLLuminance(specNoisy);
 
-                float3 diffYCoCg = s_DiffResponsiveYCoCg[si.y][si.x].rgb;
+                float3 diffYCoCg = HCUnpack(s_DiffResponsiveYCoCg[si.y][si.x]).rgb;
                 diffResponsiveM1 += diffYCoCg;
                 diffResponsiveM2 += diffYCoCg * diffYCoCg;
 
-                float3 diffNoisy = s_DiffNoisy_IsValid[si.y][si.x].rgb;
+                float3 diffNoisy = HCUnpack(s_DiffNoisy_IsValid[si.y][si.x]).rgb;
                 diffNoisyM1 += diffNoisy;
                 diffNoisyM2 += MLLuminance(diffNoisy) * MLLuminance(diffNoisy);
 
@@ -124,8 +136,8 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
     float3 diffColorMax = diffResponsiveM1 + rc.gFastHistoryClampingSigmaScale * diffResponsiveSigma;
 
     // Expand box with center pixel
-    float4 specCenterYCoCg = s_SpecResponsiveYCoCg[sharedCenter.y][sharedCenter.x];
-    float4 diffCenterYCoCg = s_DiffResponsiveYCoCg[sharedCenter.y][sharedCenter.x];
+    float4 specCenterYCoCg = HCUnpack(s_SpecResponsiveYCoCg[sharedCenter.y][sharedCenter.x]);
+    float4 diffCenterYCoCg = HCUnpack(s_DiffResponsiveYCoCg[sharedCenter.y][sharedCenter.x]);
     specColorMin = min(specColorMin, specCenterYCoCg.rgb);
     specColorMax = max(specColorMax, specCenterYCoCg.rgb);
     diffColorMin = min(diffColorMin, diffCenterYCoCg.rgb);
@@ -204,7 +216,7 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
     float noisySpecSpatialSigma = rc.gHistoryResetSpatialSigmaScale * specResponsiveSigma.x;
     float specResetAmount = saturate(0.5 * rc.gHistoryResetAmount * max(0, abs(specL - specNoisyL) - noisySpecSpatialSigma - noisySpecTemporalSigma)
         / (1e-6 + max(specL, specNoisyL) + noisySpecSpatialSigma + noisySpecTemporalSigma));
-    float3 specNoisy = s_SpecNoisy_IsValid[sharedCenter.y][sharedCenter.x].rgb;
+    float3 specNoisy = specNoisyCenter.rgb;
     outSpec.rgb = lerp(outSpec.rgb, specNoisy, specResetAmount);
     outSpecResponsive.rgb = lerp(outSpecResponsive.rgb, specNoisy, specResetAmount);
 
@@ -214,7 +226,7 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
     float noisyDiffSpatialSigma = rc.gHistoryResetSpatialSigmaScale * diffResponsiveSigma.x;
     float diffResetAmount = saturate(rc.gHistoryResetAmount * max(0, abs(diffL - diffNoisyL) - noisyDiffSpatialSigma - noisyDiffTemporalSigma)
         / (1e-6 + max(diffL, diffNoisyL) + noisyDiffSpatialSigma + noisyDiffTemporalSigma));
-    float3 diffNoisy = s_DiffNoisy_IsValid[sharedCenter.y][sharedCenter.x].rgb;
+    float3 diffNoisy = HCUnpack(s_DiffNoisy_IsValid[sharedCenter.y][sharedCenter.x]).rgb;
     outDiff.rgb = lerp(outDiff.rgb, diffNoisy, diffResetAmount);
     outDiffResponsive.rgb = lerp(outDiffResponsive.rgb, diffNoisy, diffResetAmount);
 

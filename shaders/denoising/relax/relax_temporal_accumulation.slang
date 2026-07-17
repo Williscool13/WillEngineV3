@@ -20,11 +20,11 @@ static const int TA_BUFFER_Y = TA_GROUP_Y + TA_BORDER * 2;
 
 groupshared float4 sharedNormalSpecHitT[TA_BUFFER_Y][TA_BUFFER_X];
 
-void TAPreload(uint2 sharedPos, int2 globalPos, int2 rectSize, uint normalRoughnessIndex, uint specInputIndex, float3x3 viewToWorld, uint frameIndex, uint viewZIndex, float2 invFullExtent, float depthLinearizeMult, float depthLinearizeAdd)
+void TAPreload(uint2 sharedPos, int2 globalPos, int2 rectSize, uint guideIndex, uint specInputIndex)
 {
     globalPos = clamp(globalPos, int2(0, 0), rectSize - 1);
-    uint4 gt1 = rdgTexturesUInt4[normalRoughnessIndex].Load(int3(globalPos, 0));
-    float4 normalSpecHitT = float4(RelaxUnpackNormalAndRoughness(gt1, viewToWorld).xyz, 0);
+    uint packedNR = rdgTexturesUInt2[guideIndex].Load(int3(globalPos, 0)).x;
+    float4 normalSpecHitT = float4(RelaxUnpackGuideNormalRoughness(packedNR).xyz, 0);
     float4 specIllum = rdgTexturesFloat4[specInputIndex].Load(int3(globalPos, 0));
     normalSpecHitT.a = specIllum.a;
     sharedNormalSpecHitT[sharedPos.y][sharedPos.x] = normalSpecHitT;
@@ -205,7 +205,6 @@ float LoadVirtualMotionBasedPrevData(
 void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant pc, int2 threadPos : SV_GroupThreadID, uint2 groupPos : SV_GroupID, int2 pixelPos : SV_DispatchThreadID, uint threadIndex : SV_GroupIndex)
 {
     RelaxDiffuseSpecularConstants* rc = pc.constants;
-    float3x3 viewToWorld = (float3x3)rc.gViewToWorld;
 
     // Preload
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
@@ -218,7 +217,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
             uint virtualIndex = threadIndex + stage * TA_GROUP_X * TA_GROUP_Y;
             uint2 newId = uint2(virtualIndex % TA_BUFFER_X, virtualIndex / TA_BUFFER_X);
             if (stage == 0 || virtualIndex < TA_BUFFER_X * TA_BUFFER_Y)
-                TAPreload(newId, groupBase + int2(newId), rc.gRectSize, pc.normalRoughnessIndex, pc.specInputIndex, viewToWorld, rc.gFrameIndex, pc.viewZIndex, rc.gRectSizeInv, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+                TAPreload(newId, groupBase + int2(newId), rc.gRectSize, pc.guideIndex, pc.specInputIndex);
         }
     }
     GroupMemoryBarrierWithGroupSync();
@@ -227,7 +226,10 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
         return;
 
     int2 fullPixel = pixelPos;
-    float currentLinearZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+    float3 currentNormal;
+    float currentRoughness;
+    float currentLinearZ;
+    RelaxLoadGuide(pc.guideIndex, fullPixel, currentNormal, currentRoughness, currentLinearZ);
     if (!RelaxIsInDenoisingRange(currentLinearZ, rc.gDenoisingRange))
         return;
 
@@ -239,10 +241,6 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     }
 
     uint2 sharedMemoryIndex = uint2(threadPos) + TA_BORDER;
-
-    float4 currentNR = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(fullPixel, 0)), viewToWorld);
-    float3 currentNormal = currentNR.xyz;
-    float currentRoughness = currentNR.w;
 
     float3 currentWorldPos = RelaxGetCurrentWorldPosFromPixelPos(pixelPos, currentLinearZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
     float3 currentViewVec = (rc.gOrthoMode == 0) ? currentWorldPos : currentLinearZ * normalize(rc.gFrustumForward.xyz);
@@ -415,9 +413,11 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
         {
             int2 highPos = int2(motionUvHigh * float2(rc.gRectSize));
             int2 highFullPos = highPos;
-            float zHigh = RelaxLoadViewZ(pc.viewZIndex, highFullPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+            float3 nHigh;
+            float rHigh;
+            float zHigh;
+            RelaxLoadGuide(pc.guideIndex, highFullPos, nHigh, rHigh, zHigh);
             float3 xHigh = RelaxGetCurrentWorldPosFromClipXY(motionUvHigh * 2.0 - 1.0, zHigh, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
-            float3 nHigh = RelaxUnpackNormalAndRoughness(rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(highFullPos, 0)), viewToWorld).xyz;
 
             float pixSz = RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, 1.0, currentLinearZ);
             float fSize = min(float(rc.gRectSize.x), float(rc.gRectSize.y)) * pixSz;

@@ -291,7 +291,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
         pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(SID("refl_relax_guide"));
         pass.ReadSampledImage(specIn);
         pass.ReadSampledImage(diffIn);
         if (graph.HasTexture(SID("refl_relax_spec_illum_history"))) { pass.ReadSampledImage(SID("refl_relax_spec_illum_history")); }
@@ -316,7 +316,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(SID("refl_relax_spec_reproj_confidence"));
         pass.WriteStorageImage(SID("refl_relax_prev_nr"));
 
-        pass.Execute([pipelineManager, gbufferOne, depth, specIn, diffIn, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, gbufferOne, specIn, diffIn, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const bool hasHistory = graph.HasTexture(SID("refl_relax_spec_illum_history"));
             const StringID fallbackSpec = hasHistory ? SID("refl_relax_spec_illum_history") : specIn;
             const StringID fallbackDiff = hasHistory ? SID("refl_relax_diff_illum_history") : diffIn;
@@ -331,7 +331,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
                 .constants = graph.GetBufferAddress(SID("refl_relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_tiles")),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_guide")),
                 .prevNormalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(fallbackPrevNR),
                 .prevViewZIndex = graph.GetSampledImageViewDescriptorIndex(fallbackViewZ),
                 .prevHistoryLengthIndex = graph.GetSampledImageViewDescriptorIndex(fallbackHistLen),
@@ -406,8 +406,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         auto& pass = graph.AddPass(SID("[Reflection ReLAX] History Clamping"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
-        pass.ReadSampledImage(depth);
-        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(SID("refl_relax_viewz"));
         pass.ReadWriteImage(SID("refl_relax_history_length"));
         pass.ReadSampledImage(SID("refl_relax_spec_fast"));
         pass.ReadSampledImage(SID("refl_relax_diff_fast"));
@@ -424,12 +423,11 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(diffNoisy);
         pass.WriteStorageImage(SID("refl_relax_spec_fast_hist"));
         pass.WriteStorageImage(SID("refl_relax_diff_fast_hist"));
-        pass.Execute([pipelineManager, depth, gbufferOne, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxHistoryClampingPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("refl_relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_tiles")),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_viewz")),
                 .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_history_length")),
                 .specFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_spec_fast")),
                 .diffFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_diff_fast")),
