@@ -85,6 +85,8 @@ public static const float DDGI_PROBE_DEAD_BACKFACE_FRACTION = 0.35;
 // Non-escape relocation moves below this fraction of spacing are skipped (rotation-noise jitter, not convergence); matches the temporal-restart threshold so every applied move restarts the blends.
 public static const float DDGI_RELOCATE_DEADBAND = 0.05;
 
+static const float DDGI_VISIBILITY_VARIANCE_CAP = 0.3;
+
 /**
  * Irradiance lookup at a surface point: the 8 surrounding probes, weighted by trilinear position, soft backface (wrap lighting), and Chebyshev visibility from the distance atlas. cameraDirection points from the viewer toward the surface (bias direction).
  * Atlas args are rdgTexturesFloat4/rdgTexturesFloat2 descriptor indices (resource-typed params through module imports crash slangc's spirv emit).
@@ -133,7 +135,8 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         float distanceToProbe = length(biasedToProbe);
         float2 moments = rdgTexturesFloat2[visibilityAtlasIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, -biasedToProbe / max(distanceToProbe, 1e-6), volume, DDGI_VISIBILITY_TILE, DDGI_VISIBILITY_INTERIOR), 0);
         if (distanceToProbe > moments.x) {
-            float variance = abs(moments.x * moments.x - moments.y);
+            float cappedStd = DDGI_VISIBILITY_VARIANCE_CAP * moments.x;
+            float variance = min(abs(moments.x * moments.x - moments.y), cappedStd * cappedStd);
             float d = distanceToProbe - moments.x;
             float chebyshev = variance / (variance + d * d);
             weight *= max(chebyshev * chebyshev * chebyshev, 0.05);

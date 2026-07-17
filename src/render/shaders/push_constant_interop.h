@@ -654,6 +654,9 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t depthHistoryIndex;
     SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
     SHADER_PUBLIC uint32_t bSkipRay;
+    SHADER_PUBLIC SHADER_PTR(float) exposureLuminance;
+    SHADER_PUBLIC float exposureTarget;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -675,6 +678,9 @@ SHADER_PUBLIC struct GIDenoisePushConstant
     SHADER_PUBLIC uint32_t direction;
     SHADER_PUBLIC uint32_t stepSize;
     SHADER_PUBLIC uint32_t aoIndex;
+    SHADER_PUBLIC SHADER_PTR(float) exposureLuminance;
+    SHADER_PUBLIC float exposureTarget;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct GIUpscalePushConstant
@@ -702,6 +708,10 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t bCascadesValid;
     SHADER_PUBLIC uint32_t aoIndex;
     SHADER_PUBLIC uint32_t bentNormalIndex;
+    SHADER_PUBLIC uint32_t pad1;
+    SHADER_PUBLIC SHADER_PTR(float) exposureLuminance;
+    SHADER_PUBLIC float exposureTarget;
+    SHADER_PUBLIC uint32_t pad2;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -784,6 +794,10 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC float invalidHistoryBlend;
     SHADER_PUBLIC float lumaBoostCap;
     SHADER_PUBLIC float grazingTurnoverStrength;
+    SHADER_PUBLIC float pad0;
+    SHADER_PUBLIC SHADER_PTR(float) exposureLuminance;
+    SHADER_PUBLIC float exposureTarget;
+    SHADER_PUBLIC float pad1;
 };
 
 // Donut-ported native-res TAA resolve (shaders/donut_taa.slang); fields match the shader.

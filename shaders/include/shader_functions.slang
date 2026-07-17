@@ -315,6 +315,11 @@ float Luma(float3 c)
     return dot(c, float3(0.2126, 0.7152, 0.0722));
 }
 
+float ExposureNoiseScale(float adaptedLuminance, float targetLuminance)
+{
+    return clamp(targetLuminance / max(adaptedLuminance, 1e-3), 0.25, 32.0);
+}
+
 float MSDFScreenPxRange(Texture2D tex, float2 uv, float pxRange)
 {
     uint2 atlasSize;

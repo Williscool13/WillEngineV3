@@ -102,6 +102,11 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
         float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
         float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 
+        float maxRadiance = GI_GATHER_MAX_RADIANCE;
+        if (pc.exposureTarget > 0.0) {
+            maxRadiance = GI_GATHER_MAX_RADIANCE / ExposureNoiseScale(pc.exposureLuminance[0], pc.exposureTarget);
+        }
+
         if (pc.bSkipRay != 0u) {
             float3 radiance = float3(0.0);
             uint tier;
@@ -139,7 +144,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                 tier = GI_GATHER_TIER_PROBE;
             }
 
-            radiance = min(radiance, float3(GI_GATHER_MAX_RADIANCE));
+            radiance = min(radiance, float3(maxRadiance));
             shR = float4(radiance.r, 0.0, 0.0, 0.0);
             shG = float4(radiance.g, 0.0, 0.0, 0.0);
             shB = float4(radiance.b, 0.0, 0.0, 0.0);
@@ -251,7 +256,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
         radiance *= saturate(hitT / GI_GATHER_NEAR_FIELD_METERS);
 
         // Prescaled so eval at n is sh.x + dot(sh.yzw, n) = E/pi; the NoD clamp bounds the 1/pdf weight (eval amplification capped ~1.5x).
-        radiance = min(radiance, float3(GI_GATHER_MAX_RADIANCE));
+        radiance = min(radiance, float3(maxRadiance));
         float NoD = max(dot(worldN, direction), 0.25);
         float l0 = 0.25 / NoD;
         float3 l1 = direction * (0.5 / NoD);

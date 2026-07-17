@@ -286,8 +286,14 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
 
     const Core::TAAConfiguration& taaConfig = viewFamily.aaConfig.taa;
 
+    const bool bExposure = viewFamily.postProcessConfig.bExposureEnabled && graph.HasBuffer(SID("luminance_buffer"));
+    const float exposureTarget = bExposure ? viewFamily.postProcessConfig.exposureTargetLuminance : 0.0f;
+
     RenderPass& taaPass = graph.AddPass(SID("TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     taaPass.ReadBuffer(SID("scene_data"));
+    if (bExposure) {
+        taaPass.ReadBuffer(SID("luminance_buffer"));
+    }
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.depthCopy);
     taaPass.ReadSampledImage(SID("depth_history"));
@@ -298,7 +304,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     taaPass.WriteStorageImage(SID("taa_output"));
     taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
-            gbufferOne = targets.gbufferOne, pipelineSID, taaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            gbufferOne = targets.gbufferOne, pipelineSID, taaConfig, bExposure, exposureTarget](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             TemporalAntialiasingPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
@@ -317,6 +323,8 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                 .invalidHistoryBlend = taaConfig.invalidHistoryBlend,
                 .lumaBoostCap = taaConfig.lumaBoostCap,
                 .grazingTurnoverStrength = taaConfig.grazingTurnoverStrength,
+                .exposureLuminance = bExposure ? graph.GetBufferAddress(SID("luminance_buffer")) : 0,
+                .exposureTarget = exposureTarget,
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(pipelineSID);

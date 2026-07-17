@@ -29,14 +29,14 @@ groupshared uint gsPackedVelocity[APRON_DIM][APRON_DIM];
 groupshared float gsDepth[APRON_DIM][APRON_DIM];
 
 // Karis-style weighting: blending happens in luma-compressed space so a single HDR firefly cannot dominate the average. Strength 0 is an exact identity (disabled)
-float3 KarisTonemap(float3 ycocg)
+float3 KarisTonemap(float3 ycocg, float karisStrength)
 {
-    return ycocg / (1.0 + pc.karisStrength * max(ycocg.x, 0.0));
+    return ycocg / (1.0 + karisStrength * max(ycocg.x, 0.0));
 }
 
-float3 KarisInverse(float3 ycocg)
+float3 KarisInverse(float3 ycocg, float karisStrength)
 {
-    return ycocg / max(1.0 - pc.karisStrength * max(ycocg.x, 0.0), 1e-4);
+    return ycocg / max(1.0 - karisStrength * max(ycocg.x, 0.0), 1e-4);
 }
 
 // Clips history toward the box center instead of clamping per component; clamping moves colors to box corners and shifts hue
@@ -140,12 +140,15 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
     int2 renderSize = int2(pc.sceneData.mainRenderTargetSize);
     int2 groupOrigin = int2(groupID.xy) * TILE_DIM - 1;
 
+    float exposureScale = pc.exposureTarget > 0.0 ? ExposureNoiseScale(pc.exposureLuminance[0], pc.exposureTarget) : 1.0;
+    float karisStrength = pc.karisStrength * exposureScale;
+
     for (int i = int(groupIndex); i < APRON_TEXEL_COUNT; i += TILE_DIM * TILE_DIM) {
         int2 apronCoord = int2(i % APRON_DIM, i / APRON_DIM);
         int2 loadCoord = clamp(groupOrigin + apronCoord, int2(0), renderSize - 1);
         // Stop NaNs
         float3 sourceColor = SanitizeColor(rdgTexturesFloat4[pc.colorResolvedIndex].Load(int3(loadCoord, 0)).rgb);
-        gsColorYCoCg[apronCoord.y][apronCoord.x] = KarisTonemap(RGBToYCoCg(sourceColor));
+        gsColorYCoCg[apronCoord.y][apronCoord.x] = KarisTonemap(RGBToYCoCg(sourceColor), karisStrength);
         gsPackedVelocity[apronCoord.y][apronCoord.x] = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(loadCoord, 0)).g;
         gsDepth[apronCoord.y][apronCoord.x] = rdgTexturesFloat[pc.depthIndex].Load(int3(loadCoord, 0)).r;
     }
@@ -202,7 +205,7 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
 
     float3 historyYCoCg = float3(0.0);
     if (validHistory) {
-        historyYCoCg = KarisTonemap(SampleHistoryCatmullRom(historyUv));
+        historyYCoCg = KarisTonemap(SampleHistoryCatmullRom(historyUv), karisStrength);
         // Stop NaNs
         validHistory = IsFinite3(historyYCoCg);
     }
@@ -219,7 +222,7 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
         historyYCoCg = ClipToNeighborhood(historyYCoCg, minc, maxc);
 
         float alpha = lerp(pc.baseBlendAlpha, 1.0, disocclusion);
-        float lumaDiff = saturate(abs(currentYCoCg.x - historyYCoCg.x) / max(currentYCoCg.x, 0.2));
+        float lumaDiff = saturate(abs(currentYCoCg.x - historyYCoCg.x) / max(currentYCoCg.x, 0.2 / exposureScale));
         // Luma mismatch may only increase responsiveness; without the max an already-high alpha would be pulled back down toward the cap
         float boostedAlpha = max(alpha, min(alpha * 2.0, pc.lumaBoostCap));
         alpha = lerp(alpha, boostedAlpha, lumaDiff);
@@ -235,7 +238,7 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
         resultYCoCg = lerp(historyYCoCg, currentYCoCg, alpha);
     }
 
-    float4 result = float4(YCoCgToRGB(KarisInverse(resultYCoCg)), 1.0);
+    float4 result = float4(YCoCgToRGB(KarisInverse(resultYCoCg, karisStrength)), 1.0);
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = result;
     rdgStorageFloat4[pc.outputCopyIndex][threadID.xy] = result;
 }
