@@ -4,7 +4,9 @@ import bindless_declarations;
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeShadowsResolve(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    if (threadID.x >= pc.sceneData->mainRenderTargetSize.x || threadID.y >= pc.sceneData->mainRenderTargetSize.y) return;
+    if (threadID.x >= pc.sceneData->mainRenderTargetSize.x || threadID.y >= pc.sceneData->mainRenderTargetSize.y) {
+        return;
+    }
 
     float gtao = 1.0f;
     if (pc.gtaoFilteredIndex >= 0) {

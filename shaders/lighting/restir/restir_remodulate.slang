@@ -19,7 +19,7 @@ static const float BILATERAL_MIN_WEIGHT = 1e-6;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : SV_DispatchThreadID)
+void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : SV_DispatchThreadID)
 {
     const uint2 pixel = dtid.xy;
     if (pixel.x >= pc.width || pixel.y >= pc.height) {
@@ -41,7 +41,7 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
     float metallic;
     UnpackPBR(gt1.b, roughness, metallic);
     roughness = max(roughness, 0.045);
-    const float3 albedo = UnpackAlbedoRGB8(gt2.r).rgb;
+    const float3 albedo = UnpackAlbedoRGBA8(gt2.r).rgb;
     const float3 emissive = UnpackEmissiveRGBE(gt2.g);
 
     float2 uv = (float2(pixel) + 0.5) / float2(scene.mainRenderTargetSize);

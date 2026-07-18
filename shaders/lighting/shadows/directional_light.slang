@@ -30,7 +30,7 @@ void ComputeDirectionalLight(uniform DirectionalLightPushConstant pc, uint3 thre
     float roughness;
     float metallic;
     UnpackPBR(gt1.b, roughness, metallic);
-    float3 albedo = UnpackAlbedoRGB8(gt2.r).rgb;
+    float3 albedo = UnpackAlbedoRGBA8(gt2.r).rgb;
 
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);

@@ -36,5 +36,5 @@ void ComputeShadingBucketVisualize(uint3 dtid : SV_DispatchThreadID, uniform Vis
     float4 color = float4(saturate(float3(r, g, b)), 1.0);
 
     rdgStorageUInt4[pc.gbufferOneIndex][pixel] = uint4(PackNormalOct16(float3(0, 0, 1)), 0u, PackPBR(0.5, 0.0), 1u);
-    rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGB8(color), PackEmissiveRGBE(float3(0.0)));
+    rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGBA8(color), PackEmissiveRGBE(float3(0.0)));
 }

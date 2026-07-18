@@ -221,7 +221,7 @@ void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 dtid : SV_Dispat
         case 8: ldrColor = ACESNarkowicz(exposedColor); break;
         case 9: ldrColor = AgXTonemap(exposedColor, pc.params[0], pc.params[1]); break;
         case 10: ldrColor = KhronosPBRNeutral(exposedColor, pc.params[0], pc.params[1]); break;
-        default: ldrColor = exposedColor;                                                                                         break;
+        default: ldrColor = exposedColor; break;
     }
 
     rdgStorageFloat4[pc.dstImageIndex][pixelCoord] = float4(ldrColor, 1.0);

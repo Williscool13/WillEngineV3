@@ -83,5 +83,5 @@ void ComputeShadingDefaultLit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
         1u | (any(emissiveColor > float3(0.0)) ? 2u : 0u) | PackViewZDelta(shadingInputs.viewZDelta)
     );
     rdgStorageUInt4[pc.gbufferOneIndex][pixel] = gbufferOne;
-    rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGB8(albedo), PackEmissiveRGBE(emissiveColor));
+    rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGBA8(albedo), PackEmissiveRGBE(emissiveColor));
 }

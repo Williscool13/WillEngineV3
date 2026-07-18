@@ -99,7 +99,7 @@ void ComputeSigmaShadowBlur(uniform SigmaBlurPushConstant pc, uint3 tid : SV_Dis
 
                 w *= SigmaAreBothLitOrUnlit(centerPenumbra, penum);
                 w *= RelaxGetGaussianWeight(length(float2(d) / float(SIGMA_BORDER)));
-                w = RelaxApplyGeometryWeightLast(w, zs, NoX, geometryWeightParams, NRD_INF);
+                w = RelaxApplyGeometryWeightAndRangeCheck(w, zs, NoX, geometryWeightParams, NRD_INF);
                 w *= (inside && sRawDepth > 0.0) ? 1.0 : 0.0;
             }
 
@@ -162,7 +162,7 @@ void ComputeSigmaShadowBlur(uniform SigmaBlurPushConstant pc, uint3 tid : SV_Dis
         w *= SigmaAreBothLitOrUnlit(centerPenumbra, penum);
         w *= RelaxGetGaussianWeight(offset.z);
         w *= saturate(penum * invEstimatedPenumbra);
-        w = RelaxApplyGeometryWeightLast(w, zs, NoX, geometryWeightParams, NRD_INF);
+        w = RelaxApplyGeometryWeightAndRangeCheck(w, zs, NoX, geometryWeightParams, NRD_INF);
 
         result += w == 0.0 ? 0.0 : s * w;
         sum.x += w;

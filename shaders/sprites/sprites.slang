@@ -18,18 +18,6 @@ struct FragmentOutput
     uint2 stableId : SV_Target1;
 };
 
-[shader("fragment")]
-FragmentOutput FragmentSprites(VertexOutput input, uniform SpritePushConstant pc)
-{
-    float4 texSample = assetTextures[pc.textureIndex].Sample(assetSamplers[pc.samplerIndex], input.uv);
-    float4 color = texSample * input.color;
-    if (color.a < 0.5) { discard; }
-    FragmentOutput output;
-    output.color    = color;
-    output.stableId = input.stableId;
-    return output;
-}
-
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(32, 1, 1)]
@@ -87,3 +75,16 @@ void MeshSprites(
     triangles[pBase + 0] = uint3(vBase + 0, vBase + 1, vBase + 2);
     triangles[pBase + 1] = uint3(vBase + 1, vBase + 3, vBase + 2);
 }
+
+[shader("fragment")]
+FragmentOutput FragmentSprites(VertexOutput input, uniform SpritePushConstant pc)
+{
+    float4 texSample = assetTextures[pc.textureIndex].Sample(assetSamplers[pc.samplerIndex], input.uv);
+    float4 color = texSample * input.color;
+    if (color.a < 0.5) { discard; }
+    FragmentOutput output;
+    output.color    = color;
+    output.stableId = input.stableId;
+    return output;
+}
+

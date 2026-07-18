@@ -7,6 +7,7 @@ module pbr_functions;
 public static const bool LIGHT_INVERSE_SQUARE = true;
 public static const float LIGHT_GEOM_MIN_DIST2 = 0.1;
 
+/** Full attenuation: inverse-square times windowed range cull; use when the path has no separate geometry term. */
 public float LightDistanceFalloff(float dist, float range)
 {
     if (LIGHT_INVERSE_SQUARE) {
@@ -163,6 +164,7 @@ public float Diffuse_Hammon(float NdotL, float NdotV, float NdotH, float LdotV, 
 }
 
 
+/** Prefiltered diffuse irradiance lookup; flips Y to convert engine world space to cubemap space. */
 public float3 DiffuseIrradiance(TextureCube envMap, SamplerState linearSampler, float3 worldNormal)
 {
     float3 N = worldNormal;

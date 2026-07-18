@@ -66,7 +66,7 @@ void ComputeLightingGroundTruth(uniform VisibilityLightingPushConstant pc, uint3
             lightIdx = clamp(lightIdx, 0, lightCount - 1);
 
             LightInfo al = pc.lightData->lights[lightIdx];
-            LightVS vs = TransformLight(al, scene.view);
+            LightView vs = TransformLightToView(al, scene.view);
 
             uint seed2 = seed * 2654435761u;
             seed2 = seed2 ^ (seed2 >> 16);

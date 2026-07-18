@@ -316,7 +316,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
     float roughness;
     float metallic;
     UnpackPBR(gt1.b, roughness, metallic);
-    float4 albedo = UnpackAlbedoRGB8(gt2.r);
+    float4 albedo = UnpackAlbedoRGBA8(gt2.r);
     float3 emissiveRGB = UnpackEmissiveRGBE(gt2.g);
     roughness = max(roughness, 0.045);
 

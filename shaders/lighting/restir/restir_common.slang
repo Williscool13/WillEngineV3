@@ -14,6 +14,7 @@ public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
 
 public static const float QUAD_UNIFORM_NORMAL_DOT_THRESHOLD = 0.85;
 
+// field: 0 = full-res, 1/2 = active checkerboard parity; reservoir buffers are half-width when field != 0
 public uint RestirCheckerboardStride(uint width, uint field)
 {
     return (field != 0u) ? ((width + 1u) >> 1u) : width;
@@ -50,14 +51,15 @@ public int2 ActivateCheckerboardPixel(int2 pixel, bool previousFrame, uint field
     return pixel;
 }
 
-public int2 OtherFieldPixel(uint2 pixel, uint field)
+// Horizontal neighbor pixel belonging to the opposite checkerboard field
+public int2 OppositeFieldPixel(uint2 pixel, uint field)
 {
     int2 p = int2(pixel);
     p.x += ((field == 1u) == ((pixel.y & 1u) != 0u)) ? 1 : -1;
     return p;
 }
 
-public struct LightVS
+public struct LightView
 {
     public float3 center;
     public float3 normal;
@@ -72,9 +74,9 @@ public struct LightVS
     public uint type;
 }
 
-public LightVS TransformLight(LightInfo al, float4x4 view)
+public LightView TransformLightToView(LightInfo al, float4x4 view)
 {
-    LightVS vs;
+    LightView vs;
     vs.center = mul(view, float4(al.position.xyz, 1.0)).xyz;
     vs.range = al.range;
     vs.intensity = al.intensity;
@@ -112,7 +114,7 @@ public LightVS TransformLight(LightInfo al, float4x4 view)
     return vs;
 }
 
-public LightVSData PackLightVS(LightVS vs)
+public LightVSData PackLightVS(LightView vs)
 {
     LightVSData d;
     d.centerHalfWidth = float4(vs.center, vs.halfWidth);
@@ -126,9 +128,9 @@ public LightVSData PackLightVS(LightVS vs)
     return d;
 }
 
-public LightVS UnpackLightVS(LightVSData d)
+public LightView UnpackLightVS(LightVSData d)
 {
-    LightVS vs;
+    LightView vs;
     vs.center = d.centerHalfWidth.xyz;
     vs.halfWidth = d.centerHalfWidth.w;
     vs.normal = d.normalHalfHeight.xyz;
@@ -153,7 +155,7 @@ public struct LightSample
     public float attenuation;
 }
 
-public LightSample EvalLightSample(LightVS vs, float3 samplePos, float3 shadingPos, float3 N, float range)
+public LightSample EvalLightSample(LightView vs, float3 samplePos, float3 shadingPos, float3 N, float range)
 {
     LightSample s;
     s.samplePos = samplePos;
@@ -188,7 +190,7 @@ public float3 UniformSampleSphere(float u1, float u2)
     return float3(r * cos(phi), r * sin(phi), z);
 }
 
-public float3 SampleLightPos(LightVS vs, float uU, float uV)
+public float3 SampleLightPos(LightView vs, float uU, float uV)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
     {
@@ -210,7 +212,7 @@ public float SphereConeOneMinusCosThetaMax(float d2, float radius)
     return sin2ThetaMax / (1.0 + sqrt(max(1.0 - sin2ThetaMax, 0.0)));
 }
 
-public float3 SampleLightSurface(LightVS vs, float3 shadingPos, float uU, float uV)
+public float3 SampleLightSurface(LightView vs, float3 shadingPos, float uU, float uV)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
     {
@@ -243,7 +245,7 @@ public float3 SampleLightSurface(LightVS vs, float3 shadingPos, float uU, float 
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
 
-public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
+public float LightSamplePdfArea(LightView vs, float3 shadingPos, float3 samplePos)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
     {
@@ -264,7 +266,7 @@ public float LightSamplePdfArea(LightVS vs, float3 shadingPos, float3 samplePos)
 
 public float3 ReGIRCellSize() { return float3(REGIR_CELL_SIZE_X, REGIR_CELL_SIZE_Y, REGIR_CELL_SIZE_Z); }
 
-public float EvalCellLightTarget(LightVS vs, float3 cellCenter, float3 lightColor)
+public float EvalCellLightTarget(LightView vs, float3 cellCenter, float3 lightColor)
 {
     float3 toCenter = vs.center - cellCenter;
     float dist = max(length(toCenter), 1e-5);
@@ -329,7 +331,8 @@ public void ReGIRClampW(inout ReGIRReservoir r, float wClamp)
     if (wClamp > 0.0 && r.targetPdf > 0.0) { r.totalWeight = min(r.totalWeight, wClamp * r.targetPdf); }
 }
 
-public uint EncodeSampleOffset(float3 samplePos, LightVS vs)
+// 32-bit sample-point packing: sphere = oct16 local direction, triangle = 2x16 unorm barycentrics, quad = 2x snorm16 uv
+public uint EncodeSampleOffset(float3 samplePos, LightView vs)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
     {
@@ -362,7 +365,7 @@ public uint EncodeSampleOffset(float3 samplePos, LightVS vs)
     return ux | (vy << 16);
 }
 
-public float3 DecodeSamplePos(uint sampleOffsetPacked, LightVS vs)
+public float3 DecodeSamplePos(uint sampleOffsetPacked, LightView vs)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
     {
@@ -383,7 +386,7 @@ public float3 DecodeSamplePos(uint sampleOffsetPacked, LightVS vs)
     return vs.center + u * vs.halfWidth * vs.right + v * vs.halfHeight * vs.up;
 }
 
-public float3 DecodeSamplePos(Reservoir r, LightVS vs)
+public float3 DecodeSamplePos(Reservoir r, LightView vs)
 {
     return DecodeSamplePos(r.sampleOffsetPacked, vs);
 }
@@ -409,7 +412,7 @@ public bool ReservoirAddSample(inout ReservoirAccum accum, float candidateWeight
     return u < candidateWeight / accum.wSum;
 }
 
-public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_hat_yStar, float M_total)
+public void ReservoirFinalize(inout Reservoir r, ReservoirAccum accum, float p_hat_yStar, float M_total)
 {
     if (p_hat_yStar <= 0.0 || M_total <= 0.0) {
         r.W = 0.0;
@@ -441,8 +444,7 @@ public float RestirWorldTexelSize(float viewZ, float2 ndcToViewMulXPixelSize, fl
 public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize)
 {
     // Normal-direction offset scaled by distance (slope-scaled by caller); no NoL division (that's for
-    // along-the-ray offsets, not this case).
-    // shadow erosion, which eats contact shadows up close.
+    // along-the-ray offsets, not this case, and it causes shadow erosion, which eats contact shadows up close).
     float bias = max(0.002, worldTexelSize);
     float3 rayOrigin = worldShadingPos + worldN * bias;
     float3 toLight = worldyStar - rayOrigin;
@@ -530,7 +532,7 @@ public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 
 }
 
 /** Non-sun variant for callers that already unpacked the light; the sun branch, sun argument load, and per-call lightVS element load are hoisted out. */
-public float EvalReservoirPHatLight(LightVS vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
+public float EvalReservoirPHatLight(LightView vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
                                     float3 albedo, float3 F0, float metallic, float roughness)
 {
     float3 yStar = DecodeSamplePos(sampleOffsetPacked, vs);
@@ -538,7 +540,7 @@ public float EvalReservoirPHatLight(LightVS vs, uint sampleOffsetPacked, float3 
     return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity);
 }
 
-public float EvalReservoirPHatVisibilityLight(LightVS vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
+public float EvalReservoirPHatVisibilityLight(LightView vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
                                               float3 albedo, float3 F0, float metallic, float roughness, float4x4 invView,
                                               RaytracingAccelerationStructure tlas, float3 worldPos, float3 worldN, float worldTexelSize)
 {
@@ -601,7 +603,7 @@ public bool RayIntersectQuad(float3 rayOrigin, float3 rayDir, float3 center, flo
     return abs(dot(local, right)) <= halfWidth && abs(dot(local, up)) <= halfHeight;
 }
 
-public bool RayIntersectLight(LightVS vs, float3 rayOrigin, float3 rayDir, out float t)
+public bool RayIntersectLight(LightView vs, float3 rayOrigin, float3 rayDir, out float t)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
     {

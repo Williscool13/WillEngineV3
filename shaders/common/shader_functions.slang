@@ -2,7 +2,7 @@ import common_interop;
 import model_interop;
 
 // Returns false if the world-space AABB is fully outside any frustum plane
-bool FrustumCullAABB(Frustum frustum, float3 aabbMin, float3 aabbMax)
+bool IsAABBInFrustum(Frustum frustum, float3 aabbMin, float3 aabbMax)
 {
     for (int i = 0; i < 6; i++) {
         float4 plane = frustum.planes[i];
@@ -20,7 +20,7 @@ bool FrustumCullAABB(Frustum frustum, float3 aabbMin, float3 aabbMax)
 }
 
 // Returns false if it has been culled
-bool FrustumCullSphere(Frustum frustum, float4 sphere) {
+bool IsSphereInFrustum(Frustum frustum, float4 sphere) {
     // sphere.xyz = center, sphere.w = radius
     for (int i = 0; i < 6; i++) {
         float4 plane = frustum.planes[i];
@@ -33,7 +33,7 @@ bool FrustumCullSphere(Frustum frustum, float4 sphere) {
 }
 
 // Returns false if backface culled
-bool BackfaceCullCone(float3 coneAxis, float coneCutoff, float3 center, float radius, float3 cameraPos, float3x3 modelMatrix) {
+bool IsConeFrontFacing(float3 coneAxis, float coneCutoff, float3 center, float radius, float3 cameraPos, float3x3 modelMatrix) {
     float3 worldConeAxis = normalize(mul(modelMatrix, coneAxis));
     float3 cameraToCenter = center - cameraPos;
     float centerDist = length(cameraToCenter);
@@ -99,6 +99,25 @@ float3 YCoCgToRGB(float3 ycocg) {
     float b = tmp - Co;
 
     return float3(r, g, b);
+}
+
+// Octahedral encoding: maps a unit float3 normal to float2 in [-1,1]^2.
+float2 OctEncode(float3 n)
+{
+    n /= abs(n.x) + abs(n.y) + abs(n.z);
+    if (n.z < 0.0f) {
+        n.xy = (1.0f - abs(n.yx)) * float2(n.x >= 0.0f ? 1.0f : -1.0f, n.y >= 0.0f ? 1.0f : -1.0f);
+    }
+    return n.xy;
+}
+
+// Decodes an octahedral-encoded normal back to a unit float3.
+float3 OctDecode(float2 f)
+{
+    float3 n = float3(f.x, f.y, 1.0f - abs(f.x) - abs(f.y));
+    float t = saturate(-n.z);
+    n.xy += float2(n.x >= 0.0f ? -t : t, n.y >= 0.0f ? -t : t);
+    return normalize(n);
 }
 
 // Interpolated surface attributes in view space, reconstructed from barycentrics + vertices.
@@ -202,7 +221,7 @@ InterpolatedVertex InterpolateVertex(float3 bary, VertexAttribute v0, VertexAttr
 
 
 // Albedo: pack float4 RGBA into R32 (RGB8 + 8-bit alpha)
-uint PackAlbedoRGB8(float4 c)
+uint PackAlbedoRGBA8(float4 c)
 {
     return uint(saturate(c.r) * 255.0 + 0.5)
          | (uint(saturate(c.g) * 255.0 + 0.5) << 8)
@@ -210,7 +229,7 @@ uint PackAlbedoRGB8(float4 c)
          | (uint(saturate(c.a) * 255.0 + 0.5) << 24);
 }
 
-float4 UnpackAlbedoRGB8(uint p)
+float4 UnpackAlbedoRGBA8(uint p)
 {
     return float4(
         float(p & 0xFF),
@@ -291,30 +310,12 @@ float UnpackViewZDelta(uint p)
     return f16tof32(p >> 16);
 }
 
-// Octahedral encoding: maps a unit float3 normal to float2 in [-1,1]^2.
-float2 OctEncode(float3 n)
-{
-    n /= abs(n.x) + abs(n.y) + abs(n.z);
-    if (n.z < 0.0f) {
-        n.xy = (1.0f - abs(n.yx)) * float2(n.x >= 0.0f ? 1.0f : -1.0f, n.y >= 0.0f ? 1.0f : -1.0f);
-    }
-    return n.xy;
-}
-
-// Decodes an octahedral-encoded normal back to a unit float3.
-float3 OctDecode(float2 f)
-{
-    float3 n = float3(f.x, f.y, 1.0f - abs(f.x) - abs(f.y));
-    float t = saturate(-n.z);
-    n.xy += float2(n.x >= 0.0f ? -t : t, n.y >= 0.0f ? -t : t);
-    return normalize(n);
-}
-
 float Luma(float3 c)
 {
     return dot(c, float3(0.2126, 0.7152, 0.0722));
 }
 
+// Target-to-adapted luminance ratio, clamped to [0.25, 32]; scales noise thresholds with exposure
 float ExposureNoiseScale(float adaptedLuminance, float targetLuminance)
 {
     return clamp(targetLuminance / max(adaptedLuminance, 1e-3), 0.25, 32.0);

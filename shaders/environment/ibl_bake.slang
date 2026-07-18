@@ -32,7 +32,7 @@ float2 SampleSphericalMap(float3 v) {
 [shader("compute")]
 [numthreads(ENVIRONMENT_MAP_GENERATION_DISPATCH_X, ENVIRONMENT_MAP_GENERATION_DISPATCH_Y, 1)]
 void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 tid : SV_DispatchThreadID) {
-    if (tid.x >= pc.cubemapWidth || tid.y >= pc.cubemapHeight) return;
+    if (tid.x >= pc.cubemapWidth || tid.y >= pc.cubemapHeight) { return; }
 
     int3 storePos = int3(tid.xy, tid.z);
     float2 uv = (float2(storePos.xy) + 0.5) / float2(pc.cubemapWidth, pc.cubemapHeight);
@@ -64,7 +64,7 @@ void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 ti
 [shader("compute")]
 [numthreads(ENVIRONMENT_MAP_GENERATION_DISPATCH_X, ENVIRONMENT_MAP_GENERATION_DISPATCH_Y, 1)]
 void ComputeConvolveDiffuse(uniform ConvolveDiffusePushConstant pc, uint3 tid : SV_DispatchThreadID) {
-    if (tid.x >= pc.targetWidth || tid.y >= pc.targetHeight) return;
+    if (tid.x >= pc.targetWidth || tid.y >= pc.targetHeight) { return; }
 
     int3 storePos = int3(tid.xy, tid.z);
     float2 uv = (float2(storePos.xy) + 0.5) / float2(pc.targetWidth, pc.targetHeight);
@@ -155,7 +155,7 @@ float DistributionGGX(float NdotH, float roughness) {
 [shader("compute")]
 [numthreads(ENVIRONMENT_MAP_GENERATION_DISPATCH_X, ENVIRONMENT_MAP_GENERATION_DISPATCH_Y, 1)]
 void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 tid : SV_DispatchThreadID) {
-    if (tid.x >= pc.width || tid.y >= pc.height) return;
+    if (tid.x >= pc.width || tid.y >= pc.height) { return; }
 
     int3 storePos = int3(tid.xy, tid.z);
     float2 uv = (float2(storePos.xy) + 0.5) / float2(pc.width, pc.height);

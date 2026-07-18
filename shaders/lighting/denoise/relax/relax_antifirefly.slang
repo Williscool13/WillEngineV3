@@ -20,7 +20,7 @@ static const int AF_BUFFER_Y = AF_GROUP_Y + AF_BORDER * 2;
 groupshared uint2 s_Spec[AF_BUFFER_Y][AF_BUFFER_X];
 groupshared uint2 s_Diff[AF_BUFFER_Y][AF_BUFFER_X];
 
-void Preload(uint2 sharedPos, int2 globalPos, RelaxDiffuseSpecularConstants* rc,
+void AFPreload(uint2 sharedPos, int2 globalPos, RelaxDiffuseSpecularConstants* rc,
     uint specIndex, uint diffIndex)
 {
     globalPos = clamp(globalPos, int2(0, 0), rc.gRectSize - 1);
@@ -45,18 +45,24 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
             uint virtualIndex = threadIndex + stage * AF_GROUP_X * AF_GROUP_Y;
             uint2 newId = uint2(virtualIndex % AF_BUFFER_X, virtualIndex / AF_BUFFER_X);
             if (stage == 0 || virtualIndex < AF_BUFFER_X * AF_BUFFER_Y)
-                Preload(newId, groupBase + int2(newId), rc, pc.specIndex, pc.diffIndex);
+            {
+                AFPreload(newId, groupBase + int2(newId), rc, pc.specIndex, pc.diffIndex);
+            }
         }
     }
     GroupMemoryBarrierWithGroupSync();
 
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    {
         return;
+    }
 
     int2 fullPixel = pixelPos;
     float centerViewZ = rdgTexturesFloat[pc.viewZIndex].Load(int3(fullPixel, 0)).r;
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
+    {
         return;
+    }
 
     uint2 sharedCenter = uint2(threadPos) + AF_BORDER;
 
@@ -76,9 +82,9 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
         [unroll]
         for (int xx = -1; xx <= 1; xx++)
         {
-            if (xx == 0 && yy == 0) continue;
+            if (xx == 0 && yy == 0) { continue; }
             int2 p = pixelPos + int2(xx, yy);
-            if (any(p < int2(0, 0)) || any(p >= rc.gRectSize)) continue;
+            if (any(p < int2(0, 0)) || any(p >= rc.gRectSize)) { continue; }
 
             uint2 si = uint2(threadPos) + AF_BORDER + uint2(xx, yy);
 
@@ -93,12 +99,12 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
     }
 
     uint2 specCoords = sharedCenter;
-    if (specLumCenter > maxSpecLum) specCoords = maxSpecCoords;
-    if (specLumCenter < minSpecLum) specCoords = minSpecCoords;
+    if (specLumCenter > maxSpecLum) { specCoords = maxSpecCoords; }
+    if (specLumCenter < minSpecLum) { specCoords = minSpecCoords; }
 
     uint2 diffCoords = sharedCenter;
-    if (diffLumCenter > maxDiffLum) diffCoords = maxDiffCoords;
-    if (diffLumCenter < minDiffLum) diffCoords = minDiffCoords;
+    if (diffLumCenter > maxDiffLum) { diffCoords = maxDiffCoords; }
+    if (diffLumCenter < minDiffLum) { diffCoords = minDiffCoords; }
 
     rdgStorageFloat4[pc.outSpecIndex][pixelPos] = float4(RelaxUnpackF16x4(s_Spec[specCoords.y][specCoords.x]).rgb, specCenter.a);
     rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(RelaxUnpackF16x4(s_Diff[diffCoords.y][diffCoords.x]).rgb, diffCenter.a);

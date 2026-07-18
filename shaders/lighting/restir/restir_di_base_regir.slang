@@ -107,7 +107,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
         for (int i = 0; i < RESTIR_M_LIGHT; i++) {
             uint candLightIdx = ~0u;
             float3 candXi = float3(0.0);
-            LightVS candVS = (LightVS)0;
+            LightView candVS = (LightView)0;
             float w_i = 0.0;
 
             int lightIdx = -1;
@@ -130,7 +130,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             }
 
             if (lightIdx >= 0) {
-                LightVS vs = UnpackLightVS(pc.lightVS[lightIdx]);
+                LightView vs = UnpackLightVS(pc.lightVS[lightIdx]);
                 float3 lightColor = UnpackUnorm4x8(vs.packedColor).rgb;
                 if (pSelect > 0.0) {
                     float2 xiLight;
@@ -179,14 +179,14 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             float3 Xi = float3(0.0);
             float p_light_area = 0.0;
             float p_brdf_area = 0.0;
-            LightVS bestVS = (LightVS)0;
+            LightView bestVS = (LightView)0;
 
             if (dot(N, brdfL) > 0.0) {
                 int hitLightIdx = -1;
                 float hitT = 0.0;
                 bool bTriHit = false;
                 float3 triXi = float3(0.0);
-                LightVS hitVS = (LightVS)0;
+                LightView hitVS = (LightView)0;
 #if RESTIR_ENABLE_BRDF_RAY
                 float3 worldN = normalize(mul(float3x3(scene.invView), N));
                 RayDesc ray;
@@ -216,7 +216,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                     } else {
                         uint hl = hitInst.lightIndex;
                         if (hl != ~0u && hl < uint(lightCount)) {
-                            LightVS lvs = UnpackLightVS(pc.lightVS[hl]);
+                            LightView lvs = UnpackLightVS(pc.lightVS[hl]);
                             float t;
                             if (RayIntersectLight(lvs, viewPosition, brdfL, t)) {
                                 hitLightIdx = int(hl);
@@ -267,9 +267,9 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
 #endif
                 if (hitLightIdx >= 0) {
 #if RESTIR_ENABLE_BRDF_RAY
-                    LightVS vs = hitVS;
+                    LightView vs = hitVS;
 #else
-                    LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
+                    LightView vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
 #endif
                     Xi = bTriHit ? triXi : viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
@@ -322,7 +322,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             float3 sunDirWorld = UnpackNormalOct16(r_gen.sampleOffsetPacked);
             float3 sunDirView = normalize(mul((float3x3)scene.view, sunDirWorld));
             float p_hat_gen = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, SunRadiance(sun));
-            ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
+            ReservoirFinalize(r_gen, accum_gen, p_hat_gen, 1.0);
 #if RESTIR_ENABLE_INITIAL_VISIBILITY
             if (pc.bInitialVisibility != 0u && r_gen.W > 0.0) {
                 float3 worldN = normalize(mul(float3x3(scene.invView), N));
@@ -330,11 +330,11 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             }
 #endif
         } else {
-            LightVS winnerVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
+            LightView winnerVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
             float3 yStar = DecodeSamplePos(r_gen.sampleOffsetPacked, winnerVS);
             LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
             float p_hat_gen = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity);
-            ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
+            ReservoirFinalize(r_gen, accum_gen, p_hat_gen, 1.0);
 #if RESTIR_ENABLE_INITIAL_VISIBILITY
             if (pc.bInitialVisibility != 0u && r_gen.W > 0.0) {
                 float3 worldN = normalize(mul(float3x3(scene.invView), N));

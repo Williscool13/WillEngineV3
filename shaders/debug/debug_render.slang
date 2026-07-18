@@ -16,17 +16,6 @@ struct VertexOutput {
     float cross : TEXCOORD0;
 };
 
-// =============== Fragment Shader ===============
-[shader("fragment")]
-float4 FragmentDebugRender(VertexOutput input) : SV_Target0
-{
-    float d = abs(input.cross);
-    float aa = saturate((1.0 - d) / max(fwidth(d), 1e-5));
-    float4 color = input.color;
-    color.a *= aa;
-    return color;
-}
-
 // Partial-compensation width scaling
 static const float kRefDistance = 5.0;
 static const float kDistanceExponent = 0.6;
@@ -149,4 +138,15 @@ void MeshDebugRenderGPU(
     uint pBase = gtid.x * 2;
     triangles[pBase + 0] = uint3(vBase + 0, vBase + 1, vBase + 2);
     triangles[pBase + 1] = uint3(vBase + 1, vBase + 3, vBase + 2);
+}
+
+// =============== Fragment Shader ===============
+[shader("fragment")]
+float4 FragmentDebugRender(VertexOutput input) : SV_Target0
+{
+    float d = abs(input.cross);
+    float aa = saturate((1.0 - d) / max(fwidth(d), 1e-5));
+    float4 color = input.color;
+    color.a *= aa;
+    return color;
 }

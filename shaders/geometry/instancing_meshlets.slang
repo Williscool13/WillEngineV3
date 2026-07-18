@@ -78,10 +78,10 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
     float4 worldBounds = float4(worldCenter, worldRadius);
 
     bool bVisible = true;
-    if (!FrustumCullSphere(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds)) {
+    if (!IsSphereInFrustum(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds)) {
         bVisible = false;
     }
-    if (bVisible && !BackfaceCullCone(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
+    if (bVisible && !IsConeFrontFacing(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
         bVisible = false;
     }
 

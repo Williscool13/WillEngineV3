@@ -13,7 +13,9 @@ DebugVisualizePushConstant pc;
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
-    if (threadID.x >= pc.dstExtent.x || threadID.y >= pc.dstExtent.y) return;
+    if (threadID.x >= pc.dstExtent.x || threadID.y >= pc.dstExtent.y) {
+        return;
+    }
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.dstExtent);
 
@@ -122,7 +124,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             break;
         }
         case 13: { // GBufferAlbedo, RGBA8 packed in gbuffer_two.r
-            srcPixel = UnpackAlbedoRGB8(asuint(srcPixel.x));
+            srcPixel = UnpackAlbedoRGBA8(asuint(srcPixel.x));
             break;
         }
         case 14: { // GBufferEmissive, RGBE packed in gbuffer_two.g

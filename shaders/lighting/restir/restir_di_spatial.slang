@@ -48,7 +48,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
     Reservoir center = pc.inputBuffer[centerIdx];
     if (isnan(center.W) || isinf(center.W)) { center = ReservoirEmpty(); }
-    // A LIVE sun (W>0, genuinely brightest here) is protected from local-light spatial reuse. A DEAD sun (W==0, shadowed) falls through so local neighbours can tag in — else shadowed sun-facing pixels stay stuck on the occluded sun.
+    // A LIVE sun (W>0, genuinely brightest here) is protected from local-light spatial reuse. A DEAD sun (W==0, shadowed) falls through so local neighbours can tag in; else shadowed sun-facing pixels stay stuck on the occluded sun.
     if (center.lightIdx == LIGHT_IDX_SUN && center.W > 0.0) {
         center.W = (pc.wClamp > 0.0) ? min(center.W, pc.wClamp) : center.W;
         center.M = min(center.M, pc.mCap);
@@ -61,7 +61,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
     float Mc = centerHasSample ? float(center.M) : 0.0;
 
-    LightVS centerVS;
+    LightView centerVS;
     float p_hat_center_atCenter = 0.0;
     if (validCenter) {
         centerVS = UnpackLightVS(pc.lightVS[center.lightIdx]);
@@ -144,7 +144,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
         float Mi = validCenter ? min(float(neighbor.M), 20.0 * float(center.M)) : float(neighbor.M);
 
-        LightVS neighborVS = UnpackLightVS(pc.lightVS[neighbor.lightIdx]);
+        LightView neighborVS = UnpackLightVS(pc.lightVS[neighbor.lightIdx]);
         float p_hat_neighbor_atNeighbor = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness);
         float p_hat_neighbor_atCenter = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
 
@@ -185,7 +185,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
     }
 
     if (combined.lightIdx != ~0u) {
-        LightVS winnerVS = UnpackLightVS(pc.lightVS[combined.lightIdx]);
+        LightView winnerVS = UnpackLightVS(pc.lightVS[combined.lightIdx]);
         float p_hat_final;
         if (pc.bValidateVisibility != 0u) {
             float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
@@ -194,7 +194,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         } else {
             p_hat_final = EvalReservoirPHatLight(winnerVS, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
         }
-        ReservoirFinalise(combined, accum, p_hat_final, float(neighborCount));
+        ReservoirFinalize(combined, accum, p_hat_final, float(neighborCount));
     } else {
         combined.W = 0.0;
     }

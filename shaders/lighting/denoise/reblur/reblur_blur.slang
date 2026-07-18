@@ -114,7 +114,7 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(samplePos, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
             float NoX = dot(centerNormal, sampleWorldPos);
-            w = RelaxApplyGeometryWeightLast(w, sampleViewZ, NoX, geometryWeightParams, rc.gDenoisingRange);
+            w = RelaxApplyGeometryWeightAndRangeCheck(w, sampleViewZ, NoX, geometryWeightParams, rc.gDenoisingRange);
             float normalAngle = MLAcosApproxPositive(dot(centerNormal, sampleNormal));
             w *= RelaxComputeWeight(normalAngle, normalWeightParam, 0.0);
 
@@ -188,7 +188,7 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
             float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(samplePos, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
             float NoX = dot(centerNormal, sampleWorldPos);
-            w = RelaxApplyGeometryWeightLast(w, sampleViewZ, NoX, geometryWeightParams, rc.gDenoisingRange);
+            w = RelaxApplyGeometryWeightAndRangeCheck(w, sampleViewZ, NoX, geometryWeightParams, rc.gDenoisingRange);
             float normalAngle = MLAcosApproxPositive(dot(centerNormal, sampleNR.xyz));
             w *= RelaxComputeWeight(normalAngle, normalWeightParam, 0.0);
             w *= RelaxComputeWeight(sampleNR.w, roughnessWeightParams.x, roughnessWeightParams.y);

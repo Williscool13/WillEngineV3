@@ -42,5 +42,5 @@ void ComputeShadingErrorUnlit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
         PackPBR(1.0, 0.0),
         1u | PackViewZDelta(shadingInputs.viewZDelta)
     );
-    rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGB8(albedo), PackEmissiveRGBE(float3(0.0)));
+    rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGBA8(albedo), PackEmissiveRGBE(float3(0.0)));
 }

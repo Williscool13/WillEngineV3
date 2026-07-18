@@ -151,19 +151,22 @@ void ComputeDonutTaa(
     int2 groupOutputBase = int2(i_groupIdx.xy) * int2(GROUP_X, GROUP_Y);
     int2 groupBase = int2(OutputToInput(groupOutputBase) - 1.0);
 
-    if (newID.y < RENAMED_GROUP_Y)
+    if (newID.y < RENAMED_GROUP_Y) {
         Preload(newID, groupBase + newID, inputMax);
+    }
 
     newID.y += RENAMED_GROUP_Y;
 
-    if (newID.y < BUFFER_Y)
+    if (newID.y < BUFFER_Y) {
         Preload(newID, groupBase + newID, inputMax);
+    }
 
     GroupMemoryBarrierWithGroupSync();
 
     int2 outputPixelLocal = int2(i_globalIdx.xy);
-    if (any(outputPixelLocal >= int2(pc.outputViewSize)))
+    if (any(outputPixelLocal >= int2(pc.outputViewSize))) {
         return;
+    }
 
     int2   outputPixelPos = outputPixelLocal + int2(pc.outputViewOrigin);
     float2 inputPos       = OutputToInput(outputPixelLocal);
@@ -189,8 +192,9 @@ void ComputeDonutTaa(
             float3 color = colorAndLength.rgb;
             float motionLength = colorAndLength.a;
 
-            if (dx == 1 && dy == 1)
+            if (dx == 1 && dy == 1) {
                 thisPixelColor = color;
+            }
 
             colorMoment1 += color;
             colorMoment2 += color * color;
@@ -240,14 +244,16 @@ void ComputeDonutTaa(
         all(sourcePos < pc.outputViewOrigin + pc.outputViewSize))
     {
         float3 history;
-        if (pc.useCatmullRom != 0)
+        if (pc.useCatmullRom != 0) {
             history = BicubicSampleCatmullRom(pc.feedbackInputIndex, sourcePos, pc.outputTextureSizeInv);
-        else
+        } else {
             history = rdgTexturesFloat4[pc.feedbackInputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], sourcePos * pc.outputTextureSizeInv, 0).rgb;
+        }
 
         float3 historyClamped = history;
-        if (clampingFactor >= 0.0)
+        if (clampingFactor >= 0.0) {
             historyClamped = min(colorMax, max(colorMin, history));
+        }
 
         float motionWeight = smoothstep(0.0, 1.0, length(longestMV));
         float2 distanceToLowResPixel = inputPos - float2(inputPosInt);

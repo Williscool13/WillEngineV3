@@ -64,7 +64,7 @@ BarycentricDeriv CalcFullBary(float4 pt0, float4 pt1, float4 pt2, float2 pixelNd
 // ==================== Compute Shader ====================
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void VisibilityBufferBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uniform VisibilityBufferResolvePushConstant pc)
+void ComputeVisibilityBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uniform VisibilityBufferResolvePushConstant pc)
 {
     if (dtid.x >= pc.extents.x || dtid.y >= pc.extents.y) {
         return;

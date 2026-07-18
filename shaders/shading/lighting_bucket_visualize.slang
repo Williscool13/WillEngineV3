@@ -33,7 +33,7 @@ void ComputeLightingBucketVisualize(uint3 dtid : SV_DispatchThreadID, uniform Li
 
     uint packedNormal = PackNormalOct16(float3(0, 0, 1));
     uint packedPBR = PackPBR(0.5, 0.0);
-    uint packedAlbedo = PackAlbedoRGB8(color);
+    uint packedAlbedo = PackAlbedoRGBA8(color);
     uint packedEmissive = PackEmissiveRGBE(float3(0.0));
 
     rdgStorageUInt4[pc.gbufferOneIndex][pixel] = uint4(packedNormal, 0u, packedPBR, 1u);

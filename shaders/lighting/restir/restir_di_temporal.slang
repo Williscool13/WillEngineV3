@@ -39,7 +39,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         return;
     }
 
-    int2 partner = (field != 0u) ? OtherFieldPixel(pixel, field) : int2(-1, -1);
+    int2 partner = (field != 0u) ? OppositeFieldPixel(pixel, field) : int2(-1, -1);
     bool partnerValid = partner.x >= 0 && partner.x < int(pc.renderExtent.x);
 #if RESTIR_ENABLE_ANTILAG
     if (pc.shadowVisIndex != ~0u) {
@@ -179,7 +179,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
                 pGen_hist = EvalSunPHat(sunDirView, V, historyN_cvs, li.albedo.xyz, F0, li.metallic, roughness, sunRadiance);
             }
         } else {
-            LightVS genVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
+            LightView genVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
             pGen_cur = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
             if (validHistoryReservoir) {
                 pGen_hist = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness);
@@ -205,7 +205,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
             pHist_cur = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, sunRadiance);
             pHist_hist = EvalSunPHat(sunDirView, V, historyN_cvs, li.albedo.xyz, F0, li.metallic, roughness, sunRadiance);
         } else {
-            LightVS histVS = UnpackLightVS(pc.lightVS[history.lightIdx]);
+            LightView histVS = UnpackLightVS(pc.lightVS[history.lightIdx]);
             pHist_cur = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
             pHist_hist = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness);
         }
@@ -257,7 +257,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
             }
 #endif
         } else {
-            LightVS winnerVS = UnpackLightVS(pc.lightVS[combined.lightIdx]);
+            LightView winnerVS = UnpackLightVS(pc.lightVS[combined.lightIdx]);
             float3 yStar = DecodeSamplePos(combined.sampleOffsetPacked, winnerVS);
             float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
             LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
@@ -270,7 +270,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
             }
 #endif
         }
-        ReservoirFinalise(combined, accum_combined, p_hat_winner, 1.0);
+        ReservoirFinalize(combined, accum_combined, p_hat_winner, 1.0);
         if (pc.finalWClamp > 0.0) { combined.W = min(combined.W, pc.finalWClamp); }
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
 #if RESTIR_ENABLE_CONFIDENCE
@@ -296,7 +296,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     if (pc.shadowVisIndex != ~0u) {
         rdgStorageFloat[pc.shadowVisIndex][pixel] = winnerVisibility;
         if (field != 0u) {
-            int2 o = OtherFieldPixel(pixel, field);
+            int2 o = OppositeFieldPixel(pixel, field);
             if (o.x >= 0 && o.x < int(pc.renderExtent.x)) { rdgStorageFloat[pc.shadowVisIndex][uint2(o)] = winnerVisibility; }
         }
     }
@@ -306,7 +306,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         float2 sig = float2(pHatUnshadowed * (winnerVisibility - visPrev), pHatUnshadowed * max(winnerVisibility, visPrev));
         rdgStorageFloat2[pc.signalIndex][pixel] = sig;
         if (field != 0u) {
-            int2 o = OtherFieldPixel(pixel, field);
+            int2 o = OppositeFieldPixel(pixel, field);
             if (o.x >= 0 && o.x < int(pc.renderExtent.x)) { rdgStorageFloat2[pc.signalIndex][uint2(o)] = sig; }
         }
     }

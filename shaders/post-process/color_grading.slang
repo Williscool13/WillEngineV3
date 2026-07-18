@@ -9,7 +9,7 @@ import bindless_declarations;
 [shader("compute")]
 [numthreads(POST_PROCESS_COLOR_GRADING_DISPATCH_X, POST_PROCESS_COLOR_GRADING_DISPATCH_Y, 1)]
 void ComputeColorGrading(uniform ColorGradingPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    if (any(dtid.xy >= pc.outputExtent)) return;
+    if (any(dtid.xy >= pc.outputExtent)) { return; }
 
     uint2 pixelCoord = dtid.xy;
     float3 color = rdgTexturesFloat4[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;

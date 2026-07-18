@@ -391,7 +391,7 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("instancing_max_meshlet_count"), src / "instancing_meshlets.spv", "ComputeMaxMeshletCount",
                             sizeof(MaxMeshletCountPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline("visibility_buffer_barycentric_derivative"_sid, src / "visibility_barycentric_derivative.spv", "VisibilityBufferBarycentricDerivative",
+    RegisterComputePipeline("visibility_buffer_barycentric_derivative"_sid, src / "visibility_barycentric_derivative.spv", "ComputeVisibilityBarycentricDerivative",
                             sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("visibility_bucketing_bounds_calculation"_sid, src / "visibility_bucketing_bounds.spv", "ComputeShadeDispatchBucketing",
                             sizeof(ShadeBucketingPushConstant), PipelineCategory::Critical);
@@ -438,7 +438,7 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReSTIRConfidenceGradientPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_confidence_resolve"), src / "restir_confidence_resolve.spv", "ComputeReSTIRConfidenceResolve",
                             sizeof(ReSTIRConfidenceResolvePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate.spv", "ReSTIRRemodulateMain",
+    RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate.spv", "ComputeReSTIRRemodulate",
                             sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("reflection_shade"), src / "reflection_shade.spv", "ComputeReflectionShade",
                             sizeof(ReflectionShadePushConstant), PipelineCategory::Critical);
@@ -446,7 +446,7 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr.spv", "ComputeLightingPBR",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_pbr"_sid);
-    RegisterComputePipeline("default_pbr_restir"_sid, src / "lighting_pbr_restir.spv", "ComputeLightingPbrRestir",
+    RegisterComputePipeline("default_pbr_restir"_sid, src / "lighting_pbr_restir.spv", "ComputeLightingPBRRestir",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_pbr_restir"_sid);
     RegisterComputePipeline("default_toon"_sid, src / "lighting_toon.spv", "ComputeLightingToon",
@@ -591,9 +591,9 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReblurStabilizationPushConstant), PipelineCategory::Critical);
 
 
-    RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure.spv", "ComputeBuildHistogramExposure",
+    RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure.spv", "ComputeExposureHistogram",
                             sizeof(HistogramBuildPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("exposure_calculate_average"), src / "exposure.spv", "ComputeAverageExposure",
+    RegisterComputePipeline(SID("exposure_calculate_average"), src / "exposure.spv", "ComputeExposureAverage",
                             sizeof(ExposureCalculatePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("tonemap_sdr"), src / "tonemapping.spv", "ComputeSDRTonemap",
                             sizeof(TonemapSDRPushConstant), PipelineCategory::Critical);
@@ -700,7 +700,7 @@ void PipelineManager::RegisterPipelines()
 
     // Portal Composite
     {
-        builder.AddShaderStage(src / "common_shaders.spv", VK_SHADER_STAGE_VERTEX_BIT, "FullscreenPassVertexMain");
+        builder.AddShaderStage(src / "fullscreen_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT, "FullscreenPassVertexMain");
         builder.AddShaderStage(src / "portal_rendering.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentPortalComposite");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
@@ -726,7 +726,7 @@ void PipelineManager::RegisterPipelines()
 
     // Skybox Rendering
     {
-        builder.AddShaderStage(src / "common_shaders.spv", VK_SHADER_STAGE_VERTEX_BIT, "FullscreenPassVertexMain");
+        builder.AddShaderStage(src / "fullscreen_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT, "FullscreenPassVertexMain");
         builder.AddShaderStage(src / "environment_map.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentSkybox");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);

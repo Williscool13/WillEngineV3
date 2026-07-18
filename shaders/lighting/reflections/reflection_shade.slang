@@ -115,7 +115,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
             }
         }
         if (!bShaded) {
-            radiance = ShadeProbeRayHitAnalytical(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT);
+            radiance = ShadeReflectionRayHit(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT);
         }
         hitTOut = hit.hitT;
     } else if (hit.hitT == REFLECTION_HIT_T_SKY && pc.skyboxIndex >= 0) {
@@ -140,7 +140,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
     uint2 writeCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? rcoord : pixel;
     rdgStorageFloat4[pc.outputIndex][writeCoord] = outColor;
     if (field != 0u && pc.bCheckerboardPacked == 0u) {
-        int2 o = OtherFieldPixel(pixel, field);
+        int2 o = OppositeFieldPixel(pixel, field);
         if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
             rdgStorageFloat4[pc.outputIndex][uint2(o)] = outColor;
         }

@@ -12,6 +12,6 @@ void ComputeReSTIRDITransformLights(uniform ReSTIRTransformLightsPushConstant pc
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    LightVS vs = TransformLight(pc.lightData->lights[lightIdx], scene.view);
+    LightView vs = TransformLightToView(pc.lightData->lights[lightIdx], scene.view);
     pc.lightVS[lightIdx] = PackLightVS(vs);
 }

@@ -14,6 +14,7 @@ import shader_functions;
 import denoiser_common;
 import sigma_common;
 
+// viewZ float bit pattern with its low 3 mantissa bits replaced by the accum frame count (0-7)
 static uint PackViewZAndHistoryLength(float viewZ, float historyLength)
 {
     uint p = asuint(viewZ) & ~7u;

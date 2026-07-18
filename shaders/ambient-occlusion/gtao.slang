@@ -152,7 +152,7 @@ float3x3 XeGTAO_RotFromToMatrix(float3 from, float3 to) {
         hvxz - v.y, hvyz + v.x, e + hvz * v.z);
 }
 
-uint XE_GTAO_HilbertIndex(uint posX, uint posY) {
+uint XeGTAO_HilbertIndex(uint posX, uint posY) {
     uint index = 0u;
     for (uint curLevel = XE_HILBERT_WIDTH / 2u; curLevel > 0u; curLevel /= 2u) {
         uint regionX = (posX & curLevel) > 0u ? 1u : 0u;
@@ -171,13 +171,13 @@ uint XE_GTAO_HilbertIndex(uint posX, uint posY) {
     return index;
 }
 
-float2 XE_GTAO_SpatioTemporalNoise(int2 pixCoord, uint temporalIndex) {
-    uint index = XE_GTAO_HilbertIndex(uint(pixCoord.x), uint(pixCoord.y));
+float2 XeGTAO_SpatioTemporalNoise(int2 pixCoord, uint temporalIndex) {
+    uint index = XeGTAO_HilbertIndex(uint(pixCoord.x), uint(pixCoord.y));
     index += 288u * (temporalIndex % 64u);
     return float2(frac(0.5 + index * float2(0.75487766624669276005, 0.5698402909980532659114)));
 }
 
-float4 XE_GTAO_CalculateDepthEdges(float centerZ, float leftZ, float rightZ, float topZ, float bottomZ) {
+float4 XeGTAO_CalculateDepthEdges(float centerZ, float leftZ, float rightZ, float topZ, float bottomZ) {
     float4 edgesLRTB = float4(leftZ, rightZ, topZ, bottomZ) - float4(centerZ, centerZ, centerZ, centerZ);
 
     float slopeLR = (edgesLRTB.y - edgesLRTB.x) * 0.5;
@@ -215,7 +215,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     const float viewSpaceZB = valuesBR.x;
 
     // Calculate and store edge data
-    float4 edges = XE_GTAO_CalculateDepthEdges(viewSpaceZM, viewSpaceZL, viewSpaceZR, viewSpaceZT, viewSpaceZB);
+    float4 edges = XeGTAO_CalculateDepthEdges(viewSpaceZM, viewSpaceZL, viewSpaceZR, viewSpaceZT, viewSpaceZB);
     float packedEdges = XeGTAO_PackEdges(edges);
     rdgStorageFloat[pc.edgeDataIndex][screenPos] = packedEdges;
 
@@ -245,7 +245,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     float visibility = 0.0;
 
     // Noise generation
-    float2 noise = XE_GTAO_SpatioTemporalNoise(screenPos, pc.noiseIndex);
+    float2 noise = XeGTAO_SpatioTemporalNoise(screenPos, pc.noiseIndex);
     float noiseSlice = noise.x;
     float noiseSample = noise.y;
 
@@ -275,7 +275,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
         float phi = sliceK * XE_GTAO_PI;
         float cosPhi = cos(phi);
         float sinPhi = sin(phi);
-        float2 omega = float2(cosPhi, sinPhi); // Flip sinPhi because of vulkan 0,0 at top left.
+        float2 omega = float2(cosPhi, sinPhi); // Reference uses -sinPhi; kept positive for Vulkan's top-left origin
 
         omega *= screenspaceRadius;
 

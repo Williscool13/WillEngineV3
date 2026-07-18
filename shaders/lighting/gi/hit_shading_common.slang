@@ -163,7 +163,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
 }
 
 /** Used by the reflection shade pass. */
-public float3 ShadeProbeRayHitAnalytical(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias)
+public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 

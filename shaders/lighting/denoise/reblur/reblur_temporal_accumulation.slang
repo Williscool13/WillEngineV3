@@ -252,17 +252,23 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
             uint virtualIndex = threadIndex + stage * TA_GROUP_X * TA_GROUP_Y;
             uint2 newId = uint2(virtualIndex % TA_BUFFER_X, virtualIndex / TA_BUFFER_X);
             if (stage == 0 || virtualIndex < TA_BUFFER_X * TA_BUFFER_Y)
+            {
                 TAPreload(newId, groupBase + int2(newId), rc.gRectSize, pc.normalRoughnessIndex, pc.specInputIndex, viewToWorld);
+            }
         }
     }
     GroupMemoryBarrierWithGroupSync();
 
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    {
         return;
+    }
 
     float currentLinearZ = RelaxLoadViewZ(pc.viewZIndex, pixelPos, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     if (!RelaxIsInDenoisingRange(currentLinearZ, rc.gDenoisingRange))
+    {
         return;
+    }
 
     // ReSTIR-provided history confidence (1 = full trust). A single signal drives both lobes.
     float historyConfidence = 1.0;
@@ -321,7 +327,7 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
         [unroll]
         for (int j = -1; j <= 1; j++)
         {
-            if (i == 0 && j == 0) continue;
+            if (i == 0 && j == 0) { continue; }
             float4 nsh = sharedNormalSpecHitT[sharedMemoryIndex.y + j][sharedMemoryIndex.x + i];
             minHitDist3x3 = min(minHitDist3x3, nsh.a == 0.0 ? NRD_INF : nsh.a);
             if (i >= 0 && j >= 0)
@@ -428,7 +434,7 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
             float fSize = min(float(rc.gRectSize.x), float(rc.gRectSize.y)) * pixSz;
             float2 geomWP = RelaxGetGeometryWeightParams(NRD_CURVATURE_HIGH_PARALLAX_DISOCCLUSION_THRESHOLD, fSize, currentWorldPos, currentNormal);
             float NoXHigh = dot(currentNormal, xHigh);
-            float geomW = RelaxApplyGeometryWeightLast(1.0, zHigh, NoXHigh, geomWP, rc.gDenoisingRange);
+            float geomW = RelaxApplyGeometryWeightAndRangeCheck(1.0, zHigh, NoXHigh, geomWP, rc.gDenoisingRange);
             if (geomW > 0.5) { ne = nHigh; xe = xHigh; }
         }
 

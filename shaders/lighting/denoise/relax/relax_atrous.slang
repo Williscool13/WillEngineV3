@@ -20,7 +20,9 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
 
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    {
         return;
+    }
 
     int2 fullPixel = pixelPos;
     float3 centerNormal;
@@ -28,7 +30,9 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
     float centerViewZ;
     RelaxLoadGuide(pc.guideIndex, fullPixel, centerNormal, centerRoughness, centerViewZ);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
+    {
         return;
+    }
 
     float2 pixelUv = (float2(pixelPos) + 0.5) * rc.gRectSizeInv;
     float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
@@ -100,7 +104,9 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
 
     float specularLuminanceWeightRelaxation = 1.0;
     if (stepSize <= 4)
+    {
         specularLuminanceWeightRelaxation = lerp(1.0, specularReprojectionConfidence, rc.gLuminanceEdgeStoppingRelaxation);
+    }
 
     float specularLobeAngleFraction = rc.gLobeAngleFraction;
     float diffuseLobeAngleFractionForSpec = diffuseLobeAngleFraction;
@@ -172,7 +178,7 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
         [unroll]
         for (int i = -1; i <= 1; i++)
         {
-            if (i == 0 && j == 0) continue;
+            if (i == 0 && j == 0) { continue; }
 
             int2 p = pixelPos + offset + int2(i, j) * stepSize;
             bool isInside = all(p >= int2(0, 0)) && all(p < rc.gRectSize);

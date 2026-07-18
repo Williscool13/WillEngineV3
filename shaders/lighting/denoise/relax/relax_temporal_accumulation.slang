@@ -217,13 +217,17 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
             uint virtualIndex = threadIndex + stage * TA_GROUP_X * TA_GROUP_Y;
             uint2 newId = uint2(virtualIndex % TA_BUFFER_X, virtualIndex / TA_BUFFER_X);
             if (stage == 0 || virtualIndex < TA_BUFFER_X * TA_BUFFER_Y)
+            {
                 TAPreload(newId, groupBase + int2(newId), rc.gRectSize, pc.guideIndex, pc.specInputIndex);
+            }
         }
     }
     GroupMemoryBarrierWithGroupSync();
 
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    {
         return;
+    }
 
     int2 fullPixel = pixelPos;
     float3 currentNormal;
@@ -231,7 +235,9 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float currentLinearZ;
     RelaxLoadGuide(pc.guideIndex, fullPixel, currentNormal, currentRoughness, currentLinearZ);
     if (!RelaxIsInDenoisingRange(currentLinearZ, rc.gDenoisingRange))
+    {
         return;
+    }
 
     // ReSTIR-provided history confidence (IN_DIFF/SPEC_CONFIDENCE equivalent). 1 = full trust; lower scales down the effective max accumulated frames here-and-now, collapsing history where the lighting changed in a way reprojection cannot see (moving-caster shadows on static surfaces).
     // Single ReSTIR signal drives both lobes.
@@ -285,7 +291,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
         [unroll]
         for (int j = -1; j <= 1; j++)
         {
-            if (i == 0 && j == 0) continue;
+            if (i == 0 && j == 0) { continue; }
             float4 nsh = sharedNormalSpecHitT[sharedMemoryIndex.y + j][sharedMemoryIndex.x + i];
             minHitDist3x3 = min(minHitDist3x3, nsh.a == 0.0 ? NRD_INF : nsh.a);
             currentNormalAveraged += nsh.rgb;
@@ -340,7 +346,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
         historyLength = max(historyLength, 1.0);
     }
 
-    if (rc.gResetHistory != 0) historyLength = 1.0;
+    if (rc.gResetHistory != 0) { historyLength = 1.0; }
     float maxAccumulatedFrameNum = 1.0 + max(rc.gDiffMaxAccumulatedFrameNum, rc.gSpecMaxAccumulatedFrameNum);
     historyLength = min(historyLength, maxAccumulatedFrameNum);
     // Confidence flushes the accumulated frame count itself (not just the per-frame alpha cap), so a shadow flip persists as faster blend + more spatial fill for several frames instead of one.
@@ -423,7 +429,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
             float fSize = min(float(rc.gRectSize.x), float(rc.gRectSize.y)) * pixSz;
             float2 geomWP = RelaxGetGeometryWeightParams(NRD_CURVATURE_HIGH_PARALLAX_DISOCCLUSION_THRESHOLD, fSize, currentWorldPos, currentNormal);
             float NoXHigh = dot(currentNormal, xHigh);
-            float geomW = RelaxApplyGeometryWeightLast(1.0, zHigh, NoXHigh, geomWP, rc.gDenoisingRange);
+            float geomW = RelaxApplyGeometryWeightAndRangeCheck(1.0, zHigh, NoXHigh, geomWP, rc.gDenoisingRange);
             if (geomW > 0.5) { ne = nHigh; xe = xHigh; }
         }
 
@@ -567,7 +573,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float accSpec2ndMoment = lerp(accSpecM2SMB, accSpecM2VMB, virtualHistoryAmount);
 
     float specularHistoryConfidence = lerp(specSMBConfidence, specVMBConfidence, virtualHistoryAmount);
-    if (accSpec2ndMoment == 0) accSpec2ndMoment = rc.gSpecVarianceBoost * (1.0 - specularHistoryConfidence);
+    if (accSpec2ndMoment == 0) { accSpec2ndMoment = rc.gSpecVarianceBoost * (1.0 - specularHistoryConfidence); }
 
     rdgStorageFloat4[pc.outSpecIndex][pixelPos] = float4(accSpecIllum, accSpec2ndMoment);
     rdgStorageFloat4[pc.outSpecFastIndex][pixelPos] = float4(accSpecIllumResponsive, hitDist);

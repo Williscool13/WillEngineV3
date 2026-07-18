@@ -24,7 +24,9 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
 
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    {
         return;
+    }
 
     // NRD topology: the outputs are the RESPONSIVE (fast) textures, written in place ONLY at short-history
     // pixels; elsewhere they keep TA's responsive value (early-out without writing, like NRD RELAX_HistoryFix).
@@ -41,7 +43,9 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
     float centerViewZ;
     RelaxLoadGuide(pc.guideIndex, fullPixel, centerNormal, centerRoughness, centerViewZ);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
+    {
         return;
+    }
 
     float3 centerWorldPos = RelaxGetCurrentWorldPosFromPixelPos(pixelPos, centerViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
     float3 centerV = -normalize(centerWorldPos);
@@ -65,7 +69,7 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
         [unroll]
         for (int i = -2; i <= 2; i++)
         {
-            if (i == 0 && j == 0) continue;
+            if (i == 0 && j == 0) { continue; }
 
             int2 samplePosInt = pixelPos + int2(i, j) * int(r);
             float2 uv = (float2(samplePosInt) + 0.5) * rc.gRectSizeInv;

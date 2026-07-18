@@ -22,7 +22,7 @@ float3 SanitizeRadiance(float3 c) {
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
     uint2 pixel = threadID.xy + uint2(lightParams.minX, lightParams.minY);
     if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {
@@ -101,7 +101,7 @@ void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 t
         }
         else if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->lightCount))
         {
-            LightVS vs = UnpackLightVS(pc.lightVS[r.lightIdx]);
+            LightView vs = UnpackLightVS(pc.lightVS[r.lightIdx]);
             float3 yStar = DecodeSamplePos(r, vs);
             LightSample s = EvalLightSample(vs, yStar, viewPosition, N, vs.range);
 
@@ -157,7 +157,7 @@ void ComputeLightingPbrRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     rdgStorageFloat4[pc.secondaryOutputImageIndex][writeCoord] = specPacked;
 
     if (field != 0u && pc.bCheckerboardPacked == 0u) {
-        int2 o = OtherFieldPixel(pixel, field);
+        int2 o = OppositeFieldPixel(pixel, field);
         if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
             // Keep hitT in the duplicated field: a zeroed .w oscillates the accumulated hit distance toward
             // half its value and trips the miss paths in the ReBLUR prepass.

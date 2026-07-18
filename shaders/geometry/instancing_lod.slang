@@ -33,7 +33,7 @@ void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_Disp
     float3 worldCenter = mul(model.modelMatrix, float4(boundingSphere.xyz, 1.0)).xyz;
     float4 worldBounds = float4(worldCenter, worldRadius);
 
-    bool bVisible = FrustumCullSphere(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds);
+    bool bVisible = IsSphereInFrustum(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds);
     // todo: hiz occlusion culling
     if (!bVisible) {
         pc.instanceMeshletOffsets[instanceID].count = 0;
@@ -48,10 +48,18 @@ void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_Disp
 
 
     uint lod = 0;
-    if (screenSize < 10.0) lod = 3;
-    else if (screenSize < 50.0) lod = 2;
-    else if (screenSize < 150.0) lod = 1;
-    else lod = 0;
+    if (screenSize < 10.0) {
+        lod = 3;
+    }
+    else if (screenSize < 50.0) {
+        lod = 2;
+    }
+    else if (screenSize < 150.0) {
+        lod = 1;
+    }
+    else {
+        lod = 0;
+    }
 
     lod = min(lod + pc.lodBias, LOD_COUNT - 1);
 

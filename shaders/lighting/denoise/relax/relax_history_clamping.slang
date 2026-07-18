@@ -58,18 +58,24 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
             uint virtualIndex = threadIndex + stage * HC_GROUP_X * HC_GROUP_Y;
             uint2 newId = uint2(virtualIndex % HC_BUFFER_X, virtualIndex / HC_BUFFER_X);
             if (stage == 0 || virtualIndex < HC_BUFFER_X * HC_BUFFER_Y)
+            {
                 HCPreload(newId, groupBase + int2(newId), rc, pc.viewZIndex, pc.specFastIndex, pc.diffFastIndex, pc.specNoisyIndex, pc.diffNoisyIndex);
+            }
         }
     }
     GroupMemoryBarrierWithGroupSync();
 
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    {
         return;
+    }
 
     uint2 sharedCenter = uint2(threadPos) + HC_BORDER;
     float4 specNoisyCenter = RelaxUnpackF16x4(s_SpecNoisy_IsValid[sharedCenter.y][sharedCenter.x]);
     if (specNoisyCenter.w == 0.0)
+    {
         return;
+    }
 
     float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
 
@@ -152,50 +158,54 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
     float3 specResponsiveCenter = MLYCoCgToRgb(specCenterYCoCg.rgb);
     float4 outSpecResponsive = float4(specResponsiveCenter, specCenterYCoCg.a);
     if (historyLength <= rc.gHistoryFixFrameNum)
+    {
         outSpec.rgb = outSpecResponsive.rgb;
+    }
 
     float4 outDiff = float4(clampedDiff, diffHistory.a);
     float3 diffResponsiveCenter = MLYCoCgToRgb(diffCenterYCoCg.rgb);
     float4 outDiffResponsive = float4(diffResponsiveCenter, 0);
     if (historyLength <= rc.gHistoryFixFrameNum)
+    {
         outDiff.rgb = outDiffResponsive.rgb;
+    }
 
     // Clamping factors
     float specClampingFactor = (clampedSpecYCoCg.x - specYCoCg.x) == 0 ? 0.0
         : saturate((clampedSpecYCoCg.x - specYCoCg.x) / (specCenterYCoCg.x - specYCoCg.x));
-    if (historyLength <= rc.gHistoryFixFrameNum) specClampingFactor = 1.0;
+    if (historyLength <= rc.gHistoryFixFrameNum) { specClampingFactor = 1.0; }
 
     float diffClampingFactor = (clampedDiffYCoCg.x - diffYCoCg.x) == 0 ? 0.0
         : saturate((clampedDiffYCoCg.x - diffYCoCg.x) / (diffCenterYCoCg.x - diffYCoCg.x));
-    if (historyLength <= rc.gHistoryFixFrameNum) diffClampingFactor = 1.0;
+    if (historyLength <= rc.gHistoryFixFrameNum) { diffClampingFactor = 1.0; }
 
     // History acceleration for specular
     float specHistDiffL = 0.33 * RELAX_ANTILAG_ACCELERATION_AMOUNT_SCALE * rc.gHistoryAccelerationAmount
         * MLLuminance(abs(specResponsiveCenter - specHistory.rgb)) * specClampingFactor;
-    if (historyLength <= rc.gHistoryFixFrameNum) specHistDiffL = 0;
+    if (historyLength <= rc.gHistoryFixFrameNum) { specHistDiffL = 0; }
 
     float3 specColorDist = specNoisyM1 - specResponsiveCenter;
     float specColorDistL = MLLuminance(abs(specColorDist));
     float3 specAccel = (specColorDistL == 0) ? 0.0 : specColorDist * specHistDiffL / specColorDistL;
     float specAccelL = MLLuminance(abs(specAccel));
     float specAccelRatio = (specAccelL == 0) ? 0 : specColorDistL / specAccelL;
-    if (specAccelRatio < 1.0) specAccel *= specAccelRatio;
-    if (specAccelRatio <= 0.0) specAccel = 0;
+    if (specAccelRatio < 1.0) { specAccel *= specAccelRatio; }
+    if (specAccelRatio <= 0.0) { specAccel = 0; }
     outSpec.rgb += specAccel;
     outSpecResponsive.rgb += specAccel;
 
     // History acceleration for diffuse
     float diffHistDiffL = RELAX_ANTILAG_ACCELERATION_AMOUNT_SCALE * rc.gHistoryAccelerationAmount
         * MLLuminance(abs(diffResponsiveCenter - diffHistory.rgb)) * diffClampingFactor;
-    if (historyLength <= rc.gHistoryFixFrameNum) diffHistDiffL = 0;
+    if (historyLength <= rc.gHistoryFixFrameNum) { diffHistDiffL = 0; }
 
     float3 diffColorDist = diffNoisyM1 - diffResponsiveCenter;
     float diffColorDistL = MLLuminance(abs(diffColorDist));
     float3 diffAccel = (diffColorDistL == 0) ? 0.0 : diffColorDist * diffHistDiffL / diffColorDistL;
     float diffAccelL = MLLuminance(abs(diffAccel));
     float diffAccelRatio = (diffAccelL == 0) ? 0 : diffColorDistL / diffAccelL;
-    if (diffAccelRatio < 1.0) diffAccel *= diffAccelRatio;
-    if (diffAccelRatio <= 0.0) diffAccel = 0;
+    if (diffAccelRatio < 1.0) { diffAccel *= diffAccelRatio; }
+    if (diffAccelRatio <= 0.0) { diffAccel = 0; }
     outDiff.rgb += diffAccel;
     outDiffResponsive.rgb += diffAccel;
 

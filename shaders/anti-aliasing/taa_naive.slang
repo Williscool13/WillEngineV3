@@ -11,7 +11,7 @@ TemporalAntialiasingPushConstant pc;
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeNaiveTemporalAntialiasing(uint3 threadID : SV_DispatchThreadID) {
-    if (threadID.x >= pc.sceneData.mainRenderTargetSize.x || threadID.y >= pc.sceneData.mainRenderTargetSize.y) return;
+    if (threadID.x >= pc.sceneData.mainRenderTargetSize.x || threadID.y >= pc.sceneData.mainRenderTargetSize.y) { return; }
     int2 texelCoord = int2(threadID.xy);
     float2 uv = (float2(texelCoord.xy) + 0.5) / float2(pc.sceneData.mainRenderTargetSize);
 

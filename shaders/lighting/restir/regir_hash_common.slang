@@ -3,7 +3,7 @@ module regir_hash_common;
 import restir_interop;
 
 /**
- * World-space hash-grid key for ReGIR. Distance-adaptive: cell size doubles every level so far cells stay ~constant screen size and the visible cell count stays bounded (a fixed cell size explodes the distinct-cell.
+ * World-space hash-grid key for ReGIR. Distance-adaptive: cell size doubles every level so far cells stay ~constant screen size and the visible cell count stays bounded (a fixed cell size explodes the distinct-cell count).
  */
 public struct ReGIRHashKey
 {

@@ -25,8 +25,9 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
         for (uint x = 0; x < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++x) {
             uint2 pixelCoord = tileStart + uint2(x, y);
 
-            if (any(pixelCoord >= pc.velocityBufferSize))
+            if (any(pixelCoord >= pc.velocityBufferSize)) {
                 continue;
+            }
 
             float2 objectVelocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba;
             float velocityLengthSq = dot(objectVelocity, objectVelocity);
@@ -89,7 +90,7 @@ float2 SpreadCmp(float offsetLen, float2 spreadLen) {
 [numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
 void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
-    if (any(pixelCoord >= pc.srcBufferSize)) return;
+    if (any(pixelCoord >= pc.srcBufferSize)) { return; }
 
     float2 uv = (float2(pixelCoord) + 0.5) / pc.srcBufferSize;
 
@@ -121,7 +122,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
         for (int dir = -1; dir <= 1; dir += 2) {
             float2 sampleUV = uv + blurDir * t * float(dir);
 
-            if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) continue;
+            if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) { continue; }
 
             int2 sampleCoord = int2(sampleUV * pc.srcBufferSize);
             float3 sampleColor = rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(sampleCoord, 0)).rgb;

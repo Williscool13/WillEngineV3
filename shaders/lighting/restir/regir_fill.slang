@@ -43,7 +43,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
 
     float localSum = 0.0;
     for (uint li = localID.x; li < uint(lightCount); li += 64u) {
-        LightVS vsl = UnpackLightVS(pc.lightVS[li]);
+        LightView vsl = UnpackLightVS(pc.lightVS[li]);
         localSum += EvalCellLightTarget(vsl, cellCenterVS, UnpackUnorm4x8(vsl.packedColor).rgb);
     }
     gCellTargetReduce[localID.x] = localSum;
@@ -88,7 +88,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
             float uSelect = HashStep(h);
             if (cand.lightIdx == ~0u || cand.lightIdx >= uint(lightCount) || cand.sourcePdf <= 0.0) { continue; }
 
-            LightVS vs = UnpackLightVS(pc.lightVS[cand.lightIdx]);
+            LightView vs = UnpackLightVS(pc.lightVS[cand.lightIdx]);
             float target = EvalCellLightTarget(vs, sampleVS, UnpackUnorm4x8(vs.packedColor).rgb);
             float w_i = target / cand.sourcePdf;
             if (ReservoirAddSample(accum, w_i, uSelect)) {
@@ -117,7 +117,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
                     }
                 }
                 if (prev.lightIdx != ~0u) {
-                    LightVS vsH = UnpackLightVS(pc.lightVS[prev.lightIdx]);
+                    LightView vsH = UnpackLightVS(pc.lightVS[prev.lightIdx]);
                     float pH = EvalCellLightTarget(vsH, sampleVS, UnpackUnorm4x8(vsH.packedColor).rgb);
                     float wH = pH * ReGIRReservoirW(prev);
                     if (ReservoirAddSample(accumM, wH, HashStep(h))) {

@@ -48,7 +48,7 @@ public LightingInputs ReconstructLightingInputs(
 
     result.viewNormal = UnpackNormalOct16(gt1.r);
     UnpackPBR(gt1.b, result.roughness, result.metallic);
-    result.albedo = UnpackAlbedoRGB8(gt2.r);
+    result.albedo = UnpackAlbedoRGBA8(gt2.r);
     result.emissiveRGB = UnpackEmissiveRGBE(gt2.g);
 
     result.shadows = float2(1.0f);
@@ -67,7 +67,7 @@ public LightingInputs ReconstructLightingInputs(uint2 pixel, uint4 gt1, uint32_t
     result.viewNormal = UnpackNormalOct16(gt1.r);
     UnpackPBR(gt1.b, result.roughness, result.metallic);
     uint2 gt2 = rdgTexturesUInt2[gbufferTwoIndex].Load(int3(pixel, 0));
-    result.albedo = UnpackAlbedoRGB8(gt2.r);
+    result.albedo = UnpackAlbedoRGBA8(gt2.r);
     result.emissiveRGB = UnpackEmissiveRGBE(gt2.g);
     result.shadows = float2(1.0f);
     result.valid = true;

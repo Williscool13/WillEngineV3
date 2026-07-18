@@ -25,7 +25,7 @@ uint HDRToHistogramBin(float3 hdrColor, float minLogLuminance, float oneOverLogL
 
 [shader("compute")]
 [numthreads(POST_PROCESS_LUMINANCE_DISPATCH_X, POST_PROCESS_LUMINANCE_DISPATCH_Y, 1)]
-void ComputeBuildHistogramExposure(uniform HistogramBuildPushConstant pc, uint3 tid : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
+void ComputeExposureHistogram(uniform HistogramBuildPushConstant pc, uint3 tid : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
     g_sharedHistogram[groupIndex] = 0;
 
     GroupMemoryBarrierWithGroupSync();
@@ -45,7 +45,7 @@ groupshared uint g_sharedHistogramAverage[POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE]
 
 [shader("compute")]
 [numthreads(POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE, 1, 1)]
-void ComputeAverageExposure(uniform ExposureCalculatePushConstant pc, uint3 tid : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
+void ComputeExposureAverage(uniform ExposureCalculatePushConstant pc, uint3 tid : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
     uint countForThisBin = pc.histogramBufferAddress[groupIndex];
     g_sharedHistogramAverage[groupIndex] = countForThisBin * groupIndex;
 

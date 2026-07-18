@@ -61,7 +61,7 @@ void MeshTextDefault(
         float3 c00 = col0 * q.posMin.x + col1 * q.posMin.y + col3;
         float3 c11 = col0 * q.posMax.x + col1 * q.posMax.y + col3;
 
-        visible = FrustumCullAABB(scene.frustum, min(c00, c11), max(c00, c11));
+        visible = IsAABBInFrustum(scene.frustum, min(c00, c11), max(c00, c11));
 
         if (visible) {
             gs_visibleQuadIndices[WavePrefixCountBits(visible)] = tid;
