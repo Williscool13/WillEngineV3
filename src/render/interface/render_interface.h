@@ -155,6 +155,7 @@ struct PostProcessConfiguration
     } khronosParams;
 
     bool bMotionBlurEnabled{false};
+    bool bMotionBlurObjectOnly{true}; // subtract camera reprojection so only moving objects smear
     float motionBlurVelocityScale{0.8f}; // shutter fraction of inter-frame displacement
     float motionBlurTargetFps{60.0f}; // reference rate the shutter is normalized to; 0 = physical shutter (blur scales with frame time)
     float motionBlurDepthScale{1.0f}; // 1 / soft depth-classification band in view units
@@ -188,6 +189,30 @@ struct PostProcessConfiguration
 
     bool bDitherEnabled{true};
     float ditherStrength{1.0f};
+};
+
+enum class ScreenFadeMode : uint8_t
+{
+    None = 0,
+    Fade,
+    Iris,
+    Wipe,
+    Dissolve,
+    Letterbox,
+};
+
+/** Gameplay-driven screen cover, not a graphics setting. */
+struct ScreenFadeState
+{
+    ScreenFadeMode mode{ScreenFadeMode::None};
+    /** 0 = scene visible, 1 = fully covered. */
+    float progress{0.0f};
+    float softness{0.03f};
+    glm::vec2 center{0.5f, 0.5f};
+    glm::vec2 direction{1.0f, 0.0f};
+    glm::vec3 color{0.0f, 0.0f, 0.0f};
+    /** Composite after the game UI instead of before it, so the fade covers the HUD. */
+    bool bDrawOverUI{false};
 };
 
 enum class AntiAliasingMode
@@ -260,6 +285,8 @@ struct GTAOConfiguration
     float sliceCount{5.0f};
     float stepsPerSlice{3.0f};
     float denoiseBlurBeta{1.2f};
+    /** Edge-aware denoise passes over the raw AO, clamped to [1, 8]. Stored as float to match the slider widget. */
+    float denoisePasses{2.0f};
 };
 
 /**
@@ -851,6 +878,7 @@ struct ViewFamily
     GTAOConfiguration gtaoConfig{};
     AntiAliasingConfiguration aaConfig{};
     PostProcessConfiguration postProcessConfig{};
+    ScreenFadeState screenFade{};
     SIGMAParams sigmaParams{};
     float iblIntensity{1.0f};
     float resolutionScale{1.0f};

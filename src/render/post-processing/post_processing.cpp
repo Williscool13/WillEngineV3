@@ -181,6 +181,33 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
         velocityScale /= ctx.deltaTime * ctx.config.motionBlurTargetFps;
     }
 
+    const uint32_t bObjectOnly = ctx.config.bMotionBlurObjectOnly ? 1u : 0u;
+
+    graph.CreateTexture(SID("motion_blur_velocity"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, width, height, 1}, std::nullopt, true);
+    RenderPass& velocityExtractPass = graph.AddPass(SID("[Motion Blur] Velocity Extract"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    velocityExtractPass.ReadBuffer(SID("scene_data"));
+    velocityExtractPass.ReadSampledImage(velocity);
+    velocityExtractPass.ReadSampledImage(depthStencil);
+    velocityExtractPass.WriteStorageImage(SID("motion_blur_velocity"));
+    velocityExtractPass.Execute([width, height, pipelines, velocity, depthStencil, bObjectOnly](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        MotionBlurVelocityExtractPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .extent = {width, height},
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
+            .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_velocity")),
+            .bObjectOnly = bObjectOnly,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_velocity_extract"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        uint32_t xDispatch = (width + POST_PROCESS_MOTION_BLUR_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_X;
+        uint32_t yDispatch = (height + POST_PROCESS_MOTION_BLUR_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_Y;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+    velocity = SID("motion_blur_velocity");
+
     uint32_t blurTiledX = (width + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
     uint32_t blurTiledY = (height + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
     graph.CreateTexture(SID("motion_blur_tiled_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, std::nullopt, true);
@@ -429,7 +456,8 @@ StringID PPFinalize(PostProcessContext& ctx, StringID input)
     if (bBloomEnabled) { finalizePass.ReadSampledImage(SID("bloom_chain")); }
     if (bExposureEnabled) { finalizePass.ReadBuffer(SID("luminance_buffer")); }
     finalizePass.WriteStorageImage(SID("tonemap_output"));
-    finalizePass.Execute([pc = constants, input, pipelines, bBloomEnabled, bExposureEnabled](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) mutable {
+    finalizePass.Execute([constants, input, pipelines, bBloomEnabled, bExposureEnabled](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        PostProcessFinalizePushConstant pc = constants;
         pc.srcImageIndex = graph.GetSampledImageViewDescriptorIndex(input);
         pc.dstImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("tonemap_output"));
         pc.bloomImageIndex = bBloomEnabled ? graph.GetSampledImageViewDescriptorIndex(SID("bloom_chain")) : 0u;
@@ -489,5 +517,42 @@ StringID PPCompose(PostProcessContext& ctx, StringID input)
     });
 
     return SID("post_process_output");
+}
+
+StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Array<uint32_t, 2> extent, StringID input)
+{
+    if (fade.mode == Core::ScreenFadeMode::None || fade.progress <= 0.0f) { return input; }
+
+    const uint32_t width = extent[0];
+    const uint32_t height = extent[1];
+
+    ScreenFadePushConstant constants{};
+    constants.outputExtent = {width, height};
+    constants.center = fade.center;
+    constants.direction = fade.direction;
+    constants.color = glm::vec4(fade.color, 1.0f);
+    constants.progress = std::clamp(fade.progress, 0.0f, 1.0f);
+    constants.softness = std::max(fade.softness, 0.0f);
+    constants.aspect = static_cast<float>(width) / static_cast<float>(std::max(height, 1u));
+    constants.mode = static_cast<uint32_t>(fade.mode);
+
+    graph.CreateTexture(SID("screen_fade_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
+    RenderPass& fadePass = graph.AddPass(SID("[Screen Fade] Overlay"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    fadePass.ReadSampledImage(input);
+    fadePass.WriteStorageImage(SID("screen_fade_output"));
+    fadePass.Execute([constants, input, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        ScreenFadePushConstant pc = constants;
+        pc.inputIndex = graph.GetSampledImageViewDescriptorIndex(input);
+        pc.outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("screen_fade_output"));
+
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("screen_fade"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        uint32_t xDispatch = (pc.outputExtent.x + SCREEN_FADE_DISPATCH_X - 1) / SCREEN_FADE_DISPATCH_X;
+        uint32_t yDispatch = (pc.outputExtent.y + SCREEN_FADE_DISPATCH_Y - 1) / SCREEN_FADE_DISPATCH_Y;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+
+    return SID("screen_fade_output");
 }
 } // Render

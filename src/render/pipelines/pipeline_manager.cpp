@@ -599,6 +599,10 @@ void PipelineManager::RegisterPipelines()
                             sizeof(PostProcessFinalizePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("post_process_compose"), src / "post_process_compose.spv", "ComputeCompose",
                             sizeof(PostProcessComposePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("screen_fade"), src / "screen_fade.spv", "ComputeScreenFade",
+                            sizeof(ScreenFadePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("motion_blur_velocity_extract"), src / "motion_blur.spv", "ComputeMotionBlurVelocityExtract",
+                            sizeof(MotionBlurVelocityExtractPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("motion_blur_tile_max"), src / "motion_blur.spv", "ComputeMotionBlurTileMax",
                             sizeof(MotionBlurTileVelocityPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("motion_blur_neighbor_max"), src / "motion_blur.spv", "ComputeMotionBlurNeighborMax",

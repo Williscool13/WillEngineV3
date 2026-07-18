@@ -387,6 +387,7 @@ nlohmann::json ToJson(const Core::GTAOConfiguration& p)
         {"sliceCount", p.sliceCount},
         {"stepsPerSlice", p.stepsPerSlice},
         {"denoiseBlurBeta", p.denoiseBlurBeta},
+        {"denoisePasses", p.denoisePasses},
     };
 }
 
@@ -405,6 +406,7 @@ void FromJson(const nlohmann::json& g, Core::GTAOConfiguration& p)
     p.sliceCount = gFloat("sliceCount", p.sliceCount);
     p.stepsPerSlice = gFloat("stepsPerSlice", p.stepsPerSlice);
     p.denoiseBlurBeta = gFloat("denoiseBlurBeta", p.denoiseBlurBeta);
+    p.denoisePasses = gFloat("denoisePasses", p.denoisePasses);
 }
 
 nlohmann::json ToJson(const Core::SMAAConfiguration& p)
@@ -535,6 +537,7 @@ nlohmann::json ToJson(const Core::PostProcessConfiguration& p)
         {"khronosStartCompression", p.khronosParams.startCompression},
         {"khronosDesaturation", p.khronosParams.desaturation},
         {"bMotionBlurEnabled", p.bMotionBlurEnabled},
+        {"bMotionBlurObjectOnly", p.bMotionBlurObjectOnly},
         {"motionBlurVelocityScale", p.motionBlurVelocityScale},
         {"motionBlurTargetFps", p.motionBlurTargetFps},
         {"motionBlurDepthScale", p.motionBlurDepthScale},
@@ -598,6 +601,7 @@ void FromJson(const nlohmann::json& r, Core::PostProcessConfiguration& p)
     p.khronosParams.startCompression = getFloat("khronosStartCompression", p.khronosParams.startCompression);
     p.khronosParams.desaturation = getFloat("khronosDesaturation", p.khronosParams.desaturation);
     p.bMotionBlurEnabled = getBool("bMotionBlurEnabled", p.bMotionBlurEnabled);
+    p.bMotionBlurObjectOnly = getBool("bMotionBlurObjectOnly", p.bMotionBlurObjectOnly);
     p.motionBlurVelocityScale = getFloat("motionBlurVelocityScale", p.motionBlurVelocityScale);
     p.motionBlurTargetFps = getFloat("motionBlurTargetFps", p.motionBlurTargetFps);
     p.motionBlurDepthScale = getFloat("motionBlurDepthScale", p.motionBlurDepthScale);

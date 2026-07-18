@@ -790,7 +790,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, renderExtent, outputExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
 
+        if (!viewFamily.screenFade.bDrawOverUI) {
+            targets.colorOutput = PPScreenFade(*renderGraph, pipelineManager, viewFamily.screenFade, postAaExtent, targets.colorOutput);
+        }
+
         SetupUIRender(*renderGraph, pipelineManager, viewFamily, postAaExtent, targets.colorOutput);
+
+        if (viewFamily.screenFade.bDrawOverUI) {
+            targets.colorOutput = PPScreenFade(*renderGraph, pipelineManager, viewFamily.screenFade, postAaExtent, targets.colorOutput);
+        }
 
 
 #if WILL_EDITOR

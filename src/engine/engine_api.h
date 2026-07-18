@@ -523,6 +523,7 @@ struct EngineState
     Core::InlineString<128> currentSceneName{};
     StringID currentCheckpointId{};
     int32_t currentCheckpointPriority{INT32_MIN};
+    Core::ScreenFadeState screenFade{};
 
     PhysicsState physics;
     LightingState lighting;

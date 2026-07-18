@@ -6,6 +6,38 @@ import shader_constants;
 
 import bindless_declarations;
 
+// Camera-only reprojection subtracted from the gbuffer motion vector leaves object motion alone. Both terms
+// carry the same jitter offset and the same current-frame NDC, so those cancel and the residual is the
+// model-matrix delta only; the jitter terms must still be spelled out to match the gbuffer expression.
+[shader("compute")]
+[numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
+void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    if (any(dtid.xy >= pc.extent)) { return; }
+    uint2 pixelCoord = dtid.xy;
+
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixelCoord, 0));
+    float depth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
+    if ((gt1.w & 1u) == 0u || depth <= 0.0) {
+        rdgStorageFloat2[pc.outputIndex][pixelCoord] = float2(0.0, 0.0);
+        return;
+    }
+
+    float2 velocity = UnpackMotionVectors(gt1.g);
+    if (pc.bObjectOnly != 0u) {
+        float2 uv = (float2(pixelCoord) + 0.5) / float2(pc.extent);
+        float3 worldPos = ReconstructWorldPosition(pc.sceneData.invViewProj, uv, depth);
+        float4 prevClip = mul(pc.sceneData.prevViewProj, float4(worldPos, 1.0));
+        if (prevClip.w <= 1e-6) {
+            rdgStorageFloat2[pc.outputIndex][pixelCoord] = float2(0.0, 0.0);
+            return;
+        }
+        float2 cameraVelocity = (prevClip.xy / prevClip.w - (uv * 2.0 - 1.0)) - pc.sceneData.jitter + pc.sceneData.prevJitter;
+        velocity -= cameraVelocity;
+    }
+
+    rdgStorageFloat2[pc.outputIndex][pixelCoord] = velocity;
+}
+
 groupshared float g_velLenSq[POST_PROCESS_MOTION_BLUR_TILE_SIZE * POST_PROCESS_MOTION_BLUR_TILE_SIZE];
 groupshared float2 g_vel[POST_PROCESS_MOTION_BLUR_TILE_SIZE * POST_PROCESS_MOTION_BLUR_TILE_SIZE];
 
@@ -17,7 +49,7 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
 
     float2 velocity = float2(0.0, 0.0);
     if (all(pixelCoord < pc.velocityBufferSize)) {
-        velocity = UnpackMotionVectors(rdgTexturesUInt4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).g) * pc.velocityScale;
+        velocity = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg * pc.velocityScale;
     }
     g_velLenSq[groupIndex] = dot(velocity, velocity);
     g_vel[groupIndex] = velocity;
@@ -115,7 +147,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
         blurLen = float(POST_PROCESS_MOTION_BLUR_TILE_SIZE);
     }
 
-    float2 centerVelocityUv = UnpackMotionVectors(rdgTexturesUInt4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).g) * 0.5;
+    float2 centerVelocityUv = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg * 0.5;
     float centerViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
     float centerSpreadLen = min(length(centerVelocityUv * pc.velocityScale * pc.srcBufferSize), float(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
 
@@ -144,7 +176,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
             int2 sampleCoord = int2(sampleUV * pc.srcBufferSize);
             pairColor[side] = rdgTexturesFloat4[pc.sceneColorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], sampleUV, 0).rgb;
             float sampleViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
-            float2 sampleVelocityUv = UnpackMotionVectors(rdgTexturesUInt4[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).g) * 0.5;
+            float2 sampleVelocityUv = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).rg * 0.5;
             float sampleSpreadLen = min(length(sampleVelocityUv * pc.velocityScale * pc.srcBufferSize), float(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
 
             float2 d = DepthCmp(centerViewZ, sampleViewZ, pc.depthScale);

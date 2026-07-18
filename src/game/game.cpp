@@ -376,6 +376,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->mainViewFamily.shadingShaderOverride = state->debug.shadingShaderOverride;
     frameBuffer->mainViewFamily.lightingShaderOverride = state->debug.lightingShaderOverride;
     frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
+    frameBuffer->mainViewFamily.screenFade = state->screenFade;
     frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
     frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
     frameBuffer->mainViewFamily.sigmaParams = state->lighting.sigmaParams;

@@ -532,11 +532,13 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (ImGui::CollapsingHeader("Post-Processing")) {
             if (ImGui::Button("Bloom Chain")) setDebugTarget("bloom_chain", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Motion Blur Velocity")) setDebugTarget("motion_blur_velocity", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Tiled Max")) setDebugTarget("motion_blur_tiled_max", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Neighbor Max")) setDebugTarget("motion_blur_tiled_neighbor_max", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Output")) setDebugTarget("motion_blur_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Finalize Output")) setDebugTarget("tonemap_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Post Process Output")) setDebugTarget("post_process_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Screen Fade Output")) setDebugTarget("screen_fade_output", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
     }
     ImGui::End();
@@ -759,6 +761,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             gtaoF("Slice Count##gtao", &gtao.sliceCount, gtaoDefaults.sliceCount, 1.0f, 9.0f, "%.0f", "Number of angular slices sampled per pixel. More = smoother, less directional noise, higher cost. Default 5.");
             gtaoF("Steps Per Slice##gtao", &gtao.stepsPerSlice, gtaoDefaults.stepsPerSlice, 1.0f, 9.0f, "%.0f", "Horizon-march steps taken along each slice. More = finer occluder detection, higher cost. Default 3.");
             gtaoF("Denoise Blur Beta##gtao", &gtao.denoiseBlurBeta, gtaoDefaults.denoiseBlurBeta, 0.0f, 10.0f, "%.2f", "Edge-stopping strength of the final denoise blur. Higher = preserves edges but leaves more noise; lower = smoother but softer. Default 1.2.");
+            gtaoF("Denoise Passes##gtao", &gtao.denoisePasses, gtaoDefaults.denoisePasses, 1.0f, 8.0f, "%.0f", "Edge-aware denoise passes over the raw AO. Each is a full-res dispatch; intermediate passes blur harder than the last. The XeGTAO default of 1 assumes TAA finishes the job. Default 2.");
 
             ImGui::Spacing();
             if (ImGui::Button("Reset GTAO")) {
@@ -1167,6 +1170,27 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     ImGui::End();
 }
 
+static void DrawScreenFadeConfig(Core::ScreenFadeState& fade)
+{
+    const char* modes[] = {"None", "Fade", "Iris", "Wipe", "Dissolve", "Letterbox"};
+    int currentMode = static_cast<int>(fade.mode);
+    if (ImGui::Combo("Fade Mode", &currentMode, modes, IM_ARRAYSIZE(modes))) {
+        fade.mode = static_cast<Core::ScreenFadeMode>(currentMode);
+    }
+    if (fade.mode == Core::ScreenFadeMode::None) { return; }
+
+    Widgets::SliderFloat("Progress", &fade.progress, 0.0f, 1.0f, {.reset = true, .resetTo = 0.0f});
+    Widgets::SliderFloat("Softness", &fade.softness, 0.0f, 0.5f, {.reset = true, .resetTo = 0.03f});
+    ImGui::ColorEdit3("Fade Color", &fade.color.x);
+    ImGui::Checkbox("Draw Over UI", &fade.bDrawOverUI);
+    if (fade.mode == Core::ScreenFadeMode::Iris || fade.mode == Core::ScreenFadeMode::Dissolve) {
+        ImGui::DragFloat2("Center", &fade.center.x, 0.01f, -1.0f, 2.0f);
+    }
+    if (fade.mode == Core::ScreenFadeMode::Wipe) {
+        ImGui::DragFloat2("Direction", &fade.direction.x, 0.01f, -1.0f, 1.0f);
+    }
+}
+
 bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
 {
     constexpr Core::PostProcessConfiguration defaults{};
@@ -1236,6 +1260,8 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
 
     if (ImGui::CollapsingHeader("Motion Blur")) {
         check("Enabled##motionblur", &pp.bMotionBlurEnabled);
+        check("Object Only##motionblur", &pp.bMotionBlurObjectOnly);
+        ImGui::SetItemTooltip("Subtract the camera-only reprojection so only moving objects smear. Off = full camera + object blur.");
         ppF("Velocity Scale", &pp.motionBlurVelocityScale, defaults.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f", "Shutter fraction of the inter-frame displacement; 0.5 = cinematic 180-degree shutter.");
         ppF("Target FPS", &pp.motionBlurTargetFps, defaults.motionBlurTargetFps, 0.0f, 240.0f, "%.0f", "Frame rate the shutter is normalized to, so blur length stays constant as fps varies and hitches do not smear. 0 = physical shutter (blur grows with frame time).");
         ppF("Depth Scale", &pp.motionBlurDepthScale, defaults.motionBlurDepthScale, 0.1f, 10.0f, "%.2f", "1 / soft depth band (view units) for foreground/background classification. 1.0 = 1m band.");
@@ -1327,6 +1353,10 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
         if (changed && state->projectConfig.bAutoSavePostProcess) {
             SavePostProcessTab(state);
         }
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Screen Fade");
+        DrawScreenFadeConfig(state->screenFade);
     }
     ImGui::End();
 }

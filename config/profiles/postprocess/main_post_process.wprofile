@@ -9,6 +9,7 @@
     "bExposureEnabled": true,
     "bFilmGrainEnabled": true,
     "bMotionBlurEnabled": false,
+    "bMotionBlurObjectOnly": true,
     "bPaniniEnabled": false,
     "bSharpeningEnabled": true,
     "bVignetteEnabled": true,

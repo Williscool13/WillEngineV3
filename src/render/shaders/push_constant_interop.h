@@ -911,6 +911,26 @@ SHADER_PUBLIC struct PostProcessComposePushConstant
     SHADER_PUBLIC uint frameIndex;
 };
 
+SHADER_PUBLIC SHADER_CONST uint32_t SCREEN_FADE_MODE_FADE = 1u;
+SHADER_PUBLIC SHADER_CONST uint32_t SCREEN_FADE_MODE_IRIS = 2u;
+SHADER_PUBLIC SHADER_CONST uint32_t SCREEN_FADE_MODE_WIPE = 3u;
+SHADER_PUBLIC SHADER_CONST uint32_t SCREEN_FADE_MODE_DISSOLVE = 4u;
+SHADER_PUBLIC SHADER_CONST uint32_t SCREEN_FADE_MODE_LETTERBOX = 5u;
+
+SHADER_PUBLIC struct ScreenFadePushConstant
+{
+    SHADER_PUBLIC uint2 outputExtent;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float2 center;
+    SHADER_PUBLIC float2 direction;
+    SHADER_PUBLIC float4 color; // w unused
+    SHADER_PUBLIC float progress;
+    SHADER_PUBLIC float softness;
+    SHADER_PUBLIC float aspect;
+    SHADER_PUBLIC uint32_t mode;
+};
+
 SHADER_PUBLIC struct BuildDirectIndirectPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
@@ -967,6 +987,16 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
     SHADER_PUBLIC float minAdaptedLuminance; // targetLuminance * exp2(-maxGainEV)
     SHADER_PUBLIC float maxAdaptedLuminance; // targetLuminance * exp2(-minGainEV)
     SHADER_PUBLIC uint32_t totalPixels;
+};
+
+SHADER_PUBLIC struct MotionBlurVelocityExtractPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 extent;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthBufferIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t bObjectOnly; // 0 keeps full camera+object motion
 };
 
 SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant

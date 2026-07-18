@@ -14,6 +14,7 @@
 namespace Core
 {
 struct PostProcessConfiguration;
+struct ScreenFadeState;
 struct ViewFamily;
 }
 
@@ -46,6 +47,9 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input);
 StringID PPFinalize(PostProcessContext& ctx, StringID input);
 // Display-referred sharpen + film grain + sRGB-step dither.
 StringID PPCompose(PostProcessContext& ctx, StringID input);
+// Gameplay screen cover (fade/iris/wipe/dissolve/letterbox); skipped entirely when inactive.
+// Outside the chain above because ScreenFadeState::bDrawOverUI decides whether it runs before or after UI compositing.
+StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Array<uint32_t, 2> extent, StringID input);
 
 } // Render
 
