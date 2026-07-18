@@ -856,26 +856,59 @@ SHADER_PUBLIC struct SmaaTemporalResolvePushConstant
     SHADER_PUBLIC uint32_t outputIndex;
 };
 
-SHADER_PUBLIC struct TonemapSDRPushConstant
+SHADER_PUBLIC SHADER_CONST uint32_t POST_PROCESS_FINALIZE_FLAG_EXPOSURE = 1u << 0;
+SHADER_PUBLIC SHADER_CONST uint32_t POST_PROCESS_FINALIZE_FLAG_BLOOM = 1u << 1;
+SHADER_PUBLIC SHADER_CONST uint32_t POST_PROCESS_FINALIZE_FLAG_GRADING = 1u << 2;
+
+// 172 bytes; relies on the Vulkan 1.4 256-byte maxPushConstantsSize guarantee
+SHADER_PUBLIC struct PostProcessFinalizePushConstant
 {
+    // White balance * identity-saturation basis, rows of a 3x3 matrix applied post-tonemap (w unused)
+    SHADER_PUBLIC float4 wbRow0;
+    SHADER_PUBLIC float4 wbRow1;
+    SHADER_PUBLIC float4 wbRow2;
+    // Operator params, vector-packed so the layout is stride-unambiguous:
+    // Hable/Reinhard: params0.x=whitePoint
+    // Uchimura: params0=(P,a,m,l), params1=(c,b,_,_)
+    // AgX: params0=(minEV,maxEV,_,_)
+    // Khronos: params0=(startCompression,desaturation,_,_)
+    SHADER_PUBLIC float4 params0;
+    SHADER_PUBLIC float4 params1;
+    SHADER_PUBLIC SHADER_PTR(float) luminanceBufferAddress;
+    SHADER_PUBLIC uint2 outputExtent;
+    SHADER_PUBLIC uint32_t srcImageIndex;
+    SHADER_PUBLIC uint32_t dstImageIndex;
+    SHADER_PUBLIC uint32_t bloomImageIndex;
     // -1=None, 0=ACES Fitted, 1=Hable, 2=Reinhard, 3=Lottes, 4=Reinhard-Jodie, 5=Clamp, 6=Hejl-Burgess-Dawson, 7=Uchimura, 8=ACES Narkowicz, 9=AgX, 10=Khronos PBR Neutral
     SHADER_PUBLIC int32_t tonemapOperator;
     SHADER_PUBLIC float targetLuminance;
-    SHADER_PUBLIC SHADER_PTR(float) luminanceBufferAddress;
-    SHADER_PUBLIC uint32_t bloomImageIndex;
-    SHADER_PUBLIC float bloomIntensity;
-    SHADER_PUBLIC uint32_t outputWidth;
-    SHADER_PUBLIC uint32_t outputHeight;
-    SHADER_PUBLIC uint32_t srcImageIndex;
-    SHADER_PUBLIC uint32_t dstImageIndex;
-    // Hable:   [0]=whitePoint
-    // Reinhard:[0]=whitePoint
-    // Uchimura:[0]=P, [1]=a, [2]=m, [3]=l, [4]=c, [5]=b
-    // AgX:     [0]=minEV, [1]=maxEV
-    // Khronos: [0]=startCompression, [1]=desaturation
-    SHADER_PUBLIC float params[6];
-    SHADER_PUBLIC int32_t bBloomEnabled;
-    SHADER_PUBLIC int32_t bExposureEnabled;
+    SHADER_PUBLIC float exposureBias; // exp2(colorGradingExposure), multiplied into exposure before tonemapping
+    SHADER_PUBLIC float bloomIntensity; // pre-divided by bloom mip count
+    SHADER_PUBLIC float contrast;
+    SHADER_PUBLIC float saturation;
+    SHADER_PUBLIC float vignetteStrength;
+    SHADER_PUBLIC float vignetteRadius;
+    SHADER_PUBLIC float vignetteSmoothness;
+    SHADER_PUBLIC float vignetteRoundness;
+    SHADER_PUBLIC float chromaticAberrationStrength;
+    SHADER_PUBLIC float paniniStrength;
+    SHADER_PUBLIC float paniniB; // stable screen-fit scale, CPU-precomputed
+    SHADER_PUBLIC float paniniVerticalFocalLength;
+    SHADER_PUBLIC float aspect;
+    SHADER_PUBLIC uint32_t flags;
+};
+
+SHADER_PUBLIC struct PostProcessComposePushConstant
+{
+    SHADER_PUBLIC uint2 outputExtent;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float sharpenStrength; // 0 = off
+    SHADER_PUBLIC float grainStrength; // 0 = off
+    SHADER_PUBLIC float grainSize;
+    SHADER_PUBLIC float grainResponse;
+    SHADER_PUBLIC float ditherStrength; // 0 = off; CPU zeroes when output is rescaled before presentation
+    SHADER_PUBLIC uint frameIndex;
 };
 
 SHADER_PUBLIC struct BuildDirectIndirectPushConstant
@@ -911,11 +944,14 @@ SHADER_PUBLIC struct DirectMeshShadingPushConstant
 SHADER_PUBLIC struct HistogramBuildPushConstant
 {
     SHADER_PUBLIC uint32_t hdrImageIndex;
+    SHADER_PUBLIC uint32_t _pad0;
     SHADER_PUBLIC SHADER_PTR(uint32_t) histogramBufferAddress;
     SHADER_PUBLIC uint32_t width;
     SHADER_PUBLIC uint32_t height;
     SHADER_PUBLIC float minLogLuminance;
     SHADER_PUBLIC float oneOverLogLuminanceRange;
+    // Meters every other pixel per axis; offset cycles the 2x2 phase per frame
+    SHADER_PUBLIC uint2 sampleOffset;
 };
 
 SHADER_PUBLIC struct ExposureCalculatePushConstant
@@ -924,7 +960,12 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
     SHADER_PUBLIC SHADER_PTR(float) luminanceBufferAddress;
     SHADER_PUBLIC float minLogLuminance;
     SHADER_PUBLIC float logLuminanceRange;
-    SHADER_PUBLIC float adaptationSpeed;
+    SHADER_PUBLIC float alphaBrighten; // 1-exp2(-speed*dt), applied while adapted luminance decreases
+    SHADER_PUBLIC float alphaDarken; // applied while adapted luminance increases
+    SHADER_PUBLIC float lowPercentile;
+    SHADER_PUBLIC float highPercentile;
+    SHADER_PUBLIC float minAdaptedLuminance; // targetLuminance * exp2(-maxGainEV)
+    SHADER_PUBLIC float maxAdaptedLuminance; // targetLuminance * exp2(-minGainEV)
     SHADER_PUBLIC uint32_t totalPixels;
 };
 
@@ -934,6 +975,8 @@ SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant
     SHADER_PUBLIC uint2 tileBufferSize;
     SHADER_PUBLIC uint32_t velocityBufferIndex;
     SHADER_PUBLIC uint32_t tileMaxIndex;
+    // Applied before the tile-radius clamp so the stored max describes the blur that will actually be gathered
+    SHADER_PUBLIC float velocityScale;
 };
 
 SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant
@@ -945,29 +988,36 @@ SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant
 
 SHADER_PUBLIC struct MotionBlurReconstructionPushConstant
 {
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 srcBufferSize;
     SHADER_PUBLIC uint32_t sceneColorIndex;
     SHADER_PUBLIC uint32_t velocityBufferIndex;
     SHADER_PUBLIC uint32_t depthBufferIndex;
     SHADER_PUBLIC uint32_t tileNeighborMaxIndex;
     SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float velocityScale; // 1.0f default
-    SHADER_PUBLIC float depthScale; // 1.0f?
+    SHADER_PUBLIC float velocityScale; // shutter fraction of inter-frame displacement
+    SHADER_PUBLIC float depthScale; // 1 / soft depth-classification band in view units
 };
 
 SHADER_PUBLIC struct BloomThresholdPushConstant
 {
     SHADER_PUBLIC uint2 outputExtent;
+    SHADER_PUBLIC uint2 inputExtent;
     SHADER_PUBLIC uint32_t inputColorIndex;
     SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float threshold;
+    SHADER_PUBLIC SHADER_PTR(float) luminanceBufferAddress;
+    SHADER_PUBLIC float threshold; // display-relative, scaled into scene units by the carried exposure
     SHADER_PUBLIC float softThreshold;
     SHADER_PUBLIC float clampValue;
+    SHADER_PUBLIC float targetLuminance;
+    SHADER_PUBLIC uint32_t bExposureEnabled;
+    SHADER_PUBLIC uint32_t _pad0;
 };
 
 SHADER_PUBLIC struct BloomDownsamplePushConstant
 {
     SHADER_PUBLIC uint2 outputExtent;
+    SHADER_PUBLIC uint2 inputExtent;
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t srcMipLevel;
@@ -975,71 +1025,13 @@ SHADER_PUBLIC struct BloomDownsamplePushConstant
 
 SHADER_PUBLIC struct BloomUpsamplePushConstant
 {
+    SHADER_PUBLIC uint2 outputExtent;
+    SHADER_PUBLIC uint2 lowerExtent;
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t lowerMipLevel;
     SHADER_PUBLIC uint32_t higherMipLevel;
     SHADER_PUBLIC float radius;
-};
-
-SHADER_PUBLIC struct VignetteChromaticAberrationPushConstant
-{
-    SHADER_PUBLIC uint2 outputExtent;
-    SHADER_PUBLIC uint32_t inputIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float chromaticAberrationStrength;
-    SHADER_PUBLIC float vignetteStrength;
-    SHADER_PUBLIC float vignetteRadius;
-    SHADER_PUBLIC float vignetteSmoothness;
-};
-
-SHADER_PUBLIC struct FilmGrainPushConstant
-{
-    SHADER_PUBLIC uint2 outputExtent;
-    SHADER_PUBLIC uint32_t inputIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float grainStrength;
-    SHADER_PUBLIC float grainSize;
-    SHADER_PUBLIC uint frameIndex;
-};
-
-SHADER_PUBLIC struct DitherPushConstant
-{
-    SHADER_PUBLIC uint2 outputExtent;
-    SHADER_PUBLIC uint32_t inputIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float ditherStrength;
-    SHADER_PUBLIC float frameIndex;
-};
-
-SHADER_PUBLIC struct SharpeningPushConstant
-{
-    SHADER_PUBLIC uint2 outputExtent;
-    SHADER_PUBLIC uint32_t inputIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float sharpness;
-};
-
-SHADER_PUBLIC struct ColorGradingPushConstant
-{
-    SHADER_PUBLIC uint2 outputExtent;
-    SHADER_PUBLIC uint32_t inputIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float exposure;
-    SHADER_PUBLIC float contrast;
-    SHADER_PUBLIC float saturation;
-    SHADER_PUBLIC float temperature;
-    SHADER_PUBLIC float tint;
-};
-
-SHADER_PUBLIC struct PaniniProjectionPushConstant
-{
-    SHADER_PUBLIC uint2 outputExtent;
-    SHADER_PUBLIC uint32_t inputIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float perspectiveFov;
-    SHADER_PUBLIC float aspect;
-    SHADER_PUBLIC float strength;
 };
 
 

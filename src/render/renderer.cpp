@@ -12,6 +12,8 @@ StringID SetupPostProcessing(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::ViewFamily& viewFamily,
                              Core::Array<uint32_t, 2> renderExtent,
+                             Core::Array<uint32_t, 2> preAaExtent,
+                             Core::Array<uint32_t, 2> displayExtent,
                              const RenderTargets& targets,
                              float deltaTime,
                              uint64_t frameNumber)
@@ -22,6 +24,8 @@ StringID SetupPostProcessing(RenderGraph& graph,
         .targets = targets,
         .view = viewFamily,
         .extent = renderExtent,
+        .preAaExtent = preAaExtent,
+        .displayExtent = displayExtent,
         .deltaTime = deltaTime,
         .frameNumber = frameNumber,
         .pipelines = pipelineManager,
@@ -29,15 +33,10 @@ StringID SetupPostProcessing(RenderGraph& graph,
 
     StringID current = ctx.targets.colorOutput;
     current = PPExposure(ctx, current);
+    current = PPMotionBlur(ctx, current);
     current = PPBloom(ctx, current);
-    current = PPSharpening(ctx, current);
-    current = PPTonemap(ctx, current);
-    // current = PPMotionBlur(ctx, current); // disabled: motion vector format change
-    current = PPColorGrading(ctx, current);
-    current = PPVignetteAberration(ctx, current);
-    current = PPPanini(ctx, current);
-    current = PPFilmGrain(ctx, current);
-    current = PPDither(ctx, current);
+    current = PPFinalize(ctx, current);
+    current = PPCompose(ctx, current);
     return current;
 }
 } // Render

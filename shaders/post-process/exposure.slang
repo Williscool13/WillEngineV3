@@ -12,9 +12,9 @@ groupshared uint g_sharedHistogram[POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE];
 // https://www.alextardif.com/HistogramLuminance.html
 uint HDRToHistogramBin(float3 hdrColor, float minLogLuminance, float oneOverLogLuminanceRange)
 {
-    static const float EPSILON = 0.005;
+    float epsilon = exp2(minLogLuminance);
     float luminance = dot(hdrColor, float3(0.2126, 0.7152, 0.0722));
-    if (luminance < EPSILON)
+    if (luminance < epsilon)
     {
         return 0;
     }
@@ -30,8 +30,9 @@ void ComputeExposureHistogram(uniform HistogramBuildPushConstant pc, uint3 tid :
 
     GroupMemoryBarrierWithGroupSync();
 
-    if (tid.x < pc.width && tid.y < pc.height) {
-        float3 hdrColor = rdgTexturesFloat4[pc.hdrImageIndex].Load(int3(tid.xy, 0)).rgb;
+    uint2 pixelCoord = tid.xy * 2u + pc.sampleOffset;
+    if (pixelCoord.x < pc.width && pixelCoord.y < pc.height) {
+        float3 hdrColor = rdgTexturesFloat4[pc.hdrImageIndex].Load(int3(pixelCoord, 0)).rgb;
         uint binIndex = HDRToHistogramBin(hdrColor, pc.minLogLuminance, pc.oneOverLogLuminanceRange);
         InterlockedAdd(g_sharedHistogram[binIndex], 1);
     }
@@ -41,29 +42,66 @@ void ComputeExposureHistogram(uniform HistogramBuildPushConstant pc, uint3 tid :
     InterlockedAdd(pc.histogramBufferAddress[groupIndex], g_sharedHistogram[groupIndex]);
 }
 
-groupshared uint g_sharedHistogramAverage[POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE];
+groupshared uint g_prefixSum[POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE];
+groupshared float g_weightedSum[POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE];
+groupshared float g_weightSum[POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE];
 
+// Trimmed percentile-band average of the histogram: pixels outside [lowPercentile, highPercentile] of the non-black distribution (fireflies, sky, the noise floor) do not steer exposure.
 [shader("compute")]
 [numthreads(POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE, 1, 1)]
 void ComputeExposureAverage(uniform ExposureCalculatePushConstant pc, uint3 tid : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
     uint countForThisBin = pc.histogramBufferAddress[groupIndex];
-    g_sharedHistogramAverage[groupIndex] = countForThisBin * groupIndex;
+    uint validCount = groupIndex != 0 ? countForThisBin : 0;
+    g_prefixSum[groupIndex] = validCount;
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // Hillis-Steele inclusive scan
+    for (uint offset = 1; offset < POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE; offset <<= 1) {
+        uint v = groupIndex >= offset ? g_prefixSum[groupIndex - offset] : 0;
+        GroupMemoryBarrierWithGroupSync();
+        g_prefixSum[groupIndex] += v;
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    float totalValid = float(g_prefixSum[POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE - 1]);
+    float low = pc.lowPercentile * totalValid;
+    float high = pc.highPercentile * totalValid;
+
+    float cdfHi = float(g_prefixSum[groupIndex]);
+    float cdfLo = cdfHi - float(validCount);
+    float contribution = clamp(min(cdfHi, high) - max(cdfLo, low), 0.0, float(validCount));
+    g_weightedSum[groupIndex] = contribution * float(groupIndex);
+    g_weightSum[groupIndex] = contribution;
 
     GroupMemoryBarrierWithGroupSync();
 
     for (uint cutoff = (POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE >> 1); cutoff > 0; cutoff >>= 1) {
         if (uint(groupIndex) < cutoff) {
-            g_sharedHistogramAverage[groupIndex] += g_sharedHistogramAverage[groupIndex + cutoff];
+            g_weightedSum[groupIndex] += g_weightedSum[groupIndex + cutoff];
+            g_weightSum[groupIndex] += g_weightSum[groupIndex + cutoff];
         }
 
         GroupMemoryBarrierWithGroupSync();
     }
 
     if (groupIndex == 0) {
-        float weightedLogAverage = (g_sharedHistogramAverage[0] / max(pc.totalPixels - float(countForThisBin), 1.0)) - 1.0;
-        float weightedAvgLum = exp2(((weightedLogAverage / 254.0) * pc.logLuminanceRange) + pc.minLogLuminance);
+        float weightSum = g_weightSum[0];
+        float weightedAvgLum;
+        if (weightSum > 0.5) {
+            float meanBin = g_weightedSum[0] / weightSum;
+            weightedAvgLum = exp2(((meanBin - 1.0) / 254.0) * pc.logLuminanceRange + pc.minLogLuminance);
+        } else {
+            weightedAvgLum = pc.minAdaptedLuminance;
+        }
+        weightedAvgLum = clamp(weightedAvgLum, pc.minAdaptedLuminance, pc.maxAdaptedLuminance);
+
         float lumLastFrame = pc.luminanceBufferAddress[0];
-        float adaptedLum = lumLastFrame + (weightedAvgLum - lumLastFrame) * pc.adaptationSpeed;
-        pc.luminanceBufferAddress[0] = adaptedLum;
+        if (!(lumLastFrame == lumLastFrame) || lumLastFrame <= 0.0) {
+            lumLastFrame = weightedAvgLum;
+        }
+        float alpha = weightedAvgLum < lumLastFrame ? pc.alphaBrighten : pc.alphaDarken;
+        float adaptedLum = lumLastFrame + (weightedAvgLum - lumLastFrame) * alpha;
+        pc.luminanceBufferAddress[0] = clamp(adaptedLum, pc.minAdaptedLuminance, pc.maxAdaptedLuminance);
     }
 }

@@ -788,7 +788,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             default: break;
         }
 
-        targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
+        targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, renderExtent, outputExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
 
         SetupUIRender(*renderGraph, pipelineManager, viewFamily, postAaExtent, targets.colorOutput);
 

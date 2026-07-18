@@ -532,13 +532,10 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (ImGui::CollapsingHeader("Post-Processing")) {
             if (ImGui::Button("Bloom Chain")) setDebugTarget("bloom_chain", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Sharpening Output")) setDebugTarget("sharpening_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Tonemap Output")) setDebugTarget("tonemap_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Tiled Max")) setDebugTarget("motion_blur_tiled_max", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Neighbor Max")) setDebugTarget("motion_blur_tiled_neighbor_max", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Output")) setDebugTarget("motion_blur_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Color Grading Output")) setDebugTarget("color_grading_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Vignette Aberration Output")) setDebugTarget("vignette_aberration_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Finalize Output")) setDebugTarget("tonemap_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Post Process Output")) setDebugTarget("post_process_output", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
     }
@@ -1178,8 +1175,8 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
     auto check = [&](const char* label, bool* v) {
         if (ImGui::Checkbox(label, v)) { changed = true; }
     };
-    auto slideF = [&](const char* label, float* v, float mn, float mx, const char* fmt = "%.3f") {
-        changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt});
+    auto ppF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.3f", const char* tip = nullptr) {
+        changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
     };
 
     if (ImGui::CollapsingHeader("Tonemapping")) {
@@ -1191,26 +1188,26 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
         }
         switch (pp.tonemapOperator) {
             case 1:
-                slideF("White Point##hable", &pp.hableParams.whitePoint, 1.0f, 20.0f, "%.2f");
+                ppF("White Point##hable", &pp.hableParams.whitePoint, defaults.hableParams.whitePoint, 1.0f, 20.0f, "%.2f");
                 break;
             case 2:
-                slideF("White Point##reinhard", &pp.reinhardParams.whitePoint, 1.0f, 20.0f, "%.2f");
+                ppF("White Point##reinhard", &pp.reinhardParams.whitePoint, defaults.reinhardParams.whitePoint, 1.0f, 20.0f, "%.2f");
                 break;
             case 7:
-                slideF("Max Brightness##uchimura", &pp.uchimuraParams.P, 0.5f, 2.0f, "%.2f");
-                slideF("Contrast##uchimura", &pp.uchimuraParams.a, 0.5f, 2.0f, "%.2f");
-                slideF("Linear Start##uchimura", &pp.uchimuraParams.m, 0.0f, 0.5f, "%.3f");
-                slideF("Linear Length##uchimura", &pp.uchimuraParams.l, 0.0f, 1.0f, "%.2f");
-                slideF("Toe Power##uchimura", &pp.uchimuraParams.c, 0.5f, 3.0f, "%.2f");
-                slideF("Pedestal##uchimura", &pp.uchimuraParams.b, 0.0f, 0.1f, "%.3f");
+                ppF("Max Brightness##uchimura", &pp.uchimuraParams.P, defaults.uchimuraParams.P, 0.5f, 2.0f, "%.2f");
+                ppF("Contrast##uchimura", &pp.uchimuraParams.a, defaults.uchimuraParams.a, 0.5f, 2.0f, "%.2f");
+                ppF("Linear Start##uchimura", &pp.uchimuraParams.m, defaults.uchimuraParams.m, 0.0f, 0.5f, "%.3f");
+                ppF("Linear Length##uchimura", &pp.uchimuraParams.l, defaults.uchimuraParams.l, 0.0f, 1.0f, "%.2f");
+                ppF("Toe Power##uchimura", &pp.uchimuraParams.c, defaults.uchimuraParams.c, 0.5f, 3.0f, "%.2f");
+                ppF("Pedestal##uchimura", &pp.uchimuraParams.b, defaults.uchimuraParams.b, 0.0f, 0.1f, "%.3f");
                 break;
             case 9:
-                slideF("Min EV##agx", &pp.agxParams.minEV, -20.0f, -1.0f, "%.3f");
-                slideF("Max EV##agx", &pp.agxParams.maxEV, 0.0f, 10.0f, "%.3f");
+                ppF("Min EV##agx", &pp.agxParams.minEV, defaults.agxParams.minEV, -20.0f, -1.0f, "%.3f");
+                ppF("Max EV##agx", &pp.agxParams.maxEV, defaults.agxParams.maxEV, 0.0f, 10.0f, "%.3f");
                 break;
             case 10:
-                slideF("Start Compression##khronos", &pp.khronosParams.startCompression, 0.5f, 0.95f, "%.3f");
-                slideF("Desaturation##khronos", &pp.khronosParams.desaturation, 0.0f, 0.5f, "%.3f");
+                ppF("Start Compression##khronos", &pp.khronosParams.startCompression, defaults.khronosParams.startCompression, 0.5f, 0.95f, "%.3f");
+                ppF("Desaturation##khronos", &pp.khronosParams.desaturation, defaults.khronosParams.desaturation, 0.0f, 0.5f, "%.3f");
                 break;
             default:
                 break;
@@ -1219,110 +1216,73 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
 
     if (ImGui::CollapsingHeader("Exposure")) {
         check("Enabled##exposure", &pp.bExposureEnabled);
-        slideF("Target Luminance", &pp.exposureTargetLuminance, 0.01f, 1.0f);
-        slideF("Adaptation Speed", &pp.exposureAdaptationRate, 0.1f, 50.0f, "%.1f");
-        if (ImGui::Button("Reset Exposure")) {
-            pp.exposureTargetLuminance = defaults.exposureTargetLuminance;
-            pp.exposureAdaptationRate = defaults.exposureAdaptationRate;
-            changed = true;
-        }
+        ppF("Target Luminance", &pp.exposureTargetLuminance, defaults.exposureTargetLuminance, 0.005f, 1.0f, "%.3f", "Post-exposure key the metered scene average maps to. 0.18 = standard mid-gray.");
+        ppF("Speed Brighten", &pp.exposureSpeedBrighten, defaults.exposureSpeedBrighten, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image brightens (entering darkness). Slower than darken, like the eye.");
+        ppF("Speed Darken", &pp.exposureSpeedDarken, defaults.exposureSpeedDarken, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image darkens (entering light).");
+        ppF("Min Gain EV", &pp.exposureMinGainEV, defaults.exposureMinGainEV, -12.0f, 0.0f, "%.1f", "Lower bound on exposure gain in stops; limits how far bright scenes are darkened.");
+        ppF("Max Gain EV", &pp.exposureMaxGainEV, defaults.exposureMaxGainEV, 0.0f, 12.0f, "%.1f", "Upper bound on exposure gain in stops; dark scenes stop brightening here instead of amplifying GI noise to mid-gray.");
+        ppF("Low Percentile", &pp.exposureLowPercentile, defaults.exposureLowPercentile, 0.0f, 0.9f, "%.2f", "Fraction of the darkest non-black pixels excluded from metering.");
+        ppF("High Percentile", &pp.exposureHighPercentile, defaults.exposureHighPercentile, 0.1f, 1.0f, "%.2f", "Metering cutoff for the brightest pixels; keeps fireflies, emissives, and the sun from steering exposure.");
     }
 
     if (ImGui::CollapsingHeader("Bloom")) {
         check("Enabled##bloom", &pp.bBloomEnabled);
-        slideF("Intensity", &pp.bloomIntensity, 0.0f, 0.2f);
-        slideF("Threshold", &pp.bloomThreshold, 0.0f, 2.0f, "%.2f");
-        slideF("Soft Threshold", &pp.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
-        slideF("Radius", &pp.bloomRadius, 0.5f, 2.0f, "%.2f");
-        slideF("Clamp", &pp.bloomClamp, 0.1f, 100.0f, "%.1f");
-        if (ImGui::Button("Reset Bloom")) {
-            pp.bloomIntensity = defaults.bloomIntensity;
-            pp.bloomThreshold = defaults.bloomThreshold;
-            pp.bloomSoftThreshold = defaults.bloomSoftThreshold;
-            pp.bloomRadius = defaults.bloomRadius;
-            pp.bloomClamp = defaults.bloomClamp;
-            changed = true;
-        }
+        ppF("Intensity", &pp.bloomIntensity, defaults.bloomIntensity, 0.0f, 1.0f);
+        ppF("Threshold", &pp.bloomThreshold, defaults.bloomThreshold, 0.0f, 2.0f, "%.2f", "Display-relative luminance where bloom starts; 1.0 = displayed white. Stable under auto-exposure.");
+        ppF("Soft Threshold", &pp.bloomSoftThreshold, defaults.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
+        ppF("Radius", &pp.bloomRadius, defaults.bloomRadius, 0.5f, 1.25f, "%.2f", "Tent-filter tap spacing in mip texels; above ~1.25 the upsample starts skipping texels and shimmers.");
+        ppF("Clamp", &pp.bloomClamp, defaults.bloomClamp, 0.1f, 100.0f, "%.1f", "Display-relative cap applied before thresholding; secondary firefly defense behind the Karis average.");
     }
 
     if (ImGui::CollapsingHeader("Motion Blur")) {
-        slideF("Velocity Scale", &pp.motionBlurVelocityScale, 0.0f, 4.0f, "%.2f");
-        slideF("Depth Scale", &pp.motionBlurDepthScale, 2.0f, 10.0f, "%.2f");
-        if (ImGui::Button("Reset Motion Blur")) {
-            pp.motionBlurVelocityScale = defaults.motionBlurVelocityScale;
-            pp.motionBlurDepthScale = defaults.motionBlurDepthScale;
-            changed = true;
-        }
+        check("Enabled##motionblur", &pp.bMotionBlurEnabled);
+        ppF("Velocity Scale", &pp.motionBlurVelocityScale, defaults.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f", "Shutter fraction of the inter-frame displacement; 0.5 = cinematic 180-degree shutter.");
+        ppF("Target FPS", &pp.motionBlurTargetFps, defaults.motionBlurTargetFps, 0.0f, 240.0f, "%.0f", "Frame rate the shutter is normalized to, so blur length stays constant as fps varies and hitches do not smear. 0 = physical shutter (blur grows with frame time).");
+        ppF("Depth Scale", &pp.motionBlurDepthScale, defaults.motionBlurDepthScale, 0.1f, 10.0f, "%.2f", "1 / soft depth band (view units) for foreground/background classification. 1.0 = 1m band.");
     }
 
     if (ImGui::CollapsingHeader("Color Grading")) {
         check("Enabled##colorgrading", &pp.bColorGradingEnabled);
-        slideF("Exposure Offset", &pp.colorGradingExposure, -2.0f, 2.0f, "%.2f");
-        slideF("Contrast", &pp.colorGradingContrast, 0.5f, 2.0f, "%.2f");
-        slideF("Saturation", &pp.colorGradingSaturation, 0.0f, 2.0f, "%.2f");
-        slideF("Temperature", &pp.colorGradingTemperature, -1.0f, 1.0f, "%.2f");
-        slideF("Tint", &pp.colorGradingTint, -1.0f, 1.0f, "%.2f");
-        if (ImGui::Button("Reset Color Grading")) {
-            pp.colorGradingExposure = defaults.colorGradingExposure;
-            pp.colorGradingContrast = defaults.colorGradingContrast;
-            pp.colorGradingSaturation = defaults.colorGradingSaturation;
-            pp.colorGradingTemperature = defaults.colorGradingTemperature;
-            pp.colorGradingTint = defaults.colorGradingTint;
-            changed = true;
-        }
+        ppF("Exposure Bias", &pp.colorGradingExposure, defaults.colorGradingExposure, -2.0f, 2.0f, "%.2f", "EV bias folded into exposure before tonemapping, so highlights roll off instead of clipping.");
+        ppF("Contrast", &pp.colorGradingContrast, defaults.colorGradingContrast, 0.5f, 2.0f, "%.2f", "Log-space contrast pivoted at mid-gray.");
+        ppF("Saturation", &pp.colorGradingSaturation, defaults.colorGradingSaturation, 0.0f, 2.0f, "%.2f");
+        ppF("Temperature", &pp.colorGradingTemperature, defaults.colorGradingTemperature, -1.0f, 1.0f, "%.2f", "White balance warm/cool via CAT02 gains; preserves black and overall luminance.");
+        ppF("Tint", &pp.colorGradingTint, defaults.colorGradingTint, -1.0f, 1.0f, "%.2f", "White balance green/magenta axis.");
     }
 
-    if (ImGui::CollapsingHeader("Vignette & Chromatic Aberration")) {
-        check("Enabled##vigab", &pp.bVignetteAberrationEnabled);
-        slideF("Aberration Strength", &pp.chromaticAberrationStrength, 0.0f, 100.0f, "%.2f");
-        slideF("Vignette Strength", &pp.vignetteStrength, 0.0f, 1.0f, "%.2f");
-        slideF("Vignette Radius", &pp.vignetteRadius, 0.5f, 1.0f, "%.2f");
-        slideF("Vignette Smoothness", &pp.vignetteSmoothness, 0.1f, 1.0f, "%.2f");
-        if (ImGui::Button("Reset Vignette & Aberration")) {
-            pp.chromaticAberrationStrength = defaults.chromaticAberrationStrength;
-            pp.vignetteStrength = defaults.vignetteStrength;
-            pp.vignetteRadius = defaults.vignetteRadius;
-            pp.vignetteSmoothness = defaults.vignetteSmoothness;
-            changed = true;
-        }
+    if (ImGui::CollapsingHeader("Vignette")) {
+        check("Enabled##vignette", &pp.bVignetteEnabled);
+        ppF("Strength##vignette", &pp.vignetteStrength, defaults.vignetteStrength, 0.0f, 1.0f, "%.2f");
+        ppF("Radius##vignette", &pp.vignetteRadius, defaults.vignetteRadius, 0.5f, 1.0f, "%.2f");
+        ppF("Smoothness##vignette", &pp.vignetteSmoothness, defaults.vignetteSmoothness, 0.05f, 1.0f, "%.2f");
+        ppF("Roundness##vignette", &pp.vignetteRoundness, defaults.vignetteRoundness, 0.0f, 1.0f, "%.2f", "0 = screen-fit ellipse, 1 = circular on any aspect ratio.");
+    }
+
+    if (ImGui::CollapsingHeader("Chromatic Aberration")) {
+        check("Enabled##chromab", &pp.bChromaticAberrationEnabled);
+        ppF("Strength##chromab", &pp.chromaticAberrationStrength, defaults.chromaticAberrationStrength, 0.0f, 10.0f, "%.2f", "Pixels of R/B separation at unit radius, uniform in all directions. Above ~4 the single-tap fringes read as ghosting.");
     }
 
     if (ImGui::CollapsingHeader("Sharpening")) {
         check("Enabled##sharpening", &pp.bSharpeningEnabled);
-        slideF("Sharpening Strength", &pp.sharpeningStrength, 0.0f, 100.0f, "%.2f");
-        if (ImGui::Button("Reset Sharpening")) {
-            pp.sharpeningStrength = defaults.sharpeningStrength;
-            changed = true;
-        }
+        ppF("Strength##sharpening", &pp.sharpeningStrength, defaults.sharpeningStrength, 0.0f, 1.0f, "%.2f", "Display-referred unsharp mask with a bounded delta; runs after tonemapping so strength is perceptually uniform.");
     }
 
     if (ImGui::CollapsingHeader("Panini Projection")) {
         check("Enabled##panini", &pp.bPaniniEnabled);
-        slideF("Panini Strength", &pp.paniniStrength, 0.0f, 1.0f, "%.2f");
-        if (ImGui::Button("Reset Panini")) {
-            pp.paniniStrength = defaults.paniniStrength;
-            changed = true;
-        }
+        ppF("Strength##panini", &pp.paniniStrength, defaults.paniniStrength, 0.0f, 1.0f, "%.2f", "Cylindrical projection blend; 0 = rectilinear. Typical game values 0.15-0.35.");
     }
 
     if (ImGui::CollapsingHeader("Film Grain")) {
         check("Enabled##filmgrain", &pp.bFilmGrainEnabled);
-        slideF("Grain Strength", &pp.grainStrength, 0.0f, 0.15f);
-        slideF("Grain Size", &pp.grainSize, 1.0f, 3.0f, "%.2f");
-        if (ImGui::Button("Reset Grain")) {
-            pp.grainStrength = defaults.grainStrength;
-            pp.grainSize = defaults.grainSize;
-            changed = true;
-        }
+        ppF("Strength##grain", &pp.grainStrength, defaults.grainStrength, 0.0f, 0.05f);
+        ppF("Size##grain", &pp.grainSize, defaults.grainSize, 1.0f, 4.0f, "%.2f", "Grain cell size in pixels.");
+        ppF("Response##grain", &pp.grainResponse, defaults.grainResponse, 0.0f, 1.0f, "%.2f", "0 = flat video-style noise, 1 = film response (strongest in mids, vanishing in crushed blacks and clipped whites).");
     }
 
     if (ImGui::CollapsingHeader("Dither")) {
         check("Enabled##dither", &pp.bDitherEnabled);
-        slideF("Dither Strength", &pp.ditherStrength, 0.0f, 4.0f, "%.2f");
-        if (ImGui::Button("Reset Dither")) {
-            pp.ditherStrength = defaults.ditherStrength;
-            changed = true;
-        }
+        ppF("Strength##dither", &pp.ditherStrength, defaults.ditherStrength, 0.0f, 2.0f, "%.2f", "Amplitude in encoded 8-bit LSBs, matched to the sRGB step at each pixel. Auto-disabled while render scale rescales the output.");
     }
 
     return changed;
@@ -1349,8 +1309,10 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
             pp.tonemapOperator = -1;
             pp.bExposureEnabled = false;
             pp.bBloomEnabled = false;
+            pp.bMotionBlurEnabled = false;
             pp.bColorGradingEnabled = false;
-            pp.bVignetteAberrationEnabled = false;
+            pp.bVignetteEnabled = false;
+            pp.bChromaticAberrationEnabled = false;
             pp.bSharpeningEnabled = false;
             pp.bPaniniEnabled = false;
             pp.bFilmGrainEnabled = false;

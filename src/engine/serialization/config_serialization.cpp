@@ -509,7 +509,12 @@ nlohmann::json ToJson(const Core::PostProcessConfiguration& p)
     return {
         {"bExposureEnabled", p.bExposureEnabled},
         {"exposureTargetLuminance", p.exposureTargetLuminance},
-        {"exposureAdaptationRate", p.exposureAdaptationRate},
+        {"exposureSpeedBrighten", p.exposureSpeedBrighten},
+        {"exposureSpeedDarken", p.exposureSpeedDarken},
+        {"exposureMinGainEV", p.exposureMinGainEV},
+        {"exposureMaxGainEV", p.exposureMaxGainEV},
+        {"exposureLowPercentile", p.exposureLowPercentile},
+        {"exposureHighPercentile", p.exposureHighPercentile},
         {"bBloomEnabled", p.bBloomEnabled},
         {"bloomThreshold", p.bloomThreshold},
         {"bloomSoftThreshold", p.bloomSoftThreshold},
@@ -529,7 +534,9 @@ nlohmann::json ToJson(const Core::PostProcessConfiguration& p)
         {"agxMaxEV", p.agxParams.maxEV},
         {"khronosStartCompression", p.khronosParams.startCompression},
         {"khronosDesaturation", p.khronosParams.desaturation},
+        {"bMotionBlurEnabled", p.bMotionBlurEnabled},
         {"motionBlurVelocityScale", p.motionBlurVelocityScale},
+        {"motionBlurTargetFps", p.motionBlurTargetFps},
         {"motionBlurDepthScale", p.motionBlurDepthScale},
         {"bColorGradingEnabled", p.bColorGradingEnabled},
         {"colorGradingExposure", p.colorGradingExposure},
@@ -537,11 +544,13 @@ nlohmann::json ToJson(const Core::PostProcessConfiguration& p)
         {"colorGradingSaturation", p.colorGradingSaturation},
         {"colorGradingTemperature", p.colorGradingTemperature},
         {"colorGradingTint", p.colorGradingTint},
-        {"bVignetteAberrationEnabled", p.bVignetteAberrationEnabled},
-        {"chromaticAberrationStrength", p.chromaticAberrationStrength},
+        {"bVignetteEnabled", p.bVignetteEnabled},
         {"vignetteStrength", p.vignetteStrength},
         {"vignetteRadius", p.vignetteRadius},
         {"vignetteSmoothness", p.vignetteSmoothness},
+        {"vignetteRoundness", p.vignetteRoundness},
+        {"bChromaticAberrationEnabled", p.bChromaticAberrationEnabled},
+        {"chromaticAberrationStrength", p.chromaticAberrationStrength},
         {"bSharpeningEnabled", p.bSharpeningEnabled},
         {"sharpeningStrength", p.sharpeningStrength},
         {"bPaniniEnabled", p.bPaniniEnabled},
@@ -549,6 +558,7 @@ nlohmann::json ToJson(const Core::PostProcessConfiguration& p)
         {"bFilmGrainEnabled", p.bFilmGrainEnabled},
         {"grainStrength", p.grainStrength},
         {"grainSize", p.grainSize},
+        {"grainResponse", p.grainResponse},
         {"bDitherEnabled", p.bDitherEnabled},
         {"ditherStrength", p.ditherStrength},
     };
@@ -562,7 +572,12 @@ void FromJson(const nlohmann::json& r, Core::PostProcessConfiguration& p)
 
     p.bExposureEnabled = getBool("bExposureEnabled", p.bExposureEnabled);
     p.exposureTargetLuminance = getFloat("exposureTargetLuminance", p.exposureTargetLuminance);
-    p.exposureAdaptationRate = getFloat("exposureAdaptationRate", p.exposureAdaptationRate);
+    p.exposureSpeedBrighten = getFloat("exposureSpeedBrighten", p.exposureSpeedBrighten);
+    p.exposureSpeedDarken = getFloat("exposureSpeedDarken", p.exposureSpeedDarken);
+    p.exposureMinGainEV = getFloat("exposureMinGainEV", p.exposureMinGainEV);
+    p.exposureMaxGainEV = getFloat("exposureMaxGainEV", p.exposureMaxGainEV);
+    p.exposureLowPercentile = getFloat("exposureLowPercentile", p.exposureLowPercentile);
+    p.exposureHighPercentile = getFloat("exposureHighPercentile", p.exposureHighPercentile);
     p.bBloomEnabled = getBool("bBloomEnabled", p.bBloomEnabled);
     p.bloomThreshold = getFloat("bloomThreshold", p.bloomThreshold);
     p.bloomSoftThreshold = getFloat("bloomSoftThreshold", p.bloomSoftThreshold);
@@ -582,7 +597,9 @@ void FromJson(const nlohmann::json& r, Core::PostProcessConfiguration& p)
     p.agxParams.maxEV = getFloat("agxMaxEV", p.agxParams.maxEV);
     p.khronosParams.startCompression = getFloat("khronosStartCompression", p.khronosParams.startCompression);
     p.khronosParams.desaturation = getFloat("khronosDesaturation", p.khronosParams.desaturation);
+    p.bMotionBlurEnabled = getBool("bMotionBlurEnabled", p.bMotionBlurEnabled);
     p.motionBlurVelocityScale = getFloat("motionBlurVelocityScale", p.motionBlurVelocityScale);
+    p.motionBlurTargetFps = getFloat("motionBlurTargetFps", p.motionBlurTargetFps);
     p.motionBlurDepthScale = getFloat("motionBlurDepthScale", p.motionBlurDepthScale);
     p.bColorGradingEnabled = getBool("bColorGradingEnabled", p.bColorGradingEnabled);
     p.colorGradingExposure = getFloat("colorGradingExposure", p.colorGradingExposure);
@@ -590,11 +607,13 @@ void FromJson(const nlohmann::json& r, Core::PostProcessConfiguration& p)
     p.colorGradingSaturation = getFloat("colorGradingSaturation", p.colorGradingSaturation);
     p.colorGradingTemperature = getFloat("colorGradingTemperature", p.colorGradingTemperature);
     p.colorGradingTint = getFloat("colorGradingTint", p.colorGradingTint);
-    p.bVignetteAberrationEnabled = getBool("bVignetteAberrationEnabled", p.bVignetteAberrationEnabled);
-    p.chromaticAberrationStrength = getFloat("chromaticAberrationStrength", p.chromaticAberrationStrength);
+    p.bVignetteEnabled = getBool("bVignetteEnabled", p.bVignetteEnabled);
     p.vignetteStrength = getFloat("vignetteStrength", p.vignetteStrength);
     p.vignetteRadius = getFloat("vignetteRadius", p.vignetteRadius);
     p.vignetteSmoothness = getFloat("vignetteSmoothness", p.vignetteSmoothness);
+    p.vignetteRoundness = getFloat("vignetteRoundness", p.vignetteRoundness);
+    p.bChromaticAberrationEnabled = getBool("bChromaticAberrationEnabled", p.bChromaticAberrationEnabled);
+    p.chromaticAberrationStrength = getFloat("chromaticAberrationStrength", p.chromaticAberrationStrength);
     p.bSharpeningEnabled = getBool("bSharpeningEnabled", p.bSharpeningEnabled);
     p.sharpeningStrength = getFloat("sharpeningStrength", p.sharpeningStrength);
     p.bPaniniEnabled = getBool("bPaniniEnabled", p.bPaniniEnabled);
@@ -602,6 +621,7 @@ void FromJson(const nlohmann::json& r, Core::PostProcessConfiguration& p)
     p.bFilmGrainEnabled = getBool("bFilmGrainEnabled", p.bFilmGrainEnabled);
     p.grainStrength = getFloat("grainStrength", p.grainStrength);
     p.grainSize = getFloat("grainSize", p.grainSize);
+    p.grainResponse = getFloat("grainResponse", p.grainResponse);
     p.bDitherEnabled = getBool("bDitherEnabled", p.bDitherEnabled);
     p.ditherStrength = getFloat("ditherStrength", p.ditherStrength);
 }

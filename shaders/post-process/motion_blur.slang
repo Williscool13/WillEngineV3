@@ -6,40 +6,42 @@ import shader_constants;
 
 import bindless_declarations;
 
+groupshared float g_velLenSq[POST_PROCESS_MOTION_BLUR_TILE_SIZE * POST_PROCESS_MOTION_BLUR_TILE_SIZE];
+groupshared float2 g_vel[POST_PROCESS_MOTION_BLUR_TILE_SIZE * POST_PROCESS_MOTION_BLUR_TILE_SIZE];
+
+// McGuire 2012 / Jimenez 2014.
 [shader("compute")]
-[numthreads(POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_X, POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_Y, 1)]
-void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    uint2 tileCoord = dtid.xy;
+[numthreads(POST_PROCESS_MOTION_BLUR_TILE_SIZE, POST_PROCESS_MOTION_BLUR_TILE_SIZE, 1)]
+void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint groupIndex : SV_GroupIndex) {
+    uint2 pixelCoord = gid.xy * POST_PROCESS_MOTION_BLUR_TILE_SIZE + gtid.xy;
 
-    if (any(tileCoord >= pc.tileBufferSize)) {
-        return;
+    float2 velocity = float2(0.0, 0.0);
+    if (all(pixelCoord < pc.velocityBufferSize)) {
+        velocity = UnpackMotionVectors(rdgTexturesUInt4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).g) * pc.velocityScale;
     }
+    g_velLenSq[groupIndex] = dot(velocity, velocity);
+    g_vel[groupIndex] = velocity;
 
-    float maxVelocityLengthSq = 0.0;
-    float2 maxVelocity = float2(0.0f, 0.0f);
+    GroupMemoryBarrierWithGroupSync();
 
-    uint2 tileStart = tileCoord * POST_PROCESS_MOTION_BLUR_TILE_SIZE;
-    [ForceUnroll]
-    for (uint y = 0; y < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++y) {
-        [ForceUnroll]
-        for (uint x = 0; x < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++x) {
-            uint2 pixelCoord = tileStart + uint2(x, y);
-
-            if (any(pixelCoord >= pc.velocityBufferSize)) {
-                continue;
-            }
-
-            float2 objectVelocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba;
-            float velocityLengthSq = dot(objectVelocity, objectVelocity);
-
-            if (velocityLengthSq > maxVelocityLengthSq) {
-                maxVelocityLengthSq = velocityLengthSq;
-                maxVelocity = objectVelocity;
+    for (uint cutoff = (POST_PROCESS_MOTION_BLUR_TILE_SIZE * POST_PROCESS_MOTION_BLUR_TILE_SIZE) >> 1; cutoff > 0; cutoff >>= 1) {
+        if (groupIndex < cutoff) {
+            if (g_velLenSq[groupIndex + cutoff] > g_velLenSq[groupIndex]) {
+                g_velLenSq[groupIndex] = g_velLenSq[groupIndex + cutoff];
+                g_vel[groupIndex] = g_vel[groupIndex + cutoff];
             }
         }
+        GroupMemoryBarrierWithGroupSync();
     }
 
-    rdgStorageFloat2[pc.tileMaxIndex][tileCoord] = float2(maxVelocity);
+    if (groupIndex == 0) {
+        float2 maxVelocity = g_vel[0];
+        float pixelLen = length(maxVelocity * 0.5 * float2(pc.velocityBufferSize));
+        if (pixelLen > float(POST_PROCESS_MOTION_BLUR_TILE_SIZE)) {
+            maxVelocity *= float(POST_PROCESS_MOTION_BLUR_TILE_SIZE) / pixelLen;
+        }
+        rdgStorageFloat2[pc.tileMaxIndex][gid.xy] = maxVelocity;
+    }
 }
 
 [shader("compute")]
@@ -75,12 +77,14 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
     rdgStorageFloat2[pc.neighborMaxIndex][tileCoord] = float2(maxVelocity);
 }
 
-float2 DepthCmp(float centerDepth, float sampleDepth, float depthScale) {
-    float s = (1 - sampleDepth);
-    float c = (1 - centerDepth);
-    return saturate(0.5 + float2(depthScale, -depthScale) * (s - c));
+// View-depth soft classification: delta > 0 means the sample is farther (behind the center).
+// x = sample-behind weight (pairs with the center's spread), y = sample-in-front weight (pairs with the sample's spread).
+float2 DepthCmp(float centerViewZ, float sampleViewZ, float depthScale) {
+    float delta = sampleViewZ - centerViewZ;
+    return saturate(0.5 + float2(depthScale, -depthScale) * delta);
 }
 
+// offsetLen and spreadLen both in pixels
 float2 SpreadCmp(float offsetLen, float2 spreadLen) {
     return saturate(spreadLen - offsetLen + 1.0);
 }
@@ -93,51 +97,82 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     if (any(pixelCoord >= pc.srcBufferSize)) { return; }
 
     float2 uv = (float2(pixelCoord) + 0.5) / pc.srcBufferSize;
+    float depthLinearizeMult = pc.sceneData.depthLinearizeMult;
+    float depthLinearizeAdd = pc.sceneData.depthLinearizeAdd;
 
     uint2 tileCoord = pixelCoord / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
-    float2 neighborMaxVelocity = rdgTexturesFloat2[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg * 0.5;
-    float neighborMaxLen = length(neighborMaxVelocity * pc.srcBufferSize);
     float3 centerColor = rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
 
-    float blurLen = neighborMaxLen * pc.velocityScale;
+    // Tile velocities are already shutter-scaled and tile-clamped; per-pixel velocities below are raw and still need the scale
+    float2 blurDir = rdgTexturesFloat2[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg * 0.5;
+    float blurLen = length(blurDir * pc.srcBufferSize);
     if (blurLen < 0.5) {
         rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
         return;
     }
+    if (blurLen > float(POST_PROCESS_MOTION_BLUR_TILE_SIZE)) {
+        blurDir *= float(POST_PROCESS_MOTION_BLUR_TILE_SIZE) / blurLen;
+        blurLen = float(POST_PROCESS_MOTION_BLUR_TILE_SIZE);
+    }
 
-    float2 objectVelocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba * 0.5;
-    float centerDepth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
-    float centerSpreadLen = length(objectVelocity * pc.velocityScale * pc.srcBufferSize);
+    float2 centerVelocityUv = UnpackMotionVectors(rdgTexturesUInt4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).g) * 0.5;
+    float centerViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
+    float centerSpreadLen = min(length(centerVelocityUv * pc.velocityScale * pc.srcBufferSize), float(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
     float weightAccum = 0.0;
     float sampleCount = 0.0;
 
-    float2 blurDir = neighborMaxVelocity * pc.velocityScale;
     float noise = frac(52.9829189 * frac(0.06711056 * pixelCoord.x + 0.00583715 * pixelCoord.y));
 
     for (int i = 1; i <= POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2; ++i) {
-        float t = (float(i) - 0.5 + noise) / float(POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2);
+        float t = min((float(i) - 0.5 + noise) / float(POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2), 1.0);
+        float offsetLen = t * blurLen;
 
-        for (int dir = -1; dir <= 1; dir += 2) {
-            float2 sampleUV = uv + blurDir * t * float(dir);
+        float3 pairColor[2] = { float3(0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0) };
+        float pairWeight[2] = { 0.0, 0.0 };
+        bool pairValid[2] = { false, false };
 
-            if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) { continue; }
+        [ForceUnroll]
+        for (int side = 0; side < 2; ++side) {
+            float dir = side == 0 ? 1.0 : -1.0;
+            float2 sampleUV = uv + blurDir * t * dir;
+
+            pairValid[side] = all(sampleUV >= 0.0) && all(sampleUV <= 1.0);
+            if (!pairValid[side]) { continue; }
 
             int2 sampleCoord = int2(sampleUV * pc.srcBufferSize);
-            float3 sampleColor = rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(sampleCoord, 0)).rgb;
-            float sampleDepth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r;
-            float2 sampleObjectVelocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).ba * 0.5;
-            float sampleSpreadLen = length(sampleObjectVelocity * pc.velocityScale * pc.srcBufferSize);
+            pairColor[side] = rdgTexturesFloat4[pc.sceneColorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], sampleUV, 0).rgb;
+            float sampleViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
+            float2 sampleVelocityUv = UnpackMotionVectors(rdgTexturesUInt4[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).g) * 0.5;
+            float sampleSpreadLen = min(length(sampleVelocityUv * pc.velocityScale * pc.srcBufferSize), float(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
 
-            float2 d = DepthCmp(centerDepth, sampleDepth, pc.depthScale);
-            float2 s = SpreadCmp(abs(t), float2(centerSpreadLen, sampleSpreadLen));
-
-            float weight = dot(d, s);
-            colorAccum += sampleColor * weight;
-            weightAccum += weight;
-            sampleCount += 1.0;
+            float2 d = DepthCmp(centerViewZ, sampleViewZ, pc.depthScale);
+            float2 s = SpreadCmp(offsetLen, float2(centerSpreadLen, sampleSpreadLen));
+            pairWeight[side] = dot(d, s);
         }
+
+        if (pairValid[0] && pairValid[1]) {
+            // Shared max keeps background reconstruction symmetric across the mover (Jimenez)
+            float w = max(pairWeight[0], pairWeight[1]);
+            colorAccum += (pairColor[0] + pairColor[1]) * w;
+            weightAccum += 2.0 * w;
+            sampleCount += 2.0;
+        } else {
+            [ForceUnroll]
+            for (int side = 0; side < 2; ++side) {
+                if (pairValid[side]) {
+                    colorAccum += pairColor[side] * pairWeight[side];
+                    weightAccum += pairWeight[side];
+                    sampleCount += 1.0;
+                }
+            }
+        }
+    }
+
+    if (sampleCount < 0.5) {
+        rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
+        return;
     }
 
     float4 sumColor = float4(colorAccum, weightAccum) / sampleCount;

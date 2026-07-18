@@ -106,14 +106,19 @@ struct PostProcessConfiguration
 {
     bool bExposureEnabled{true};
     float exposureTargetLuminance{0.18f};
-    float exposureAdaptationRate{16.0f};
+    float exposureSpeedBrighten{2.0f}; // 1/s, applied while adapted luminance decreases (image brightening)
+    float exposureSpeedDarken{6.0f}; // 1/s, applied while adapted luminance increases (image darkening)
+    float exposureMinGainEV{-6.0f}; // final exposure gain clamped to [exp2(min), exp2(max)]
+    float exposureMaxGainEV{4.0f};
+    float exposureLowPercentile{0.5f}; // histogram band metered, fraction of non-black pixels
+    float exposureHighPercentile{0.9f};
 
     bool bBloomEnabled{true};
-    float bloomThreshold{1.0f};
+    float bloomThreshold{1.0f}; // display-relative (post-exposure) luminance
     float bloomSoftThreshold{0.5f};
     float bloomRadius{1.0f};
-    float bloomIntensity{0.04f};
-    float bloomClamp{10.0f};
+    float bloomIntensity{0.25f}; // per-octave weight; composite is normalized by mip count
+    float bloomClamp{10.0f}; // display-relative
 
     int32_t tonemapOperator{10};
 
@@ -149,21 +154,26 @@ struct PostProcessConfiguration
         float desaturation{0.15f};
     } khronosParams;
 
-    float motionBlurVelocityScale{0.8f};
-    float motionBlurDepthScale{50.0f};
+    bool bMotionBlurEnabled{false};
+    float motionBlurVelocityScale{0.8f}; // shutter fraction of inter-frame displacement
+    float motionBlurTargetFps{60.0f}; // reference rate the shutter is normalized to; 0 = physical shutter (blur scales with frame time)
+    float motionBlurDepthScale{1.0f}; // 1 / soft depth-classification band in view units
 
     bool bColorGradingEnabled{true};
-    float colorGradingExposure = 0.0f;
+    float colorGradingExposure = 0.0f; // EV bias folded into exposure before tonemapping
     float colorGradingContrast = 1.0f;
     float colorGradingSaturation = 1.0f;
     float colorGradingTemperature = 0.0f;
     float colorGradingTint = 0.0f;
 
-    bool bVignetteAberrationEnabled{true};
-    float chromaticAberrationStrength{1.5f};
+    bool bVignetteEnabled{true};
     float vignetteStrength{0.2f};
     float vignetteRadius{0.8f};
     float vignetteSmoothness{0.5f};
+    float vignetteRoundness{0.0f}; // 0 = screen-fit ellipse, 1 = aspect-corrected circle
+
+    bool bChromaticAberrationEnabled{true};
+    float chromaticAberrationStrength{1.5f}; // pixels of R/B separation per unit aspect-corrected radius
 
     bool bSharpeningEnabled{true};
     float sharpeningStrength{0.4f};
@@ -174,6 +184,7 @@ struct PostProcessConfiguration
     bool bFilmGrainEnabled{true};
     float grainStrength{0.01f};
     float grainSize{1.5f};
+    float grainResponse{1.0f}; // 0 = flat noise, 1 = film-like luminance-weighted response
 
     bool bDitherEnabled{true};
     float ditherStrength{1.0f};

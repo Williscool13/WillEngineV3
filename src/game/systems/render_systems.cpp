@@ -1732,8 +1732,10 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     appendPPTag(state->lighting.gtaoConfig.bEnabled, "GTAO");
     appendPPTag(pp.bExposureEnabled, "Exposure");
     appendPPTag(pp.bBloomEnabled, "Bloom");
+    appendPPTag(pp.bMotionBlurEnabled, "MotionBlur");
     appendPPTag(pp.bColorGradingEnabled, "ColorGrade");
-    appendPPTag(pp.bVignetteAberrationEnabled, "Vignette");
+    appendPPTag(pp.bVignetteEnabled, "Vignette");
+    appendPPTag(pp.bChromaticAberrationEnabled, "ChromAb");
     appendPPTag(pp.bSharpeningEnabled, "Sharpen");
     appendPPTag(pp.bPaniniEnabled, "Panini");
     appendPPTag(pp.bFilmGrainEnabled, "FilmGrain");

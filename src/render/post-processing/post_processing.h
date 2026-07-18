@@ -29,6 +29,8 @@ struct PostProcessContext
     const RenderTargets& targets;
     const Core::ViewFamily& view;
     Core::Array<uint32_t, 2> extent;
+    Core::Array<uint32_t, 2> preAaExtent;
+    Core::Array<uint32_t, 2> displayExtent;
     float deltaTime;
     uint64_t frameNumber;
     PipelineManager* pipelines;
@@ -39,14 +41,11 @@ StringID PPExposure(PostProcessContext& ctx, StringID input);
 StringID PPBloom(PostProcessContext& ctx, StringID input);
 
 // Transform passes: 1-in 1-out, return their output name
-StringID PPSharpening(PostProcessContext& ctx, StringID input);
-StringID PPTonemap(PostProcessContext& ctx, StringID input);
 StringID PPMotionBlur(PostProcessContext& ctx, StringID input);
-StringID PPColorGrading(PostProcessContext& ctx, StringID input);
-StringID PPVignetteAberration(PostProcessContext& ctx, StringID input);
-StringID PPPanini(PostProcessContext& ctx, StringID input);
-StringID PPFilmGrain(PostProcessContext& ctx, StringID input);
-StringID PPDither(PostProcessContext& ctx, StringID input);
+// Fused panini remap + chromatic aberration + bloom composite + exposure + tonemap + grading + vignette.
+StringID PPFinalize(PostProcessContext& ctx, StringID input);
+// Display-referred sharpen + film grain + sRGB-step dither.
+StringID PPCompose(PostProcessContext& ctx, StringID input);
 
 } // Render
 

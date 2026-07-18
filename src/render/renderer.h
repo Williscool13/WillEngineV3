@@ -33,6 +33,8 @@ StringID SetupPostProcessing(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::ViewFamily& viewFamily,
                              Core::Array<uint32_t, 2> renderExtent,
+                             Core::Array<uint32_t, 2> preAaExtent,
+                             Core::Array<uint32_t, 2> displayExtent,
                              const RenderTargets& targets,
                              float deltaTime,
                              uint64_t frameNumber);

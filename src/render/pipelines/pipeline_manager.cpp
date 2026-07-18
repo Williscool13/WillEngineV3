@@ -595,8 +595,10 @@ void PipelineManager::RegisterPipelines()
                             sizeof(HistogramBuildPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("exposure_calculate_average"), src / "exposure.spv", "ComputeExposureAverage",
                             sizeof(ExposureCalculatePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("tonemap_sdr"), src / "tonemapping.spv", "ComputeSDRTonemap",
-                            sizeof(TonemapSDRPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("post_process_finalize"), src / "post_process_finalize.spv", "ComputeFinalize",
+                            sizeof(PostProcessFinalizePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("post_process_compose"), src / "post_process_compose.spv", "ComputeCompose",
+                            sizeof(PostProcessComposePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("motion_blur_tile_max"), src / "motion_blur.spv", "ComputeMotionBlurTileMax",
                             sizeof(MotionBlurTileVelocityPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("motion_blur_neighbor_max"), src / "motion_blur.spv", "ComputeMotionBlurNeighborMax",
@@ -609,19 +611,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(BloomDownsamplePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("bloom_upsample"), src / "bloom.spv", "ComputeBloomUpsample",
                             sizeof(BloomUpsamplePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("vignette_aberration"), src / "vignette_aberration.spv", "ComputeVignetteAberration",
-                            sizeof(VignetteChromaticAberrationPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("film_grain"), src / "film_grain.spv", "ComputeFilmGrain",
-                            sizeof(FilmGrainPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("sharpening"), src / "sharpening.spv", "ComputeSharpening",
-                            sizeof(SharpeningPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("color_grading"), src / "color_grading.spv", "ComputeColorGrading",
-                            sizeof(ColorGradingPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("panini_projection"), src / "panini_projection.spv", "ComputePaniniProjection",
-                            sizeof(PaniniProjectionPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("dither"), src / "dither.spv", "ComputeDither",
-                            sizeof(DitherPushConstant), PipelineCategory::Critical);
-
     RegisterComputePipeline("selection_outline"_sid, src / "selection_outline.spv", "ComputeSelectionOutline",
                             sizeof(SelectionOutlinePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("debug_visualize"), src / "debug_visualize.spv", "ComputeDebugVisualize",

@@ -23,6 +23,8 @@ float3 ApplyThreshold(float3 color, float threshold, float softThreshold) {
     return color * contribution;
 }
 
+// Fused threshold + first 13-tap downsample: reads the full-res scene, writes the half-res chain top.
+// Threshold/clamp operate in exposed (display-relative) space so their meaning is stable under auto-exposure, and the 5 box groups get a partial Karis average (Jimenez 2014) to suppress fireflies at the source.
 [shader("compute")]
 [numthreads(POST_PROCESS_BLOOM_DISPATCH_X, POST_PROCESS_BLOOM_DISPATCH_Y, 1)]
 void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
@@ -32,10 +34,52 @@ void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : S
         return;
     }
 
-    float3 color = rdgTexturesFloat4[pc.inputColorIndex].Load(int3(pixelCoord, 0)).rgb;
-    color = min(color, float3(pc.clampValue, pc.clampValue, pc.clampValue));
-    float3 thresholded = ApplyThreshold(color, pc.threshold, pc.softThreshold);
-    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(thresholded, 1.0);
+    float exposure = 1.0;
+    if (pc.bExposureEnabled != 0) {
+        float avgLuminance = pc.luminanceBufferAddress[0];
+        exposure = pc.targetLuminance / max(avgLuminance, 1e-4);
+    }
+
+    float2 uv = (float2(pixelCoord) + 0.5) / float2(pc.outputExtent);
+    float2 texelSize = 1.0 / float2(pc.inputExtent);
+
+    float3 taps[13];
+    static const float2 offsets[13] = {
+        float2(-2, -2), float2(0, -2), float2(2, -2),
+        float2(-1, -1), float2(1, -1),
+        float2(-2, 0), float2(0, 0), float2(2, 0),
+        float2(-1, 1), float2(1, 1),
+        float2(-2, 2), float2(0, 2), float2(2, 2),
+    };
+    [ForceUnroll]
+    for (int i = 0; i < 13; ++i) {
+        float3 c = rdgTexturesFloat4[pc.inputColorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + offsets[i] * texelSize, 0).rgb;
+        c = max(c, 0.0);
+        c = min(c * exposure, float3(pc.clampValue, pc.clampValue, pc.clampValue));
+        taps[i] = ApplyThreshold(c, pc.threshold, pc.softThreshold);
+    }
+
+    // Boxes: taps index map A0 B1 C2 / D3 E4 / F5 G6 H7 / I8 J9 / K10 L11 M12
+    float3 boxes[5] = {
+        (taps[3] + taps[4] + taps[8] + taps[9]) * 0.25,
+        (taps[0] + taps[1] + taps[5] + taps[6]) * 0.25,
+        (taps[1] + taps[2] + taps[6] + taps[7]) * 0.25,
+        (taps[5] + taps[6] + taps[10] + taps[11]) * 0.25,
+        (taps[6] + taps[7] + taps[11] + taps[12]) * 0.25,
+    };
+    static const float boxWeights[5] = { 0.5, 0.125, 0.125, 0.125, 0.125 };
+
+    float3 result = float3(0, 0, 0);
+    float weightSum = 0.0;
+    [ForceUnroll]
+    for (int b = 0; b < 5; ++b) {
+        float w = boxWeights[b] / (1.0 + Luminance(boxes[b]));
+        result += boxes[b] * w;
+        weightSum += w;
+    }
+    result /= max(weightSum, 1e-6);
+
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(result / exposure, 1.0);
 }
 
 [shader("compute")]
@@ -48,13 +92,7 @@ void ComputeBloomDownsample(uniform BloomDownsamplePushConstant pc, uint3 dtid :
     }
 
     float2 uv = (float2(pixelCoord) + 0.5) / float2(pc.outputExtent);
-
-    uint2 inputSize;
-    uint numMips;
-    rdgTexturesFloat4[pc.inputIndex].GetDimensions(0, inputSize.x, inputSize.y, numMips);
-
-    inputSize = inputSize >> pc.srcMipLevel;
-    float2 texelSize = 1.0 / float2(inputSize);
+    float2 texelSize = 1.0 / float2(pc.inputExtent);
 
     // 13-tap filter (Jimenez 2014)
     float3 A = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-2, -2) * texelSize, pc.srcMipLevel).rgb;
@@ -91,21 +129,12 @@ void ComputeBloomDownsample(uniform BloomDownsamplePushConstant pc, uint3 dtid :
 void ComputeBloomUpsample(uniform BloomUpsamplePushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
 
-    uint2 outputSize;
-    rdgStorageFloat4[pc.outputIndex].GetDimensions(outputSize.x, outputSize.y);
-
-    if (any(pixelCoord >= outputSize)) {
+    if (any(pixelCoord >= pc.outputExtent)) {
         return;
     }
 
-    float2 uv = (float2(pixelCoord) + 0.5) / float2(outputSize);
-
-    // Lower mip size
-    uint2 lowerSize;
-    uint numMips;
-    rdgTexturesFloat4[pc.inputIndex].GetDimensions(0, lowerSize.x, lowerSize.y, numMips);
-    lowerSize = lowerSize >> pc.lowerMipLevel;
-    float2 texelSize = pc.radius / float2(lowerSize);
+    float2 uv = (float2(pixelCoord) + 0.5) / float2(pc.outputExtent);
+    float2 texelSize = pc.radius / float2(pc.lowerExtent);
 
     // 9-tap tent filter (3x3 with bilinear, weights sum to 16)
     float3 result = float3(0, 0, 0);
