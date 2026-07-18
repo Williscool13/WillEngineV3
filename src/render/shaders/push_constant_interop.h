@@ -419,7 +419,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(Reservoir) genBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
     SHADER_PUBLIC SHADER_PTR(ReflectionHitDescriptor) reflectionDescriptors;
-    SHADER_PUBLIC uint32_t visibilityBufferIndex;
+    SHADER_PUBLIC uint32_t _pad0;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t depthIndex;
@@ -450,10 +450,9 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) inputBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
-    SHADER_PUBLIC uint32_t visibilityBufferIndex;
+    SHADER_PUBLIC uint32_t _pad0;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t depthIndex;
@@ -656,7 +655,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t bSkipRay;
     SHADER_PUBLIC SHADER_PTR(float) exposureLuminance;
     SHADER_PUBLIC float exposureTarget;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t guideOutIndex;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -665,8 +664,7 @@ SHADER_PUBLIC struct GIDenoisePushConstant
     SHADER_PUBLIC uint2 gatherExtent;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
-    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t guideIndex;
     SHADER_PUBLIC uint32_t dataIndex;
     SHADER_PUBLIC uint32_t srcShRIndex;
     SHADER_PUBLIC uint32_t srcShGIndex;
@@ -674,7 +672,6 @@ SHADER_PUBLIC struct GIDenoisePushConstant
     SHADER_PUBLIC uint32_t dstShRIndex;
     SHADER_PUBLIC uint32_t dstShGIndex;
     SHADER_PUBLIC uint32_t dstShBIndex;
-    SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t direction;
     SHADER_PUBLIC uint32_t stepSize;
     SHADER_PUBLIC uint32_t aoIndex;
@@ -698,7 +695,7 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t depthHistoryIndex;
     SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
     SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t guideIndex;
     SHADER_PUBLIC uint32_t bHistoryValid;
     SHADER_PUBLIC uint32_t dataIndex;
     SHADER_PUBLIC uint32_t pad0;
@@ -727,10 +724,8 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t width;
     SHADER_PUBLIC uint32_t height;
     SHADER_PUBLIC uint32_t outputMode;
-    SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;
-    SHADER_PUBLIC uint32_t pad0;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t bDDGIApply;
     SHADER_PUBLIC uint32_t shadowsIndex;
@@ -1516,7 +1511,6 @@ SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(RelaxDiffuseSpecularConstants) constants;
     SHADER_PUBLIC uint32_t tilesIndex;
-    SHADER_PUBLIC uint32_t normalRoughnessIndex;
     SHADER_PUBLIC uint32_t viewZIndex;
     SHADER_PUBLIC uint32_t specIndex;
     SHADER_PUBLIC uint32_t diffIndex;

@@ -579,15 +579,15 @@ public float RelaxLoadGuideViewZ(uint guideIndex, int2 pixel)
     return asfloat(rdgTexturesUInt2[guideIndex].Load(int3(pixel, 0)).y);
 }
 
-public float4 RelaxGatherViewZ(uint texIdx, float2 uv, float depthLinearizeMult, float depthLinearizeAdd)
+// f16x4 packing for groupshared arrays holding RGBA16F-resident, spatially-consumed values.
+public uint2 RelaxPackF16x4(float4 v)
 {
-    float4 raw = rdgTexturesFloat[texIdx].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv);
-    return float4(
-        ScreenToViewSpaceDepth(raw.x, depthLinearizeMult, depthLinearizeAdd),
-        ScreenToViewSpaceDepth(raw.y, depthLinearizeMult, depthLinearizeAdd),
-        ScreenToViewSpaceDepth(raw.z, depthLinearizeMult, depthLinearizeAdd),
-        ScreenToViewSpaceDepth(raw.w, depthLinearizeMult, depthLinearizeAdd)
-    );
+    return uint2(f32tof16(v.x) | (f32tof16(v.y) << 16), f32tof16(v.z) | (f32tof16(v.w) << 16));
+}
+
+public float4 RelaxUnpackF16x4(uint2 p)
+{
+    return float4(f16tof32(p.x & 0xFFFFu), f16tof32(p.x >> 16), f16tof32(p.y & 0xFFFFu), f16tof32(p.y >> 16));
 }
 
 /** Gather from a texture that already stores linearized viewZ (no conversion needed). */

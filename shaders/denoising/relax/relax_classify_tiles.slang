@@ -32,10 +32,10 @@ void RelaxClassifyTilesMain(uniform RelaxClassifyTilesPushConstant pc,
     for (uint i = 0; i < 2; i++) {
         for (uint j = 0; j < 4; j++) {
             uint2 pos = pixelPos + uint2(i, j);
-            uint2 fullPos = pos;
-            float z = rdgTexturesFloat[pc.viewZIndex].Load(int3(fullPos, 0)).r;
-            float screenDepth = ScreenToViewSpaceDepth(z, rc.depthLinearizeMult, rc.depthLinearizeAdd);
-            isSky += !RelaxIsInDenoisingRange(screenDepth, rc.gDenoisingRange) ? 1 : 0;
+            // Out-of-rect texels vote sky (was implicit via the raw-depth OOB load linearizing to far).
+            bool bInRect = pos.x < uint(rc.gRectSize.x) && pos.y < uint(rc.gRectSize.y);
+            float viewZ = rdgTexturesFloat[pc.viewZIndex].Load(int3(pos, 0)).r;
+            isSky += (!bInRect || !RelaxIsInDenoisingRange(viewZ, rc.gDenoisingRange)) ? 1 : 0;
         }
     }
 

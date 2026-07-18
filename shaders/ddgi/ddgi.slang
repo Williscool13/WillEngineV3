@@ -181,6 +181,7 @@ static float DDGIMaxComponent(float3 v)
 }
 
 groupshared float4 gsRays[DDGI_MAX_RAYS_PER_PROBE];
+groupshared float3 gsRayDirections[DDGI_MAX_RAYS_PER_PROBE];
 groupshared float3 gsTexels[DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE];
 
 [shader("compute")]
@@ -203,6 +204,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     if (!bFrozen) {
         for (uint r = threadIndex; r < rayBudget; r += DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE) {
             gsRays[r] = pc.rayData[probeIndex * pc.raysPerProbe + r];
+            gsRayDirections[r] = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
         }
     }
     GroupMemoryBarrierWithGroupSync();
@@ -221,7 +223,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
             if (rayData.w < 0.0) {
                 continue;
             }
-            float3 rayDirection = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
+            float3 rayDirection = gsRayDirections[r];
             float weight = max(dot(texelDirection, rayDirection), 0.0);
             radianceSum += max(rayData.rgb, float3(0.0)) * weight;
             weightSum += weight;
@@ -267,6 +269,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
 }
 
 groupshared float gsRayDistances[DDGI_MAX_RAYS_PER_PROBE];
+groupshared float3 gsVisRayDirections[DDGI_MAX_RAYS_PER_PROBE];
 groupshared float2 gsVisTexels[DDGI_VISIBILITY_TILE * DDGI_VISIBILITY_TILE];
 
 [shader("compute")]
@@ -290,6 +293,7 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     if (!bFrozen) {
         for (uint r = threadIndex; r < rayBudget; r += DDGI_VISIBILITY_TILE * DDGI_VISIBILITY_TILE) {
             gsRayDistances[r] = min(abs(pc.rayData[probeIndex * pc.raysPerProbe + r].w), maxDistance);
+            gsVisRayDirections[r] = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
         }
     }
     GroupMemoryBarrierWithGroupSync();
@@ -303,7 +307,7 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
         float2 momentsSum = float2(0.0);
         float weightSum = 0.0;
         for (uint r = 0; r < rayBudget; ++r) {
-            float3 rayDirection = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
+            float3 rayDirection = gsVisRayDirections[r];
             float weight = pow(max(dot(texelDirection, rayDirection), 0.0), pc.distanceExponent);
             momentsSum += float2(gsRayDistances[r], gsRayDistances[r] * gsRayDistances[r]) * weight;
             weightSum += weight;

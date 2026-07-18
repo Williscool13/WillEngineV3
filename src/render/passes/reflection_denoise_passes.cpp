@@ -86,7 +86,6 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
     worldToViewPrevPosZ[2][2] = -worldToViewPrevPosZ[2][2];
     worldToViewPrevPosZ[3][2] = -worldToViewPrevPosZ[3][2];
     rc.gWorldToViewPrev = worldToViewPrevPosZ;
-    rc.gWorldPrevToWorld = glm::mat4(1.0f);
     rc.gViewToWorld = viewToWorld;
 
     rc.gRotatorPre = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
@@ -99,14 +98,9 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
     rc.gCameraDelta = glm::vec4(prevCamPos - camPos, 0.0f);
     rc.gMvScale = glm::vec4(0.5f, 0.5f, 1.0f, 0.0f);
 
-    rc.gJitter = glm::vec2(0.0f);
-    rc.gResolutionScale = glm::vec2(1.0f);
-    rc.gRectOffset = glm::vec2(0.0f);
     rc.gRectSizeInv = glm::vec2(1.0f / width, 1.0f / height);
     rc.gRectSizePrev = glm::vec2(width, height);
-    rc.gResourceSizeInv = rc.gRectSizeInv;
     rc.gResourceSizeInvPrev = rc.gRectSizeInv;
-    rc.gResourceSize = glm::vec2(width, height);
 
     rc.gRectSize = glm::ivec2(width, height);
 
@@ -121,7 +115,6 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
     const float jitterDelta = ComputeRelaxJitterDelta(viewFamily.aaConfig.mode, frameNumber);
     const float disocclusionThresholdBonus = (1.0f + jitterDelta) / static_cast<float>(height);
     rc.gDisocclusionThreshold = params.disocclusionThreshold + disocclusionThresholdBonus;
-    rc.gDisocclusionThresholdAlternate = params.disocclusionThreshold * 2.0f + disocclusionThresholdBonus;
     rc.gDenoisingRange = params.denoisingRange;
     rc.gDepthThreshold = params.depthThreshold;
     rc.gRoughnessFraction = params.roughnessFraction;
@@ -215,12 +208,12 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
 
         auto& pass = graph.AddPass(SID("[Reflection ReLAX] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
-        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(SID("refl_relax_viewz"));
         pass.WriteStorageImage(SID("refl_relax_tiles"));
-        pass.Execute([pipelineManager, depth, tilesW, tilesH](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, tilesW, tilesH](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxClassifyTilesPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("refl_relax_constants")),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_viewz")),
                 .tilesOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("refl_relax_tiles")),
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_classify_tiles"));
@@ -449,19 +442,17 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
         auto& pass = graph.AddPass(SID("[Reflection ReLAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsDenoise);
         pass.ReadBuffer(SID("refl_relax_constants"));
         pass.ReadSampledImage(SID("refl_relax_tiles"));
-        pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(depth);
+        pass.ReadSampledImage(SID("refl_relax_viewz"));
         pass.ReadSampledImage(SID("refl_relax_atrous_spec_0"));
         pass.ReadSampledImage(SID("refl_relax_atrous_diff_0"));
         pass.WriteStorageImage(SID("refl_relax_spec_hist"));
         pass.WriteStorageImage(SID("refl_relax_diff_hist"));
 
-        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxAntiFireflyPushConstant pc{
                 .constants = graph.GetBufferAddress(SID("refl_relax_constants")),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_tiles")),
-                .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_viewz")),
                 .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_atrous_spec_0")),
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("refl_relax_atrous_diff_0")),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("refl_relax_spec_hist")),

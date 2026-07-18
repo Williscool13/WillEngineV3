@@ -15,8 +15,8 @@ public static const uint GI_GATHER_TIER_SKY = 3u;
 public static const uint GI_GATHER_TIER_BACKFACE = 4u;
 public static const uint GI_GATHER_TIER_INVALID = 5u;
 
-/** The full-res pixel a gather texel represents; fixed to the quad's (0,0) so guide geometry (depth/normal/hitT) is stationary. frameIndex is intentionally ignored: cycling it strobed depth edges every 4 frames; temporal supersampling lives in the ray RNG instead. */
-public uint2 GIGatherRepresentativePixel(uint2 gatherPixel, uint frameIndex, uint2 renderExtent)
+/** The full-res pixel a gather texel represents; fixed to the quad's (0,0) so guide geometry (depth/normal/hitT) is stationary. Deliberately not frame-cycled: cycling strobed depth edges every 4 frames; temporal supersampling lives in the ray RNG instead. */
+public uint2 GIGatherRepresentativePixel(uint2 gatherPixel, uint2 renderExtent)
 {
     return min(gatherPixel * 2u, renderExtent - 1u);
 }

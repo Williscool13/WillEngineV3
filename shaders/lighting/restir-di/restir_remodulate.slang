@@ -66,27 +66,30 @@ void ReSTIRRemodulateMain(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid : 
         float3 kD_ibl = (1.0 - F_ibl) * (1.0 - metallic);
         float3 worldN = normalize(mul(float3x3(scene.invView), N));
 
+        float3 skyIrradiance = float3(0.0);
+        if (pc.skyboxIndex >= 0) {
+            skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+        }
+
         if (pc.giGatherMode != 0u) {
             // Upscaled gather; already contains the skybox and probe fallbacks.
             indirectDiffuse = rdgTexturesFloat4[pc.giResolvedIndex].Load(int3(pixel, 0)).rgb;
         } else {
-            if (pc.skyboxIndex >= 0) {
-                indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
-            }
+            indirectDiffuse = skyIrradiance;
             if (pc.bDDGIApply != 0) {
                 float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
                 float3 cameraDirection = normalize(mul(float3x3(scene.invView), viewPosition));
-                float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition));
-                indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.ddgiCascades)));
+                float edgeFade;
+                float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
+                indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
             }
         }
 
         float3 reflectionSpecular = float3(0.0);
         if (pc.skyboxIndex >= 0) {
-            reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl) * pc.iblIntensity;
+            reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl, envBRDF) * pc.iblIntensity;
 #if GI_SKY_SPECULAR_OCCLUSION
             // The diffuse GI already resolves local sky reachability, reuse for specular
-            float3 skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
             reflectionSpecular *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
 #endif
         }

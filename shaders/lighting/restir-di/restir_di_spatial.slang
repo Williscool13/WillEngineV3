@@ -37,15 +37,8 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
     float viewSpaceDepth = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
 
-    LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
-    if (!li.valid) {
-        Reservoir passthrough = pc.inputBuffer[centerIdx];
-        if (isnan(passthrough.W) || isinf(passthrough.W)) { passthrough = ReservoirEmpty(); }
-        passthrough.W = (pc.wClamp > 0.0) ? min(passthrough.W, pc.wClamp) : passthrough.W;
-        passthrough.M = min(passthrough.M, pc.mCap);
-        pc.outputBuffer[centerIdx] = passthrough;
-        return;
-    }
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
+    LightingInputs li = ReconstructLightingInputs(fullPixel, gt1, pc.gbufferTwoIndex);
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
@@ -62,14 +55,17 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         pc.outputBuffer[centerIdx] = center;
         return;
     }
-    bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->lightCount);
+    uint lightCount = uint(pc.lightData->lightCount);
+    bool validCenter = center.lightIdx != ~0u && center.lightIdx < lightCount;
     bool centerHasSample = center.lightIdx != ~0u;
 
     float Mc = centerHasSample ? float(center.M) : 0.0;
 
+    LightVS centerVS;
     float p_hat_center_atCenter = 0.0;
     if (validCenter) {
-        p_hat_center_atCenter = EvalReservoirPHat(center.lightIdx, center.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
+        centerVS = UnpackLightVS(pc.lightVS[center.lightIdx]);
+        p_hat_center_atCenter = EvalReservoirPHatLight(centerVS, center.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
     }
 
     ReservoirAccum accum = ReservoirAccumEmpty();
@@ -118,7 +114,8 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
             continue;
         }
 
-        float3 neighborN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(neighborFullPixel, 0)).r));
+        uint4 neighborGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(neighborFullPixel, 0));
+        float3 neighborN = normalize(UnpackNormalOct16(neighborGt1.r));
         if (dot(N, neighborN) < 0.906) {
             continue;
         }
@@ -126,17 +123,14 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         uint2 nrPos = PixelPosToReservoirPos(uint2(neighborPixel), field);
         Reservoir neighbor = pc.inputBuffer[nrPos.y * stride + nrPos.x];
         if (isnan(neighbor.W) || isinf(neighbor.W)) { neighbor = ReservoirEmpty(); }
-        if (neighbor.lightIdx == ~0u || neighbor.lightIdx == LIGHT_IDX_SUN || neighbor.lightIdx >= uint(pc.lightData->lightCount) || neighbor.M == 0u) {
+        if (neighbor.lightIdx == ~0u || neighbor.lightIdx == LIGHT_IDX_SUN || neighbor.lightIdx >= lightCount || neighbor.M == 0u) {
             continue;
         }
         if (validCenter && center.M >= 4u && neighbor.M < 2u) {
             continue;
         }
 
-        LightingInputs nli = ReconstructLightingInputs(neighborFullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
-        if (!nli.valid) {
-            continue;
-        }
+        LightingInputs nli = ReconstructLightingInputs(neighborFullPixel, neighborGt1, pc.gbufferTwoIndex);
         if (abs(nli.roughness - li.roughness) > 0.5) {
             continue;
         }
@@ -150,14 +144,15 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
         float Mi = validCenter ? min(float(neighbor.M), 20.0 * float(center.M)) : float(neighbor.M);
 
-        float p_hat_neighbor_atNeighbor = EvalReservoirPHat(neighbor.lightIdx, neighbor.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
-        float p_hat_neighbor_atCenter = EvalReservoirPHat(neighbor.lightIdx, neighbor.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
+        LightVS neighborVS = UnpackLightVS(pc.lightVS[neighbor.lightIdx]);
+        float p_hat_neighbor_atNeighbor = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness);
+        float p_hat_neighbor_atCenter = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
 
         float denomNeighbor = Mi * p_hat_neighbor_atNeighbor + Mc * p_hat_neighbor_atCenter;
         float misNeighbor = (denomNeighbor > 0.0) ? (Mi * p_hat_neighbor_atNeighbor) / denomNeighbor : 0.0;
 
         if (validCenter) {
-            float p_hat_center_atNeighbor = EvalReservoirPHat(center.lightIdx, center.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
+            float p_hat_center_atNeighbor = EvalReservoirPHatLight(centerVS, center.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness);
             float denomCenter = Mi * p_hat_center_atNeighbor + Mc * p_hat_center_atCenter;
             if (denomCenter > 0.0) {
                 centerMisAccum += (Mc * p_hat_center_atCenter) / denomCenter;
@@ -190,13 +185,14 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
     }
 
     if (combined.lightIdx != ~0u) {
+        LightVS winnerVS = UnpackLightVS(pc.lightVS[combined.lightIdx]);
         float p_hat_final;
         if (pc.bValidateVisibility != 0u) {
             float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
             float3 worldN = normalize(mul(float3x3(scene.invView), N));
-            p_hat_final = EvalReservoirPHatVisibility(combined.lightIdx, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, scene.invView, pc.lightData->directionalLight, pc.lightVS, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize);
+            p_hat_final = EvalReservoirPHatVisibilityLight(winnerVS, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.invView, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize);
         } else {
-            p_hat_final = EvalReservoirPHat(combined.lightIdx, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
+            p_hat_final = EvalReservoirPHatLight(winnerVS, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
         }
         ReservoirFinalise(combined, accum, p_hat_final, float(neighborCount));
     } else {

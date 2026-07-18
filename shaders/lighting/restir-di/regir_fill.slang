@@ -109,12 +109,11 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
                 ReGIRReservoir merged = ReGIRReservoirEmpty();
                 float mergedWinnerTarget = 0.0;
                 if (res.lightIdx != ~0u) {
-                    LightVS vsCur = UnpackLightVS(pc.lightVS[res.lightIdx]);
-                    float pCur = EvalCellLightTarget(vsCur, sampleVS, UnpackUnorm4x8(vsCur.packedColor).rgb);
-                    float wCur = pCur * ReGIRReservoirW(res);
+                    // winnerTarget was evaluated at this same sampleVS during candidate selection; res.targetPdf == winnerTarget.
+                    float wCur = winnerTarget * ReGIRReservoirW(res);
                     if (ReservoirAddSample(accumM, wCur, HashStep(h))) {
                         merged.lightIdx = res.lightIdx;
-                        mergedWinnerTarget = pCur;
+                        mergedWinnerTarget = winnerTarget;
                     }
                 }
                 if (prev.lightIdx != ~0u) {

@@ -46,11 +46,8 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
         return;
     }
 
-    LightingInputs li = ReconstructLightingInputs(fullPixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
-    if (!li.valid) {
-        pc.outputBuffer[pixelIdx] = ReservoirEmpty();
-        return;
-    }
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
+    LightingInputs li = ReconstructLightingInputs(fullPixel, gt1, pc.gbufferTwoIndex);
 
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
@@ -65,6 +62,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
     int mBrdf = (roughness <= pc.brdfRoughnessMax) ? RESTIR_M_BRDF : 0;
 
     int lightCount = pc.lightData->lightCount;
+    DirectionalLightData sun = pc.lightData->directionalLight;
 
     Reservoir r_gen = ReservoirEmpty();
     ReservoirAccum accum_gen = ReservoirAccumEmpty();
@@ -188,6 +186,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                 float hitT = 0.0;
                 bool bTriHit = false;
                 float3 triXi = float3(0.0);
+                LightVS hitVS = (LightVS)0;
 #if RESTIR_ENABLE_BRDF_RAY
                 float3 worldN = normalize(mul(float3x3(scene.invView), N));
                 RayDesc ray;
@@ -207,20 +206,24 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                         uint idx = hitInst.emissiveTriLightBase + q.CommittedPrimitiveIndex();
                         if (idx < uint(lightCount)) {
                             hitLightIdx = int(idx);
-                            LightVS tvs = UnpackLightVS(pc.lightVS[idx]);
+                            hitVS = UnpackLightVS(pc.lightVS[idx]);
                             float2 bary = q.CommittedTriangleBarycentrics();
                             // Exact view-space hit from barycentrics avoids the origin-offset t error of a re-intersection
-                            triXi = tvs.center + bary.x * tvs.right + bary.y * tvs.up;
+                            triXi = hitVS.center + bary.x * hitVS.right + bary.y * hitVS.up;
                             bTriHit = true;
                         }
                         bOwnedByReSTIR = true;
                     } else {
                         uint hl = hitInst.lightIndex;
-                        float t;
-                        if (hl != ~0u && hl < uint(lightCount) && RayIntersectLight(UnpackLightVS(pc.lightVS[hl]), viewPosition, brdfL, t)) {
-                            hitLightIdx = int(hl);
-                            hitT = t;
-                            bOwnedByReSTIR = true;
+                        if (hl != ~0u && hl < uint(lightCount)) {
+                            LightVS lvs = UnpackLightVS(pc.lightVS[hl]);
+                            float t;
+                            if (RayIntersectLight(lvs, viewPosition, brdfL, t)) {
+                                hitLightIdx = int(hl);
+                                hitT = t;
+                                hitVS = lvs;
+                                bOwnedByReSTIR = true;
+                            }
                         }
                     }
 
@@ -263,7 +266,11 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
                 hitT = nearestT;
 #endif
                 if (hitLightIdx >= 0) {
+#if RESTIR_ENABLE_BRDF_RAY
+                    LightVS vs = hitVS;
+#else
                     LightVS vs = UnpackLightVS(pc.lightVS[hitLightIdx]);
+#endif
                     Xi = bTriHit ? triXi : viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                     // The ReGIR selection pdf is modeled from cell-average occupancy, not the exact per-reservoir pdf, so it does not partition unity when mBrdf > 0.
@@ -287,8 +294,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
 
     }
 
-    if (pc.lightData->directionalLight.directionIntensity.w > 0.0) {
-        DirectionalLightData sun = pc.lightData->directionalLight;
+    if (sun.directionIntensity.w > 0.0) {
         float2 xiSun = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 4u);
         float p_cone;
         float3 sunDirWorld = SampleSunConeDirection(SunDirectionWorld(sun), sun.angularRadius, xiSun.x, xiSun.y, p_cone);
@@ -312,16 +318,31 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
     if (accum_gen.M > 0) { r_gen.M = 1u; }
 
     if (r_gen.lightIdx != ~0u) {
-        float p_hat_gen = EvalReservoirPHat(r_gen.lightIdx, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, pc.lightData->directionalLight, pc.lightVS);
-        ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
-
+        if (r_gen.lightIdx == LIGHT_IDX_SUN) {
+            float3 sunDirWorld = UnpackNormalOct16(r_gen.sampleOffsetPacked);
+            float3 sunDirView = normalize(mul((float3x3)scene.view, sunDirWorld));
+            float p_hat_gen = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, SunRadiance(sun));
+            ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
 #if RESTIR_ENABLE_INITIAL_VISIBILITY
-        if (pc.bInitialVisibility != 0u) {
-            float3 worldN = normalize(mul(float3x3(scene.invView), N));
-            float p_hat_vis = EvalReservoirPHatVisibility(r_gen.lightIdx, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.view, scene.invView, pc.lightData->directionalLight, pc.lightVS, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize);
-            if (p_hat_vis <= 0.0) { r_gen.W = 0.0; }
-        }
+            if (pc.bInitialVisibility != 0u && r_gen.W > 0.0) {
+                float3 worldN = normalize(mul(float3x3(scene.invView), N));
+                if (!RestirSunShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, sunDirWorld, worldTexelSize)) { r_gen.W = 0.0; }
+            }
 #endif
+        } else {
+            LightVS winnerVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
+            float3 yStar = DecodeSamplePos(r_gen.sampleOffsetPacked, winnerVS);
+            LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
+            float p_hat_gen = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity);
+            ReservoirFinalise(r_gen, accum_gen, p_hat_gen, 1.0);
+#if RESTIR_ENABLE_INITIAL_VISIBILITY
+            if (pc.bInitialVisibility != 0u && r_gen.W > 0.0) {
+                float3 worldN = normalize(mul(float3x3(scene.invView), N));
+                float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+                if (!RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize)) { r_gen.W = 0.0; }
+            }
+#endif
+        }
     }
 
     pc.outputBuffer[pixelIdx] = r_gen;

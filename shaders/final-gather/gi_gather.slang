@@ -83,12 +83,13 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
         return;
     }
 
-    uint2 pixel = GIGatherRepresentativePixel(gatherPixel, pc.frameIndex, pc.renderExtent);
+    uint2 pixel = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent);
 
     float4 shR = float4(0.0);
     float4 shG = float4(0.0);
     float4 shB = float4(0.0);
     float2 data = float2(0.0, float(GI_GATHER_TIER_INVALID));
+    uint2 guide = uint2(0u, 0u);
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
@@ -99,6 +100,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
 
         float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
         float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+        guide = uint2(gt1.r, asuint(viewSpaceDepth));
         float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
         float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 
@@ -136,8 +138,9 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                 }
                 if (pc.bCascadesValid != 0) {
                     float3 cameraDirection = normalize(mul((float3x3)scene.invView, viewPosition));
-                    float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition));
-                    indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.ddgiCascades)));
+                    float edgeFade;
+                    float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
+                    indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
                 }
                 // No hit material to modulate by; the shading pixel's own albedo is applied once downstream (matches the non-gather DDGI path).
                 radiance = indirectDiffuse;
@@ -234,8 +237,9 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                             indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], hit.normal) * pc.iblIntensity;
                         }
                         if (pc.bCascadesValid != 0) {
-                            float4 gi = DDGISampleIrradianceCascaded(hitWorldPos, hit.normal, direction, pc.ddgiCascades, 0.75 * hitT);
-                            indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(hitWorldPos, pc.ddgiCascades)));
+                            float edgeFade;
+                            float4 gi = DDGISampleIrradianceCascaded(hitWorldPos, hit.normal, direction, pc.ddgiCascades, 0.75 * hitT, edgeFade);
+                            indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
                         }
                         radiance = hit.diffuseColor * indirectDiffuse;
                         tier = GI_GATHER_TIER_PROBE;
@@ -271,4 +275,5 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
     rdgStorageFloat4[pc.shGIndex][gatherPixel] = shG;
     rdgStorageFloat4[pc.shBIndex][gatherPixel] = shB;
     rdgStorageFloat2[pc.dataIndex][gatherPixel] = data;
+    rdgStorageUInt2[pc.guideOutIndex][gatherPixel] = guide;
 }

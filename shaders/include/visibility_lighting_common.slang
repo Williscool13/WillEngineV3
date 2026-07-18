@@ -59,3 +59,17 @@ public LightingInputs ReconstructLightingInputs(
     result.valid = true;
     return result;
 }
+
+/** Variant for callers that already loaded the pixel's gbuffer-one texel; skips the visibility/instance gate and shadows fetch. */
+public LightingInputs ReconstructLightingInputs(uint2 pixel, uint4 gt1, uint32_t gbufferTwoIndex)
+{
+    LightingInputs result;
+    result.viewNormal = UnpackNormalOct16(gt1.r);
+    UnpackPBR(gt1.b, result.roughness, result.metallic);
+    uint2 gt2 = rdgTexturesUInt2[gbufferTwoIndex].Load(int3(pixel, 0));
+    result.albedo = UnpackAlbedoRGB8(gt2.r);
+    result.emissiveRGB = UnpackEmissiveRGBE(gt2.g);
+    result.shadows = float2(1.0f);
+    result.valid = true;
+    return result;
+}

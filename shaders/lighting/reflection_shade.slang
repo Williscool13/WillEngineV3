@@ -36,15 +36,17 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
         return;
     }
 
-    LightingInputs li = ReconstructLightingInputs(pixel, ~0x0, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
-    if (!li.valid) {
-        return;
-    }
-
-    float roughness = max(li.roughness, 0.045);
+    // Roughness gate before touching gbuffer two; most pixels early-out here.
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
+    float roughness;
+    float metallic;
+    UnpackPBR(gt1.b, roughness, metallic);
+    roughness = max(roughness, 0.045);
     if (roughness > pc.roughnessMax) {
         return;
     }
+
+    LightingInputs li = ReconstructLightingInputs(pixel, gt1, pc.gbufferTwoIndex);
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);

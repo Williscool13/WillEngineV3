@@ -42,18 +42,17 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         bool inside = all(pos >= int2(0)) && all(pos < int2(pc.gatherExtent));
         int2 p = clamp(pos, int2(0), int2(pc.gatherExtent) - 1);
 
-        uint2 fullPixel = GIGatherRepresentativePixel(uint2(p), pc.frameIndex, pc.renderExtent);
-        float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(fullPixel, 0)).r;
-        uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
+        uint2 fullPixel = GIGatherRepresentativePixel(uint2(p), pc.renderExtent);
+        uint2 g = rdgTexturesUInt2[pc.guideIndex].Load(int3(p, 0)).xy;
         float2 data = rdgTexturesFloat2[pc.dataIndex].Load(int3(p, 0)).xy;
         // Backface samples carry no radiance; excluding them here removes them as taps and reduces the center to a passthrough.
-        bool valid = inside && depth > 0.0 && (gt1.w & 1u) != 0u && uint(data.y + 0.5) != GI_GATHER_TIER_BACKFACE;
+        bool valid = inside && asfloat(g.y) != 0.0 && uint(data.y + 0.5) != GI_GATHER_TIER_BACKFACE;
 
         sShR[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcShRIndex].Load(int3(p, 0)));
         sShG[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcShGIndex].Load(int3(p, 0)));
         sShB[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcShBIndex].Load(int3(p, 0)));
-        sNormal[t] = gt1.r;
-        sViewZ[t] = valid ? ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd) : 0.0;
+        sNormal[t] = g.x;
+        sViewZ[t] = valid ? asfloat(g.y) : 0.0;
         // Sky misses opt out of the hitT guide (sentinel -1): a miss is a legit 0-radiance sample of the same integral as a neighboring hit, but hitT=10000 vs metres walls them off; with no IBL that blocks exactly the smoothing the outdoor speckle needs.
         sHitT[t] = uint(data.y + 0.5) == GI_GATHER_TIER_SKY ? -1.0 : data.x;
         sAO[t] = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(fullPixel, 0)).y : 1.0;
@@ -102,7 +101,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
                 sumB *= fireflyScale;
             }
         }
-        uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.frameIndex, pc.renderExtent);
+        uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent);
         float2 centerUv = (float2(centerFull) + 0.5) / float2(pc.renderExtent);
         float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, centerUv, centerViewZ);
         float invPlaneSigma = 1.0 / (GI_DENOISE_PLANE_DIST_SIGMA * abs(centerViewZ));
@@ -118,7 +117,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             float tapViewZ = sViewZ[idx];
             if (tapViewZ == 0.0) { continue; }
 
-            uint2 tapFull = GIGatherRepresentativePixel(uint2(int2(gatherPixel) + dir * tapOffset), pc.frameIndex, pc.renderExtent);
+            uint2 tapFull = GIGatherRepresentativePixel(uint2(int2(gatherPixel) + dir * tapOffset), pc.renderExtent);
             float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
             float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
             float3 tapNormal = UnpackNormalOct16(sNormal[idx]);

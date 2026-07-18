@@ -529,32 +529,19 @@ public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 
     return q.CommittedStatus() == COMMITTED_NOTHING;
 }
 
-public float EvalReservoirPHat(uint lightIdx, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
-                               float3 albedo, float3 F0, float metallic, float roughness,
-                               float4x4 view, DirectionalLightData sun, LightVSData* lightVS)
+/** Non-sun variant for callers that already unpacked the light; the sun branch, sun argument load, and per-call lightVS element load are hoisted out. */
+public float EvalReservoirPHatLight(LightVS vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
+                                    float3 albedo, float3 F0, float metallic, float roughness)
 {
-    if (lightIdx == LIGHT_IDX_SUN) {
-        float3 sunDirView = normalize(mul((float3x3)view, UnpackNormalOct16(sampleOffsetPacked)));
-        return EvalSunPHat(sunDirView, V, N, albedo, F0, metallic, roughness, SunRadiance(sun));
-    }
-    LightVS vs = UnpackLightVS(lightVS[lightIdx]);
     float3 yStar = DecodeSamplePos(sampleOffsetPacked, vs);
     LightSample s = EvalLightSample(vs, yStar, viewPos, N, vs.range);
     return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity);
 }
 
-public float EvalReservoirPHatVisibility(uint lightIdx, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
-                                         float3 albedo, float3 F0, float metallic, float roughness,
-                                         float4x4 view, float4x4 invView, DirectionalLightData sun, LightVSData* lightVS,
-                                         RaytracingAccelerationStructure tlas, float3 worldPos, float3 worldN, float worldTexelSize)
+public float EvalReservoirPHatVisibilityLight(LightVS vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
+                                              float3 albedo, float3 F0, float metallic, float roughness, float4x4 invView,
+                                              RaytracingAccelerationStructure tlas, float3 worldPos, float3 worldN, float worldTexelSize)
 {
-    if (lightIdx == LIGHT_IDX_SUN) {
-        float3 sunDirWorld = UnpackNormalOct16(sampleOffsetPacked);
-        if (!RestirSunShadowVisible(tlas, worldPos, worldN, sunDirWorld, worldTexelSize)) { return 0.0; }
-        float3 sunDirView = normalize(mul((float3x3)view, sunDirWorld));
-        return EvalSunPHat(sunDirView, V, N, albedo, F0, metallic, roughness, SunRadiance(sun));
-    }
-    LightVS vs = UnpackLightVS(lightVS[lightIdx]);
     float3 yStar = DecodeSamplePos(sampleOffsetPacked, vs);
     float3 worldyStar = mul(invView, float4(yStar, 1.0)).xyz;
     if (!RestirShadowVisible(tlas, worldPos, worldN, worldyStar, worldTexelSize)) { return 0.0; }

@@ -21,6 +21,7 @@ inline const StringID GI_GATHER_SH_R = SID("gi_gather_sh_r");
 inline const StringID GI_GATHER_SH_G = SID("gi_gather_sh_g");
 inline const StringID GI_GATHER_SH_B = SID("gi_gather_sh_b");
 inline const StringID GI_GATHER_DATA = SID("gi_gather_data");
+inline const StringID GI_GATHER_GUIDE = SID("gi_gather_guide");
 inline const StringID GI_GATHER_RAW_SH_R = SID("gi_gather_raw_sh_r");
 inline const StringID GI_GATHER_RAW_SH_G = SID("gi_gather_raw_sh_g");
 inline const StringID GI_GATHER_RAW_SH_B = SID("gi_gather_raw_sh_b");

@@ -267,7 +267,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .genBuffer = 0,
                 .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_base")),
                 .reflectionDescriptors = reflectionRoughnessMax >= 0.0f ? graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER) : 0,
-                .visibilityBufferIndex = ~0u,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -304,7 +303,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
             temporalPass.ReadBuffer(SCENE_DATA_BUFFER);
             temporalPass.ReadBuffer(SID("light_data"));
             temporalPass.ReadBuffer(SID("restir_lights_vs"));
-            temporalPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
             temporalPass.ReadBuffer(SID("restir_reservoir_base"));
             if (bHasHistory) { temporalPass.ReadBuffer(SID("restir_reservoir_history")); }
             temporalPass.ReadSampledImage(targets.gbufferOne);
@@ -329,7 +327,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                     .lightData = graph.GetBufferAddress(SID("light_data")),
                     .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .instanceBuffer = 0,
                     .hashEntries = 0,
                     .reservoirs = 0,
                     .cellData = 0,
@@ -337,7 +335,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .genBuffer = graph.GetBufferAddress(SID("restir_reservoir_base")),
                     .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
                     .reflectionDescriptors = 0,
-                    .visibilityBufferIndex = ~0u,
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                     .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -480,7 +477,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
         spatialPass.ReadBuffer(SCENE_DATA_BUFFER);
         spatialPass.ReadBuffer(SID("light_data"));
         spatialPass.ReadBuffer(SID("restir_lights_vs"));
-        spatialPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         spatialPass.ReadBuffer(inputName);
         spatialPass.ReadSampledImage(targets.gbufferOne);
         spatialPass.ReadSampledImage(targets.gbufferTwo);
@@ -497,10 +493,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(SID("light_data")),
                 .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
-                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .inputBuffer = graph.GetBufferAddress(inputName),
                 .outputBuffer = graph.GetBufferAddress(outputName),
-                .visibilityBufferIndex = ~0u,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -667,7 +661,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     }
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, frameNumber, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -683,7 +677,6 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .width = width,
                 .height = height,
                 .outputMode = outputMode,
-                .frameIndex = static_cast<uint32_t>(frameNumber),
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,

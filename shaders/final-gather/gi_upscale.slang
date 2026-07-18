@@ -63,17 +63,16 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     [unroll]
     for (uint i = 0; i < 4; i++) {
         int2 tap = clamp(footprintBase + int2(int(i & 1u), int(i >> 1u)), int2(0), int2(pc.gatherExtent) - 1);
-        uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.frameIndex, pc.renderExtent);
-        float tapDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(tapFull, 0)).r;
-        uint4 tapGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tapFull, 0));
+        uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent);
+        uint2 tapGuide = rdgTexturesUInt2[pc.guideIndex].Load(int3(tap, 0)).xy;
         float tapTier = rdgTexturesFloat2[pc.dataIndex].Load(int3(tap, 0)).y;
-        if (tapDepth <= 0.0 || (tapGt1.w & 1u) == 0u) { continue; }
+        if (asfloat(tapGuide.y) == 0.0) { continue; }
         if (uint(tapTier + 0.5) == GI_GATHER_TIER_BACKFACE) { bAnyBackfaceTap = true; continue; }
 
-        float tapViewZ = ScreenToViewSpaceDepth(tapDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+        float tapViewZ = asfloat(tapGuide.y);
         float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
         float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
-        float3 tapNormal = UnpackNormalOct16(tapGt1.r);
+        float3 tapNormal = UnpackNormalOct16(tapGuide.x);
 
         float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
         w *= pow(saturate(dot(centerNormal, tapNormal)), GI_UPSCALE_NORMAL_POWER);
@@ -119,8 +118,9 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
         if (pc.bCascadesValid != 0) {
             float3 cameraDirection = normalize(mul((float3x3)scene.invView, centerXv));
-            float4 gi = DDGISampleIrradianceCascaded(worldPos, evalN, cameraDirection, pc.ddgiCascades, length(centerXv));
-            current = gi.rgb * gi.w + current * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPos, pc.ddgiCascades)));
+            float edgeFade;
+            float4 gi = DDGISampleIrradianceCascaded(worldPos, evalN, cameraDirection, pc.ddgiCascades, length(centerXv), edgeFade);
+            current = gi.rgb * gi.w + current * (1.0 - max(gi.w, edgeFade));
         }
     } else {
         current = float3(0.0);
@@ -140,12 +140,13 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
             for (int oy = -1; oy <= 1; oy++) {
                 [unroll]
                 for (int ox = -1; ox <= 1; ox++) {
+                    bool bCenterTap = ox == 0 && oy == 0;
                     int2 tap = clamp(int2(pixel) + int2(ox, oy) * 2, int2(0), int2(pc.renderExtent) - int2(1));
-                    uint4 tapGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tap, 0));
+                    uint4 tapGt1 = bCenterTap ? gt1 : rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tap, 0));
                     if ((tapGt1.w & 1u) == 0u) {
                         continue;
                     }
-                    float tapDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(tap, 0)).r;
+                    float tapDepth = bCenterTap ? depth : rdgTexturesFloat[pc.depthIndex].Load(int3(tap, 0)).r;
                     if (tapDepth <= 0.0) {
                         continue;
                     }

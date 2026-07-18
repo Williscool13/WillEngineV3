@@ -180,6 +180,46 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
  * Returns the same contract as DDGISampleIrradiance; w is total coverage for the caller's fallback blend, dropping below 1 outside every cascade's interior and in weight-starved dead pockets.
  */
 [ForceInline] // the struct ptr fails to compile
+public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet, float maxBias, out float edgeFade)
+{
+    float3 color = float3(0.0);
+    float coverage = 0.0;
+    bool bSaturated = false;
+    edgeFade = 0.0;
+    uint count = min(cascadeSet->cascadeCount, DDGI_MAX_CASCADES);
+    for (uint c = 0; c < count; ++c) {
+        DDGICascadeDescriptor desc = cascadeSet->cascades[c];
+        if (desc.bValid == 0) {
+            continue;
+        }
+
+        // Geometric interior fade of the cascade set: 1 inside any valid window, falling to 0 over the outermost window's edgeFadeCells.
+        // Lets callers distinguish "outside the probe world" (sky is a fair irradiance fallback) from an interior coverage hole (it is not: dead-probe pockets in sealed rooms would leak full-strength sky, and the bounce-feedback sites would spread it through the whole probe/cache field).
+        float3 gridCoord = worldPosition / desc.volume.probeSpacing;
+        float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
+        edgeFade = max(edgeFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
+
+        if (bSaturated) {
+            continue;
+        }
+        float4 gi = DDGISampleIrradiance(worldPosition, normal, cameraDirection, desc.volume, desc.irradianceIndex, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid, maxBias);
+        if (gi.w <= 0.0) {
+            continue;
+        }
+        color += gi.rgb * gi.w * (1.0 - coverage);
+        coverage += gi.w * (1.0 - coverage);
+        if (coverage >= 0.999) {
+            bSaturated = true;
+        }
+    }
+    if (coverage <= 0.0) {
+        return float4(0.0);
+    }
+    return float4(color / coverage, coverage);
+}
+
+/** No-fade variant; keeps the hard early break for callers that never blend against the set edge (per-probe-ray bounce feedback). */
+[ForceInline]
 public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet, float maxBias)
 {
     float3 color = float3(0.0);
@@ -204,27 +244,6 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
         return float4(0.0);
     }
     return float4(color / coverage, coverage);
-}
-
-/**
- * Geometric interior fade of the cascade set: 1 inside any valid window, falling to 0 over the outermost window's edgeFadeCells.
- * Lets callers distinguish "outside the probe world" (sky is a fair irradiance fallback) from an interior coverage hole (it is not: dead-probe pockets in sealed rooms would leak full-strength sky, and the bounce-feedback sites would spread it through the whole probe/cache field).
- */
-[ForceInline]
-public float DDGICascadeSetEdgeFade(float3 worldPosition, DDGICascadeSetGPU* cascadeSet)
-{
-    float fade = 0.0;
-    uint count = min(cascadeSet->cascadeCount, DDGI_MAX_CASCADES);
-    for (uint c = 0; c < count; ++c) {
-        DDGICascadeDescriptor desc = cascadeSet->cascades[c];
-        if (desc.bValid == 0) {
-            continue;
-        }
-        float3 gridCoord = worldPosition / desc.volume.probeSpacing;
-        float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
-        fade = max(fade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
-    }
-    return fade;
 }
 
 public float3 DDGISphericalFibonacci(uint index, uint count)

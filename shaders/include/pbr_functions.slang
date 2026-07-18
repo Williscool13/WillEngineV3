@@ -170,16 +170,22 @@ public float3 DiffuseIrradiance(TextureCube envMap, SamplerState linearSampler, 
     return envMap.SampleLevel(linearSampler, N, ENVIRONMENT_MAP_DIFFUSE_MIP).rgb;
 }
 
-public float3 SpecularReflection(TextureCube envMap, Texture2D lut, SamplerState linearSampler,
-                          float3 viewV, float3 viewN, float4x4 invView, float roughness, float3 F)
+/** Variant for callers that already sampled the BRDF LUT at (NoV, roughness). */
+public float3 SpecularReflection(TextureCube envMap, SamplerState linearSampler,
+                          float3 viewV, float3 viewN, float4x4 invView, float roughness, float3 F, float2 envBRDF)
 {
     float3 R = reflect(-viewV, viewN);
     float3 worldR = normalize(mul((float3x3)invView, R));
     worldR.y = -worldR.y;
 
     float3 prefilteredColor = envMap.SampleLevel(linearSampler, worldR, roughness * roughness * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1)).rgb;
+    return prefilteredColor * (F * envBRDF.x + envBRDF.y);
+}
+
+public float3 SpecularReflection(TextureCube envMap, Texture2D lut, SamplerState linearSampler,
+                          float3 viewV, float3 viewN, float4x4 invView, float roughness, float3 F)
+{
     float2 brdfUV = float2(max(dot(viewN, viewV), 0.0), roughness);
     float2 envBRDF = lut.SampleLevel(linearSampler, brdfUV, 0).rg;
-
-    return prefilteredColor * (F * envBRDF.x + envBRDF.y);
+    return SpecularReflection(envMap, linearSampler, viewV, viewN, invView, roughness, F, envBRDF);
 }

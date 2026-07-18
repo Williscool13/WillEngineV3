@@ -17,17 +17,15 @@ static const int AF_GROUP_Y = 8;
 static const int AF_BUFFER_X = AF_GROUP_X + AF_BORDER * 2;
 static const int AF_BUFFER_Y = AF_GROUP_Y + AF_BORDER * 2;
 
-groupshared float4 s_Spec[AF_BUFFER_Y][AF_BUFFER_X];
-groupshared float4 s_Diff[AF_BUFFER_Y][AF_BUFFER_X];
-groupshared float s_MaterialID[AF_BUFFER_Y][AF_BUFFER_X];
+groupshared uint2 s_Spec[AF_BUFFER_Y][AF_BUFFER_X];
+groupshared uint2 s_Diff[AF_BUFFER_Y][AF_BUFFER_X];
 
 void Preload(uint2 sharedPos, int2 globalPos, RelaxDiffuseSpecularConstants* rc,
-    uint normalRoughnessIndex, uint specIndex, uint diffIndex)
+    uint specIndex, uint diffIndex)
 {
     globalPos = clamp(globalPos, int2(0, 0), rc.gRectSize - 1);
-    s_MaterialID[sharedPos.y][sharedPos.x] = 0.0; // material ID not used; always match
-    s_Spec[sharedPos.y][sharedPos.x] = rdgTexturesFloat4[specIndex].Load(int3(globalPos, 0));
-    s_Diff[sharedPos.y][sharedPos.x] = rdgTexturesFloat4[diffIndex].Load(int3(globalPos, 0));
+    s_Spec[sharedPos.y][sharedPos.x] = RelaxPackF16x4(rdgTexturesFloat4[specIndex].Load(int3(globalPos, 0)));
+    s_Diff[sharedPos.y][sharedPos.x] = RelaxPackF16x4(rdgTexturesFloat4[diffIndex].Load(int3(globalPos, 0)));
 }
 
 [shader("compute")]
@@ -47,7 +45,7 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
             uint virtualIndex = threadIndex + stage * AF_GROUP_X * AF_GROUP_Y;
             uint2 newId = uint2(virtualIndex % AF_BUFFER_X, virtualIndex / AF_BUFFER_X);
             if (stage == 0 || virtualIndex < AF_BUFFER_X * AF_BUFFER_Y)
-                Preload(newId, groupBase + int2(newId), rc, pc.normalRoughnessIndex, pc.specIndex, pc.diffIndex);
+                Preload(newId, groupBase + int2(newId), rc, pc.specIndex, pc.diffIndex);
         }
     }
     GroupMemoryBarrierWithGroupSync();
@@ -56,14 +54,14 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
         return;
 
     int2 fullPixel = pixelPos;
-    float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
+    float centerViewZ = rdgTexturesFloat[pc.viewZIndex].Load(int3(fullPixel, 0)).r;
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
         return;
 
     uint2 sharedCenter = uint2(threadPos) + AF_BORDER;
 
-    float4 specCenter = s_Spec[sharedCenter.y][sharedCenter.x];
-    float4 diffCenter = s_Diff[sharedCenter.y][sharedCenter.x];
+    float4 specCenter = RelaxUnpackF16x4(s_Spec[sharedCenter.y][sharedCenter.x]);
+    float4 diffCenter = RelaxUnpackF16x4(s_Diff[sharedCenter.y][sharedCenter.x]);
     float specLumCenter = MLLuminance(specCenter.rgb);
     float diffLumCenter = MLLuminance(diffCenter.rgb);
 
@@ -84,8 +82,8 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
 
             uint2 si = uint2(threadPos) + AF_BORDER + uint2(xx, yy);
 
-            float specLum = MLLuminance(s_Spec[si.y][si.x].rgb);
-            float diffLum = MLLuminance(s_Diff[si.y][si.x].rgb);
+            float specLum = MLLuminance(RelaxUnpackF16x4(s_Spec[si.y][si.x]).rgb);
+            float diffLum = MLLuminance(RelaxUnpackF16x4(s_Diff[si.y][si.x]).rgb);
 
             if (specLum > maxSpecLum) { maxSpecLum = specLum; maxSpecCoords = si; }
             if (specLum < minSpecLum) { minSpecLum = specLum; minSpecCoords = si; }
@@ -102,6 +100,6 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
     if (diffLumCenter > maxDiffLum) diffCoords = maxDiffCoords;
     if (diffLumCenter < minDiffLum) diffCoords = minDiffCoords;
 
-    rdgStorageFloat4[pc.outSpecIndex][pixelPos] = float4(s_Spec[specCoords.y][specCoords.x].rgb, specCenter.a);
-    rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(s_Diff[diffCoords.y][diffCoords.x].rgb, diffCenter.a);
+    rdgStorageFloat4[pc.outSpecIndex][pixelPos] = float4(RelaxUnpackF16x4(s_Spec[specCoords.y][specCoords.x]).rgb, specCenter.a);
+    rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(RelaxUnpackF16x4(s_Diff[diffCoords.y][diffCoords.x]).rgb, diffCenter.a);
 }

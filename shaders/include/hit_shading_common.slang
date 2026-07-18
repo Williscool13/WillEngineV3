@@ -154,8 +154,9 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], N) * pc.iblIntensity;
     }
     if (pc.bFeedbackValid != 0) {
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades, maxBias);
-        indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.previousCascades)));
+        float edgeFade;
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades, maxBias, edgeFade);
+        indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
     }
     radiance += diffuseColor * indirectDiffuse;
     return radiance;
@@ -355,8 +356,9 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
     }
     if (pc.bFeedbackValid != 0) {
         float cellSize = WorldCacheCellSizeAtLevel(WorldCacheLevelFromDistance(distance(worldPosition, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz)));
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, cellSize);
-        indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, DDGICascadeSetEdgeFade(worldPosition, pc.previousCascades)));
+        float edgeFade;
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, cellSize, edgeFade);
+        indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
     }
     radiance += diffuseColor * indirectDiffuse;
     return radiance;
