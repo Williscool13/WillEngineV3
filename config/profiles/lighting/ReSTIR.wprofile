@@ -33,6 +33,7 @@
   "gtao": {
     "bEnabled": true,
     "denoiseBlurBeta": 1.2000000476837158,
+    "denoisePasses": 2.0,
     "depthMipSamplingOffset": 3.299999952316284,
     "effectFalloffRange": 0.6150000095367432,
     "effectRadius": 0.5,
@@ -47,8 +48,8 @@
   "lightingMode": 1,
   "lightingShaderOverride": 7554520945661456859,
   "reflection": {
-    "bDenoiserEnabled": false,
-    "bEnabled": false,
+    "bDenoiserEnabled": true,
+    "bEnabled": true,
     "bScreenSpaceLighting": false,
     "intensity": 1.0,
     "roughnessMax": 0.44999998807907104

@@ -842,25 +842,26 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.ReadSampledImage(targets.depthCopy);
-                switch (viewFamily.debugTransformationType) {
-                    case DebugTransformationType::ReservoirLightIdx:
-                    case DebugTransformationType::ReservoirGenerateW:
-                        debugVisPass.ReadBuffer(SID("restir_reservoir_base"));
-                        break;
-                    case DebugTransformationType::ReservoirTemporalLightIdx:
-                    case DebugTransformationType::ReservoirTemporalW:
-                        debugVisPass.ReadBuffer(SID("restir_reservoir_temporal"));
-                        break;
-                    case DebugTransformationType::ReservoirSpatialLightIdx:
-                    case DebugTransformationType::ReservoirSpatialW:
-                        debugVisPass.ReadBuffer(SID("restir_reservoir_spatial"));
-                        break;
-                    case DebugTransformationType::ReservoirHistoryLightIdx:
-                    case DebugTransformationType::ReservoirHistoryW:
-                        debugVisPass.ReadBuffer(SID("restir_reservoir_history"));
-                        break;
-                    default:
-                        break;
+                const StringID debugVisBuffers[] = {
+                    SCENE_DATA_BUFFER,
+                    GEOMETRY_VERTEX_POSITION_BUFFER,
+                    GEOMETRY_VERTEX_ATTRIBUTE_BUFFER,
+                    GEOMETRY_MESHLET_VERTEX_BUFFER,
+                    GEOMETRY_MESHLET_TRIANGLE_BUFFER,
+                    GEOMETRY_MESHLET_BUFFER,
+                    GEOMETRY_PRIMITIVE_BUFFER,
+                    GEOMETRY_INSTANCE_BUFFER,
+                    GEOMETRY_MODEL_BUFFER,
+                    GEOMETRY_MATERIAL_BUFFER,
+                    SID("restir_reservoir_base"),
+                    SID("restir_reservoir_temporal"),
+                    SID("restir_reservoir_spatial"),
+                    SID("restir_reservoir_history"),
+                };
+                for (const StringID bufferId : debugVisBuffers) {
+                    if (renderGraph->HasBuffer(bufferId)) {
+                        debugVisPass.ReadBuffer(bufferId);
+                    }
                 }
                 debugVisPass.WriteStorageImage(targets.colorOutput);
                 debugVisPass.Execute([&, debugTargetName, colorOutput = targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {

@@ -78,6 +78,7 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     YCoCgSignal = 32,
     ReblurInternalData = 33,
     ReblurData2 = 34,
+    BentNormal = 35,
 };
 
 SHADER_PUBLIC struct Frustum

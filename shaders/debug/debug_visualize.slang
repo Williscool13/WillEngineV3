@@ -290,6 +290,11 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(float(countbits(p & 0xFu)) / 4.0, float(countbits((p >> 4) & 0xFu)) / 4.0, float((p >> 8) & 0x7Fu) / 127.0);
             break;
         }
+        case 35: { // BentNormal: oct16 in R32_UINT (raw uint, float() is lossy). Same view-space RGB encoding as case 10 so it A/Bs against GBuffer Normal.
+            uint p = rdgTexturesUInt[pc.textureIndexInArray].Load(sampleTexCoord).r;
+            srcPixel = float4(UnpackNormalOct16(p) * 0.5 + 0.5, 1.0);
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

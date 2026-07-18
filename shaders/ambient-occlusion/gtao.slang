@@ -2,6 +2,7 @@ import common_interop;
 import push_constant_interop;
 import shader_functions;
 import constants_interop;
+import random_common;
 
 import bindless_declarations;
 
@@ -114,10 +115,6 @@ static const float XE_GTAO_PI = 3.1415926535897932384626433832795;
 static const float XE_GTAO_PI_HALF = 1.5707963267948966192313216916398;
 static const float XE_GTAO_OCCLUSION_TERM_SCALE = 1.5f;
 
-static const uint XE_HILBERT_LEVEL = 6u;
-static const uint XE_HILBERT_WIDTH = (1u << XE_HILBERT_LEVEL);
-static const uint XE_HILBERT_AREA = (XE_HILBERT_WIDTH * XE_HILBERT_WIDTH);
-
 // http://h14s.p5r.org/2012/09/0x5f3759df.html
 float XeGTAO_FastSqrt(float x) {
     return asfloat(0x1fbd1df5 + (asuint(x) >> 1));
@@ -152,29 +149,10 @@ float3x3 XeGTAO_RotFromToMatrix(float3 from, float3 to) {
         hvxz - v.y, hvyz + v.x, e + hvz * v.z);
 }
 
-uint XeGTAO_HilbertIndex(uint posX, uint posY) {
-    uint index = 0u;
-    for (uint curLevel = XE_HILBERT_WIDTH / 2u; curLevel > 0u; curLevel /= 2u) {
-        uint regionX = (posX & curLevel) > 0u ? 1u : 0u;
-        uint regionY = (posY & curLevel) > 0u ? 1u : 0u;
-        index += curLevel * curLevel * ((3u * regionX) ^ regionY);
-        if (regionY == 0u) {
-            if (regionX == 1u) {
-                posX = uint(XE_HILBERT_WIDTH - 1u) - posX;
-                posY = uint(XE_HILBERT_WIDTH - 1u) - posY;
-            }
-            uint temp = posX;
-            posX = posY;
-            posY = temp;
-        }
-    }
-    return index;
-}
-
+// Stock XeGTAO scrambles a Hilbert index through the R2 sequence; the baked void-and-cluster mask is a better spatial
+// distribution under the bilateral denoise and keeps the same R2 temporal walk.
 float2 XeGTAO_SpatioTemporalNoise(int2 pixCoord, uint temporalIndex) {
-    uint index = XeGTAO_HilbertIndex(uint(pixCoord.x), uint(pixCoord.y));
-    index += 288u * (temporalIndex % 64u);
-    return float2(frac(0.5 + index * float2(0.75487766624669276005, 0.5698402909980532659114)));
+    return SpatioTemporalBlueNoise2D(uint2(pixCoord), temporalIndex, 5u);
 }
 
 float4 XeGTAO_CalculateDepthEdges(float centerZ, float leftZ, float rightZ, float topZ, float bottomZ) {

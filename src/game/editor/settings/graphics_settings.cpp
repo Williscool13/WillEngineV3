@@ -414,6 +414,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("GTAO AO")) setDebugTarget("gtao_ao", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Edges")) setDebugTarget("gtao_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Filtered")) setDebugTarget("gtao_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("GTAO Bent Normals")) setDebugTarget("gtao_bent_normals", DebugTransformationType::BentNormal, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("SIGMA")) {
