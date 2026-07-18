@@ -1,0 +1,101 @@
+import push_constant_interop;
+import ddgi_interop;
+import ddgi_common;
+import bindless_declarations;
+import shader_functions;
+
+// =============== Shader Summary ============
+// DDGI blend irradiance: one thread group per probe tile; each interior texel cosine-integrates the probe's rays into octahedral irradiance stored as pow(E, 1/gamma), hysteresis-blended in that perceptual space with RTXGI's change/brightness thresholds. Slots whose lattice cell changed since last frame (window scroll) or with no history start fresh. Border texels copy wrapped interior texels so bilinear taps stay seamless.
+
+static float DDGIMaxComponent(float3 v)
+{
+    return max(v.x, max(v.y, v.z));
+}
+
+groupshared float4 gsRays[DDGI_MAX_RAYS_PER_PROBE];
+groupshared float3 gsRayDirections[DDGI_MAX_RAYS_PER_PROBE];
+groupshared float3 gsTexels[DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE];
+
+[shader("compute")]
+[numthreads(DDGI_IRRADIANCE_TILE, DDGI_IRRADIANCE_TILE, 1)]
+void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupThreadID, uniform DDGIProbeBlendPushConstant pc)
+{
+    uint probeIndex = groupId.x;
+    int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
+    int2 tileOrigin = DDGIProbeTileOrigin(slot, pc.volume, DDGI_IRRADIANCE_TILE);
+
+    DDGIVolumeParams previousVolume = pc.volume;
+    previousVolume.baseCell = pc.previousBaseCell;
+    bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume));
+    bool bInactive = pc.bActiveValid != 0 && bSameCellPrev && pc.probeActive[probeIndex] == 0;
+    // Frozen inactive probe
+    bool bFrozen = bInactive && pc.bHistoryValid != 0;
+    uint rayBudget = bInactive ? min(DDGI_SENTINEL_RAYS, pc.raysPerProbe) : pc.raysPerProbe;
+
+    uint threadIndex = gtid.y * DDGI_IRRADIANCE_TILE + gtid.x;
+    if (!bFrozen) {
+        for (uint r = threadIndex; r < rayBudget; r += DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE) {
+            gsRays[r] = pc.rayData[probeIndex * pc.raysPerProbe + r];
+            gsRayDirections[r] = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    int2 texel = int2(gtid.xy);
+    bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_IRRADIANCE_INTERIOR));
+    if (bInterior && bFrozen) {
+        gsTexels[threadIndex] = rdgTexturesFloat4[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rgb;
+    } else if (bInterior) {
+        float3 texelDirection = DDGIOctTexelDirection(texel, DDGI_IRRADIANCE_INTERIOR);
+        float3 radianceSum = float3(0.0);
+        float weightSum = 0.0;
+        for (uint r = 0; r < rayBudget; ++r) {
+            // Backface hits are excluded entirely (RTXGI); counting their weight darkens probes near geometry.
+            float4 rayData = gsRays[r];
+            if (rayData.w < 0.0) {
+                continue;
+            }
+            float3 rayDirection = gsRayDirections[r];
+            float weight = max(dot(texelDirection, rayDirection), 0.0);
+            radianceSum += max(rayData.rgb, float3(0.0)) * weight;
+            weightSum += weight;
+        }
+        // The EMA runs in perceptual space (pow 1/gamma): a rare bright ray moves the encoded value little, so small
+        // sky apertures stop pulsing. Thresholds and the delta clamp follow RTXGI's probe blending.
+        float3 result = weightSum > 1e-4 ? radianceSum / weightSum : float3(0.0);
+        result = pow(result, 1.0 / pc.volume.irradianceGamma);
+
+        if (pc.bHistoryValid != 0) {
+            if (bSameCellPrev) {
+                float3 previous = rdgTexturesFloat4[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rgb;
+
+                if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
+                    // Relocation teleport or revival is a real change, not noise; skip the anti-flicker clamps.
+                    result = lerp(result, previous, max(pc.hysteresis - 0.75, 0.0));
+                } else {
+                    float hysteresis = pc.hysteresis;
+                    if (DDGIMaxComponent(previous - result) > pc.irradianceThreshold) {
+                        // Never fully discard history here; a 1spp update is too noisy to trust alone.
+                        hysteresis = max(hysteresis - 0.75, 0.1);
+                    }
+                    float3 delta = result - previous;
+                    if (DDGIMaxComponent(delta) > pc.brightnessThreshold) {
+                        delta *= 0.25;
+                    }
+                    float3 lerpDelta = (1.0 - hysteresis) * delta;
+                    if (DDGIMaxComponent(result) < DDGIMaxComponent(previous)) {
+                        const float minDarkeningStep = 1.0 / 1024.0;
+                        lerpDelta = min(max(float3(minDarkeningStep), abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
+                    }
+                    result = previous + lerpDelta;
+                }
+            }
+        }
+        gsTexels[threadIndex] = result;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    int2 source = DDGIOctBorderSource(texel, int(DDGI_IRRADIANCE_INTERIOR));
+    float3 value = gsTexels[uint(source.y) * DDGI_IRRADIANCE_TILE + uint(source.x)];
+    rdgStorageFloat4[pc.atlasOutIndex][uint2(tileOrigin + texel)] = float4(value, 1.0);
+}

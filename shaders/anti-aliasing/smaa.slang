@@ -4,6 +4,121 @@ import constants_interop;
 import bindless_declarations;
 import shader_functions;
 
+// https://github.com/iryoku/smaa/blob/master/SMAA.hlsl
+
+static const float SMAA_DEPTH_THRESHOLD = 0.1;
+
+// ============================================================
+// Pass 1a: Luma Edge Detection
+//
+// Requires gamma-corrected (linear) color input.
+// Standard choice: good quality, low cost.
+// ============================================================
+[shader("compute")]
+[numthreads(16, 16, 1)]
+void LumaEdgeDetectionMain(uniform SmaaEdgeDetectionPushConstant pc, uint3 threadID : SV_DispatchThreadID)
+{
+    if (threadID.x >= uint(pc.sceneData.mainRenderTargetSize.x) || threadID.y >= uint(pc.sceneData.mainRenderTargetSize.y)) { return; }
+
+    int2 coord   = int2(threadID.xy);
+    float2 tsize = pc.sceneData.texelSize;
+
+    float3 C   = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord,                0)).rgb;
+    float3 Cl  = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(-1,  0), 0)).rgb;
+    float3 Ct  = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 0, -1), 0)).rgb;
+    float3 Cr  = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 1,  0), 0)).rgb;
+    float3 Cb  = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 0,  1), 0)).rgb;
+    float3 Cll = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(-2,  0), 0)).rgb;
+    float3 Ctt = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 0, -2), 0)).rgb;
+
+    float L   = Luma(C);
+    float Ll  = Luma(Cl);
+    float Lt  = Luma(Ct);
+
+    float4 delta;
+    delta.xy = abs(L - float2(Ll, Lt));
+    float2 edges = step(pc.threshold, delta.xy);
+
+    delta.zw   = abs(L - float2(Luma(Cr), Luma(Cb)));
+    float2 maxDelta = max(delta.xy, delta.zw);
+    maxDelta = max(maxDelta, abs(float2(Ll - Luma(Cll), Lt - Luma(Ctt))));
+
+    edges *= step(max(maxDelta.x, maxDelta.y), pc.localContrastAdaptation * delta.xy);
+
+    rdgStorageFloat2[pc.outputEdgeIndex][coord] = edges;
+}
+
+// ============================================================
+// Pass 1b: Color Edge Detection
+//
+// Catches edges luma misses (e.g. isoluminant color boundaries).
+// Higher quality than luma, ~3x more samples.
+// ============================================================
+[shader("compute")]
+[numthreads(16, 16, 1)]
+void ColorEdgeDetectionMain(uniform SmaaEdgeDetectionPushConstant pc, uint3 threadID : SV_DispatchThreadID)
+{
+    if (threadID.x >= uint(pc.sceneData.mainRenderTargetSize.x) || threadID.y >= uint(pc.sceneData.mainRenderTargetSize.y)) { return; }
+
+    int2 coord   = int2(threadID.xy);
+    float2 tsize = pc.sceneData.texelSize;
+
+    float3 C  = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord,                0)).rgb;
+    float3 Cl = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(-1,  0), 0)).rgb;
+    float3 Ct = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 0, -1), 0)).rgb;
+
+    float4 delta;
+    float3 t;
+
+    t = abs(C - Cl); delta.x = max(max(t.r, t.g), t.b);
+    t = abs(C - Ct); delta.y = max(max(t.r, t.g), t.b);
+
+    float2 edges = step(pc.threshold, delta.xy);
+
+    float3 Cr = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 1,  0), 0)).rgb;
+    float3 Cb = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 0,  1), 0)).rgb;
+
+    t = abs(C - Cr); delta.z = max(max(t.r, t.g), t.b);
+    t = abs(C - Cb); delta.w = max(max(t.r, t.g), t.b);
+
+    float2 maxDelta = max(delta.xy, delta.zw);
+
+    float3 Cll = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(-2,  0), 0)).rgb;
+    float3 Ctt = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 0, -2), 0)).rgb;
+
+    t = abs(Cl - Cll); delta.z = max(max(t.r, t.g), t.b);
+    t = abs(Ct - Ctt); delta.w = max(max(t.r, t.g), t.b);
+
+    maxDelta = max(maxDelta, delta.zw);
+
+    edges *= step(max(maxDelta.x, maxDelta.y), pc.localContrastAdaptation * delta.xy);
+
+    rdgStorageFloat2[pc.outputEdgeIndex][coord] = edges;
+}
+
+// ============================================================
+// Pass 1c: Depth Edge Detection
+//
+// Geometry edges only. Cheapest option, misses texture/color edges.
+// ============================================================
+[shader("compute")]
+[numthreads(16, 16, 1)]
+void DepthEdgeDetectionMain(uniform SmaaEdgeDetectionPushConstant pc, uint3 threadID : SV_DispatchThreadID)
+{
+    if (threadID.x >= uint(pc.sceneData.mainRenderTargetSize.x) || threadID.y >= uint(pc.sceneData.mainRenderTargetSize.y)) { return; }
+
+    int2 coord = int2(threadID.xy);
+
+    float D   = rdgTexturesFloat[pc.depthIndex].Load(int3(coord,                0));
+    float Dl  = rdgTexturesFloat[pc.depthIndex].Load(int3(coord + int2(-1,  0), 0));
+    float Dt  = rdgTexturesFloat[pc.depthIndex].Load(int3(coord + int2( 0, -1), 0));
+
+    float2 delta = abs(D - float2(Dl, Dt));
+    float2 edges = step(SMAA_DEPTH_THRESHOLD, delta);
+
+    rdgStorageFloat2[pc.outputEdgeIndex][coord] = edges;
+}
+
 static const int    SMAA_MAX_SEARCH_STEPS          = 32;
 static const int    SMAA_MAX_SEARCH_STEPS_DIAG     = 8;
 static const float  SMAA_AREATEX_MAX_DISTANCE      = 16.0;
@@ -13,8 +128,6 @@ static const float  SMAA_AREATEX_SUBTEX_SIZE       = 1.0 / 7.0;
 static const float  SMAA_CORNER_ROUNDING           = 0.25; // normalized [0,1], matches reference default of 25/100
 static const float2 SMAA_SEARCHTEX_SIZE            = float2(66.0, 33.0);
 static const float2 SMAA_SEARCHTEX_PACKED_SIZE     = float2(64.0, 16.0);
-
-// https://github.com/iryoku/smaa/blob/master/SMAA.hlsl
 
 //-----------------------------------------------------------------------------
 // Diagonal Search Functions
@@ -295,4 +408,78 @@ void BlendWeightMain(uniform SmaaBlendWeightPushConstant pc, uint3 threadID : SV
     }
 
     rdgStorageFloat4[pc.outputBlendIndex][coord] = weights;
+}
+
+// ============================================================
+// Pass 3: Neighborhood Blending
+// ============================================================
+[shader("compute")]
+[numthreads(16, 16, 1)]
+void NeighborhoodBlendMain(uniform SmaaNeighborhoodBlendPushConstant pc, uint3 threadID : SV_DispatchThreadID)
+{
+    if (threadID.x >= uint(pc.sceneData.mainRenderTargetSize.x) || threadID.y >= uint(pc.sceneData.mainRenderTargetSize.y)) { return; }
+
+    int2   coord  = int2(threadID.xy);
+    float2 uv     = (float2(coord) + 0.5) * pc.sceneData.texelSize;
+    float2 tsize  = pc.sceneData.texelSize;
+
+    // Gather blend weights from the neighborhood.
+    // Weight packing from pass 2: rg = horizontal edge weights, ba = vertical edge weights.
+    // To blend rightward: read the right pixel's .a (its vertical-left weight pointing back at us).
+    // To blend downward:  read the below pixel's .g (its horizontal-top weight pointing back at us).
+    float4 a;
+    a.x = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord + int2(1, 0), 0)).a; // right pixel
+    a.y = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord + int2(0, 1), 0)).g; // below pixel
+    a.z = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord,              0)).b; // current
+    a.w = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord,              0)).r; // current
+
+    float3 result = float3(0.0f);
+
+    if (dot(a, float4(1.0)) < 1e-5) {
+        result = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord, 0)).rgb;
+    } else {
+        // Horizontal dominates when right/left weights exceed top/bottom weights.
+        bool h = max(a.x, a.z) > max(a.y, a.w);
+
+        float4 blendingOffset = h ? float4(a.x, 0.0, a.z, 0.0) : float4(0.0, a.y, 0.0, a.w);
+        float2 blendingWeight = h ? a.xz : a.yw;
+        blendingWeight /= dot(blendingWeight, float2(1.0, 1.0));
+
+        // Positive offset blends toward right/below, negative toward left/above.
+        float4 blendingCoord = uv.xyxy + blendingOffset * float4(tsize.x, tsize.y, -tsize.x, -tsize.y);
+
+        float3 color0 = rdgTexturesFloat4[pc.colorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], blendingCoord.xy, 0).rgb;
+        float3 color1 = rdgTexturesFloat4[pc.colorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], blendingCoord.zw, 0).rgb;
+
+        result = blendingWeight.x * color0 + blendingWeight.y * color1;
+    }
+
+    rdgStorageFloat4[pc.outputIndex][coord] = float4(result, 1.0);
+}
+
+// ============================================================
+// Pass 4: Temporal Resolve (SMAA T2x)
+// ============================================================
+static const float SMAA_REPROJECTION_WEIGHT_SCALE = 30.0;
+
+[shader("compute")]
+[numthreads(16, 16, 1)]
+void TemporalResolveMain(uniform SmaaTemporalResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID)
+{
+    if (threadID.x >= uint(pc.sceneData.mainRenderTargetSize.x) || threadID.y >= uint(pc.sceneData.mainRenderTargetSize.y)) { return; }
+
+    int2   coord = int2(threadID.xy);
+    float2 uv    = (float2(coord) + 0.5) * pc.sceneData.texelSize;
+
+    uint4  g1          = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(coord, 0));
+    float2 velocityNDC = UnpackMotionVectors(g1.g);
+    float2 velocity    = velocityNDC * 0.5;
+
+    float4 current  = rdgTexturesFloat4[pc.currentColorIndex].Load(int3(coord, 0));
+    float4 previous = rdgTexturesFloat4[pc.previousColorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + velocity, 0);
+
+    float delta  = length(velocity);
+    float weight = 0.5 * saturate(1.0 - delta * SMAA_REPROJECTION_WEIGHT_SCALE);
+
+    rdgStorageFloat4[pc.outputIndex][coord] = lerp(current, previous, weight);
 }

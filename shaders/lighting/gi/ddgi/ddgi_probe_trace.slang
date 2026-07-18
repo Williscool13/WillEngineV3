@@ -1,0 +1,153 @@
+import model_interop;
+import push_constant_interop;
+import lights_interop;
+import ddgi_interop;
+import instance_mask_interop;
+import ddgi_common;
+import bindless_declarations;
+import constants_interop;
+import shader_constants;
+import shader_functions;
+import packing_functions;
+import random_common;
+import hit_shading_common;
+import world_cache_hash_common;
+import world_cache_interop;
+import binning_common;
+import common_interop;
+
+// =============== Shader Summary ============
+// DDGI probe trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits key+read the world radiance cache (last frame's shaded value; NEE shading only as a fallback when the cache has no slot for the hit). Light-proxy hits carry no radiance, only the hit distance for the visibility moments.
+
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTracePushConstant pc)
+{
+    uint rayIndex = dtid.x;
+    uint probeIndex = dtid.y;
+    int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
+    int3 cell = DDGICellFromSlot(slot, pc.volume);
+    DDGIVolumeParams previousVolume = pc.volume;
+    previousVolume.baseCell = pc.previousBaseCell;
+    bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == cell);
+
+    // Inactive probes trace only the sentinel budget
+    uint rayBudget = pc.raysPerProbe;
+    if (pc.probeActive != nullptr && bSameCellPrev && pc.probeActive[probeIndex] == 0) {
+        rayBudget = min(DDGI_SENTINEL_RAYS, pc.raysPerProbe);
+    }
+    if (rayIndex >= rayBudget) {
+        return;
+    }
+
+    // The per-frame rotation doubles as relocation's direction search; found escapes persist in the carried offset.
+    float3 direction = DDGIRotate(DDGISphericalFibonacci(rayIndex, rayBudget), pc.rayRotation);
+
+    // Relocation offsets are last frame's
+    float3 origin = DDGIProbeWorldPosition(cell, pc.volume);
+    if (pc.probeOffsets != nullptr && bSameCellPrev) {
+        origin += pc.probeOffsets[probeIndex].xyz;
+    }
+
+    RayDesc ray;
+    ray.Origin = origin;
+    ray.Direction = direction;
+    ray.TMin = 0.0;
+    ray.TMax = 10000.0;
+
+    RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+    q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI_PROBE_TRACE, ray);
+    q.Proceed();
+
+    float4 result;
+    if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
+        float hitT = q.CommittedRayT();
+        Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
+        if (instance.lightIndex != 0xFFFFFFFF) {
+            // -1 in x tags a light-proxy hit so relocation can ignore it; blending clamps it back to black.
+            result = float4(-1.0, 0.0, 0.0, hitT);
+        } else if (q.CommittedTriangleFrontFace()) {
+            float3 hitWorldPos = ray.Origin + direction * hitT;
+            float3 radiance = float3(0.0);
+            bool bCacheRead = false;
+            SceneData scene = pc.sceneData[0];
+
+            if (pc.worldCache != nullptr) {
+                float3 hitNormal = DecodeHitNormal(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
+                WorldCacheKey wcKey = WorldCacheComputeKey(hitWorldPos, hitNormal, scene.cameraWorldPos.xyz);
+                bool isNew;
+                uint wcSlot = WorldCacheHashInsert(pc.worldCache->entries, pc.worldCache->keys, pc.worldCache->stats, wcKey, isNew);
+                if (wcSlot != WORLD_CACHE_HASH_INVALID) {
+                    uint2 packedRadiance = pc.worldCache->cells[wcSlot].packedRadiance;
+                    if (isNew) {
+                        uint seedCount;
+                        uint seedEmissive;
+                        packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey, seedCount, seedEmissive);
+                        pc.worldCache->cells[wcSlot].packedRadiance = packedRadiance;
+                        pc.worldCache->cells[wcSlot].packedEmissive = seedEmissive;
+                        // Inherit the warm-start source's accumulation count so a re-keyed shell keeps its smoothing instead of a 50/50 first shade.
+                        pc.worldCache->cells[wcSlot].changeStreak = seedCount << 16u;
+                    }
+
+                    if (WorldCacheRadianceShaded(packedRadiance)) {
+                        radiance = WorldCacheUnpackRadiance(packedRadiance) + UnpackEmissiveRGBE(pc.worldCache->cells[wcSlot].packedEmissive);
+                        bCacheRead = true;
+                    }
+                    pc.worldCache->cells[wcSlot].lastTouched = pc.frameIndex;
+
+                    uint shadeInterval = WORLD_CACHE_SHADE_INTERVAL + (wcSlot & 3u);
+                    if (isNew || pc.frameIndex - pc.worldCache->cells[wcSlot].lastShaded >= shadeInterval) {
+                        uint prevActive;
+                        InterlockedExchange(pc.worldCache->active[wcSlot], 1u, prevActive);
+                        if (prevActive == 0u) {
+                            uint listIndex;
+                            InterlockedAdd(pc.worldCache->activeCount[0], 1u, listIndex);
+                            if (listIndex < WORLD_CACHE_SHADE_BUDGET) {
+                                pc.worldCache->activeList[listIndex] = wcSlot;
+                                pc.worldCache->cells[wcSlot].lastShaded = pc.frameIndex;
+                                WorldCacheHitDescriptor wcHit;
+                                wcHit.instanceID = q.CommittedInstanceID();
+                                wcHit.primitiveIndex = q.CommittedPrimitiveIndex();
+                                wcHit.packedBary = PackUnorm2x16(q.CommittedTriangleBarycentrics());
+                                wcHit.pad = 0u;
+                                pc.worldCache->descriptors[wcSlot] = wcHit;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!bCacheRead) {
+                uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
+                WorldGridPunctualLights worldGridLights = (WorldGridPunctualLights)0;
+                if (pc.worldGridBuffer != nullptr) {
+                    worldGridLights.view = scene.view;
+                    worldGridLights.camPos = scene.cameraWorldPos.xyz;
+                    worldGridLights.grid = pc.worldGridBuffer;
+                    worldGridLights.indexList = pc.worldGridIndexList;
+                }
+                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, rng, worldGridLights, 0.75 * hitT);
+            }
+
+            // Firefly clamp
+            float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
+            if (pc.maxRayRadiance > 0.0 && maxChannel > pc.maxRayRadiance) {
+                radiance *= pc.maxRayRadiance / maxChannel;
+            }
+            result = float4(radiance, hitT);
+        } else {
+            // Backface hits mark "probe likely inside geometry" with a shortened negative distance, classic DDGI convention.
+            result = float4(0.0, 0.0, 0.0, -0.2 * hitT);
+        }
+    } else {
+        float3 radiance = float3(0.0);
+        if (pc.skyboxIndex >= 0 && pc.bBounceOnly == 0) {
+            // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
+            float3 skyDirection = float3(direction.x, -direction.y, direction.z);
+            // Mip 4 is the roughness-1.0 (blurriest) prefiltered level. Reduces flickering from high frequency variance.
+            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 4).rgb * pc.iblIntensity;
+        }
+        result = float4(radiance, 10000.0);
+    }
+    pc.rayData[probeIndex * pc.raysPerProbe + rayIndex] = result;
+}

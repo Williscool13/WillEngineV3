@@ -246,6 +246,23 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     return float4(color / coverage, coverage);
 }
 
+/** Border texel -> wrapped interior source texel; identity for interior texels. Corners copy the diagonally opposite interior corner. */
+public int2 DDGIOctBorderSource(int2 texel, int n)
+{
+    bool onX = texel.x == 0 || texel.x == n + 1;
+    bool onY = texel.y == 0 || texel.y == n + 1;
+    if (!onX && !onY) {
+        return texel;
+    }
+    if (onX && onY) {
+        return int2(texel.x == 0 ? n : 1, texel.y == 0 ? n : 1);
+    }
+    if (onY) {
+        return int2(n + 1 - texel.x, texel.y == 0 ? 1 : n);
+    }
+    return int2(texel.x == 0 ? 1 : n, n + 1 - texel.y);
+}
+
 public float3 DDGISphericalFibonacci(uint index, uint count)
 {
     float phi = 6.28318530718 * frac(float(index) * 0.61803398875);
