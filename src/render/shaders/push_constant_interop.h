@@ -529,7 +529,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC uint32_t activeCheckerboardField;
     SHADER_PUBLIC uint32_t bCheckerboardPacked;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t reflectionIndex;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t bDDGIApply;
     SHADER_PUBLIC uint32_t pad1;
@@ -538,7 +538,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t giResolvedIndex;
     SHADER_PUBLIC uint32_t giDataIndex;
     SHADER_PUBLIC uint32_t giGatherMode;
-    SHADER_PUBLIC uint32_t pad2;
+    SHADER_PUBLIC float reflectionRoughnessMax;
 };
 
 // Unused: kept around alongside WorldGridBinningPushConstant.
@@ -735,6 +735,19 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t giDataIndex;
     SHADER_PUBLIC uint32_t giGatherMode;
     SHADER_PUBLIC uint32_t pad1;
+};
+
+SHADER_PUBLIC struct ReflectionTracePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ReflectionHitDescriptor) reflectionDescriptors;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC float roughnessMax;
 };
 
 SHADER_PUBLIC struct ReflectionShadePushConstant

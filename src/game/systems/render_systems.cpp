@@ -920,20 +920,25 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
             runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
+            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::StaticMeshPrimitiveComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
+            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::ProceduralMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
             runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
+            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::SplineMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
+            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::Text3DComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
             runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
+            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
         }
     }
 
@@ -977,6 +982,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     .blasDeviceAddress = inst.blasDeviceAddress,
                     .emissiveTriLightBase = triBase ? *triBase : 0xFFFFFFFFu,
                     .ddgiVisible = runtime.ddgiVisible,
+                    .bHero = runtime.bHero,
                 });
             }
         }

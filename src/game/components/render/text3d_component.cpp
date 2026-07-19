@@ -142,11 +142,11 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     }
 
     bool visible = comp.modelFlags.x != 0.0f;
-    bool shadowCaster = comp.modelFlags.y != 0.0f;
+    bool hero = comp.modelFlags.w != 0.0f;
     bool ddgiContribution = comp.modelFlags.z == 0.0f;
     if (ImGui::Checkbox("Visible##text3d", &visible)) { comp.modelFlags.x = visible ? 1.0f : 0.0f; }
     ImGui::SameLine();
-    if (ImGui::Checkbox("Shadow Caster##text3d", &shadowCaster)) { comp.modelFlags.y = shadowCaster ? 1.0f : 0.0f; }
+    if (ImGui::Checkbox("Hero##text3d", &hero)) { comp.modelFlags.w = hero ? 1.0f : 0.0f; }
     ImGui::SameLine();
     if (ImGui::Checkbox("DDGI Contribution##text3d", &ddgiContribution)) { comp.modelFlags.z = ddgiContribution ? 0.0f : 1.0f; }
 

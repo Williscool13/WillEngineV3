@@ -15,6 +15,48 @@
 
 namespace Render
 {
+void SetupReflectionTracePass(RenderGraph& graph,
+                              PipelineManager* pipelineManager,
+                              Core::Array<uint32_t, 2> renderExtent,
+                              const RenderTargets& targets,
+                              uint32_t sceneIndex,
+                              uint64_t frameNumber,
+                              const Core::RTReflectionConfiguration& reflectionConfig)
+{
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, REFLECTION_NO_BRDF_CLAMP);
+    if (reflectionRoughnessMax < 0.0f || !graph.HasBuffer(RT_TLAS_BUFFER)) {
+        return;
+    }
+
+    graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent[0] * renderExtent[1], true);
+
+    RenderPass& pass = graph.AddPass(SID("[Reflection] Trace"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.depthCopy);
+    pass.ReadTLASBuffer(RT_TLAS_BUFFER);
+    pass.WriteBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
+
+    pass.Execute([pipelineManager, sceneIndex, renderExtent, frameNumber, reflectionRoughnessMax,
+            gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            ReflectionTracePushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .reflectionDescriptors = graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER),
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .sceneDataIndex = sceneIndex,
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+                .roughnessMax = reflectionRoughnessMax,
+            };
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_trace"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
+        });
+}
+
 void SetupReflectionShadePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
                               const Core::ViewFamily& viewFamily,

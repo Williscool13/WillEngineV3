@@ -128,16 +128,21 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
             }
         }
 
+        // Select, don't lerp: a traced ray already resolves sky visibility and occlusion, so it replaces the probe specular outright and skips GTAO.
         float3 reflectionSpecular = float3(0.0);
-        if (pc.skyboxIndex >= 0) {
+        if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
+            float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
+            reflectionSpecular = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb * (F0 * envBRDF.x + envBRDF.y);
+        } else if (pc.skyboxIndex >= 0) {
             reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl) * pc.iblIntensity;
 #if GI_SKY_SPECULAR_OCCLUSION
             // The diffuse GI already resolves local sky reachability, reuse for specular
             float3 skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
             reflectionSpecular *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
 #endif
+            reflectionSpecular *= gtao;
         }
-        ibl = (kD_ibl * indirectDiffuse * li.albedo.xyz + reflectionSpecular) * gtao;
+        ibl = kD_ibl * indirectDiffuse * li.albedo.xyz * gtao + reflectionSpecular;
     }
 
     float3 finalColor = directLight + ibl + li.emissiveRGB;

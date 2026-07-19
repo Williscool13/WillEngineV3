@@ -48,8 +48,8 @@
   "lightingMode": 1,
   "lightingShaderOverride": 7554520945661456859,
   "reflection": {
-    "bDenoiserEnabled": true,
-    "bEnabled": true,
+    "bDenoiserEnabled": false,
+    "bEnabled": false,
     "bScreenSpaceLighting": false,
     "intensity": 1.0,
     "roughnessMax": 0.44999998807907104

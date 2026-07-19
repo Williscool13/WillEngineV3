@@ -23,6 +23,10 @@ SHADER_PUBLIC SHADER_CONST uint INSTANCE_MASK_OCCLUDER = 0x01u;
 SHADER_PUBLIC SHADER_CONST uint INSTANCE_MASK_LIGHT_PROXY = 0x02u;
 // Occluder geometry with DDGI contribution enabled (PrimitiveInstanceData::ddgiVisible / a mesh's "DDGI Contribution" checkbox).
 SHADER_PUBLIC SHADER_CONST uint INSTANCE_MASK_DDGI = 0x04u;
+// Occluder geometry that casts the traced (stochastic + denoised) sun shadow.
+SHADER_PUBLIC SHADER_CONST uint INSTANCE_MASK_SUN_OCCLUDER = 0x08u;
+// Hero geometry: excluded from the traced sun shadow, shadowed instead by the deterministic hero pass. Mutually exclusive with SUN_OCCLUDER.
+SHADER_PUBLIC SHADER_CONST uint INSTANCE_MASK_HERO = 0x10u;
 
 SHADER_PUBLIC SHADER_CONST uint INSTANCE_MASK_ALL = 0xFFu;
 

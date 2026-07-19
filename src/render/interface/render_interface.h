@@ -302,6 +302,8 @@ struct PrimitiveInstanceData
     uint32_t lightIndex{0xFFFFFFFFu};
     uint32_t emissiveTriLightBase{0xFFFFFFFFu};
     bool ddgiVisible{true};
+    /** Hero instances are excluded from the traced sun shadow and shadowed by the deterministic hero pass instead. */
+    bool bHero{false};
 };
 
 struct CustomShaderDraw

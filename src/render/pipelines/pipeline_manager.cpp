@@ -440,6 +440,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReSTIRConfidenceResolvePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_remodulate"), src / "restir_remodulate.spv", "ComputeReSTIRRemodulate",
                             sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("reflection_trace"), src / "reflection_trace.spv", "ComputeReflectionTrace",
+                            sizeof(ReflectionTracePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("reflection_shade"), src / "reflection_shade.spv", "ComputeReflectionShade",
                             sizeof(ReflectionShadePushConstant), PipelineCategory::Critical);
 

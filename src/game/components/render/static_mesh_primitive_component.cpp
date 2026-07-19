@@ -113,10 +113,10 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
 
     if (open) {
         bool visible = component.modelFlags.x != 0.0f;
-        bool shadowCaster = component.modelFlags.y != 0.0f;
+        bool hero = component.modelFlags.w != 0.0f;
         if (ImGui::Checkbox("Visible", &visible)) { component.modelFlags.x = visible ? 1.0f : 0.0f; }
         ImGui::SameLine();
-        if (ImGui::Checkbox("Shadow Caster", &shadowCaster)) { component.modelFlags.y = shadowCaster ? 1.0f : 0.0f; }
+        if (ImGui::Checkbox("Hero", &hero)) { component.modelFlags.w = hero ? 1.0f : 0.0f; }
 
         if (!component.modelId.IsValid()) {
             if (ImGui::BeginCombo("Select Model", "")) {

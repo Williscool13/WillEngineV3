@@ -648,7 +648,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                             constexpr float kDebugClusterZFar = 500.0f;
                             SetupClusterGridDebug(*renderGraph, pipelineManager, 0, viewFamily.mainView.currentViewData.nearPlane, kDebugClusterZFar);
                         }
-                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, giGatherMode);
+                        // No ReSTIR BRDF ray to piggyback here, so reflections trace their own; the shade/denoise/composite path downstream is shared.
+                        SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, frameBuffer.reflection);
+                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, bDDGIApply, false, REFLECTION_NO_BRDF_CLAMP);
+                        if (frameBuffer.reflection.bDenoiserEnabled) {
+                            SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, 0u, 1.0f, frameBuffer.reflection, REFLECTION_NO_BRDF_CLAMP);
+                        }
+                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, giGatherMode, frameBuffer.reflection);
                         break;
                     }
                     case Core::LightingMode::ReSTIR:

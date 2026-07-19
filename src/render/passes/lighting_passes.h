@@ -37,7 +37,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
                                         bool bDDGIApply,
-                                        uint32_t giGatherMode);
+                                        uint32_t giGatherMode,
+                                        const Core::RTReflectionConfiguration& reflectionConfig);
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,

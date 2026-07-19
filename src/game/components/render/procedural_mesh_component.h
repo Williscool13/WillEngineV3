@@ -23,7 +23,7 @@ struct ProceduralMeshComponent
 {
     Engine::ProceduralParams params;
     Engine::MaterialID material{};
-    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, z: exclude from DDGI (0=contributes, default), w: reserved
+    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: unused, z: exclude from DDGI (0=contributes, default), w: hero (excluded from the traced sun shadow)
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 

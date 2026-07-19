@@ -87,8 +87,6 @@ public static const float DDGI_RELOCATE_DEADBAND = 0.05;
 
 static const float DDGI_VISIBILITY_VARIANCE_CAP = 0.3;
 
-static const float DDGI_CHEBYSHEV_FLOOR = 0.005;
-
 /**
  * Irradiance lookup at a surface point: the 8 surrounding probes, weighted by trilinear position, soft backface (wrap lighting), and Chebyshev visibility from the distance atlas. cameraDirection points from the viewer toward the surface (bias direction).
  * Atlas args are rdgTexturesFloat4/rdgTexturesFloat2 descriptor indices (resource-typed params through module imports crash slangc's spirv emit).
@@ -149,8 +147,8 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
             float d = distanceToProbe - moments.x;
             float chebyshev = variance / (variance + d * d);
             float cheb3 = chebyshev * chebyshev * chebyshev;
-            weight *= max(cheb3, DDGI_CHEBYSHEV_FLOOR);
-            chebRatio = cheb3 / max(cheb3, DDGI_CHEBYSHEV_FLOOR);
+            weight *= max(cheb3, 0.05);
+            chebRatio = cheb3 / max(cheb3, 0.05);
         }
 
         weight = max(weight, 1e-6);

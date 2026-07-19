@@ -6,6 +6,7 @@
 
 #include "ddgi_passes.h"
 #include "final_gather_passes.h"
+#include "reflection_passes.h"
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -98,7 +99,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         Core::Arena& arena,
                                         uint64_t frameNumber,
                                         bool bDDGIApply,
-                                        uint32_t giGatherMode)
+                                        uint32_t giGatherMode,
+                                        const Core::RTReflectionConfiguration& reflectionConfig)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -106,6 +108,10 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
 
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
+
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, REFLECTION_NO_BRDF_CLAMP);
+    const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
+    const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
     struct LightingEntry
     {
@@ -146,12 +152,15 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadSampledImage(GI_GATHER_RESOLVED);
         lightingResolve.ReadSampledImage(GI_GATHER_DATA);
     }
+    if (bReflection) {
+        lightingResolve.ReadSampledImage(reflectionTarget);
+    }
     lightingResolve.WriteStorageImage(targets.colorOutput);
     lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
-            bDDGI, bWorldGrid, bGIGather, giGatherMode,
+            bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax,
             buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -183,6 +192,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .renderExtent = {renderExtent[0], renderExtent[1]},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                     .iblIntensity = iblIntensity,
+                    .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(reflectionTarget) : ~0x0u,
                     .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                     .bDDGIApply = bDDGI ? 1u : 0u,
                     .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
@@ -190,6 +200,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .giResolvedIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_RESOLVED) : ~0x0u,
                     .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
                     .giGatherMode = bGIGather ? giGatherMode : 0u,
+                    .reflectionRoughnessMax = reflectionRoughnessMax,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

@@ -200,10 +200,10 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
     if (open) {
         bool visible = component.modelFlags.x != 0.0f;
-        bool shadowCaster = component.modelFlags.y != 0.0f;
+        bool hero = component.modelFlags.w != 0.0f;
         if (ImGui::Checkbox("Visible##splinemesh", &visible)) { component.modelFlags.x = visible ? 1.0f : 0.0f; }
         ImGui::SameLine();
-        if (ImGui::Checkbox("Shadow Caster##splinemesh", &shadowCaster)) { component.modelFlags.y = shadowCaster ? 1.0f : 0.0f; }
+        if (ImGui::Checkbox("Hero##splinemesh", &hero)) { component.modelFlags.w = hero ? 1.0f : 0.0f; }
 
         bool dirty = false;
 
