@@ -53,9 +53,10 @@ enum class RenderCategory : uint64_t
     Scene               = 1ull << 18,
     UI                  = 1ull << 19,
     Debug               = 1ull << 20,
+    HeroDirectionalLight = 1ull << 21,
 };
 
-inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 21;
+inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 22;
 inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = {
     "Geometry",
     "WorldGridBinning",
@@ -78,6 +79,7 @@ inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = 
     "Scene",
     "UI",
     "Debug",
+    "HeroDirectionalLight",
 };
 
 inline RenderCategory operator|(RenderCategory a, RenderCategory b)
@@ -146,6 +148,7 @@ inline constexpr RenderCategoryGroup RENDER_CATEGORY_GROUP_OF[RENDER_CATEGORY_BI
     /*Scene*/ RenderCategoryGroup::Scene,
     /*UI*/ RenderCategoryGroup::UI,
     /*Debug*/ RenderCategoryGroup::Debug,
+    /*HeroDirectionalLight*/ RenderCategoryGroup::Lighting,
 };
 
 struct VRAMReport

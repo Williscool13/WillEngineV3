@@ -79,6 +79,7 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     ReblurInternalData = 33,
     ReblurData2 = 34,
     BentNormal = 35,
+    HeroSunShadow = 36,
 };
 
 SHADER_PUBLIC struct Frustum

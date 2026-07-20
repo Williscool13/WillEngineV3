@@ -32,7 +32,7 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->lighting.heroShadow, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
     }
     Engine::WriteProjectConfig(cfg);
 }
@@ -56,7 +56,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->lighting.heroShadow, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -76,7 +76,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.gtaoConfig, state->lighting.heroShadow, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -461,6 +461,10 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Stabilized Visibility")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
             ImGui::SameLine();
             if (ImGui::Button("Stabilized Penumbra")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowPenumbra, Core::DebugViewAspect::None);
+        }
+
+        if (ImGui::CollapsingHeader("Hero Sun Shadow")) {
+            if (ImGui::Button("Hero Visibility")) setDebugTarget("hero_sun_shadow", DebugTransformationType::HeroSunShadow, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("ReBLUR")) {
@@ -935,6 +939,20 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Reset DDGI")) {
                 ddgi = Core::DDGIParams{};
                 changed = true;
+            }
+        }
+
+        Core::HeroShadowConfiguration& heroShadow = state->lighting.heroShadow;
+        ImGui::SeparatorText("Hero Sun Shadow");
+        if (ImGui::Checkbox("Enabled##HeroShadow", &heroShadow.bEnabled)) { changed = true; }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Deterministic noise-free sun shadow for hero-flagged meshes, which the traced sun shadow excludes. Off ignores every hero flag in the scene: the pass is never built (zero cost) and that geometry returns to the traced sun shadow.");
+        }
+
+        if (heroShadow.bEnabled) {
+            if (Widgets::SliderInt("Hero Shadow Rays", &heroShadow.sampleCount, 4, 64)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Sun-disk rays per shadowed pixel. Sets the penumbra's gradient steps (rays + 1 levels), so raise it when a hero casts from far above its receiver and the soft edge bands. Cost is linear but only over pixels the hero actually shadows.");
             }
         }
 

@@ -373,6 +373,20 @@ void FromJson(const nlohmann::json& r, Core::RTReflectionConfiguration& p)
     p.intensity = rFloat("intensity", p.intensity);
 }
 
+nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)
+{
+    return {
+        {"bEnabled", p.bEnabled},
+        {"sampleCount", p.sampleCount},
+    };
+}
+
+void FromJson(const nlohmann::json& r, Core::HeroShadowConfiguration& p)
+{
+    p.bEnabled = r.contains("bEnabled") && r["bEnabled"].is_boolean() ? r["bEnabled"].get<bool>() : p.bEnabled;
+    p.sampleCount = r.contains("sampleCount") && r["sampleCount"].is_number_integer() ? r["sampleCount"].get<int32_t>() : p.sampleCount;
+}
+
 nlohmann::json ToJson(const Core::GTAOConfiguration& p)
 {
     return {

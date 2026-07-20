@@ -112,7 +112,7 @@ void ComputeRTSunShadow(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPus
     ray.TMax = 10000.0;
 
     RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-    q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
+    q.TraceRayInline(tlas, 0, INSTANCE_MASK_SUN_OCCLUDER, ray);
     q.Proceed();
 
     if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {

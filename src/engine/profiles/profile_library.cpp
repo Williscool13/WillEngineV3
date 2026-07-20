@@ -61,7 +61,7 @@ uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames)
     return ListProfiles("lighting", outNames, maxNames);
 }
 
-bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::RTReflectionConfiguration& reflection, Core::GTAOConfiguration& gtao, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity)
+bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::RTReflectionConfiguration& reflection, Core::GTAOConfiguration& gtao, Core::HeroShadowConfiguration& heroShadow, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity)
 {
     const nlohmann::json j = ReadProfileJson("lighting", name);
     if (!j.is_object()) {
@@ -83,6 +83,9 @@ bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Cor
     if (j.contains("gtao") && j["gtao"].is_object()) {
         ConfigSerialization::FromJson(j["gtao"], gtao);
     }
+    if (j.contains("heroShadow") && j["heroShadow"].is_object()) {
+        ConfigSerialization::FromJson(j["heroShadow"], heroShadow);
+    }
     // Migration: iblIntensity used to live inside the restir blob.
     if (j.contains("iblIntensity") && j["iblIntensity"].is_number()) {
         iblIntensity = j["iblIntensity"].get<float>();
@@ -95,7 +98,7 @@ bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Cor
     return true;
 }
 
-bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::RTReflectionConfiguration& reflection, const Core::GTAOConfiguration& gtao, StringID shadingOverride, StringID lightingOverride, float iblIntensity)
+bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::RTReflectionConfiguration& reflection, const Core::GTAOConfiguration& gtao, const Core::HeroShadowConfiguration& heroShadow, StringID shadingOverride, StringID lightingOverride, float iblIntensity)
 {
     nlohmann::json j;
     j["lightingMode"] = static_cast<uint32_t>(lightingMode);
@@ -103,6 +106,7 @@ bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, cons
     j["ddgi"] = ConfigSerialization::ToJson(ddgi);
     j["reflection"] = ConfigSerialization::ToJson(reflection);
     j["gtao"] = ConfigSerialization::ToJson(gtao);
+    j["heroShadow"] = ConfigSerialization::ToJson(heroShadow);
     j["iblIntensity"] = iblIntensity;
     if (shadingOverride) { j["shadingShaderOverride"] = shadingOverride.id; }
     if (lightingOverride) { j["lightingShaderOverride"] = lightingOverride.id; }

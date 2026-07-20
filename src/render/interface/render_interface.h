@@ -832,6 +832,12 @@ struct RTReflectionConfiguration
     float intensity{1.0f};
 };
 
+struct HeroShadowConfiguration
+{
+    bool bEnabled{true};
+    int32_t sampleCount{16};
+};
+
 struct ViewFamily
 {
     ViewFamily() = default;
@@ -869,6 +875,11 @@ struct ViewFamily
     int32_t skyboxLOD{0};
 
     DirectionalLight directionalLight{};
+    /** World AABB enclosing every hero instance, valid only while bHasHero. Sizes the hero sun-shadow footprint test, so it must stay conservative. */
+    glm::vec3 heroBoundsMin{0.0f};
+    glm::vec3 heroBoundsMax{0.0f};
+    bool bHasHero{false};
+    HeroShadowConfiguration heroShadow{};
     InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
     ArenaVector<LightInfo> lights{};
     ArenaMap<uint32_t, uint32_t> lightEntityToIndex{};

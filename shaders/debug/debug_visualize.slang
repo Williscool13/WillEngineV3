@@ -295,6 +295,10 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel = float4(UnpackNormalOct16(p) * 0.5 + 0.5, 1.0);
             break;
         }
+        case 36: { // HeroSunShadow: hero visibility, black = fully hero-shadowed, white = the hero takes nothing away.
+            srcPixel.xyz = float3(srcPixel.x);
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

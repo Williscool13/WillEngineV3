@@ -7,6 +7,7 @@
 #include "ddgi_passes.h"
 #include "final_gather_passes.h"
 #include "reflection_passes.h"
+#include "shadow_passes.h"
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -316,8 +317,12 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
         pass.ReadSampledImage(SID("rt_sun_depth"));
         pass.ReadSampledImage(SID("rt_sun_gbuffer"));
     }
+    const bool bHeroShadow = graph.HasTexture(HERO_SUN_SHADOW_TARGET);
+    if (bHeroShadow) {
+        pass.ReadSampledImage(HERO_SUN_SHADOW_TARGET);
+    }
     pass.ReadWriteImage(targets.colorOutput);
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, shadowExtent, pixelScale, bHalfRes, shadowTex,
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, shadowExtent, pixelScale, bHalfRes, shadowTex, bHeroShadow,
             depth = targets.depthCopy, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("directional_light"));
@@ -331,6 +336,7 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .shadowIndex = graph.GetSampledImageViewDescriptorIndex(shadowTex),
+                .heroShadowIndex = bHeroShadow ? graph.GetSampledImageViewDescriptorIndex(HERO_SUN_SHADOW_TARGET) : ~0x0u,
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
                 .sceneDataIndex = sceneIndex,
                 .renderExtent = {renderExtent[0], renderExtent[1]},

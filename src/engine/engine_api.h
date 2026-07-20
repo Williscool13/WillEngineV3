@@ -363,6 +363,9 @@ struct LightingState
     Core::AntiAliasingConfiguration aaConfig{};
     Core::PostProcessConfiguration postProcess{};
     Core::SIGMAParams sigmaParams{};
+
+    Core::HeroShadowConfiguration heroShadow{};
+
     Core::DDGIParams ddgi{};
     Core::RTReflectionConfiguration reflection{};
     float iblIntensity{1.0f};

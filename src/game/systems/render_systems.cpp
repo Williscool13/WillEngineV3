@@ -912,33 +912,56 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 }
 
+static void AccumulateWorldAABB(glm::vec3& boundsMin, glm::vec3& boundsMax, bool& bHasBounds, const Engine::AABB& localBounds, const glm::mat4& worldMatrix)
+{
+    if (localBounds.min.x > localBounds.max.x) { return; }
+    for (uint32_t i = 0; i < 8; ++i) {
+        const glm::vec3 corner{
+            (i & 1) ? localBounds.max.x : localBounds.min.x,
+            (i & 2) ? localBounds.max.y : localBounds.min.y,
+            (i & 4) ? localBounds.max.z : localBounds.min.z,
+        };
+        const glm::vec3 world = glm::vec3(worldMatrix * glm::vec4(corner, 1.0f));
+        if (!bHasBounds) {
+            boundsMin = world;
+            boundsMax = world;
+            bHasBounds = true;
+        }
+        else {
+            boundsMin = glm::min(boundsMin, world);
+            boundsMax = glm::max(boundsMax, world);
+        }
+    }
+}
+
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     auto& materialManager = ctx->materialManager; {
         ZoneScopedN("SyncMeshVisibility");
+        const bool bHeroEnabled = state->lighting.heroShadow.bEnabled;
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
             runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
-            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
+            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::StaticMeshPrimitiveComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
-            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
+            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::ProceduralMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
             runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
-            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
+            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::SplineMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
-            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
+            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::Text3DComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
             runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
-            runtime.bHero = meshComponent.modelFlags.w != 0.0f;
+            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
     }
 
@@ -960,6 +983,14 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             uint64_t stableId = 1234567890;
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 stableId = stable->id.id;
+            }
+
+            if (runtime.bHero) {
+                const Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
+                if (model && model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
+                    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+                    AccumulateWorldAABB(vf.heroBoundsMin, vf.heroBoundsMax, vf.bHasHero, model->bounds.aabb, renderTransform.modelMatrix);
+                }
             }
 
             uint32_t modelIndex = 0;

@@ -515,6 +515,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(RTGroundTruthGIPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("rt_sun_shadow"), src / "rt_sun_shadow.spv", "ComputeRTSunShadow",
                             sizeof(RTSunShadowPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("hero_sun_shadow"), src / "hero_sun_shadow.spv", "ComputeHeroSunShadow",
+                            sizeof(HeroSunShadowPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("sigma_classify_tiles"), src / "sigma_classify_tiles.spv", "ComputeSigmaClassifyTiles",
                             sizeof(SigmaClassifyPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("sigma_smooth_tiles"), src / "sigma_smooth_tiles.spv", "ComputeSigmaSmoothTiles",

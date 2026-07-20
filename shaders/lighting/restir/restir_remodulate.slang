@@ -4,7 +4,9 @@ import constants_interop;
 import bindless_declarations;
 import shader_functions;
 import pbr_functions;
+import packing_functions;
 import restir_common;
+import lights_interop;
 import ddgi_interop;
 import ddgi_common;
 import gi_gather_common;
@@ -16,6 +18,30 @@ static const float BILATERAL_SPATIAL_SIGMA = 1.0;
 static const float BILATERAL_MIN_WEIGHT = 1e-6;
 
 #define GI_SKY_SPECULAR_OCCLUSION 1
+
+static void EvalSunContribution(DirectionalLightData sun, float3 N, float3 V, float3 L, float nDotV, float3 F0,
+                                float metallic, float roughness, float3 specReflectance, out float3 diffuseTerm, out float3 specularTerm)
+{
+    diffuseTerm = float3(0.0);
+    specularTerm = float3(0.0);
+
+    float nDotL = max(dot(N, L), 0.0);
+    if (nDotL <= 0.0) {
+        return;
+    }
+
+    float3 H = normalize(V + L);
+    float NDF = D_GGX(N, H, roughness);
+    float G = G_SMITH_HEIGHT_CORRELATED(N, V, L, roughness);
+    float3 F = F_SCHLICK(V, H, F0);
+    float3 kD = (1.0 - F) * (1.0 - metallic);
+    float orenNayar = Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
+    float3 sunIrradiance = UnpackUnorm4x8(sun.packedColor).rgb * sun.directionIntensity.w;
+    float3 common = nDotL * sunIrradiance;
+
+    diffuseTerm = kD * orenNayar * common;
+    specularTerm = (NDF * G * F) / max(4.0 * nDotV * nDotL, 0.001) * common / max(specReflectance, float3(0.01));
+}
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -57,6 +83,22 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
 
     float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb;
     float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb;
+
+    // Hero instances are excluded from the traced sun visibility, uses dedicated path for crisp shadows.
+    if (pc.heroShadowIndex != ~0x0u) {
+        float heroVisibility = rdgTexturesFloat[pc.heroShadowIndex].Load(int3(pixel, 0)).r;
+        if (heroVisibility < 1.0) {
+            float3 sunL = normalize(mul((float3x3)scene.view, normalize(-pc.lightData->directionalLight.directionIntensity.xyz)));
+            float3 sunDiffuse;
+            float3 sunSpecular;
+            EvalSunContribution(pc.lightData->directionalLight, N, V, sunL, nDotV, F0, metallic, roughness, specReflectance, sunDiffuse, sunSpecular);
+
+            float diffuseShare = saturate(Luma(sunDiffuse) / max(Luma(diffuse), 1e-6));
+            float specularShare = saturate(Luma(sunSpecular) / max(Luma(specular), 1e-6));
+            diffuse *= lerp(1.0, heroVisibility, diffuseShare);
+            specular *= lerp(1.0, heroVisibility, specularShare);
+        }
+    }
 
     // Indirect: diffuse from the DDGI probe volume when it covers this point (skybox irradiance fallback), specular from the prefiltered skybox.
     float3 indirectDiffuse = float3(0.0);

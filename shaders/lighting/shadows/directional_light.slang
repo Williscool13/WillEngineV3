@@ -94,6 +94,10 @@ void ComputeDirectionalLight(uniform DirectionalLightPushConstant pc, uint3 thre
     // SIGMA stores shadow as sqrt(visibility); unpack to linear here (binary fallback squares to itself).
     visibility *= visibility;
 
+    if (pc.heroShadowIndex != ~0x0u) {
+        visibility *= rdgTexturesFloat[pc.heroShadowIndex].Load(int3(pixel, 0)).r;
+    }
+
     float intensity = pc.lightData->directionalLight.directionIntensity.w;
     float3 lightColor = UnpackUnorm4x8(pc.lightData->directionalLight.packedColor).rgb;
     float3 sun = (diffuse + specular) * nDotL * visibility * intensity * lightColor;

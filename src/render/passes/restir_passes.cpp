@@ -7,6 +7,7 @@
 #include "ddgi_passes.h"
 #include "final_gather_passes.h"
 #include "reflection_passes.h"
+#include "shadow_passes.h"
 #include "render/render_config.h"
 #include "render/render_utils.h"
 #include "core/math/math_helpers.h"
@@ -638,9 +639,11 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
     const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
     const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
+    const bool bHeroShadow = graph.HasTexture(HERO_SUN_SHADOW_TARGET);
 
     RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(LIGHT_DATA_BUFFER);
     pass.ReadSampledImage(targets.intermediateOne);
     pass.ReadSampledImage(targets.intermediateTwo);
     pass.ReadSampledImage(targets.gbufferOne);
@@ -659,14 +662,18 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
         pass.ReadSampledImage(GI_GATHER_RESOLVED);
         pass.ReadSampledImage(GI_GATHER_DATA);
     }
+    if (bHeroShadow) {
+        pass.ReadSampledImage(HERO_SUN_SHADOW_TARGET);
+    }
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, bHeroShadow,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
                 .sceneDataIndex = sceneIndex,
                 .diffuseIndex = graph.GetSampledImageViewDescriptorIndex(diffuse),
                 .specularIndex = graph.GetSampledImageViewDescriptorIndex(specular),
@@ -687,6 +694,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .giResolvedIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_RESOLVED) : ~0x0u,
                 .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
+                .heroShadowIndex = bHeroShadow ? graph.GetSampledImageViewDescriptorIndex(HERO_SUN_SHADOW_TARGET) : ~0x0u,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
