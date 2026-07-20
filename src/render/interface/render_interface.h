@@ -928,6 +928,13 @@ struct ViewFamily
 };
 
 
+enum class RenderCacheReset : uint8_t
+{
+    None = 0,
+    ScreenHistory,
+    All,
+};
+
 struct FrameBuffer
 {
     FrameBuffer() = default;
@@ -998,6 +1005,7 @@ struct FrameBuffer
     RTReflectionConfiguration reflection{};
 
     bool bTakeScreenshot{false};
+    RenderCacheReset cacheReset = RenderCacheReset::None;
 };
 } // Core
 

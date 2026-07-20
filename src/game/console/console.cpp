@@ -151,6 +151,10 @@ void RegisterBuiltinCommands()
         }
         Print(ctx, l.c_str());
     });
+
+    Register("render_reset", "Full renderer cache clear", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
+        state->pendingCacheReset = Core::RenderCacheReset::All;
+    });
 }
 
 static void SnapToBottom(const Clay_ScrollContainerData& sd)

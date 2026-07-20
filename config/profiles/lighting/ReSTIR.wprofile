@@ -15,7 +15,7 @@
     "cascadeCount": 6,
     "distanceExponent": 50.0,
     "edgeBlendCells": 3.96610164642334,
-    "hysteresis": 0.9700000286102295,
+    "hysteresis": 0.5,
     "irradianceGamma": 5.0,
     "irradianceThreshold": 0.25,
     "maxRayRadiance": 20.0,
@@ -43,6 +43,10 @@
     "sliceCount": 5.0,
     "stepsPerSlice": 3.0,
     "thinOccluderCompensation": 0.0
+  },
+  "heroShadow": {
+    "bEnabled": true,
+    "sampleCount": 16
   },
   "iblIntensity": 1.0,
   "lightingMode": 1,

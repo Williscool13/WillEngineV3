@@ -37,9 +37,11 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
     DDGICascades cascades{};
     cascades.count = glm::clamp(params.cascadeCount, 1u, DDGI_MAX_CASCADES);
 
+    // Cold start (post full-clear or first startup): burst-update every cascade so cascade 0 validates immediately, else an odd-frame round-robin pick seeds indoor points from a coarse sky-lit outer cascade before the walls resolve.
+    const bool bColdStart = previous.count == 0;
     const uint32_t updatedCascade = cascades.count == 1 || frameNumber % 2 == 0 ? 0u : 1u + static_cast<uint32_t>((frameNumber / 2) % (cascades.count - 1));
     for (uint32_t k = 0; k < cascades.count; ++k) {
-        cascades.bUpdated[k] = k == updatedCascade;
+        cascades.bUpdated[k] = bColdStart || k == updatedCascade;
 
         const float cascadeScale = static_cast<float>(1u << k);
         const float biasScale = params.bScaleBiasPerCascade ? cascadeScale : 1.0f;
@@ -105,11 +107,11 @@ static void AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName
         set.cascadeCount = sources->count;
         for (uint32_t k = 0; k < sources->count; ++k) {
             const DDGICascadeDescSource& source = sources->entries[k];
+            DDGICascadeDescriptor& desc = set.cascades[k];
+            desc.volume = source.volume;
             if (!source.bValid) {
                 continue;
             }
-            DDGICascadeDescriptor& desc = set.cascades[k];
-            desc.volume = source.volume;
             desc.irradianceIndex = graph.PeekSampledImageViewDescriptorIndex(source.irradiance);
             desc.visibilityIndex = graph.PeekSampledImageViewDescriptorIndex(source.visibility);
             desc.probeOffsets = source.offsets != StringID{} ? graph.PeekBufferAddress(source.offsets) : 0;
@@ -137,7 +139,6 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     bool bOffsetsHistoryValid[DDGI_MAX_CASCADES]{};
     bool bRestartHistoryValid[DDGI_MAX_CASCADES]{};
     bool bActiveHistoryValid[DDGI_MAX_CASCADES]{};
-    bool bAnyHistory = false;
     for (uint32_t k = 0; k < cascades.count; ++k) {
         const bool bSameWindow = k < previous.count && previous.volumes[k].probeCount == cascades.volumes[k].probeCount && previous.volumes[k].probeSpacing == cascades.volumes[k].probeSpacing
             && previous.volumes[k].irradianceGamma == cascades.volumes[k].irradianceGamma;
@@ -145,25 +146,26 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         bOffsetsHistoryValid[k] = bSameWindow && params.bRelocation && graph.HasBuffer(DDGI_OFFSETS_HISTORY[k]);
         bRestartHistoryValid[k] = bSameWindow && params.bRelocation && graph.HasBuffer(DDGI_RESTART_HISTORY[k]);
         bActiveHistoryValid[k] = bSameWindow && bClassify && graph.HasBuffer(DDGI_ACTIVE_HISTORY[k]);
-        bAnyHistory |= bHistoryValid[k];
     }
-    const bool bFeedback = bAnyHistory && params.bInfiniteBounce && !bBounceOnly;
+
+    const bool bFeedback = params.bInfiniteBounce && !bBounceOnly;
 
     if (bFeedback) {
         DDGICascadeDescSources* prevSources = arena.AllocArray<DDGICascadeDescSources>(1);
         *prevSources = DDGICascadeDescSources{};
         prevSources->count = cascades.count;
         for (uint32_t k = 0; k < cascades.count; ++k) {
-            if (!bHistoryValid[k]) {
-                continue;
+            if (bHistoryValid[k]) {
+                prevSources->entries[k] = DDGICascadeDescSource{
+                    .volume = previous.volumes[k],
+                    .irradiance = DDGI_IRRADIANCE_HISTORY[k],
+                    .visibility = DDGI_VISIBILITY_HISTORY[k],
+                    .offsets = bOffsetsHistoryValid[k] ? DDGI_OFFSETS_HISTORY[k] : StringID{},
+                    .bValid = true,
+                };
+            } else {
+                prevSources->entries[k].volume = k < previous.count ? previous.volumes[k] : cascades.volumes[k];
             }
-            prevSources->entries[k] = DDGICascadeDescSource{
-                .volume = previous.volumes[k],
-                .irradiance = DDGI_IRRADIANCE_HISTORY[k],
-                .visibility = DDGI_VISIBILITY_HISTORY[k],
-                .offsets = bOffsetsHistoryValid[k] ? DDGI_OFFSETS_HISTORY[k] : StringID{},
-                .bValid = true,
-            };
         }
         AddDDGICascadeDescriptorUpload(graph, SID("DDGI Prev Cascade Descriptors"), DDGI_CASCADES_PREV_BUFFER, prevSources);
     }
@@ -446,6 +448,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .offsets = bOffsetsHistoryValid[k] ? DDGI_OFFSETS_HISTORY[k] : StringID{},
                 .bValid = true,
             };
+        } else {
+            sources->entries[k].volume = cascades.volumes[k];
         }
     }
     AddDDGICascadeDescriptorUpload(graph, SID("DDGI Cascade Descriptors"), DDGI_CASCADES_BUFFER, sources);

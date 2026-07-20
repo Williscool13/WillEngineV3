@@ -95,6 +95,11 @@ public: // Frame setup
      */
     void InvalidateAllViewportAssociated() { bDestroyViewportAssociated = true; }
 
+    /**
+     * Drops every frame carryover record (textures and buffers, including the TLAS carry) regardless of viewport flag; physicals age out normally
+     */
+    void InvalidateAllCarried() { bDropAllCarryovers = true; }
+
     void InvalidateAllSwapchainAssociated() { bRemoveSwapchainPhysicals = true; }
 
 public: // Resource registration
@@ -359,6 +364,7 @@ private:
 
     bool bRemoveSwapchainPhysicals{false};
     bool bDestroyViewportAssociated{false};
+    bool bDropAllCarryovers{false};
 
     bool bDebugLogging = false;
     uint32_t debugCaptureFramesLeft{0};

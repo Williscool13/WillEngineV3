@@ -483,6 +483,7 @@ struct EngineState
     // Gathered in GameUpdate, used in PrepareRenderFrame
     bool bWantsScreenshot{false};
     bool bViewportClickPending{false};
+    Core::RenderCacheReset pendingCacheReset{Core::RenderCacheReset::None};
 
     const Core::TimeFrame* timeFrame{nullptr};
 

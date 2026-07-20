@@ -1455,14 +1455,13 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     uploadArenas[currentFrameIndex].allocator.Reset();
 
     //
-    if (bDestroyViewportAssociated) {
+    if (bDestroyViewportAssociated || bDropAllCarryovers) {
         ZoneScopedN("DestroyViewportScaledResources");
 
-        // Drop carryovers whose src physical is viewport-scaled
         for (int32_t i = static_cast<int32_t>(textureCarryovers.Size()) - 1; i >= 0; --i) {
             const TextureFrameCarryover& carryover = textureCarryovers[i];
             const TextureResource* tex = GetTexture(carryover.srcName);
-            if (tex && tex->HasPhysical() && physicalResources[tex->physicalIndex].bIsViewportScaled) {
+            if (bDropAllCarryovers || (tex && tex->HasPhysical() && physicalResources[tex->physicalIndex].bIsViewportScaled)) {
                 textureCarryovers.SwapRemove(i);
             }
         }
@@ -1470,7 +1469,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         for (int32_t i = static_cast<int32_t>(bufferCarryovers.Size()) - 1; i >= 0; --i) {
             const BufferFrameCarryover& carryover = bufferCarryovers[i];
             const BufferResource* buf = GetBuffer(carryover.srcName);
-            if (buf && buf->HasPhysical() && physicalResources[buf->physicalIndex].bIsViewportScaled) {
+            if (bDropAllCarryovers || (buf && buf->HasPhysical() && physicalResources[buf->physicalIndex].bIsViewportScaled)) {
                 bufferCarryovers.SwapRemove(i);
             }
         }
@@ -1639,6 +1638,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
 
     bDestroyViewportAssociated = false;
     bRemoveSwapchainPhysicals = false;
+    bDropAllCarryovers = false;
 }
 
 void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue, bool bIsViewportScaled)

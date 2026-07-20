@@ -189,16 +189,16 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     uint count = min(cascadeSet->cascadeCount, DDGI_MAX_CASCADES);
     for (uint c = 0; c < count; ++c) {
         DDGICascadeDescriptor desc = cascadeSet->cascades[c];
-        if (desc.bValid == 0) {
-            continue;
-        }
 
-        // Geometric interior fade of the cascade set: 1 inside any valid window, falling to 0 over the outermost window's edgeFadeCells.
+        // Geometric interior fade of the cascade set: 1 inside any configured window, falling to 0 over the outermost window's edgeFadeCells. Accumulated regardless of bValid so a configured-but-not-yet-valid window (cold start after a cache clear) suppresses sky instead of leaking it.
         // Lets callers distinguish "outside the probe world" (sky is a fair irradiance fallback) from an interior coverage hole (it is not: dead-probe pockets in sealed rooms would leak full-strength sky, and the bounce-feedback sites would spread it through the whole probe/cache field).
         float3 gridCoord = worldPosition / desc.volume.probeSpacing;
         float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
         edgeFade = max(edgeFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
 
+        if (desc.bValid == 0) {
+            continue;
+        }
         if (bSaturated) {
             continue;
         }

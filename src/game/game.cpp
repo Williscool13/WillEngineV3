@@ -375,6 +375,8 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 
     state->lighting.bResetGroundTruth = false;
+    frameBuffer->cacheReset = state->pendingCacheReset;
+    state->pendingCacheReset = Core::RenderCacheReset::None;
     frameBuffer->mainViewFamily.shadingShaderOverride = state->debug.shadingShaderOverride;
     frameBuffer->mainViewFamily.lightingShaderOverride = state->debug.lightingShaderOverride;
     frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;

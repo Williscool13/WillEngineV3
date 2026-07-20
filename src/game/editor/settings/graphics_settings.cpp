@@ -759,6 +759,12 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             gtToggle("Full", Core::GroundTruthMode::Full);
         }
 
+        ImGui::SeparatorText("Render Cache Reset"); {
+            if (ImGui::Button("Full Renderer Clear")) {
+                state->pendingCacheReset = Core::RenderCacheReset::All;
+            }
+        }
+
         ImGui::Separator();
 
         const bool bDefaultMode = state->lighting.lightingMode == Core::LightingMode::Default;

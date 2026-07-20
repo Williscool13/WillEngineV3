@@ -372,6 +372,21 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
     }
 
+    if (frameBuffer.cacheReset != Core::RenderCacheReset::None) {
+        vkQueueWaitIdle(context->graphicsQueue);
+    }
+    if (frameBuffer.cacheReset == Core::RenderCacheReset::ScreenHistory) {
+        renderGraph->InvalidateAllViewportAssociated();
+    }
+    else if (frameBuffer.cacheReset == Core::RenderCacheReset::All) {
+        renderGraph->InvalidateAllCarried();
+        rtGroundTruthDIAccumCount = 0;
+        rtGroundTruthGIAccumCount = 0;
+        rtGroundTruthFullAccumCount = 0;
+        previousRestirCheckerboardField = 0;
+        ddgiPreviousCascades = DDGICascades{};
+    }
+
     renderGraph->Reset(frameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
 
     Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily;
