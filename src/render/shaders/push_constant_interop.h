@@ -1209,8 +1209,24 @@ SHADER_PUBLIC struct DDGIProbeDebugPushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
     SHADER_PUBLIC uint32_t bActiveValid;
     SHADER_PUBLIC uint32_t bHideInactive;
-    SHADER_PUBLIC uint32_t pad1;
-    SHADER_PUBLIC uint32_t pad2;
+    SHADER_PUBLIC uint32_t visibilityAtlasIndex;
+    SHADER_PUBLIC uint32_t debugMode;
+};
+
+SHADER_PUBLIC struct GIDeconstructPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
+    SHADER_PUBLIC SHADER_PTR(uint) cacheEntries;
+    SHADER_PUBLIC SHADER_PTR(uint2) cacheKeys;
+    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cacheCells;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t mode;
+    SHADER_PUBLIC uint32_t bCascadesValid;
 };
 
 SHADER_PUBLIC struct ClusterGridDebugPushConstant

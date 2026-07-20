@@ -255,4 +255,47 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 
     return FinalGatherFrame{.bValid = true};
 }
+
+void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, int32_t mode)
+{
+    if (mode <= 0 || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(WORLD_CACHE_ENTRIES) || !graph.HasBuffer(WORLD_CACHE_KEYS) || !graph.HasBuffer(WORLD_CACHE_CELLS)) {
+        return;
+    }
+
+    graph.CreateTexture(GI_DECONSTRUCT_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+
+    RenderPass& pass = graph.AddPass(SID("GI Deconstruct"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(WORLD_CACHE_ENTRIES);
+    pass.ReadBuffer(WORLD_CACHE_KEYS);
+    pass.ReadBuffer(WORLD_CACHE_CELLS);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.depthCopy);
+    const bool bCascades = AddDDGISampleDependencies(graph, pass);
+    pass.WriteStorageImage(GI_DECONSTRUCT_TARGET);
+    pass.Execute([pipelineManager, sceneIndex, renderExtent, bCascades, mode, gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_deconstruct"));
+        if (!pipelineEntry) {
+            return;
+        }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        GIDeconstructPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .ddgiCascades = bCascades ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
+            .cacheEntries = graph.GetBufferAddress(WORLD_CACHE_ENTRIES),
+            .cacheKeys = graph.GetBufferAddress(WORLD_CACHE_KEYS),
+            .cacheCells = graph.GetBufferAddress(WORLD_CACHE_CELLS),
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .sceneDataIndex = sceneIndex,
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(GI_DECONSTRUCT_TARGET),
+            .mode = static_cast<uint32_t>(mode),
+            .bCascadesValid = bCascades ? 1u : 0u,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
+    });
+}
 } // Render

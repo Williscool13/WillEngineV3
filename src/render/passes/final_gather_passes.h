@@ -30,6 +30,7 @@ inline const StringID GI_GATHER_TMP_SH_G = SID("gi_gather_tmp_sh_g");
 inline const StringID GI_GATHER_TMP_SH_B = SID("gi_gather_tmp_sh_b");
 inline const StringID GI_GATHER_RESOLVED = SID("gi_gather_resolved");
 inline const StringID GI_GATHER_HISTORY = SID("gi_gather_history");
+inline const StringID GI_DECONSTRUCT_TARGET = SID("gi_deconstruct_target");
 
 /** Gates the composite passes' gather read this frame. */
 struct FinalGatherFrame
@@ -52,6 +53,17 @@ struct FinalGatherFrame
  * @return
  */
 FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, bool bSkipRay, bool bDebugView);
+
+/**
+ * Full-screen GI leak deconstruction at the primary surface, written to gi_deconstruct_target for the debug visualizer.
+ * @param graph
+ * @param pipelineManager
+ * @param renderExtent
+ * @param targets
+ * @param sceneIndex
+ * @param mode 1 cache cell identity hash, 2 cache radiance/servability, 3 DDGI Chebyshev-gate weight fractions, 4 dominant-probe mean-vs-distance margin, 5 coverage/confidence/serving cascade, 6 raw DDGI irradiance
+ */
+void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, int32_t mode);
 } // Render
 
 #endif //WILL_ENGINE_FINAL_GATHER_PASSES_H

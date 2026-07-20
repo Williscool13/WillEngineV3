@@ -493,6 +493,8 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline(SID("ddgi_probe_debug"), src / "ddgi_probe_debug.spv", "ComputeDDGIProbeDebug",
                             sizeof(DDGIProbeDebugPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gi_deconstruct"), src / "gi_deconstruct.spv", "ComputeGIDeconstruct",
+                            sizeof(GIDeconstructPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("ddgi_probe_trace"), src / "ddgi_probe_trace.spv", "ComputeDDGIProbeTrace",
                             sizeof(DDGIProbeTracePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("ddgi_blend_irradiance"), src / "ddgi_blend_irradiance.spv", "ComputeDDGIBlendIrradiance",

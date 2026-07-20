@@ -485,7 +485,7 @@ static const uint32_t DDGI_CASCADE_TINT[DDGI_MAX_CASCADES] = {
     0xFFCCCCCCu, 0xFFCC99FFu, 0xFF99CCFFu, 0xFFFFCC99u,
 };
 
-void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive)
+void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive, int32_t probeDebugMode)
 {
 #ifdef WDEBUG
     if (!graph.HasBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER)) {
@@ -500,6 +500,8 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
         if (!graph.HasTexture(atlasId)) {
             continue;
         }
+        const StringID visibilityId = graph.HasTexture(DDGI_VISIBILITY[k]) ? DDGI_VISIBILITY[k] : DDGI_VISIBILITY_HISTORY[k];
+        const bool bVisibility = graph.HasTexture(visibilityId);
         const StringID offsetsId = graph.HasBuffer(DDGI_OFFSETS[k]) ? DDGI_OFFSETS[k] : DDGI_OFFSETS_HISTORY[k];
         const bool bOffsets = graph.HasBuffer(offsetsId);
         const StringID activeId = graph.HasBuffer(DDGI_ACTIVE[k]) ? DDGI_ACTIVE[k] : DDGI_ACTIVE_HISTORY[k];
@@ -510,6 +512,9 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
         pass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
         pass.WriteBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER);
         pass.ReadSampledImage(atlasId);
+        if (bVisibility) {
+            pass.ReadSampledImage(visibilityId);
+        }
         if (bOffsets) {
             pass.ReadBuffer(offsetsId);
         }
@@ -517,7 +522,7 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
             pass.ReadBuffer(activeId);
         }
         const uint32_t packedTint = debugCascade < 0 ? DDGI_CASCADE_TINT[k] : 0xFFFFFFFFu;
-        pass.Execute([pipelineManager, volume, bOffsets, bActive, bHideInactive, probeDebugExposure, packedTint, atlasId, offsetsId, activeId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, volume, bOffsets, bActive, bHideInactive, probeDebugExposure, packedTint, atlasId, visibilityId, bVisibility, probeDebugMode, offsetsId, activeId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_debug"));
             if (!pipelineEntry) {
                 return;
@@ -536,6 +541,8 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
                 .probeActive = bActive ? graph.GetBufferAddress(activeId) : 0,
                 .bActiveValid = bActive ? 1u : 0u,
                 .bHideInactive = bHideInactive ? 1u : 0u,
+                .visibilityAtlasIndex = bVisibility ? graph.GetSampledImageViewDescriptorIndex(visibilityId) : 0u,
+                .debugMode = probeDebugMode == 1 && bVisibility ? 1u : 0u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (volume.probeCount.x + 3) / 4, (volume.probeCount.y + 3) / 4, (volume.probeCount.z + 3) / 4);

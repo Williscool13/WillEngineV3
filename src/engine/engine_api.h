@@ -457,7 +457,9 @@ struct DebugState
     float ddgiProbeDebugExposure{1.0f};
     int32_t ddgiProbeDebugCascade{-1};
     bool bDDGIHideInactiveProbes{false};
+    int32_t ddgiProbeDebugMode{0};
     int32_t giGatherDebugMode{0};
+    int32_t giDeconstructMode{0};
     Core::ReSTIRParams restir{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};

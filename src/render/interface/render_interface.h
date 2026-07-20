@@ -975,8 +975,12 @@ struct FrameBuffer
     float ddgiProbeDebugExposure = 1.0f;
     int32_t ddgiProbeDebugCascade = -1;
     bool bDDGIHideInactiveProbes = false;
+    // 0 = irradiance, 1 = visibility (mean/std lobes)
+    int32_t ddgiProbeDebugMode = 0;
     // 0 = off, 1 = irradiance, 2 = tiers, 3 = hit distance, 4 = accumulation
     int32_t giGatherDebugMode = 0;
+    // 0 = off, 1 = cache cell id, 2 = cache radiance, 3 = ddgi cheb gate, 4 = ddgi mean vs dist, 5 = ddgi coverage, 6 = ddgi irradiance
+    int32_t giDeconstructMode = 0;
     bool bLogRDG = false;
     ReSTIRParams restir{};
     DDGIParams ddgi{};

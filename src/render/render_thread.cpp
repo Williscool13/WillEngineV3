@@ -559,7 +559,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     });
                 }
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
-                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure, frameBuffer.ddgiProbeDebugCascade, frameBuffer.bDDGIHideInactiveProbes);
+                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure, frameBuffer.ddgiProbeDebugCascade, frameBuffer.bDDGIHideInactiveProbes, frameBuffer.ddgiProbeDebugMode);
                 }
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bWorldCacheDebug && !frameBuffer.bLockGPUDebug) {
                     SetupWorldCacheDebug(*renderGraph, pipelineManager, worldCache, frameBuffer.worldCacheDebugExposure, frameBuffer.worldCacheDebugBucket);
@@ -583,6 +583,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                         vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
                     });
+            }
+
+            if (frameBuffer.ddgi.bEnabled && frameBuffer.giDeconstructMode != 0) {
+                SetupGIDeconstruct(*renderGraph, pipelineManager, renderExtent, targets, 0, frameBuffer.giDeconstructMode);
             }
 
             if (viewFamily.gtaoConfig.bEnabled) {

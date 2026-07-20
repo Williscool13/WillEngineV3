@@ -72,8 +72,9 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass);
  * @param probeDebugExposure linear scale applied to the fitted probe irradiance so bright probes do not blow out to flat white
  * @param debugCascade -1 draws every cascade with a per-cascade identification tint; 0-3 draws only that cascade, untinted
  * @param bHideInactive skip classification-inactive probes entirely instead of drawing them flat blue
+ * @param probeDebugMode 0 fits the irradiance atlas; 1 fits the visibility atlas (red = mean distance / miss clamp, green = std/mean)
  */
-void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive);
+void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive, int32_t probeDebugMode);
 } // Render
 
 #endif //WILL_ENGINE_DDGI_PASSES_H

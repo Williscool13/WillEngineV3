@@ -7,6 +7,7 @@ import packing_functions;
 
 // =============== Shader Summary ============
 // DDGI probe debug: one sphere per probe at its relocated position, L1 SH fitted from the probe's decoded atlas tile; dead probes render flat red, inactive probes flat blue (or hidden).
+// debugMode 1 fits the visibility atlas instead: red = mean distance / miss clamp per direction, green = std/mean; a red-hot lobe is a miss-inflated mean that bypasses the Chebyshev gate.
 
 [shader("compute")]
 [numthreads(4, 4, 4)]
@@ -33,6 +34,33 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
         if (pc.bHideInactive == 0) {
             GPUDebugAddSphereFlat(pc.sphereArgs, pc.sphereBuffer, position, radius, float3(0.15, 0.3, 0.9));
         }
+        return;
+    }
+
+    if (pc.debugMode == 1u) {
+        int2 visTileOrigin = DDGIProbeTileOrigin(slot, pc.volume, DDGI_VISIBILITY_TILE);
+        float maxDistance = length(pc.volume.probeSpacing) * 1.5;
+        float dcMean = 0.0;
+        float dcStd = 0.0;
+        float3 dirMean = float3(0.0);
+        float3 dirStd = float3(0.0);
+        for (int ty = 1; ty <= int(DDGI_VISIBILITY_INTERIOR); ++ty) {
+            for (int tx = 1; tx <= int(DDGI_VISIBILITY_INTERIOR); ++tx) {
+                float2 moments = rdgTexturesFloat2[pc.visibilityAtlasIndex].Load(int3(visTileOrigin + int2(tx, ty), 0)).rg;
+                float mean = moments.x / maxDistance;
+                float stdRatio = sqrt(abs(moments.y - moments.x * moments.x)) / max(moments.x, 1e-4);
+                float3 texelDirection = DDGIOctTexelDirection(int2(tx, ty), DDGI_VISIBILITY_INTERIOR);
+                dcMean += mean;
+                dirMean += mean * texelDirection;
+                dcStd += stdRatio;
+                dirStd += stdRatio * texelDirection;
+            }
+        }
+        float invVisCount = pc.probeDebugExposure / float(DDGI_VISIBILITY_INTERIOR * DDGI_VISIBILITY_INTERIOR);
+        GPUDebugAddSphere(pc.sphereArgs, pc.sphereBuffer, position, radius,
+                          float4(dcMean * invVisCount, dirMean * 3.0 * invVisCount),
+                          float4(dcStd * invVisCount, dirStd * 3.0 * invVisCount),
+                          float4(0.0));
         return;
     }
 

@@ -317,6 +317,14 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SameLine();
         ImGui::SetNextItemWidth(240.0f);
         Widgets::SliderFloat("Probe Exposure##GPUDebug", &state->debug.ddgiProbeDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
+        {
+            const char* probeDisplayLabels[] = {"Irradiance", "Visibility"};
+            ImGui::SetNextItemWidth(120.0f);
+            ImGui::Combo("Display##DDGIDebug", &state->debug.ddgiProbeDebugMode, probeDisplayLabels, static_cast<int>(std::size(probeDisplayLabels)));
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Visibility shows the probe's distance atlas as L1 lobes: red = mean distance relative to the miss clamp per direction, green = std/mean. A red-hot lobe pointing into the room from an exterior probe is a miss-inflated mean, which bypasses the Chebyshev occlusion test at sampling.");
+            }
+        }
 
         ImGui::SeparatorText("GI Diffuse Gather");
         {
@@ -325,6 +333,24 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::Combo("View##GIGatherDebug", &state->debug.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)));
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Fullscreen final-gather view; runs the gather even when it is not applied to lighting. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where each ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history).");
+            }
+        }
+
+        ImGui::SeparatorText("GI Deconstruct");
+        {
+            const char* giDeconstructLabels[] = {"Off", "Cache Cell ID", "Cache Radiance", "DDGI Cheb Gate", "DDGI Mean vs Dist", "DDGI Coverage", "DDGI Irradiance"};
+            ImGui::SetNextItemWidth(160.0f);
+            if (ImGui::Combo("View##GIDeconstruct", &state->debug.giDeconstructMode, giDeconstructLabels, static_cast<int>(std::size(giDeconstructLabels)))) {
+                if (state->debug.giDeconstructMode != 0) {
+                    state->debug.resourceName = Core::InlineString("gi_deconstruct_target");
+                    state->debug.transformationType = DebugTransformationType::None;
+                    state->debug.viewAspect = Core::DebugViewAspect::None;
+                } else if (state->debug.resourceName == "gi_deconstruct_target") {
+                    state->debug.resourceName.Clear();
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Per-pixel GI leak deconstruction at the primary surface. Cache Cell ID = hash color of the resolved world-cache cell; the same color on both sides of a wall means interior and exterior share one cell. Cache Radiance = what gather tier 1 would return (magenta = found but not servable). DDGI Cheb Gate = weight fractions: red = occlusion test bypassed with a miss-inflated mean, green = bypassed with a plausible mean, blue = test ran. Mean vs Dist = dominant probe's (mean - distance)/spacing: red = bypassed, green = tested; blue overlays std/mean. Coverage = R coverage, G confidence, B serving cascade. Irradiance = raw DDGI injection at the pixel.");
             }
         }
 
