@@ -372,6 +372,12 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                         shapeJson["bShowCenterColumn"] = p.bShowCenterColumn;
                         shapeJson["bRamp"] = p.bRamp;
                     }
+                    else if constexpr (std::is_same_v<T, Engine::RingParams>) {
+                        shapeJson["outerRadius"] = p.outerRadius;
+                        shapeJson["innerRadius"] = p.innerRadius;
+                        shapeJson["slices"] = p.slices;
+                        shapeJson["bDoubleSided"] = p.bDoubleSided;
+                    }
                 }, shape.proceduralParams);
                 break;
         }
@@ -620,6 +626,14 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                         p.bRamp = shapeJson.value("bRamp", false);
                         shape.proceduralParams = p;
                     }
+                    else if (ptype == 24) {
+                        Engine::RingParams p{};
+                        p.outerRadius = shapeJson["outerRadius"].get<float>();
+                        p.innerRadius = shapeJson["innerRadius"].get<float>();
+                        p.slices = shapeJson["slices"].get<int32_t>();
+                        p.bDoubleSided = shapeJson.value("bDoubleSided", true);
+                        shape.proceduralParams = p;
+                    }
                 }
                 if (shapeJson.contains("splineParams")) {
                     const auto& sp = shapeJson["splineParams"];
@@ -847,11 +861,11 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 {
                     bool bHasAny = false;
                     const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
-                    static constexpr Core::Array<const char*, 24> kProceduralNames = {
+                    static constexpr Core::Array<const char*, 25> kProceduralNames = {
                         nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
                         "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
                         "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
-                        "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase",
+                        "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring",
                     };
                     const size_t idx = shape.proceduralParams.index();
 

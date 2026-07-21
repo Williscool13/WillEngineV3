@@ -227,6 +227,7 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
                    [&](const Engine::CurvedRampParams& p) { bSuccess = GenerateCurvedRamp(p); },
                    [&](const Engine::BowlParams& p) { bSuccess = GenerateBowl(p); },
                    [&](const Engine::SpiralStaircaseParams& p) { bSuccess = GenerateSpiralStaircase(p); },
+                   [&](const Engine::RingParams& p) { bSuccess = GenerateRing(p); },
                }, params);
     return bSuccess;
 }
@@ -716,6 +717,97 @@ bool ProceduralModelLoadSlot::GenerateTorus(const Engine::TorusParams& p)
     }
 
     par_shapes_free_mesh(m);
+
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateRing(const Engine::RingParams& p)
+{
+    ZoneScopedN("GenerateRing");
+
+    const int N = std::max(3, p.slices);
+    const float ro = std::max(0.01f, p.outerRadius);
+    const float ri = glm::clamp(p.innerRadius, 0.0f, ro - 0.001f);
+    const bool bDisc = ri <= 1e-4f;
+    const auto pi = glm::pi<float>();
+
+    const int faces = p.bDoubleSided ? 2 : 1;
+    const size_t vertsPerFace = bDisc ? static_cast<size_t>(N + 2) : static_cast<size_t>(2 * (N + 1));
+    const size_t indicesPerFace = bDisc ? static_cast<size_t>(3 * N) : static_cast<size_t>(6 * N);
+
+    Core::HeapArray<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, vertsPerFace * faces);
+    Core::HeapArray<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, indicesPerFace * faces);
+    size_t vi = 0, ii = 0;
+
+    // ny = +1 for the top face (+Y normal), -1 for the mirrored back face.
+    auto addFace = [&](float ny) {
+        const auto base = static_cast<uint32_t>(vi);
+        const float invD = 0.5f / ro;
+        if (bDisc) {
+            Engine::FullVertex c{};
+            c.position = {0, 0, 0};
+            c.normal = {0, ny, 0};
+            c.uv = {0.5f, 0.5f};
+            c.tangent = {1, 0, 0, ny};
+            c.color = {1, 1, 1, 1};
+            vertices[vi++] = c;
+            for (int j = 0; j <= N; j++) {
+                const float a = static_cast<float>(j) / static_cast<float>(N) * 2.0f * pi;
+                const float cx = cosf(a), cz = sinf(a);
+                Engine::FullVertex v{};
+                v.position = {cx * ro, 0, cz * ro};
+                v.normal = {0, ny, 0};
+                v.uv = {cx * ro * invD + 0.5f, cz * ro * invD + 0.5f};
+                v.tangent = {1, 0, 0, ny};
+                v.color = {1, 1, 1, 1};
+                vertices[vi++] = v;
+            }
+            for (int j = 0; j < N; j++) {
+                const uint32_t r0 = base + 1 + j, r1 = base + 2 + j;
+                if (ny > 0.0f) {
+                    indices[ii++] = r0; indices[ii++] = base; indices[ii++] = r1;
+                }
+                else {
+                    indices[ii++] = r0; indices[ii++] = r1; indices[ii++] = base;
+                }
+            }
+        }
+        else {
+            for (int j = 0; j <= N; j++) {
+                const float a = static_cast<float>(j) / static_cast<float>(N) * 2.0f * pi;
+                const float cx = cosf(a), cz = sinf(a);
+                Engine::FullVertex vo{};
+                vo.position = {cx * ro, 0, cz * ro};
+                vo.normal = {0, ny, 0};
+                vo.uv = {cx * ro * invD + 0.5f, cz * ro * invD + 0.5f};
+                vo.tangent = {1, 0, 0, ny};
+                vo.color = {1, 1, 1, 1};
+                vertices[vi++] = vo;
+                Engine::FullVertex vin{};
+                vin.position = {cx * ri, 0, cz * ri};
+                vin.normal = {0, ny, 0};
+                vin.uv = {cx * ri * invD + 0.5f, cz * ri * invD + 0.5f};
+                vin.tangent = {1, 0, 0, ny};
+                vin.color = {1, 1, 1, 1};
+                vertices[vi++] = vin;
+            }
+            for (int j = 0; j < N; j++) {
+                const uint32_t oa = base + j * 2, oi = base + j * 2 + 1;
+                const uint32_t na = base + (j + 1) * 2, ni = base + (j + 1) * 2 + 1;
+                if (ny > 0.0f) {
+                    indices[ii++] = oa; indices[ii++] = oi; indices[ii++] = na;
+                    indices[ii++] = oi; indices[ii++] = ni; indices[ii++] = na;
+                }
+                else {
+                    indices[ii++] = oa; indices[ii++] = na; indices[ii++] = oi;
+                    indices[ii++] = oi; indices[ii++] = na; indices[ii++] = ni;
+                }
+            }
+        }
+    };
+
+    addFace(1.0f);
+    if (p.bDoubleSided) { addFace(-1.0f); }
 
     return FinalizeGeometry(vertices, indices);
 }

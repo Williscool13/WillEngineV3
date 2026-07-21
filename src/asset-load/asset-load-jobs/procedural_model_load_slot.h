@@ -118,6 +118,7 @@ private:
     bool GenerateCurvedRamp(const Engine::CurvedRampParams& p);
     bool GenerateBowl(const Engine::BowlParams& p);
     bool GenerateSpiralStaircase(const Engine::SpiralStaircaseParams& p);
+    bool GenerateRing(const Engine::RingParams& p);
     bool GenerateSpline(const Engine::SplineParams& p);
     bool GenerateText3D(const Engine::Text3DParams& p);
 };

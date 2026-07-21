@@ -419,8 +419,20 @@ struct SpiralStaircaseParams
     bool bRamp{false};
 };
 
+/**
+ * Flat annular disc in the y=0 plane (a disc with a hole). innerRadius=0 collapses to a solid disc.
+ * bDoubleSided emits a back face (-Y) so it is visible from below; single-sided is +Y only.
+ */
+struct RingParams
+{
+    float outerRadius{0.5f};
+    float innerRadius{0.25f};
+    int32_t slices{32};
+    bool bDoubleSided{true};
+};
+
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
-    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams>;
+    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams>;
 
 /** Horizontal placement of each line relative to the model origin. */
 enum class Text3DAlign : uint8_t

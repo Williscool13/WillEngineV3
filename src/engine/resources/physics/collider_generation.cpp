@@ -355,6 +355,37 @@ static void CompoundTorus(const TorusParams& p, Core::Vector<SplineColliderPrimi
     }
 }
 
+// One ConvexHull wedge (annular sector) per slice; mirrors GenerateRing (thin slab at y=0). Wedges tile the annulus exactly (no gaps/overlap, unlike boxes). A solid disc (innerRadius=0) collapses to one thin cylinder.
+static void CompoundRing(const RingParams& p, Core::Vector<SplineColliderPrimitive>& out, Core::Vector<Vec3>& outPositions)
+{
+    const float ro = std::max(0.01f, p.outerRadius);
+    const float ri = glm::clamp(p.innerRadius, 0.0f, ro - 0.001f);
+    const float hh = 0.02f;
+    if (ri <= 1e-4f) {
+        SplineColliderPrimitive col{};
+        col.type = SplineColliderPrimitiveType::Cylinder;
+        col.radius = ro;
+        col.halfHeight = hh;
+        out.PushBack(col);
+        return;
+    }
+    const int N = glm::clamp(p.slices, 3, 64);
+    const float twoPi = 2.0f * glm::pi<float>();
+    for (int j = 0; j < N; j++) {
+        const float a0 = twoPi * static_cast<float>(j) / static_cast<float>(N);
+        const float a1 = twoPi * static_cast<float>(j + 1) / static_cast<float>(N);
+        const Vec3 ds(std::cos(a0), 0.0f, std::sin(a0));
+        const Vec3 dn(std::cos(a1), 0.0f, std::sin(a1));
+        const Vec3 top(0.0f, hh, 0.0f);
+        const Vec3 bot(0.0f, -hh, 0.0f);
+        const Vec3 corners[8] = {
+            ds * ri + top, ds * ro + top, dn * ro + top, dn * ri + top,
+            ds * ri + bot, ds * ro + bot, dn * ro + bot, dn * ri + bot,
+        };
+        PushHullPrim(Core::Span<const Vec3>(corners, 8), out, outPositions);
+    }
+}
+
 // Box-per-segment along the arch band; mirrors GenerateArch (outer/inner XY contours extruded in Z).
 static void CompoundArch(const ArchParams& p, Core::Vector<SplineColliderPrimitive>& out)
 {
@@ -528,6 +559,7 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<SpiralStaircaseParams>(params)
         || std::holds_alternative<PipeParams>(params)
         || std::holds_alternative<TorusParams>(params)
+        || std::holds_alternative<RingParams>(params)
         || std::holds_alternative<ArchParams>(params)
         || std::holds_alternative<DoorParams>(params)
         || std::holds_alternative<TetrahedronParams>(params)
@@ -613,6 +645,11 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
     if (const auto* p = std::get_if<TorusParams>(&params)) {
         outKind = PhysicsColliderKind::Compound;
         CompoundTorus(*p, outPrimitives);
+        return true;
+    }
+    if (const auto* p = std::get_if<RingParams>(&params)) {
+        outKind = PhysicsColliderKind::Compound;
+        CompoundRing(*p, outPrimitives, outPositions);
         return true;
     }
     if (const auto* p = std::get_if<ArchParams>(&params)) {

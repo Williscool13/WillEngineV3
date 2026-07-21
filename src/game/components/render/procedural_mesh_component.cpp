@@ -212,6 +212,12 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
             json["bShowCenterColumn"] = p.bShowCenterColumn;
             json["bRamp"] = p.bRamp;
         }
+        else if constexpr (std::is_same_v<T, Engine::RingParams>) {
+            json["outerRadius"] = p.outerRadius;
+            json["innerRadius"] = p.innerRadius;
+            json["slices"] = p.slices;
+            json["bDoubleSided"] = p.bDoubleSided;
+        }
     }, comp.params);
 }
 
@@ -421,6 +427,14 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.bRamp = json.value("bRamp", false);
         comp.params = p;
     }
+    else if (type == 24) {
+        Engine::RingParams p{};
+        p.outerRadius = json["outerRadius"].get<float>();
+        p.innerRadius = json["innerRadius"].get<float>();
+        p.slices = json["slices"].get<int32_t>();
+        p.bDoubleSided = json.value("bDoubleSided", true);
+        comp.params = p;
+    }
 }
 
 /**
@@ -562,13 +576,14 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 if (ImGui::Selectable("Curved Ramp")) selectShape(Engine::CurvedRampParams{});
                 if (ImGui::Selectable("Bowl")) selectShape(Engine::BowlParams{});
                 if (ImGui::Selectable("Spiral Staircase")) selectShape(Engine::SpiralStaircaseParams{});
+                if (ImGui::Selectable("Ring")) selectShape(Engine::RingParams{});
                 ImGui::EndCombo();
             }
         }
         else {
             static constexpr const char* shapeNames[] = {
                 "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase"
+                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring"
             };
             ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
             ImGui::SameLine();
@@ -937,6 +952,22 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                             CreateSpiralRailingEntity(state, registry, entity, p, std::max(0.02f, p.centerColumnRadius), railingHeight, "Inner");
                         }
                     }
+                }
+                else if constexpr (std::is_same_v<T, Engine::RingParams>) {
+                    ImGui::DragFloat("Outer Radius", &p.outerRadius, 0.01f, 0.01f, 50.0f);
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        p.innerRadius = glm::clamp(p.innerRadius, 0.0f, p.outerRadius - 0.001f);
+                        dirty = true;
+                    }
+                    ImGui::DragFloat("Inner Radius", &p.innerRadius, 0.01f, 0.0f, p.outerRadius - 0.001f);
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        p.innerRadius = glm::clamp(p.innerRadius, 0.0f, p.outerRadius - 0.001f);
+                        dirty = true;
+                    }
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 256);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Double Sided", &p.bDoubleSided)) { dirty = true; }
+                    if (p.innerRadius <= 1e-4f) { ImGui::TextDisabled("Inner radius 0 -> solid disc"); }
                 }
             }, component.params);
 
