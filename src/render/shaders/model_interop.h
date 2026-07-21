@@ -181,6 +181,10 @@ SHADER_PUBLIC struct Instance
     SHADER_PUBLIC uint32_t lightIndex;
     // Base index into LightData.lights of this instance's emissive-triangle lights (+PrimitiveIndex())
     SHADER_PUBLIC uint32_t emissiveTriLightBase;
+    SHADER_PUBLIC uint32_t flags;
+    uint32_t pad0;
+    uint32_t pad1;
+    uint32_t pad2;
 };
 
 SHADER_PUBLIC struct Model

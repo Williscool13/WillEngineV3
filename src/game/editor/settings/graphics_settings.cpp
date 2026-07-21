@@ -432,6 +432,8 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("View Space Position")) setDebugTarget("depth_target", DebugTransformationType::ViewSpacePosition, Core::DebugViewAspect::Depth);
             ImGui::SameLine();
             if (ImGui::Button("NdotV")) setDebugTarget("gbuffer_one", DebugTransformationType::NdotV, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Hero Flag")) setDebugTarget("gbuffer_one", DebugTransformationType::HeroFlag, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("Lighting")) {
@@ -468,6 +470,10 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::SameLine();
             if (ImGui::Button("Hero Shadow Prev")) setDebugTarget("hero_sun_shadow_history", DebugTransformationType::HeroSunShadow, Core::DebugViewAspect::None);
             if (ImGui::Button("Hero TAA Reactive")) setDebugTarget("hero_reactive", DebugTransformationType::HeroReactive, Core::DebugViewAspect::None);
+            if (ImGui::Button("Hero Silhouette Rim")) setDebugTarget("hero_rim", DebugTransformationType::HeroRim, Core::DebugViewAspect::None);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Silhouette AA coverage (needs a hero + Silhouette AA > 0). Green = the outline is being blurred (brighter = stronger). Red = a silhouette edge detected but the motion gate suppressed the blur, so it stays crisp/jaggy. If donut-motion edges show red, the gate floor is too high for that speed.");
+            }
         }
 
         if (ImGui::CollapsingHeader("ReBLUR")) {
@@ -963,13 +969,29 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Sun-disk rays per shadowed pixel. Sets the penumbra's gradient steps (rays + 1 levels), so raise it when a hero casts from far above its receiver and the soft edge bands. Cost is linear but only over pixels the hero actually shadows.");
             }
-            if (Widgets::SliderFloat("Hero TAA Reactivity", &heroShadow.reactiveScale, 0.0f, 8.0f)) { changed = true; }
+            if (Widgets::SliderFloat("Shadow Contour Reactivity", &heroShadow.shadowReactiveScale, 0.0f, 8.0f)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("How hard TAA snaps to the current frame where the hero shadow swept a pixel, killing the trailing smear on the moving contour. Higher is crisper but reintroduces a little aliasing on that thin band; 0 disables the reaction (shadow trails under motion).");
             }
-            if (Widgets::SliderInt("Hero TAA Dilation", &heroShadow.reactiveDilation, 0, 3)) { changed = true; }
+            if (Widgets::SliderInt("Shadow Reactive Dilation", &heroShadow.shadowReactiveDilation, 0, 3)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Conservatively grows the reactive mask by this many pixels so a sub-pixel gap at the contour cannot leave a sliver of stale history. 1 is usually enough; raise if the shadow edge still trails a hairline. Use the Debug View 'Hero TAA Reactive' target to see the covered band.");
+            }
+        }
+
+        ImGui::SeparatorText("Hero Object Silhouette");
+        if (ImGui::Checkbox("Enabled##HeroSilhouette", &heroShadow.bSilhouetteEnabled)) { changed = true; }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Softens the hero object's own outline under motion (not the shadow). Independent of the sun-shadow toggle. Off skips the rim treatment entirely.");
+        }
+        if (heroShadow.bSilhouetteEnabled) {
+            if (Widgets::SliderFloat("Silhouette AA", &heroShadow.silhouetteRimStrength, 0.0f, 1.0f)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Donut TAA only. Blends the silhouette toward a local spatial average, replacing the history that smears when a rolling surface's motion vectors track the spinning texture instead of the translating outline. Higher is smoother (more FXAA-like) but softer.");
+            }
+            if (ImGui::Checkbox("Uniform (object motion)", &heroShadow.bSilhouetteUniform)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Blurs the whole silhouette together whenever the hero OBJECT is moving (camera motion alone does not trigger it), instead of gating each pixel on the local motion vector. Removes the patchy blurred/crisp seam on a rolling ball, at the cost of blurring the whole outline uniformly. Best for a single hero (e.g. the ball).");
             }
         }
 

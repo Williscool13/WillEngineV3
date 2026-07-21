@@ -378,8 +378,11 @@ nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)
     return {
         {"bEnabled", p.bEnabled},
         {"sampleCount", p.sampleCount},
-        {"reactiveScale", p.reactiveScale},
-        {"reactiveDilation", p.reactiveDilation},
+        {"shadowReactiveScale", p.shadowReactiveScale},
+        {"shadowReactiveDilation", p.shadowReactiveDilation},
+        {"bSilhouetteEnabled", p.bSilhouetteEnabled},
+        {"silhouetteRimStrength", p.silhouetteRimStrength},
+        {"bSilhouetteUniform", p.bSilhouetteUniform},
     };
 }
 
@@ -387,8 +390,11 @@ void FromJson(const nlohmann::json& r, Core::HeroShadowConfiguration& p)
 {
     p.bEnabled = r.contains("bEnabled") && r["bEnabled"].is_boolean() ? r["bEnabled"].get<bool>() : p.bEnabled;
     p.sampleCount = r.contains("sampleCount") && r["sampleCount"].is_number_integer() ? r["sampleCount"].get<int32_t>() : p.sampleCount;
-    p.reactiveScale = r.contains("reactiveScale") && r["reactiveScale"].is_number() ? r["reactiveScale"].get<float>() : p.reactiveScale;
-    p.reactiveDilation = r.contains("reactiveDilation") && r["reactiveDilation"].is_number_integer() ? r["reactiveDilation"].get<int32_t>() : p.reactiveDilation;
+    p.shadowReactiveScale = r.contains("shadowReactiveScale") && r["shadowReactiveScale"].is_number() ? r["shadowReactiveScale"].get<float>() : p.shadowReactiveScale;
+    p.shadowReactiveDilation = r.contains("shadowReactiveDilation") && r["shadowReactiveDilation"].is_number_integer() ? r["shadowReactiveDilation"].get<int32_t>() : p.shadowReactiveDilation;
+    p.bSilhouetteEnabled = r.contains("bSilhouetteEnabled") && r["bSilhouetteEnabled"].is_boolean() ? r["bSilhouetteEnabled"].get<bool>() : p.bSilhouetteEnabled;
+    p.silhouetteRimStrength = r.contains("silhouetteRimStrength") && r["silhouetteRimStrength"].is_number() ? r["silhouetteRimStrength"].get<float>() : p.silhouetteRimStrength;
+    p.bSilhouetteUniform = r.contains("bSilhouetteUniform") && r["bSilhouetteUniform"].is_boolean() ? r["bSilhouetteUniform"].get<bool>() : p.bSilhouetteUniform;
 }
 
 nlohmann::json ToJson(const Core::GTAOConfiguration& p)

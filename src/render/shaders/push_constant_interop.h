@@ -843,6 +843,9 @@ SHADER_PUBLIC struct DonutTaaPushConstant
     SHADER_PUBLIC float2 inputOverOutputViewSize;
     SHADER_PUBLIC float2 outputOverInputViewSize;
     SHADER_PUBLIC uint32_t heroReactiveIndex;
+    SHADER_PUBLIC float heroRimStrength;
+    SHADER_PUBLIC uint32_t heroRimDebugIndex;
+    SHADER_PUBLIC float heroRimUniformGate; // >= 0: uniform-mode gate (whole silhouette); < 0: per-pixel motion gating.
 };
 
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant

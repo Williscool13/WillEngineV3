@@ -35,6 +35,7 @@
 
 import common_interop;
 import constants_interop;
+import flags_interop;
 import shader_functions;
 import push_constant_interop;
 import bindless_declarations;
@@ -49,6 +50,7 @@ static const int RENAMED_GROUP_Y = (GROUP_X * GROUP_Y) / BUFFER_X;
 
 groupshared float4 s_ColorsAndLengths[BUFFER_Y][BUFFER_X]; // .rgb = PQ color, .a = dot(pixelMV, pixelMV)
 groupshared float2 s_MotionVectors[BUFFER_Y][BUFFER_X];
+groupshared uint s_Hero[BUFFER_Y][BUFFER_X]; // hero flag from the same gbuffer load, for the silhouette rim test
 
 static const float pq_m1 = 0.1593017578125;
 static const float pq_m2 = 78.84375;
@@ -116,13 +118,14 @@ void Preload(int2 sharedID, int2 globalID, int2 inputMax)
 
     float3 color = PQEncode(rdgTexturesFloat4[pc.colorInputIndex].Load(int3(loadCoord, 0)).rgb);
 
-    uint packedMV = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(loadCoord, 0)).g;
-    float2 velocityNDC = UnpackMotionVectors(packedMV);
+    uint4 gbufferOne = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(loadCoord, 0));
+    float2 velocityNDC = UnpackMotionVectors(gbufferOne.g);
     float2 motion = velocityNDC * 0.5 * pc.inputViewSize; // NDC delta -> input-pixel delta
     float motionLength = dot(motion, motion);
 
     s_ColorsAndLengths[sharedID.y][sharedID.x] = float4(color, motionLength);
     s_MotionVectors[sharedID.y][sharedID.x] = motion;
+    s_Hero[sharedID.y][sharedID.x] = gbufferOne.w & GBUFFER1_HERO_BIT;
 }
 
 float2 OutputToInput(int2 pixelPosRelativeToOrigin)
@@ -272,6 +275,39 @@ void ComputeDonutTaa(
     else
     {
         resultPQ = thisPixelColor;
+    }
+
+    if (pc.heroRimStrength > 0.0) {
+        // The full 3x3 s_Hero is already in the apron this thread read for its moments; no extra gbuffer taps.
+        int2 sc = inputPosShared + int2(1, 1);
+        uint heroCount = 0;
+        [unroll]
+        for (int ry = -1; ry <= 1; ry++)
+        {
+            [unroll]
+            for (int rx = -1; rx <= 1; rx++)
+            {
+                heroCount += (s_Hero[sc.y + ry][sc.x + rx] != 0u) ? 1u : 0u;
+            }
+        }
+        // Coverage feathers the rim across the 3x3 (peaks at the 50/50 boundary, 0 in pure hero/background), so the treated
+        // band is a smooth ramp instead of a render-res staircase of blurred-vs-sharp mask edges.
+        float frac = float(heroCount) / 9.0;
+        float coverage = 1.0 - abs(2.0 * frac - 1.0);
+
+        // Uniform mode gates the whole silhouette on the hero's own (camera-excluded) motion; else per-pixel on the local dilated MV.
+        float rimMotion = (pc.heroRimUniformGate >= 0.0) ? pc.heroRimUniformGate : smoothstep(0.5, 2.0, length(longestMV));
+        float rimWeight = pc.heroRimStrength * rimMotion * coverage;
+
+        if (rimWeight > 0.0) {
+            // Isotropic 3x3 mean: an axis-quantized 2-tap can't follow a curved (mostly diagonal) silhouette and reinforces the staircase.
+            resultPQ = lerp(resultPQ, colorMoment1, rimWeight);
+        }
+
+        // Debug: R = applied weight, G = rim coverage. Coloured in debug_visualize (HeroRim); only bound when that view is active.
+        if (pc.heroRimDebugIndex != ~0x0u) {
+            rdgStorageFloat4[pc.heroRimDebugIndex][outputPixelPos] = float4(rimWeight, coverage, 0.0, 1.0);
+        }
     }
 
     float3 result = PQDecode(resultPQ);

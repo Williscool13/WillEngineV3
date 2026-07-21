@@ -1,5 +1,6 @@
 import push_constant_interop;
 import constants_interop;
+import flags_interop;
 
 import shader_functions;
 import shader_constants;
@@ -17,7 +18,7 @@ void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConst
 
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixelCoord, 0));
     float depth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
-    if ((gt1.w & 1u) == 0u || depth <= 0.0) {
+    if ((gt1.w & GBUFFER1_LIT_BIT) == 0u || depth <= 0.0) {
         rdgStorageFloat2[pc.outputIndex][pixelCoord] = float2(0.0, 0.0);
         return;
     }

@@ -27,6 +27,7 @@
 #include "light_bvh.h"
 #include "shaders/constants_interop.h"
 #include "shaders/push_constant_interop.h"
+#include "shaders/flags_interop.h"
 
 #include "types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
@@ -1672,6 +1673,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             .stableId = inst.stableId,
             .lightIndex = inst.lightIndex,
             .emissiveTriLightBase = inst.emissiveTriLightBase,
+            .flags = inst.bHero ? INSTANCE_FLAG_HERO : 0u,
         };
     }
 

@@ -1,5 +1,6 @@
 import common_interop;
 import constants_interop;
+import flags_interop;
 import model_interop;
 import instancing_interop;
 import push_constant_interop;
@@ -80,7 +81,7 @@ void ComputeShadingDefaultLit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
         PackNormalOct16(shadingNormal),
         PackMotionVectors(shadingInputs.velocity),
         PackPBR(roughness, metallic),
-        1u | (any(emissiveColor > float3(0.0)) ? 2u : 0u) | PackViewZDelta(shadingInputs.viewZDelta)
+        GBUFFER1_LIT_BIT | (any(emissiveColor > float3(0.0)) ? GBUFFER1_EMISSIVE_BIT : 0u) | ((data.instance.flags & INSTANCE_FLAG_HERO) != 0u ? GBUFFER1_HERO_BIT : 0u) | PackViewZDelta(shadingInputs.viewZDelta)
     );
     rdgStorageUInt4[pc.gbufferOneIndex][pixel] = gbufferOne;
     rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGBA8(albedo), PackEmissiveRGBE(emissiveColor));

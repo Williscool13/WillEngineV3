@@ -1,5 +1,6 @@
 import push_constant_interop;
 import constants_interop;
+import flags_interop;
 import restir_interop;
 
 import bindless_declarations;
@@ -301,6 +302,16 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
         }
         case 37: { // HeroReactive: TAA snap mask, red = where TAA is forced to current (the moving shadow contour). Dark = normal temporal blend.
             srcPixel.xyz = float3(srcPixel.x, 0.0, 0.0);
+            break;
+        }
+        case 38: { // HeroFlag: gbuffer_one.w hero bit, green = hero-flagged geometry.
+            srcPixel.xyz = float3(0.0, (asuint(srcPixel.w) & GBUFFER1_HERO_BIT) != 0u ? 1.0 : 0.0, 0.0);
+            break;
+        }
+        case 39: { // HeroRim: R = applied weight, G = rim coverage. Green = blurred (bright = weight); red = rim covered but motion gate off.
+            float weight = srcPixel.r;
+            float coverage = srcPixel.g;
+            srcPixel.xyz = (coverage > 0.0) ? (weight > 0.0 ? float3(0.0, weight, 0.0) : float3(coverage, 0.0, 0.0)) : float3(0.0);
             break;
         }
     }

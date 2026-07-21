@@ -81,6 +81,8 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     BentNormal = 35,
     HeroSunShadow = 36,
     HeroReactive = 37,
+    HeroFlag = 38,
+    HeroRim = 39,
 };
 
 SHADER_PUBLIC struct Frustum

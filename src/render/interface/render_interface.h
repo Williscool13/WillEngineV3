@@ -834,10 +834,17 @@ struct RTReflectionConfiguration
 
 struct HeroShadowConfiguration
 {
+    // Ray-traced sun shadow cast by the hero.
     bool bEnabled{true};
     int32_t sampleCount{16};
-    float reactiveScale{2.0f};
-    int32_t reactiveDilation{1};
+    // TAA: snaps the shadow's moving contour to the current frame.
+    float shadowReactiveScale{2.0f};
+    int32_t shadowReactiveDilation{1};
+    // TAA: softens the hero object's own outline under motion, independent of the shadow toggle.
+    bool bSilhouetteEnabled{true};
+    float silhouetteRimStrength{0.8f};
+    // Uniform mode: blur the whole silhouette together when the hero OBJECT moves (camera motion excluded), instead of per-pixel motion gating.
+    bool bSilhouetteUniform{false};
 };
 
 struct ViewFamily
@@ -881,6 +888,8 @@ struct ViewFamily
     glm::vec3 heroBoundsMin{0.0f};
     glm::vec3 heroBoundsMax{0.0f};
     bool bHasHero{false};
+    /** Camera-independent hero object motion this frame, [0,1], from the hero model-matrix delta. Drives uniform silhouette AA. */
+    float heroMotionAmount{0.0f};
     HeroShadowConfiguration heroShadow{};
     InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
     ArenaVector<LightInfo> lights{};

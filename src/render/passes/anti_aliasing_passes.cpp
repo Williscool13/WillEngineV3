@@ -244,8 +244,8 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
 // Builds the render-res hero-shadow reactivity mask for any TAA resolve to snap history to current. Returns false when not built.
 static bool AddHeroReactivePass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent)
 {
-    const bool bHeroReactive = viewFamily.heroShadow.bEnabled && viewFamily.heroShadow.reactiveScale > 0.0f
-        && graph.HasTexture(SID("hero_sun_shadow")) && graph.HasTexture(SID("hero_sun_shadow_history"));
+    const bool bHeroReactive = viewFamily.heroShadow.bEnabled && viewFamily.heroShadow.shadowReactiveScale > 0.0f
+                               && graph.HasTexture(SID("hero_sun_shadow")) && graph.HasTexture(SID("hero_sun_shadow_history"));
     if (!bHeroReactive) { return false; }
 
     graph.CreateTexture(SID("hero_reactive"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
@@ -253,8 +253,8 @@ static bool AddHeroReactivePass(RenderGraph& graph, PipelineManager* pipelineMan
     reactivePass.ReadSampledImage(SID("hero_sun_shadow"));
     reactivePass.ReadSampledImage(SID("hero_sun_shadow_history"));
     reactivePass.WriteStorageImage(SID("hero_reactive"));
-    const float reactiveScaleValue = viewFamily.heroShadow.reactiveScale;
-    const int32_t dilationRadius = viewFamily.heroShadow.reactiveDilation;
+    const float reactiveScaleValue = viewFamily.heroShadow.shadowReactiveScale;
+    const int32_t dilationRadius = viewFamily.heroShadow.shadowReactiveDilation;
     reactivePass.Execute([pipelineManager, width = renderExtent[0], height = renderExtent[1], reactiveScaleValue, dilationRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("hero_reactive"));
         if (!pipeline) { return; }
@@ -392,6 +392,13 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
     const Core::DonutTAAConfiguration& donutConfig = viewFamily.aaConfig.donutTaa;
 
     const bool bHeroReactive = AddHeroReactivePass(graph, pipelineManager, viewFamily, inputExtent);
+    const float heroRimStrength = (viewFamily.bHasHero && viewFamily.heroShadow.bSilhouetteEnabled) ? viewFamily.heroShadow.silhouetteRimStrength : 0.0f;
+    const float heroRimUniformGate = viewFamily.heroShadow.bSilhouetteUniform ? viewFamily.heroMotionAmount : -1.0f;
+
+    const bool bRimDebug = heroRimStrength > 0.0f && StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size()) == SID("hero_rim");
+    if (bRimDebug) {
+        graph.CreateTexture(SID("hero_rim"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, outputExtent[0], outputExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    }
 
     RenderPass& taaPass = graph.AddPass(SID("Donut TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     taaPass.ReadBuffer(SID("scene_data"));
@@ -405,7 +412,10 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
     }
     taaPass.WriteStorageImage(SID("donut_taa_feedback"));
     taaPass.WriteStorageImage(SID("donut_taa_output"));
-    taaPass.Execute([&, pipelineManager, bHasHistory, bHeroReactive,
+    if (bRimDebug) {
+        taaPass.WriteStorageImage(SID("hero_rim"));
+    }
+    taaPass.Execute([&, pipelineManager, bHasHistory, bHeroReactive, heroRimStrength, heroRimUniformGate, bRimDebug,
             inWidth = static_cast<float>(inputExtent[0]), inHeight = static_cast<float>(inputExtent[1]),
             outWidth = static_cast<float>(outputExtent[0]), outHeight = static_cast<float>(outputExtent[1]),
             dispatchW = outputExtent[0], dispatchH = outputExtent[1],
@@ -441,6 +451,9 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                 .inputOverOutputViewSize = {inWidth / outWidth, inHeight / outHeight},
                 .outputOverInputViewSize = {outWidth / inWidth, outHeight / inHeight},
                 .heroReactiveIndex = bHeroReactive ? graph.GetSampledImageViewDescriptorIndex(SID("hero_reactive")) : ~0x0u,
+                .heroRimStrength = heroRimStrength,
+                .heroRimDebugIndex = bRimDebug ? graph.GetStorageImageViewDescriptorIndex(SID("hero_rim")) : ~0x0u,
+                .heroRimUniformGate = heroRimUniformGate,
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("taa_donut"));

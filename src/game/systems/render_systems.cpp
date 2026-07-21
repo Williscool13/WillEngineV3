@@ -990,6 +990,19 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 if (model && model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
                     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
                     AccumulateWorldAABB(vf.heroBoundsMin, vf.heroBoundsMax, vf.bHasHero, model->bounds.aabb, renderTransform.modelMatrix);
+
+                    // Camera-independent object motion (model matrices never carry the camera): world speed in radii/sec.
+                    const glm::vec3 curPos = glm::vec3(renderTransform.modelMatrix[3]);
+                    const glm::vec3 prevPos = glm::vec3(renderTransform.previousMatrix[3]);
+                    const glm::vec3 modelHalf = 0.5f * (model->bounds.aabb.max - model->bounds.aabb.min);
+                    const glm::mat3 lin = glm::mat3(renderTransform.modelMatrix);
+                    const glm::vec3 worldHalf = glm::abs(lin[0]) * modelHalf.x + glm::abs(lin[1]) * modelHalf.y + glm::abs(lin[2]) * modelHalf.z;
+                    const float radius = glm::max(glm::max(worldHalf.x, worldHalf.y), worldHalf.z);
+                    const float dt = frameBuffer->timeFrame.deltaTime;
+                    if (dt > 0.0f && radius > 1e-5f) {
+                        const float speed = glm::length(curPos - prevPos) / dt / radius;
+                        vf.heroMotionAmount = glm::max(vf.heroMotionAmount, glm::smoothstep(0.1f, 1.0f, speed));
+                    }
                 }
             }
 
