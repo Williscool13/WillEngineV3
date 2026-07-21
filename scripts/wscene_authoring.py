@@ -32,10 +32,12 @@ SPLINE = "7578841921361002753"      # SplineMeshComponent (render): profile/rail
 STATIC_MESH = "6701167194273300414"     # StaticMeshComponent: modelId, modelFlags, renderOffset, renderRotation
 STATIC_MESH_PRIMITIVE = "9501467225504619303"  # StaticMeshPrimitiveComponent: modelId, primitiveOrdinal, modelFlags, renderOffset, renderRotation
 SPAWN = "7249683205650136767"       # PlayerSpawnComponent: offset, priority
-LIGHT_DIRECTIONAL = "10824031899279087785"  # DirectionalLightComponent: color, intensity, priority, angularRadiusDegrees
-LIGHT_POINT = None       # not yet captured from a template scene -- grep light_components.cpp PointLightComponent::Serialize + a scene using one
-LIGHT_AREA = None        # same -- AreaLightComponent
-LIGHT_SPHERE = None      # same -- SphereLightComponent
+LIGHT_DIRECTIONAL = "10824031899279087785"  # DirectionalLightComponent: color, intensity, priority, angularRadiusDegrees; direction = rotation*(0,0,1), highest priority wins
+LIGHT_POINT = "11855831114528409091"   # PointLightComponent: color[3], intensity, range
+LIGHT_AREA = "9298580231829766696"     # AreaLightComponent: color[3], intensity, halfWidth, halfHeight, range, drawEmissiveSurface; world extent = half*transform.scale, emissive quad = unit XZ plane
+LIGHT_SPHERE = "8299222229286905880"   # SphereLightComponent: color[3], intensity, radius, range, drawEmissiveSurface; world radius = radius*transform.scale.x
+# NOTE: light `color` is packed to 8-bit [0,1] on the GPU -- HDR brightness MUST come from `intensity`, never color>1.
+# `range` is the influence/falloff+cull radius (NOT the emissive size). `drawEmissiveSurface`=visible glowing rep mesh.
 GIZMO = "9701894349906914118"       # DebugGizmoComponent: color, extents, lineWidth, shape (0=Box?,2=Sphere confirmed)
 
 # NOT yet keyed (no example scene exists with these -- do NOT guess the hash,
@@ -53,7 +55,7 @@ GIZMO = "9701894349906914118"       # DebugGizmoComponent: color, extents, lineW
 #   name <scene name>
 #   entity_count <n>
 #   end_header
-#   { "editor_camera": {"rotation":[x,y,z,w OR w,x,y,z? -- CHECK, camera may differ from entity convention],
+#   { "editor_camera": {"rotation":[w,x,y,z]  (SAME as entities -- scene_system.cpp:233/320),
 #                        "translation":[x,y,z]},
 #     "entities": [ {<entity object>}, ... ],
 #     "scene_id": <same uint64 as header id>,
@@ -115,11 +117,12 @@ def spiral_params(stepCount, totalHeight, outerRadius, centerColumnRadius, tread
             "outerRadius": outerRadius, "centerColumnRadius": centerColumnRadius, "treadThickness": treadThickness,
             "degreesPerStep": degreesPerStep, "totalSweep": totalSweep, "bSpecifyDegreesPerStep": specifyDegrees,
             "arcSegments": arcSegments, "bShowCenterColumn": showColumn, "bRamp": ramp}, 23
+def ring_params(outer, inner, slices=32, doubleSided=True): return {"outerRadius": outer, "innerRadius": inner, "slices": slices, "bDoubleSided": doubleSided}, 24
 
 # proceduralType index -> variant name, for reference / error messages
 PROC_TYPE_NAMES = ["monostate", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door",
                     "Plane", "Sphere", "SubdividedSphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                    "Icosahedron", "Dodecahedron", "KleinBottle", "TrefoilKnot", "CurvedRamp", "Bowl", "SpiralStaircase"]
+                    "Icosahedron", "Dodecahedron", "KleinBottle", "TrefoilKnot", "CurvedRamp", "Bowl", "SpiralStaircase", "Ring"]
 
 # =============================================================================
 # Spiral staircase ramp-mode geometry (ported from CompoundSpiralStaircase in
@@ -188,6 +191,29 @@ def add_procedural(entity, ptype_idx, fields, motion=0, friction=0.5, restitutio
         "motionQuality": 0, "layerOverride": 65535,
         "enhancedInternalEdgeRemoval": False, "isSensor": False, "shapes": [shape],
     }
+    return entity
+
+# ---- lights (no physics; a light entity is just Transform + light component) ----
+# All keys/fields verified 2026-07-21 against light_components.cpp + isolated_*_light.wscene.
+# HDR brightness comes from `intensity`; `color` is clamped to 8-bit [0,1] on upload.
+def add_area_light(entity, color=(1.0, 1.0, 1.0), intensity=100.0, half_width=1.0, half_height=1.0, draw_range=100.0, draw_emissive=True):
+    """Rectangular area light. World extent = (half_width,half_height)*transform.scale; emissive quad lies in the local XZ plane.
+    `draw_range` is the influence/falloff+cull radius, NOT the emissive size."""
+    entity[LIGHT_AREA] = {"color": list(color), "intensity": intensity, "halfWidth": half_width,
+                           "halfHeight": half_height, "range": draw_range, "drawEmissiveSurface": draw_emissive}
+    return entity
+
+def add_sphere_light(entity, color=(1.0, 1.0, 1.0), intensity=100.0, radius=0.5, draw_range=100.0, draw_emissive=True):
+    """Sphere (point-like) light. World radius = radius*transform.scale.x. Use radius~0.05 for a near-point emitter."""
+    entity[LIGHT_SPHERE] = {"color": list(color), "intensity": intensity, "radius": radius,
+                             "range": draw_range, "drawEmissiveSurface": draw_emissive}
+    return entity
+
+def add_directional_light(entity, color=(1.0, 1.0, 1.0), intensity=2.0, priority=0, angular_radius_deg=1.0):
+    """Sun. Direction = transform.rotation * (0,0,1) (local +Z). Highest `priority` wins when several exist.
+    angular_radius_deg = sun-disk half-angle (0 = hard shadow, larger = softer penumbra)."""
+    entity[LIGHT_DIRECTIONAL] = {"color": list(color), "intensity": intensity, "priority": priority,
+                                  "angularRadiusDegrees": angular_radius_deg}
     return entity
 
 ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT = 0, 1, 2
@@ -324,7 +350,10 @@ def add_wall(entities, name, p_start, p_end, lateral_offset, height=0.6, thickne
 # =============================================================================
 def write_scene(path, entities, scene_id, scene_name, editor_camera=None):
     if editor_camera is None:
-        editor_camera = {"rotation": [0.0, 0.0, 0.0, 1.0], "translation": [0.0, 4.0, 12.0]}
+        # editor_camera rotation is [w,x,y,z] -- SAME as entity quats, NOT [x,y,z,w].
+        # (scene_system.cpp:233 writes {w,x,y,z}; :320 reads glm::quat(w,x,y,z).)
+        # [1,0,0,0] = identity/upright. A stray w=0 here flips the camera upside-down.
+        editor_camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 4.0, 12.0]}
     body = {"editor_camera": editor_camera, "entities": entities, "scene_id": scene_id, "scene_name": scene_name}
     header = f"wscene\nversion 1 0\nid {scene_id}\nname {scene_name}\nentity_count {len(entities)}\nend_header\n"
     with open(path, "w", encoding="utf-8") as f:
