@@ -378,6 +378,8 @@ nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)
     return {
         {"bEnabled", p.bEnabled},
         {"sampleCount", p.sampleCount},
+        {"reactiveScale", p.reactiveScale},
+        {"reactiveDilation", p.reactiveDilation},
     };
 }
 
@@ -385,6 +387,8 @@ void FromJson(const nlohmann::json& r, Core::HeroShadowConfiguration& p)
 {
     p.bEnabled = r.contains("bEnabled") && r["bEnabled"].is_boolean() ? r["bEnabled"].get<bool>() : p.bEnabled;
     p.sampleCount = r.contains("sampleCount") && r["sampleCount"].is_number_integer() ? r["sampleCount"].get<int32_t>() : p.sampleCount;
+    p.reactiveScale = r.contains("reactiveScale") && r["reactiveScale"].is_number() ? r["reactiveScale"].get<float>() : p.reactiveScale;
+    p.reactiveDilation = r.contains("reactiveDilation") && r["reactiveDilation"].is_number_integer() ? r["reactiveDilation"].get<int32_t>() : p.reactiveDilation;
 }
 
 nlohmann::json ToJson(const Core::GTAOConfiguration& p)

@@ -299,6 +299,10 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(srcPixel.x);
             break;
         }
+        case 37: { // HeroReactive: TAA snap mask, red = where TAA is forced to current (the moving shadow contour). Dark = normal temporal blend.
+            srcPixel.xyz = float3(srcPixel.x, 0.0, 0.0);
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

@@ -836,6 +836,8 @@ struct HeroShadowConfiguration
 {
     bool bEnabled{true};
     int32_t sampleCount{16};
+    float reactiveScale{2.0f};
+    int32_t reactiveDilation{1};
 };
 
 struct ViewFamily

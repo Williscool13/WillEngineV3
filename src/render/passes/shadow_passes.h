@@ -14,6 +14,7 @@ namespace Render
 class PipelineManager;
 
 inline const StringID HERO_SUN_SHADOW_TARGET = SID("hero_sun_shadow");
+inline const StringID HERO_SUN_SHADOW_HISTORY = SID("hero_sun_shadow_history");
 
 void SetupShadowsResolve(RenderGraph& graph,
                          PipelineManager* pipelineManager,

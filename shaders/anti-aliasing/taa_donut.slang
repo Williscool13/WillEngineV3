@@ -261,6 +261,12 @@ void ComputeDonutTaa(
         float sampleWeight = saturate(1.0 - upscalingFactor * dot(distanceToLowResPixel, distanceToLowResPixel));
         float blendWeight = saturate(max(motionWeight, sampleWeight) * newFrameWeight);
 
+        // Snap to current on the hero shadow's moving contour; render-res mask sampled at the resolved input pixel.
+        if (pc.heroReactiveIndex != ~0x0u) {
+            float heroReactive = rdgTexturesFloat[pc.heroReactiveIndex].Load(int3(clamp(inputPosInt, int2(0, 0), inputMax), 0)).r;
+            blendWeight = lerp(blendWeight, 1.0, heroReactive);
+        }
+
         resultPQ = lerp(historyClamped, thisPixelColor, blendWeight);
     }
     else

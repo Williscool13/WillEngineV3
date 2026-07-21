@@ -803,10 +803,20 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC float invalidHistoryBlend;
     SHADER_PUBLIC float lumaBoostCap;
     SHADER_PUBLIC float grazingTurnoverStrength;
-    SHADER_PUBLIC float pad0;
+    SHADER_PUBLIC uint32_t heroReactiveIndex;
     SHADER_PUBLIC SHADER_PTR(float) exposureLuminance;
     SHADER_PUBLIC float exposureTarget;
     SHADER_PUBLIC float pad1;
+};
+
+SHADER_PUBLIC struct HeroReactivePushConstant
+{
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t currentIndex;
+    SHADER_PUBLIC uint32_t historyIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float reactiveScale;
+    SHADER_PUBLIC int32_t dilationRadius;
 };
 
 // Donut-ported native-res TAA resolve (shaders/donut_taa.slang); fields match the shader.
@@ -832,6 +842,7 @@ SHADER_PUBLIC struct DonutTaaPushConstant
     SHADER_PUBLIC float2 outputTextureSizeInv;
     SHADER_PUBLIC float2 inputOverOutputViewSize;
     SHADER_PUBLIC float2 outputOverInputViewSize;
+    SHADER_PUBLIC uint32_t heroReactiveIndex;
 };
 
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant

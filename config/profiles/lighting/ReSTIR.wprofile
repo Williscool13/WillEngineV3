@@ -46,6 +46,8 @@
   },
   "heroShadow": {
     "bEnabled": true,
+    "reactiveDilation": 2,
+    "reactiveScale": 2.0,
     "sampleCount": 16
   },
   "iblIntensity": 1.0,

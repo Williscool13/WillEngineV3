@@ -102,6 +102,8 @@ void SetupHeroSunShadow(RenderGraph& graph,
             const uint32_t groupsY = (renderExtent[1] + 7) / 8;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
+
+    graph.CarryTextureToNextFrame(HERO_SUN_SHADOW_TARGET, HERO_SUN_SHADOW_HISTORY, VK_IMAGE_USAGE_SAMPLED_BIT);
 }
 
 static void AddSigmaBlurPass(RenderGraph& graph,

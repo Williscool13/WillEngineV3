@@ -529,12 +529,14 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("shadows_resolve"), src / "shadows_resolve.spv", "ComputeShadowsResolve",
                             sizeof(ShadowsResolvePushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("hero_reactive"), src / "hero_reactive.spv", "ComputeHeroReactive",
+                            sizeof(HeroReactivePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("taa_main"), src / "taa.spv", "ComputeTemporalAntialiasing",
                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
     RegisterComputePipeline(SID("taa_naive"), src / "taa_naive.spv", "ComputeNaiveTemporalAntialiasing",
                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
     RegisterComputePipeline(SID("taa_donut"), src / "taa_donut.spv", "ComputeDonutTaa",
-                            sizeof(DonutTaaPushConstant), PipelineCategory::Legacy);
+                            sizeof(DonutTaaPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("smaa_luma_edge_detection"), src / "smaa.spv", "LumaEdgeDetectionMain",
                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);

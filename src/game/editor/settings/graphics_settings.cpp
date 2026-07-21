@@ -465,6 +465,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (ImGui::CollapsingHeader("Hero Sun Shadow")) {
             if (ImGui::Button("Hero Visibility")) setDebugTarget("hero_sun_shadow", DebugTransformationType::HeroSunShadow, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Hero Shadow Prev")) setDebugTarget("hero_sun_shadow_history", DebugTransformationType::HeroSunShadow, Core::DebugViewAspect::None);
+            if (ImGui::Button("Hero TAA Reactive")) setDebugTarget("hero_reactive", DebugTransformationType::HeroReactive, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("ReBLUR")) {
@@ -959,6 +962,14 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (Widgets::SliderInt("Hero Shadow Rays", &heroShadow.sampleCount, 4, 64)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Sun-disk rays per shadowed pixel. Sets the penumbra's gradient steps (rays + 1 levels), so raise it when a hero casts from far above its receiver and the soft edge bands. Cost is linear but only over pixels the hero actually shadows.");
+            }
+            if (Widgets::SliderFloat("Hero TAA Reactivity", &heroShadow.reactiveScale, 0.0f, 8.0f)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("How hard TAA snaps to the current frame where the hero shadow swept a pixel, killing the trailing smear on the moving contour. Higher is crisper but reintroduces a little aliasing on that thin band; 0 disables the reaction (shadow trails under motion).");
+            }
+            if (Widgets::SliderInt("Hero TAA Dilation", &heroShadow.reactiveDilation, 0, 3)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Conservatively grows the reactive mask by this many pixels so a sub-pixel gap at the contour cannot leave a sliver of stale history. 1 is usually enough; raise if the shadow edge still trails a hairline. Use the Debug View 'Hero TAA Reactive' target to see the covered band.");
             }
         }
 
