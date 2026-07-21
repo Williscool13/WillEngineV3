@@ -2,6 +2,7 @@ module binning_common;
 
 import lights_interop;
 import shader_functions;
+import packing_functions;
 import world_grid_interop;
 
 // FrustumBinning: screen-frustum-tied clusters (froxels)
@@ -51,6 +52,21 @@ public float SqDistPointAABB(float3 p, float3 mn, float3 mx)
 }
 
 // WorldGridBinning: camera-centered cascaded world-space grid
+
+/** Light power for strongest-K ranking; matches the CPU alias metric (intensity * area * maxColor). Triangles are excluded from the bin. */
+public float WorldGridLightPower(LightInfo light)
+{
+    float area;
+    if (light.type == LIGHT_TYPE_SPHERE) {
+        float r = light.right.w;
+        area = 4.0 * 3.14159265358979 * r * r;
+    } else {
+        area = 4.0 * light.right.w * light.up.w;
+    }
+    float3 color = UnpackUnorm4x8(light.packedColor).rgb;
+    float colorMax = max(color.r, max(color.g, color.b));
+    return light.intensity * area * colorMax;
+}
 
 public float WorldGridCellSizeAtLevel(uint level)
 {

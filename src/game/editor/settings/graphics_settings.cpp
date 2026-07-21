@@ -995,8 +995,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
-        if (bDefaultMode) {
-            ImGui::SeparatorText("Default Rendering");
+        if (bDefaultMode || bReSTIRMode) {
+            ImGui::SeparatorText("Directional Sun Shadow");
 
             if (ImGui::CollapsingHeader("SIGMA Shadow Denoiser")) {
                 Core::SIGMAParams& sigma = state->lighting.sigmaParams;
@@ -1034,14 +1034,18 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
                 // Sections compiled out via restir_features_macros.h are greyed: the runtime toggle has no effect until the macro is set to 1 and shaders are rebuilt.
                 ImGui::SeparatorText("Base (Candidate Generation)");
+                const char* proposalModes[] = {"World Grid Bin", "ReGIR"};
+                int proposalIdx = static_cast<int>(restir.lightProposal);
+                if (ImGui::Combo("Light Proposal", &proposalIdx, proposalModes, IM_ARRAYSIZE(proposalModes))) {
+                    restir.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(proposalIdx);
+                    changed = true;
+                }
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Candidate source for ReSTIR DI. World Grid Bin: cascaded strongest-K analytic bin (sparse analytic scenes). ReGIR: reservoir hash grid (dense/emissive-triangle scenes; schedules the presample/fill producer chain)."); }
                 ImGui::BeginDisabled(!RESTIR_ENABLE_INITIAL_VISIBILITY);
                 if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
                     changed = true;
                 }
                 ImGui::EndDisabled();
-                if (ImGui::Checkbox("Sun Candidate Visibility", &restir.bSunCandidateVisibility)) {
-                    changed = true;
-                }
                 if (Widgets::SliderFloat("BRDF Ray Roughness Max", &restir.brdfRoughnessMax, 0.0f, 1.0f,
                                          {.format = "%.2f", .tooltip = "Roughness ceiling for the base pass's piggybacked BRDF-importance-sampled ray. Reflections can only narrow within this, never exceed it.", .reset = true, .resetTo = 0.3f})) {
                     changed = true;
@@ -1128,7 +1132,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     }
                 });
 
-                if (bReGIR) {
+                if (bReGIR && restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
                     ImGui::SeparatorText("ReGIR");
                     if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
                         changed = true;

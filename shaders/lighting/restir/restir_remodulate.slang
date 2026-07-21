@@ -84,22 +84,6 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb;
     float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb;
 
-    // Hero instances are excluded from the traced sun visibility, uses dedicated path for crisp shadows.
-    if (pc.heroShadowIndex != ~0x0u) {
-        float heroVisibility = rdgTexturesFloat[pc.heroShadowIndex].Load(int3(pixel, 0)).r;
-        if (heroVisibility < 1.0) {
-            float3 sunL = normalize(mul((float3x3)scene.view, normalize(-pc.lightData->directionalLight.directionIntensity.xyz)));
-            float3 sunDiffuse;
-            float3 sunSpecular;
-            EvalSunContribution(pc.lightData->directionalLight, N, V, sunL, nDotV, F0, metallic, roughness, specReflectance, sunDiffuse, sunSpecular);
-
-            float diffuseShare = saturate(Luma(sunDiffuse) / max(Luma(diffuse), 1e-6));
-            float specularShare = saturate(Luma(sunSpecular) / max(Luma(specular), 1e-6));
-            diffuse *= lerp(1.0, heroVisibility, diffuseShare);
-            specular *= lerp(1.0, heroVisibility, specularShare);
-        }
-    }
-
     // Indirect: diffuse from the DDGI probe volume when it covers this point (skybox irradiance fallback), specular from the prefiltered skybox.
     float3 indirectDiffuse = float3(0.0);
     float3 ibl = float3(0.0);

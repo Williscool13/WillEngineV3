@@ -16,12 +16,12 @@ import bindless_declarations;
 import restir_common;
 import random_common;
 import regir_hash_common;
+import restir_light_proposal_common;
 
 #include "restir_features_macros.h"
 
-[shader("compute")]
-[numthreads(16, 16, 1)]
-void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+// Generic over the candidate proposal (ReGIR grid or WorldGrid strongest-K bin); the two backends differ only in Acquire/Draw/Marginal.
+void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID) {
     uint field = pc.activeCheckerboardField;
     uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
     uint2 reservoirCoord = threadID.xy;
@@ -62,7 +62,6 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
     int mBrdf = (roughness <= pc.brdfRoughnessMax) ? RESTIR_M_BRDF : 0;
 
     int lightCount = pc.lightData->lightCount;
-    DirectionalLightData sun = pc.lightData->directionalLight;
 
     Reservoir r_gen = ReservoirEmpty();
     ReservoirAccum accum_gen = ReservoirAccumEmpty();
@@ -74,33 +73,7 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
     float3 cameraPos = scene.cameraWorldPos.xyz;
     float camDist = distance(worldPos, cameraPos);
 
-    bool useGrid = false;
-    uint gridBase = 0u;
-    float3 cellCenterVS = float3(0.0);
-    float cellTargetSum = 0.0;
-    float cellOccupancy = 0.0;
-    if (camDist <= REGIR_MAX_DIST) {
-        float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
-        float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
-
-        [unroll]
-        for (int attempt = 0; attempt < 2 && !useGrid; attempt++)
-        {
-            float3 queryPos = (attempt == 0) ? (worldPos + jitter) : worldPos;
-            ReGIRHashKey key = ReGIRComputeKey(queryPos, cameraPos);
-            uint cellSlot = ReGIRHashFind(pc.hashEntries, key);
-            if (cellSlot != REGIR_HASH_INVALID) {
-                float2 cd = pc.cellData[cellSlot];
-                if (cd.x > 0.0) {
-                    cellTargetSum = cd.x;
-                    gridBase = ReGIRCellReservoirBase(cellSlot);
-                    cellCenterVS = mul(scene.view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
-                    cellOccupancy = cd.y;
-                    useGrid = true;
-                }
-            }
-        }
-    }
+    prop.Acquire(worldPos, cameraPos, scene.view, camDist, h);
 
     if (lightCount > 0) {
         float invLightCount = 1.0 / float(lightCount);
@@ -110,21 +83,9 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
             LightView candVS = (LightView)0;
             float w_i = 0.0;
 
-            int lightIdx = -1;
-            float pSelect = 0.0;
-            if (useGrid) {
-                // Stratified over the candidate loop so the taps hit distinct cell regions (RTXDI parity).
-                float uStrat = (float(i) + HashStep(h)) / float(RESTIR_M_LIGHT);
-                uint slotInCell = min(uint(uStrat * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
-                ReGIRReservoir gr = pc.reservoirs[gridBase + slotInCell];
-                if (gr.lightIdx != ~0u && gr.lightIdx < uint(lightCount) && gr.totalWeight > 0.0) {
-                    lightIdx = int(gr.lightIdx);
-                    pSelect = gr.targetPdf / gr.totalWeight;
-                } else {
-                    lightIdx = clamp(int(HashStep(h) * float(lightCount)), 0, lightCount - 1);
-                    pSelect = invLightCount;
-                }
-            } else {
+            int lightIdx;
+            float pSelect;
+            if (!prop.Draw(uint(i), uint(RESTIR_M_LIGHT), lightCount, h, lightIdx, pSelect)) {
                 lightIdx = clamp(int(HashStep(h) * float(lightCount)), 0, lightCount - 1);
                 pSelect = invLightCount;
             }
@@ -273,8 +234,8 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
 #endif
                     Xi = bTriHit ? triXi : viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                    // The ReGIR selection pdf is modeled from cell-average occupancy, not the exact per-reservoir pdf, so it does not partition unity when mBrdf > 0.
-                    float pSelect = useGrid ? (cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, UnpackUnorm4x8(vs.packedColor).rgb) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(lightCount))) : (1.0 / float(lightCount));
+                    // Backend-specific marginal light-selection pdf for the BRDF-hit light (ReGIR: cell-average model; Bin: exact top-K membership).
+                    float pSelect = prop.Marginal(hitLightIdx, vs, lightCount);
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, LIGHT_GEOM_MIN_DIST2)) : 0.0;
                     float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
@@ -294,56 +255,41 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
 
     }
 
-    if (sun.directionIntensity.w > 0.0) {
-        float2 xiSun = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 4u);
-        float p_cone;
-        float3 sunDirWorld = SampleSunConeDirection(SunDirectionWorld(sun), sun.angularRadius, xiSun.x, xiSun.y, p_cone);
-        float3 sunDirView = normalize(mul((float3x3)scene.view, sunDirWorld));
-        float p_hat_sun = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, SunRadiance(sun));
-        float w_sun = (p_cone > 0.0) ? (p_hat_sun / p_cone) : 0.0;
-        // Shadow-test at candidate selection: unshadowed sun otherwise dominates RIS then dies at the winner
-        // trace, starving disoccluded pixels. Unbiased since the sun is a disjoint single-candidate technique.
-        if (pc.bSunCandidateVisibility != 0u && w_sun > 0.0) {
-            float3 worldNSun = normalize(mul(float3x3(scene.invView), N));
-            if (!RestirSunShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldNSun, sunDirWorld, worldTexelSize)) {
-                w_sun = 0.0;
-            }
-        }
-        if (ReservoirAddSample(accum_gen, w_sun, HashStep(h))) {
-            r_gen.lightIdx = LIGHT_IDX_SUN;
-            r_gen.sampleOffsetPacked = PackNormalOct16(sunDirWorld);
-        }
-    }
-
     if (accum_gen.M > 0) { r_gen.M = 1u; }
 
     if (r_gen.lightIdx != ~0u) {
-        if (r_gen.lightIdx == LIGHT_IDX_SUN) {
-            float3 sunDirWorld = UnpackNormalOct16(r_gen.sampleOffsetPacked);
-            float3 sunDirView = normalize(mul((float3x3)scene.view, sunDirWorld));
-            float p_hat_gen = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, SunRadiance(sun));
-            ReservoirFinalize(r_gen, accum_gen, p_hat_gen, 1.0);
+        LightView winnerVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
+        float3 yStar = DecodeSamplePos(r_gen.sampleOffsetPacked, winnerVS);
+        LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
+        float p_hat_gen = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity);
+        ReservoirFinalize(r_gen, accum_gen, p_hat_gen, 1.0);
 #if RESTIR_ENABLE_INITIAL_VISIBILITY
-            if (pc.bInitialVisibility != 0u && r_gen.W > 0.0) {
-                float3 worldN = normalize(mul(float3x3(scene.invView), N));
-                if (!RestirSunShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, sunDirWorld, worldTexelSize)) { r_gen.W = 0.0; }
-            }
-#endif
-        } else {
-            LightView winnerVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
-            float3 yStar = DecodeSamplePos(r_gen.sampleOffsetPacked, winnerVS);
-            LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
-            float p_hat_gen = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity);
-            ReservoirFinalize(r_gen, accum_gen, p_hat_gen, 1.0);
-#if RESTIR_ENABLE_INITIAL_VISIBILITY
-            if (pc.bInitialVisibility != 0u && r_gen.W > 0.0) {
-                float3 worldN = normalize(mul(float3x3(scene.invView), N));
-                float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
-                if (!RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize)) { r_gen.W = 0.0; }
-            }
-#endif
+        if (pc.bInitialVisibility != 0u && r_gen.W > 0.0) {
+            float3 worldN = normalize(mul(float3x3(scene.invView), N));
+            float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+            if (!RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize)) { r_gen.W = 0.0; }
         }
+#endif
     }
 
     pc.outputBuffer[pixelIdx] = r_gen;
+}
+
+[shader("compute")]
+[numthreads(16, 16, 1)]
+void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+    ReGIRProposal prop;
+    prop.hashEntries = pc.hashEntries;
+    prop.reservoirs = pc.reservoirs;
+    prop.cellData = pc.cellData;
+    ReSTIRDIBase(prop, pc, threadID);
+}
+
+[shader("compute")]
+[numthreads(16, 16, 1)]
+void ComputeReSTIRDIBaseBin(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+    WorldGridProposal prop;
+    prop.grid = pc.worldGridBuffer;
+    prop.indexList = pc.worldGridIndexList;
+    ReSTIRDIBase(prop, pc, threadID);
 }

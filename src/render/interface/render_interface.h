@@ -727,13 +727,14 @@ struct ReSTIRParams
     bool bCheckerboard{false};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
-    /** Trace the sun candidate's shadow ray BEFORE it enters the fresh RIS: an occluded sun must not win
-     *  and starve the pixel of signal (slow convergence at disocclusions in sun shadow). */
-    bool bSunCandidateVisibility{true};
     float brdfRoughnessMax{0.3f};
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};
+    // WorldGridBin = cascaded strongest-K analytic bin (default, sparse analytic scenes)
+    // ReGIR = reservoir hash grid (retained for dense/emissive-triangle scenes). Only ReGIR schedules the presample/fill producer chain.
+    enum class LightProposal : uint32_t { WorldGridBin = 0, ReGIR = 1 };
+    LightProposal lightProposal{LightProposal::WorldGridBin};
     // Emissive triangle lights
     bool bEmissiveTriangleLights{true};
     float emissiveTriRangeMultiplier{8.0f};

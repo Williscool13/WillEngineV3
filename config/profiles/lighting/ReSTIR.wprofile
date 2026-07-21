@@ -14,7 +14,7 @@
     "brightnessThreshold": 0.10000000149011612,
     "cascadeCount": 6,
     "distanceExponent": 50.0,
-    "edgeBlendCells": 3.96610164642334,
+    "edgeBlendCells": 3.0,
     "hysteresis": 0.5,
     "irradianceGamma": 5.0,
     "irradianceThreshold": 0.25,
@@ -46,9 +46,12 @@
   },
   "heroShadow": {
     "bEnabled": true,
-    "reactiveDilation": 2,
-    "reactiveScale": 2.0,
-    "sampleCount": 16
+    "bSilhouetteEnabled": true,
+    "bSilhouetteUniform": true,
+    "sampleCount": 16,
+    "shadowReactiveDilation": 1,
+    "shadowReactiveScale": 2.0,
+    "silhouetteRimStrength": 0.800000011920929
   },
   "iblIntensity": 1.0,
   "lightingMode": 1,
@@ -88,6 +91,7 @@
     "denoiserMode": 3,
     "emissiveTriMaxPerPrimitive": 256,
     "emissiveTriRangeMultiplier": 8.0,
+    "lightProposal": 0,
     "reblur": {
       "antilagLuminanceSensitivity": 3.0,
       "antilagLuminanceSigmaScale": 2.0,

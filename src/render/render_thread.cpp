@@ -544,6 +544,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             const bool bNeedsWorldGrid = viewFamily.lightingMode == Core::LightingMode::Default
                                          || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled)
+                                         || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin)
                                          || frameBuffer.ddgi.bEnabled;
             if (bNeedsWorldGrid) {
                 SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0);
@@ -684,8 +685,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         const uint32_t restirCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) ? 1u : 0u;
                         const float restirCheckerboardResolveSpeed = ComputeCheckerboardResolveAccumSpeed(viewFamily.aaConfig.mode, frameNumber, renderFps);
 
-                        SetupHeroSunShadow(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
-
                         const bool bResetReSTIRHistory = (previousRestirCheckerboardField == 0u) != (restirCheckerboardField == 0u);
                         previousRestirCheckerboardField = restirCheckerboardField;
                         SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection, bResetReSTIRHistory);
@@ -714,7 +713,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     }
                 }
 
-                if (viewFamily.directionalLight.bEnabled && viewFamily.lightingMode == Core::LightingMode::Default) {
+                if (viewFamily.directionalLight.bEnabled && (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)) {
                     const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
                     const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
                     SetupHeroSunShadow(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);

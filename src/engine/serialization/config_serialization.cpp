@@ -189,10 +189,10 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bCheckerboard", p.bCheckerboard},
         {"boilingFilterStrength", p.boilingFilterStrength},
         {"bInitialVisibility", p.bInitialVisibility},
-        {"bSunCandidateVisibility", p.bSunCandidateVisibility},
         {"brdfRoughnessMax", p.brdfRoughnessMax},
         {"regirWClamp", p.regirWClamp},
         {"restirWClamp", p.restirWClamp},
+        {"lightProposal", static_cast<uint32_t>(p.lightProposal)},
         {"bEmissiveTriangleLights", p.bEmissiveTriangleLights},
         {"emissiveTriRangeMultiplier", p.emissiveTriRangeMultiplier},
         {"emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive},
@@ -232,10 +232,10 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bCheckerboard = getBool("bCheckerboard", p.bCheckerboard);
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
-    p.bSunCandidateVisibility = getBool("bSunCandidateVisibility", p.bSunCandidateVisibility);
     p.brdfRoughnessMax = r.contains("brdfRoughnessMax") && r["brdfRoughnessMax"].is_number() ? r["brdfRoughnessMax"].get<float>() : p.brdfRoughnessMax;
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
+    p.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(getUint("lightProposal", static_cast<uint32_t>(p.lightProposal)));
     p.bEmissiveTriangleLights = getBool("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
     p.emissiveTriRangeMultiplier = r.contains("emissiveTriRangeMultiplier") && r["emissiveTriRangeMultiplier"].is_number() ? r["emissiveTriRangeMultiplier"].get<float>() : p.emissiveTriRangeMultiplier;
     p.emissiveTriMaxPerPrimitive = getInt("emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive);

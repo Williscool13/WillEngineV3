@@ -55,7 +55,6 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
 #endif
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    DirectionalLightData sun = pc.lightData->directionalLight;
     uint lightCount = uint(pc.lightData->lightCount);
     uint2 fullPixel = pixel;
 
@@ -150,7 +149,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         uint2 histRPos = PixelPosToReservoirPos(historyPixel, field);
         Reservoir candidate = pc.historyBuffer[histRPos.y * stride + histRPos.x];
         if (isnan(candidate.W) || isinf(candidate.W)) { candidate = ReservoirEmpty(); }
-        if (candidate.lightIdx != ~0u && (candidate.lightIdx == LIGHT_IDX_SUN || candidate.lightIdx < lightCount)) {
+        if (candidate.lightIdx != ~0u && candidate.lightIdx < lightCount) {
             history = candidate;
         }
     }
@@ -171,19 +170,10 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     if (r_gen.lightIdx != ~0u) {
         float pGen_cur;
         float pGen_hist = 0.0;
-        if (r_gen.lightIdx == LIGHT_IDX_SUN) {
-            float3 sunDirView = normalize(mul((float3x3)scene.view, UnpackNormalOct16(r_gen.sampleOffsetPacked)));
-            float3 sunRadiance = SunRadiance(sun);
-            pGen_cur = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, sunRadiance);
-            if (validHistoryReservoir) {
-                pGen_hist = EvalSunPHat(sunDirView, V, historyN_cvs, li.albedo.xyz, F0, li.metallic, roughness, sunRadiance);
-            }
-        } else {
-            LightView genVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
-            pGen_cur = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
-            if (validHistoryReservoir) {
-                pGen_hist = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness);
-            }
+        LightView genVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
+        pGen_cur = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
+        if (validHistoryReservoir) {
+            pGen_hist = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness);
         }
 
         float denomGen = Mc * pGen_cur + Mi * pGen_hist;
@@ -199,16 +189,9 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     if (validHistoryReservoir) {
         float pHist_cur;
         float pHist_hist;
-        if (history.lightIdx == LIGHT_IDX_SUN) {
-            float3 sunDirView = normalize(mul((float3x3)scene.view, UnpackNormalOct16(history.sampleOffsetPacked)));
-            float3 sunRadiance = SunRadiance(sun);
-            pHist_cur = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, sunRadiance);
-            pHist_hist = EvalSunPHat(sunDirView, V, historyN_cvs, li.albedo.xyz, F0, li.metallic, roughness, sunRadiance);
-        } else {
-            LightView histVS = UnpackLightVS(pc.lightVS[history.lightIdx]);
-            pHist_cur = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
-            pHist_hist = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness);
-        }
+        LightView histVS = UnpackLightVS(pc.lightVS[history.lightIdx]);
+        pHist_cur = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
+        pHist_hist = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness);
 
         float denomHist = Mi * pHist_hist + Mc * pHist_cur;
         float misHist = (denomHist > 0.0) ? (Mi * pHist_hist) / denomHist : 0.0;
@@ -244,32 +227,18 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
 #if RESTIR_ENABLE_CONFIDENCE
         float visPrevTrace = 1.0;
 #endif
-        if (combined.lightIdx == LIGHT_IDX_SUN) {
-            float3 sunDirWorld = UnpackNormalOct16(combined.sampleOffsetPacked);
-            float3 sunDirView = normalize(mul((float3x3)scene.view, sunDirWorld));
-            pHatUnshadowed = EvalSunPHat(sunDirView, V, N, li.albedo.xyz, F0, li.metallic, roughness, SunRadiance(sun));
-            p_hat_winner = bSkipWinnerTrace ? pHatUnshadowed
-                : (RestirSunShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, sunDirWorld, worldTexelSize) ? pHatUnshadowed : 0.0);
+        LightView winnerVS = UnpackLightVS(pc.lightVS[combined.lightIdx]);
+        float3 yStar = DecodeSamplePos(combined.sampleOffsetPacked, winnerVS);
+        float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+        LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
+        pHatUnshadowed = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity);
+        p_hat_winner = bSkipWinnerTrace ? pHatUnshadowed
+            : (RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? pHatUnshadowed : 0.0);
 #if RESTIR_ENABLE_CONFIDENCE
-            // Re-shade the same winner against the previous frame's TLAS: occluder motion flips the pair and drives the gradient.
-            if (pc.prevTlasIndex != ~0u) {
-                visPrevTrace = RestirSunShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, sunDirWorld, worldTexelSize) ? 1.0 : 0.0;
-            }
-#endif
-        } else {
-            LightView winnerVS = UnpackLightVS(pc.lightVS[combined.lightIdx]);
-            float3 yStar = DecodeSamplePos(combined.sampleOffsetPacked, winnerVS);
-            float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
-            LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
-            pHatUnshadowed = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity);
-            p_hat_winner = bSkipWinnerTrace ? pHatUnshadowed
-                : (RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? pHatUnshadowed : 0.0);
-#if RESTIR_ENABLE_CONFIDENCE
-            if (pc.prevTlasIndex != ~0u) {
-                visPrevTrace = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? 1.0 : 0.0;
-            }
-#endif
+        if (pc.prevTlasIndex != ~0u) {
+            visPrevTrace = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? 1.0 : 0.0;
         }
+#endif
         ReservoirFinalize(combined, accum_combined, p_hat_winner, 1.0);
         if (pc.finalWClamp > 0.0) { combined.W = min(combined.W, pc.finalWClamp); }
         winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;

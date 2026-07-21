@@ -561,7 +561,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
         const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
         const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
-        const bool bHeroShadow = graph.HasTexture(HERO_SUN_SHADOW_TARGET);
 
         const StringID shadows = targets.shadows;
 
@@ -586,13 +585,10 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(GI_GATHER_RESOLVED);
             pass.ReadSampledImage(GI_GATHER_DATA);
         }
-        if (bHeroShadow) {
-            pass.ReadSampledImage(HERO_SUN_SHADOW_TARGET);
-        }
         pass.WriteStorageImage(noisyInput);
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, bHeroShadow](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
@@ -616,7 +612,6 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .giResolvedIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_RESOLVED) : ~0x0u,
                 .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
-                .heroShadowIndex = bHeroShadow ? graph.GetSampledImageViewDescriptorIndex(HERO_SUN_SHADOW_TARGET) : ~0x0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1141,7 +1136,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
         const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
         const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
-        const bool bHeroShadow = graph.HasTexture(HERO_SUN_SHADOW_TARGET);
 
         const StringID shadows = targets.shadows;
 
@@ -1166,13 +1160,10 @@ void SetupReBLURDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(GI_GATHER_RESOLVED);
             pass.ReadSampledImage(GI_GATHER_DATA);
         }
-        if (bHeroShadow) {
-            pass.ReadSampledImage(HERO_SUN_SHADOW_TARGET);
-        }
         pass.WriteStorageImage(noisyInput);
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, bHeroShadow](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
@@ -1196,7 +1187,6 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .giResolvedIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_RESOLVED) : ~0x0u,
                 .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
-                .heroShadowIndex = bHeroShadow ? graph.GetSampledImageViewDescriptorIndex(HERO_SUN_SHADOW_TARGET) : ~0x0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

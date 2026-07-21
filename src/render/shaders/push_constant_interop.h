@@ -419,6 +419,8 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(Reservoir) genBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
     SHADER_PUBLIC SHADER_PTR(ReflectionHitDescriptor) reflectionDescriptors;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
     SHADER_PUBLIC uint32_t _pad0;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
@@ -439,7 +441,6 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t bInitialVisibility;
     SHADER_PUBLIC uint32_t bTemporalSearch;
     SHADER_PUBLIC uint32_t activeCheckerboardField;
-    SHADER_PUBLIC uint32_t bSunCandidateVisibility;
     SHADER_PUBLIC float reflectionRoughnessMax;
     SHADER_PUBLIC float brdfRoughnessMax;
     SHADER_PUBLIC float finalWClamp;
@@ -735,7 +736,6 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t giResolvedIndex;
     SHADER_PUBLIC uint32_t giDataIndex;
     SHADER_PUBLIC uint32_t giGatherMode;
-    SHADER_PUBLIC uint32_t heroShadowIndex;
 };
 
 SHADER_PUBLIC struct ReflectionTracePushConstant
@@ -1811,6 +1811,7 @@ SHADER_PUBLIC struct DirectionalLightPushConstant
     SHADER_PUBLIC uint32_t heroShadowIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t _pad0;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint2 shadowExtent;
     SHADER_PUBLIC uint32_t pixelScale;
