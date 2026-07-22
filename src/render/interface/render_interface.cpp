@@ -12,6 +12,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
 
     modelMatrices = ArenaVector<Model>(&arena, wm.modelMatrices);
     lights = ArenaVector<LightInfo>(&arena, wm.lights);
+    reflectionProbes = ArenaFixedVector<ReflectionProbeGPU>(&arena, MAX_REFLECTION_PROBES);
 
     primitiveInstances = ArenaVector<PrimitiveInstanceData>(&arena, wm.primitiveInstances);
     worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, wm.worldGlyphQuads);

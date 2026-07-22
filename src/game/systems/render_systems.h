@@ -34,11 +34,13 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
 void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
@@ -62,6 +64,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
 void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 } // Game

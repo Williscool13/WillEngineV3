@@ -22,6 +22,7 @@
 #include "game/components/gameplay/rotate_in_place_component.h"
 #include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render/light_components.h"
+#include "game/components/render/reflection_probe_component.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/render/static_mesh_primitive_component.h"
 #include "game/components/render/text_component.h"
@@ -49,6 +50,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::AreaLightComponent>(componentRegistry, "AreaLightComponent", false, false);
     RegisterComponent<Component::SphereLightComponent>(componentRegistry, "SphereLightComponent", false, false);
     RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, "DirectionalLightComponent", false, false);
+    RegisterComponent<Component::ReflectionProbeComponent>(componentRegistry, "ReflectionProbeComponent", false, false);
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, "ProceduralMeshComponent", false, false);
     RegisterComponent<Component::SplineMeshComponent>(componentRegistry, "SplineMeshComponent", false, false);
     RegisterComponent<Component::Text3DComponent>(componentRegistry, "Text3DComponent", false, false);

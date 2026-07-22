@@ -10,6 +10,7 @@
 #include "core/containers/array.h"
 #include "shaders/lights_interop.h"
 #include "shaders/model_interop.h"
+#include "shaders/reflection_probe_interop.h"
 #include "shaders/restir_interop.h"
 
 namespace Render
@@ -37,6 +38,7 @@ inline constexpr int32_t RDG_MAX_TLAS = 16;
 inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
 inline const StringID LIGHT_DATA_BUFFER = SID("light_data");
 inline const StringID LIGHT_ALIAS_BUFFER = SID("light_alias");
+inline const StringID REFLECTION_PROBE_BUFFER = SID("reflection_probes");
 inline const StringID GEOMETRY_PRIMITIVE_BUFFER = SID("primitive_buffer");
 inline const StringID GEOMETRY_MODEL_BUFFER = SID("model_buffer");
 inline const StringID GEOMETRY_INSTANCE_BUFFER = SID("main_instance_buffer");
@@ -95,6 +97,7 @@ inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE = sizeof(Primitive) * MEGA_P
 inline constexpr int32_t VIEW_COUNT = 4; // Up to 4 views per frame, 0 is main view. 1 is portal. Idk what 2/3 are (maybe remove)
 inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * VIEW_COUNT;
 inline constexpr int32_t LIGHT_DATA_BUFFER_SIZE = sizeof(LightData) * VIEW_COUNT;
+inline constexpr int32_t REFLECTION_PROBE_BUFFER_SIZE = sizeof(ReflectionProbeGPU) * MAX_REFLECTION_PROBES;
 
 // Alias Table
 inline constexpr int32_t LIGHT_ALIAS_BUFFER_SIZE = MAX_LIGHTS * static_cast<int32_t>(sizeof(LightAliasEntry));

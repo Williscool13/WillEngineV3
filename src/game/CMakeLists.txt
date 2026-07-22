@@ -117,6 +117,8 @@ set(GAME_SOURCES
         systems/gameplay_systems.h
         components/render/light_components.cpp
         components/render/light_components.h
+        components/render/reflection_probe_component.cpp
+        components/render/reflection_probe_component.h
         component-registry/editor_gizmo_helpers.cpp
         editor/settings/graphics_settings.cpp
         editor/settings/graphics_settings.h

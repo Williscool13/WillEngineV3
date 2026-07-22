@@ -25,7 +25,9 @@
 #include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/text3d_component.h"
 #include "game/components/render/light_components.h"
+#include "game/components/render/reflection_probe_component.h"
 #include "render/shaders/lights_interop.h"
+#include "render/shaders/reflection_probe_interop.h"
 #include "render/shaders/text_interop.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/render/static_mesh_primitive_component.h"
@@ -67,6 +69,9 @@ void ConnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::SphereLightComponent>().connect<&Component::SphereLightComponent::OnConstruct>();
     registry.on_destroy<Component::SphereLightComponent>().connect<&Component::SphereLightComponent::OnDestroy>();
+
+    registry.on_construct<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnConstruct>();
+    registry.on_destroy<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnDestroy>();
 }
 
 void DisconnectRenderObservers(entt::registry& registry)
@@ -99,6 +104,9 @@ void DisconnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::SphereLightComponent>().disconnect<&Component::SphereLightComponent::OnConstruct>();
     registry.on_destroy<Component::SphereLightComponent>().disconnect<&Component::SphereLightComponent::OnDestroy>();
+
+    registry.on_construct<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnConstruct>();
+    registry.on_destroy<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnDestroy>();
 }
 
 void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -261,6 +269,46 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     for (const entt::entity entity : started) {
         state->registry.remove<Component::StaticMeshLoadPendingTag>(entity);
         state->registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+    }
+}
+
+void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeLoadPendingTag>();
+    if (view.size_hint() == 0) { return; }
+
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    for (const auto& [entity, probe] : view.each()) {
+        if (!probe.standInEnvMap.IsValid()) {
+            state->registry.remove<Component::ReflectionProbeLoadPendingTag>(entity);
+            continue;
+        }
+        probe.contentHandle = ctx->assetManager->LoadCubemap(probe.standInEnvMap);
+        if (probe.contentHandle.IsValid()) { started.PushBack(entity); }
+    }
+    for (const entt::entity entity : started) {
+        state->registry.remove<Component::ReflectionProbeLoadPendingTag>(entity);
+        state->registry.emplace_or_replace<Component::ReflectionProbeLoadingTag>(entity);
+    }
+}
+
+void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeLoadingTag>();
+    if (view.size_hint() == 0) { return; }
+
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    for (const auto& [entity, probe] : view.each()) {
+        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
+        if (!cubemap) {
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (cubemap->loadState == Render::Cubemap::LoadState::Loading) { continue; }
+        resolved.PushBack(entity);
+    }
+    for (const entt::entity entity : resolved) {
+        state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
     }
 }
 
@@ -1434,6 +1482,40 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     }
 }
 
+void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+
+    auto view = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
+    for (auto [entity, probe, worldTransform] : view.each()) {
+        if (vf.reflectionProbes.IsFull()) { break; }
+        if (!probe.contentHandle.IsValid()) { continue; }
+        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
+        if (!cubemap || cubemap->loadState != Render::Cubemap::LoadState::Loaded) { continue; }
+
+        const bool bSphere = probe.shape == Component::ReflectionProbeComponent::Shape::Sphere;
+        const glm::vec3 halfExtents = bSphere
+                                          ? glm::vec3(glm::max(glm::max(worldTransform.scale.x, worldTransform.scale.y), worldTransform.scale.z))
+                                          : worldTransform.scale;
+        const glm::mat4 world = glm::translate(glm::mat4(1.0f), worldTransform.translation) * glm::mat4_cast(worldTransform.rotation) * glm::scale(glm::mat4(1.0f), halfExtents);
+        const glm::vec3 capturePos = worldTransform.translation + worldTransform.rotation * probe.captureOffset;
+
+        uint32_t flags = 0u;
+        if (bSphere) { flags |= REFLECTION_PROBE_FLAG_SPHERE; }
+        if (probe.bParallax) { flags |= REFLECTION_PROBE_FLAG_PARALLAX; }
+
+        vf.reflectionProbes.PushBack(ReflectionProbeGPU{
+            .worldToLocal = glm::inverse(world),
+            .capturePosition = {capturePos, 0.0f},
+            .cubemapIndex = cubemap->bindlessHandle.index,
+            .fadeMargin = probe.fadeMargin,
+            .flags = flags,
+            ._pad0 = 0u,
+        });
+    }
+}
+
 void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
@@ -1579,6 +1661,21 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform.translation, transform.translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
+    }
+
+    for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
+        if (!shouldDraw(entity)) { continue; }
+        constexpr Vec4 volumeColor{0.4f, 1.0f, 0.7f, 1.0f};
+        constexpr Vec4 captureColor{1.0f, 0.8f, 0.3f, 1.0f};
+        if (probe.shape == Component::ReflectionProbeComponent::Shape::Sphere) {
+            const float radius = glm::max(glm::max(transform.scale.x, transform.scale.y), transform.scale.z);
+            DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, radius, volumeColor, 0.02f});
+        }
+        else {
+            DEBUG_ADD_BOX(viewFamily.debugBoxes, {transform.translation, transform.scale, transform.rotation, volumeColor, 0.02f});
+        }
+        const Vec3 capturePos = transform.translation + transform.rotation * probe.captureOffset;
+        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {capturePos, 0.1f, captureColor, 0.02f});
     }
 }
 

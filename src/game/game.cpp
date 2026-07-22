@@ -281,6 +281,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 #endif
 
     Game::StaticMeshPendingKickoff(ctx, state);
+    Game::ReflectionProbePendingKickoff(ctx, state);
     Game::StaticMeshPrimitivePendingKickoff(ctx, state);
     Game::ProceduralMeshPendingKickoff(ctx, state);
     Game::SplineMeshPendingKickoff(ctx, state);
@@ -291,6 +292,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (ctx->bAssetsChangedThisFrame || state->bPendingModelResolve) {
         state->bPendingModelResolve = false;
         Game::StaticMeshLoadResolve(ctx, state);
+        Game::ReflectionProbeLoadResolve(ctx, state);
         Game::StaticMeshPrimitiveLoadResolve(ctx, state);
         Game::ProceduralMeshLoadResolve(ctx, state);
         Game::SplineMeshLoadResolve(ctx, state);
@@ -363,6 +365,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->restir = state->debug.restir;
     frameBuffer->ddgi = state->lighting.ddgi;
     frameBuffer->reflection = state->lighting.reflection;
+    frameBuffer->reflectionProbe = state->lighting.reflectionProbe;
     state->debug.restir.bResetReGIR = false;
     frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;
     frameBuffer->mainViewFamily.groundTruthMode = state->lighting.groundTruthMode;
@@ -395,6 +398,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::ResolveWorldTransforms(ctx, state);
     Game::RenderPrepareTransforms(ctx, state, frameBuffer);
     Game::GatherLights(ctx, state, frameBuffer);
+    Game::GatherReflectionProbes(ctx, state, frameBuffer);
     Game::GatherRenderables(ctx, state, frameBuffer);
     Game::GatherTextRenderables(ctx, state, frameBuffer);
     Game::GatherUIRenderables(ctx, state, frameBuffer);

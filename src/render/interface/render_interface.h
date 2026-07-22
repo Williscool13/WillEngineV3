@@ -22,6 +22,7 @@
 #include "render/shaders/lights_interop.h"
 #include "render/shaders/model_interop.h"
 #include "render/shaders/push_constant_interop.h"
+#include "render/shaders/reflection_probe_interop.h"
 #include "render/shaders/text_interop.h"
 
 
@@ -833,6 +834,13 @@ struct RTReflectionConfiguration
     float intensity{1.0f};
 };
 
+struct ReflectionProbeConfiguration
+{
+    bool bEnabled{true};
+    float intensity{1.0f};
+    bool bDebugDraw{false};
+};
+
 struct HeroShadowConfiguration
 {
     // Ray-traced sun shadow cast by the hero.
@@ -895,6 +903,7 @@ struct ViewFamily
     InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
     ArenaVector<LightInfo> lights{};
     ArenaMap<uint32_t, uint32_t> lightEntityToIndex{};
+    ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};
 
     uint32_t analyticLightCount{0};
     // MeshPrimitiveStore slot -> base light index of light list
@@ -1015,6 +1024,7 @@ struct FrameBuffer
     ReSTIRParams restir{};
     DDGIParams ddgi{};
     RTReflectionConfiguration reflection{};
+    ReflectionProbeConfiguration reflectionProbe{};
 
     bool bTakeScreenshot{false};
     RenderCacheReset cacheReset = RenderCacheReset::None;

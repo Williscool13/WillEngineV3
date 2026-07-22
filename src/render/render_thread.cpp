@@ -1534,6 +1534,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     renderGraph->CreateBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE, false);
     renderGraph->CreateBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE, false);
     renderGraph->CreateBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE, false);
+    renderGraph->CreateBuffer(REFLECTION_PROBE_BUFFER, REFLECTION_PROBE_BUFFER_SIZE, false);
 
     // Scene Data
     SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
@@ -1587,17 +1588,29 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         BuildLightPowerAlias(viewFamily.lights.Data(), lightCount, lightAliasScratch, static_cast<LightAliasEntry*>(aliasUploadAllocation.ptr));
     }
 
+    // Reflection probes
+    const auto probeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
+    const size_t probeBytes = static_cast<size_t>(probeCount) * sizeof(ReflectionProbeGPU);
+    UploadAllocation probeUploadAllocation{};
+    if (probeBytes > 0) {
+        probeUploadAllocation = renderGraph->AllocateTransient(probeBytes);
+        memcpy(probeUploadAllocation.ptr, viewFamily.reflectionProbes.Data(), probeBytes);
+    }
+
     auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
     uploadUniformsPass.WriteTransferBuffer(SCENE_DATA_BUFFER);
     uploadUniformsPass.WriteTransferBuffer(LIGHT_DATA_BUFFER);
     uploadUniformsPass.WriteTransferBuffer(LIGHT_ALIAS_BUFFER);
+    uploadUniformsPass.WriteTransferBuffer(REFLECTION_PROBE_BUFFER);
     uploadUniformsPass.Execute([&,
             sceneOffset = sceneDataUploadAllocation.offset,
             portalOffset = portalSceneDataUploadAllocation.offset,
             hasPortal = bHasPortal,
             lightOffset = lightDataUploadAllocation.offset,
             aliasOffset = aliasUploadAllocation.offset,
-            aliasBytes = aliasBytes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            aliasBytes = aliasBytes,
+            probeOffset = probeUploadAllocation.offset,
+            probeBytes = probeBytes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Core::Array<VkBufferCopy2, 2> sceneDataRegions{};
             uint32_t sceneDataCount{1};
             sceneDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
@@ -1649,6 +1662,22 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
                     .pRegions = &aliasRegion
                 };
                 vkCmdCopyBuffer2(cmd, &aliasCopyInfo);
+            }
+
+            if (probeBytes > 0) {
+                VkBufferCopy2 probeRegion{};
+                probeRegion.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+                probeRegion.srcOffset = probeOffset;
+                probeRegion.dstOffset = 0;
+                probeRegion.size = probeBytes;
+                const VkCopyBufferInfo2 probeCopyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle(REFLECTION_PROBE_BUFFER),
+                    .regionCount = 1,
+                    .pRegions = &probeRegion
+                };
+                vkCmdCopyBuffer2(cmd, &probeCopyInfo);
             }
         });
 }

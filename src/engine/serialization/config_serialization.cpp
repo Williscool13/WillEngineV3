@@ -373,6 +373,24 @@ void FromJson(const nlohmann::json& r, Core::RTReflectionConfiguration& p)
     p.intensity = rFloat("intensity", p.intensity);
 }
 
+nlohmann::json ToJson(const Core::ReflectionProbeConfiguration& p)
+{
+    return {
+        {"bEnabled", p.bEnabled},
+        {"intensity", p.intensity},
+        {"bDebugDraw", p.bDebugDraw},
+    };
+}
+
+void FromJson(const nlohmann::json& r, Core::ReflectionProbeConfiguration& p)
+{
+    auto rBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
+    auto rFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
+    p.bEnabled = rBool("bEnabled", p.bEnabled);
+    p.intensity = rFloat("intensity", p.intensity);
+    p.bDebugDraw = rBool("bDebugDraw", p.bDebugDraw);
+}
+
 nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)
 {
     return {

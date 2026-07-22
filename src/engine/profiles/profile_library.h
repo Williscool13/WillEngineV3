@@ -15,6 +15,7 @@ namespace Core
 struct ReSTIRParams;
 struct DDGIParams;
 struct RTReflectionConfiguration;
+struct ReflectionProbeConfiguration;
 struct HeroShadowConfiguration;
 struct GTAOConfiguration;
 struct PostProcessConfiguration;
@@ -33,8 +34,8 @@ using ProfileName = Core::InlineString<64>;
  * Load applies a profile into the live configs, Save writes the live configs out, and List fills a caller-provided array with the discovered profile names and returns the count.
  */
 uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames);
-bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::RTReflectionConfiguration& reflection, Core::GTAOConfiguration& gtao, Core::HeroShadowConfiguration& heroShadow, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity);
-bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::RTReflectionConfiguration& reflection, const Core::GTAOConfiguration& gtao, const Core::HeroShadowConfiguration& heroShadow, StringID shadingOverride, StringID lightingOverride, float iblIntensity);
+bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::RTReflectionConfiguration& reflection, Core::ReflectionProbeConfiguration& reflectionProbe, Core::GTAOConfiguration& gtao, Core::HeroShadowConfiguration& heroShadow, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity);
+bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::RTReflectionConfiguration& reflection, const Core::ReflectionProbeConfiguration& reflectionProbe, const Core::GTAOConfiguration& gtao, const Core::HeroShadowConfiguration& heroShadow, StringID shadingOverride, StringID lightingOverride, float iblIntensity);
 bool DeleteLightingProfile(const char* name);
 
 uint32_t ListPostProcessProfiles(ProfileName* outNames, uint32_t maxNames);
