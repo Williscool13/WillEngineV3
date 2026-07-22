@@ -43,6 +43,13 @@ struct RenderScreenCapture
     uint32_t screenshotCaptureHeight{0};
     Core::Path screenshotSavePath{};
 
+    std::atomic_flag bIsProbeCaptureInProgress{};
+    AllocatedImage probeCaptureIntermediateImage{};
+    AllocatedBuffer probeCaptureReadbackBuffer{};
+    uint32_t probeCapturePendingSlot{UINT32_MAX};
+    uint32_t probeCaptureSize{0};
+    std::atomic<bool> bProbeCaptureReady{false};
+
     bool CanScreenshot() const;
 
     /**
@@ -53,6 +60,24 @@ struct RenderScreenCapture
     void StartScreenshot();
 
     void ResolveScreenshot(uint32_t currentFrameIndex);
+
+    bool CanProbeCapture() const;
+
+    void PrepareProbeCaptureResources(uint32_t size);
+
+    void StartProbeCapture();
+
+    void ResolveProbeCapture(uint32_t currentFrameIndex);
+
+    /** @returns true once a probe-face capture has landed in the mapped readback buffer and has not yet been released. */
+    bool IsProbeCaptureReady() const;
+
+    const uint16_t* GetProbeCapturePixels() const;
+
+    uint32_t GetProbeCaptureCaptureSize() const;
+
+    /** Clears the ready + in-flight state, allowing a new probe-face capture to be requested. */
+    void ReleaseProbeCapture();
 
     void Reset();
 };

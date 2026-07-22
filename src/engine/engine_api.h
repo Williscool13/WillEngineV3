@@ -127,7 +127,7 @@ struct ComponentRegistry
 
 enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On, Selected };
 enum class LightDebugDrawMode : uint8_t { None, Selected, All };
-enum class InputContext : uint8_t { Editor, Menu, Gameplay, Console };
+enum class InputContext : uint8_t { Editor, Menu, Gameplay, Console, ProbeBake };
 
 struct RuntimeSceneMetadata
 {

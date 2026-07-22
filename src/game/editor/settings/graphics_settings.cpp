@@ -4,14 +4,21 @@
 
 #include "graphics_settings.h"
 
+#include <cstring>
+#include <glm/glm.hpp>
+
 #include "imgui.h"
+
+#include "core/containers/inline_string.h"
 
 #include "game/editor/editor_widgets.h"
 
 #include "game/systems/debug_system.h"
 #include "game/systems/render_systems.h"
+#include "game/systems/probe_bake_system.h"
 #include "game/components/camera_components.h"
 #include "game/components/core_components.h"
+#include "game/components/render/reflection_probe_component.h"
 #include "core/string_id.h"
 #include "core/containers/arena_array.h"
 #include "engine/include/engine_context.h"
@@ -814,6 +821,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Full Renderer Clear")) {
                 state->pendingCacheReset = Core::RenderCacheReset::All;
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Reset Screen History")) {
+                state->pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
+            }
         }
 
         ImGui::Separator();
@@ -892,12 +903,39 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Enable Reflection Probes", &reflectionProbe.bEnabled)) { changed = true; }
             if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
             if (ImGui::Checkbox("Debug Draw Probe Volumes", &reflectionProbe.bDebugDraw)) { changed = true; }
+            if (Widgets::SliderInt("Bake Settle Frames##reflectionprobe", &reflectionProbe.settleFrames, 1, 1024, {.tooltip = "Rendered frames held on each cube face before its capture snapshot; covers static-camera TAA convergence plus the corner-leak disocclusion transient. Default 240.", .reset = true, .resetTo = 240.0})) { changed = true; }
 
             if (ImGui::Checkbox("Test Bake Hide (temp)##probebakehidetest", &state->editor.bProbeBakeHideTest)) {
                 if (state->editor.bProbeBakeHideTest) {
                     ApplyProbeBakeHideSet(ctx, state);
                 } else {
                     ClearProbeBakeHideSet(ctx, state);
+                }
+            }
+
+            if (ImGui::Button("Capture Probe Face (temp)##probecapturetest")) {
+                ProbeBakeGetOrCreate(state).bManualDumpRequested = true;
+            }
+
+            entt::entity selectedProbe = entt::null;
+            if (state->editor.selectedEntities.Size() == 1) {
+                const entt::entity candidate = state->editor.selectedEntities[0];
+                if (state->registry.try_get<Component::ReflectionProbeComponent>(candidate)) { selectedProbe = candidate; }
+            }
+
+            ProbeBakeSystem* bake = ProbeBakeFind(state);
+            const bool bakeActive = bake && bake->bBakeActive;
+
+            ImGui::BeginDisabled(bakeActive || selectedProbe == entt::null);
+            if (ImGui::Button("Bake Selected Probe (temp)##probebaketest") && selectedProbe != entt::null) {
+                ProbeBakeGetOrCreate(state).Start(ctx, state, selectedProbe);
+            }
+            ImGui::EndDisabled();
+
+            if (bakeActive) {
+                ImGui::Text("Baking face %d/6, settle frame %d/%d", bake->currentFace + 1, bake->settleCounter, bake->settleFrames);
+                if (ImGui::Button("Cancel Bake##probebakecancel")) {
+                    bake->Cancel(ctx, state);
                 }
             }
 

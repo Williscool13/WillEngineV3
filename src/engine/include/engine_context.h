@@ -10,6 +10,7 @@
 #include <clay.h>
 
 #include "core/containers/inline_function.h"
+#include "core/containers/heap_array.h"
 #include "core/memory/arena_suballocator.h"
 #include "render/pipelines/pipeline_manager.h"
 
@@ -71,6 +72,14 @@ struct WorldCacheStatsSnapshot
     uint32_t cellsShaded{};
 };
 
+/** Game-side landing zone for a captured probe face; pixels are S x S RGBA16F half-floats (4 per texel). */
+struct ProbeCaptureStaging
+{
+    Core::HeapArray<uint16_t> pixels{};
+    uint32_t captureSize{0};
+    std::atomic<bool> bReady{false};
+};
+
 struct EngineContext
 {
     WindowContext windowContext{};
@@ -111,6 +120,13 @@ struct EngineContext
     bool bAssetsChangedThisFrame{false};
 
     WorldCacheStatsSnapshot worldCacheStats{};
+
+    ProbeCaptureStaging probeCapture{};
+
+    /** @returns true when a probe-face capture has been delivered by the renderer and not yet consumed. */
+    bool IsProbeCaptureReady() const { return probeCapture.bReady.load(std::memory_order_acquire); }
+    const ProbeCaptureStaging& GetProbeCapture() const { return probeCapture; }
+    void ConsumeProbeCapture() { probeCapture.bReady.store(false, std::memory_order_release); }
 
 
     // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded)

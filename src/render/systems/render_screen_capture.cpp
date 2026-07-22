@@ -104,6 +104,74 @@ void RenderScreenCapture::ResolveScreenshot(uint32_t currentFrameIndex)
     }
 }
 
+bool RenderScreenCapture::CanProbeCapture() const
+{
+    return !bIsProbeCaptureInProgress.test();
+}
+
+void RenderScreenCapture::PrepareProbeCaptureResources(uint32_t size)
+{
+    if (probeCaptureIntermediateImage.handle != VK_NULL_HANDLE && probeCaptureIntermediateImage.extent.width == size && probeCaptureIntermediateImage.extent.height == size) {
+        return;
+    }
+
+    probeCaptureIntermediateImage = AllocatedImage{};
+    probeCaptureReadbackBuffer = AllocatedBuffer{};
+
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    imageInfo.extent = {size, size, 1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    probeCaptureIntermediateImage = AllocatedImage::CreateAllocatedImage(context, imageInfo);
+    probeCaptureIntermediateImage.SetDebugName("probe_capture_intermediate");
+
+    const size_t bufferSize = static_cast<size_t>(size) * size * 8;
+    probeCaptureReadbackBuffer = AllocatedBuffer::CreateAllocatedReceivingBuffer(context, bufferSize);
+    probeCaptureReadbackBuffer.SetDebugName("probe_capture_readback");
+    probeCaptureSize = size;
+}
+
+void RenderScreenCapture::StartProbeCapture()
+{
+    auto bWasInProgress = bIsProbeCaptureInProgress.test_and_set();
+    assert(!bWasInProgress);
+}
+
+void RenderScreenCapture::ResolveProbeCapture(uint32_t currentFrameIndex)
+{
+    if (probeCapturePendingSlot == currentFrameIndex) {
+        probeCapturePendingSlot = UINT32_MAX;
+        bProbeCaptureReady.store(true, std::memory_order_release);
+    }
+}
+
+bool RenderScreenCapture::IsProbeCaptureReady() const
+{
+    return bProbeCaptureReady.load(std::memory_order_acquire);
+}
+
+const uint16_t* RenderScreenCapture::GetProbeCapturePixels() const
+{
+    return static_cast<const uint16_t*>(probeCaptureReadbackBuffer.allocationInfo.pMappedData);
+}
+
+uint32_t RenderScreenCapture::GetProbeCaptureCaptureSize() const
+{
+    return probeCaptureSize;
+}
+
+void RenderScreenCapture::ReleaseProbeCapture()
+{
+    bProbeCaptureReady.store(false, std::memory_order_release);
+    bIsProbeCaptureInProgress.clear();
+}
+
 void RenderScreenCapture::Reset()
 {
     taskScheduler = {};
@@ -113,5 +181,11 @@ void RenderScreenCapture::Reset()
     screenshotCaptureWidth = {};
     screenshotCaptureHeight = {};
     screenshotSavePath = {};
+    bIsProbeCaptureInProgress.clear();
+    probeCaptureIntermediateImage = {};
+    probeCaptureReadbackBuffer = {};
+    probeCapturePendingSlot = UINT32_MAX;
+    probeCaptureSize = {};
+    bProbeCaptureReady.store(false, std::memory_order_relaxed);
 }
 } // Render

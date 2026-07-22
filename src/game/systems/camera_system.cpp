@@ -8,6 +8,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "debug_system.h"
+#include "probe_bake_system.h"
 #include "engine/include/engine_context.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
@@ -105,6 +106,8 @@ void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamil
     mainViewFamily.mainView.currentViewData = cam.currentViewData;
     mainViewFamily.mainView.previousViewData = cam.previousViewData;
     cam.previousViewData = cam.currentViewData;
+
+    ProbeBakeOverrideView(state, mainViewFamily);
 }
 
 void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily)

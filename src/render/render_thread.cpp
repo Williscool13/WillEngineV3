@@ -265,6 +265,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     statisticsManager.scratch.meshInvocations = pipelineStats.meshInvocations;
     statisticsManager.scratch.gpuProfile = renderGraph->CollectGPUProfile(currentFrameIndex);
     screenCapture->ResolveScreenshot(currentFrameIndex);
+    screenCapture->ResolveProbeCapture(currentFrameIndex);
 
     VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
     VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
@@ -814,6 +815,60 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 targets.colorOutput = SetupSMAA_T2X(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
                 break;
             default: break;
+        }
+
+        if (frameBuffer.bCaptureProbeFace && screenCapture->CanProbeCapture()) {
+            uint32_t captureSquare = std::min(postAaExtent[0], postAaExtent[1]) & ~1u;
+            if (captureSquare >= 2) {
+                screenCapture->PrepareProbeCaptureResources(captureSquare);
+                renderGraph->CreateTexture(SID("probe_capture_intermediate"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, captureSquare, captureSquare, 1}, CLEAR_COLOR_EMPTY, true);
+
+                auto& probeCaptureBlitPass = renderGraph->AddPass(SID("Probe Capture Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
+                probeCaptureBlitPass.ReadBlitImage(targets.colorOutput);
+                probeCaptureBlitPass.WriteBlitImage(SID("probe_capture_intermediate"));
+                probeCaptureBlitPass.Execute([&, colorOutput = targets.colorOutput, s = captureSquare, w = postAaExtent[0], h = postAaExtent[1]](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+                    VkImageBlit2 blitRegion{};
+                    blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+                    blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                    blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                    blitRegion.srcOffsets[0] = {static_cast<int32_t>((w - s) / 2), static_cast<int32_t>((h - s) / 2), 0};
+                    blitRegion.srcOffsets[1] = {static_cast<int32_t>((w + s) / 2), static_cast<int32_t>((h + s) / 2), 1};
+                    blitRegion.dstOffsets[0] = {0, 0, 0};
+                    blitRegion.dstOffsets[1] = {static_cast<int32_t>(s), static_cast<int32_t>(s), 1};
+
+                    VkBlitImageInfo2 blitInfo{};
+                    blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+                    blitInfo.srcImage = renderGraph->GetImageHandle(colorOutput);
+                    blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                    blitInfo.dstImage = renderGraph->GetImageHandle(SID("probe_capture_intermediate"));
+                    blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                    blitInfo.regionCount = 1;
+                    blitInfo.pRegions = &blitRegion;
+                    blitInfo.filter = VK_FILTER_NEAREST;
+                    vkCmdBlitImage2(_cmd, &blitInfo);
+                });
+
+                auto& probeCaptureCopyPass = renderGraph->AddPass(SID("Probe Capture Copy"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
+                probeCaptureCopyPass.ReadCopyImage(SID("probe_capture_intermediate"));
+                probeCaptureCopyPass.Execute([&, s = captureSquare](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+                    VkBufferImageCopy2 copyRegion{};
+                    copyRegion.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+                    copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                    copyRegion.imageExtent = {s, s, 1};
+
+                    VkCopyImageToBufferInfo2 copyInfo{};
+                    copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2;
+                    copyInfo.srcImage = renderGraph->GetImageHandle(SID("probe_capture_intermediate"));
+                    copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                    copyInfo.dstBuffer = screenCapture->probeCaptureReadbackBuffer.handle;
+                    copyInfo.regionCount = 1;
+                    copyInfo.pRegions = &copyRegion;
+                    vkCmdCopyImageToBuffer2(_cmd, &copyInfo);
+                });
+
+                screenCapture->probeCapturePendingSlot = frameIndex;
+                screenCapture->StartProbeCapture();
+            }
         }
 
         targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, renderExtent, outputExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
@@ -1571,10 +1626,6 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         lightData->analyticLightCount = static_cast<int32_t>(viewFamily.analyticLightCount);
         lightData->_pad1 = 0.0f;
 
-        lightData->pointLightCount = static_cast<int32_t>(viewFamily.pointLights.Size());
-        for (int32_t i = 0; i < lightData->pointLightCount; i++) {
-            lightData->pointLights[i] = viewFamily.pointLights[i];
-        }
 
         lightData->lightCount = static_cast<int32_t>(viewFamily.lights.Size());
         for (int32_t i = 0; i < lightData->lightCount; i++) {

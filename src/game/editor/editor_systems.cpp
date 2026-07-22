@@ -270,7 +270,7 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 void EditorTickInput(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->inputContext != Engine::InputContext::Gameplay && !ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->input.GetActionState(Actions::ACTION_VIEWPORT_SELECT).pressed) {
+    if (!ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->input.GetActionState(Actions::ACTION_VIEWPORT_SELECT).pressed) {
         state->bViewportClickPending = true;
     }
     HandleEditorHotkeys(ctx, state);

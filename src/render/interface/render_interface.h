@@ -840,6 +840,7 @@ struct ReflectionProbeConfiguration
     bool bEnabled{true};
     float intensity{1.0f};
     bool bDebugDraw{false};
+    int32_t settleFrames{240};
 };
 
 struct HeroShadowConfiguration
@@ -901,7 +902,6 @@ struct ViewFamily
     /** Camera-independent hero object motion this frame, [0,1], from the hero model-matrix delta. Drives uniform silhouette AA. */
     float heroMotionAmount{0.0f};
     HeroShadowConfiguration heroShadow{};
-    InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
     ArenaVector<LightInfo> lights{};
     ArenaMap<uint32_t, uint32_t> lightEntityToIndex{};
     ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};
@@ -1028,6 +1028,7 @@ struct FrameBuffer
     ReflectionProbeConfiguration reflectionProbe{};
 
     bool bTakeScreenshot{false};
+    bool bCaptureProbeFace{false};
     RenderCacheReset cacheReset = RenderCacheReset::None;
 };
 } // Core

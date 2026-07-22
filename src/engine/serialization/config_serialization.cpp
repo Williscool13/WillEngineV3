@@ -381,6 +381,7 @@ nlohmann::json ToJson(const Core::ReflectionProbeConfiguration& p)
         {"bEnabled", p.bEnabled},
         {"intensity", p.intensity},
         {"bDebugDraw", p.bDebugDraw},
+        {"settleFrames", p.settleFrames},
     };
 }
 
@@ -388,9 +389,11 @@ void FromJson(const nlohmann::json& r, Core::ReflectionProbeConfiguration& p)
 {
     auto rBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
     auto rFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
+    auto rInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number_integer() ? r[k].get<int32_t>() : def; };
     p.bEnabled = rBool("bEnabled", p.bEnabled);
     p.intensity = rFloat("intensity", p.intensity);
     p.bDebugDraw = rBool("bDebugDraw", p.bDebugDraw);
+    p.settleFrames = rInt("settleFrames", p.settleFrames);
 }
 
 nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)

@@ -27,6 +27,7 @@
 #include "render/vulkan/vk_context.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
+#include "systems/probe_bake_system.h"
 #include "editor/editor_systems.h"
 #include "console/console.h"
 #include "game_state.h"
@@ -326,6 +327,8 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
+    Game::ProbeBakeTick(ctx, state, frameBuffer);
+
     Game::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
 
     Game::BuildViewFamily(state, frameBuffer->mainViewFamily);
@@ -413,6 +416,8 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::DebugRender(ctx, state, frameBuffer);
     Game::DebugRenderPhysics(ctx, state, frameBuffer);
 #endif
+
+    Game::ProbeBakeScrubFrame(ctx, state, frameBuffer);
 }
 
 GAME_API void GameEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state)

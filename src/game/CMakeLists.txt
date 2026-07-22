@@ -115,6 +115,8 @@ set(GAME_SOURCES
         systems/common_systems.h
         systems/gameplay_systems.cpp
         systems/gameplay_systems.h
+        systems/probe_bake_system.cpp
+        systems/probe_bake_system.h
         components/render/light_components.cpp
         components/render/light_components.h
         components/render/reflection_probe_component.cpp

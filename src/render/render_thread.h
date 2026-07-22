@@ -132,6 +132,11 @@ public:
         return snapshot;
     }
 
+    bool IsProbeCaptureReady() const { return screenCapture->IsProbeCaptureReady(); }
+    const uint16_t* GetProbeCapturePixels() const { return screenCapture->GetProbeCapturePixels(); }
+    uint32_t GetProbeCaptureSize() const { return screenCapture->GetProbeCaptureCaptureSize(); }
+    void ReleaseProbeCapture() { screenCapture->ReleaseProbeCapture(); }
+
 private:
     void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 

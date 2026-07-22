@@ -1400,6 +1400,19 @@ void WillEngine::Run()
                 Core::FrameBuffer* frameBufferFramesInFlightAgo = engineRenderSynchronization->GetFrameBufferMinusFIF();
                 engineContext->lastKnownStableIdUnderCursor = frameBufferFramesInFlightAgo->stableIdUnderCursor;
 
+                if (renderThread->IsProbeCaptureReady() && !engineContext->probeCapture.bReady.load(std::memory_order_acquire)) {
+                    const uint32_t captureSquare = renderThread->GetProbeCaptureSize();
+                    const uint16_t* capturePixels = renderThread->GetProbeCapturePixels();
+                    if (captureSquare > 0 && capturePixels != nullptr) {
+                        const size_t halfCount = static_cast<size_t>(captureSquare) * captureSquare * 4;
+                        engineContext->probeCapture.pixels = Core::HeapArray<uint16_t>(&memoryManager.AssetsScratch(), Core::AllocTag::EngineContext, halfCount);
+                        memcpy(engineContext->probeCapture.pixels.Data(), capturePixels, halfCount * sizeof(uint16_t));
+                        engineContext->probeCapture.captureSize = captureSquare;
+                        engineContext->probeCapture.bReady.store(true, std::memory_order_release);
+                    }
+                    renderThread->ReleaseProbeCapture();
+                }
+
                 const Render::WorldCacheStatistics wcStats = renderThread->GetRendererStatistics().worldCache;
                 engineContext->worldCacheStats = {wcStats.occupiedSlots, wcStats.cellsCarried, wcStats.cellsEvicted, wcStats.insertsFailed, wcStats.cellsShaded};
 
