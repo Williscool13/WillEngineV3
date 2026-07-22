@@ -11,6 +11,15 @@
 
 namespace Engine
 {
+static constexpr int MAX_CAMERA_PRESETS = 8;
+
+struct CameraPreset
+{
+    bool bSet{false};
+    Vec3 translation{0.0f};
+    Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+};
+
 struct ProjectConfig
 {
     Core::InlineString<256> defaultScene{};
@@ -41,6 +50,9 @@ struct ProjectConfig
     // Optional
     bool gameCameraLockAspect{false};
     Vec2 gameCameraAspect{16.0f, 9.0f};
+
+    /** Editor-camera transform bookmarks; shift-click a preset button to save, click to jump. */
+    CameraPreset cameraPresets[MAX_CAMERA_PRESETS]{};
 
     [[nodiscard]] float ResolvedGameAspect(float viewportAspect) const
     {

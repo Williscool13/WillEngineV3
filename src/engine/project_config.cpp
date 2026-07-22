@@ -90,6 +90,24 @@ ProjectConfig ReadProjectConfig()
         config.gameCameraAspect = Vec2(j["gameCameraAspect"][0].get<float>(), j["gameCameraAspect"][1].get<float>());
     }
 
+    if (j.contains("cameraPresets") && j["cameraPresets"].is_array()) {
+        const nlohmann::json& presets = j["cameraPresets"];
+        const size_t count = presets.size() < MAX_CAMERA_PRESETS ? presets.size() : MAX_CAMERA_PRESETS;
+        for (size_t i = 0; i < count; ++i) {
+            const nlohmann::json& e = presets[i];
+            CameraPreset& p = config.cameraPresets[i];
+            if (e.contains("set") && e["set"].is_boolean()) {
+                p.bSet = e["set"].get<bool>();
+            }
+            if (e.contains("t") && e["t"].is_array() && e["t"].size() == 3) {
+                p.translation = Vec3(e["t"][0].get<float>(), e["t"][1].get<float>(), e["t"][2].get<float>());
+            }
+            if (e.contains("r") && e["r"].is_array() && e["r"].size() == 4) {
+                p.rotation = Quat(e["r"][3].get<float>(), e["r"][0].get<float>(), e["r"][1].get<float>(), e["r"][2].get<float>());
+            }
+        }
+    }
+
     return config;
 }
 
@@ -119,6 +137,16 @@ bool WriteProjectConfig(const ProjectConfig& config)
     j["editorCameraNearPlane"] = config.editorCameraNearPlane;
     j["gameCameraLockAspect"] = config.gameCameraLockAspect;
     j["gameCameraAspect"] = {config.gameCameraAspect.x, config.gameCameraAspect.y};
+
+    nlohmann::json presets = nlohmann::json::array();
+    for (const CameraPreset& p : config.cameraPresets) {
+        nlohmann::json e;
+        e["set"] = p.bSet;
+        e["t"] = {p.translation.x, p.translation.y, p.translation.z};
+        e["r"] = {p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w};
+        presets.push_back(e);
+    }
+    j["cameraPresets"] = presets;
 
     file << j.dump(2);
     return file.good();
