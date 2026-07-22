@@ -83,6 +83,7 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     HeroReactive = 37,
     HeroFlag = 38,
     HeroRim = 39,
+    ReflectionProbeIndex = 40,
 };
 
 SHADER_PUBLIC struct Frustum

@@ -23,6 +23,7 @@ import relax_interop;
 import reblur_interop;
 import ddgi_interop;
 import reflection_interop;
+import reflection_probe_interop;
 import world_grid_interop;
 import world_cache_interop;
 #else
@@ -39,6 +40,7 @@ import world_cache_interop;
 #include "reblur_interop.h"
 #include "ddgi_interop.h"
 #include "reflection_interop.h"
+#include "reflection_probe_interop.h"
 #include "world_grid_interop.h"
 #include "world_cache_interop.h"
 
@@ -94,6 +96,8 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint depthTextureIndex;
     SHADER_PUBLIC uint checkerboardField;
     SHADER_PUBLIC uint historyCheckerboardField;
+    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
+    SHADER_PUBLIC uint reflectionProbeCount;
 };
 
 SHADER_PUBLIC struct InstanceLODPushConstant
@@ -540,6 +544,8 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t giDataIndex;
     SHADER_PUBLIC uint32_t giGatherMode;
     SHADER_PUBLIC float reflectionRoughnessMax;
+    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
+    SHADER_PUBLIC uint32_t reflectionProbeCount;
 };
 
 // Unused: kept around alongside WorldGridBinningPushConstant.
@@ -736,6 +742,8 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t giResolvedIndex;
     SHADER_PUBLIC uint32_t giDataIndex;
     SHADER_PUBLIC uint32_t giGatherMode;
+    SHADER_PUBLIC uint32_t reflectionProbeCount;
+    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
 };
 
 SHADER_PUBLIC struct ReflectionTracePushConstant

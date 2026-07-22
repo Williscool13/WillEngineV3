@@ -656,7 +656,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 uint32_t giGatherMode = 0u;
                 const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.giGatherDebugMode);
                 if (frameBuffer.ddgi.bEnabled && ((frameBuffer.ddgi.bFinalGather && bDDGIApply) || giGatherDebug != 0u)) {
-                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bGatherSkipRay, giGatherDebug != 0u);
+                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.bGatherSkipRay, giGatherDebug != 0u);
                     if (giGather.bValid) {
                         giGatherMode = giGatherDebug != 0u ? giGatherDebug + 1u : 1u;
                     }
@@ -885,6 +885,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     SID("restir_reservoir_temporal"),
                     SID("restir_reservoir_spatial"),
                     SID("restir_reservoir_history"),
+                    REFLECTION_PROBE_BUFFER,
                 };
                 for (const StringID bufferId : debugVisBuffers) {
                     if (renderGraph->HasBuffer(bufferId)) {
@@ -967,6 +968,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .depthTextureIndex = renderGraph->GetSampledImageViewDescriptorIndex(targets.depthCopy),
                         .checkerboardField = debugReservoirCheckerboardField,
                         .historyCheckerboardField = historyCheckerboardField,
+                        .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? renderGraph->TryGetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+                        .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

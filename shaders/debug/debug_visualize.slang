@@ -7,6 +7,7 @@ import bindless_declarations;
 import shader_functions;
 import denoiser_common;
 import restir_common;
+import reflection_probe_common;
 
 [[vk::push_constant]]
 DebugVisualizePushConstant pc;
@@ -312,6 +313,22 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             float weight = srcPixel.r;
             float coverage = srcPixel.g;
             srcPixel.xyz = (coverage > 0.0) ? (weight > 0.0 ? float3(0.0, weight, 0.0) : float3(coverage, 0.0, 0.0)) : float3(0.0);
+            break;
+        }
+        case 40: { // ReflectionProbeIndex: hash-color the probe covering the pixel. Black = sky, magenta = no probe.
+            float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
+            if (depth <= 0.0) { srcPixel.xyz = float3(0.0); break; }
+            float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
+            float3 viewPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
+            float3 worldPos = mul(pc.sceneData->invView, float4(viewPos, 1.0)).xyz;
+            float probeFade;
+            int probeIndex = PickReflectionProbe(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+            if (probeIndex < 0) {
+                srcPixel.xyz = float3(1.0, 0.0, 1.0);
+            } else {
+                uint h = (uint(probeIndex) + 1u) * 2654435761u;
+                srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
+            }
             break;
         }
     }

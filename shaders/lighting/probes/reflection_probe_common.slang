@@ -1,0 +1,78 @@
+module reflection_probe_common;
+
+import constants_interop;
+import reflection_probe_interop;
+import bindless_declarations;
+import pbr_functions;
+
+/** Per-axis world half-extent. worldToLocal = inverse(R*S); its mathematical rows have length 1/halfExtent_i, and since matrix subscripting returns columns here, transpose exposes those rows. */
+static float3 ReflectionProbeWorldExtent(ReflectionProbeGPU probe)
+{
+    float4x4 worldToLocalRows = transpose(probe.worldToLocal);
+    return float3(
+        1.0 / max(length(worldToLocalRows[0].xyz), 1e-8),
+        1.0 / max(length(worldToLocalRows[1].xyz), 1e-8),
+        1.0 / max(length(worldToLocalRows[2].xyz), 1e-8));
+}
+
+/** Brute-force pick of the smallest-volume probe containing worldPos. Returns the array index (or -1), and a world-space edge fade in [0,1] (1 = interior, 0 = boundary). Tie-break: strictly-less volume, then lowest index. */
+public int PickReflectionProbe(float3 worldPos, ReflectionProbeGPU* probes, uint count, out float fade)
+{
+    int best = -1;
+    float bestVolume = 1e30;
+    float bestFade = 1.0;
+
+    for (uint i = 0; i < count; i++) {
+        ReflectionProbeGPU probe = probes[i];
+        float3 localPos = mul(probe.worldToLocal, float4(worldPos, 1.0)).xyz;
+        float3 extent = ReflectionProbeWorldExtent(probe);
+
+        float volume;
+        float thisFade;
+        if ((probe.flags & REFLECTION_PROBE_FLAG_SPHERE) != 0u) {
+            float lenLocal = length(localPos);
+            if (lenLocal > 1.0) { continue; }
+            float radius = extent.x;
+            volume = 4.18879020479 * radius * radius * radius;
+            thisFade = probe.fadeMargin > 0.0 ? saturate((1.0 - lenLocal) * radius / probe.fadeMargin) : 1.0;
+        } else {
+            if (any(abs(localPos) > 1.0)) { continue; }
+            volume = 8.0 * extent.x * extent.y * extent.z;
+            if (probe.fadeMargin > 0.0) {
+                float3 worldDist = (1.0 - abs(localPos)) * extent;
+                thisFade = saturate(min(min(worldDist.x, worldDist.y), worldDist.z) / probe.fadeMargin);
+            } else {
+                thisFade = 1.0;
+            }
+        }
+
+        if (volume < bestVolume) {
+            bestVolume = volume;
+            best = int(i);
+            bestFade = thisFade;
+        }
+    }
+
+    fade = bestFade;
+    return best;
+}
+
+/** Prefiltered specular radiance from a probe. worldR is the world-space reflection vector; when the probe is a parallax box the ray is intersected against the OBB interior and re-pointed from the capture origin. Routes the final direction through the shared cubemap Y-flip so it matches SpecularReflection. Returns raw radiance; the caller applies the BRDF term and intensity. */
+public float3 SampleReflectionProbeSpecular(ReflectionProbeGPU probe, float3 worldPos, float3 worldR, float roughness)
+{
+    float3 sampleDir = worldR;
+    if ((probe.flags & REFLECTION_PROBE_FLAG_PARALLAX) != 0u) {
+        float3 localPos = mul(probe.worldToLocal, float4(worldPos, 1.0)).xyz;
+        float3 localDir = mul((float3x3)probe.worldToLocal, worldR);
+        float3 invDir = 1.0 / localDir;
+        float3 t1 = (float3(-1.0) - localPos) * invDir;
+        float3 t2 = (float3(1.0) - localPos) * invDir;
+        float3 tMax = max(t1, t2);
+        float t = min(min(tMax.x, tMax.y), tMax.z);
+        float3 hitWorld = worldPos + worldR * t;
+        sampleDir = normalize(hitWorld - probe.capturePosition.xyz);
+    }
+
+    float mip = roughness * roughness * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1);
+    return assetCubemaps[probe.cubemapIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(sampleDir), mip).rgb;
+}

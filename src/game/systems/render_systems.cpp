@@ -1485,6 +1485,9 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
+    const auto& config = state->lighting.reflectionProbe;
+    if (!config.bEnabled) { return; }
+
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
 
     auto view = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
@@ -1511,7 +1514,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
             .cubemapIndex = cubemap->bindlessHandle.index,
             .fadeMargin = probe.fadeMargin,
             .flags = flags,
-            ._pad0 = 0u,
+            .intensity = config.intensity,
         });
     }
 }
@@ -1595,11 +1598,13 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
 {
     ZoneScoped;
     const Engine::LightDebugDrawMode mode = state->editor.lightDebugDrawMode;
-    if (mode == Engine::LightDebugDrawMode::None) { return; }
+    const bool bProbeDebugDraw = state->lighting.reflectionProbe.bDebugDraw;
+    if (mode == Engine::LightDebugDrawMode::None && !bProbeDebugDraw) { return; }
 
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
 
     auto shouldDraw = [&](entt::entity entity) {
+        if (mode == Engine::LightDebugDrawMode::None) { return false; }
         return mode == Engine::LightDebugDrawMode::All || state->editor.selectedEntities.Contains(entity);
     };
 
@@ -1664,7 +1669,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 
     for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
-        if (!shouldDraw(entity)) { continue; }
+        if (!bProbeDebugDraw && !shouldDraw(entity)) { continue; }
         constexpr Vec4 volumeColor{0.4f, 1.0f, 0.7f, 1.0f};
         constexpr Vec4 captureColor{1.0f, 0.8f, 0.3f, 1.0f};
         if (probe.shape == Component::ReflectionProbeComponent::Shape::Sphere) {

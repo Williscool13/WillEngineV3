@@ -164,12 +164,16 @@ public float Diffuse_Hammon(float NdotL, float NdotV, float NdotH, float LdotV, 
 }
 
 
+/** Engine world space is +Y up; the prefiltered cubemaps are authored Y-flipped, so every cubemap fetch routes its world direction through here. */
+public float3 CubemapDirection(float3 worldDir)
+{
+    return float3(worldDir.x, -worldDir.y, worldDir.z);
+}
+
 /** Prefiltered diffuse irradiance lookup; flips Y to convert engine world space to cubemap space. */
 public float3 DiffuseIrradiance(TextureCube envMap, SamplerState linearSampler, float3 worldNormal)
 {
-    float3 N = worldNormal;
-    N.y = -N.y;
-    return envMap.SampleLevel(linearSampler, N, ENVIRONMENT_MAP_DIFFUSE_MIP).rgb;
+    return envMap.SampleLevel(linearSampler, CubemapDirection(worldNormal), ENVIRONMENT_MAP_DIFFUSE_MIP).rgb;
 }
 
 /** Variant for callers that already sampled the BRDF LUT at (NoV, roughness). */
@@ -178,9 +182,8 @@ public float3 SpecularReflection(TextureCube envMap, SamplerState linearSampler,
 {
     float3 R = reflect(-viewV, viewN);
     float3 worldR = normalize(mul((float3x3)invView, R));
-    worldR.y = -worldR.y;
 
-    float3 prefilteredColor = envMap.SampleLevel(linearSampler, worldR, roughness * roughness * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1)).rgb;
+    float3 prefilteredColor = envMap.SampleLevel(linearSampler, CubemapDirection(worldR), roughness * roughness * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1)).rgb;
     return prefilteredColor * (F * envBRDF.x + envBRDF.y);
 }
 

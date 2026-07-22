@@ -48,11 +48,12 @@ struct FinalGatherFrame
  * @param sceneIndex
  * @param frameNumber
  * @param bDenoise
+ * @param bTemporalFilter Counter accumulation of the resolved output against carried history; off = this frame's resolve only (raw-signal inspection).
  * @param bSkipRay Skip the cosine ray entirely; sample the world radiance cache at the pixel's own surface point (probes as fallback) instead.
  * @param bDebugView A GI-gather debug view is active; disable the screen tier so the debug color written into the composite is not fed back as radiance.
  * @return
  */
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, bool bSkipRay, bool bDebugView);
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, bool bTemporalFilter, bool bSkipRay, bool bDebugView);
 
 /**
  * Full-screen GI leak deconstruction at the primary surface, written to gi_deconstruct_target for the debug visualizer.

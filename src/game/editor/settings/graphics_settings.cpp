@@ -9,6 +9,8 @@
 #include "game/editor/editor_widgets.h"
 
 #include "game/systems/debug_system.h"
+#include "game/components/camera_components.h"
+#include "game/components/core_components.h"
 #include "core/string_id.h"
 #include "core/containers/arena_array.h"
 #include "engine/include/engine_context.h"
@@ -147,6 +149,42 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             ImGui::SameLine();
             ImGui::SetNextItemWidth(120.0f);
             if (ImGui::InputFloat2("##game_aspect", &state->projectConfig.gameCameraAspect.x, "%.2f")) { changed = true; }
+        }
+
+        {
+            auto editorCamView = state->registry.view<Component::TransformComponent, Component::EditorCameraTag>();
+            const entt::entity editorCam = editorCamView.front();
+            ImGui::Text("Presets:");
+            for (int i = 0; i < Engine::MAX_CAMERA_PRESETS; ++i) {
+                Engine::CameraPreset& preset = state->projectConfig.cameraPresets[i];
+                ImGui::SameLine();
+                ImGui::PushID(i);
+                const bool bTinted = preset.bSet;
+                if (bTinted) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.25f, 1.0f));
+                }
+                Core::InlineString<8> label;
+                label.Format("%d", i + 1);
+                if (ImGui::Button(label.c_str(), ImVec2(24.0f, 0.0f)) && editorCam != entt::null) {
+                    auto& tf = state->registry.get<Component::TransformComponent>(editorCam);
+                    if (ImGui::GetIO().KeyShift) {
+                        preset.translation = tf.translation;
+                        preset.rotation = tf.rotation;
+                        preset.bSet = true;
+                        changed = true;
+                    } else if (preset.bSet) {
+                        tf.translation = preset.translation;
+                        tf.rotation = preset.rotation;
+                    }
+                }
+                if (bTinted) {
+                    ImGui::PopStyleColor();
+                }
+                ImGui::PopID();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Editor camera bookmarks. Shift-click to save the current view; click to jump to a saved one. Green = occupied.");
+            }
         }
 
         ImGui::Spacing();
@@ -407,6 +445,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (ImGui::CollapsingHeader("RT Reflections Debug")) {
             if (ImGui::Button("Raw Traced (Demodulated)")) setDebugTarget("reflection_spec_noisy", DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+        if (ImGui::CollapsingHeader("Reflection Probes")) {
+            if (ImGui::Button("Reflection Probe Index")) setDebugTarget("depth_target", DebugTransformationType::ReflectionProbeIndex, Core::DebugViewAspect::Depth);
         }
         if (ImGui::CollapsingHeader("G-Buffer")) {
             if (ImGui::Button("Depth")) setDebugTarget("depth_target", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
@@ -883,6 +924,11 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Denoise##gigather", &ddgi.bFinalGatherDenoise)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Separable bilateral blur on the gather SH before compositing (normal/depth/hit-distance edge stopping). Off = raw 1spp signal, for A/B.");
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Temporal##gigather", &ddgi.bFinalGatherTemporal)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Counter accumulation of the resolved gather across frames (up to 32). Off = this frame's result only; with Denoise also off the composite shows the raw gather.");
             }
             if (ImGui::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay)) { changed = true; }
             if (ImGui::IsItemHovered()) {

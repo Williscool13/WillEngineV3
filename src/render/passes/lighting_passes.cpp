@@ -131,6 +131,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
     lightingResolve.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
+    lightingResolve.ReadBuffer(REFLECTION_PROBE_BUFFER);
     if (bWorldGrid) {
         lightingResolve.ReadBuffer(SID("world_grid_light_grid"));
         lightingResolve.ReadBuffer(SID("world_grid_index_list"));
@@ -202,6 +203,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
                     .giGatherMode = bGIGather ? giGatherMode : 0u,
                     .reflectionRoughnessMax = reflectionRoughnessMax,
+                    .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+                    .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

@@ -39,7 +39,7 @@ SHADER_PUBLIC struct ReflectionProbeGPU
     SHADER_PUBLIC uint cubemapIndex; // bindless cubemap index
     SHADER_PUBLIC float fadeMargin;
     SHADER_PUBLIC uint flags; // REFLECTION_PROBE_FLAG_*
-    SHADER_PUBLIC uint _pad0;
+    SHADER_PUBLIC float intensity;
 };
 
 #endif //WILL_ENGINE_REFLECTION_PROBE_INTEROP_H

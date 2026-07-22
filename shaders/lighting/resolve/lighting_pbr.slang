@@ -13,6 +13,8 @@ import world_grid_interop;
 import binning_common;
 import visibility_lighting_common;
 import gi_gather_common;
+import reflection_probe_interop;
+import reflection_probe_common;
 
 import bindless_declarations;
 
@@ -133,13 +135,27 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
         if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
             float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
             reflectionSpecular = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb * (F0 * envBRDF.x + envBRDF.y);
-        } else if (pc.skyboxIndex >= 0) {
-            reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl) * pc.iblIntensity;
+        } else {
+            if (pc.skyboxIndex >= 0) {
+                reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl) * pc.iblIntensity;
 #if GI_SKY_SPECULAR_OCCLUSION
-            // The diffuse GI already resolves local sky reachability, reuse for specular
-            float3 skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
-            reflectionSpecular *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
+                // The diffuse GI already resolves local sky reachability, reuse for specular
+                float3 skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
+                reflectionSpecular *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
 #endif
+            }
+            if (pc.reflectionProbeCount > 0u) {
+                float probeFade;
+                int probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+                if (probeIndex >= 0) {
+                    ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                    float3 worldR = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, reflect(-V, N)));
+                    float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
+                    float3 probeRadiance = SampleReflectionProbeSpecular(probe, worldPosition, worldR, roughness);
+                    float3 probeTerm = probeRadiance * (F_ibl * envBRDF.x + envBRDF.y) * probe.intensity;
+                    reflectionSpecular = lerp(reflectionSpecular, probeTerm, probeFade);
+                }
+            }
             reflectionSpecular *= gtao;
         }
         ibl = kD_ibl * indirectDiffuse * li.albedo.xyz * gtao + reflectionSpecular;

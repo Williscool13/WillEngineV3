@@ -10,6 +10,8 @@ import lights_interop;
 import ddgi_interop;
 import ddgi_common;
 import gi_gather_common;
+import reflection_probe_interop;
+import reflection_probe_common;
 
 static const float BILATERAL_DEPTH_SIGMA = 0.01;
 static const float BILATERAL_NORMAL_POWER = 32.0;
@@ -118,6 +120,19 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
             // The diffuse GI already resolves local sky reachability, reuse for specular
             reflectionSpecular *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
 #endif
+        }
+
+        if (pc.reflectionProbeCount > 0u) {
+            float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+            float probeFade;
+            int probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+            if (probeIndex >= 0) {
+                ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                float3 worldR = normalize(mul((float3x3)scene.invView, reflect(-V, N)));
+                float3 probeRadiance = SampleReflectionProbeSpecular(probe, worldPosition, worldR, roughness);
+                float3 probeTerm = probeRadiance * (F_ibl * envBRDF.x + envBRDF.y) * probe.intensity;
+                reflectionSpecular = lerp(reflectionSpecular, probeTerm, probeFade);
+            }
         }
 
         if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {

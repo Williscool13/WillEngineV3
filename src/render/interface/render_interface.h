@@ -816,6 +816,7 @@ struct DDGIParams
     bool bApplyToLighting{true};
     bool bFinalGather{false};
     bool bFinalGatherDenoise{true};
+    bool bFinalGatherTemporal{true};
     bool bGatherSkipRay{false};
     float normalBias{0.1f};
     float viewBias{0.3f};
