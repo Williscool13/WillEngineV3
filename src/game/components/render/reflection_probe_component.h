@@ -33,6 +33,13 @@ struct ReflectionProbeComponent
         Res256 = 1,
     };
 
+    enum class ContentSource : uint8_t
+    {
+        None = 0,
+        StandIn = 1,
+        Baked = 2,
+    };
+
     uint64_t probeId{0};
     Shape shape{Shape::Box};
     float fadeMargin{0.5f};
@@ -41,8 +48,11 @@ struct ReflectionProbeComponent
     Resolution resolution{Resolution::Res256};
     Engine::EnvironmentMapID standInEnvMap{};
 
-    // Runtime-only: resident cubemap for the stand-in content, recorded on load resolve.
+    // Runtime-only
+    // Resident cubemap for the current content, recorded on load resolve.
     Engine::CubemapHandle contentHandle{Engine::CubemapHandle::INVALID};
+    ContentSource contentSource{ContentSource::None};
+    bool bBakeRequested{false};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 

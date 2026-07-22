@@ -13,6 +13,7 @@
 #include "asset_generation_types.h"
 #include "engine/compression/compression.h"
 #include "engine/resources/environment_map/environment_map_format.h"
+#include "engine/resources/environment_map/probe_format.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
@@ -97,12 +98,14 @@ void EnvironmentMapGenerateSlot::Launch(
     EnvironmentMapGenerateSlotHandle _slotHandle,
     const Core::Path& _imagePath,
     const Core::Path& _outputPath,
-    Engine::EnvironmentMapID _environmentMapId)
+    Engine::EnvironmentMapID _environmentMapId,
+    uint64_t _contentVersion)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
     outputPath = _outputPath;
     environmentMapId = _environmentMapId;
+    contentVersion = _contentVersion;
     bProbeMode = false;
     baseResolution = ENVIRONMENT_MAP_RESOLUTION;
 
@@ -120,15 +123,21 @@ void EnvironmentMapGenerateSlot::LaunchProbe(
     uint32_t captureSize,
     uint32_t targetResolution,
     const Core::Path& _outputPath,
-    Engine::EnvironmentMapID _environmentMapId)
+    Engine::EnvironmentMapID _environmentMapId,
+    uint64_t _probeId,
+    const Engine::ProbeBakeSnapshot& _snapshot,
+    uint64_t _contentVersion)
 {
     slotHandle = _slotHandle;
     imagePath = Core::Path{};
     outputPath = _outputPath;
     environmentMapId = _environmentMapId;
+    contentVersion = _contentVersion;
     bProbeMode = true;
     baseResolution = targetResolution;
     probeCaptureSize = captureSize;
+    probeId = _probeId;
+    probeSnapshot = _snapshot;
     for (uint32_t face = 0; face < 6; ++face) {
         probeFaces[face] = std::move(faces[face]);
     }
@@ -159,6 +168,8 @@ void EnvironmentMapGenerateSlot::Clear()
     }
     bProbeMode = false;
     probeCaptureSize = 0;
+    probeId = 0;
+    probeSnapshot = {};
     baseResolution = ENVIRONMENT_MAP_RESOLUTION;
     mipData = {};
     imageStagingAllocator.Reset();
@@ -209,7 +220,8 @@ void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartiti
         return;
     }
 
-    if (!taskSlot->WriteWEnvMapFile()) {
+    const bool bWriteRes = taskSlot->bProbeMode ? taskSlot->WriteWProbeFile() : taskSlot->WriteWEnvMapFile();
+    if (!bWriteRes) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
         vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
         vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
@@ -940,6 +952,7 @@ bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
 
     Engine::WEnvMapHeader header{};
     header.environmentMapId = environmentMapId.id;
+    header.contentVersion = contentVersion;
     header.width = baseResolution;
     header.height = baseResolution;
     header.mipCount = ENVIRONMENT_MAP_MIPS;
@@ -960,6 +973,83 @@ bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
 
     if (!Engine::WriteWEnvMapHeader(f, header)) {
         SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to write header: {}", outputPath.c_str());
+        return false;
+    }
+    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realCompressedSize));
+
+    SPDLOG_INFO("[EnvironmentMapGenerateSlot] Wrote {}", outputPath.c_str());
+    return true;
+}
+
+bool EnvironmentMapGenerateSlot::WriteWProbeFile()
+{
+    ZoneScopedN("WriteWProbeFile");
+
+    ktxTexture2* texture;
+    ktxTextureCreateInfo createInfo{};
+    createInfo.vkFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+    createInfo.baseWidth = baseResolution;
+    createInfo.baseHeight = baseResolution;
+    createInfo.baseDepth = 1;
+    createInfo.numDimensions = 2;
+    createInfo.numLevels = ENVIRONMENT_MAP_MIPS;
+    createInfo.numLayers = 1;
+    createInfo.numFaces = 6;
+    createInfo.isArray = KTX_FALSE;
+    createInfo.generateMipmaps = KTX_FALSE;
+
+    ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
+    if (result != KTX_SUCCESS) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to create KTX texture");
+        return false;
+    }
+    for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_MIPS; mip++) {
+        for (uint32_t face = 0; face < 6; face++) {
+            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, face, mipData[mip][face].Data(), mipData[mip][face].Size());
+        }
+    }
+
+    ktx_uint8_t* ktxBytes{nullptr};
+    ktx_size_t ktxSize{0};
+    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
+    ktxTexture_Destroy(ktxTexture(texture));
+
+    if (result != KTX_SUCCESS) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to serialise KTX texture to memory");
+        return false;
+    }
+
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_ENV_MAP_COMPRESSION, ktxSize);
+    auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
+    size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_ENV_MAP_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
+    free(ktxBytes);
+
+    Engine::WProbeHeader header{};
+    header.probeId = probeId;
+    header.environmentMapId = environmentMapId.id;
+    header.contentVersion = contentVersion;
+    header.width = baseResolution;
+    header.height = baseResolution;
+    header.mipCount = ENVIRONMENT_MAP_MIPS;
+    header.uncompressedSize = ktxSize;
+    header.dataSize = realCompressedSize;
+    header.resolution = baseResolution;
+    header.snapshot = probeSnapshot;
+
+    Core::InlineString stem{Core::InlineString(outputPath.Stem())};
+    const size_t copyLen = std::min(stem.Size(), Engine::WENVMAP_NAME_LENGTH - 1);
+    memcpy(header.name, stem.c_str(), copyLen);
+    header.name[copyLen] = '\0';
+
+    Platform::CreateDirectories(outputPath.Parent().c_str());
+    std::ofstream f(outputPath.c_str(), std::ios::binary);
+    if (!f) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to open output file: {}", outputPath.c_str());
+        return false;
+    }
+
+    if (!Engine::WriteWProbeHeader(f, header)) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to write probe header: {}", outputPath.c_str());
         return false;
     }
     f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realCompressedSize));

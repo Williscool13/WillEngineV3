@@ -25,6 +25,8 @@ struct WStaticModelHeader
 
     uint32_t version{STATICMODEL_VERSION};
 
+    uint64_t contentVersion{0};
+
     uint32_t nodeCount{0};
     uint32_t meshNodeCount{0};
 

@@ -279,9 +279,11 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::ModelHotReload(ctx, state);
     Game::FontHotReload(ctx, state);
     Game::TextureHotReload(ctx, state);
+    Game::CubemapHotReload(ctx, state);
 #endif
 
     Game::StaticMeshPendingKickoff(ctx, state);
+    Game::ReflectionProbeBakeUpgrade(ctx, state);
     Game::ReflectionProbePendingKickoff(ctx, state);
     Game::StaticMeshPrimitivePendingKickoff(ctx, state);
     Game::ProceduralMeshPendingKickoff(ctx, state);

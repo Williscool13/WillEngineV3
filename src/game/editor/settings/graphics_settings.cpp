@@ -905,35 +905,26 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Debug Draw Probe Volumes", &reflectionProbe.bDebugDraw)) { changed = true; }
             if (Widgets::SliderInt("Bake Settle Frames##reflectionprobe", &reflectionProbe.settleFrames, 1, 1024, {.tooltip = "Rendered frames held on each cube face before its capture snapshot; covers static-camera TAA convergence plus the corner-leak disocclusion transient. Default 240.", .reset = true, .resetTo = 240.0})) { changed = true; }
 
-            if (ImGui::Checkbox("Test Bake Hide (temp)##probebakehidetest", &state->editor.bProbeBakeHideTest)) {
-                if (state->editor.bProbeBakeHideTest) {
-                    ApplyProbeBakeHideSet(ctx, state);
-                } else {
-                    ClearProbeBakeHideSet(ctx, state);
-                }
-            }
-
             if (ImGui::Button("Capture Probe Face (temp)##probecapturetest")) {
                 ProbeBakeGetOrCreate(state).bManualDumpRequested = true;
             }
 
-            entt::entity selectedProbe = entt::null;
-            if (state->editor.selectedEntities.Size() == 1) {
-                const entt::entity candidate = state->editor.selectedEntities[0];
-                if (state->registry.try_get<Component::ReflectionProbeComponent>(candidate)) { selectedProbe = candidate; }
+            if (ImGui::Button("Bake All Probes In Scene##probebakeall")) {
+                ProbeBakeGetOrCreate(state).EnqueueAllProbes(state);
             }
 
             ProbeBakeSystem* bake = ProbeBakeFind(state);
             const bool bakeActive = bake && bake->bBakeActive;
 
-            ImGui::BeginDisabled(bakeActive || selectedProbe == entt::null);
-            if (ImGui::Button("Bake Selected Probe (temp)##probebaketest") && selectedProbe != entt::null) {
-                ProbeBakeGetOrCreate(state).Start(ctx, state, selectedProbe);
-            }
-            ImGui::EndDisabled();
-
-            if (bakeActive) {
-                ImGui::Text("Baking face %d/6, settle frame %d/%d", bake->currentFace + 1, bake->settleCounter, bake->settleFrames);
+            if (bake && (bakeActive || !bake->bakeQueue.IsEmpty())) {
+                if (bake->bakeBatchTotal > 0) {
+                    const uint32_t remaining = static_cast<uint32_t>(bake->bakeQueue.Size());
+                    const uint32_t done = bake->bakeBatchTotal > remaining ? bake->bakeBatchTotal - remaining : 0;
+                    ImGui::Text("Baking probe %u of %u", done, bake->bakeBatchTotal);
+                }
+                if (bakeActive) {
+                    ImGui::Text("Face %d/6, settle frame %d/%d", bake->currentFace + 1, bake->settleCounter, bake->settleFrames);
+                }
                 if (ImGui::Button("Cancel Bake##probebakecancel")) {
                     bake->Cancel(ctx, state);
                 }

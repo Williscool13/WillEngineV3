@@ -10,8 +10,10 @@
 #include "engine/core/environment_map_id.h"
 #include "engine/core/font_id.h"
 #include "engine/core/model_id.h"
+#include "engine/core/probe_id.h"
 #include "engine/core/physics_collider_id.h"
 #include "core/sampler_id.h"
+#include "engine/resources/environment_map/probe_format.h"
 #include "engine/include/engine_context.h"
 #include "core/memory/handle_allocator.h"
 #include "core/memory/memory_manager.h"
@@ -110,6 +112,7 @@ public: // Models
         uint32_t meshNodesCount{};
         Core::HeapArray<Node> nodes;
         ModelBounds bounds{};
+        uint64_t contentVersion{0};
     };
 
     const Core::FixedMap<ModelID, CachedModelMetadata>& GetModelCache() { return modelCache; }
@@ -164,6 +167,7 @@ public: // Textures
         uint64_t dataSize{};
         uint64_t uncompressedSize{};
         CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
+        uint64_t contentVersion{0};
     };
 
     struct StaticProceduralDesc
@@ -240,7 +244,15 @@ public: // Cubemaps
         return found ? *found : EnvironmentMapID::INVALID;
     }
 
+    [[nodiscard]] bool IsCubemapLoaded(const EnvironmentMapID cubemapId) const
+    {
+        return cubemapIdToHandle.Contains(cubemapId);
+    }
+
     CubemapHandle LoadCubemap(EnvironmentMapID cubemapId);
+
+    /** Hot-reload: refreshes an already-loaded cubemap's runtime fields from cubemapCache metadata and re-requests the async load. No-op if the cubemap is not currently resident. */
+    bool ReloadCubemap(EnvironmentMapID cubemapId);
 
     Render::Cubemap* GetCubemap(CubemapHandle handle);
 
@@ -257,6 +269,7 @@ public: // Cubemaps
         uint64_t dataSize{};
         uint64_t uncompressedSize{};
         CompressionType compressionType{DEFAULT_ENV_MAP_COMPRESSION};
+        uint64_t contentVersion{0};
     };
 
     [[nodiscard]] const Core::FixedMap<StringID, EnvironmentMapID>& GetCubemapNameToId() const { return cubemapNameToId; }
@@ -265,6 +278,28 @@ public: // Cubemaps
     [[nodiscard]] const CachedCubemapMetadata* GetCubemapMetadata(EnvironmentMapID cubemapId) const
     {
         return cubemapCache.Find(cubemapId);
+    }
+
+public: // Reflection probes
+    struct ProbeInfo
+    {
+        Core::Path source;
+        EnvironmentMapID environmentMapId{};
+        uint32_t resolution{};
+        ProbeBakeSnapshot snapshot{};
+        uint64_t contentVersion{0};
+    };
+
+    /** Resolves a probe to its runtime cubemap and loads it through the shared cubemap path (keyed by the probe's EnvironmentMapID). @returns INVALID if the probe is not in the registry. */
+    CubemapHandle LoadProbe(ProbeID probeId);
+
+    /** Releases a probe cubemap handle acquired from LoadProbe. */
+    void UnloadProbe(CubemapHandle handle);
+
+    /** @returns the cached probe registry entry (path + EnvironmentMapID + resolution + bake snapshot), or null if not registered. */
+    [[nodiscard]] const ProbeInfo* GetProbeInfo(ProbeID probeId) const
+    {
+        return probeRegistry.Find(probeId);
     }
 
 public: // Fonts
@@ -295,6 +330,7 @@ public: // Fonts
         Core::Path source{};
         Core::InlineString<128> name{};
         WFontHeader header{};
+        uint64_t contentVersion{0};
     };
 
     [[nodiscard]] const Core::FixedMap<StringID, FontID>& GetFontNameToId() const { return fontNameToId; }
@@ -316,6 +352,12 @@ public: // Per-Tick calls
     void Scan();
 
     void RegisterProceduralTextures();
+
+    /** IDs whose on-disk content_version changed on the most recent Scan(); cleared at the top of every Scan() call. */
+    [[nodiscard]] const Core::InlineVector<ModelID, 16>& GetChangedModelIds() const { return changedModelIds; }
+    [[nodiscard]] const Core::InlineVector<TextureID, 16>& GetChangedTextureIds() const { return changedTextureIds; }
+    [[nodiscard]] const Core::InlineVector<FontID, 16>& GetChangedFontIds() const { return changedFontIds; }
+    [[nodiscard]] const Core::InlineVector<EnvironmentMapID, 16>& GetChangedEnvironmentMapIds() const { return changedEnvironmentMapIds; }
 
 public:
     OffsetAllocator::Allocator& GetJointMatrixAllocator()
@@ -399,6 +441,7 @@ public: // Scenes
         Core::Path source;
         Core::InlineString<128> sceneName{};
         uint32_t entityCount{};
+        uint64_t contentVersion{0};
     };
 
     const Core::FixedMap<StringID, CachedSceneMetadata>& GetSceneCache() { return sceneCache; }
@@ -417,6 +460,7 @@ public: // Prefabs
         Core::Path source;
         Core::InlineString<128> prefabName{};
         uint32_t componentCount{};
+        uint64_t contentVersion{0};
     };
 
     const Core::FixedMap<StringID, CachedPrefabMetadata>& GetPrefabCache() { return prefabCache; }
@@ -441,8 +485,31 @@ private: // Asset Registry
     Core::FixedMap<StringID, EnvironmentMapID> cubemapNameToId;
     Core::FixedMap<EnvironmentMapID, CachedCubemapMetadata> cubemapCache;
 
+    Core::FixedMap<ProbeID, ProbeInfo> probeRegistry;
+
     Core::FixedMap<StringID, CachedSceneMetadata> sceneCache;
     Core::FixedMap<StringID, CachedPrefabMetadata> prefabCache;
+
+    Core::InlineVector<ModelID, 16> changedModelIds{};
+    Core::InlineVector<TextureID, 16> changedTextureIds{};
+    Core::InlineVector<FontID, 16> changedFontIds{};
+    Core::InlineVector<EnvironmentMapID, 16> changedEnvironmentMapIds{};
+
+    struct DeferredTextureBindingRelease
+    {
+        Render::BindlessTextureHandle handle{};
+        uint64_t releaseFrame{0};
+    };
+
+    struct DeferredCubemapBindingRelease
+    {
+        Render::BindlessCubemapHandle handle{};
+        uint64_t releaseFrame{0};
+    };
+
+    /** Old bindless slots orphaned by Reload*; released in ResolveUnloads once in-flight frames can no longer reference them. */
+    Core::Vector<DeferredTextureBindingRelease> deferredTextureBindingReleases;
+    Core::Vector<DeferredCubemapBindingRelease> deferredCubemapBindingReleases;
 };
 } // Engine
 

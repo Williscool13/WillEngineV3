@@ -13,6 +13,7 @@
 #include "engine/core/environment_map_id.h"
 #include "engine/core/model_id.h"
 #include "engine/core/texture_id.h"
+#include "engine/resources/environment_map/probe_format.h"
 
 #include "asset_generation_types.h"
 #include "environment_map_generate_slot.h"
@@ -63,6 +64,7 @@ struct ModelGenerateRequest
     Core::Path outputPath;
     Core::Path textureOutputPath;
     uint64_t modelId{0};
+    uint64_t contentVersion{1};
 };
 
 struct ModelGenerateComplete
@@ -79,6 +81,7 @@ struct TextureGenerateRequest
     bool mipmapped;
     bool flipY{true};
     DXGI_FORMAT targetFormat;
+    uint64_t contentVersion{1};
 
     Core::Path imagePath;
 
@@ -101,6 +104,7 @@ struct EnvironmentMapGenerateRequest
     Core::Path imagePath;
     Core::Path outputPath;
     Engine::EnvironmentMapID environmentMapId{};
+    uint64_t contentVersion{1};
 };
 
 struct EnvironmentMapGenerateComplete
@@ -117,6 +121,9 @@ struct ProbeAssembleRequest
     uint32_t targetResolution{0};
     Core::Path outputPath;
     Engine::EnvironmentMapID environmentMapId{};
+    uint64_t probeId{0};
+    Engine::ProbeBakeSnapshot snapshot{};
+    uint64_t contentVersion{1};
 };
 
 struct FontGenerateRequest
@@ -124,6 +131,7 @@ struct FontGenerateRequest
     Core::Path ttfPath;
     Core::Path outputPath;
     Engine::FontID fontId{};
+    uint64_t contentVersion{1};
 };
 
 struct FontGenerateComplete
@@ -163,8 +171,8 @@ public:
 
     void RequestEnvironmentMapGenerate(const Core::Path& hdriPath, const Core::Path& outputPath);
 
-    /** Assembles the 6 captured probe faces (moved in) into a prefiltered .wenvmap; completion is surfaced through the environment-map complete queue. */
-    void RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath);
+    /** Assembles the 6 captured probe faces (moved in) into a prefiltered .wprobe; completion is surfaced through the environment-map complete queue. */
+    void RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const Engine::ProbeBakeSnapshot& snapshot);
 
     bool TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult);
 

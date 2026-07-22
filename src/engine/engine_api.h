@@ -396,7 +396,6 @@ struct EditorState
     PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
     LightDebugDrawMode lightDebugDrawMode{LightDebugDrawMode::Selected};
     bool bShowLightSprites{true};
-    bool bProbeBakeHideTest{false};
 
     // Scene management
     Core::InlineVector<RuntimeSceneMetadata, 8> loadedScenes{};

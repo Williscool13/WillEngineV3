@@ -27,6 +27,8 @@ struct WPrefabHeader
     uint32_t major{PREFAB_MAJOR_VERSION};
     uint32_t minor{PREFAB_MINOR_VERSION};
 
+    uint64_t contentVersion{0};
+
     uint32_t componentCount{0};
     uint64_t dataOffset{0};
 };

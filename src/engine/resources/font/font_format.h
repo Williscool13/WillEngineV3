@@ -77,6 +77,8 @@ struct WFontHeader
     uint32_t major{FONT_MAJOR_VERSION};
     uint32_t minor{FONT_MINOR_VERSION};
 
+    uint64_t contentVersion{0};
+
     /** Source rasterization size in pixels (e.g. 48). */
     uint32_t sourceSizePx{0};
     /** SDF texel spread radius in pixels. Used in shader smoothstep edge computation. */

@@ -254,6 +254,17 @@ void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
+void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (state->pendingHotReloadEnvironmentMapIds.IsEmpty()) { return; }
+
+    for (auto hotId : state->pendingHotReloadEnvironmentMapIds) {
+        if (ctx->assetManager->IsCubemapLoaded(hotId)) {
+            ctx->assetManager->ReloadCubemap(hotId);
+        }
+    }
+}
+
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadPendingTag>();
@@ -279,16 +290,37 @@ void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineSta
 
     auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
     for (const auto& [entity, probe] : view.each()) {
-        if (!probe.standInEnvMap.IsValid()) {
+        if (ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) {
+            probe.contentHandle = ctx->assetManager->LoadProbe(Engine::ProbeID{probe.probeId});
+            probe.contentSource = Component::ReflectionProbeComponent::ContentSource::Baked;
+        } else if (probe.standInEnvMap.IsValid()) {
+            probe.contentHandle = ctx->assetManager->LoadCubemap(probe.standInEnvMap);
+            probe.contentSource = Component::ReflectionProbeComponent::ContentSource::StandIn;
+        } else {
+            probe.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
             state->registry.remove<Component::ReflectionProbeLoadPendingTag>(entity);
             continue;
         }
-        probe.contentHandle = ctx->assetManager->LoadCubemap(probe.standInEnvMap);
         if (probe.contentHandle.IsValid()) { started.PushBack(entity); }
     }
     for (const entt::entity entity : started) {
         state->registry.remove<Component::ReflectionProbeLoadPendingTag>(entity);
         state->registry.emplace_or_replace<Component::ReflectionProbeLoadingTag>(entity);
+    }
+}
+
+void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
+        if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) { continue; }
+        if (!ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) { continue; }
+        if (probe.contentHandle.IsValid()) {
+            ctx->assetManager->UnloadCubemap(probe.contentHandle);
+            probe.contentHandle = Engine::CubemapHandle::INVALID;
+        }
+        state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
+        state->registry.emplace_or_replace<Component::ReflectionProbeLoadPendingTag>(entity);
+        state->bPendingModelResolve |= true;
     }
 }
 

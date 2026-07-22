@@ -26,6 +26,8 @@ struct WEnvMapHeader
     uint32_t major{ENV_MAP_MAJOR_VERSION};
     uint32_t minor{ENV_MAP_MINOR_VERSION};
 
+    uint64_t contentVersion{0};
+
     uint32_t width{0};
     uint32_t height{0};
     uint32_t mipCount{0};

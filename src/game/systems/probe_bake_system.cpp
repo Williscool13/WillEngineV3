@@ -121,6 +121,16 @@ void ProbeBakeSystem::Start(Engine::EngineContext* ctx, Engine::EngineState* sta
     phase = Phase::Starting;
 }
 
+void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState* state)
+{
+    bakeQueue.Clear();
+    for (const entt::entity entity : state->registry.view<Component::ReflectionProbeComponent>()) {
+        if (bakeQueue.IsFull()) { break; }
+        bakeQueue.PushBack(entity);
+    }
+    bakeBatchTotal = static_cast<uint32_t>(bakeQueue.Size());
+}
+
 void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (bBakeActive) {
@@ -129,6 +139,8 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
         ClearProbeBakeHideSet(ctx, state);
         state->inputContext = stashedInputContext;
     }
+    bakeQueue.Clear();
+    bakeBatchTotal = 0;
     bViewOverrideActive = false;
     bBakeActive = false;
     phase = Phase::Idle;
@@ -161,6 +173,22 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
     switch (phase) {
         case Phase::Idle:
         {
+            for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
+                if (!probe.bBakeRequested) { continue; }
+                probe.bBakeRequested = false;
+                if (!bakeQueue.Contains(entity) && !bakeQueue.IsFull()) { bakeQueue.PushBack(entity); }
+            }
+
+            while (!bakeQueue.IsEmpty()) {
+                const entt::entity next = bakeQueue.Front();
+                bakeQueue.RemoveAt(0);
+                if (state->registry.valid(next) && state->registry.all_of<Component::ReflectionProbeComponent>(next)) {
+                    Start(ctx, state, next);
+                    return;
+                }
+            }
+
+            bakeBatchTotal = 0;
             return;
         }
         case Phase::Starting:
@@ -189,6 +217,21 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             capturePosition = worldTransform->translation + worldTransform->rotation * probe->captureOffset;
             bakeProbeId = probe->probeId;
             bakeTargetResolution = probe->resolution == Component::ReflectionProbeComponent::Resolution::Res128 ? 128 : 256;
+
+            bakeSnapshot = {};
+            bakeSnapshot.translation[0] = worldTransform->translation.x;
+            bakeSnapshot.translation[1] = worldTransform->translation.y;
+            bakeSnapshot.translation[2] = worldTransform->translation.z;
+            bakeSnapshot.rotation[0] = worldTransform->rotation.w;
+            bakeSnapshot.rotation[1] = worldTransform->rotation.x;
+            bakeSnapshot.rotation[2] = worldTransform->rotation.y;
+            bakeSnapshot.rotation[3] = worldTransform->rotation.z;
+            bakeSnapshot.scale[0] = worldTransform->scale.x;
+            bakeSnapshot.scale[1] = worldTransform->scale.y;
+            bakeSnapshot.scale[2] = worldTransform->scale.z;
+            bakeSnapshot.captureOffset[0] = probe->captureOffset.x;
+            bakeSnapshot.captureOffset[1] = probe->captureOffset.y;
+            bakeSnapshot.captureOffset[2] = probe->captureOffset.z;
 
             phase = Phase::FaceSetup;
             return;
@@ -261,25 +304,14 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             bBakeActive = false;
             bFacesReady = true;
 
-            if (captureSize > 0) {
-                Core::Path bakeDir = Platform::GetUserDataPath() / "screenshots";
-                Platform::CreateDirectories(bakeDir.c_str());
-                for (uint32_t face = 0; face < 6; ++face) {
-                    if (!faceBuffers[face].IsAllocated()) { continue; }
-                    Core::InlineString<64> faceName = Core::InlineString<64>::Format("probe_bake_face_%u.hdr", face);
-                    Core::Path facePath = bakeDir / faceName.c_str();
-                    WriteProbeFaceHdr(ctx, faceBuffers[face].Data(), captureSize, facePath);
-                }
-            }
-
             bool bAllFacesReady = captureSize > 0;
             for (const auto & faceBuffer : faceBuffers) {
                 if (!faceBuffer.IsAllocated()) { bAllFacesReady = false; }
             }
             if (bAllFacesReady) {
-                Core::InlineString<64> assetName = Core::InlineString<64>::Format("probe_%llu.wenvmap", static_cast<unsigned long long>(bakeProbeId));
-                Core::Path outputPath = Platform::GetAssetPath() / "environment-maps" / assetName.c_str();
-                ctx->SubmitProbeAssemble(faceBuffers, captureSize, bakeTargetResolution, outputPath);
+                Core::InlineString<64> assetName = Core::InlineString<64>::Format("probe_%llu.wprobe", static_cast<unsigned long long>(bakeProbeId));
+                Core::Path outputPath = Platform::GetAssetPath() / "probes" / assetName.c_str();
+                ctx->SubmitProbeAssemble(faceBuffers, captureSize, bakeTargetResolution, outputPath, bakeProbeId, bakeSnapshot);
             }
 
             phase = Phase::Idle;

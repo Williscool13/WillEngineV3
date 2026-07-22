@@ -40,12 +40,13 @@ void FontGenerateSlot::Initialize(
     ft = msdfgen::initializeFreetype();
 }
 
-void FontGenerateSlot::Launch(FontGenerateSlotHandle slotHandle, const Core::Path& _ttfPath, const Core::Path& _outputPath, Engine::FontID _fontId)
+void FontGenerateSlot::Launch(FontGenerateSlotHandle slotHandle, const Core::Path& _ttfPath, const Core::Path& _outputPath, Engine::FontID _fontId, uint64_t _contentVersion)
 {
     _slotHandle = slotHandle;
     ttfPath = _ttfPath;
     outputPath = _outputPath;
     fontId = _fontId;
+    contentVersion = _contentVersion;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -244,6 +245,7 @@ bool FontGenerateSlot::GenerateAndWrite()
     // Build and write .wsfont
     Engine::WFontHeader header{};
     header.fontId = fontId.id;
+    header.contentVersion = contentVersion;
     header.major = Engine::FONT_MAJOR_VERSION;
     header.minor = Engine::FONT_MINOR_VERSION;
     header.sourceSizePx = static_cast<uint32_t>(MSDF_MIN_SCALE);

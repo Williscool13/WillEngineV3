@@ -23,6 +23,7 @@ add_library(engine STATIC
         core/texture_id.h
         core/sampler_id.h
         core/model_id.h
+        core/probe_id.h
         core/physics_collider_id.h
         core/action_handle.h
         input/input_resolve.cpp
@@ -45,6 +46,8 @@ add_library(engine STATIC
         resources/text_material/text_material_format.h
         resources/environment_map/environment_map_format.cpp
         resources/environment_map/environment_map_format.h
+        resources/environment_map/probe_format.cpp
+        resources/environment_map/probe_format.h
         resources/texture/texture.h
         resources/texture/texture_format.cpp
         resources/texture/texture_format.h

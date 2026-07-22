@@ -17,6 +17,7 @@
 #include "core/memory/linear_allocator.h"
 #include "core/memory/memory_manager.h"
 #include "engine/core/environment_map_id.h"
+#include "engine/resources/environment_map/probe_format.h"
 #include "render/shaders/constants_interop.h"
 #include "render/vulkan/vk_resources.h"
 
@@ -47,10 +48,10 @@ struct EnvironmentMapGenerateSlot
         Core::InlineFunction<void(bool success, EnvironmentMapGenerateSlotHandle cubemapSlotHandle)> notifyCallback
     );
 
-    void Launch(EnvironmentMapGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId);
+    void Launch(EnvironmentMapGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId, uint64_t _contentVersion);
 
-    /** Assembles a prefiltered cubemap asset from 6 captured RGBA16F probe faces (S x S) downsampled to targetResolution, writing a .wenvmap at _outputPath. Faces are moved in. */
-    void LaunchProbe(EnvironmentMapGenerateSlotHandle _slotHandle, Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId);
+    /** Assembles a prefiltered cubemap asset from 6 captured RGBA16F probe faces (S x S) downsampled to targetResolution, writing a .wprobe at _outputPath. Faces are moved in. */
+    void LaunchProbe(EnvironmentMapGenerateSlotHandle _slotHandle, Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId, uint64_t _probeId, const Engine::ProbeBakeSnapshot& _snapshot, uint64_t _contentVersion);
 
     void Clear();
 
@@ -64,6 +65,7 @@ struct EnvironmentMapGenerateSlot
     Core::Path imagePath;
     Core::Path outputPath;
     Engine::EnvironmentMapID environmentMapId{};
+    uint64_t contentVersion{1};
 
 private:
     bool LoadEquirectangularAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait);
@@ -74,6 +76,8 @@ private:
     bool BuildFilteredMipsAndCopy(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
 
     bool WriteWEnvMapFile();
+
+    bool WriteWProbeFile();
 
     enki::TaskScheduler* scheduler{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
@@ -90,6 +94,8 @@ private:
     bool bProbeMode{false};
     uint32_t baseResolution{ENVIRONMENT_MAP_RESOLUTION};
     uint32_t probeCaptureSize{0};
+    uint64_t probeId{0};
+    Engine::ProbeBakeSnapshot probeSnapshot{};
     Core::HeapArray<uint16_t> probeFaces[6]{};
 
     Render::AllocatedImage probeSourceImage;

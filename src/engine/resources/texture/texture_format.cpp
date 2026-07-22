@@ -19,6 +19,7 @@ bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header)
     out << "wtexture\n";
     out << "version " << header.major << " " << header.minor << "\n";
     out << "id " << header.textureId << "\n";
+    out << "content_version " << header.contentVersion << "\n";
     out << "name " << header.name << "\n";
     out << "width " << header.width << "\n";
     out << "height " << header.height << "\n";
@@ -60,6 +61,9 @@ std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
         }
         else if (strncmp(line, "id ", 3) == 0) {
             std::from_chars(line + 3, line + LINE_BUF, header.textureId);
+        }
+        else if (strncmp(line, "content_version ", 16) == 0) {
+            std::from_chars(line + 16, line + LINE_BUF, header.contentVersion);
         }
         else if (strncmp(line, "name ", 5) == 0) {
             const char* name = line + 5;

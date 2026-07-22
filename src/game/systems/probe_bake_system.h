@@ -9,6 +9,8 @@
 #include <glm/glm.hpp>
 
 #include "core/containers/heap_array.h"
+#include "core/containers/inline_vector.h"
+#include "engine/resources/environment_map/probe_format.h"
 #include "render/interface/render_interface.h"
 
 namespace Engine
@@ -52,6 +54,8 @@ struct ProbeBakeSystem
     glm::vec3 capturePosition{0.0f};
     /** Stashed from the probe component at Starting; the entity may be deleted mid-bake. */
     uint64_t bakeProbeId{0};
+    /** Baked-state snapshot stashed at Starting; written into the .wprobe header for stale-bake detection. */
+    Engine::ProbeBakeSnapshot bakeSnapshot{};
     uint32_t bakeTargetResolution{256};
     int32_t currentFace{0};
     int32_t settleCounter{0};
@@ -64,8 +68,16 @@ struct ProbeBakeSystem
     Engine::InputContext stashedInputContext{};
     Core::HeapArray<uint16_t> faceBuffers[6]{};
 
+    /** Probe entities awaiting a bake; drained one at a time from the Idle phase. */
+    Core::InlineVector<entt::entity, 64> bakeQueue{};
+    /** Size of the last "bake all" batch, for the "probe K of N" progress readout. */
+    uint32_t bakeBatchTotal{0};
+
     /** Kicks a bake for the given probe entity; no-op if a bake is already active. */
     void Start(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity probe);
+
+    /** Queues every reflection-probe entity in the scene for baking; replaces any pending queue. */
+    void EnqueueAllProbes(Engine::EngineState* state);
 
     /** Advances the state machine one render frame; owns FrameBuffer::bCaptureProbeFace (cleared every tick, raised on request frames). */
     void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);

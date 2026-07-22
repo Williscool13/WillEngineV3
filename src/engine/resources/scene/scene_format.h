@@ -25,6 +25,8 @@ struct WSceneHeader
     uint32_t major{SCENE_MAJOR_VERSION};
     uint32_t minor{SCENE_MINOR_VERSION};
 
+    uint64_t contentVersion{0};
+
     uint32_t entityCount{0};
     uint64_t dataOffset{0};
 };

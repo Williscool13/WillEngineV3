@@ -32,13 +32,14 @@ struct FontGenerateSlot
         Core::InlineFunction<void(bool success, FontGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(FontGenerateSlotHandle slotHandle, const Core::Path& ttfPath, const Core::Path& outputPath, Engine::FontID fontId);
+    void Launch(FontGenerateSlotHandle slotHandle, const Core::Path& ttfPath, const Core::Path& outputPath, Engine::FontID fontId, uint64_t contentVersion);
 
     void Clear();
 
     Core::Path ttfPath;
     Core::Path outputPath;
     Engine::FontID fontId{};
+    uint64_t contentVersion{1};
 
 private:
     bool GenerateAndWrite();

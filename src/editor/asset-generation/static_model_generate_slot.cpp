@@ -44,7 +44,7 @@ void StaticModelGenerateSlot::Initialize(
     _notifyCallback = std::move(notifyCallback);
 }
 
-void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const Core::Path& _gltfPath, const Core::Path& _outputPath, const Core::Path& _textureOutputPath, uint64_t _modelId)
+void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const Core::Path& _gltfPath, const Core::Path& _outputPath, const Core::Path& _textureOutputPath, uint64_t _modelId, uint64_t _contentVersion)
 {
     gltfPath = Core::Path{};
     slotHandle = _slotHandle;
@@ -52,6 +52,7 @@ void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const 
     outputPath = _outputPath;
     textureOutputPath = _textureOutputPath;
     modelId = _modelId;
+    contentVersion = _contentVersion;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -1058,6 +1059,7 @@ bool StaticModelGenerateSlot::WriteStaticModel()
         std::ofstream file(outputPath.c_str(), std::ios::binary);
         Engine::WStaticModelHeader header{};
         header.modelId = modelId;
+        header.contentVersion = contentVersion;
         const size_t copyLen = std::min(rawModel.name.Size(), Engine::WSTATICMODEL_NAME_LENGTH - 1);
         memcpy(header.name, rawModel.name.c_str(), copyLen);
         header.name[copyLen] = '\0';

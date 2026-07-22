@@ -234,11 +234,19 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
         }
     }
 
+    uint64_t contentVersion = 1;
+    if (path.Exists()) {
+        if (auto existing = Engine::ReadWSceneHeader(path)) {
+            contentVersion = existing->contentVersion + 1;
+        }
+    }
+
     Platform::CreateDirectories(path.Parent().c_str());
     std::ofstream file(path.c_str());
 
     Engine::WSceneHeader sceneHeader{};
     sceneHeader.sceneId = sceneID.id;
+    sceneHeader.contentVersion = contentVersion;
     const auto nameLen = std::min(sceneName.size(), Engine::WSCENE_NAME_LENGTH - 1);
     memcpy(sceneHeader.name, sceneName.data(), nameLen);
     sceneHeader.name[nameLen] = '\0';
@@ -603,11 +611,19 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
         prefabId = state->rng();
     }
 
+    uint64_t contentVersion = 1;
+    if (path.Exists()) {
+        if (auto existing = Engine::ReadWPrefabHeader(path)) {
+            contentVersion = existing->contentVersion + 1;
+        }
+    }
+
     Platform::CreateDirectories(path.Parent().c_str());
     std::ofstream file(path.c_str());
 
     Engine::WPrefabHeader header{};
     header.prefabId = prefabId;
+    header.contentVersion = contentVersion;
     const auto nameLen = std::min(prefabName.size(), Engine::WPREFAB_NAME_LENGTH - 1);
     memcpy(header.name, prefabName.data(), nameLen);
     header.name[nameLen] = '\0';

@@ -32,9 +32,12 @@ void DisconnectRenderObservers(entt::registry& registry);
 void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
 void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
 void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
+void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+/** Upgrades a stand-in/unbaked probe to its baked content once its first bake lands in the probe registry; re-enters the kickoff flow. */
+void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState* state);
 void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);

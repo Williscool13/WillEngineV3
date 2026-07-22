@@ -17,6 +17,7 @@ bool WriteWSceneHeader(std::ostream& out, const WSceneHeader& header)
     out << "wscene\n";
     out << "version " << header.major << " " << header.minor << "\n";
     out << "id " << header.sceneId << "\n";
+    out << "content_version " << header.contentVersion << "\n";
     out << "name " << header.name << "\n";
     out << "entity_count " << header.entityCount << "\n";
     out << "end_header\n";
@@ -50,6 +51,7 @@ std::optional<WSceneHeader> ReadWSceneHeader(std::istream& in)
             if (major != SCENE_MAJOR_VERSION) { return std::nullopt; }
         }
         else if (strncmp(line, "id ", 3) == 0) { std::from_chars(line + 3, line + LINE_BUF, header.sceneId); }
+        else if (strncmp(line, "content_version ", 16) == 0) { std::from_chars(line + 16, line + LINE_BUF, header.contentVersion); }
         else if (strncmp(line, "name ", 5) == 0) {
             const char* name = line + 5;
             const size_t copyLen = std::min(strlen(name), WSCENE_NAME_LENGTH - 1);

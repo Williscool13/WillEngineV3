@@ -26,6 +26,8 @@ struct WTextureHeader
     uint32_t major{TEXTURE_MAJOR_VERSION};
     uint32_t minor{TEXTURE_MINOR_VERSION};
 
+    uint64_t contentVersion{0};
+
     uint32_t width{0};
     uint32_t height{0};
     uint32_t mipCount{0};

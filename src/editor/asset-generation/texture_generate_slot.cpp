@@ -49,12 +49,13 @@ void TextureGenerateSlot::Initialize(
 }
 
 void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId,
-                                 bool _mipmapped, DXGI_FORMAT _targetFormat, bool _flipY)
+                                 bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _flipY)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
     outputPath = _outputPath;
     textureId = _textureId;
+    contentVersion = _contentVersion;
     mipmapped = _mipmapped;
     flipY = _flipY;
     targetFormat = _targetFormat;
@@ -68,11 +69,12 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Co
 }
 
 void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel,
-                                           const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat)
+                                           const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion)
 {
     slotHandle = _slotHandle;
     outputPath = _outputPath;
     textureId = _textureId;
+    contentVersion = _contentVersion;
     mipmapped = _mipmapped;
     targetFormat = _targetFormat;
     preloadedPixels = std::move(pixels);
@@ -459,6 +461,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
 
     Engine::WTextureHeader header{};
     header.textureId = textureId.id;
+    header.contentVersion = contentVersion;
     header.width = sourceImage.extent.width;
     header.height = sourceImage.extent.height;
     header.mipCount = mipLevels;

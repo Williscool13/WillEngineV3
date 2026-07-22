@@ -14,6 +14,7 @@
 #include "core/containers/heap_array.h"
 #include "core/containers/inline_path.h"
 #include "core/memory/arena_suballocator.h"
+#include "engine/resources/environment_map/probe_format.h"
 #include "render/pipelines/pipeline_manager.h"
 
 namespace enki
@@ -89,6 +90,8 @@ struct ProbeAssembleStaging
     uint32_t captureSize{0};
     uint32_t targetResolution{0};
     Core::Path outputPath{};
+    uint64_t probeId{0};
+    ProbeBakeSnapshot snapshot{};
     std::atomic<bool> bPending{false};
 };
 
@@ -143,12 +146,14 @@ struct EngineContext
     ProbeAssembleStaging probeAssemble{};
 
     /** Hands a finished bake's 6 face buffers off (moved) for engine-side assembly; the engine forwards it to the asset generator next frame. */
-    void SubmitProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath)
+    void SubmitProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const ProbeBakeSnapshot& snapshot)
     {
         for (uint32_t face = 0; face < 6; ++face) { probeAssemble.faces[face] = std::move(faces[face]); }
         probeAssemble.captureSize = captureSize;
         probeAssemble.targetResolution = targetResolution;
         probeAssemble.outputPath = outputPath;
+        probeAssemble.probeId = probeId;
+        probeAssemble.snapshot = snapshot;
         probeAssemble.bPending.store(true, std::memory_order_release);
     }
 

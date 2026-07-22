@@ -19,6 +19,7 @@ bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header
     out << "wstaticmodel\n";
     out << "version " << header.version << "\n";
     out << "id " << header.modelId << "\n";
+    out << "content_version " << header.contentVersion << "\n";
     out << "name " << header.name << "\n";
     out << "node_count " << header.nodeCount << "\n";
     out << "mesh_node_count " << header.meshNodeCount << "\n";
@@ -73,6 +74,7 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in)
             if (header.version != STATICMODEL_VERSION) { return std::nullopt; }
         }
         else if (strncmp(line, "id ", 3) == 0) { std::from_chars(line + 3, line + LINE_BUF, header.modelId); }
+        else if (strncmp(line, "content_version ", 16) == 0) { std::from_chars(line + 16, line + LINE_BUF, header.contentVersion); }
         else if (strncmp(line, "name ", 5) == 0) {
             const char* name = line + 5;
             const size_t copyLen = std::min(strlen(name), WSTATICMODEL_NAME_LENGTH - 1);
@@ -144,6 +146,7 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeaderAnyVersion(const Core::P
         }
         if (strncmp(line, "version ", 8) == 0) { std::from_chars(line + 8, line + LINE_BUF, header.version); }
         else if (strncmp(line, "id ", 3) == 0) { std::from_chars(line + 3, line + LINE_BUF, header.modelId); }
+        else if (strncmp(line, "content_version ", 16) == 0) { std::from_chars(line + 16, line + LINE_BUF, header.contentVersion); }
         else if (strncmp(line, "name ", 5) == 0) {
             const char* name = line + 5;
             const size_t copyLen = std::min(strlen(name), WSTATICMODEL_NAME_LENGTH - 1);

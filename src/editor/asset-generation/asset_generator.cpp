@@ -105,7 +105,7 @@ void AssetGenerator::ThreadMain()
                 Core::Handle<StaticModelGenerateSlot> slotHandle = modelGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     StaticModelGenerateSlot& task = modelGenerateTasks[slotHandle.index];
-                    task.Launch(slotHandle, req.gltfPath, req.outputPath, req.textureOutputPath, req.modelId);
+                    task.Launch(slotHandle, req.gltfPath, req.outputPath, req.textureOutputPath, req.modelId, req.contentVersion);
                 }
                 else {
                     modelGenerateRequestQueue.enqueue(req);
@@ -123,10 +123,10 @@ void AssetGenerator::ThreadMain()
                     TextureGenerateSlot& task = textureGenerateTasks[slotHandle.index];
                     if (req.sourcePixels.IsAllocated()) {
                         task.LaunchFromMemory(slotHandle, std::move(req.sourcePixels), req.sourceWidth, req.sourceHeight, req.sourceBytesPerPixel, req.outputPath, req.textureId, req.mipmapped,
-                                              req.targetFormat);
+                                              req.targetFormat, req.contentVersion);
                     }
                     else {
-                        task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat, req.flipY);
+                        task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat, req.contentVersion, req.flipY);
                     }
                 }
                 else {
@@ -143,7 +143,7 @@ void AssetGenerator::ThreadMain()
                 Core::Handle<EnvironmentMapGenerateSlot> slotHandle = environmentMapGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     EnvironmentMapGenerateSlot& task = environmentMapeGenerateTasks[slotHandle.index];
-                    task.Launch(slotHandle, req.imagePath, req.outputPath, req.environmentMapId);
+                    task.Launch(slotHandle, req.imagePath, req.outputPath, req.environmentMapId, req.contentVersion);
                 }
                 else {
                     environmentMapGenerateRequestQueue.enqueue(req);
@@ -158,7 +158,7 @@ void AssetGenerator::ThreadMain()
                 Core::Handle<EnvironmentMapGenerateSlot> slotHandle = environmentMapGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     EnvironmentMapGenerateSlot& task = environmentMapeGenerateTasks[slotHandle.index];
-                    task.LaunchProbe(slotHandle, req.faces, req.captureSize, req.targetResolution, req.outputPath, req.environmentMapId);
+                    task.LaunchProbe(slotHandle, req.faces, req.captureSize, req.targetResolution, req.outputPath, req.environmentMapId, req.probeId, req.snapshot, req.contentVersion);
                 }
                 else {
                     probeAssembleRequestQueue.enqueue(std::move(req));
@@ -173,7 +173,7 @@ void AssetGenerator::ThreadMain()
                 Core::Handle<FontGenerateSlot> slotHandle = fontGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     FontGenerateSlot& task = fontGenerateTasks[slotHandle.index];
-                    task.Launch(slotHandle, req.ttfPath, req.outputPath, req.fontId);
+                    task.Launch(slotHandle, req.ttfPath, req.outputPath, req.fontId, req.contentVersion);
                 }
                 else {
                     fontGenerateRequestQueue.enqueue(std::move(req));
@@ -220,12 +220,14 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
     ZoneScoped;
 
     uint64_t modelId = modelIdRng();
+    uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
         if (auto header = Engine::ReadWStaticModelHeaderAnyVersion(outputPath)) {
             modelId = header->modelId;
+            contentVersion = header->contentVersion + 1;
         }
     }
-    modelGenerateRequestQueue.enqueue({gltfPath, outputPath, textureOutputPath, modelId});
+    modelGenerateRequestQueue.enqueue({gltfPath, outputPath, textureOutputPath, modelId, contentVersion});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
@@ -234,12 +236,22 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Pat
 {
     ZoneScoped;
     Engine::TextureID id{textureIdRng()};
+    uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
         if (auto header = Engine::ReadWTextureHeader(outputPath)) {
             id = Engine::TextureID{header->textureId};
+            contentVersion = header->contentVersion + 1;
         }
     }
-    textureGenerateRequestQueue.enqueue({outputPath, id, mipmapped, flipY, targetFormat, imagePath});
+    TextureGenerateRequest req{};
+    req.outputPath = outputPath;
+    req.textureId = id;
+    req.mipmapped = mipmapped;
+    req.flipY = flipY;
+    req.targetFormat = targetFormat;
+    req.contentVersion = contentVersion;
+    req.imagePath = imagePath;
+    textureGenerateRequestQueue.enqueue(std::move(req));
     workCounter.fetch_add(1);
     wakeCV.notify_one();
     return id;
@@ -250,9 +262,11 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArr
 {
     ZoneScoped;
     Engine::TextureID id{textureIdRng()};
+    uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
         if (auto header = Engine::ReadWTextureHeader(outputPath)) {
             id = Engine::TextureID{header->textureId};
+            contentVersion = header->contentVersion + 1;
         }
     }
     TextureGenerateRequest req{};
@@ -260,6 +274,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArr
     req.textureId = id;
     req.mipmapped = mipmapped;
     req.targetFormat = targetFormat;
+    req.contentVersion = contentVersion;
     req.sourcePixels = std::move(pixels);
     req.sourceWidth = w;
     req.sourceHeight = h;
@@ -275,24 +290,28 @@ void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, c
     ZoneScoped;
 
     Engine::EnvironmentMapID id{environmentMapIdRng()};
+    uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
         if (auto header = Engine::ReadWEnvMapHeader(outputPath)) {
             id = Engine::EnvironmentMapID{header->environmentMapId};
+            contentVersion = header->contentVersion + 1;
         }
     }
-    environmentMapGenerateRequestQueue.enqueue({hdriPath, outputPath, id});
+    environmentMapGenerateRequestQueue.enqueue({hdriPath, outputPath, id, contentVersion});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
 
-void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath)
+void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const Engine::ProbeBakeSnapshot& snapshot)
 {
     ZoneScoped;
 
     Engine::EnvironmentMapID id{environmentMapIdRng()};
+    uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
-        if (auto header = Engine::ReadWEnvMapHeader(outputPath)) {
+        if (auto header = Engine::ReadWProbeHeader(outputPath)) {
             id = Engine::EnvironmentMapID{header->environmentMapId};
+            contentVersion = header->contentVersion + 1;
         }
     }
 
@@ -304,6 +323,9 @@ void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint
     req.targetResolution = targetResolution;
     req.outputPath = outputPath;
     req.environmentMapId = id;
+    req.probeId = probeId;
+    req.snapshot = snapshot;
+    req.contentVersion = contentVersion;
     probeAssembleRequestQueue.enqueue(std::move(req));
     workCounter.fetch_add(1);
     wakeCV.notify_one();
@@ -433,12 +455,14 @@ Engine::FontID AssetGenerator::RequestFontGenerate(const Core::Path& ttfPath, co
     ZoneScoped;
 
     Engine::FontID id{fontIdRng()};
+    uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
         if (auto header = Engine::ReadWFontHeaderAnyVersion(outputPath)) {
             id = Engine::FontID{header->fontId};
+            contentVersion = header->contentVersion + 1;
         }
     }
-    fontGenerateRequestQueue.enqueue({ttfPath, outputPath, id});
+    fontGenerateRequestQueue.enqueue({ttfPath, outputPath, id, contentVersion});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
     return id;

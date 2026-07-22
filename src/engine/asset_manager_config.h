@@ -20,6 +20,7 @@ inline constexpr uint32_t MAX_CACHED_MODELS = 4096;
 inline constexpr uint32_t MAX_CACHED_TEXTURES = 4096;
 inline constexpr uint32_t MAX_CACHED_SAMPLERS = 256;
 inline constexpr uint32_t MAX_CACHED_CUBEMAPS = 512;
+inline constexpr uint32_t MAX_CACHED_PROBES = 512;
 inline constexpr uint32_t MAX_CACHED_AUDIO = 256;
 inline constexpr uint32_t MAX_CACHED_SCENES = 512;
 inline constexpr uint32_t MAX_CACHED_PREFABS = 512;

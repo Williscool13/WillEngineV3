@@ -17,6 +17,7 @@ bool WriteWFontHeader(std::ostream& out, const WFontHeader& header)
     out << "wsfont\n";
     out << "version " << header.major << " " << header.minor << "\n";
     out << "id " << header.fontId << "\n";
+    out << "content_version " << header.contentVersion << "\n";
     out << "name " << header.name << "\n";
     out << "source_size_px " << header.sourceSizePx << "\n";
     out << "sdf_spread " << header.sdfSpread << "\n";
@@ -49,6 +50,7 @@ static void ComputeOffsets(WFontHeader& header, uint64_t headerEnd)
 static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& header)
 {
     if (strncmp(line, "id ", 3) == 0) { std::from_chars(line + 3, line + lineBufSize, header.fontId); }
+    else if (strncmp(line, "content_version ", 16) == 0) { std::from_chars(line + 16, line + lineBufSize, header.contentVersion); }
     else if (strncmp(line, "name ", 5) == 0) {
         const char* name = line + 5;
         const size_t copyLen = std::min(strlen(name), WFONT_NAME_LENGTH - 1);

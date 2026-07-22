@@ -9,6 +9,7 @@
 
 #include "asset-load/async_asset_load_manager.h"
 #include "resources/environment_map/environment_map_format.h"
+#include "resources/environment_map/probe_format.h"
 #include "resources/font/font_format.h"
 #include "resources/prefab/prefab_format.h"
 #include "resources/scene/scene_format.h"
@@ -31,10 +32,13 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       staticProceduralRegistry(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_STATIC_PROCEDURAL_TEXTURES),
       cubemapNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       cubemapCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
+      probeRegistry(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_PROBES),
       sceneCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
       prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS),
       fontNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
-      fontCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS)
+      fontCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
+      deferredTextureBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager),
+      deferredCubemapBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager)
 {
 #if WILL_EDITOR
     // Creates white/error if they don't exist. Also creates BRDF LUT
@@ -1063,6 +1067,19 @@ bool AssetManager::ResolveUnloads()
 {
     const uint64_t currentFrame = ctx->currentRenderFrame;
 
+    for (size_t i = deferredTextureBindingReleases.Size(); i > 0;) {
+        --i;
+        if (currentFrame < deferredTextureBindingReleases[i].releaseFrame) { continue; }
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(deferredTextureBindingReleases[i].handle);
+        deferredTextureBindingReleases.SwapRemove(i);
+    }
+    for (size_t i = deferredCubemapBindingReleases.Size(); i > 0;) {
+        --i;
+        if (currentFrame < deferredCubemapBindingReleases[i].releaseFrame) { continue; }
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseCubemapBinding(deferredCubemapBindingReleases[i].handle);
+        deferredCubemapBindingReleases.SwapRemove(i);
+    }
+
     int32_t modelsUnloadedThisTick{0};
     for (auto& model : models) {
         if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
@@ -1192,6 +1209,11 @@ bool AssetManager::ResolveUnloads()
 
 void AssetManager::Scan()
 {
+    changedModelIds.Clear();
+    changedTextureIds.Clear();
+    changedFontIds.Clear();
+    changedEnvironmentMapIds.Clear();
+
     if (ctx->bShouldRescanResources) {
         const Core::Path& assetPath = Platform::GetAssetPath();
         if (assetPath.Exists()) {
@@ -1211,6 +1233,9 @@ void AssetManager::Scan()
                     if (textureNameToId.Contains(nameSid) && *textureNameToId.Find(nameSid) != id) {
                         LOG_CRITICAL(Asset, "2 Textures were mounted that contain the same name. This will cause issues for texture lookups by name. ({})", path.c_str());
                     }
+                    const DiskTextureDesc* prev = textureRegistry.Find(id);
+                    const bool bExisted = prev != nullptr;
+                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
                     DiskTextureDesc& cached = textureRegistry[id];
                     cached.source = Core::Path(path);
                     cached.name = Core::InlineString<128>(header->name);
@@ -1221,7 +1246,12 @@ void AssetManager::Scan()
                     cached.dataSize = header->dataSize;
                     cached.uncompressedSize = header->uncompressedSize;
                     cached.compressionType = header->compressionType;
+                    cached.contentVersion = header->contentVersion;
                     textureNameToId[nameSid] = id;
+                    if (bExisted && prevVersion != header->contentVersion) {
+                        LOG_TRACE(Asset, "Texture '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, header->contentVersion);
+                        if (!changedTextureIds.IsFull()) { changedTextureIds.PushBack(id); }
+                    }
                 }
                 else if (ext == ".wsmesh") {
                     auto optModelHeader = ReadWStaticModelHeader(path);
@@ -1241,6 +1271,9 @@ void AssetManager::Scan()
                     auto optNodes = ReadWStaticModelNodes(path, *optModelHeader, memoryManager->Assets(), memoryManager->AssetsScratch());
                     if (!optNodes) { continue; }
 
+                    const CachedModelMetadata* prev = modelCache.Find(id);
+                    const bool bExisted = prev != nullptr;
+                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
                     CachedModelMetadata& cached = modelCache[id];
                     cached.source = Core::Path(path);
                     cached.name = Core::InlineString(name);
@@ -1248,7 +1281,12 @@ void AssetManager::Scan()
                     cached.meshNodesCount = optModelHeader->meshNodeCount;
                     cached.nodes = std::move(optNodes->nodes);
                     cached.bounds = optNodes->bounds;
+                    cached.contentVersion = optModelHeader->contentVersion;
                     modelNameToId[nameSid] = id;
+                    if (bExisted && prevVersion != optModelHeader->contentVersion) {
+                        LOG_TRACE(Asset, "Model '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, optModelHeader->contentVersion);
+                        if (!changedModelIds.IsFull()) { changedModelIds.PushBack(id); }
+                    }
                 }
                 else if (ext == ".wenvmap") {
                     auto header = ReadWEnvMapHeader(path);
@@ -1259,6 +1297,9 @@ void AssetManager::Scan()
                     if (cubemapNameToId.Contains(nameSid) && *cubemapNameToId.Find(nameSid) != id) {
                         LOG_CRITICAL(Asset, "2 Environment maps were mounted that contain the same name. This will cause issues for cubemap lookups by name. ({})", path.c_str());
                     }
+                    const CachedCubemapMetadata* prev = cubemapCache.Find(id);
+                    const bool bExisted = prev != nullptr;
+                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
                     CachedCubemapMetadata& cached = cubemapCache[id];
                     cached.source = Core::Path(path);
                     cached.name = Core::InlineString<128>(header->name);
@@ -1269,7 +1310,46 @@ void AssetManager::Scan()
                     cached.dataSize = header->dataSize;
                     cached.uncompressedSize = header->uncompressedSize;
                     cached.compressionType = header->compressionType;
+                    cached.contentVersion = header->contentVersion;
                     cubemapNameToId[nameSid] = id;
+                    if (bExisted && prevVersion != header->contentVersion) {
+                        LOG_TRACE(Asset, "Cubemap '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, header->contentVersion);
+                        if (!changedEnvironmentMapIds.IsFull()) { changedEnvironmentMapIds.PushBack(id); }
+                    }
+                }
+                else if (ext == ".wprobe") {
+                    auto header = ReadWProbeHeader(path);
+                    if (!header) { continue; }
+                    ProbeID probeId{header->probeId};
+                    EnvironmentMapID envMapId{header->environmentMapId};
+
+                    const ProbeInfo* prev = probeRegistry.Find(probeId);
+                    const bool bExisted = prev != nullptr;
+                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
+
+                    ProbeInfo& probeInfo = probeRegistry[probeId];
+                    probeInfo.source = Core::Path(path);
+                    probeInfo.environmentMapId = envMapId;
+                    probeInfo.resolution = header->resolution;
+                    probeInfo.snapshot = header->snapshot;
+                    probeInfo.contentVersion = header->contentVersion;
+
+                    // A probe is a cubemap at runtime; register it into the cubemap cache keyed by its EnvironmentMapID so LoadCubemap and the existing hot-reload path cover probes unchanged.
+                    CachedCubemapMetadata& cached = cubemapCache[envMapId];
+                    cached.source = Core::Path(path);
+                    cached.name = Core::InlineString<128>(header->name);
+                    cached.width = header->width;
+                    cached.height = header->height;
+                    cached.mipCount = header->mipCount;
+                    cached.dataOffset = header->dataOffset;
+                    cached.dataSize = header->dataSize;
+                    cached.uncompressedSize = header->uncompressedSize;
+                    cached.compressionType = header->compressionType;
+                    cached.contentVersion = header->contentVersion;
+                    if (bExisted && prevVersion != header->contentVersion) {
+                        LOG_TRACE(Asset, "Probe '{}' (id {:x}) content changed on disk: v{} -> v{}", Core::InlineString<128>(header->name).c_str(), envMapId.id, prevVersion, header->contentVersion);
+                        if (!changedEnvironmentMapIds.IsFull()) { changedEnvironmentMapIds.PushBack(envMapId); }
+                    }
                 }
                 else if (ext == ".wscene") {
                     auto header = ReadWSceneHeader(path);
@@ -1280,10 +1360,17 @@ void AssetManager::Scan()
                         id = StringID{stem.c_str(), stem.Size()};
                         LOG_WARN(Asset, "Scene '{}' has no sceneId, using stem-derived ID. Re-save to fix", stem.c_str());
                     }
+                    const CachedSceneMetadata* prev = sceneCache.Find(id);
+                    const bool bExisted = prev != nullptr;
+                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
                     CachedSceneMetadata& cached = sceneCache[id];
                     cached.source = Core::Path(path);
                     cached.sceneName = Core::InlineString<128>(header->name);
                     cached.entityCount = header->entityCount;
+                    cached.contentVersion = header->contentVersion;
+                    if (bExisted && prevVersion != header->contentVersion) {
+                        LOG_TRACE(Asset, "Scene '{}' (id {:x}) content changed on disk: v{} -> v{}", cached.sceneName.c_str(), id.id, prevVersion, header->contentVersion);
+                    }
                 }
                 else if (ext == ".wsfont") {
                     auto header = ReadWFontHeader(path);
@@ -1294,11 +1381,19 @@ void AssetManager::Scan()
                     if (fontNameToId.Contains(nameSid) && *fontNameToId.Find(nameSid) != id) {
                         LOG_CRITICAL(Asset, "Two fonts share the same name; lookups by name will be ambiguous. ({})", path.c_str());
                     }
+                    const CachedFontMetadata* prev = fontCache.Find(id);
+                    const bool bExisted = prev != nullptr;
+                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
                     CachedFontMetadata& cached = fontCache[id];
                     cached.source = path;
                     cached.name = name;
                     cached.header = *header;
+                    cached.contentVersion = header->contentVersion;
                     fontNameToId[nameSid] = id;
+                    if (bExisted && prevVersion != header->contentVersion) {
+                        LOG_TRACE(Asset, "Font '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, header->contentVersion);
+                        if (!changedFontIds.IsFull()) { changedFontIds.PushBack(id); }
+                    }
                 }
                 else if (ext == ".wprefab") {
                     auto header = ReadWPrefabHeader(path);
@@ -1309,10 +1404,17 @@ void AssetManager::Scan()
                         id = StringID{stem.c_str(), stem.Size()};
                         LOG_WARN(Asset, "Prefab '{}' has no prefabId, using stem-derived ID. Re-save to fix", stem.c_str());
                     }
+                    const CachedPrefabMetadata* prev = prefabCache.Find(id);
+                    const bool bExisted = prev != nullptr;
+                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
                     CachedPrefabMetadata& cached = prefabCache[id];
                     cached.source = Core::Path(path);
                     cached.prefabName = Core::InlineString<128>(header->name);
                     cached.componentCount = header->componentCount;
+                    cached.contentVersion = header->contentVersion;
+                    if (bExisted && prevVersion != header->contentVersion) {
+                        LOG_TRACE(Asset, "Prefab '{}' (id {:x}) content changed on disk: v{} -> v{}", cached.prefabName.c_str(), id.id, prevVersion, header->contentVersion);
+                    }
                 }
             }
         }
@@ -1507,6 +1609,7 @@ bool AssetManager::ReloadTexture(TextureID textureId)
     texture.compressionType = meta.compressionType;
     texture.loadState = Texture::LoadState::Loading;
     texture.refCount = 1;
+    deferredTextureBindingReleases.PushBack({texture.bindlessHandle, ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4});
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
@@ -1665,6 +1768,42 @@ CubemapHandle AssetManager::LoadCubemap(EnvironmentMapID cubemapId)
     return handle;
 }
 
+bool AssetManager::ReloadCubemap(EnvironmentMapID cubemapId)
+{
+    if (!cubemapCache.Contains(cubemapId)) {
+        LOG_ERROR(Asset, "Cubemap {:x} not found in registry", cubemapId.id);
+        return false;
+    }
+
+    CubemapHandle* existingPtr = cubemapIdToHandle.Find(cubemapId);
+    if (existingPtr == nullptr) {
+        LOG_ERROR(Asset, "Cubemap {:x} requested reload but it is not currently loaded", cubemapId.id);
+        return false;
+    }
+
+    const CachedCubemapMetadata& meta = cubemapCache[cubemapId];
+
+    Render::Cubemap& cubemap = cubemaps[existingPtr->index];
+    cubemap.selfHandle = *existingPtr;
+    cubemap.source = meta.source;
+    cubemap.name = Core::InlineString(meta.name);
+    cubemap.cubemapId = cubemapId;
+    cubemap.dataOffset = meta.dataOffset;
+    cubemap.dataSize = meta.dataSize;
+    cubemap.uncompressedSize = meta.uncompressedSize;
+    cubemap.compressionType = meta.compressionType;
+    cubemap.loadState = Render::Cubemap::LoadState::Loading;
+    deferredCubemapBindingReleases.PushBack({cubemap.bindlessHandle, ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4});
+    cubemap.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateCubemap();
+
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting cubemap reload: {}", cubemap.name.c_str());
+    }
+    assetLoadManager->RequestCubemapLoad(&cubemap);
+
+    return true;
+}
+
 Render::Cubemap* AssetManager::GetCubemap(CubemapHandle handle)
 {
     if (!cubemapAllocator.IsValid(handle)) {
@@ -1692,6 +1831,27 @@ void AssetManager::UnloadCubemap(CubemapHandle handle)
         // assetLoadThread->RequestCubemapUnload(handle, &cubemap);
         cubemapIdToHandle.Remove(cubemap.cubemapId);
     }
+}
+
+CubemapHandle AssetManager::LoadProbe(ProbeID probeId)
+{
+    if (!probeId.IsValid()) {
+        LOG_ERROR(Asset, "LoadProbe called with invalid ProbeID");
+        return CubemapHandle::INVALID;
+    }
+
+    const ProbeInfo* info = probeRegistry.Find(probeId);
+    if (info == nullptr) {
+        LOG_ERROR(Asset, "Probe {:x} not found in registry", probeId.id);
+        return CubemapHandle::INVALID;
+    }
+
+    return LoadCubemap(info->environmentMapId);
+}
+
+void AssetManager::UnloadProbe(CubemapHandle handle)
+{
+    UnloadCubemap(handle);
 }
 
 FontHandle AssetManager::LoadFont(FontID id)

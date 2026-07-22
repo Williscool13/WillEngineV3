@@ -40,7 +40,7 @@ public:
         Core::InlineFunction<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(ModelGenerateSlotHandle slotHandle, const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath, uint64_t modelId);
+    void Launch(ModelGenerateSlotHandle slotHandle, const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath, uint64_t modelId, uint64_t contentVersion);
 
     void Clear();
 
@@ -48,6 +48,7 @@ public:
     Core::Path outputPath;
     Core::Path textureOutputPath;
     uint64_t modelId{0};
+    uint64_t contentVersion{1};
 
 private:
     struct GenerateTask : enki::ITaskSet

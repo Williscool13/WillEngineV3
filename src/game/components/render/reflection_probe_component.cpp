@@ -5,12 +5,15 @@
 #include "reflection_probe_component.h"
 
 #include <imgui.h>
+#include <glm/glm.hpp>
 
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/json_helpers.h"
 #include "game/components/core_components.h"
+#include "game/systems/probe_bake_system.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
+#include "engine/core/probe_id.h"
 
 namespace Game::Component
 {
@@ -18,12 +21,45 @@ static void RequestReflectionProbeLoad(entt::registry& registry, entt::entity en
 {
     auto& comp = registry.get<ReflectionProbeComponent>(entity);
     auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
 
     registry.remove<ReflectionProbeLoadingTag>(entity);
-    if (comp.standInEnvMap.IsValid()) {
+    const bool bHasBaked = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId}) != nullptr;
+    if (bHasBaked || comp.standInEnvMap.IsValid()) {
         registry.emplace_or_replace<ReflectionProbeLoadPendingTag>(entity);
         state->bPendingModelResolve |= true;
     }
+}
+
+static bool IsBakeStale(const WorldTransformComponent& world, const ReflectionProbeComponent& comp, const Engine::AssetManager::ProbeInfo& info)
+{
+    constexpr float kEpsilon = 1e-3f;
+    const Engine::ProbeBakeSnapshot& snap = info.snapshot;
+
+    if (glm::abs(world.translation.x - snap.translation[0]) > kEpsilon) { return true; }
+    if (glm::abs(world.translation.y - snap.translation[1]) > kEpsilon) { return true; }
+    if (glm::abs(world.translation.z - snap.translation[2]) > kEpsilon) { return true; }
+
+    if (glm::abs(world.scale.x - snap.scale[0]) > kEpsilon) { return true; }
+    if (glm::abs(world.scale.y - snap.scale[1]) > kEpsilon) { return true; }
+    if (glm::abs(world.scale.z - snap.scale[2]) > kEpsilon) { return true; }
+
+    glm::vec4 liveRot{world.rotation.w, world.rotation.x, world.rotation.y, world.rotation.z};
+    glm::vec4 bakedRot{snap.rotation[0], snap.rotation[1], snap.rotation[2], snap.rotation[3]};
+    if (glm::dot(liveRot, bakedRot) < 0.0f) { bakedRot = -bakedRot; }
+    if (glm::abs(liveRot.x - bakedRot.x) > kEpsilon) { return true; }
+    if (glm::abs(liveRot.y - bakedRot.y) > kEpsilon) { return true; }
+    if (glm::abs(liveRot.z - bakedRot.z) > kEpsilon) { return true; }
+    if (glm::abs(liveRot.w - bakedRot.w) > kEpsilon) { return true; }
+
+    if (glm::abs(comp.captureOffset.x - snap.captureOffset[0]) > kEpsilon) { return true; }
+    if (glm::abs(comp.captureOffset.y - snap.captureOffset[1]) > kEpsilon) { return true; }
+    if (glm::abs(comp.captureOffset.z - snap.captureOffset[2]) > kEpsilon) { return true; }
+
+    const uint32_t livePixels = comp.resolution == ReflectionProbeComponent::Resolution::Res128 ? 128u : 256u;
+    if (livePixels != info.resolution) { return true; }
+
+    return false;
 }
 
 Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -69,6 +105,31 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
                 }
             }
             ImGui::EndCombo();
+        }
+
+        auto* state = registry.ctx().get<Engine::EngineState*>();
+        ProbeBakeSystem& bake = ProbeBakeGetOrCreate(state);
+        const bool bBakeInFlight = bake.bBakeActive && bake.probeEntity == entity;
+
+        ImGui::BeginDisabled(comp.bBakeRequested || bBakeInFlight);
+        if (ImGui::Button("Bake##rp")) {
+            comp.bBakeRequested = true;
+        }
+        ImGui::EndDisabled();
+
+        const char* sourceLabel = "None";
+        switch (comp.contentSource) {
+            case ContentSource::Baked: { sourceLabel = "Baked"; break; }
+            case ContentSource::StandIn: { sourceLabel = "Stand-in"; break; }
+            case ContentSource::None: { sourceLabel = "None"; break; }
+        }
+        ImGui::Text("Content: %s", sourceLabel);
+
+        const Engine::AssetManager::ProbeInfo* probeInfo = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId});
+        if (!probeInfo) {
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Not baked");
+        } else if (const auto* worldTransform = registry.try_get<WorldTransformComponent>(entity); worldTransform && IsBakeStale(*worldTransform, comp, *probeInfo)) {
+            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "Bake is stale (transform changed). Rebake.");
         }
     }
 

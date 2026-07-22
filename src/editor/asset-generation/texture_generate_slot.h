@@ -52,10 +52,10 @@ struct TextureGenerateSlot
         Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, bool _flipY = true);
+    void Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _flipY = true);
 
     void LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& _outputPath,
-                          Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
+                          Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion);
 
     void Clear();
 
@@ -74,6 +74,7 @@ struct TextureGenerateSlot
     Core::Path imagePath;
     Core::Path outputPath;
     Engine::TextureID textureId{};
+    uint64_t contentVersion{1};
 
 private:
     bool LoadImageAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait);
