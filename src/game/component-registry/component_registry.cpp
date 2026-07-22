@@ -46,7 +46,6 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::StaticMeshComponent>(componentRegistry, "StaticMeshComponent", false, false);
     RegisterComponent<Component::StaticMeshPrimitiveComponent>(componentRegistry, "StaticMeshPrimitiveComponent", false, false);
     RegisterComponent<Component::TextComponent>(componentRegistry, "TextComponent", false, false);
-    RegisterComponent<Component::PointLightComponent>(componentRegistry, "PointLightComponent", false, false);
     RegisterComponent<Component::AreaLightComponent>(componentRegistry, "AreaLightComponent", false, false);
     RegisterComponent<Component::SphereLightComponent>(componentRegistry, "SphereLightComponent", false, false);
     RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, "DirectionalLightComponent", false, false);

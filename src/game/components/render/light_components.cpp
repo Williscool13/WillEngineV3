@@ -15,25 +15,6 @@
 
 namespace Game
 {
-Engine::ComponentEditorResult Component::PointLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
-{
-    bool open = ImGui::CollapsingHeader("Point Light", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    bool remove = ImGui::SmallButton("X##deletepointlight");
-    ImGui::PopStyleColor();
-
-    if (open) {
-        auto& comp = registry.get<PointLightComponent>(entity);
-        ImGui::ColorEdit3("Color##pl", &comp.color.r);
-        ImGui::DragFloat("Intensity##pl", &comp.intensity, 0.05f, 0.0f, 100.0f);
-        ImGui::DragFloat("Range##pl", &comp.range, 0.1f, 0.0f, 1000.0f);
-        ImGui::Checkbox("Probe Bake Exclude##pl", &comp.bExcludeFromProbeBake);
-    }
-
-    return {.requestRemoval = remove};
-}
-
 Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     static entt::entity editEntity = entt::null;
@@ -109,23 +90,6 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
     }
 
     return {.requestRemoval = remove};
-}
-
-void Component::PointLightComponent::Serialize(const PointLightComponent& comp, nlohmann::json& json)
-{
-    json["color"] = comp.color;
-    json["intensity"] = comp.intensity;
-    json["range"] = comp.range;
-    json["bExcludeFromProbeBake"] = comp.bExcludeFromProbeBake;
-}
-
-void Component::PointLightComponent::Deserialize(PointLightComponent& comp, const nlohmann::json& json)
-{
-    if (!json.is_object()) { return; }
-    comp.color = json.contains("color") ? json["color"].get<Vec3>() : Vec3{1.0f, 1.0f, 1.0f};
-    comp.intensity = json.value("intensity", 1.0f);
-    comp.range = json.value("range", 10.0f);
-    comp.bExcludeFromProbeBake = json.value("bExcludeFromProbeBake", false);
 }
 
 void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, nlohmann::json& json)

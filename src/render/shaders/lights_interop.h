@@ -46,7 +46,6 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_PUBLIC SHADER_CONST int MAX_POINT_LIGHTS = 256;
 SHADER_PUBLIC SHADER_CONST int MAX_LIGHTS = 32768;
 
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_AREA = 0u;
@@ -68,16 +67,6 @@ SHADER_PUBLIC struct DirectionalLightData
     SHADER_PUBLIC float angularRadius; // radians; sun-disk half-angle for soft shadows (0 = hard)
     SHADER_PUBLIC float _pad1;
     SHADER_PUBLIC float _pad2;
-};
-
-/** Point light: position (xyz) + range (w), color packed as RGBA8 unorm, intensity separate. */
-SHADER_PUBLIC struct PointLightData
-{
-    SHADER_PUBLIC float4 positionRange; // xyz world-space position, w range
-    SHADER_PUBLIC uint packedColor; // RGBA8 unorm
-    SHADER_PUBLIC float intensity;
-    SHADER_PUBLIC float _pad0;
-    SHADER_PUBLIC float _pad1;
 };
 
 /** Unified light source tagged by type. Area: rect via normal + right/up half-extents. Sphere: center + radius (right.w); normal/up unused. Triangle: position = v0, right/up = edges e1/e2 (unnormalized), area = 0.5*|cross(e1,e2)|. */
@@ -108,13 +97,12 @@ SHADER_PUBLIC struct LightVSData
 
 SHADER_PUBLIC struct LightData
 {
-    SHADER_PUBLIC int pointLightCount;
     SHADER_PUBLIC int lightCount;
     // Lights [0, analyticLightCount) are analytic (area/sphere); [analyticLightCount, lightCount) are emissive triangles
     SHADER_PUBLIC int analyticLightCount;
+    float _pad0;
     float _pad1;
     SHADER_PUBLIC DirectionalLightData directionalLight;
-    SHADER_PUBLIC PointLightData pointLights[MAX_POINT_LIGHTS];
     SHADER_PUBLIC LightInfo lights[MAX_LIGHTS];
 };
 

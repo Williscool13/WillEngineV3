@@ -57,36 +57,6 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
     float gtao = li.shadows.y;
     float3 directLight = float3(0.0);
 
-    // Point lights
-    for (int i = 0; i < pc.lightData->pointLightCount; i++)
-    {
-        PointLightData pl = pc.lightData->pointLights[i];
-
-        float3 plViewPos = mul(pc.sceneData[pc.sceneDataIndex].view, float4(pl.positionRange.xyz, 1.0)).xyz;
-        float3 plVec = plViewPos - viewPosition;
-        float dist = length(plVec);
-        float range = pl.positionRange.w;
-        if (dist >= range) { continue; }
-
-        float3 Lpl = plVec / dist;
-        float3 Hpl = normalize(V + Lpl);
-
-        float NDFpl = D_GGX(N, Hpl, roughness);
-        float Gpl = G_SMITH_HEIGHT_CORRELATED(N, V, Lpl, roughness);
-        float3 Fpl = F_SCHLICK(V, Hpl, F0);
-        float3 specularPl = (NDFpl * Gpl * Fpl) / max(4.0 * max(dot(N, V), 0.0) * max(dot(N, Lpl), 0.0), 0.001);
-
-        float3 kSpl = Fpl;
-        float3 kDpl = (1.0 - kSpl) * (1.0 - li.metallic);
-        float nDotLpl = max(dot(N, Lpl), 0.0);
-        float orenNayarPl = Diffuse_OrenNayar(nDotLpl, nDotV, Lpl, V, roughness);
-        float3 diffusePl = kDpl * li.albedo.xyz * orenNayarPl;
-
-        float attenuation = LightDistanceFalloff(dist, range);
-        float3 plColor = UnpackUnorm4x8(pl.packedColor).rgb;
-        directLight += (diffusePl + specularPl) * nDotLpl * attenuation * pl.intensity * plColor;
-    }
-
     // Area / sphere lights, selected per WorldGridBinning cell.
     if (pc.worldGridBuffer != 0)
     {

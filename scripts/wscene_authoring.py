@@ -33,7 +33,6 @@ STATIC_MESH = "6701167194273300414"     # StaticMeshComponent: modelId, modelFla
 STATIC_MESH_PRIMITIVE = "9501467225504619303"  # StaticMeshPrimitiveComponent: modelId, primitiveOrdinal, modelFlags, renderOffset, renderRotation
 SPAWN = "7249683205650136767"       # PlayerSpawnComponent: offset, priority
 LIGHT_DIRECTIONAL = "10824031899279087785"  # DirectionalLightComponent: color, intensity, priority, angularRadiusDegrees; direction = rotation*(0,0,1), highest priority wins
-LIGHT_POINT = "11855831114528409091"   # PointLightComponent: color[3], intensity, range
 LIGHT_AREA = "9298580231829766696"     # AreaLightComponent: color[3], intensity, halfWidth, halfHeight, range, drawEmissiveSurface; world extent = half*transform.scale, emissive quad = unit XZ plane
 LIGHT_SPHERE = "8299222229286905880"   # SphereLightComponent: color[3], intensity, radius, range, drawEmissiveSurface; world radius = radius*transform.scale.x
 # NOTE: light `color` is packed to 8-bit [0,1] on the GPU -- HDR brightness MUST come from `intensity`, never color>1.

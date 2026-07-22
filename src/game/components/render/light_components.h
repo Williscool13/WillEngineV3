@@ -19,20 +19,6 @@ namespace Game::Component
 {
 struct TransformComponent;
 
-struct PointLightComponent
-{
-    Vec3 color{1.0f, 1.0f, 1.0f};
-    float intensity{1.0f};
-    float range{10.0f};
-    bool bExcludeFromProbeBake{false};
-
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
-
-    static void Serialize(const PointLightComponent& comp, nlohmann::json& json);
-
-    static void Deserialize(PointLightComponent& comp, const nlohmann::json& json);
-};
-
 struct AreaLightComponent
 {
     Vec3 color{1.0f, 1.0f, 1.0f};

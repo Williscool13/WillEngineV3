@@ -1308,9 +1308,6 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
 
-    for (auto [entity, light] : registry.view<Component::PointLightComponent>().each()) {
-        if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
-    }
     for (auto [entity, light] : registry.view<Component::AreaLightComponent>().each()) {
         if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
@@ -1335,22 +1332,6 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 {
     ZoneScoped;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
-
-    auto pointView = state->registry.view<Component::PointLightComponent, Component::TransformComponent>();
-    for (auto [entity, light, transform] : pointView.each()) {
-        if (vf.pointLights.IsFull()) { break; }
-        if (state->registry.all_of<Component::ProbeBakeHiddenTag>(entity)) { continue; }
-        const glm::vec3& c = light.color;
-        vf.pointLights.PushBack(PointLightData{
-            .positionRange = {transform.translation, light.range},
-            .packedColor =
-            (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
-            (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
-            (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-            (0xFFu << 24),
-            .intensity = light.intensity,
-        });
-    }
 
     auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : areaView.each()) {
@@ -1572,23 +1553,6 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
     ZoneScoped;
     if (!state->editor.bShowLightSprites) { return; }
     Core::ArenaVector<Core::Sprite>& sprites = frameBuffer->mainViewFamily.sprites;
-
-    auto pointView = state->registry.view<Component::PointLightComponent, Component::TransformComponent>();
-    for (auto [entity, light, transform] : pointView.each()) {
-        uint64_t stableId = 0;
-        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-            stableId = stable->id.id;
-        }
-        sprites.PushBack(Core::Sprite{
-            .worldPosition = transform.translation,
-            .pixelSize = 0.5f,
-            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
-            .stableId = stableId,
-            .textureIndex = SPRITE_POINT_LIGHT_BINDLESS_INDEX,
-            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
-            .billboard = true,
-        });
-    }
 
     auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : areaView.each()) {
