@@ -1347,6 +1347,12 @@ void WillEngine::Run()
                     engineState->pendingHotReloadEnvironmentMapIds.PushBack(envMapComplete.environmentMapId);
                 }
             }
+
+            if (engineContext->IsProbeAssemblePending()) {
+                Engine::ProbeAssembleStaging& probeReq = engineContext->probeAssemble;
+                assetGenerator->RequestProbeAssemble(probeReq.faces, probeReq.captureSize, probeReq.targetResolution, probeReq.outputPath);
+                probeReq.bPending.store(false, std::memory_order_release);
+            }
         }
         materialManager->Scan();
         assetManager->Scan();

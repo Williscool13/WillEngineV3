@@ -152,6 +152,21 @@ void AssetGenerator::ThreadMain()
         }
 
         {
+            ZoneScopedN("Process Probe Assemble Requests");
+            ProbeAssembleRequest req{};
+            if (probeAssembleRequestQueue.try_dequeue(req)) {
+                Core::Handle<EnvironmentMapGenerateSlot> slotHandle = environmentMapGenerateAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    EnvironmentMapGenerateSlot& task = environmentMapeGenerateTasks[slotHandle.index];
+                    task.LaunchProbe(slotHandle, req.faces, req.captureSize, req.targetResolution, req.outputPath, req.environmentMapId);
+                }
+                else {
+                    probeAssembleRequestQueue.enqueue(std::move(req));
+                }
+            }
+        }
+
+        {
             ZoneScopedN("Process Font Generation Requests");
             FontGenerateRequest req{};
             if (fontGenerateRequestQueue.try_dequeue(req)) {
@@ -266,6 +281,30 @@ void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, c
         }
     }
     environmentMapGenerateRequestQueue.enqueue({hdriPath, outputPath, id});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath)
+{
+    ZoneScoped;
+
+    Engine::EnvironmentMapID id{environmentMapIdRng()};
+    if (outputPath.Exists()) {
+        if (auto header = Engine::ReadWEnvMapHeader(outputPath)) {
+            id = Engine::EnvironmentMapID{header->environmentMapId};
+        }
+    }
+
+    ProbeAssembleRequest req{};
+    for (uint32_t face = 0; face < 6; ++face) {
+        req.faces[face] = std::move(faces[face]);
+    }
+    req.captureSize = captureSize;
+    req.targetResolution = targetResolution;
+    req.outputPath = outputPath;
+    req.environmentMapId = id;
+    probeAssembleRequestQueue.enqueue(std::move(req));
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }

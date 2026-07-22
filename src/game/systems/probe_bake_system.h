@@ -50,6 +50,9 @@ struct ProbeBakeSystem
 
     entt::entity probeEntity{entt::null};
     glm::vec3 capturePosition{0.0f};
+    /** Stashed from the probe component at Starting; the entity may be deleted mid-bake. */
+    uint64_t bakeProbeId{0};
+    uint32_t bakeTargetResolution{256};
     int32_t currentFace{0};
     int32_t settleCounter{0};
     int32_t settleFrames{48};

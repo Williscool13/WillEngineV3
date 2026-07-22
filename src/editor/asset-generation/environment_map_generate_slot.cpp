@@ -103,6 +103,35 @@ void EnvironmentMapGenerateSlot::Launch(
     imagePath = _imagePath;
     outputPath = _outputPath;
     environmentMapId = _environmentMapId;
+    bProbeMode = false;
+    baseResolution = ENVIRONMENT_MAP_RESOLUTION;
+
+    if (!task.GetIsComplete()) {
+        scheduler->WaitforTask(&task);
+    }
+
+    task.taskSlot = this;
+    scheduler->AddTaskSetToPipe(&task);
+}
+
+void EnvironmentMapGenerateSlot::LaunchProbe(
+    EnvironmentMapGenerateSlotHandle _slotHandle,
+    Core::HeapArray<uint16_t>* faces,
+    uint32_t captureSize,
+    uint32_t targetResolution,
+    const Core::Path& _outputPath,
+    Engine::EnvironmentMapID _environmentMapId)
+{
+    slotHandle = _slotHandle;
+    imagePath = Core::Path{};
+    outputPath = _outputPath;
+    environmentMapId = _environmentMapId;
+    bProbeMode = true;
+    baseResolution = targetResolution;
+    probeCaptureSize = captureSize;
+    for (uint32_t face = 0; face < 6; ++face) {
+        probeFaces[face] = std::move(faces[face]);
+    }
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -116,6 +145,7 @@ void EnvironmentMapGenerateSlot::Clear()
 {
     imagePath = Core::Path{};
     outputPath = Core::Path{};
+    probeSourceImage = {};
     equiImage = {};
     equiImageView = {};
     mipmappedCubemapImage = {};
@@ -124,6 +154,12 @@ void EnvironmentMapGenerateSlot::Clear()
     for (auto& imgView : finalCubemapMipViews) {
         imgView = {};
     }
+    for (auto& face : probeFaces) {
+        face = {};
+    }
+    bProbeMode = false;
+    probeCaptureSize = 0;
+    baseResolution = ENVIRONMENT_MAP_RESOLUTION;
     mipData = {};
     imageStagingAllocator.Reset();
     imageReceivingAllocator.Reset();
@@ -163,7 +199,9 @@ void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartiti
         }
     };
 
-    bool loadRes = taskSlot->LoadEquirectangularAndGenerate(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait);
+    bool loadRes = taskSlot->bProbeMode
+        ? taskSlot->AssembleProbeCubemapAndGenerate(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait)
+        : taskSlot->LoadEquirectangularAndGenerate(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait);
     if (!loadRes) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
         vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
@@ -182,6 +220,314 @@ void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartiti
 
     vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
     vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
+}
+
+struct ProbeAssembleFaceOrientation
+{
+    bool flipX;
+    bool flipY;
+    int32_t rotateQuarters;
+};
+
+static const ProbeAssembleFaceOrientation PROBE_ASSEMBLE_FACE_ORIENTATIONS[6] = {
+    {false, false, 0},
+    {false, false, 0},
+    {false, false, 0},
+    {false, false, 0},
+    {false, false, 0},
+    {false, false, 0},
+};
+
+static void ProbeFaceRemap(const ProbeAssembleFaceOrientation& o, uint32_t x, uint32_t y, uint32_t n, uint32_t& sx, uint32_t& sy)
+{
+    uint32_t rx = x;
+    uint32_t ry = y;
+    for (int32_t r = 0; r < o.rotateQuarters; ++r) {
+        const uint32_t t = rx;
+        rx = ry;
+        ry = n - 1 - t;
+    }
+    if (o.flipX) { rx = n - 1 - rx; }
+    if (o.flipY) { ry = n - 1 - ry; }
+    sx = rx;
+    sy = ry;
+}
+
+bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait)
+{
+    ZoneScopedN("AssembleProbeCubemapAndGenerate");
+
+    const uint32_t S = probeCaptureSize;
+    const uint32_t R = baseResolution;
+    if (S == 0) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Probe assembly received an empty capture");
+        return false;
+    }
+
+    const size_t faceTexels = static_cast<size_t>(S) * S;
+    const size_t faceBytes = faceTexels * 4 * sizeof(uint16_t);
+    const size_t uploadBytes = faceBytes * 6;
+
+    imageStagingAllocator.Reset();
+    const size_t allocation = imageStagingAllocator.Allocate(uploadBytes);
+    if (allocation == SIZE_MAX) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Probe faces too large for staging buffer");
+        return false;
+    }
+
+    startRecording();
+
+    uint16_t* stagingBase = reinterpret_cast<uint16_t*>(static_cast<char*>(imageStagingBuffer.allocationInfo.pMappedData) + allocation);
+    for (uint32_t face = 0; face < 6; ++face) {
+        if (!probeFaces[face].IsAllocated()) {
+            SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Probe face {} missing", face);
+            return false;
+        }
+        const uint16_t* src = probeFaces[face].Data();
+        uint16_t* dst = stagingBase + faceTexels * 4 * face;
+        const ProbeAssembleFaceOrientation& orient = PROBE_ASSEMBLE_FACE_ORIENTATIONS[face];
+        for (uint32_t y = 0; y < S; ++y) {
+            for (uint32_t x = 0; x < S; ++x) {
+                uint32_t sx, sy;
+                ProbeFaceRemap(orient, x, y, S, sx, sy);
+                const size_t srcIdx = (static_cast<size_t>(sy) * S + sx) * 4;
+                const size_t dstIdx = (static_cast<size_t>(y) * S + x) * 4;
+                dst[dstIdx + 0] = src[srcIdx + 0];
+                dst[dstIdx + 1] = src[srcIdx + 1];
+                dst[dstIdx + 2] = src[srcIdx + 2];
+                dst[dstIdx + 3] = src[srcIdx + 3];
+            }
+        }
+    }
+
+    VkImageMemoryBarrier2 barrier{};
+    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
+
+    // Halving chain so every capture texel contributes to the downsample; a single S -> R blit would point-skip most of the supersampled capture
+    uint32_t sourceMipLevels = 1;
+    for (uint32_t dim = S; dim > 2 * R; dim /= 2) {
+        ++sourceMipLevels;
+    }
+
+    VkImageCreateInfo sourceCreateInfo = Render::VkHelpers::ImageCreateInfo(
+        VK_FORMAT_R16G16B16A16_SFLOAT,
+        {S, S, 1},
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+    );
+    sourceCreateInfo.arrayLayers = 6;
+    sourceCreateInfo.mipLevels = sourceMipLevels;
+    probeSourceImage = Render::AllocatedImage::CreateAllocatedImage(context, sourceCreateInfo);
+
+    barrier = Render::VkHelpers::ImageMemoryBarrier(
+        probeSourceImage.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6),
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+    );
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    for (uint32_t face = 0; face < 6; ++face) {
+        VkBufferImageCopy copyRegion{};
+        copyRegion.bufferOffset = allocation + faceBytes * face;
+        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.imageSubresource.mipLevel = 0;
+        copyRegion.imageSubresource.baseArrayLayer = face;
+        copyRegion.imageSubresource.layerCount = 1;
+        copyRegion.imageExtent = {S, S, 1};
+        vkCmdCopyBufferToImage(cmd, imageStagingBuffer.handle, probeSourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+    }
+
+    barrier = Render::VkHelpers::ImageMemoryBarrier(
+        probeSourceImage.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6),
+        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+    );
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    uint32_t sourceDim = S;
+    for (uint32_t mip = 1; mip < sourceMipLevels; ++mip) {
+        const uint32_t nextDim = sourceDim / 2;
+
+        barrier = Render::VkHelpers::ImageMemoryBarrier(
+            probeSourceImage.handle,
+            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6),
+            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+        );
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+
+        for (uint32_t face = 0; face < 6; ++face) {
+            VkImageBlit2 blitRegion{.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2};
+            blitRegion.srcOffsets[0] = {0, 0, 0};
+            blitRegion.srcOffsets[1] = {static_cast<int32_t>(sourceDim), static_cast<int32_t>(sourceDim), 1};
+            blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blitRegion.srcSubresource.mipLevel = mip - 1;
+            blitRegion.srcSubresource.baseArrayLayer = face;
+            blitRegion.srcSubresource.layerCount = 1;
+            blitRegion.dstOffsets[0] = {0, 0, 0};
+            blitRegion.dstOffsets[1] = {static_cast<int32_t>(nextDim), static_cast<int32_t>(nextDim), 1};
+            blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blitRegion.dstSubresource.mipLevel = mip;
+            blitRegion.dstSubresource.baseArrayLayer = face;
+            blitRegion.dstSubresource.layerCount = 1;
+
+            VkBlitImageInfo2 blitInfo{.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2};
+            blitInfo.srcImage = probeSourceImage.handle;
+            blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            blitInfo.dstImage = probeSourceImage.handle;
+            blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            blitInfo.regionCount = 1;
+            blitInfo.pRegions = &blitRegion;
+            blitInfo.filter = VK_FILTER_LINEAR;
+            vkCmdBlitImage2(cmd, &blitInfo);
+        }
+
+        barrier = Render::VkHelpers::ImageMemoryBarrier(
+            probeSourceImage.handle,
+            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6),
+            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+        );
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+
+        sourceDim = nextDim;
+    }
+
+    const uint32_t sourceFinalMip = sourceMipLevels - 1;
+
+    const uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(R))) + 1;
+
+    VkImageCreateInfo cubemapCreateInfo = Render::VkHelpers::ImageCreateInfo(
+        VK_FORMAT_R32G32B32A32_SFLOAT,
+        {R, R, 1},
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+    );
+    cubemapCreateInfo.arrayLayers = 6;
+    cubemapCreateInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    cubemapCreateInfo.mipLevels = mipLevels;
+    mipmappedCubemapImage = Render::AllocatedImage::CreateAllocatedImage(context, cubemapCreateInfo);
+
+    VkImageViewCreateInfo cubemapViewInfo = Render::VkHelpers::ImageViewCreateInfo(
+        mipmappedCubemapImage.handle,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_IMAGE_ASPECT_COLOR_BIT
+    );
+    cubemapViewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+    cubemapViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 6);
+    mipmappedCubemapImageView = Render::ImageView::CreateImageView(context, cubemapViewInfo);
+    bool success = resourceManager->environmentMapGenerateResources.SetCubemap({nullptr, mipmappedCubemapImageView.handle, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 0);
+    assert(success);
+
+    barrier = Render::VkHelpers::ImageMemoryBarrier(
+        mipmappedCubemapImage.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 6),
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+    );
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    // Final step of the chain: last halved mip (within 2x of R) -> cubemap mip 0 (LINEAR, may be non-integer scale)
+    for (uint32_t face = 0; face < 6; ++face) {
+        VkImageBlit2 blitRegion{.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2};
+        blitRegion.srcOffsets[0] = {0, 0, 0};
+        blitRegion.srcOffsets[1] = {static_cast<int32_t>(sourceDim), static_cast<int32_t>(sourceDim), 1};
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.mipLevel = sourceFinalMip;
+        blitRegion.srcSubresource.baseArrayLayer = face;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.dstOffsets[0] = {0, 0, 0};
+        blitRegion.dstOffsets[1] = {static_cast<int32_t>(R), static_cast<int32_t>(R), 1};
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.mipLevel = 0;
+        blitRegion.dstSubresource.baseArrayLayer = face;
+        blitRegion.dstSubresource.layerCount = 1;
+
+        VkBlitImageInfo2 blitInfo{.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2};
+        blitInfo.srcImage = probeSourceImage.handle;
+        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        blitInfo.dstImage = mipmappedCubemapImage.handle;
+        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        blitInfo.regionCount = 1;
+        blitInfo.pRegions = &blitRegion;
+        blitInfo.filter = VK_FILTER_LINEAR;
+        vkCmdBlitImage2(cmd, &blitInfo);
+    }
+
+    barrier = Render::VkHelpers::ImageMemoryBarrier(
+        mipmappedCubemapImage.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6),
+        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+    );
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    // Build the source mip chain (prefilter/convolve sample it by LOD)
+    {
+        uint32_t mipWidth = R;
+        uint32_t mipHeight = R;
+        for (uint32_t mip = 1; mip < mipLevels; mip++) {
+            uint32_t nextWidth = mipWidth / 2;
+            uint32_t nextHeight = mipHeight / 2;
+
+            for (uint32_t face = 0; face < 6; face++) {
+                VkImageBlit2 blitRegion{.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2};
+                blitRegion.srcOffsets[0] = {0, 0, 0};
+                blitRegion.srcOffsets[1] = {static_cast<int32_t>(mipWidth), static_cast<int32_t>(mipHeight), 1};
+                blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                blitRegion.srcSubresource.mipLevel = mip - 1;
+                blitRegion.srcSubresource.baseArrayLayer = face;
+                blitRegion.srcSubresource.layerCount = 1;
+                blitRegion.dstOffsets[0] = {0, 0, 0};
+                blitRegion.dstOffsets[1] = {static_cast<int32_t>(nextWidth), static_cast<int32_t>(nextHeight), 1};
+                blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                blitRegion.dstSubresource.mipLevel = mip;
+                blitRegion.dstSubresource.baseArrayLayer = face;
+                blitRegion.dstSubresource.layerCount = 1;
+
+                VkBlitImageInfo2 blitInfo{.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2};
+                blitInfo.srcImage = mipmappedCubemapImage.handle;
+                blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                blitInfo.dstImage = mipmappedCubemapImage.handle;
+                blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                blitInfo.regionCount = 1;
+                blitInfo.pRegions = &blitRegion;
+                blitInfo.filter = VK_FILTER_LINEAR;
+                vkCmdBlitImage2(cmd, &blitInfo);
+            }
+
+            if (mip < mipLevels - 1) {
+                barrier = Render::VkHelpers::ImageMemoryBarrier(
+                    mipmappedCubemapImage.handle,
+                    Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6),
+                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                );
+                vkCmdPipelineBarrier2(cmd, &depInfo);
+            }
+
+            mipWidth = nextWidth;
+            mipHeight = nextHeight;
+        }
+    }
+
+    barrier = Render::VkHelpers::ImageMemoryBarrier(
+        mipmappedCubemapImage.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels - 1, 0, 6),
+        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    barrier = Render::VkHelpers::ImageMemoryBarrier(
+        mipmappedCubemapImage.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mipLevels - 1, 1, 0, 6),
+        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    return BuildFilteredMipsAndCopy(cmd, submitAndWait);
 }
 
 bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait)
@@ -403,9 +749,21 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
         vkCmdPipelineBarrier2(cmd, &depInfo);
     }
 
+    return BuildFilteredMipsAndCopy(cmd, submitAndWait);
+}
+
+bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
+{
+    ZoneScopedN("BuildFilteredMipsAndCopy");
+
+    const uint32_t diffuseResolution = baseResolution >> ENVIRONMENT_MAP_DIFFUSE_MIP;
+
+    VkImageMemoryBarrier2 barrier{};
+    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
+
     VkImageCreateInfo finalCubemapCreateInfo = Render::VkHelpers::ImageCreateInfo(
         VK_FORMAT_R16G16B16A16_SFLOAT,
-        {ENVIRONMENT_MAP_RESOLUTION, ENVIRONMENT_MAP_RESOLUTION, 1},
+        {baseResolution, baseResolution, 1},
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
     );
     finalCubemapCreateInfo.arrayLayers = 6;
@@ -423,7 +781,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
         mipViewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
         mipViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6);
         finalCubemapMipViews[mip] = Render::ImageView::CreateImageView(context, mipViewInfo);
-        success = resourceManager->environmentMapGenerateResources.SetRWCubemapHalfArray(
+        bool success = resourceManager->environmentMapGenerateResources.SetRWCubemapHalfArray(
             {nullptr, finalCubemapMipViews[mip].handle, VK_IMAGE_LAYOUT_GENERAL},
             mip
         );
@@ -452,7 +810,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
 
         for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_DIFFUSE_MIP; mip++) {
             float roughness = static_cast<float>(mip) / static_cast<float>(ENVIRONMENT_MAP_DIFFUSE_MIP - 1);
-            uint32_t mipResolution = ENVIRONMENT_MAP_RESOLUTION >> mip;
+            uint32_t mipResolution = baseResolution >> mip;
 
             PrefilterSpecularPushConstant pc{
                 .samplerIndex = CUBEMAP_IMAGE_SAMPLER_INDEX,
@@ -484,14 +842,14 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
             .samplerIndex = CUBEMAP_IMAGE_SAMPLER_INDEX,
             .sourceIndex = 0, // mipmapped cubemap index
             .targetIndex = ENVIRONMENT_MAP_DIFFUSE_MIP,
-            .targetWidth = ENVIRONMENT_MAP_DIFFUSE_RESOLUTION,
-            .targetHeight = ENVIRONMENT_MAP_DIFFUSE_RESOLUTION,
+            .targetWidth = diffuseResolution,
+            .targetHeight = diffuseResolution,
             .sampleDelta = 0.025f
         };
 
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        uint32_t dispatchX = (ENVIRONMENT_MAP_DIFFUSE_RESOLUTION + ENVIRONMENT_MAP_GENERATION_DISPATCH_X - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_X;
-        uint32_t dispatchY = (ENVIRONMENT_MAP_DIFFUSE_RESOLUTION + ENVIRONMENT_MAP_GENERATION_DISPATCH_Y - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_Y;
+        uint32_t dispatchX = (diffuseResolution + ENVIRONMENT_MAP_GENERATION_DISPATCH_X - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_X;
+        uint32_t dispatchY = (diffuseResolution + ENVIRONMENT_MAP_GENERATION_DISPATCH_Y - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_Y;
         vkCmdDispatch(cmd, dispatchX, dispatchY, 6);
     }
 
@@ -508,7 +866,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
         ZoneScopedN("CopyCubemapToCPU");
 
         for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_MIPS; mip++) {
-            uint32_t mipResolution = (mip < ENVIRONMENT_MAP_DIFFUSE_MIP) ? (ENVIRONMENT_MAP_RESOLUTION >> mip) : ENVIRONMENT_MAP_DIFFUSE_RESOLUTION;
+            uint32_t mipResolution = (mip < ENVIRONMENT_MAP_DIFFUSE_MIP) ? (baseResolution >> mip) : diffuseResolution;
             size_t faceSize = mipResolution * mipResolution * 4 * sizeof(uint16_t);
 
             if (faceSize > imageReceivingBuffer.allocationInfo.size) {
@@ -544,8 +902,8 @@ bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
     ktxTexture2* texture;
     ktxTextureCreateInfo createInfo{};
     createInfo.vkFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-    createInfo.baseWidth = ENVIRONMENT_MAP_RESOLUTION;
-    createInfo.baseHeight = ENVIRONMENT_MAP_RESOLUTION;
+    createInfo.baseWidth = baseResolution;
+    createInfo.baseHeight = baseResolution;
     createInfo.baseDepth = 1;
     createInfo.numDimensions = 2;
     createInfo.numLevels = ENVIRONMENT_MAP_MIPS;
@@ -582,8 +940,8 @@ bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
 
     Engine::WEnvMapHeader header{};
     header.environmentMapId = environmentMapId.id;
-    header.width = ENVIRONMENT_MAP_RESOLUTION;
-    header.height = ENVIRONMENT_MAP_RESOLUTION;
+    header.width = baseResolution;
+    header.height = baseResolution;
     header.mipCount = ENVIRONMENT_MAP_MIPS;
     header.uncompressedSize = ktxSize;
     header.dataSize = realCompressedSize;

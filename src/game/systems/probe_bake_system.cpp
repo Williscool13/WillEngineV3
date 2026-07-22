@@ -29,12 +29,13 @@ struct ProbeFaceOrientation
     glm::vec3 up;
 };
 
-// Vulkan/KTX2 cube layer order: +X, -X, +Y, -Y, +Z, -Z (Y-up, GLM). Handedness validated in checkpoint 3d against an axis-colored room.
+// Vulkan/KTX2 cube layer order: +X, -X, +Y, -Y, +Z, -Z (Y-up, GLM).
+// Y rows are swapped in this engine though
 static const ProbeFaceOrientation kProbeFaceOrientations[6] = {
     {{ 1.0f,  0.0f,  0.0f}, { 0.0f, -1.0f,  0.0f}},
     {{-1.0f,  0.0f,  0.0f}, { 0.0f, -1.0f,  0.0f}},
-    {{ 0.0f,  1.0f,  0.0f}, { 0.0f,  0.0f,  1.0f}},
     {{ 0.0f, -1.0f,  0.0f}, { 0.0f,  0.0f, -1.0f}},
+    {{ 0.0f,  1.0f,  0.0f}, { 0.0f,  0.0f,  1.0f}},
     {{ 0.0f,  0.0f,  1.0f}, { 0.0f, -1.0f,  0.0f}},
     {{ 0.0f,  0.0f, -1.0f}, { 0.0f, -1.0f,  0.0f}},
 };
@@ -186,6 +187,8 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 return;
             }
             capturePosition = worldTransform->translation + worldTransform->rotation * probe->captureOffset;
+            bakeProbeId = probe->probeId;
+            bakeTargetResolution = probe->resolution == Component::ReflectionProbeComponent::Resolution::Res128 ? 128 : 256;
 
             phase = Phase::FaceSetup;
             return;
@@ -267,6 +270,16 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                     Core::Path facePath = bakeDir / faceName.c_str();
                     WriteProbeFaceHdr(ctx, faceBuffers[face].Data(), captureSize, facePath);
                 }
+            }
+
+            bool bAllFacesReady = captureSize > 0;
+            for (const auto & faceBuffer : faceBuffers) {
+                if (!faceBuffer.IsAllocated()) { bAllFacesReady = false; }
+            }
+            if (bAllFacesReady) {
+                Core::InlineString<64> assetName = Core::InlineString<64>::Format("probe_%llu.wenvmap", static_cast<unsigned long long>(bakeProbeId));
+                Core::Path outputPath = Platform::GetAssetPath() / "environment-maps" / assetName.c_str();
+                ctx->SubmitProbeAssemble(faceBuffers, captureSize, bakeTargetResolution, outputPath);
             }
 
             phase = Phase::Idle;

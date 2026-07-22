@@ -110,6 +110,15 @@ struct EnvironmentMapGenerateComplete
     bool success;
 };
 
+struct ProbeAssembleRequest
+{
+    Core::HeapArray<uint16_t> faces[6];
+    uint32_t captureSize{0};
+    uint32_t targetResolution{0};
+    Core::Path outputPath;
+    Engine::EnvironmentMapID environmentMapId{};
+};
+
 struct FontGenerateRequest
 {
     Core::Path ttfPath;
@@ -153,6 +162,9 @@ public:
     bool TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult);
 
     void RequestEnvironmentMapGenerate(const Core::Path& hdriPath, const Core::Path& outputPath);
+
+    /** Assembles the 6 captured probe faces (moved in) into a prefiltered .wenvmap; completion is surfaced through the environment-map complete queue. */
+    void RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath);
 
     bool TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult);
 
@@ -263,6 +275,7 @@ private:
 
     moodycamel::ConcurrentQueue<EnvironmentMapGenerateRequest> environmentMapGenerateRequestQueue;
     moodycamel::ConcurrentQueue<EnvironmentMapGenerateComplete> environmentMapGenerateCompleteQueue;
+    moodycamel::ConcurrentQueue<ProbeAssembleRequest> probeAssembleRequestQueue;
 
     moodycamel::ConcurrentQueue<FontGenerateRequest> fontGenerateRequestQueue;
     moodycamel::ConcurrentQueue<FontGenerateComplete> fontGenerateCompleteQueue;

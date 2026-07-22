@@ -49,6 +49,9 @@ struct EnvironmentMapGenerateSlot
 
     void Launch(EnvironmentMapGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId);
 
+    /** Assembles a prefiltered cubemap asset from 6 captured RGBA16F probe faces (S x S) downsampled to targetResolution, writing a .wenvmap at _outputPath. Faces are moved in. */
+    void LaunchProbe(EnvironmentMapGenerateSlotHandle _slotHandle, Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId);
+
     void Clear();
 
     struct GenerateTask : enki::ITaskSet
@@ -65,6 +68,11 @@ struct EnvironmentMapGenerateSlot
 private:
     bool LoadEquirectangularAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait);
 
+    bool AssembleProbeCubemapAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait);
+
+    /** Shared tail: consumes a populated float cubemap (SetCubemap index 0, SHADER_READ, full mip chain) into GGX-prefiltered specular mips 0-4 + diffuse irradiance mip 5, then reads back to mipData. Resolution driven by baseResolution. */
+    bool BuildFilteredMipsAndCopy(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
+
     bool WriteWEnvMapFile();
 
     enki::TaskScheduler* scheduler{nullptr};
@@ -79,6 +87,12 @@ private:
     EnvironmentMapGenerateSlotHandle slotHandle{EnvironmentMapGenerateSlotHandle::INVALID};
 
 
+    bool bProbeMode{false};
+    uint32_t baseResolution{ENVIRONMENT_MAP_RESOLUTION};
+    uint32_t probeCaptureSize{0};
+    Core::HeapArray<uint16_t> probeFaces[6]{};
+
+    Render::AllocatedImage probeSourceImage;
     Render::AllocatedImage equiImage;
     Render::ImageView equiImageView;
     Render::AllocatedImage mipmappedCubemapImage;
