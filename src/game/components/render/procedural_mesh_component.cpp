@@ -546,6 +546,10 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         if (ImGui::Checkbox("DDGI Contribution##proceduralmesh", &ddgiContribution)) {
             component.modelFlags.z = ddgiContribution ? 0.0f : 1.0f;
         }
+        bool probeBakeExclude = component.modelFlags.y == 0.0f;
+        if (ImGui::Checkbox("Probe Bake Exclude##proceduralmesh", &probeBakeExclude)) {
+            component.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f;
+        }
 
         if (std::holds_alternative<std::monostate>(component.params)) {
             if (ImGui::BeginCombo("Shape", "")) {

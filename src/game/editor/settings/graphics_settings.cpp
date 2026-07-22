@@ -9,6 +9,7 @@
 #include "game/editor/editor_widgets.h"
 
 #include "game/systems/debug_system.h"
+#include "game/systems/render_systems.h"
 #include "game/components/camera_components.h"
 #include "game/components/core_components.h"
 #include "core/string_id.h"
@@ -891,6 +892,14 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Enable Reflection Probes", &reflectionProbe.bEnabled)) { changed = true; }
             if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
             if (ImGui::Checkbox("Debug Draw Probe Volumes", &reflectionProbe.bDebugDraw)) { changed = true; }
+
+            if (ImGui::Checkbox("Test Bake Hide (temp)##probebakehidetest", &state->editor.bProbeBakeHideTest)) {
+                if (state->editor.bProbeBakeHideTest) {
+                    ApplyProbeBakeHideSet(ctx, state);
+                } else {
+                    ClearProbeBakeHideSet(ctx, state);
+                }
+            }
 
             ImGui::Spacing();
             if (ImGui::Button("Reset Reflection Probes")) {

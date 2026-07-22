@@ -28,6 +28,7 @@ Engine::ComponentEditorResult Component::PointLightComponent::DrawEditor(Core::V
         ImGui::ColorEdit3("Color##pl", &comp.color.r);
         ImGui::DragFloat("Intensity##pl", &comp.intensity, 0.05f, 0.0f, 100.0f);
         ImGui::DragFloat("Range##pl", &comp.range, 0.1f, 0.0f, 1000.0f);
+        ImGui::Checkbox("Probe Bake Exclude##pl", &comp.bExcludeFromProbeBake);
     }
 
     return {.requestRemoval = remove};
@@ -66,6 +67,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         ImGui::EndDisabled();
         ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
         ImGui::Checkbox("Draw Emissive Surface##al", &comp.drawEmissiveSurface);
+        ImGui::Checkbox("Probe Bake Exclude##al", &comp.bExcludeFromProbeBake);
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing);
@@ -114,6 +116,7 @@ void Component::PointLightComponent::Serialize(const PointLightComponent& comp, 
     json["color"] = comp.color;
     json["intensity"] = comp.intensity;
     json["range"] = comp.range;
+    json["bExcludeFromProbeBake"] = comp.bExcludeFromProbeBake;
 }
 
 void Component::PointLightComponent::Deserialize(PointLightComponent& comp, const nlohmann::json& json)
@@ -122,6 +125,7 @@ void Component::PointLightComponent::Deserialize(PointLightComponent& comp, cons
     comp.color = json.contains("color") ? json["color"].get<Vec3>() : Vec3{1.0f, 1.0f, 1.0f};
     comp.intensity = json.value("intensity", 1.0f);
     comp.range = json.value("range", 10.0f);
+    comp.bExcludeFromProbeBake = json.value("bExcludeFromProbeBake", false);
 }
 
 void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, nlohmann::json& json)
@@ -132,6 +136,7 @@ void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, nl
     json["halfHeight"] = comp.halfHeight;
     json["range"] = comp.range;
     json["drawEmissiveSurface"] = comp.drawEmissiveSurface;
+    json["bExcludeFromProbeBake"] = comp.bExcludeFromProbeBake;
 }
 
 void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const nlohmann::json& json)
@@ -143,6 +148,7 @@ void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const 
     comp.halfHeight = json.value("halfHeight", 1.0f);
     comp.range = json.value("range", 10.0f);
     comp.drawEmissiveSurface = json.value("drawEmissiveSurface", true);
+    comp.bExcludeFromProbeBake = json.value("bExcludeFromProbeBake", false);
 }
 
 Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -229,6 +235,7 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         }
         ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
         ImGui::Checkbox("Draw Emissive Surface##sl", &comp.drawEmissiveSurface);
+        ImGui::Checkbox("Probe Bake Exclude##sl", &comp.bExcludeFromProbeBake);
     }
 
     return {.requestRemoval = remove};
@@ -241,6 +248,7 @@ void Component::SphereLightComponent::Serialize(const SphereLightComponent& comp
     json["radius"] = comp.radius;
     json["range"] = comp.range;
     json["drawEmissiveSurface"] = comp.drawEmissiveSurface;
+    json["bExcludeFromProbeBake"] = comp.bExcludeFromProbeBake;
 }
 
 void Component::SphereLightComponent::Deserialize(SphereLightComponent& comp, const nlohmann::json& json)
@@ -251,6 +259,7 @@ void Component::SphereLightComponent::Deserialize(SphereLightComponent& comp, co
     comp.radius = json.value("radius", 0.5f);
     comp.range = json.value("range", 10.0f);
     comp.drawEmissiveSurface = json.value("drawEmissiveSurface", true);
+    comp.bExcludeFromProbeBake = json.value("bExcludeFromProbeBake", false);
 }
 
 glm::mat4 Component::ComputeSphereLightMatrix(const TransformComponent& transform, const SphereLightComponent& light)

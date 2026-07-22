@@ -37,7 +37,7 @@ struct Text3DComponent
     Engine::Text3DAlign align{Engine::Text3DAlign::Left};
     Engine::Text3DAnchor anchor{Engine::Text3DAnchor::Baseline};
     Engine::MaterialID material{};
-    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: unused, z: exclude from DDGI (0=contributes, default), w: hero (excluded from the traced sun shadow)
+    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: include in probe bake (nonzero=included, default; 0=excluded, legacy scenes store 1), z: exclude from DDGI (0=contributes, default), w: hero (excluded from the traced sun shadow)
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 

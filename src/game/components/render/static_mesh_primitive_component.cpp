@@ -117,6 +117,8 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         if (ImGui::Checkbox("Visible", &visible)) { component.modelFlags.x = visible ? 1.0f : 0.0f; }
         ImGui::SameLine();
         if (ImGui::Checkbox("Hero", &hero)) { component.modelFlags.w = hero ? 1.0f : 0.0f; }
+        bool probeBakeExclude = component.modelFlags.y == 0.0f;
+        if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) { component.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f; }
 
         if (!component.modelId.IsValid()) {
             if (ImGui::BeginCombo("Select Model", "")) {

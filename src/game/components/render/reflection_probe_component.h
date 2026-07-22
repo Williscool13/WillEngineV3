@@ -62,6 +62,10 @@ struct ReflectionProbeLoadPendingTag
 /** Cubemap load in flight; ReflectionProbeLoadResolve records the resident handle once it finishes. */
 struct ReflectionProbeLoadingTag
 {};
+
+/** Transient bake-time hide: tagged entities drop out of raster, TLAS, and light gather for the capture. Not serialized, not registered. */
+struct ProbeBakeHiddenTag
+{};
 }
 
 #endif //WILL_ENGINE_REFLECTION_PROBE_COMPONENT_H

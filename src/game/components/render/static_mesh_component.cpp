@@ -190,6 +190,10 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         if (ImGui::Checkbox("DDGI Contribution", &ddgiContribution)) {
             component.modelFlags.z = ddgiContribution ? 0.0f : 1.0f;
         }
+        bool probeBakeExclude = component.modelFlags.y == 0.0f;
+        if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) {
+            component.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f;
+        }
 
         auto* runtime = registry.try_get<MeshRuntime>(entity);
 

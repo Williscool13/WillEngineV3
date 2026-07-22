@@ -1019,7 +1019,8 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         auto view = state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent>(
             entt::exclude<
                 Component::PortalPlaneTag,
-                Component::CubemapVisualizeTag
+                Component::CubemapVisualizeTag,
+                Component::ProbeBakeHiddenTag
             >);
 
         Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
@@ -1092,7 +1093,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
             emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
 
-            for (const auto& [entity, light, areaLightTransform] : state->registry.view<Component::AreaLightComponent, Component::AreaLightTransformComponent>().each()) {
+            for (const auto& [entity, light, areaLightTransform] : state->registry.view<Component::AreaLightComponent, Component::AreaLightTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
                 if (!light.drawEmissiveSurface) { continue; }
                 const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
                 frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(areaLightTransform.modelMatrix, areaLightTransform.previousMatrix);
@@ -1140,7 +1141,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
             emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
 
-            for (const auto& [entity, light, sphereLightTransform] : state->registry.view<Component::SphereLightComponent, Component::SphereLightTransformComponent>().each()) {
+            for (const auto& [entity, light, sphereLightTransform] : state->registry.view<Component::SphereLightComponent, Component::SphereLightTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
                 if (!light.drawEmissiveSurface) { continue; }
                 const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
                 frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(sphereLightTransform.modelMatrix, sphereLightTransform.previousMatrix);
@@ -1287,6 +1288,49 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
+void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    entt::registry& registry = state->registry;
+
+    for (auto [entity, mesh] : registry.view<Component::StaticMeshComponent>().each()) {
+        if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+    for (auto [entity, mesh] : registry.view<Component::StaticMeshPrimitiveComponent>().each()) {
+        if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+    for (auto [entity, mesh] : registry.view<Component::ProceduralMeshComponent>().each()) {
+        if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+    for (auto [entity, mesh] : registry.view<Component::SplineMeshComponent>().each()) {
+        if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+    for (auto [entity, mesh] : registry.view<Component::Text3DComponent>().each()) {
+        if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+
+    for (auto [entity, light] : registry.view<Component::PointLightComponent>().each()) {
+        if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+    for (auto [entity, light] : registry.view<Component::AreaLightComponent>().each()) {
+        if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+    for (auto [entity, light] : registry.view<Component::SphereLightComponent>().each()) {
+        if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+
+    for (auto entity : registry.view<Component::DynamicPhysicsBodyComponent>()) {
+        registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity);
+    }
+    for (auto [entity, body] : registry.view<Component::PhysicsBodyDesc>().each()) {
+        if (body.motionType != Component::PhysicsMotionType::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+}
+
+void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    state->registry.clear<Component::ProbeBakeHiddenTag>();
+}
+
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
@@ -1295,6 +1339,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     auto pointView = state->registry.view<Component::PointLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : pointView.each()) {
         if (vf.pointLights.IsFull()) { break; }
+        if (state->registry.all_of<Component::ProbeBakeHiddenTag>(entity)) { continue; }
         const glm::vec3& c = light.color;
         vf.pointLights.PushBack(PointLightData{
             .positionRange = {transform.translation, light.range},
@@ -1310,6 +1355,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : areaView.each()) {
         if (vf.lights.Size() >= static_cast<size_t>(MAX_LIGHTS)) { break; }
+        if (state->registry.all_of<Component::ProbeBakeHiddenTag>(entity)) { continue; }
         vf.lightEntityToIndex[static_cast<uint32_t>(entity)] = static_cast<uint32_t>(vf.lights.Size());
         const glm::mat3 rot = glm::mat3_cast(transform.rotation);
         const glm::vec3 normal = rot[2];
@@ -1335,6 +1381,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     auto sphereView = state->registry.view<Component::SphereLightComponent, Component::TransformComponent>();
     for (auto [entity, light, transform] : sphereView.each()) {
         if (vf.lights.Size() >= static_cast<size_t>(MAX_LIGHTS)) { break; }
+        if (state->registry.all_of<Component::ProbeBakeHiddenTag>(entity)) { continue; }
         vf.lightEntityToIndex[static_cast<uint32_t>(entity)] = static_cast<uint32_t>(vf.lights.Size());
         const glm::vec3& c = light.color;
         vf.lights.PushBack(LightInfo{
@@ -1360,7 +1407,8 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         auto view = state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent>(
             entt::exclude<
                 Component::PortalPlaneTag,
-                Component::CubemapVisualizeTag
+                Component::CubemapVisualizeTag,
+                Component::ProbeBakeHiddenTag
             >);
 
         size_t meshCount = view.size_hint();

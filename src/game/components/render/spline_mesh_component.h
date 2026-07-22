@@ -36,7 +36,7 @@ struct SplineMeshComponent
     Engine::SplineRailing railing{};
 
     Engine::MaterialID material{};
-    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f};
+    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: include in probe bake (nonzero=included, default; 0=excluded, legacy scenes store 1), z: exclude from DDGI (0=contributes, default), w: hero (excluded from the traced sun shadow)
     glm::vec3 renderOffset{0.0f};
 
     static void Serialize(const SplineMeshComponent& comp, nlohmann::json& json);

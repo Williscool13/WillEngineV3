@@ -64,6 +64,12 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
 void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+
+/** Bake-time hide: tags entities flagged exclude-from-probe-bake plus dynamic/kinematic movers so gather drops them from raster, TLAS, and lights. */
+void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+/** Removes the transient ProbeBakeHiddenTag from every entity, restoring normal gather. */
+void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state);
 void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);

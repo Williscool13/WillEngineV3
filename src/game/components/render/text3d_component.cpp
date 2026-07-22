@@ -149,6 +149,8 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     if (ImGui::Checkbox("Hero##text3d", &hero)) { comp.modelFlags.w = hero ? 1.0f : 0.0f; }
     ImGui::SameLine();
     if (ImGui::Checkbox("DDGI Contribution##text3d", &ddgiContribution)) { comp.modelFlags.z = ddgiContribution ? 0.0f : 1.0f; }
+    bool probeBakeExclude = comp.modelFlags.y == 0.0f;
+    if (ImGui::Checkbox("Probe Bake Exclude##text3d", &probeBakeExclude)) { comp.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f; }
 
     ImGui::BeginDisabled(busy);
 

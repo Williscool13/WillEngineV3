@@ -24,6 +24,7 @@ struct PointLightComponent
     Vec3 color{1.0f, 1.0f, 1.0f};
     float intensity{1.0f};
     float range{10.0f};
+    bool bExcludeFromProbeBake{false};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
@@ -40,6 +41,7 @@ struct AreaLightComponent
     float halfHeight{1.0f};
     float range{10.0f};
     bool drawEmissiveSurface{true};
+    bool bExcludeFromProbeBake{false};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
@@ -67,6 +69,7 @@ struct SphereLightComponent
     float radius{0.5f};
     float range{10.0f};
     bool drawEmissiveSurface{true};
+    bool bExcludeFromProbeBake{false};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
