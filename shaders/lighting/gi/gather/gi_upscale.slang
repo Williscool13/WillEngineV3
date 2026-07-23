@@ -7,6 +7,8 @@ import packing_functions;
 import pbr_functions;
 import gi_gather_common;
 import ddgi_common;
+import reflection_probe_interop;
+import reflection_probe_common;
 
 // Full-res resolve: bilateral upsample of the gather SH from the pixel's nearest 2x2 half-res footprint (the own texel is always among the taps), evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection.
 
@@ -116,11 +118,23 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         if (pc.skyboxIndex >= 0) {
             current = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], evalN) * pc.iblIntensity;
         }
+        float giW = 0.0;
         if (pc.bCascadesValid != 0) {
             float3 cameraDirection = normalize(mul((float3x3)scene.invView, centerXv));
             float edgeFade;
             float4 gi = DDGISampleIrradianceCascaded(worldPos, evalN, cameraDirection, pc.ddgiCascades, length(centerXv), edgeFade);
             current = gi.rgb * gi.w + current * (1.0 - max(gi.w, edgeFade));
+            giW = gi.w;
+        }
+        if (pc.reflectionProbeCount > 0u) {
+            float probeFade;
+            int probeIndex = PickReflectionProbe(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+            if (probeIndex >= 0) {
+                ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                float3 probeIrr = SampleReflectionProbeIrradiance(probe, evalN) * probe.intensity;
+                probeIrr *= lerp(1.0, min(1.0, Luma(current) / max(Luma(probeIrr), 1e-4)), giW);
+                current = lerp(current, probeIrr, probeFade);
+            }
         }
     } else {
         current = float3(0.0);

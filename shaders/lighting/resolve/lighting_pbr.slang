@@ -92,11 +92,23 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
             if (pc.skyboxIndex >= 0) {
                 indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
             }
+            float giW = 0.0;
             if (pc.bDDGIApply != 0) {
                 float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
                 float edgeFade;
                 float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
                 indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
+                giW = gi.w;
+            }
+            if (pc.reflectionProbeCount > 0u) {
+                float probeFade;
+                int probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+                if (probeIndex >= 0) {
+                    ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                    float3 probeIrr = SampleReflectionProbeIrradiance(probe, worldN) * probe.intensity;
+                    probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
+                    indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
+                }
             }
         }
 

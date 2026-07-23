@@ -614,8 +614,6 @@ SHADER_PUBLIC struct WorldCacheShadePushConstant
     SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cells;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
-    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) previousCascades;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
@@ -631,6 +629,7 @@ SHADER_PUBLIC struct WorldCacheShadePushConstant
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC float maxRadiance;
     SHADER_PUBLIC float bounceIntensity;
+    SHADER_PUBLIC uint32_t accumCap;
 };
 
 SHADER_PUBLIC struct GIGatherPushConstant
@@ -664,6 +663,9 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
     SHADER_PUBLIC uint32_t bSkipRay;
     SHADER_PUBLIC uint32_t guideOutIndex;
+    SHADER_PUBLIC uint32_t reflectionProbeCount;
+    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
+    SHADER_PUBLIC float bakedDiffuseClampK;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -711,7 +713,8 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t bCascadesValid;
     SHADER_PUBLIC uint32_t aoIndex;
     SHADER_PUBLIC uint32_t bentNormalIndex;
-    SHADER_PUBLIC uint32_t pad1;
+    SHADER_PUBLIC uint32_t reflectionProbeCount;
+    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -1279,18 +1282,16 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) previousCascades;
     SHADER_PUBLIC SHADER_PTR(WorldCacheBuffers) worldCache;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
     SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
     SHADER_PUBLIC uint32_t bBounceOnly;
     SHADER_PUBLIC uint32_t frameIndex;
-    SHADER_PUBLIC uint32_t bLocalNEE;
     SHADER_PUBLIC float maxRayRadiance;
     SHADER_PUBLIC float bounceIntensity;
     SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC uint32_t worldCacheShadeInterval;
 };
 
 SHADER_PUBLIC struct DDGIProbeBlendPushConstant

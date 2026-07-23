@@ -16,6 +16,7 @@
 #include "game/systems/debug_system.h"
 #include "game/systems/render_systems.h"
 #include "game/systems/probe_bake_system.h"
+#include "game/systems/ddgi_converge_boost.h"
 #include "game/components/camera_components.h"
 #include "game/components/core_components.h"
 #include "game/components/render/reflection_probe_component.h"
@@ -338,7 +339,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SameLine();
         ImGui::Checkbox("Bounce Only##DDGIDebug", &state->debug.bDDGIBounceOnly);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Zero skybox radiance in the DDGI trace (feedback also disabled); anything left in the probes is one-bounce surface shading (sun + local-light NEE at hits)");
+            ImGui::SetTooltip("Zero skybox radiance in the DDGI trace (feedback also disabled); anything left in the probes is one-bounce surface shading (sun + emissive + light-proxy emission at hits)");
         }
         ImGui::SameLine();
         ImGui::Checkbox("Hide Inactive##DDGIDebug", &state->debug.bDDGIHideInactiveProbes);
@@ -905,6 +906,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Debug Draw Probe Volumes", &reflectionProbe.bDebugDraw)) { changed = true; }
             if (Widgets::SliderInt("Bake Settle Frames##reflectionprobe", &reflectionProbe.settleFrames, 1, 1024, {.tooltip = "Rendered frames held on each cube face before its capture snapshot; covers static-camera TAA convergence plus the corner-leak disocclusion transient. Default 240.", .reset = true, .resetTo = 240.0})) { changed = true; }
             if (Widgets::SliderInt("Bake Capture Size##reflectionprobe", &reflectionProbe.bakeCaptureSize, 256, 1280, {.tooltip = "Per-face capture resolution in pixels before downsample to the probe resolution; larger values cost bake time only. Default 1024.", .reset = true, .resetTo = 1024.0})) { changed = true; }
+            if (Widgets::SliderFloat("Baked Diffuse Clamp K##reflectionprobe", &reflectionProbe.bakedDiffuseClampK, 1.0f, 16.0f, {.format = "%.1f", .tooltip = "Luminance-ratio ceiling for the world-cache diffuse tier inside a probe volume: cache is scaled down when it exceeds K times the baked probe irradiance. Default 4.0.", .reset = true, .resetTo = 4.0})) { changed = true; }
 
             if (ImGui::Button("Capture Probe Face (temp)##probecapturetest")) {
                 ProbeBakeGetOrCreate(state).bManualDumpRequested = true;
@@ -1011,10 +1013,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ddgi.outerRaysPerProbe = static_cast<uint32_t>(outerRaysPerProbe);
                 changed = true;
             }
-            if (ImGui::Checkbox("Outer Local Light NEE##ddgi", &ddgi.bOuterLocalNEE)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Sample one local light (with a shadow ray) at ray hits on outer cascades. Off = outer hits shade only sun + emissive + bounce feedback, halving their shadow rays; local lights are near-field, so their bounce through coarse probes is usually negligible.");
-            }
             if (ImGui::Checkbox("Probe Classification##ddgi", &ddgi.bClassification)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Probes with no geometry within ~1.5 cells drop to 16 sentinel rays and freeze their atlas tiles (nothing within sampling reach reads them); a sentinel hit reactivates the probe with a temporal restart. Requires Relocation (classification rides that pass). Inactive probes draw flat blue in the probe debug view.");
@@ -1027,8 +1025,28 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ddgiF("Max Ray Radiance##ddgi", &ddgi.maxRayRadiance, ddgiDefaults.maxRayRadiance, 0.0f, 100.0f, "%.1f", "Firefly clamp: hit radiance above this (max channel) is scaled down before blending, taming NEE light-selection spikes and rare bright emissive hits. Dims indirect from very bright small sources. 0 = off. Default 20.");
 
             ImGui::SeparatorText("Blend");
+            if (ImGui::Button("Converge Now##ddgi")) {
+                DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, ddgi);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Temporarily drops hysteresis, maxes rays, and accelerates world-cache shading (interval + accumulation window) for ~70 frames so dark multi-bounce rooms converge quickly, then restores the values below. Retrigger to restart the schedule.");
+            }
+            if (state->ddgiConvergeBoost.bActive) {
+                ImGui::SameLine();
+                ImGui::Text("Converging... %d frames left", DDGI_CONVERGE_BOOST_FRAMES - state->ddgiConvergeBoost.frame);
+            }
             ddgiF("Hysteresis##ddgi", &ddgi.hysteresis, ddgiDefaults.hysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for irradiance (RTXGI parity). Probe updates are 1spp Monte Carlo, so the EMA carries most of the smoothing; the darkening fast path plus the min darkening step keep lights-off response quick. Higher = smoother but laggier; 0 = no history. Default 0.97.");
             ddgiF("Visibility Hysteresis##ddgi", &ddgi.visibilityHysteresis, ddgiDefaults.visibilityHysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for the distance/Chebyshev atlas. The world cache stabilizes radiance only; the visibility integrand still changes every frame with ray rotation, so this stays high. Default 0.97.");
+            int cacheShadeInterval = static_cast<int>(ddgi.worldCacheShadeInterval);
+            if (Widgets::SliderInt("Cache Shade Interval##ddgi", &cacheShadeInterval, 1, 32, {.tooltip = "Frames between world-cache cell re-shades (plus a 0-3 per-slot stagger). Lower = the cache tracks lighting changes faster, at more shade dispatch cost. Interbounce light propagates one cache shade + one probe blend per generation, so this bounds multi-bounce convergence speed. Default 8.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.worldCacheShadeInterval)})) {
+                ddgi.worldCacheShadeInterval = static_cast<uint32_t>(cacheShadeInterval);
+                changed = true;
+            }
+            int cacheAccumCap = static_cast<int>(ddgi.worldCacheAccumCap);
+            if (Widgets::SliderInt("Cache Accum Frames##ddgi", &cacheAccumCap, 1, 64, {.tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance; the change-streak dump already cuts history on sustained changes. Default 16.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.worldCacheAccumCap)})) {
+                ddgi.worldCacheAccumCap = static_cast<uint32_t>(cacheAccumCap);
+                changed = true;
+            }
             ddgiF("Irradiance Gamma##ddgi", &ddgi.irradianceGamma, ddgiDefaults.irradianceGamma, 1.0f, 10.0f, "%.1f", "Perceptual encoding exponent: the atlas stores pow(E, 1/gamma) and blends in that space, so rare bright rays (sky through a small opening) cannot pulse the average. 1 = linear. Default 5.");
             ddgiF("Irradiance Threshold##ddgi", &ddgi.irradianceThreshold, ddgiDefaults.irradianceThreshold, 0.0f, 1.0f, "%.2f", "Encoded-space darkening that counts as a real lighting change (lights turning off, the low-variance direction; RTXGI): hysteresis drops by 0.75 so the probe re-converges fast. Brightening spikes stay damped by hysteresis + the delta clamp. Default 0.25.");
             ddgiF("Brightness Threshold##ddgi", &ddgi.brightnessThreshold, ddgiDefaults.brightnessThreshold, 0.0f, 1.0f, "%.2f", "Encoded-space per-frame change clamp: deltas above this are scaled to 25% (firefly/pulse suppression). Default 0.10.");

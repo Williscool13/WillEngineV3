@@ -104,12 +104,25 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
             indirectDiffuse = rdgTexturesFloat4[pc.giResolvedIndex].Load(int3(pixel, 0)).rgb;
         } else {
             indirectDiffuse = skyIrradiance;
+            float giW = 0.0;
             if (pc.bDDGIApply != 0) {
                 float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
                 float3 cameraDirection = normalize(mul(float3x3(scene.invView), viewPosition));
                 float edgeFade;
                 float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
                 indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
+                giW = gi.w;
+            }
+            if (pc.reflectionProbeCount > 0u) {
+                float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+                float probeFade;
+                int probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+                if (probeIndex >= 0) {
+                    ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                    float3 probeIrr = SampleReflectionProbeIrradiance(probe, worldN) * probe.intensity;
+                    probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
+                    indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
+                }
             }
         }
 

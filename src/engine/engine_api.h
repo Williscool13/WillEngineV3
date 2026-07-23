@@ -472,6 +472,18 @@ struct DebugState
     Core::DebugViewAspect viewAspect{};
 };
 
+struct DDGIConvergeBoost
+{
+    bool bActive{false};
+    int32_t frame{0};
+    float stashedHysteresis{0.0f};
+    float stashedVisibilityHysteresis{0.0f};
+    uint32_t stashedRaysPerProbe{0};
+    uint32_t stashedOuterRaysPerProbe{0};
+    uint32_t stashedWorldCacheShadeInterval{0};
+    uint32_t stashedWorldCacheAccumCap{0};
+};
+
 struct EngineState
 {
     EngineState() = default;
@@ -536,6 +548,7 @@ struct EngineState
     LightingState lighting;
     EditorState editor;
     DebugState debug;
+    DDGIConvergeBoost ddgiConvergeBoost;
     ProjectConfig projectConfig{};
 };
 

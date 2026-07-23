@@ -312,19 +312,35 @@ void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineSta
 
 void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    Core::InlineVector<uint64_t, 64> seenProbeIds{};
+    struct ClaimedProbeId
+    {
+        uint64_t id;
+        entt::entity owner;
+    };
+    Core::InlineVector<ClaimedProbeId, 64> claimedProbeIds{};
+    for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
+        if (probe.contentSource != Component::ReflectionProbeComponent::ContentSource::Baked || probe.probeId == 0) { continue; }
+        bool bTaken = false;
+        for (const ClaimedProbeId& claimed : claimedProbeIds) {
+            if (claimed.id == probe.probeId) { bTaken = true; break; }
+        }
+        if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
+    }
     for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
         bool bCollision = probe.probeId == 0;
-        for (const uint64_t seen : seenProbeIds) {
-            if (seen == probe.probeId) { bCollision = true; break; }
+        for (const ClaimedProbeId& claimed : claimedProbeIds) {
+            if (claimed.id == probe.probeId) {
+                bCollision = claimed.owner != entity;
+                break;
+            }
         }
         if (bCollision) {
             uint64_t fresh = state->rng();
             bool bUnique = false;
             while (!bUnique) {
                 bUnique = fresh != 0;
-                for (const uint64_t seen : seenProbeIds) {
-                    if (seen == fresh) { bUnique = false; break; }
+                for (const ClaimedProbeId& claimed : claimedProbeIds) {
+                    if (claimed.id == fresh) { bUnique = false; break; }
                 }
                 if (!bUnique) { fresh = state->rng(); }
             }
@@ -338,7 +354,11 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
             state->registry.emplace_or_replace<Component::ReflectionProbeLoadPendingTag>(entity);
             state->bPendingModelResolve |= true;
         }
-        if (!seenProbeIds.IsFull()) { seenProbeIds.PushBack(probe.probeId); }
+        bool bTaken = false;
+        for (const ClaimedProbeId& claimed : claimedProbeIds) {
+            if (claimed.id == probe.probeId) { bTaken = true; break; }
+        }
+        if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
     }
 
     for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
@@ -1580,6 +1600,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
     if (!config.bEnabled) { return; }
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    vf.bakedDiffuseClampK = config.bakedDiffuseClampK;
 
     auto view = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
     for (auto [entity, probe, worldTransform] : view.each()) {

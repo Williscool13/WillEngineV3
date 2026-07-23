@@ -561,7 +561,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.bDDGIBounceOnly, worldCache);
                 ddgiPreviousCascades = ddgiCascades;
                 const bool bWorldCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.bDDGIBounceOnly;
-                SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, bWorldCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity);
+                SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, bWorldCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.worldCacheAccumCap);
                 SetupWorldCacheEnd(*renderGraph, worldCache);
                 if (worldCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
                     RenderPass& wcStatsReadback = renderGraph->AddPass(SID("World Cache Stats Readback"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::WorldCache);

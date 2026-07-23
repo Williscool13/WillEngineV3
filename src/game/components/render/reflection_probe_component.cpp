@@ -116,6 +116,12 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
             comp.bBakeRequested = true;
         }
         ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(bake.bBakeActive || bake.bInterbounceBatch || !bake.bakeQueue.IsEmpty());
+        if (ImGui::Button("Double Bake##rp")) {
+            bake.EnqueueProbeInterbounce(state, entity);
+        }
+        ImGui::EndDisabled();
 
         const char* sourceLabel = "None";
         switch (comp.contentSource) {

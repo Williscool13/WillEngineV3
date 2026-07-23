@@ -55,9 +55,14 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
             if (rayData.w < 0.0) {
                 continue;
             }
+            float3 radiance = rayData.rgb;
+            if (radiance.x < 0.0) {
+                // Light-proxy hit: x carries -(emission.r + 1)
+                radiance.x = -radiance.x - 1.0;
+            }
             float3 rayDirection = gsRayDirections[r];
             float weight = max(dot(texelDirection, rayDirection), 0.0);
-            radianceSum += max(rayData.rgb, float3(0.0)) * weight;
+            radianceSum += radiance * weight;
             weightSum += weight;
         }
         // The EMA runs in perceptual space (pow 1/gamma): a rare bright ray moves the encoded value little, so small

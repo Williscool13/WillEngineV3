@@ -14,6 +14,8 @@ import hit_shading_common;
 import world_cache_hash_common;
 import world_cache_interop;
 import gi_gather_common;
+import reflection_probe_interop;
+import reflection_probe_common;
 
 // =============== Shader Summary ============
 // One cosine-weighted ray per half-res pixel, zero shading at the hit: cache radiance, else albedo * DDGI irradiance (one material fetch), skybox on miss. MC-projected into per-channel 2-band SH, evaluated at the full-res normal at composite.
@@ -122,14 +124,25 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
             uint slot = WorldCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition);
             uint2 packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(WORLD_CACHE_RADIANCE_UNSHADED, WORLD_CACHE_RADIANCE_UNSHADED);
             uint cellCount = slot != WORLD_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
+            int probeIndex = -1;
+            float probeFade = 0.0;
+            if (pc.reflectionProbeCount > 0u) {
+                probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+            }
             // Count gate: a count-1 cell is one bary-jittered point; the probe tier is smoother while cells stream in.
             if (WorldCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
                 radiance = WorldCacheUnpackRadiance(packedRadiance);
                 tier = GI_GATHER_TIER_CACHE;
+                if (probeIndex >= 0) {
+                    ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                    float3 probeIrr = SampleReflectionProbeIrradiance(probe, worldN) * probe.intensity;
+                    radiance *= min(1.0, pc.bakedDiffuseClampK * Luma(probeIrr) / max(Luma(radiance), 1e-4));
+                }
                 // Reader keeps the cell resident: probe rays alone can let a gather-consumed sparse cell age past the LRU window.
                 pc.cacheCells[slot].lastTouched = pc.frameIndex;
             } else {
                 float3 indirectDiffuse = float3(0.0);
+                float giW = 0.0;
                 if (pc.skyboxIndex >= 0) {
                     indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
                 }
@@ -138,10 +151,18 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                     float edgeFade;
                     float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
                     indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
+                    giW = gi.w;
                 }
                 // No hit material to modulate by; the shading pixel's own albedo is applied once downstream (matches the non-gather DDGI path).
                 radiance = indirectDiffuse;
                 tier = GI_GATHER_TIER_PROBE;
+                if (probeIndex >= 0) {
+                    ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                    float3 probeIrr = SampleReflectionProbeIrradiance(probe, worldN) * probe.intensity;
+                    probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
+                    radiance = lerp(radiance, probeIrr, probeFade);
+                    if (probeFade > 0.5) { tier = GI_GATHER_TIER_BAKED; }
+                }
             }
 
             radiance = min(radiance, float3(maxRadiance));
@@ -223,13 +244,24 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                     uint slot = WorldCacheHashFindLodTolerant(pc.cacheEntries, key, hitWorldPos);
                     uint2 packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(WORLD_CACHE_RADIANCE_UNSHADED, WORLD_CACHE_RADIANCE_UNSHADED);
                     uint cellCount = slot != WORLD_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
+                    int probeIndex = -1;
+                    float probeFade = 0.0;
+                    if (pc.reflectionProbeCount > 0u) {
+                        probeIndex = PickReflectionProbe(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+                    }
                     if (WorldCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
                         radiance = WorldCacheUnpackRadiance(packedRadiance);
                         tier = GI_GATHER_TIER_CACHE;
+                        if (probeIndex >= 0) {
+                            ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                            float3 probeIrr = SampleReflectionProbeIrradiance(probe, hit.normal) * probe.intensity;
+                            radiance *= min(1.0, pc.bakedDiffuseClampK * Luma(probeIrr) / max(Luma(radiance), 1e-4));
+                        }
                         pc.cacheCells[slot].lastTouched = pc.frameIndex;
                     } else {
                         // No light loop at fallback hits; their own direct light is missing (TDA's same trade).
                         float3 indirectDiffuse = float3(0.0);
+                        float giW = 0.0;
                         if (pc.skyboxIndex >= 0) {
                             indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], hit.normal) * pc.iblIntensity;
                         }
@@ -237,9 +269,17 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                             float edgeFade;
                             float4 gi = DDGISampleIrradianceCascaded(hitWorldPos, hit.normal, direction, pc.ddgiCascades, 0.75 * hitT, edgeFade);
                             indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
+                            giW = gi.w;
+                        }
+                        if (probeIndex >= 0) {
+                            ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                            float3 probeIrr = SampleReflectionProbeIrradiance(probe, hit.normal) * probe.intensity;
+                            probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
+                            indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
                         }
                         radiance = hit.diffuseColor * indirectDiffuse;
                         tier = GI_GATHER_TIER_PROBE;
+                        if (probeIndex >= 0 && probeFade > 0.5) { tier = GI_GATHER_TIER_BAKED; }
                     }
                 }
             } else {

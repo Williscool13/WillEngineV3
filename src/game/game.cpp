@@ -28,6 +28,7 @@
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
 #include "systems/probe_bake_system.h"
+#include "systems/ddgi_converge_boost.h"
 #include "editor/editor_systems.h"
 #include "console/console.h"
 #include "game_state.h"
@@ -330,6 +331,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     Game::ProbeBakeTick(ctx, state, frameBuffer);
+    Game::DDGIConvergeBoostTick(state->ddgiConvergeBoost, state->lighting.ddgi);
 
     Game::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
 

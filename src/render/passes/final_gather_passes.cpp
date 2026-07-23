@@ -44,6 +44,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
+    pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.depthCopy);
     if (bScreenSpace) {
@@ -58,8 +59,9 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.WriteStorageImage(GI_GATHER_DATA);
     pass.WriteStorageImage(GI_GATHER_GUIDE);
 
-    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, bCascades, bScreenSpace, bSkipRay, gatherShR, gatherShG, gatherShB,
-            gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
+    const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
+    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, bCascades, bScreenSpace, bSkipRay, gatherShR, gatherShG, gatherShB, reflectionProbeCount,
+            gbufferOne = targets.gbufferOne, depth = targets.depthCopy, bakedDiffuseClampK = viewFamily.bakedDiffuseClampK,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_gather"));
         if (!pipelineEntry) {
@@ -97,6 +99,9 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .gbufferOneHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0x0u,
             .bSkipRay = bSkipRay ? 1u : 0u,
             .guideOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_GUIDE),
+            .reflectionProbeCount = reflectionProbeCount,
+            .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+            .bakedDiffuseClampK = bakedDiffuseClampK,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (gatherExtent[0] + 7u) / 8u, (gatherExtent[1] + 7u) / 8u, 1);
@@ -181,6 +186,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     upscale.ReadSampledImage(GI_GATHER_SH_B);
     upscale.ReadSampledImage(GI_GATHER_DATA);
     upscale.ReadSampledImage(GI_GATHER_GUIDE);
+    upscale.ReadBuffer(REFLECTION_PROBE_BUFFER);
     if (bTemporal) {
         upscale.ReadSampledImage(GI_GATHER_HISTORY);
         upscale.ReadSampledImage(SID("depth_history"));
@@ -196,7 +202,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     const bool bUpscaleCascades = AddDDGISampleDependencies(graph, upscale);
     upscale.WriteStorageImage(GI_GATHER_RESOLVED);
 
-    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, bTemporal, bAO, bBentNormals, bUpscaleCascades,
+    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, bTemporal, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_upscale"));
@@ -228,6 +234,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .bCascadesValid = bUpscaleCascades ? 1u : 0u,
             .aoIndex = bAO ? graph.GetSampledImageViewDescriptorIndex(SID("shadows_resolve_target")) : ~0x0u,
             .bentNormalIndex = bBentNormals ? graph.GetSampledImageViewDescriptorIndex(SID("gtao_bent_normals")) : ~0x0u,
+            .reflectionProbeCount = reflectionProbeCount,
+            .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);

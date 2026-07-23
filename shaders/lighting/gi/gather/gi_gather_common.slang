@@ -14,6 +14,7 @@ public static const uint GI_GATHER_TIER_PROBE = 2u;
 public static const uint GI_GATHER_TIER_SKY = 3u;
 public static const uint GI_GATHER_TIER_BACKFACE = 4u;
 public static const uint GI_GATHER_TIER_INVALID = 5u;
+public static const uint GI_GATHER_TIER_BAKED = 6u;
 
 /** The full-res pixel a gather texel represents; fixed to the quad's (0,0) so guide geometry (depth/normal/hitT) is stationary. Deliberately not frame-cycled: cycling strobed depth edges every 4 frames; temporal supersampling lives in the ray RNG instead. */
 public uint2 GIGatherRepresentativePixel(uint2 gatherPixel, uint2 renderExtent)
@@ -132,7 +133,7 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
     return result;
 }
 
-/** Debug views: 2 = resolved irradiance, 3 = fallback tier (cyan screen / green cache / blue probe / yellow sky / red backface), 4 = hit distance, 5 = temporal accumulation count. */
+/** Debug views: 2 = resolved irradiance, 3 = fallback tier (cyan screen / green cache / blue probe / yellow sky / red backface / magenta baked), 4 = hit distance, 5 = temporal accumulation count. */
 public float3 GIGatherDebugColor(uint dataIndex, uint resolvedIndex, uint2 pixel, uint mode, float3 indirectDiffuse)
 {
     if (mode == 2u) {
@@ -149,6 +150,7 @@ public float3 GIGatherDebugColor(uint dataIndex, uint resolvedIndex, uint2 pixel
             case 2u: return float3(0.15, 0.3, 1.0);
             case 3u: return float3(1.0, 0.9, 0.2);
             case 4u: return float3(1.0, 0.1, 0.1);
+            case 6u: return float3(0.9, 0.2, 0.9);
             default: return float3(0.0);
         }
     }

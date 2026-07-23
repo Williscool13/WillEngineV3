@@ -83,7 +83,6 @@ struct ProbeBakeSystem
 
     Core::ViewData overrideView{};
     Core::ReflectionProbeConfiguration stashedProbeConfig{};
-    Core::RTReflectionConfiguration stashedReflectionConfig{};
     Engine::InputContext stashedInputContext{};
     Core::HeapArray<uint16_t> faceBuffers[6]{};
 
@@ -110,6 +109,9 @@ struct ProbeBakeSystem
 
     /** Queues every reflection-probe entity for a two-pass interbounce bake; pass 2 rebakes with pass-1 results lit. */
     void EnqueueAllProbesInterbounce(Engine::EngineState* state);
+
+    /** Queues a single probe entity for a two-pass interbounce bake; replaces any pending queue. */
+    void EnqueueProbeInterbounce(Engine::EngineState* state, entt::entity probe);
 
     /** Advances the state machine one render frame; owns FrameBuffer::bCaptureProbeFace (cleared every tick, raised on request frames). */
     void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);

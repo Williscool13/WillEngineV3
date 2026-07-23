@@ -17,7 +17,7 @@ import binning_common;
 import common_interop;
 
 // =============== Shader Summary ============
-// DDGI probe trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits key+read the world radiance cache (last frame's shaded value; NEE shading only as a fallback when the cache has no slot for the hit). Light-proxy hits carry no radiance, only the hit distance for the visibility moments.
+// DDGI probe trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits key+read the world radiance cache (last frame's shaded value; NEE shading only as a fallback when the cache has no slot for the hit). Light-proxy hits return the light's emission (front face only), sign-tagged so relocation ignores them.
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
@@ -64,8 +64,17 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         float hitT = q.CommittedRayT();
         Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
         if (instance.lightIndex != 0xFFFFFFFF) {
-            // -1 in x tags a light-proxy hit so relocation can ignore it; blending clamps it back to black.
-            result = float4(-1.0, 0.0, 0.0, hitT);
+            float3 radiance = float3(0.0);
+            if (q.CommittedTriangleFrontFace()) {
+                LightInfo light = pc.lightData->lights[instance.lightIndex];
+                radiance = UnpackUnorm4x8(light.packedColor).rgb * light.intensity;
+                float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
+                if (pc.maxRayRadiance > 0.0 && maxChannel > pc.maxRayRadiance) {
+                    radiance *= pc.maxRayRadiance / maxChannel;
+                }
+            }
+            // Negative x tags a light-proxy hit so relocation/classification skip it; x carries -(emission.r + 1) for the irradiance blend to decode.
+            result = float4(-(radiance.r + 1.0), radiance.g, radiance.b, hitT);
         } else if (q.CommittedTriangleFrontFace()) {
             float3 hitWorldPos = ray.Origin + direction * hitT;
             float3 radiance = float3(0.0);
@@ -95,7 +104,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                     }
                     pc.worldCache->cells[wcSlot].lastTouched = pc.frameIndex;
 
-                    uint shadeInterval = WORLD_CACHE_SHADE_INTERVAL + (wcSlot & 3u);
+                    uint shadeInterval = pc.worldCacheShadeInterval + (wcSlot & 3u);
                     if (isNew || pc.frameIndex - pc.worldCache->cells[wcSlot].lastShaded >= shadeInterval) {
                         uint prevActive;
                         InterlockedExchange(pc.worldCache->active[wcSlot], 1u, prevActive);
@@ -118,15 +127,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
             }
 
             if (!bCacheRead) {
-                uint rng = SeedRng(uint2(rayIndex, probeIndex), pc.frameIndex, 0xDD61u);
-                WorldGridPunctualLights worldGridLights = (WorldGridPunctualLights)0;
-                if (pc.worldGridBuffer != nullptr) {
-                    worldGridLights.view = scene.view;
-                    worldGridLights.camPos = scene.cameraWorldPos.xyz;
-                    worldGridLights.grid = pc.worldGridBuffer;
-                    worldGridLights.indexList = pc.worldGridIndexList;
-                }
-                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, rng, worldGridLights, 0.75 * hitT);
+                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, 0.75 * hitT);
             }
 
             // Firefly clamp

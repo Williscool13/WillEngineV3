@@ -10,6 +10,7 @@
 #include <stb/stb_image_write.h>
 
 #include "camera_system.h"
+#include "ddgi_converge_boost.h"
 #include "render_systems.h"
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
@@ -155,11 +156,26 @@ void ProbeBakeSystem::EnqueueAllProbesInterbounce(Engine::EngineState* state)
     bakePass = 1;
 }
 
+void ProbeBakeSystem::EnqueueProbeInterbounce(Engine::EngineState* state, entt::entity probe)
+{
+    if (phase == Phase::AwaitAssembles) {
+        state->inputContext = stashedBatchInputContext;
+        phase = Phase::Idle;
+    }
+    bakeQueue.Clear();
+    bakeQueue.PushBack(probe);
+    bakeBatchTotal = 1u;
+    interbounceBatch.Clear();
+    interbounceBatch.PushBack(probe);
+    awaitedAssembles.Clear();
+    bInterbounceBatch = true;
+    bakePass = 1;
+}
+
 void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (bBakeActive) {
         state->lighting.reflectionProbe = stashedProbeConfig;
-        state->lighting.reflection = stashedReflectionConfig;
         ClearProbeBakeHideSet(ctx, state);
         state->inputContext = stashedInputContext;
         if (bakeForcedExtent > 0) {
@@ -258,9 +274,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
         case Phase::Starting:
         {
             stashedProbeConfig = state->lighting.reflectionProbe;
-            stashedReflectionConfig = state->lighting.reflection;
 
-            state->lighting.reflection.bEnabled = true;
             if (bInterbounceBatch && bakePass == 2) {
                 state->lighting.reflectionProbe.bEnabled = true;
                 state->lighting.reflectionProbe.intensity = 1.0f;
@@ -317,6 +331,8 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             state->projectConfig.resolutionScale = 1.0f;
             frameBuffer->viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, bakeForcedExtent, bakeForcedExtent};
 
+            DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, state->lighting.ddgi);
+
             phase = Phase::FaceSetup;
             return;
         }
@@ -338,6 +354,9 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
         {
             ++settleCounter;
             if (settleCounter >= settleFrames) {
+                if (currentFace == 0 && state->ddgiConvergeBoost.bActive) {
+                    return;
+                }
                 phase = Phase::CaptureRequested;
             }
             return;
@@ -376,7 +395,6 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
         case Phase::Finishing:
         {
             state->lighting.reflectionProbe = stashedProbeConfig;
-            state->lighting.reflection = stashedReflectionConfig;
             ClearProbeBakeHideSet(ctx, state);
             state->inputContext = stashedInputContext;
             if (bakeForcedExtent > 0) {

@@ -293,11 +293,12 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"bScaleBiasPerCascade", p.bScaleBiasPerCascade},
         {"raysPerProbe", p.raysPerProbe},
         {"outerRaysPerProbe", p.outerRaysPerProbe},
-        {"bOuterLocalNEE", p.bOuterLocalNEE},
         {"bClassification", p.bClassification},
         {"bInfiniteBounce", p.bInfiniteBounce},
         {"bounceIntensity", p.bounceIntensity},
         {"maxRayRadiance", p.maxRayRadiance},
+        {"worldCacheShadeInterval", p.worldCacheShadeInterval},
+        {"worldCacheAccumCap", p.worldCacheAccumCap},
         {"hysteresis", p.hysteresis},
         {"visibilityHysteresis", p.visibilityHysteresis},
         {"irradianceGamma", p.irradianceGamma},
@@ -333,11 +334,12 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.bScaleBiasPerCascade = dBool("bScaleBiasPerCascade", p.bScaleBiasPerCascade);
     p.raysPerProbe = dUint("raysPerProbe", p.raysPerProbe);
     p.outerRaysPerProbe = dUint("outerRaysPerProbe", p.outerRaysPerProbe);
-    p.bOuterLocalNEE = dBool("bOuterLocalNEE", p.bOuterLocalNEE);
     p.bClassification = dBool("bClassification", p.bClassification);
     p.bInfiniteBounce = dBool("bInfiniteBounce", p.bInfiniteBounce);
     p.bounceIntensity = dFloat("bounceIntensity", p.bounceIntensity);
     p.maxRayRadiance = dFloat("maxRayRadiance", p.maxRayRadiance);
+    p.worldCacheShadeInterval = dUint("worldCacheShadeInterval", p.worldCacheShadeInterval);
+    p.worldCacheAccumCap = dUint("worldCacheAccumCap", p.worldCacheAccumCap);
     p.hysteresis = dFloat("hysteresis", p.hysteresis);
     p.visibilityHysteresis = dFloat("visibilityHysteresis", p.visibilityHysteresis);
     p.irradianceGamma = dFloat("irradianceGamma", p.irradianceGamma);
@@ -385,6 +387,7 @@ nlohmann::json ToJson(const Core::ReflectionProbeConfiguration& p)
         {"bDebugDraw", p.bDebugDraw},
         {"settleFrames", p.settleFrames},
         {"bakeCaptureSize", p.bakeCaptureSize},
+        {"bakedDiffuseClampK", p.bakedDiffuseClampK},
     };
 }
 
@@ -398,6 +401,7 @@ void FromJson(const nlohmann::json& r, Core::ReflectionProbeConfiguration& p)
     p.bDebugDraw = rBool("bDebugDraw", p.bDebugDraw);
     p.settleFrames = rInt("settleFrames", p.settleFrames);
     p.bakeCaptureSize = rInt("bakeCaptureSize", p.bakeCaptureSize);
+    p.bakedDiffuseClampK = rFloat("bakedDiffuseClampK", p.bakedDiffuseClampK);
 }
 
 nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)

@@ -802,11 +802,12 @@ struct DDGIParams
 
     uint32_t raysPerProbe{128};
     uint32_t outerRaysPerProbe{64};
-    bool bOuterLocalNEE{false};
     bool bClassification{true};
     bool bInfiniteBounce{true};
     float bounceIntensity{0.75f};
     float maxRayRadiance{20.0f};
+    uint32_t worldCacheShadeInterval{8};
+    uint32_t worldCacheAccumCap{16};
 
     float hysteresis{0.97f};
     float visibilityHysteresis{0.97f};
@@ -844,6 +845,7 @@ struct ReflectionProbeConfiguration
     bool bDebugDraw{false};
     int32_t settleFrames{240};
     int32_t bakeCaptureSize{1024};
+    float bakedDiffuseClampK{4.0f};
 };
 
 struct HeroShadowConfiguration
@@ -919,6 +921,7 @@ struct ViewFamily
     ScreenFadeState screenFade{};
     SIGMAParams sigmaParams{};
     float iblIntensity{1.0f};
+    float bakedDiffuseClampK{4.0f};
     float resolutionScale{1.0f};
 
 

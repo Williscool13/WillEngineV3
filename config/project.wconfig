@@ -7,7 +7,7 @@
       "maxRadiance": 1000.0,
       "newFrameWeight": 0.10000000149011612
     },
-    "mode": 5,
+    "mode": 1,
     "smaa": {
       "edgeDetectionMode": 1,
       "localContrastAdaptation": 2.0,
@@ -27,7 +27,7 @@
     }
   },
   "activeInputProfile": "",
-  "activeLightingProfile": "Standard",
+  "activeLightingProfile": "ReSTIR",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,
@@ -50,16 +50,16 @@
     },
     {
       "r": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
+        -0.0028216997161507607,
+        -0.9945855140686035,
+        -0.10010068118572235,
+        0.02777676284313202
       ],
-      "set": false,
+      "set": true,
       "t": [
-        0.0,
-        0.0,
-        0.0
+        -31.84471321105957,
+        -3.0920989513397217,
+        -50.61861038208008
       ]
     },
     {
@@ -158,5 +158,5 @@
   "gameCameraFovDegrees": 70.0,
   "gameCameraLockAspect": false,
   "gameCameraNearPlane": 0.10000000149011612,
-  "resolutionScale": 0.75
+  "resolutionScale": 1.0
 }

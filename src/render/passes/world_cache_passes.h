@@ -61,8 +61,9 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
  * @param iblIntensity
  * @param maxRadiance firefly clamp applied before blending into the cell, so a single outlier sample can't drag the EMA toward it; 0 disables it
  * @param bounceIntensity sub-unity scale on the DDGI feedback term, bounding the cache<->DDGI loop gain
+ * @param accumCap running-mean window cap for cell radiance (blend weight 1/(count+1) up to this); low values make cells track fresh shades fast at more variance
  */
-void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity);
+void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap);
 
 /**
  * Carries this frame's cache buffers into history. Call last.

@@ -20,19 +20,10 @@ void ComputeWorldCacheShade(uint3 dtid: SV_DispatchThreadID, uniform WorldCacheS
     float2 bary = UnpackUnorm2x16(hit.packedBary);
     Instance instance = pc.instanceBuffer[hit.instanceID];
 
-    WorldGridPunctualLights worldGridLights = (WorldGridPunctualLights)0;
-    if (pc.worldGridBuffer != nullptr) {
-        SceneData scene = pc.sceneData[pc.sceneDataIndex];
-        worldGridLights.view = scene.view;
-        worldGridLights.camPos = scene.cameraWorldPos.xyz;
-        worldGridLights.grid = pc.worldGridBuffer;
-        worldGridLights.indexList = pc.worldGridIndexList;
-    }
-
     // lastShaded holds this shade event's queue frame; salting with it decorrelates events even if the hit bary repeats.
     uint rngSeed = SeedRng(uint2(slot, hit.packedBary), pc.cells[slot].lastShaded, 0x5CACEu);
     float3 emissive;
-    float3 radiance = ShadeWorldCacheCell(pc, instance, hit.primitiveIndex, bary, rngSeed, worldGridLights, emissive);
+    float3 radiance = ShadeWorldCacheCell(pc, instance, hit.primitiveIndex, bary, rngSeed, emissive);
 
     float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
     if (pc.maxRadiance > 0.0 && maxChannel > pc.maxRadiance) {
@@ -62,7 +53,7 @@ void ComputeWorldCacheShade(uint3 dtid: SV_DispatchThreadID, uniform WorldCacheS
         uint state = pc.cells[slot].changeStreak;
         uint previousStreak = state & 0xFFu;
         uint previousDirection = (state >> 8u) & 1u;
-        count = min((state >> 16u) & 0xFFu, WORLD_CACHE_ACCUM_FRAMES - 1u);
+        count = min((state >> 16u) & 0xFFu, pc.accumCap - 1u);
         // Chroma-dominant deltas have no reliable luma sign; inherit the previous direction so constant-luma chromatic changes can still streak.
         direction = abs(lumaDelta) < 0.25 * maxAbsDelta ? previousDirection : (lumaDelta > 0.0 ? 1u : 0u);
         streak = bLargeDelta ? (previousStreak == 0u || direction == previousDirection ? previousStreak + 1u : 1u) : 0u;

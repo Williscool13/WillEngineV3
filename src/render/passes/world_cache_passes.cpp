@@ -94,19 +94,19 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     return WorldCacheFrame{.bValid = true};
 }
 
-void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity)
+void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap)
 {
     if (!frame.bValid) {
         return;
     }
 
     bounceIntensity = glm::clamp(bounceIntensity, 0.0f, 1.0f);
+    accumCap = glm::clamp(accumCap, 1u, 255u);
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(LIGHT_DATA_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER)
         || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)
         || !graph.HasBuffer(GEOMETRY_INDEX_BUFFER) || !graph.HasBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER) || !graph.HasBuffer(GEOMETRY_VERTEX_POSITION_BUFFER)) {
         return;
     }
-    const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
     const bool bFeedback = bDDGIFeedbackValid && graph.HasBuffer(DDGI_CASCADES_BUFFER);
 
     RenderPass& indirectPass = graph.AddPass(SID("World Cache Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::WorldCache);
@@ -143,14 +143,10 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
     pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
-    if (bWorldGrid) {
-        pass.ReadBuffer(SID("world_grid_light_grid"));
-        pass.ReadBuffer(SID("world_grid_index_list"));
-    }
     if (bFeedback) {
         AddDDGISampleDependencies(graph, pass);
     }
-    pass.Execute([pipelineManager, sceneIndex, bWorldGrid, bFeedback, skyboxIndex, iblIntensity, maxRadiance, bounceIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, sceneIndex, bFeedback, skyboxIndex, iblIntensity, maxRadiance, bounceIntensity, accumCap](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("world_cache_shade"));
         if (!pipelineEntry) {
             return;
@@ -164,8 +160,6 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
             .cells = graph.GetBufferAddress(WORLD_CACHE_CELLS),
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
-            .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
-            .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
             .previousCascades = bFeedback ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
@@ -181,6 +175,7 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
             .iblIntensity = iblIntensity,
             .maxRadiance = maxRadiance,
             .bounceIntensity = bounceIntensity,
+            .accumCap = accumCap,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(WORLD_CACHE_SHADE_ARGS), 0);

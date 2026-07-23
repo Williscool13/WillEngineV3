@@ -194,10 +194,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         const glm::vec4 rayRotation = DDGIRayRotation(frameNumber * DDGI_MAX_CASCADES + k);
         const glm::ivec3 previousBaseCell = k < previous.count ? previous.volumes[k].baseCell : volume.baseCell;
         const uint32_t raysPerProbe = glm::clamp(k == 0 ? params.raysPerProbe : params.outerRaysPerProbe, 16u, DDGI_MAX_RAYS_PER_PROBE);
-        const bool bLocalNEE = k == 0 || params.bOuterLocalNEE;
         const float maxRayRadiance = glm::max(params.maxRayRadiance, 0.0f);
         const float bounceIntensity = glm::clamp(params.bounceIntensity, 0.0f, 1.0f);
-        const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
+        const uint32_t worldCacheShadeInterval = glm::max(params.worldCacheShadeInterval, 1u);
 
         graph.CreateBuffer(DDGI_RAY_DATA[k], static_cast<VkDeviceSize>(probeCountTotal) * raysPerProbe * sizeof(glm::vec4), false);
 
@@ -212,10 +211,6 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         tracePass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
         tracePass.WriteBuffer(DDGI_RAY_DATA[k]);
         tracePass.ReadBuffer(SCENE_DATA_BUFFER);
-        if (bWorldGrid) {
-            tracePass.ReadBuffer(SID("world_grid_light_grid"));
-            tracePass.ReadBuffer(SID("world_grid_index_list"));
-        }
         if (worldCache.bValid) {
             tracePass.ReadBuffer(WORLD_CACHE_BUFFERS_CURRENT);
             tracePass.ReadWriteBuffer(WORLD_CACHE_ENTRIES);
@@ -244,7 +239,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (bActiveHistoryValid[k]) {
             tracePass.ReadBuffer(DDGI_ACTIVE_HISTORY[k]);
         }
-        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, iblIntensity, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, bLocalNEE, maxRayRadiance, bounceIntensity, bWorldGrid, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber, bWorldCache = worldCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, iblIntensity, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, maxRayRadiance, bounceIntensity, worldCacheShadeInterval, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber, bWorldCache = worldCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_trace"));
             if (!pipelineEntry) {
                 return;
@@ -268,18 +263,16 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .previousCascades = bFeedback ? graph.GetBufferAddress(DDGI_CASCADES_PREV_BUFFER) : 0,
                 .worldCache = bWorldCache ? graph.GetBufferAddress(WORLD_CACHE_BUFFERS_CURRENT) : 0,
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
-                .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
                 .probeActive = bActiveHistory ? graph.GetBufferAddress(activeHistoryId) : 0,
                 .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
                 .skyboxIndex = skyboxIndex,
                 .raysPerProbe = raysPerProbe,
                 .bBounceOnly = bBounceOnly ? 1u : 0u,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
-                .bLocalNEE = bLocalNEE ? 1u : 0u,
                 .maxRayRadiance = maxRayRadiance,
                 .bounceIntensity = bounceIntensity,
                 .iblIntensity = iblIntensity,
+                .worldCacheShadeInterval = worldCacheShadeInterval,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (raysPerProbe + 63) / 64, probeCountTotal, 1);
@@ -302,7 +295,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (bActiveHistoryValid[k]) {
             blendPass.ReadBuffer(DDGI_ACTIVE_HISTORY[k]);
         }
-        blendPass.Execute([pipelineManager, params, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, rayDataId = DDGI_RAY_DATA[k], restartHistoryId = DDGI_RESTART_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], atlasId = DDGI_IRRADIANCE[k], atlasHistoryId = DDGI_IRRADIANCE_HISTORY[k]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        blendPass.Execute([pipelineManager, hysteresis = glm::clamp(params.hysteresis, 0.0f, 0.995f), irradianceThreshold = params.irradianceThreshold, brightnessThreshold = params.brightnessThreshold, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, rayDataId = DDGI_RAY_DATA[k], restartHistoryId = DDGI_RESTART_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], atlasId = DDGI_IRRADIANCE[k], atlasHistoryId = DDGI_IRRADIANCE_HISTORY[k]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_irradiance"));
             if (!pipelineEntry) {
                 return;
@@ -319,9 +312,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .atlasOutIndex = graph.GetStorageImageViewDescriptorIndex(atlasId),
                 .atlasHistoryIndex = bHistory ? graph.GetSampledImageViewDescriptorIndex(atlasHistoryId) : 0u,
                 .raysPerProbe = raysPerProbe,
-                .hysteresis = glm::clamp(params.hysteresis, 0.0f, 0.995f),
-                .irradianceThreshold = params.irradianceThreshold,
-                .brightnessThreshold = params.brightnessThreshold,
+                .hysteresis = hysteresis,
+                .irradianceThreshold = irradianceThreshold,
+                .brightnessThreshold = brightnessThreshold,
                 .bRestartValid = bRestartHistory ? 1u : 0u,
                 .probeActive = bActiveHistory ? graph.GetBufferAddress(activeHistoryId) : 0,
                 .bActiveValid = bActiveHistory ? 1u : 0u,
@@ -342,7 +335,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (bActiveHistoryValid[k]) {
             visibilityPass.ReadBuffer(DDGI_ACTIVE_HISTORY[k]);
         }
-        visibilityPass.Execute([pipelineManager, params, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, rayDataId = DDGI_RAY_DATA[k], restartHistoryId = DDGI_RESTART_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], atlasId = DDGI_VISIBILITY[k], atlasHistoryId = DDGI_VISIBILITY_HISTORY[k]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        visibilityPass.Execute([pipelineManager, visibilityHysteresis = glm::clamp(params.visibilityHysteresis, 0.0f, 0.995f), distanceExponent = glm::max(params.distanceExponent, 1.0f), volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, rayDataId = DDGI_RAY_DATA[k], restartHistoryId = DDGI_RESTART_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], atlasId = DDGI_VISIBILITY[k], atlasHistoryId = DDGI_VISIBILITY_HISTORY[k]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_visibility"));
             if (!pipelineEntry) {
                 return;
@@ -359,8 +352,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .atlasOutIndex = graph.GetStorageImageViewDescriptorIndex(atlasId),
                 .atlasHistoryIndex = bHistory ? graph.GetSampledImageViewDescriptorIndex(atlasHistoryId) : 0u,
                 .raysPerProbe = raysPerProbe,
-                .hysteresis = glm::clamp(params.visibilityHysteresis, 0.0f, 0.995f),
-                .distanceExponent = glm::max(params.distanceExponent, 1.0f),
+                .hysteresis = visibilityHysteresis,
+                .distanceExponent = distanceExponent,
                 .bRestartValid = bRestartHistory ? 1u : 0u,
                 .probeActive = bActiveHistory ? graph.GetBufferAddress(activeHistoryId) : 0,
                 .bActiveValid = bActiveHistory ? 1u : 0u,

@@ -19,7 +19,7 @@ using uint = uint32_t;
 
 // Scene occluder geometry.
 SHADER_PUBLIC SHADER_CONST uint INSTANCE_MASK_OCCLUDER = 0x01u;
-// Area/sphere light emissive representative meshes. Excluded from generic occlusion so lights don't self-shadow; NEE owns their emission.
+// Area/sphere light emissive representative meshes. Excluded from generic occlusion so lights don't self-shadow; the DDGI probe trace reads their emission directly.
 SHADER_PUBLIC SHADER_CONST uint INSTANCE_MASK_LIGHT_PROXY = 0x02u;
 // Occluder geometry with DDGI contribution enabled (PrimitiveInstanceData::ddgiVisible / a mesh's "DDGI Contribution" checkbox).
 SHADER_PUBLIC SHADER_CONST uint INSTANCE_MASK_DDGI = 0x04u;
