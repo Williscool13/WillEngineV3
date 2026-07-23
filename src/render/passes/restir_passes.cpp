@@ -300,6 +300,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .activeCheckerboardField = field,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
                 .brdfRoughnessMax = restirParams.brdfRoughnessMax,
+                .specularDeferRoughnessMax = restirParams.specularDeferRoughnessMax,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -524,6 +525,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .bValidateVisibility = bLastPass ? 1u : 0u,
                 .wClamp = restirParams.restirWClamp,
                 .activeCheckerboardField = field,
+                .specularDeferRoughnessMax = restirParams.specularDeferRoughnessMax,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

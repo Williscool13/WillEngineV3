@@ -73,6 +73,6 @@ public float3 SampleReflectionProbeSpecular(ReflectionProbeGPU probe, float3 wor
         sampleDir = normalize(hitWorld - probe.capturePosition.xyz);
     }
 
-    float mip = roughness * roughness * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1);
+    float mip = sqrt(roughness) * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1);
     return assetCubemaps[probe.cubemapIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(sampleDir), mip).rgb;
 }

@@ -98,8 +98,8 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
 
                 diffuseRadiance += diffuseAl * commonTerm;
 
-                // Defer low roughness light reflections to specular GI
-                if (roughness > RESTIR_MIRROR_ROUGHNESS_MAX)
+                // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
+                if (roughness > pc.specularDeferRoughnessMax)
                 {
                     float3 specContribution = specularAl * commonTerm;
                     specularRadiance += specContribution;

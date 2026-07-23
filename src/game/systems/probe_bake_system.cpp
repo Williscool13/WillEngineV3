@@ -13,6 +13,9 @@
 #include "render_systems.h"
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
+#include "engine/asset_manager.h"
+#include "engine/core/probe_id.h"
+#include "engine/logging/engine_log.h"
 #include "platform/paths.h"
 #include "platform/file_utils.h"
 #include "core/containers/inline_string.h"
@@ -23,6 +26,8 @@
 
 namespace Game
 {
+constexpr float kProbeBakeOverscan = 1.2f;
+
 struct ProbeFaceOrientation
 {
     glm::vec3 forward;
@@ -116,6 +121,8 @@ void ProbeBakeSystem::Start(Engine::EngineContext* ctx, Engine::EngineState* sta
     currentFace = 0;
     settleCounter = 0;
     captureSize = 0;
+    bakeCropSize = 0;
+    bakeForcedExtent = 0;
     bFacesReady = false;
     bBakeActive = true;
     phase = Phase::Starting;
@@ -131,6 +138,23 @@ void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState* state)
     bakeBatchTotal = static_cast<uint32_t>(bakeQueue.Size());
 }
 
+void ProbeBakeSystem::EnqueueAllProbesInterbounce(Engine::EngineState* state)
+{
+    if (phase == Phase::AwaitAssembles) {
+        state->inputContext = stashedBatchInputContext;
+        phase = Phase::Idle;
+    }
+    EnqueueAllProbes(state);
+    interbounceBatch.Clear();
+    for (const entt::entity entity : bakeQueue) {
+        if (interbounceBatch.IsFull()) { break; }
+        interbounceBatch.PushBack(entity);
+    }
+    awaitedAssembles.Clear();
+    bInterbounceBatch = true;
+    bakePass = 1;
+}
+
 void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (bBakeActive) {
@@ -138,9 +162,20 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
         state->lighting.reflection = stashedReflectionConfig;
         ClearProbeBakeHideSet(ctx, state);
         state->inputContext = stashedInputContext;
+        if (bakeForcedExtent > 0) {
+            state->projectConfig.resolutionScale = stashedResolutionScale;
+            bPendingExtentRestore = true;
+            bakeForcedExtent = 0;
+        }
+    } else if (phase == Phase::AwaitAssembles) {
+        state->inputContext = stashedBatchInputContext;
     }
     bakeQueue.Clear();
     bakeBatchTotal = 0;
+    bInterbounceBatch = false;
+    interbounceBatch.Clear();
+    awaitedAssembles.Clear();
+    bakePass = 1;
     bViewOverrideActive = false;
     bBakeActive = false;
     phase = Phase::Idle;
@@ -149,6 +184,21 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
 void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->bCaptureProbeFace = false;
+    frameBuffer->probeCaptureCropSize = bBakeActive ? bakeCropSize : 0;
+
+    if (bPendingExtentRestore) {
+        frameBuffer->viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, stashedViewportWidth, stashedViewportHeight};
+        bPendingExtentRestore = false;
+    }
+
+    // A mid-bake panel drag is not blocked by the input lockout; re-stash the user's new viewport and keep the forced extent so the 90-degree crop stays exact
+    if (bBakeActive && bakeForcedExtent > 0 && frameBuffer->viewportResizeCommand.bEngineCommandsResize) {
+        stashedViewportOffsetX = frameBuffer->viewportResizeCommand.offsetX;
+        stashedViewportOffsetY = frameBuffer->viewportResizeCommand.offsetY;
+        stashedViewportWidth = frameBuffer->viewportResizeCommand.sizeX;
+        stashedViewportHeight = frameBuffer->viewportResizeCommand.sizeY;
+        frameBuffer->viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, bakeForcedExtent, bakeForcedExtent};
+    }
 
     if (!bBakeActive && bManualDumpRequested) {
         if (!bManualDumpAwaiting) {
@@ -188,6 +238,20 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 }
             }
 
+            if (bInterbounceBatch) {
+                if (bakePass == 1) {
+                    stashedBatchInputContext = state->inputContext == Engine::InputContext::Console ? Engine::InputContext::Editor : state->inputContext;
+                    state->inputContext = Engine::InputContext::ProbeBake;
+                    awaitTimeoutFrames = 0;
+                    phase = Phase::AwaitAssembles;
+                    return;
+                }
+                bInterbounceBatch = false;
+                interbounceBatch.Clear();
+                awaitedAssembles.Clear();
+                bakePass = 1;
+            }
+
             bakeBatchTotal = 0;
             return;
         }
@@ -197,7 +261,12 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             stashedReflectionConfig = state->lighting.reflection;
 
             state->lighting.reflection.bEnabled = true;
-            state->lighting.reflectionProbe.bEnabled = false;
+            if (bInterbounceBatch && bakePass == 2) {
+                state->lighting.reflectionProbe.bEnabled = true;
+                state->lighting.reflectionProbe.intensity = 1.0f;
+            } else {
+                state->lighting.reflectionProbe.bEnabled = false;
+            }
 
             ApplyProbeBakeHideSet(ctx, state);
             state->editor.selectedEntities.Clear();
@@ -233,18 +302,28 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             bakeSnapshot.captureOffset[1] = probe->captureOffset.y;
             bakeSnapshot.captureOffset[2] = probe->captureOffset.z;
 
+            const int32_t crop = glm::clamp(stashedProbeConfig.bakeCaptureSize, 256, 1280);
+            bakeCropSize = static_cast<uint32_t>(crop) & ~1u;
+            const uint32_t overscanned = static_cast<uint32_t>(glm::ceil(static_cast<float>(bakeCropSize) * kProbeBakeOverscan));
+            bakeForcedExtent = (overscanned + 1u) & ~1u;
+
+            stashedViewportOffsetX = ctx->windowContext.viewportOffsetX;
+            stashedViewportOffsetY = ctx->windowContext.viewportOffsetY;
+            stashedViewportWidth = ctx->windowContext.viewportWidth;
+            stashedViewportHeight = ctx->windowContext.viewportHeight;
+            stashedResolutionScale = state->projectConfig.resolutionScale;
+
+            // Force a square native-res render target so the exact-90-degree crop and fovY are aspect-independent.
+            state->projectConfig.resolutionScale = 1.0f;
+            frameBuffer->viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, bakeForcedExtent, bakeForcedExtent};
+
             phase = Phase::FaceSetup;
             return;
         }
         case Phase::FaceSetup:
         {
-            const uint32_t viewportWidth = ctx->windowContext.viewportWidth;
-            const uint32_t viewportHeight = ctx->windowContext.viewportHeight;
-            const float aspect = static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight);
-            float fovY = glm::radians(90.0f);
-            if (viewportWidth < viewportHeight) {
-                fovY = 2.0f * glm::atan(glm::tan(glm::radians(45.0f)) * static_cast<float>(viewportHeight) / static_cast<float>(viewportWidth));
-            }
+            const float aspect = 1.0f;
+            const float fovY = 2.0f * glm::atan(static_cast<float>(bakeForcedExtent) / static_cast<float>(bakeCropSize));
 
             const ProbeFaceOrientation& face = kProbeFaceOrientations[currentFace];
             overrideView = Camera::BuildPerspectiveView(capturePosition, face.forward, face.up, aspect, fovY, state->projectConfig.editorCameraNearPlane);
@@ -300,6 +379,11 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             state->lighting.reflection = stashedReflectionConfig;
             ClearProbeBakeHideSet(ctx, state);
             state->inputContext = stashedInputContext;
+            if (bakeForcedExtent > 0) {
+                state->projectConfig.resolutionScale = stashedResolutionScale;
+                bPendingExtentRestore = true;
+                bakeForcedExtent = 0;
+            }
             bViewOverrideActive = false;
             bBakeActive = false;
             bFacesReady = true;
@@ -312,9 +396,66 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 Core::InlineString<64> assetName = Core::InlineString<64>::Format("probe_%llu.wprobe", static_cast<unsigned long long>(bakeProbeId));
                 Core::Path outputPath = Platform::GetAssetPath() / "probes" / assetName.c_str();
                 ctx->SubmitProbeAssemble(faceBuffers, captureSize, bakeTargetResolution, outputPath, bakeProbeId, bakeSnapshot);
+
+                if (bInterbounceBatch && bakePass == 1 && !awaitedAssembles.IsFull()) {
+                    const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{bakeProbeId});
+                    const uint64_t expectedVersion = (info ? info->contentVersion : 0) + 1;
+                    awaitedAssembles.PushBack(AwaitedAssemble{bakeProbeId, expectedVersion, probeEntity});
+                }
             }
 
             phase = Phase::Idle;
+            return;
+        }
+        case Phase::AwaitAssembles:
+        {
+            ++awaitTimeoutFrames;
+
+            Core::InlineVector<AwaitedAssemble, 64> stillPending{};
+            bool bAllReady = true;
+            for (const AwaitedAssemble& awaited : awaitedAssembles) {
+                if (!state->registry.valid(awaited.entity) || !state->registry.all_of<Component::ReflectionProbeComponent>(awaited.entity)) { continue; }
+                stillPending.PushBack(awaited);
+
+                const Component::ReflectionProbeComponent& probe = state->registry.get<Component::ReflectionProbeComponent>(awaited.entity);
+                const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{awaited.probeId});
+                bool bReady = info != nullptr
+                    && info->contentVersion >= awaited.expectedVersion
+                    && probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked
+                    && probe.contentHandle.IsValid();
+                if (bReady) {
+                    const Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
+                    bReady = cubemap != nullptr && cubemap->loadState == Render::Cubemap::LoadState::Loaded;
+                }
+                if (!bReady) { bAllReady = false; }
+            }
+            awaitedAssembles = stillPending;
+
+            if (awaitTimeoutFrames > 3600) {
+                LOG_ERROR(Game, "Interbounce probe bake timed out waiting for pass-1 assembles; aborting pass 2.");
+                state->inputContext = stashedBatchInputContext;
+                bakeQueue.Clear();
+                bakeBatchTotal = 0;
+                bInterbounceBatch = false;
+                interbounceBatch.Clear();
+                awaitedAssembles.Clear();
+                bakePass = 1;
+                phase = Phase::Idle;
+                return;
+            }
+
+            if (bAllReady) {
+                state->inputContext = stashedBatchInputContext;
+                bakePass = 2;
+                bakeQueue.Clear();
+                for (const entt::entity entity : interbounceBatch) {
+                    if (bakeQueue.IsFull()) { break; }
+                    if (state->registry.valid(entity) && state->registry.all_of<Component::ReflectionProbeComponent>(entity)) { bakeQueue.PushBack(entity); }
+                }
+                bakeBatchTotal = static_cast<uint32_t>(bakeQueue.Size());
+                awaitedAssembles.Clear();
+                phase = Phase::Idle;
+            }
             return;
         }
     }

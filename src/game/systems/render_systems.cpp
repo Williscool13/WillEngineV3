@@ -11,6 +11,7 @@
 #include "game/ui/ui_zindex.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/arena_vector.h"
+#include "core/containers/inline_vector.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/material_manager.h"
@@ -311,6 +312,35 @@ void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineSta
 
 void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
+    Core::InlineVector<uint64_t, 64> seenProbeIds{};
+    for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
+        bool bCollision = probe.probeId == 0;
+        for (const uint64_t seen : seenProbeIds) {
+            if (seen == probe.probeId) { bCollision = true; break; }
+        }
+        if (bCollision) {
+            uint64_t fresh = state->rng();
+            bool bUnique = false;
+            while (!bUnique) {
+                bUnique = fresh != 0;
+                for (const uint64_t seen : seenProbeIds) {
+                    if (seen == fresh) { bUnique = false; break; }
+                }
+                if (!bUnique) { fresh = state->rng(); }
+            }
+            probe.probeId = fresh;
+            if (probe.contentHandle.IsValid()) {
+                ctx->assetManager->UnloadCubemap(probe.contentHandle);
+                probe.contentHandle = Engine::CubemapHandle::INVALID;
+            }
+            probe.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
+            state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
+            state->registry.emplace_or_replace<Component::ReflectionProbeLoadPendingTag>(entity);
+            state->bPendingModelResolve |= true;
+        }
+        if (!seenProbeIds.IsFull()) { seenProbeIds.PushBack(probe.probeId); }
+    }
+
     for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
         if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) { continue; }
         if (!ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) { continue; }
@@ -1558,12 +1588,26 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
         Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
         if (!cubemap || cubemap->loadState != Render::Cubemap::LoadState::Loaded) { continue; }
 
+        glm::vec3 srcTranslation = worldTransform.translation;
+        glm::quat srcRotation = worldTransform.rotation;
+        glm::vec3 srcScale = worldTransform.scale;
+        glm::vec3 srcCaptureOffset = probe.captureOffset;
+        if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
+            if (const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) {
+                const Engine::ProbeBakeSnapshot& snap = info->snapshot;
+                srcTranslation = glm::vec3(snap.translation[0], snap.translation[1], snap.translation[2]);
+                srcRotation = glm::quat(snap.rotation[0], snap.rotation[1], snap.rotation[2], snap.rotation[3]);
+                srcScale = glm::vec3(snap.scale[0], snap.scale[1], snap.scale[2]);
+                srcCaptureOffset = glm::vec3(snap.captureOffset[0], snap.captureOffset[1], snap.captureOffset[2]);
+            }
+        }
+
         const bool bSphere = probe.shape == Component::ReflectionProbeComponent::Shape::Sphere;
         const glm::vec3 halfExtents = bSphere
-                                          ? glm::vec3(glm::max(glm::max(worldTransform.scale.x, worldTransform.scale.y), worldTransform.scale.z))
-                                          : worldTransform.scale;
-        const glm::mat4 world = glm::translate(glm::mat4(1.0f), worldTransform.translation) * glm::mat4_cast(worldTransform.rotation) * glm::scale(glm::mat4(1.0f), halfExtents);
-        const glm::vec3 capturePos = worldTransform.translation + worldTransform.rotation * probe.captureOffset;
+                                          ? glm::vec3(glm::max(glm::max(srcScale.x, srcScale.y), srcScale.z))
+                                          : srcScale;
+        const glm::mat4 world = glm::translate(glm::mat4(1.0f), srcTranslation) * glm::mat4_cast(srcRotation) * glm::scale(glm::mat4(1.0f), halfExtents);
+        const glm::vec3 capturePos = srcTranslation + srcRotation * srcCaptureOffset;
 
         uint32_t flags = 0u;
         if (bSphere) { flags |= REFLECTION_PROBE_FLAG_SPHERE; }

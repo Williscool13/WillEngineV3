@@ -242,12 +242,12 @@ struct ProbeAssembleFaceOrientation
 };
 
 static const ProbeAssembleFaceOrientation PROBE_ASSEMBLE_FACE_ORIENTATIONS[6] = {
-    {false, false, 0},
-    {false, false, 0},
-    {false, false, 0},
-    {false, false, 0},
-    {false, false, 0},
-    {false, false, 0},
+    {false, true, 0},
+    {false, true, 0},
+    {false, true, 0},
+    {false, true, 0},
+    {false, true, 0},
+    {false, true, 0},
 };
 
 static void ProbeFaceRemap(const ProbeAssembleFaceOrientation& o, uint32_t x, uint32_t y, uint32_t n, uint32_t& sx, uint32_t& sy)
@@ -813,7 +813,7 @@ bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, c
     VkDeviceSize bindingOffset{0};
     vkCmdBindDescriptorBuffersEXT(cmd, bindings.Size(), bindings.Data());
 
-    // Generate specular prefilter for mips 0-4
+    // Generate specular prefilter for mips 0 to ENVIRONMENT_MAP_DIFFUSE_MIP-1
     {
         ZoneScopedN("PrefilterSpecular");
         const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_prefilter_specular"));
@@ -821,7 +821,9 @@ bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, c
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
 
         for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_DIFFUSE_MIP; mip++) {
-            float roughness = static_cast<float>(mip) / static_cast<float>(ENVIRONMENT_MAP_DIFFUSE_MIP - 1);
+            // Squared spacing concentrates mip fidelity at low roughness; the lookup inverts with sqrt
+            const float mipFraction = static_cast<float>(mip) / static_cast<float>(ENVIRONMENT_MAP_DIFFUSE_MIP - 1);
+            float roughness = mipFraction * mipFraction;
             uint32_t mipResolution = baseResolution >> mip;
 
             PrefilterSpecularPushConstant pc{
@@ -832,7 +834,8 @@ bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, c
                 .width = mipResolution,
                 .height = mipResolution,
                 .sampleCount = 4096,
-                .fireflyThreshold = 10.0f
+                .fireflyThreshold = 10.0f,
+                .sourceResolution = baseResolution
             };
 
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -843,7 +846,7 @@ bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, c
         }
     }
 
-    // Generate diffuse irradiance for mip 5
+    // Generate diffuse irradiance for the last mip
     {
         ZoneScopedN("ConvolveDiffuse");
         const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_convolve_diffuse"));

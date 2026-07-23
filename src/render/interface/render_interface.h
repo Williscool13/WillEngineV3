@@ -729,6 +729,8 @@ struct ReSTIRParams
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
     float brdfRoughnessMax{0.3f};
+    // Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular (pure baked-probe mode); low = only near-mirror deferred. Independent of whether the RT reflection pass is enabled.
+    float specularDeferRoughnessMax{0.1f};
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};
@@ -841,6 +843,7 @@ struct ReflectionProbeConfiguration
     float intensity{1.0f};
     bool bDebugDraw{false};
     int32_t settleFrames{240};
+    int32_t bakeCaptureSize{1024};
 };
 
 struct HeroShadowConfiguration
@@ -1029,6 +1032,8 @@ struct FrameBuffer
 
     bool bTakeScreenshot{false};
     bool bCaptureProbeFace{false};
+
+    uint32_t probeCaptureCropSize{0};
     RenderCacheReset cacheReset = RenderCacheReset::None;
 };
 } // Core

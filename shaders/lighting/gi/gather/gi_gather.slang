@@ -105,9 +105,6 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
         float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 
         float maxRadiance = GI_GATHER_MAX_RADIANCE;
-        if (pc.exposureTarget > 0.0) {
-            maxRadiance = GI_GATHER_MAX_RADIANCE / ExposureNoiseScale(pc.exposureLuminance[0], pc.exposureTarget);
-        }
 
         if (pc.bSkipRay != 0u) {
             float3 radiance = float3(0.0);

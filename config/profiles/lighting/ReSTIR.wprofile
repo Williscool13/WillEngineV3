@@ -5,6 +5,7 @@
     "bEnabled": true,
     "bFinalGather": true,
     "bFinalGatherDenoise": true,
+    "bFinalGatherTemporal": true,
     "bGatherSkipRay": false,
     "bInfiniteBounce": true,
     "bOuterLocalNEE": false,
@@ -63,6 +64,13 @@
     "intensity": 1.0,
     "roughnessMax": 0.44999998807907104
   },
+  "reflectionProbe": {
+    "bDebugDraw": false,
+    "bEnabled": true,
+    "bakeCaptureSize": 1024,
+    "intensity": 1.0,
+    "settleFrames": 240
+  },
   "restir": {
     "adaptiveSpatialBoost": 3.0,
     "antilagStrength": 0.8971193432807922,
@@ -80,7 +88,6 @@
     "bEnableTemporal": true,
     "bInitialVisibility": true,
     "bPermutationSampling": true,
-    "bSunCandidateVisibility": true,
     "boilingFilterStrength": 0.20000000298023224,
     "brdfRoughnessMax": 0.44999998807907104,
     "confidenceBlurRadius": 3,
@@ -206,6 +213,7 @@
     "spatialNeighbors": 1,
     "spatialPasses": 1,
     "spatialRadius": 30,
+    "specularDeferRoughnessMax": 1.0,
     "svgf": {
       "alphaMin": 0.10000000149011612,
       "atrousIterations": 4,

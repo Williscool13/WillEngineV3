@@ -102,7 +102,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     }
                     float3 Xi = SampleLightSurface(vs, viewPosition, xiLight.x, xiLight.y);
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                    float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity);
+                    float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity, pc.specularDeferRoughnessMax);
                     float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
                     // Same d2 floor as LightGeometryTerm so the MIS denominator stays consistent with p_hat at contact distances.
@@ -192,8 +192,8 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     if (bReflEligible) {
                         ReflectionHitDescriptor refl;
                         refl.rayDir = ray.Direction;
-                        // Defer low roughness light reflections to specular GI
-                        if (bOwnedByReSTIR && roughness > RESTIR_MIRROR_ROUGHNESS_MAX) {
+                        // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
+                        if (bOwnedByReSTIR && roughness > pc.specularDeferRoughnessMax) {
                             refl.hitT = REFLECTION_HIT_T_OWNED;
                             refl.bary = float2(0.0);
                             refl.instanceID = ~0u;
@@ -239,7 +239,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, LIGHT_GEOM_MIN_DIST2)) : 0.0;
                     float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                    p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity);
+                    p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity, pc.specularDeferRoughnessMax);
                     bestLightIdx = hitLightIdx;
                     bestVS = vs;
                 }
@@ -261,7 +261,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
         LightView winnerVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
         float3 yStar = DecodeSamplePos(r_gen.sampleOffsetPacked, winnerVS);
         LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
-        float p_hat_gen = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity);
+        float p_hat_gen = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity, pc.specularDeferRoughnessMax);
         ReservoirFinalize(r_gen, accum_gen, p_hat_gen, 1.0);
 #if RESTIR_ENABLE_INITIAL_VISIBILITY
         if (pc.bInitialVisibility != 0u && r_gen.W > 0.0) {

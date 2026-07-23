@@ -193,7 +193,7 @@ void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 ti
             float D = DistributionGGX(NdotH, roughness);
             float pdf = (D * NdotH / (4.0 * HdotV)) + 0.0001;
 
-            float saTexel = 4.0 * PI / (6.0 * ENVIRONMENT_MAP_RESOLUTION * ENVIRONMENT_MAP_RESOLUTION);
+            float saTexel = 4.0 * PI / (6.0 * float(pc.sourceResolution) * float(pc.sourceResolution));
             float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
 
             float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);

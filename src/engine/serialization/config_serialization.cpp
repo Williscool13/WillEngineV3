@@ -190,6 +190,7 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"boilingFilterStrength", p.boilingFilterStrength},
         {"bInitialVisibility", p.bInitialVisibility},
         {"brdfRoughnessMax", p.brdfRoughnessMax},
+        {"specularDeferRoughnessMax", p.specularDeferRoughnessMax},
         {"regirWClamp", p.regirWClamp},
         {"restirWClamp", p.restirWClamp},
         {"lightProposal", static_cast<uint32_t>(p.lightProposal)},
@@ -233,6 +234,7 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
     p.brdfRoughnessMax = r.contains("brdfRoughnessMax") && r["brdfRoughnessMax"].is_number() ? r["brdfRoughnessMax"].get<float>() : p.brdfRoughnessMax;
+    p.specularDeferRoughnessMax = r.contains("specularDeferRoughnessMax") && r["specularDeferRoughnessMax"].is_number() ? r["specularDeferRoughnessMax"].get<float>() : p.specularDeferRoughnessMax;
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
     p.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(getUint("lightProposal", static_cast<uint32_t>(p.lightProposal)));
@@ -382,6 +384,7 @@ nlohmann::json ToJson(const Core::ReflectionProbeConfiguration& p)
         {"intensity", p.intensity},
         {"bDebugDraw", p.bDebugDraw},
         {"settleFrames", p.settleFrames},
+        {"bakeCaptureSize", p.bakeCaptureSize},
     };
 }
 
@@ -394,6 +397,7 @@ void FromJson(const nlohmann::json& r, Core::ReflectionProbeConfiguration& p)
     p.intensity = rFloat("intensity", p.intensity);
     p.bDebugDraw = rBool("bDebugDraw", p.bDebugDraw);
     p.settleFrames = rInt("settleFrames", p.settleFrames);
+    p.bakeCaptureSize = rInt("bakeCaptureSize", p.bakeCaptureSize);
 }
 
 nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)

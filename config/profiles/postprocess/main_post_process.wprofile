@@ -44,7 +44,7 @@
     "paniniStrength": 0.0,
     "reinhardWhitePoint": 4.0,
     "sharpeningStrength": 0.4000000059604645,
-    "tonemapOperator": 10,
+    "tonemapOperator": 9,
     "uchimuraA": 1.0,
     "uchimuraB": 0.0,
     "uchimuraC": 1.3300000429153442,

@@ -5,6 +5,7 @@
     "bEnabled": true,
     "bFinalGather": true,
     "bFinalGatherDenoise": true,
+    "bFinalGatherTemporal": true,
     "bGatherSkipRay": false,
     "bInfiniteBounce": true,
     "bOuterLocalNEE": false,
@@ -33,6 +34,7 @@
   "gtao": {
     "bEnabled": true,
     "denoiseBlurBeta": 1.2000000476837158,
+    "denoisePasses": 2.0,
     "depthMipSamplingOffset": 3.299999952316284,
     "effectFalloffRange": 0.6150000095367432,
     "effectRadius": 0.5,
@@ -43,6 +45,15 @@
     "stepsPerSlice": 3.0,
     "thinOccluderCompensation": 0.0
   },
+  "heroShadow": {
+    "bEnabled": true,
+    "bSilhouetteEnabled": true,
+    "bSilhouetteUniform": false,
+    "sampleCount": 16,
+    "shadowReactiveDilation": 1,
+    "shadowReactiveScale": 2.0,
+    "silhouetteRimStrength": 0.800000011920929
+  },
   "iblIntensity": 1.0,
   "lightingMode": 0,
   "lightingShaderOverride": 12304496605836952073,
@@ -52,6 +63,13 @@
     "bScreenSpaceLighting": false,
     "intensity": 1.0,
     "roughnessMax": 0.44999998807907104
+  },
+  "reflectionProbe": {
+    "bDebugDraw": false,
+    "bEnabled": true,
+    "bakeCaptureSize": 1024,
+    "intensity": 1.0,
+    "settleFrames": 240
   },
   "restir": {
     "adaptiveSpatialBoost": 3.0,
@@ -70,7 +88,6 @@
     "bEnableTemporal": true,
     "bInitialVisibility": true,
     "bPermutationSampling": false,
-    "bSunCandidateVisibility": true,
     "boilingFilterStrength": 0.20000000298023224,
     "brdfRoughnessMax": 0.44999998807907104,
     "confidenceBlurRadius": 2,
@@ -81,6 +98,7 @@
     "denoiserMode": 3,
     "emissiveTriMaxPerPrimitive": 256,
     "emissiveTriRangeMultiplier": 48.369232177734375,
+    "lightProposal": 0,
     "reblur": {
       "antilagLuminanceSensitivity": 3.0,
       "antilagLuminanceSigmaScale": 2.0,

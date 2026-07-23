@@ -4,6 +4,7 @@ import constants_interop;
 import model_interop;
 import lights_interop;
 import reflection_interop;
+import reflection_probe_interop;
 import ddgi_interop;
 
 import shader_functions;
@@ -13,6 +14,7 @@ import visibility_lighting_common;
 import restir_common;
 import ddgi_common;
 import hit_shading_common;
+import reflection_probe_common;
 import random_common;
 import binning_common;
 
@@ -118,10 +120,21 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
             radiance = ShadeReflectionRayHit(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT);
         }
         hitTOut = hit.hitT;
-    } else if (hit.hitT == REFLECTION_HIT_T_SKY && pc.skyboxIndex >= 0) {
-        // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
-        float3 skyDirection = float3(hit.rayDir.x, -hit.rayDir.y, hit.rayDir.z);
-        radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+    } else if (hit.hitT == REFLECTION_HIT_T_SKY) {
+        if (pc.skyboxIndex >= 0) {
+            // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
+            float3 skyDirection = float3(hit.rayDir.x, -hit.rayDir.y, hit.rayDir.z);
+            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+        }
+        if (pc.reflectionProbeCount > 0u) {
+            float probeFade;
+            int probeIndex = PickReflectionProbe(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+            if (probeIndex >= 0) {
+                ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+                float3 probeRadiance = SampleReflectionProbeSpecular(probe, worldPos, hit.rayDir, roughness) * probe.intensity;
+                radiance = lerp(radiance, probeRadiance, probeFade);
+            }
+        }
         hitTOut = 10000.0;
     }
     // hit.hitT == REFLECTION_HIT_T_OWNED (or the NaN clear-sentinel): radiance and hitTOut stay 0, matching the "no hit" convention RELAX's temporal accumulation expects.

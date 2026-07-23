@@ -101,7 +101,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint64_t frameNumber,
                                         bool bDDGIApply,
                                         uint32_t giGatherMode,
-                                        const Core::RTReflectionConfiguration& reflectionConfig)
+                                        const Core::RTReflectionConfiguration& reflectionConfig,
+                                        float specularDeferRoughnessMax)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -162,7 +163,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
-            bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax,
+            bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax, specularDeferRoughnessMax,
             buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -203,6 +204,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
                     .giGatherMode = bGIGather ? giGatherMode : 0u,
                     .reflectionRoughnessMax = reflectionRoughnessMax,
+                    .specularDeferRoughnessMax = specularDeferRoughnessMax,
                     .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                     .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
                 };

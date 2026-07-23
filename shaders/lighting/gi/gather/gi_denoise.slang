@@ -92,7 +92,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
                 float3 tapL0 = float3(UnpackHalf2x16Pair(sShR[idx]).x, UnpackHalf2x16Pair(sShG[idx]).x, UnpackHalf2x16Pair(sShB[idx]).x);
                 maxNeighborLuma = max(maxNeighborLuma, dot(tapL0, float3(0.2126, 0.7152, 0.0722)));
             }
-            float lumaEps = pc.exposureTarget > 0.0 ? 1e-3 / ExposureNoiseScale(pc.exposureLuminance[0], pc.exposureTarget) : 1e-3;
+            float lumaEps = 1e-3;
             float lumaCap = maxNeighborLuma * GI_DENOISE_FIREFLY_LUMA_SCALE + lumaEps;
             if (maxNeighborLuma >= 0.0 && centerLuma > lumaCap) {
                 float fireflyScale = lumaCap / centerLuma;

@@ -183,7 +183,8 @@ public float3 SpecularReflection(TextureCube envMap, SamplerState linearSampler,
     float3 R = reflect(-viewV, viewN);
     float3 worldR = normalize(mul((float3x3)invView, R));
 
-    float3 prefilteredColor = envMap.SampleLevel(linearSampler, CubemapDirection(worldR), roughness * roughness * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1)).rgb;
+    // Mips are prefiltered at squared-spaced roughness ((m/(MIPS-1))^2), so the lookup inverts with sqrt
+    float3 prefilteredColor = envMap.SampleLevel(linearSampler, CubemapDirection(worldR), sqrt(roughness) * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1)).rgb;
     return prefilteredColor * (F * envBRDF.x + envBRDF.y);
 }
 

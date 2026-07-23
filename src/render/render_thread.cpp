@@ -676,7 +676,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         if (frameBuffer.reflection.bDenoiserEnabled) {
                             SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, 0u, 1.0f, frameBuffer.reflection, REFLECTION_NO_BRDF_CLAMP);
                         }
-                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, giGatherMode, frameBuffer.reflection);
+                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, giGatherMode, frameBuffer.reflection, restir.specularDeferRoughnessMax);
                         break;
                     }
                     case Core::LightingMode::ReSTIR:
@@ -818,7 +818,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
 
         if (frameBuffer.bCaptureProbeFace && screenCapture->CanProbeCapture()) {
-            uint32_t captureSquare = std::min(postAaExtent[0], postAaExtent[1]) & ~1u;
+            const uint32_t minSquare = std::min(postAaExtent[0], postAaExtent[1]) & ~1u;
+            uint32_t captureSquare = frameBuffer.probeCaptureCropSize > 0 ? std::min(frameBuffer.probeCaptureCropSize, minSquare) : minSquare;
             if (captureSquare >= 2) {
                 screenCapture->PrepareProbeCaptureResources(captureSquare);
                 renderGraph->CreateTexture(SID("probe_capture_intermediate"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, captureSquare, captureSquare, 1}, CLEAR_COLOR_EMPTY, true);

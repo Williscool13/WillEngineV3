@@ -421,14 +421,14 @@ public void ReservoirFinalize(inout Reservoir r, ReservoirAccum accum, float p_h
     }
 }
 
-public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity)
+public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity, float mirrorRoughnessMax)
 {
     if (s.cosShade <= 0.0 || s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
     const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
     float3 H = normalize(V + s.L);
 
-    // Defer low roughness light reflections to specular GI
-    float D = (roughness <= RESTIR_MIRROR_ROUGHNESS_MAX) ? 0.0 : D_GGX(N, H, roughness);
+    // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
+    float D = (roughness <= mirrorRoughnessMax) ? 0.0 : D_GGX(N, H, roughness);
     float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
     // Max-channel (not luminance): must match EvalCellLightTarget, avoids chromatic fireflies from saturated colors.
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
@@ -462,10 +462,10 @@ public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 wor
 
 [ForceInline]
 public float EvalPHatVisibility(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity,
-                                 RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize)
+                                 RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize, float mirrorRoughnessMax)
 {
     if (!RestirShadowVisible(tlas, worldShadingPos, worldN, worldyStar, worldTexelSize)) { return 0.0; }
-    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, lightColor, lightIntensity);
+    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, lightColor, lightIntensity, mirrorRoughnessMax);
 }
 
 public float3 SunDirectionWorld(DirectionalLightData sun)
@@ -534,22 +534,22 @@ public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 
 
 /** Non-sun variant for callers that already unpacked the light; the sun branch, sun argument load, and per-call lightVS element load are hoisted out. */
 public float EvalReservoirPHatLight(LightView vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
-                                    float3 albedo, float3 F0, float metallic, float roughness)
+                                    float3 albedo, float3 F0, float metallic, float roughness, float mirrorRoughnessMax)
 {
     float3 yStar = DecodeSamplePos(sampleOffsetPacked, vs);
     LightSample s = EvalLightSample(vs, yStar, viewPos, N, vs.range);
-    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity);
+    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity, mirrorRoughnessMax);
 }
 
 public float EvalReservoirPHatVisibilityLight(LightView vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
                                               float3 albedo, float3 F0, float metallic, float roughness, float4x4 invView,
-                                              RaytracingAccelerationStructure tlas, float3 worldPos, float3 worldN, float worldTexelSize)
+                                              RaytracingAccelerationStructure tlas, float3 worldPos, float3 worldN, float worldTexelSize, float mirrorRoughnessMax)
 {
     float3 yStar = DecodeSamplePos(sampleOffsetPacked, vs);
     float3 worldyStar = mul(invView, float4(yStar, 1.0)).xyz;
     if (!RestirShadowVisible(tlas, worldPos, worldN, worldyStar, worldTexelSize)) { return 0.0; }
     LightSample s = EvalLightSample(vs, yStar, viewPos, N, vs.range);
-    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity);
+    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity, mirrorRoughnessMax);
 }
 
 public float GGXPdf(float3 N, float3 V, float3 L, float roughness)

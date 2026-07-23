@@ -173,7 +173,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                     float3 mean = irrM1 / clampTaps;
                     float3 dev = sqrt(max(irrM2 / clampTaps - mean * mean, float3(0.0)));
 
-                    float devEps = pc.exposureTarget > 0.0 ? 4e-4 / ExposureNoiseScale(pc.exposureLuminance[0], pc.exposureTarget) : 4e-4;
+                    float devEps = 4e-4;
                     float3 devFloor = max(dev * 4.0, abs(history.color) * 0.4 + float3(devEps));
                     float3 histDist = abs(history.color - current) / devFloor;
                     float3 closest = clamp(history.color, current - devFloor, current + devFloor);

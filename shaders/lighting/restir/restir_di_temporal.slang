@@ -171,9 +171,9 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         float pGen_cur;
         float pGen_hist = 0.0;
         LightView genVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
-        pGen_cur = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
+        pGen_cur = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.specularDeferRoughnessMax);
         if (validHistoryReservoir) {
-            pGen_hist = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness);
+            pGen_hist = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness, pc.specularDeferRoughnessMax);
         }
 
         float denomGen = Mc * pGen_cur + Mi * pGen_hist;
@@ -190,8 +190,8 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         float pHist_cur;
         float pHist_hist;
         LightView histVS = UnpackLightVS(pc.lightVS[history.lightIdx]);
-        pHist_cur = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness);
-        pHist_hist = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness);
+        pHist_cur = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.specularDeferRoughnessMax);
+        pHist_hist = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness, pc.specularDeferRoughnessMax);
 
         float denomHist = Mi * pHist_hist + Mc * pHist_cur;
         float misHist = (denomHist > 0.0) ? (Mi * pHist_hist) / denomHist : 0.0;
@@ -231,7 +231,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         float3 yStar = DecodeSamplePos(combined.sampleOffsetPacked, winnerVS);
         float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
         LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
-        pHatUnshadowed = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity);
+        pHatUnshadowed = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity, pc.specularDeferRoughnessMax);
         p_hat_winner = bSkipWinnerTrace ? pHatUnshadowed
             : (RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? pHatUnshadowed : 0.0);
 #if RESTIR_ENABLE_CONFIDENCE

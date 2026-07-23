@@ -904,6 +904,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
             if (ImGui::Checkbox("Debug Draw Probe Volumes", &reflectionProbe.bDebugDraw)) { changed = true; }
             if (Widgets::SliderInt("Bake Settle Frames##reflectionprobe", &reflectionProbe.settleFrames, 1, 1024, {.tooltip = "Rendered frames held on each cube face before its capture snapshot; covers static-camera TAA convergence plus the corner-leak disocclusion transient. Default 240.", .reset = true, .resetTo = 240.0})) { changed = true; }
+            if (Widgets::SliderInt("Bake Capture Size##reflectionprobe", &reflectionProbe.bakeCaptureSize, 256, 1280, {.tooltip = "Per-face capture resolution in pixels before downsample to the probe resolution; larger values cost bake time only. Default 1024.", .reset = true, .resetTo = 1024.0})) { changed = true; }
 
             if (ImGui::Button("Capture Probe Face (temp)##probecapturetest")) {
                 ProbeBakeGetOrCreate(state).bManualDumpRequested = true;
@@ -912,11 +913,21 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Bake All Probes In Scene##probebakeall")) {
                 ProbeBakeGetOrCreate(state).EnqueueAllProbes(state);
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Bake All (2-Pass Interbounce)##probebakeall2")) {
+                ProbeBakeGetOrCreate(state).EnqueueAllProbesInterbounce(state);
+            }
 
             ProbeBakeSystem* bake = ProbeBakeFind(state);
             const bool bakeActive = bake && bake->bBakeActive;
 
-            if (bake && (bakeActive || !bake->bakeQueue.IsEmpty())) {
+            if (bake && (bakeActive || !bake->bakeQueue.IsEmpty() || bake->bInterbounceBatch)) {
+                if (bake->bInterbounceBatch) {
+                    ImGui::Text("Pass %d/2", bake->bakePass);
+                }
+                if (bake->phase == ProbeBakeSystem::Phase::AwaitAssembles) {
+                    ImGui::Text("Waiting for probe assembles (%u remaining)", static_cast<uint32_t>(bake->awaitedAssembles.Size()));
+                }
                 if (bake->bakeBatchTotal > 0) {
                     const uint32_t remaining = static_cast<uint32_t>(bake->bakeQueue.Size());
                     const uint32_t done = bake->bakeBatchTotal > remaining ? bake->bakeBatchTotal - remaining : 0;
@@ -1146,6 +1157,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ImGui::EndDisabled();
                 if (Widgets::SliderFloat("BRDF Ray Roughness Max", &restir.brdfRoughnessMax, 0.0f, 1.0f,
                                          {.format = "%.2f", .tooltip = "Roughness ceiling for the base pass's piggybacked BRDF-importance-sampled ray. Reflections can only narrow within this, never exceed it.", .reset = true, .resetTo = 0.3f})) {
+                    changed = true;
+                }
+                if (Widgets::SliderFloat("Specular Defer Roughness Max", &restir.specularDeferRoughnessMax, 0.0f, 1.0f,
+                                         {.format = "%.2f", .tooltip = "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) rather than shaded analytically. 1.0 = providers own all specular (pure baked-probe mode, avoids double-counting when lights are baked into probes); low = only near-mirror deferred. Independent of the RT reflection toggle.", .reset = true, .resetTo = 0.1f})) {
                     changed = true;
                 }
 

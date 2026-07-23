@@ -37,6 +37,14 @@ struct ProbeBakeSystem
         CaptureRequested,
         AwaitDelivery,
         Finishing,
+        AwaitAssembles,
+    };
+
+    struct AwaitedAssemble
+    {
+        uint64_t probeId{0};
+        uint64_t expectedVersion{0};
+        entt::entity entity{entt::null};
     };
 
     Phase phase{Phase::Idle};
@@ -62,6 +70,17 @@ struct ProbeBakeSystem
     int32_t settleFrames{48};
     uint32_t captureSize{0};
 
+    uint32_t bakeCropSize{0};
+    uint32_t bakeForcedExtent{0};
+    /** Viewport extent request stashed at Starting and restored at Finishing/Cancel. */
+    uint32_t stashedViewportOffsetX{0};
+    uint32_t stashedViewportOffsetY{0};
+    uint32_t stashedViewportWidth{0};
+    uint32_t stashedViewportHeight{0};
+    float stashedResolutionScale{1.0f};
+    /** Set by Finishing/Cancel; the next Tick re-issues the stashed viewport resize (Cancel has no FrameBuffer of its own). */
+    bool bPendingExtentRestore{false};
+
     Core::ViewData overrideView{};
     Core::ReflectionProbeConfiguration stashedProbeConfig{};
     Core::RTReflectionConfiguration stashedReflectionConfig{};
@@ -73,11 +92,24 @@ struct ProbeBakeSystem
     /** Size of the last "bake all" batch, for the "probe K of N" progress readout. */
     uint32_t bakeBatchTotal{0};
 
+    /** True while a two-pass interbounce "bake all" is running; pass 1 bakes cold, pass 2 rebakes with pass-1 results lit. */
+    bool bInterbounceBatch{false};
+    int32_t bakePass{1};
+    /** Round-1 entity list, preserved to refill the queue for round 2. */
+    Core::InlineVector<entt::entity, 64> interbounceBatch{};
+    /** Pass-1 assembles the batch waits on before starting pass 2. */
+    Core::InlineVector<AwaitedAssemble, 64> awaitedAssembles{};
+    int32_t awaitTimeoutFrames{0};
+    Engine::InputContext stashedBatchInputContext{};
+
     /** Kicks a bake for the given probe entity; no-op if a bake is already active. */
     void Start(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity probe);
 
     /** Queues every reflection-probe entity in the scene for baking; replaces any pending queue. */
     void EnqueueAllProbes(Engine::EngineState* state);
+
+    /** Queues every reflection-probe entity for a two-pass interbounce bake; pass 2 rebakes with pass-1 results lit. */
+    void EnqueueAllProbesInterbounce(Engine::EngineState* state);
 
     /** Advances the state machine one render frame; owns FrameBuffer::bCaptureProbeFace (cleared every tick, raised on request frames). */
     void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
