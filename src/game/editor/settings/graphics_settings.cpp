@@ -457,6 +457,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (ImGui::CollapsingHeader("Reflection Probes")) {
             if (ImGui::Button("Reflection Probe Index")) setDebugTarget("depth_target", DebugTransformationType::ReflectionProbeIndex, Core::DebugViewAspect::Depth);
+            if (ImGui::Button("Probe Bin Disagreement")) setDebugTarget("depth_target", DebugTransformationType::ReflectionProbeBinDisagreement, Core::DebugViewAspect::Depth);
         }
         if (ImGui::CollapsingHeader("G-Buffer")) {
             if (ImGui::Button("Depth")) setDebugTarget("depth_target", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
@@ -982,6 +983,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
             if (ImGui::Checkbox("Debug Draw Probe Volumes", &reflectionProbe.bDebugDraw)) { changed = true; }
             if (Widgets::SliderFloat("Baked Diffuse Clamp K##reflectionprobe", &reflectionProbe.bakedDiffuseClampK, 1.0f, 16.0f, {.format = "%.1f", .tooltip = "Luminance-ratio ceiling for the world-cache diffuse tier inside a probe volume: cache is scaled down when it exceeds K times the baked probe irradiance. Default 4.0.", .reset = true, .resetTo = 4.0})) { changed = true; }
+            if (ImGui::Checkbox("Brute-Force Probe Pick", &reflectionProbe.bBruteForcePick)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Debug: bypass the world-grid probe bin and scan all probes per pixel.");
+            }
 
             ImGui::Spacing();
             if (ImGui::Button("Reset Reflection Probes")) {

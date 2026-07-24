@@ -127,7 +127,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
             int probeIndex = -1;
             float probeFade = 0.0;
             if (pc.reflectionProbeCount > 0u) {
-                probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+                probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
             }
             // Count gate: a count-1 cell is one bary-jittered point; the probe tier is smoother while cells stream in.
             if (WorldCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
@@ -247,7 +247,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid : SV_DispatchTh
                     int probeIndex = -1;
                     float probeFade = 0.0;
                     if (pc.reflectionProbeCount > 0u) {
-                        probeIndex = PickReflectionProbe(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+                        probeIndex = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
                     }
                     if (WorldCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
                         radiance = WorldCacheUnpackRadiance(packedRadiance);

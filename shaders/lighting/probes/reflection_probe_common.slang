@@ -4,15 +4,53 @@ import constants_interop;
 import reflection_probe_interop;
 import bindless_declarations;
 import pbr_functions;
+import world_grid_interop;
+import binning_common;
 
 /** Per-axis world half-extent. worldToLocal = inverse(R*S); its mathematical rows have length 1/halfExtent_i, and since matrix subscripting returns columns here, transpose exposes those rows. */
-static float3 ReflectionProbeWorldExtent(ReflectionProbeGPU probe)
+public float3 ReflectionProbeWorldExtent(ReflectionProbeGPU probe)
 {
     float4x4 worldToLocalRows = transpose(probe.worldToLocal);
     return float3(
         1.0 / max(length(worldToLocalRows[0].xyz), 1e-8),
         1.0 / max(length(worldToLocalRows[1].xyz), 1e-8),
         1.0 / max(length(worldToLocalRows[2].xyz), 1e-8));
+}
+
+/** Influence-volume measure used for the smallest-wins pick tie-break; single source for the world-grid binning kernel. sphere = (4/3)pi r^3, box = 8*ex*ey*ez. */
+public float ReflectionProbeVolume(ReflectionProbeGPU probe)
+{
+    float3 extent = ReflectionProbeWorldExtent(probe);
+    if ((probe.flags & REFLECTION_PROBE_FLAG_SPHERE) != 0u) {
+        float radius = extent.x;
+        return 4.18879020479 * radius * radius * radius;
+    }
+    return 8.0 * extent.x * extent.y * extent.z;
+}
+
+/** Containment + volume + edge-fade for a single probe. False when worldPos lies outside the volume. */
+static bool ReflectionProbeContains(ReflectionProbeGPU probe, float3 worldPos, out float volume, out float fade)
+{
+    float3 localPos = mul(probe.worldToLocal, float4(worldPos, 1.0)).xyz;
+    float3 extent = ReflectionProbeWorldExtent(probe);
+
+    volume = ReflectionProbeVolume(probe);
+    fade = 0.0;
+    if ((probe.flags & REFLECTION_PROBE_FLAG_SPHERE) != 0u) {
+        float lenLocal = length(localPos);
+        if (lenLocal > 1.0) { return false; }
+        float radius = extent.x;
+        fade = probe.fadeMargin > 0.0 ? saturate((1.0 - lenLocal) * radius / probe.fadeMargin) : 1.0;
+    } else {
+        if (any(abs(localPos) > 1.0)) { return false; }
+        if (probe.fadeMargin > 0.0) {
+            float3 worldDist = (1.0 - abs(localPos)) * extent;
+            fade = saturate(min(min(worldDist.x, worldDist.y), worldDist.z) / probe.fadeMargin);
+        } else {
+            fade = 1.0;
+        }
+    }
+    return true;
 }
 
 /** Brute-force pick of the smallest-volume probe containing worldPos. Returns the array index (or -1), and a world-space edge fade in [0,1] (1 = interior, 0 = boundary). Tie-break: strictly-less volume, then lowest index. */
@@ -23,29 +61,9 @@ public int PickReflectionProbe(float3 worldPos, ReflectionProbeGPU* probes, uint
     float bestFade = 1.0;
 
     for (uint i = 0; i < count; i++) {
-        ReflectionProbeGPU probe = probes[i];
-        float3 localPos = mul(probe.worldToLocal, float4(worldPos, 1.0)).xyz;
-        float3 extent = ReflectionProbeWorldExtent(probe);
-
         float volume;
         float thisFade;
-        if ((probe.flags & REFLECTION_PROBE_FLAG_SPHERE) != 0u) {
-            float lenLocal = length(localPos);
-            if (lenLocal > 1.0) { continue; }
-            float radius = extent.x;
-            volume = 4.18879020479 * radius * radius * radius;
-            thisFade = probe.fadeMargin > 0.0 ? saturate((1.0 - lenLocal) * radius / probe.fadeMargin) : 1.0;
-        } else {
-            if (any(abs(localPos) > 1.0)) { continue; }
-            volume = 8.0 * extent.x * extent.y * extent.z;
-            if (probe.fadeMargin > 0.0) {
-                float3 worldDist = (1.0 - abs(localPos)) * extent;
-                thisFade = saturate(min(min(worldDist.x, worldDist.y), worldDist.z) / probe.fadeMargin);
-            } else {
-                thisFade = 1.0;
-            }
-        }
-
+        if (!ReflectionProbeContains(probes[i], worldPos, volume, thisFade)) { continue; }
         if (volume < bestVolume) {
             bestVolume = volume;
             best = int(i);
@@ -55,6 +73,25 @@ public int PickReflectionProbe(float3 worldPos, ReflectionProbeGPU* probes, uint
 
     fade = bestFade;
     return best;
+}
+
+/** Cell-lookup pick: reads the per-cell probe index the world-grid binning kernel wrote and validates containment against that one probe. A null probeGrid (debug brute-force toggle, or grid pass absent) falls back to PickReflectionProbe. camPos must be the same cameraWorldPos the binning kernel used. Returns the array index (or -1) and the probe's edge fade. */
+public int PickReflectionProbeBinned(float3 worldPos, ReflectionProbeGPU* probes, uint count, uint* probeGrid, float3 camPos, out float fade)
+{
+    fade = 0.0;
+    if (probeGrid == nullptr) { return PickReflectionProbe(worldPos, probes, count, fade); }
+
+    WorldGridKey key = WorldGridResolveCell(worldPos, camPos);
+    if (!key.bValid) { return -1; }
+
+    uint idx = probeGrid[key.cellIndex];
+    if (idx == WORLD_GRID_PROBE_SENTINEL || idx >= count) { return -1; }
+
+    float volume;
+    float thisFade;
+    if (!ReflectionProbeContains(probes[idx], worldPos, volume, thisFade)) { return -1; }
+    fade = thisFade;
+    return int(idx);
 }
 
 /** Prefiltered specular radiance from a probe. worldR is the world-space reflection vector; when the probe is a parallax box the ray is intersected against the OBB interior and re-pointed from the capture origin. Routes the final direction through the shared cubemap Y-flip so it matches SpecularReflection. Returns raw radiance; the caller applies the BRDF term and intensity. */

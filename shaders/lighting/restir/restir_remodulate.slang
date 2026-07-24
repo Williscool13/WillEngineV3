@@ -116,7 +116,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
             if (pc.reflectionProbeCount > 0u) {
                 float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
                 float probeFade;
-                int probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+                int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
                 if (probeIndex >= 0) {
                     ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
                     float3 probeIrr = SampleReflectionProbeIrradiance(probe, worldN) * probe.intensity;
@@ -138,7 +138,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
         if (pc.reflectionProbeCount > 0u) {
             float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
             float probeFade;
-            int probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+            int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
             if (probeIndex >= 0) {
                 ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
                 float3 worldR = normalize(mul((float3x3)scene.invView, reflect(-V, N)));

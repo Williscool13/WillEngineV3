@@ -63,8 +63,10 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
  * @param maxRadiance firefly clamp applied before blending into the cell, so a single outlier sample can't drag the EMA toward it; 0 disables it
  * @param bounceIntensity sub-unity scale on the DDGI feedback term, bounding the cache<->DDGI loop gain
  * @param accumCap running-mean window cap for cell radiance (blend weight 1/(count+1) up to this); low values make cells track fresh shades fast at more variance
+ * @param reflectionProbeCount baked probes this frame; inside a probe volume the cell's ambient term uses probe irradiance ahead of the skybox fallback
+ * @param bReflectionProbeBruteForce debug: bypass the world-grid probe bin for the ambient's probe pick
  */
-void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap);
+void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce);
 
 /**
  * Carries this frame's cache buffers into history. Call last.

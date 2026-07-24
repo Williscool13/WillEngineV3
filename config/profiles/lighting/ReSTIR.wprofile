@@ -66,6 +66,7 @@
     "roughnessMax": 0.44999998807907104
   },
   "reflectionProbe": {
+    "bBruteForcePick": false,
     "bDebugDraw": false,
     "bEnabled": true,
     "bakedDiffuseClampK": 4.0,

@@ -54,8 +54,10 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
  * @param frameNumber
  * @param bBounceOnly debug: zero skybox radiance (and disable feedback) so probes show only one-bounce surface shading
  * @param worldCache this frame's world radiance cache buffers; trace populates it as a side effect when valid, keyed with scene.cameraWorldPos (never the per-cascade window center)
+ * @param reflectionProbeCount baked probes this frame; inside a probe volume the trace's cache-miss fallback shading uses probe irradiance ahead of the skybox ambient
+ * @param bReflectionProbeBruteForce debug: bypass the world-grid probe bin for the fallback shading's probe pick
  */
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache);
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce);
 
 /**
  * Declares the pass dependencies for sampling the cascade chain. Returns false when the chain doesn't exist this frame.

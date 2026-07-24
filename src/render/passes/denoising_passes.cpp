@@ -568,6 +568,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadBuffer(LIGHT_DATA_BUFFER);
         pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
+        if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(gbufferOne);
@@ -590,7 +591,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
         const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
@@ -616,6 +618,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+                .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1147,6 +1150,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadBuffer(LIGHT_DATA_BUFFER);
         pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
+        if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(gbufferOne);
@@ -1169,7 +1173,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
         const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
@@ -1195,6 +1200,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+                .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

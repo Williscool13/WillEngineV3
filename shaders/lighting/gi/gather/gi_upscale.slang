@@ -128,7 +128,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
         if (pc.reflectionProbeCount > 0u) {
             float probeFade;
-            int probeIndex = PickReflectionProbe(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+            int probeIndex = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
             if (probeIndex >= 0) {
                 ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
                 float3 probeIrr = SampleReflectionProbeIrradiance(probe, evalN) * probe.intensity;

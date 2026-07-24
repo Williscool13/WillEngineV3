@@ -386,6 +386,7 @@ nlohmann::json ToJson(const Core::ReflectionProbeConfiguration& p)
         {"intensity", p.intensity},
         {"bDebugDraw", p.bDebugDraw},
         {"bakedDiffuseClampK", p.bakedDiffuseClampK},
+        {"bBruteForcePick", p.bBruteForcePick},
     };
 }
 
@@ -397,6 +398,7 @@ void FromJson(const nlohmann::json& r, Core::ReflectionProbeConfiguration& p)
     p.intensity = rFloat("intensity", p.intensity);
     p.bDebugDraw = rBool("bDebugDraw", p.bDebugDraw);
     p.bakedDiffuseClampK = rFloat("bakedDiffuseClampK", p.bakedDiffuseClampK);
+    p.bBruteForcePick = rBool("bBruteForcePick", p.bBruteForcePick);
 }
 
 nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)

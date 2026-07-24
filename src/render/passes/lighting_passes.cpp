@@ -67,13 +67,18 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
     const VkDeviceSize indexBytes = static_cast<VkDeviceSize>(WORLD_GRID_CELL_COUNT) * MAX_LIGHTS_PER_WORLD_GRID_CELL * sizeof(uint32_t);
     graph.CreateBuffer(SID("world_grid_light_grid"), gridBytes, false);
     graph.CreateBuffer(SID("world_grid_index_list"), indexBytes, false);
+    graph.CreateBuffer(SID("world_grid_probe_grid"), static_cast<VkDeviceSize>(WORLD_GRID_CELL_COUNT) * sizeof(uint32_t), false);
+
+    const uint32_t probeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
 
     RenderPass& binning = graph.AddPass(SID("World Grid Binning"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::WorldGridBinning);
     binning.ReadBuffer(SCENE_DATA_BUFFER);
     binning.ReadBuffer(LIGHT_DATA_BUFFER);
+    binning.ReadBuffer(REFLECTION_PROBE_BUFFER);
     binning.WriteBuffer(SID("world_grid_light_grid"));
     binning.WriteBuffer(SID("world_grid_index_list"));
-    binning.Execute([pipelineManager, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    binning.WriteBuffer(SID("world_grid_probe_grid"));
+    binning.Execute([pipelineManager, sceneIndex, probeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("world_grid_binning"));
         if (!pipelineEntry) { return; }
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -84,6 +89,9 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
             .worldGridBuffer = graph.GetBufferAddress(SID("world_grid_light_grid")),
             .worldGridIndexList = graph.GetBufferAddress(SID("world_grid_index_list")),
             .sceneDataIndex = sceneIndex,
+            .reflectionProbes = probeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+            .worldGridProbeGrid = graph.GetBufferAddress(SID("world_grid_probe_grid")),
+            .reflectionProbeCount = probeCount,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         const uint32_t groups = (WORLD_GRID_CELL_COUNT + 63u) / 64u;
@@ -136,6 +144,9 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     if (bWorldGrid) {
         lightingResolve.ReadBuffer(SID("world_grid_light_grid"));
         lightingResolve.ReadBuffer(SID("world_grid_index_list"));
+    }
+    if (graph.HasBuffer(SID("world_grid_probe_grid"))) {
+        lightingResolve.ReadBuffer(SID("world_grid_probe_grid"));
     }
     if (graph.HasBuffer(SID("restir_reservoir_final"))) {
         lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
@@ -207,6 +218,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .specularDeferRoughnessMax = specularDeferRoughnessMax,
                     .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                     .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
+                    .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

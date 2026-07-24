@@ -322,12 +322,35 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             float3 viewPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
             float3 worldPos = mul(pc.sceneData->invView, float4(viewPos, 1.0)).xyz;
             float probeFade;
-            int probeIndex = PickReflectionProbe(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+            int probeIndex = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData->cameraWorldPos.xyz, probeFade);
             if (probeIndex < 0) {
                 srcPixel.xyz = float3(1.0, 0.0, 1.0);
             } else {
                 uint h = (uint(probeIndex) + 1u) * 2654435761u;
                 srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
+            }
+            break;
+        }
+        case 41: { // ReflectionProbeBinDisagreement: brute vs cell-lookup pick. Green = agree, red = bin lost a probe, yellow = different probe, magenta = bin-only (bug), gray = both empty.
+            float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
+            if (depth <= 0.0) { srcPixel.xyz = float3(0.0); break; }
+            float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
+            float3 viewPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
+            float3 worldPos = mul(pc.sceneData->invView, float4(viewPos, 1.0)).xyz;
+            float bruteFade;
+            float binnedFade;
+            int brute = PickReflectionProbe(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, bruteFade);
+            int binned = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData->cameraWorldPos.xyz, binnedFade);
+            if (brute < 0 && binned < 0) {
+                srcPixel.xyz = float3(0.05);
+            } else if (brute == binned) {
+                srcPixel.xyz = float3(0.0, 1.0, 0.0);
+            } else if (binned < 0 && brute >= 0) {
+                srcPixel.xyz = float3(1.0, 0.0, 0.0);
+            } else if (binned >= 0 && brute < 0) {
+                srcPixel.xyz = float3(1.0, 0.0, 1.0);
+            } else {
+                srcPixel.xyz = float3(1.0, 1.0, 0.0);
             }
             break;
         }

@@ -102,7 +102,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
             }
             if (pc.reflectionProbeCount > 0u) {
                 float probeFade;
-                int probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+                int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, probeFade);
                 if (probeIndex >= 0) {
                     ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
                     float3 probeIrr = SampleReflectionProbeIrradiance(probe, worldN) * probe.intensity;
@@ -128,7 +128,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
             }
             if (pc.reflectionProbeCount > 0u) {
                 float probeFade;
-                int probeIndex = PickReflectionProbe(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, probeFade);
+                int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, probeFade);
                 if (probeIndex >= 0) {
                     ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
                     float3 worldR = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, reflect(-V, N)));

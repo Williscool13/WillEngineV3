@@ -1601,10 +1601,12 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     vf.bakedDiffuseClampK = config.bakedDiffuseClampK;
+    vf.bReflectionProbeBruteForce = config.bBruteForcePick;
 
     auto view = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
     for (auto [entity, probe, worldTransform] : view.each()) {
         if (vf.reflectionProbes.IsFull()) { break; }
+        if (!probe.bEnabled) { continue; }
         if (!probe.contentHandle.IsValid()) { continue; }
         Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
         if (!cubemap || cubemap->loadState != Render::Cubemap::LoadState::Loaded) { continue; }

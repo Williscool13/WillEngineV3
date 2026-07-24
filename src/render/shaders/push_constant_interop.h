@@ -98,6 +98,8 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint historyCheckerboardField;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC uint reflectionProbeCount;
+    SHADER_PUBLIC uint pad0;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
 };
 
 SHADER_PUBLIC struct InstanceLODPushConstant
@@ -549,6 +551,8 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC float specularDeferRoughnessMax;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
+    SHADER_PUBLIC uint32_t pad2;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
 };
 
 // Unused: kept around alongside WorldGridBinningPushConstant.
@@ -573,6 +577,10 @@ SHADER_PUBLIC struct WorldGridBinningPushConstant
     SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    SHADER_PUBLIC uint32_t reflectionProbeCount;
+    SHADER_PUBLIC uint32_t pad1;
 };
 
 SHADER_PUBLIC struct WorldGridDebugPushConstant
@@ -630,6 +638,10 @@ SHADER_PUBLIC struct WorldCacheShadePushConstant
     SHADER_PUBLIC float maxRadiance;
     SHADER_PUBLIC float bounceIntensity;
     SHADER_PUBLIC uint32_t accumCap;
+    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    SHADER_PUBLIC uint32_t reflectionProbeCount;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct GIGatherPushConstant
@@ -666,6 +678,8 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC float bakedDiffuseClampK;
+    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -715,6 +729,7 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t bentNormalIndex;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -743,6 +758,7 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t giGatherMode;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
 };
 
 SHADER_PUBLIC struct ReflectionTracePushConstant
@@ -791,6 +807,7 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
@@ -1292,6 +1309,9 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC float bounceIntensity;
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC uint32_t worldCacheShadeInterval;
+    SHADER_PUBLIC uint32_t reflectionProbeCount;
+    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
 };
 
 SHADER_PUBLIC struct DDGIProbeBlendPushConstant

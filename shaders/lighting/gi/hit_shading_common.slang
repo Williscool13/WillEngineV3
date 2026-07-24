@@ -16,6 +16,8 @@ import shader_constants;
 import constants_interop;
 import world_cache_interop;
 import world_cache_hash_common;
+import reflection_probe_interop;
+import reflection_probe_common;
 
 // Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
@@ -93,10 +95,22 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
     if (pc.skyboxIndex >= 0) {
         indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], N) * pc.iblIntensity;
     }
+    float giW = 0.0;
     if (pc.bFeedbackValid != 0) {
         float edgeFade;
         float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades, maxBias, edgeFade);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
+        giW = gi.w;
+    }
+    if (pc.reflectionProbeCount > 0u) {
+        float probeFade;
+        int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[0].cameraWorldPos.xyz, probeFade);
+        if (probeIndex >= 0) {
+            ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+            float3 probeIrr = SampleReflectionProbeIrradiance(probe, N) * probe.intensity;
+            probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
+            indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
+        }
     }
     radiance += diffuseColor * indirectDiffuse;
     return radiance;
@@ -272,11 +286,23 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
     if (pc.skyboxIndex >= 0) {
         indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], N) * pc.iblIntensity;
     }
+    float giW = 0.0;
     if (pc.bFeedbackValid != 0) {
         float cellSize = WorldCacheCellSizeAtLevel(WorldCacheLevelFromDistance(distance(worldPosition, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz)));
         float edgeFade;
         float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, cellSize, edgeFade);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
+        giW = gi.w;
+    }
+    if (pc.reflectionProbeCount > 0u) {
+        float probeFade;
+        int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, probeFade);
+        if (probeIndex >= 0) {
+            ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+            float3 probeIrr = SampleReflectionProbeIrradiance(probe, N) * probe.intensity;
+            probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
+            indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
+        }
     }
     radiance += diffuseColor * indirectDiffuse;
     return radiance;

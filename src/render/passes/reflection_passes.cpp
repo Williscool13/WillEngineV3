@@ -95,6 +95,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     pass.ReadBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
     pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
+    if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(targets.depthCopy);
@@ -148,6 +149,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .gbufferOneHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+                .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_shade"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

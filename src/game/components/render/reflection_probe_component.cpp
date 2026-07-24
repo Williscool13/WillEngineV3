@@ -73,6 +73,8 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
     if (open) {
         auto& comp = registry.get<ReflectionProbeComponent>(entity);
 
+        ImGui::Checkbox("Enabled##rp", &comp.bEnabled);
+
         static constexpr const char* SHAPE_LABELS[] = {"Box", "Sphere"};
         int shapeIndex = static_cast<int>(comp.shape);
         if (ImGui::Combo("Shape##rp", &shapeIndex, SHAPE_LABELS, 2)) {
@@ -145,6 +147,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
 void ReflectionProbeComponent::Serialize(const ReflectionProbeComponent& comp, nlohmann::json& json)
 {
     json["probeId"] = comp.probeId;
+    json["bEnabled"] = comp.bEnabled;
     json["shape"] = static_cast<uint32_t>(comp.shape);
     json["fadeMargin"] = comp.fadeMargin;
     json["captureOffset"] = {comp.captureOffset.x, comp.captureOffset.y, comp.captureOffset.z};
@@ -157,6 +160,7 @@ void ReflectionProbeComponent::Deserialize(ReflectionProbeComponent& comp, const
 {
     if (!json.is_object()) { return; }
     comp.probeId = json.value("probeId", uint64_t{0});
+    comp.bEnabled = json.value("bEnabled", true);
     comp.shape = static_cast<Shape>(json.value("shape", static_cast<uint32_t>(Shape::Box)));
     comp.fadeMargin = json.value("fadeMargin", 0.5f);
     comp.captureOffset = json.contains("captureOffset") ? json["captureOffset"].get<Vec3>() : Vec3{0.0f, 0.0f, 0.0f};

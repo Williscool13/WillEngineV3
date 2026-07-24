@@ -95,7 +95,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
     return WorldCacheFrame{.bValid = true};
 }
 
-void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap)
+void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const WorldCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce)
 {
     if (!frame.bValid) {
         return;
@@ -144,10 +144,12 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
     pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
+    pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
+    if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
     if (bFeedback) {
         AddDDGISampleDependencies(graph, pass);
     }
-    pass.Execute([pipelineManager, sceneIndex, bFeedback, skyboxIndex, iblIntensity, maxRadiance, bounceIntensity, accumCap](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, sceneIndex, bFeedback, skyboxIndex, iblIntensity, maxRadiance, bounceIntensity, accumCap, reflectionProbeCount, bReflectionProbeBruteForce](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("world_cache_shade"));
         if (!pipelineEntry) {
             return;
@@ -177,6 +179,9 @@ void SetupWorldCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, 
             .maxRadiance = maxRadiance,
             .bounceIntensity = bounceIntensity,
             .accumCap = accumCap,
+            .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+            .worldGridProbeGrid = (!bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
+            .reflectionProbeCount = reflectionProbeCount,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(WORLD_CACHE_SHADE_ARGS), 0);

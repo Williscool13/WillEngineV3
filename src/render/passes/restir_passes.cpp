@@ -657,6 +657,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
     pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
+    if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
     pass.ReadSampledImage(targets.intermediateOne);
     pass.ReadSampledImage(targets.intermediateTwo);
     pass.ReadSampledImage(targets.gbufferOne);
@@ -678,7 +679,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     pass.WriteStorageImage(targets.colorOutput);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount,
+    const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -707,6 +709,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+                .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

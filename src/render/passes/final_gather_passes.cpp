@@ -45,6 +45,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
+    if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.depthCopy);
     if (bScreenSpace) {
@@ -60,7 +61,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.WriteStorageImage(GI_GATHER_GUIDE);
 
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, bCascades, bScreenSpace, bSkipRay, gatherShR, gatherShG, gatherShB, reflectionProbeCount,
+    const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
+    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, bCascades, bScreenSpace, bSkipRay, gatherShR, gatherShG, gatherShB, reflectionProbeCount, bProbeBrute,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy, bakedDiffuseClampK = viewFamily.bakedDiffuseClampK,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_gather"));
@@ -102,6 +104,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .reflectionProbeCount = reflectionProbeCount,
             .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
             .bakedDiffuseClampK = bakedDiffuseClampK,
+            .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (gatherExtent[0] + 7u) / 8u, (gatherExtent[1] + 7u) / 8u, 1);
@@ -187,6 +190,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     upscale.ReadSampledImage(GI_GATHER_DATA);
     upscale.ReadSampledImage(GI_GATHER_GUIDE);
     upscale.ReadBuffer(REFLECTION_PROBE_BUFFER);
+    if (graph.HasBuffer(SID("world_grid_probe_grid"))) { upscale.ReadBuffer(SID("world_grid_probe_grid")); }
     if (bTemporal) {
         upscale.ReadSampledImage(GI_GATHER_HISTORY);
         upscale.ReadSampledImage(SID("depth_history"));
@@ -202,7 +206,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     const bool bUpscaleCascades = AddDDGISampleDependencies(graph, upscale);
     upscale.WriteStorageImage(GI_GATHER_RESOLVED);
 
-    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, bTemporal, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount,
+    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, bTemporal, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_upscale"));
@@ -236,6 +240,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .bentNormalIndex = bBentNormals ? graph.GetSampledImageViewDescriptorIndex(SID("gtao_bent_normals")) : ~0x0u,
             .reflectionProbeCount = reflectionProbeCount,
             .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+            .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);

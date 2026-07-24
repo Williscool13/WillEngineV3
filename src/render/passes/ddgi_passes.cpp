@@ -122,7 +122,7 @@ static void AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName
     });
 }
 
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache)
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) {
         return;
@@ -211,6 +211,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         tracePass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
         tracePass.WriteBuffer(DDGI_RAY_DATA[k]);
         tracePass.ReadBuffer(SCENE_DATA_BUFFER);
+        tracePass.ReadBuffer(REFLECTION_PROBE_BUFFER);
+        if (graph.HasBuffer(SID("world_grid_probe_grid"))) { tracePass.ReadBuffer(SID("world_grid_probe_grid")); }
         if (worldCache.bValid) {
             tracePass.ReadBuffer(WORLD_CACHE_BUFFERS_CURRENT);
             tracePass.ReadWriteBuffer(WORLD_CACHE_ENTRIES);
@@ -239,7 +241,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (bActiveHistoryValid[k]) {
             tracePass.ReadBuffer(DDGI_ACTIVE_HISTORY[k]);
         }
-        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, iblIntensity, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, maxRayRadiance, bounceIntensity, worldCacheShadeInterval, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber, bWorldCache = worldCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, iblIntensity, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, maxRayRadiance, bounceIntensity, worldCacheShadeInterval, reflectionProbeCount, bReflectionProbeBruteForce, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsHistoryId = DDGI_OFFSETS_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], rayDataId = DDGI_RAY_DATA[k], frameNumber, bWorldCache = worldCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_trace"));
             if (!pipelineEntry) {
                 return;
@@ -273,6 +275,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .bounceIntensity = bounceIntensity,
                 .iblIntensity = iblIntensity,
                 .worldCacheShadeInterval = worldCacheShadeInterval,
+                .reflectionProbeCount = reflectionProbeCount,
+                .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+                .worldGridProbeGrid = (!bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (raysPerProbe + 63) / 64, probeCountTotal, 1);

@@ -41,6 +41,7 @@ struct ReflectionProbeComponent
     };
 
     uint64_t probeId{0};
+    bool bEnabled{true};
     Shape shape{Shape::Box};
     float fadeMargin{0.5f};
     Vec3 captureOffset{0.0f, 0.0f, 0.0f};

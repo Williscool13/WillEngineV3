@@ -844,6 +844,7 @@ struct ReflectionProbeConfiguration
     float intensity{1.0f};
     bool bDebugDraw{false};
     float bakedDiffuseClampK{4.0f};
+    bool bBruteForcePick{false};
 };
 
 struct HeroShadowConfiguration
@@ -920,6 +921,7 @@ struct ViewFamily
     SIGMAParams sigmaParams{};
     float iblIntensity{1.0f};
     float bakedDiffuseClampK{4.0f};
+    bool bReflectionProbeBruteForce{false};
     float resolutionScale{1.0f};
 
 

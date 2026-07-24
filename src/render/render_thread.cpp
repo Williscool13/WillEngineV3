@@ -546,7 +546,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             const bool bNeedsWorldGrid = viewFamily.lightingMode == Core::LightingMode::Default
                                          || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled)
                                          || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin)
-                                         || frameBuffer.ddgi.bEnabled;
+                                         || frameBuffer.ddgi.bEnabled
+                                         || viewFamily.reflectionProbes.Size() > 0u;
             if (bNeedsWorldGrid) {
                 SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0);
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bWorldGridDebug && !frameBuffer.bLockGPUDebug) {
@@ -558,10 +559,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
                 const WorldCacheFrame worldCache = SetupWorldCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.bFreezeGIField);
-                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.bDDGIBounceOnly, worldCache);
+                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.bDDGIBounceOnly, worldCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
                 ddgiPreviousCascades = ddgiCascades;
                 const bool bWorldCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.bDDGIBounceOnly;
-                SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, bWorldCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.worldCacheAccumCap);
+                SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, bWorldCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.worldCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
                 SetupWorldCacheEnd(*renderGraph, worldCache);
                 if (worldCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
                     RenderPass& wcStatsReadback = renderGraph->AddPass(SID("World Cache Stats Readback"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::WorldCache);
@@ -942,6 +943,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     SID("restir_reservoir_spatial"),
                     SID("restir_reservoir_history"),
                     REFLECTION_PROBE_BUFFER,
+                    SID("world_grid_probe_grid"),
                 };
                 for (const StringID bufferId : debugVisBuffers) {
                     if (renderGraph->HasBuffer(bufferId)) {
@@ -1026,6 +1028,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .historyCheckerboardField = historyCheckerboardField,
                         .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? renderGraph->TryGetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                         .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
+                        .worldGridProbeGrid = viewFamily.bReflectionProbeBruteForce ? 0 : renderGraph->TryGetBufferAddress(SID("world_grid_probe_grid")),
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
