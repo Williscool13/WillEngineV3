@@ -321,7 +321,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
                                          ? ImGuizmo::TRANSLATE
                                          : state->editor.currentGizmoOperation;
 
-                ImGuizmo::PushID(editPointIdx);
+                ImGuizmo::PushID(Editor::GizmoId::PATH_MOVER_POINT_BASE + editPointIdx);
                 if (ImGuizmo::Manipulate(
                     glm::value_ptr(view), glm::value_ptr(proj),
                     gizmoOp, ImGuizmo::LOCAL,

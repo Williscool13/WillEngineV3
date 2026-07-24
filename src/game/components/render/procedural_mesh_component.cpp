@@ -1100,7 +1100,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             }
 
             ImGuizmo::SetGizmoSizeClipSpace(0.10f);
-            ImGuizmo::PushID(9901);
+            ImGuizmo::PushID(Editor::GizmoId::PROCEDURAL_MESH_TRANSFORM);
             const Quat worldRenderRot = world.rotation * component.renderRotation;
             Mat4 gizmoMat = glm::translate(Mat4(1.0f), pivotWorld) * glm::mat4_cast(worldRenderRot);
             if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), state->editor.currentGizmoOperation, state->editor.currentGizmoMode, glm::value_ptr(gizmoMat), nullptr, snap)) {

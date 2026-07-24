@@ -436,7 +436,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 if (hadSelection) { MarkSceneModified(state, state->currentSceneId); }
             }
 
-            if (!popupOpen && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
+            if (!popupOpen && !state->editor.bExclusiveGizmoActivePrev && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
                 state->editor.selectedFolders.Clear();
                 state->editor.selectedEntities.Clear();
             }
@@ -843,6 +843,7 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                     snap = snapArr;
                 }
 
+                ImGuizmo::PushID(Editor::GizmoId::PRIMARY_TRANSFORM);
                 ImGuizmo::Manipulate(
                     glm::value_ptr(view),
                     glm::value_ptr(proj),
@@ -852,7 +853,10 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                     nullptr,
                     snap
                 );
-                if (ImGuizmo::IsUsing()) {
+
+                const bool bUsing = ImGuizmo::IsUsing();
+                ImGuizmo::PopID();
+                if (bUsing) {
                     const glm::mat4 localModel = glm::inverse(parentWorld) * model;
                     float t[3], r[3], s[3];
                     ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localModel), t, r, s);
@@ -890,6 +894,7 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
 
             glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), multiGizmoCentroid);
             glm::mat4 deltaMatrix(1.0f);
+            ImGuizmo::PushID(Editor::GizmoId::MULTI_SELECT_TRANSFORM);
             ImGuizmo::Manipulate(
                 glm::value_ptr(view),
                 glm::value_ptr(proj),
@@ -899,8 +904,10 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                 glm::value_ptr(deltaMatrix),
                 snap
             );
+            const bool bUsing = ImGuizmo::IsUsing();
+            ImGuizmo::PopID();
 
-            if (ImGuizmo::IsUsing()) {
+            if (bUsing) {
                 if (!s_wasDragging) {
                     s_prevTranslation = multiGizmoCentroid;
                     s_wasDragging = true;

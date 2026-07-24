@@ -71,6 +71,10 @@ ProjectConfig ReadProjectConfig()
         config.resolutionScale = j["resolutionScale"].get<float>();
     }
 
+    if (j.contains("reflectionProbeLineWidth") && j["reflectionProbeLineWidth"].is_number()) {
+        config.reflectionProbeLineWidth = j["reflectionProbeLineWidth"].get<float>();
+    }
+
     if (j.contains("gameCameraFovDegrees") && j["gameCameraFovDegrees"].is_number()) {
         config.gameCameraFovDegrees = j["gameCameraFovDegrees"].get<float>();
     }
@@ -147,6 +151,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
     j["activeInputProfile"] = std::string_view(config.activeInputProfile.c_str(), config.activeInputProfile.Size());
     j["aa"] = ConfigSerialization::ToJson(config.aaConfig);
     j["resolutionScale"] = config.resolutionScale;
+    j["reflectionProbeLineWidth"] = config.reflectionProbeLineWidth;
     j["gameCameraFovDegrees"] = config.gameCameraFovDegrees;
     j["gameCameraNearPlane"] = config.gameCameraNearPlane;
     j["editorCameraFovDegrees"] = config.editorCameraFovDegrees;

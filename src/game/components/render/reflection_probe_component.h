@@ -17,8 +17,15 @@ namespace Core
 struct ViewFamily;
 }
 
+namespace Engine
+{
+struct ProbeBakeSnapshot;
+}
+
 namespace Game::Component
 {
+struct WorldTransformComponent;
+
 struct ReflectionProbeComponent
 {
     enum class Shape : uint32_t
@@ -56,6 +63,9 @@ struct ReflectionProbeComponent
     bool bBakeRequested{false};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+
+    /** True when the live world transform, captureOffset, or resolution no longer matches the .wprobe bake snapshot; shading uses the snapshot until rebaked. */
+    static bool IsBakeStale(const WorldTransformComponent& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snapshot, uint32_t bakedResolutionPx);
 
     static void Serialize(const ReflectionProbeComponent& comp, nlohmann::json& json);
 

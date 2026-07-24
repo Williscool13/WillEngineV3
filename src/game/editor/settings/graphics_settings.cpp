@@ -199,6 +199,7 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
         ImGui::Spacing();
         ImGui::Separator();
         if (Widgets::SliderFloat("Render Resolution##graphics", &state->projectConfig.resolutionScale, 0.5f, 1.0f, {.format = "%.3f", .commitOnRelease = true})) { changed = true; }
+        if (Widgets::SliderFloat("Reflection Probe Line Width##graphics", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe debug wireframes (volume, fade shell, capture marker, stale bake volume).", .reset = true, .resetTo = 0.02})) { changed = true; }
 
 
         const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};

@@ -291,5 +291,6 @@ void ComputeReSTIRDIBaseBin(uniform ReSTIRDICombinedTemporalPushConstant pc, uin
     WorldGridProposal prop;
     prop.grid = pc.worldGridBuffer;
     prop.indexList = pc.worldGridIndexList;
+    prop.analyticCount = pc.lightData->analyticLightCount;
     ReSTIRDIBase(prop, pc, threadID);
 }

@@ -12,6 +12,7 @@
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/arena_vector.h"
 #include "core/containers/inline_vector.h"
+#include "core/math/color_helpers.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/material_manager.h"
@@ -294,10 +295,12 @@ void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineSta
         if (ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) {
             probe.contentHandle = ctx->assetManager->LoadProbe(Engine::ProbeID{probe.probeId});
             probe.contentSource = Component::ReflectionProbeComponent::ContentSource::Baked;
-        } else if (probe.standInEnvMap.IsValid()) {
+        }
+        else if (probe.standInEnvMap.IsValid()) {
             probe.contentHandle = ctx->assetManager->LoadCubemap(probe.standInEnvMap);
             probe.contentSource = Component::ReflectionProbeComponent::ContentSource::StandIn;
-        } else {
+        }
+        else {
             probe.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
             state->registry.remove<Component::ReflectionProbeLoadPendingTag>(entity);
             continue;
@@ -322,7 +325,10 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         if (probe.contentSource != Component::ReflectionProbeComponent::ContentSource::Baked || probe.probeId == 0) { continue; }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
-            if (claimed.id == probe.probeId) { bTaken = true; break; }
+            if (claimed.id == probe.probeId) {
+                bTaken = true;
+                break;
+            }
         }
         if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
     }
@@ -340,7 +346,10 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
             while (!bUnique) {
                 bUnique = fresh != 0;
                 for (const ClaimedProbeId& claimed : claimedProbeIds) {
-                    if (claimed.id == fresh) { bUnique = false; break; }
+                    if (claimed.id == fresh) {
+                        bUnique = false;
+                        break;
+                    }
                 }
                 if (!bUnique) { fresh = state->rng(); }
             }
@@ -356,7 +365,10 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
-            if (claimed.id == probe.probeId) { bTaken = true; break; }
+            if (claimed.id == probe.probeId) {
+                bTaken = true;
+                break;
+            }
         }
         if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
     }
@@ -1781,17 +1793,48 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
 
     for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
         if (!bProbeDebugDraw && !shouldDraw(entity)) { continue; }
-        constexpr Vec4 volumeColor{0.4f, 1.0f, 0.7f, 1.0f};
+
+        const Vec4 volumeColor = Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f);
         constexpr Vec4 captureColor{1.0f, 0.8f, 0.3f, 1.0f};
+        const float lineWidth = state->projectConfig.reflectionProbeLineWidth;
         if (probe.shape == Component::ReflectionProbeComponent::Shape::Sphere) {
             const float radius = glm::max(glm::max(transform.scale.x, transform.scale.y), transform.scale.z);
-            DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, radius, volumeColor, 0.02f});
+            DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, radius, volumeColor, lineWidth});
         }
         else {
-            DEBUG_ADD_BOX(viewFamily.debugBoxes, {transform.translation, transform.scale, transform.rotation, volumeColor, 0.02f});
+            DEBUG_ADD_BOX(viewFamily.debugBoxes, {transform.translation, transform.scale, transform.rotation, volumeColor, lineWidth});
+            const Vec3 axes[3] = {transform.rotation * Vec3(1.0f, 0.0f, 0.0f), transform.rotation * Vec3(0.0f, 1.0f, 0.0f), transform.rotation * Vec3(0.0f, 0.0f, 1.0f)};
+            for (int i = 0; i < 3; ++i) {
+                const Vec3 u = axes[(i + 1) % 3] * transform.scale[(i + 1) % 3];
+                const Vec3 v = axes[(i + 2) % 3] * transform.scale[(i + 2) % 3];
+                for (int s = 0; s < 2; ++s) {
+                    const Vec3 faceCenter = transform.translation + axes[i] * (s == 0 ? transform.scale[i] : -transform.scale[i]);
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u - v, faceCenter + u + v, volumeColor, lineWidth});
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u + v, faceCenter + u - v, volumeColor, lineWidth});
+                }
+            }
         }
         const Vec3 capturePos = transform.translation + transform.rotation * probe.captureOffset;
-        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {capturePos, 0.1f, captureColor, 0.02f});
+        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {capturePos, 0.1f, captureColor, lineWidth});
+
+        // Stale baked probes
+        if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
+            const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId});
+            if (info && Component::ReflectionProbeComponent::IsBakeStale(transform, probe, info->snapshot, info->resolution)) {
+                constexpr Vec4 staleColor{1.0f, 0.0f, 0.0f, 1.0f};
+                const Engine::ProbeBakeSnapshot& snap = info->snapshot;
+                const Vec3 snapTranslation{snap.translation[0], snap.translation[1], snap.translation[2]};
+                const Quat snapRotation{snap.rotation[0], snap.rotation[1], snap.rotation[2], snap.rotation[3]};
+                const Vec3 snapScale{snap.scale[0], snap.scale[1], snap.scale[2]};
+                if (probe.shape == Component::ReflectionProbeComponent::Shape::Sphere) {
+                    const float snapRadius = glm::max(glm::max(snapScale.x, snapScale.y), snapScale.z);
+                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {snapTranslation, snapRadius, staleColor, lineWidth});
+                }
+                else {
+                    DEBUG_ADD_BOX(viewFamily.debugBoxes, {snapTranslation, snapScale, snapRotation, staleColor, lineWidth});
+                }
+            }
+        }
     }
 }
 
@@ -1840,196 +1883,196 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     if (state->debug.bEnableUI) {
 #endif
 #if 0
-    constexpr Clay_Color COLOR_LIGHT = Clay_Color{224, 215, 210, 255};
-    constexpr Clay_Color COLOR_RED = Clay_Color{168, 66, 28, 255};
-    constexpr Clay_Color COLOR_ORANGE = Clay_Color{225, 138, 50, 255};
+        constexpr Clay_Color COLOR_LIGHT = Clay_Color{224, 215, 210, 255};
+        constexpr Clay_Color COLOR_RED = Clay_Color{168, 66, 28, 255};
+        constexpr Clay_Color COLOR_ORANGE = Clay_Color{225, 138, 50, 255};
 
-    uint32_t smilingFriendImageIndex = SMILING_FRIENDS_BINDLESS_INDEX;
+        uint32_t smilingFriendImageIndex = SMILING_FRIENDS_BINDLESS_INDEX;
 
-    constexpr Clay_Color COLOR_DARK = Clay_Color{30, 30, 40, 240};
-    constexpr Clay_Color COLOR_ITEM = Clay_Color{60, 80, 120, 255};
-    constexpr Clay_Color COLOR_SCROLLBAR = Clay_Color{180, 180, 200, 160};
-    constexpr Clay_Color COLOR_OVERLAY = Clay_Color{255, 120, 60, 80};
+        constexpr Clay_Color COLOR_DARK = Clay_Color{30, 30, 40, 240};
+        constexpr Clay_Color COLOR_ITEM = Clay_Color{60, 80, 120, 255};
+        constexpr Clay_Color COLOR_SCROLLBAR = Clay_Color{180, 180, 200, 160};
+        constexpr Clay_Color COLOR_OVERLAY = Clay_Color{255, 120, 60, 80};
 
-    CLAY(CLAY_ID("OuterContainer"), { .layout = { .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16 }, .backgroundColor = {250, 250, 255, 64} }) {
-        CLAY(CLAY_ID("SideBar"), {
-             .layout = {.sizing = {.width = CLAY_SIZING_FIXED(300), .height = CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16, .layoutDirection = CLAY_TOP_TO_BOTTOM, },
-             .backgroundColor = COLOR_LIGHT
-             }) {
-            CLAY(CLAY_ID("ProfilePictureOuter"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(16), .childGap = 16, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } }, .backgroundColor = COLOR_RED }) {
-                CLAY(CLAY_ID("ProfilePicture"), { .layout = { .sizing = { .width = CLAY_SIZING_FIXED(60), .height = CLAY_SIZING_FIXED(60) }}, .image = { .imageData = &smilingFriendImageIndex } }) {}
-                CLAY_TEXT(CLAY_STRING("Clay - UI Library"), { .textColor = {255, 255, 255, 255}, .fontSize = 24, });
-            }
-            CLAY_TEXT(CLAY_STRING("WillEngine"), {.textColor = {255, 255, 255, 255}, .fontSize = 24, });
-
-            CLAY(CLAY_ID("MainContent"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) } }, .backgroundColor = COLOR_LIGHT }) {}
-        }
-
-        // Border demo: nested boxes showing per-side widths and corner radius
-        CLAY(CLAY_ID("BorderDemo"), {
-             .layout = { .sizing = { CLAY_SIZING_FIXED(200), CLAY_SIZING_FIXED(200) }, .padding = CLAY_PADDING_ALL(16), .childGap = 12, .layoutDirection = CLAY_TOP_TO_BOTTOM },
-             .backgroundColor = {20, 20, 30, 255},
-             .border = { .color = {100, 200, 255, 255}, .width = { .left = 3, .right = 3, .top = 3, .bottom = 3 } },
-             }) {
-            CLAY(CLAY_ID("BorderInner1"), {
-                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(60) }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-                 .backgroundColor = {40, 40, 60, 255},
-                 .cornerRadius = CLAY_CORNER_RADIUS(8),
-                 .border = { .color = {255, 180, 50, 255}, .width = { .left = 2, .right = 2, .top = 2, .bottom = 2 } },
+        CLAY(CLAY_ID("OuterContainer"), { .layout = { .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16 }, .backgroundColor = {250, 250, 255, 64} }) {
+            CLAY(CLAY_ID("SideBar"), {
+                 .layout = {.sizing = {.width = CLAY_SIZING_FIXED(300), .height = CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16, .layoutDirection = CLAY_TOP_TO_BOTTOM, },
+                 .backgroundColor = COLOR_LIGHT
                  }) {
-                CLAY_TEXT(CLAY_STRING("Rounded"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
-            }
-            CLAY(CLAY_ID("BorderInner2"), {
-                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(60) }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-                 .backgroundColor = {40, 40, 60, 255},
-                 .border = { .color = {80, 255, 120, 255}, .width = { .left = 6, .right = 1, .top = 1, .bottom = 6 } },
-                 }) {
-                CLAY_TEXT(CLAY_STRING("Asymmetric"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
-            }
-        }
+                CLAY(CLAY_ID("ProfilePictureOuter"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(16), .childGap = 16, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } }, .backgroundColor = COLOR_RED }) {
+                    CLAY(CLAY_ID("ProfilePicture"), { .layout = { .sizing = { .width = CLAY_SIZING_FIXED(60), .height = CLAY_SIZING_FIXED(60) }}, .image = { .imageData = &smilingFriendImageIndex } }) {}
+                    CLAY_TEXT(CLAY_STRING("Clay - UI Library"), { .textColor = {255, 255, 255, 255}, .fontSize = 24, });
+                }
+                CLAY_TEXT(CLAY_STRING("WillEngine"), {.textColor = {255, 255, 255, 255}, .fontSize = 24, });
 
-        // Rounded image demo
-        CLAY(CLAY_ID("RoundedImage"), {
-             .layout = { .sizing = { CLAY_SIZING_FIXED(200), CLAY_SIZING_FIXED(120) } },
-             .cornerRadius = CLAY_CORNER_RADIUS(20),
-             .image = { .imageData = &smilingFriendImageIndex },
-             }) {}
-
-        // Overlay demo: a panel whose overlayColor tints all children
-        CLAY(CLAY_ID("OverlayDemo"), {
-             .layout = { .sizing = { CLAY_SIZING_FIXED(160), CLAY_SIZING_FIXED(200) }, .padding = CLAY_PADDING_ALL(10), .childGap = 8, .layoutDirection = CLAY_TOP_TO_BOTTOM },
-             .backgroundColor = {50, 50, 80, 255},
-             .overlayColor = { 80, 160, 255, 100 },
-             .border = { .color = {180, 180, 255, 200}, .width = { .left = 1, .right = 1, .top = 1, .bottom = 1 } },
-             }) {
-            CLAY_TEXT(CLAY_STRING("Overlay"), { .textColor = {255, 255, 255, 255}, .fontSize = 20 });
-            CLAY(CLAY_ID("OverlayItem1"), {
-                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(40) }, .padding = { 8, 8, 0, 0 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
-                 .backgroundColor = COLOR_RED,
-                 .cornerRadius = CLAY_CORNER_RADIUS(4),
-                 }) {
-                CLAY_TEXT(CLAY_STRING("Red"), { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+                CLAY(CLAY_ID("MainContent"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) } }, .backgroundColor = COLOR_LIGHT }) {}
             }
-            CLAY(CLAY_ID("OverlayItem2"), {
-                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(40) }, .padding = { 8, 8, 0, 0 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
-                 .backgroundColor = COLOR_ORANGE,
-                 .cornerRadius = CLAY_CORNER_RADIUS(4),
-                 }) {
-                CLAY_TEXT(CLAY_STRING("Orange"), { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
-            }
-        }
 
-        // Scrollable list with overlay color tint and a floating scrollbar
-        CLAY(CLAY_ID("ScrollDemo"), {
-             .layout = { .sizing = { .width = CLAY_SIZING_FIXED(260), .height = CLAY_SIZING_FIXED(300) }, .layoutDirection = CLAY_TOP_TO_BOTTOM },
-             .backgroundColor = COLOR_DARK,
-             .overlayColor = COLOR_OVERLAY,
-             }) {
-            // Clipped scroll area (generates SCISSOR_START/END)
-            CLAY(CLAY_ID("ScrollList"), {
-                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(8), .childGap = 6, .layoutDirection = CLAY_TOP_TO_BOTTOM },
-                 .clip = { .vertical = true, .childOffset = Clay_GetScrollOffset() },
+            // Border demo: nested boxes showing per-side widths and corner radius
+            CLAY(CLAY_ID("BorderDemo"), {
+                 .layout = { .sizing = { CLAY_SIZING_FIXED(200), CLAY_SIZING_FIXED(200) }, .padding = CLAY_PADDING_ALL(16), .childGap = 12, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+                 .backgroundColor = {20, 20, 30, 255},
+                 .border = { .color = {100, 200, 255, 255}, .width = { .left = 3, .right = 3, .top = 3, .bottom = 3 } },
                  }) {
-                for (int32_t i = 0; i < 32; ++i) {
-                    CLAY(CLAY_IDI("ScrollItem", i), {
-                         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(36) }, .padding = { 8, 8, 6, 6 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
-                         .backgroundColor = COLOR_ITEM,
-                         .cornerRadius = CLAY_CORNER_RADIUS(4),
-                         }) {
-                        CLAY_TEXT(CLAY_STRING("Item"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
-                    }
+                CLAY(CLAY_ID("BorderInner1"), {
+                     .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(60) }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
+                     .backgroundColor = {40, 40, 60, 255},
+                     .cornerRadius = CLAY_CORNER_RADIUS(8),
+                     .border = { .color = {255, 180, 50, 255}, .width = { .left = 2, .right = 2, .top = 2, .bottom = 2 } },
+                     }) {
+                    CLAY_TEXT(CLAY_STRING("Rounded"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
+                }
+                CLAY(CLAY_ID("BorderInner2"), {
+                     .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(60) }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
+                     .backgroundColor = {40, 40, 60, 255},
+                     .border = { .color = {80, 255, 120, 255}, .width = { .left = 6, .right = 1, .top = 1, .bottom = 6 } },
+                     }) {
+                    CLAY_TEXT(CLAY_STRING("Asymmetric"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
                 }
             }
 
-            // Floating scrollbar thumb
-            Clay_ScrollContainerData scrollData = Clay_GetScrollContainerData(Clay_GetElementId(CLAY_STRING("ScrollList")));
-            if (scrollData.found && scrollData.contentDimensions.height > scrollData.scrollContainerDimensions.height) {
-                const float trackH = scrollData.scrollContainerDimensions.height;
-                const float thumbH = (trackH / scrollData.contentDimensions.height) * trackH;
-                const float thumbY = (-scrollData.scrollPosition->y / scrollData.contentDimensions.height) * trackH;
-                CLAY(CLAY_ID("ScrollThumb"), {
-                     .layout = { .sizing = { CLAY_SIZING_FIXED(6), CLAY_SIZING_FIXED(thumbH) } },
-                     .backgroundColor = COLOR_SCROLLBAR,
-                     .cornerRadius = CLAY_CORNER_RADIUS(3),
-                     .floating = {
-                     .offset = { .x = -6, .y = thumbY },
-                     .parentId = Clay_GetElementId(CLAY_STRING("ScrollList")).id,
-                     .zIndex = UI::ZIndex::LIST_DECORATION,
-                     .attachPoints = { .element = CLAY_ATTACH_POINT_RIGHT_TOP, .parent = CLAY_ATTACH_POINT_RIGHT_TOP },
-                     .attachTo = CLAY_ATTACH_TO_PARENT,
-                     },
-                     }) {}
+            // Rounded image demo
+            CLAY(CLAY_ID("RoundedImage"), {
+                 .layout = { .sizing = { CLAY_SIZING_FIXED(200), CLAY_SIZING_FIXED(120) } },
+                 .cornerRadius = CLAY_CORNER_RADIUS(20),
+                 .image = { .imageData = &smilingFriendImageIndex },
+                 }) {}
+
+            // Overlay demo: a panel whose overlayColor tints all children
+            CLAY(CLAY_ID("OverlayDemo"), {
+                 .layout = { .sizing = { CLAY_SIZING_FIXED(160), CLAY_SIZING_FIXED(200) }, .padding = CLAY_PADDING_ALL(10), .childGap = 8, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+                 .backgroundColor = {50, 50, 80, 255},
+                 .overlayColor = { 80, 160, 255, 100 },
+                 .border = { .color = {180, 180, 255, 200}, .width = { .left = 1, .right = 1, .top = 1, .bottom = 1 } },
+                 }) {
+                CLAY_TEXT(CLAY_STRING("Overlay"), { .textColor = {255, 255, 255, 255}, .fontSize = 20 });
+                CLAY(CLAY_ID("OverlayItem1"), {
+                     .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(40) }, .padding = { 8, 8, 0, 0 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+                     .backgroundColor = COLOR_RED,
+                     .cornerRadius = CLAY_CORNER_RADIUS(4),
+                     }) {
+                    CLAY_TEXT(CLAY_STRING("Red"), { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+                }
+                CLAY(CLAY_ID("OverlayItem2"), {
+                     .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(40) }, .padding = { 8, 8, 0, 0 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+                     .backgroundColor = COLOR_ORANGE,
+                     .cornerRadius = CLAY_CORNER_RADIUS(4),
+                     }) {
+                    CLAY_TEXT(CLAY_STRING("Orange"), { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+                }
+            }
+
+            // Scrollable list with overlay color tint and a floating scrollbar
+            CLAY(CLAY_ID("ScrollDemo"), {
+                 .layout = { .sizing = { .width = CLAY_SIZING_FIXED(260), .height = CLAY_SIZING_FIXED(300) }, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+                 .backgroundColor = COLOR_DARK,
+                 .overlayColor = COLOR_OVERLAY,
+                 }) {
+                // Clipped scroll area (generates SCISSOR_START/END)
+                CLAY(CLAY_ID("ScrollList"), {
+                     .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(8), .childGap = 6, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+                     .clip = { .vertical = true, .childOffset = Clay_GetScrollOffset() },
+                     }) {
+                    for (int32_t i = 0; i < 32; ++i) {
+                        CLAY(CLAY_IDI("ScrollItem", i), {
+                             .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(36) }, .padding = { 8, 8, 6, 6 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+                             .backgroundColor = COLOR_ITEM,
+                             .cornerRadius = CLAY_CORNER_RADIUS(4),
+                             }) {
+                            CLAY_TEXT(CLAY_STRING("Item"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
+                        }
+                    }
+                }
+
+                // Floating scrollbar thumb
+                Clay_ScrollContainerData scrollData = Clay_GetScrollContainerData(Clay_GetElementId(CLAY_STRING("ScrollList")));
+                if (scrollData.found && scrollData.contentDimensions.height > scrollData.scrollContainerDimensions.height) {
+                    const float trackH = scrollData.scrollContainerDimensions.height;
+                    const float thumbH = (trackH / scrollData.contentDimensions.height) * trackH;
+                    const float thumbY = (-scrollData.scrollPosition->y / scrollData.contentDimensions.height) * trackH;
+                    CLAY(CLAY_ID("ScrollThumb"), {
+                         .layout = { .sizing = { CLAY_SIZING_FIXED(6), CLAY_SIZING_FIXED(thumbH) } },
+                         .backgroundColor = COLOR_SCROLLBAR,
+                         .cornerRadius = CLAY_CORNER_RADIUS(3),
+                         .floating = {
+                         .offset = { .x = -6, .y = thumbY },
+                         .parentId = Clay_GetElementId(CLAY_STRING("ScrollList")).id,
+                         .zIndex = UI::ZIndex::LIST_DECORATION,
+                         .attachPoints = { .element = CLAY_ATTACH_POINT_RIGHT_TOP, .parent = CLAY_ATTACH_POINT_RIGHT_TOP },
+                         .attachTo = CLAY_ATTACH_TO_PARENT,
+                         },
+                         }) {}
+                }
             }
         }
-    }
 #endif
 
-    // FPS counter, top-left: render thread FPS (EMA-smoothed in TimeManager::UpdateRender) and game-tick FPS (TimeManager::UpdateGame).
-    const Core::TimeFrame& tf = frameBuffer->timeFrame;
-    const auto renderFpsText = Core::InlineString<48>::Format("Render: %.0f FPS (%.2f ms)", tf.renderFps, tf.renderFps > 0.0f ? 1000.0f / tf.renderFps : 0.0f);
-    const auto gameFpsText = Core::InlineString<48>::Format("Game: %.0f FPS (%.2f ms)", tf.gameFps, tf.gameFps > 0.0f ? 1000.0f / tf.gameFps : 0.0f);
-    const Clay_String renderFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(renderFpsText.Size()), .chars = renderFpsText.c_str()};
-    const Clay_String gameFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(gameFpsText.Size()), .chars = gameFpsText.c_str()};
+        // FPS counter, top-left: render thread FPS (EMA-smoothed in TimeManager::UpdateRender) and game-tick FPS (TimeManager::UpdateGame).
+        const Core::TimeFrame& tf = frameBuffer->timeFrame;
+        const auto renderFpsText = Core::InlineString<48>::Format("Render: %.0f FPS (%.2f ms)", tf.renderFps, tf.renderFps > 0.0f ? 1000.0f / tf.renderFps : 0.0f);
+        const auto gameFpsText = Core::InlineString<48>::Format("Game: %.0f FPS (%.2f ms)", tf.gameFps, tf.gameFps > 0.0f ? 1000.0f / tf.gameFps : 0.0f);
+        const Clay_String renderFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(renderFpsText.Size()), .chars = renderFpsText.c_str()};
+        const Clay_String gameFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(gameFpsText.Size()), .chars = gameFpsText.c_str()};
 
-    static constexpr const char* AA_MODE_NAMES[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
-    const char* aaModeName = AA_MODE_NAMES[static_cast<int32_t>(state->lighting.aaConfig.mode)];
-    const char* profileName = state->projectConfig.activeLightingProfile.IsEmpty() ? "(none)" : state->projectConfig.activeLightingProfile.c_str();
-    const auto profileText = Core::InlineString<80>::Format("Profile: %s", profileName);
-    const auto aaText = Core::InlineString<48>::Format("AA: %s | Denoiser: %s", aaModeName, DenoiserModeName(state->debug.restir.denoiserMode));
-    Core::InlineString<48> giText("Diffuse GI: ");
-    AppendDiffuseGIModeText(giText, state->lighting);
+        static constexpr const char* AA_MODE_NAMES[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
+        const char* aaModeName = AA_MODE_NAMES[static_cast<int32_t>(state->lighting.aaConfig.mode)];
+        const char* profileName = state->projectConfig.activeLightingProfile.IsEmpty() ? "(none)" : state->projectConfig.activeLightingProfile.c_str();
+        const auto profileText = Core::InlineString<80>::Format("Profile: %s", profileName);
+        const auto aaText = Core::InlineString<48>::Format("AA: %s | Denoiser: %s", aaModeName, DenoiserModeName(state->debug.restir.denoiserMode));
+        Core::InlineString<48> giText("Diffuse GI: ");
+        AppendDiffuseGIModeText(giText, state->lighting);
 
-    const auto renderWidth = static_cast<uint32_t>(static_cast<float>(ctx->windowContext.viewportWidth) * state->projectConfig.resolutionScale);
-    const auto renderHeight = static_cast<uint32_t>(static_cast<float>(ctx->windowContext.viewportHeight) * state->projectConfig.resolutionScale);
-    const auto resText = Core::InlineString<64>::Format("Res: %ux%u (%.0f%%)", renderWidth, renderHeight, state->projectConfig.resolutionScale * 100.0f);
+        const auto renderWidth = static_cast<uint32_t>(static_cast<float>(ctx->windowContext.viewportWidth) * state->projectConfig.resolutionScale);
+        const auto renderHeight = static_cast<uint32_t>(static_cast<float>(ctx->windowContext.viewportHeight) * state->projectConfig.resolutionScale);
+        const auto resText = Core::InlineString<64>::Format("Res: %ux%u (%.0f%%)", renderWidth, renderHeight, state->projectConfig.resolutionScale * 100.0f);
 
-    const Core::PostProcessConfiguration& pp = state->lighting.postProcess;
-    Core::InlineString<160> ppSummary("PP:");
-    bool bAnyPPActive = false;
-    auto appendPPTag = [&](bool bEnabled, const char* tag) {
-        if (!bEnabled) { return; }
-        ppSummary.Append(bAnyPPActive ? ", " : " ");
-        ppSummary.Append(tag);
-        bAnyPPActive = true;
-    };
-    appendPPTag(state->lighting.gtaoConfig.bEnabled, "GTAO");
-    appendPPTag(pp.bExposureEnabled, "Exposure");
-    appendPPTag(pp.bBloomEnabled, "Bloom");
-    appendPPTag(pp.bMotionBlurEnabled, "MotionBlur");
-    appendPPTag(pp.bColorGradingEnabled, "ColorGrade");
-    appendPPTag(pp.bVignetteEnabled, "Vignette");
-    appendPPTag(pp.bChromaticAberrationEnabled, "ChromAb");
-    appendPPTag(pp.bSharpeningEnabled, "Sharpen");
-    appendPPTag(pp.bPaniniEnabled, "Panini");
-    appendPPTag(pp.bFilmGrainEnabled, "FilmGrain");
-    appendPPTag(pp.bDitherEnabled, "Dither");
-    if (!bAnyPPActive) { ppSummary.Append(" None"); }
+        const Core::PostProcessConfiguration& pp = state->lighting.postProcess;
+        Core::InlineString<160> ppSummary("PP:");
+        bool bAnyPPActive = false;
+        auto appendPPTag = [&](bool bEnabled, const char* tag) {
+            if (!bEnabled) { return; }
+            ppSummary.Append(bAnyPPActive ? ", " : " ");
+            ppSummary.Append(tag);
+            bAnyPPActive = true;
+        };
+        appendPPTag(state->lighting.gtaoConfig.bEnabled, "GTAO");
+        appendPPTag(pp.bExposureEnabled, "Exposure");
+        appendPPTag(pp.bBloomEnabled, "Bloom");
+        appendPPTag(pp.bMotionBlurEnabled, "MotionBlur");
+        appendPPTag(pp.bColorGradingEnabled, "ColorGrade");
+        appendPPTag(pp.bVignetteEnabled, "Vignette");
+        appendPPTag(pp.bChromaticAberrationEnabled, "ChromAb");
+        appendPPTag(pp.bSharpeningEnabled, "Sharpen");
+        appendPPTag(pp.bPaniniEnabled, "Panini");
+        appendPPTag(pp.bFilmGrainEnabled, "FilmGrain");
+        appendPPTag(pp.bDitherEnabled, "Dither");
+        if (!bAnyPPActive) { ppSummary.Append(" None"); }
 
-    const Clay_String profileString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(profileText.Size()), .chars = profileText.c_str()};
-    const Clay_String aaString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(aaText.Size()), .chars = aaText.c_str()};
-    const Clay_String giString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(giText.Size()), .chars = giText.c_str()};
-    const Clay_String resString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(resText.Size()), .chars = resText.c_str()};
-    const Clay_String ppString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(ppSummary.Size()), .chars = ppSummary.c_str()};
+        const Clay_String profileString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(profileText.Size()), .chars = profileText.c_str()};
+        const Clay_String aaString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(aaText.Size()), .chars = aaText.c_str()};
+        const Clay_String giString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(giText.Size()), .chars = giText.c_str()};
+        const Clay_String resString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(resText.Size()), .chars = resText.c_str()};
+        const Clay_String ppString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(ppSummary.Size()), .chars = ppSummary.c_str()};
 
-    CLAY(CLAY_ID("FpsCounter"), {
-         .layout = { .sizing = { .width = CLAY_SIZING_FIXED(340) }, .padding = CLAY_PADDING_ALL(8), .childGap = 4, .layoutDirection = CLAY_TOP_TO_BOTTOM },
-         .backgroundColor = {0, 0, 0, 140},
-         .cornerRadius = CLAY_CORNER_RADIUS(4),
-         .floating = {
+        CLAY(CLAY_ID("FpsCounter"), {
+             .layout = { .sizing = { .width = CLAY_SIZING_FIXED(340) }, .padding = CLAY_PADDING_ALL(8), .childGap = 4, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+             .backgroundColor = {0, 0, 0, 140},
+             .cornerRadius = CLAY_CORNER_RADIUS(4),
+             .floating = {
              .offset = { .x = 16, .y = -16 },
              .zIndex = UI::ZIndex::HUD_OVERLAY,
              .attachPoints = { .element = CLAY_ATTACH_POINT_LEFT_BOTTOM, .parent = CLAY_ATTACH_POINT_LEFT_BOTTOM },
              .attachTo = CLAY_ATTACH_TO_ROOT,
              },
-         }) {
-        CLAY_TEXT(renderFpsString, { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
-        CLAY_TEXT(gameFpsString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
-        CLAY_TEXT(profileString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
-        CLAY_TEXT(aaString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
-        CLAY_TEXT(giString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
-        CLAY_TEXT(resString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
-        CLAY_TEXT(ppString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
-    }
+             }) {
+            CLAY_TEXT(renderFpsString, { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+            CLAY_TEXT(gameFpsString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+            CLAY_TEXT(profileString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+            CLAY_TEXT(aaString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+            CLAY_TEXT(giString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+            CLAY_TEXT(resString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+            CLAY_TEXT(ppString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+        }
 #if WILL_EDITOR
     } // state->debug.bEnableUI
 #endif

@@ -988,7 +988,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 case PhysicsShapeType::Sphere:
                 {
                     const Vec3 planeNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
-                    bHandleBusy |= Editor::DotHandle(10000, shapeCenter + entityRight * shape.sphere.radius, planeNormal,
+                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 0, shapeCenter + entityRight * shape.sphere.radius, planeNormal,
                                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
                                                      [&](Vec3 newPt) { shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
                                                      colorX);
@@ -998,11 +998,11 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 {
                     const Vec3 upPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
                     const Vec3 rightPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
-                    bHandleBusy |= Editor::DotHandle(10000, shapeCenter + entityUp * shape.capsule.halfHeight, upPlane,
+                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 0, shapeCenter + entityUp * shape.capsule.halfHeight, upPlane,
                                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
                                                      [&](Vec3 newPt) { shape.capsule.halfHeight = glm::max(0.001f, glm::dot(newPt - shapeCenter, entityUp)); },
                                                      colorY);
-                    bHandleBusy |= Editor::DotHandle(10001, shapeCenter + entityRight * shape.capsule.radius, rightPlane,
+                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 1, shapeCenter + entityRight * shape.capsule.radius, rightPlane,
                                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
                                                      [&](Vec3 newPt) { shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
                                                      colorX);
@@ -1013,15 +1013,15 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     const Vec3 xPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
                     const Vec3 yPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
                     const Vec3 zPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityForward) * entityForward);
-                    bHandleBusy |= Editor::DotHandle(10000, shapeCenter + entityRight * shape.box.halfExtents.x, xPlane,
+                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 0, shapeCenter + entityRight * shape.box.halfExtents.x, xPlane,
                                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
                                                      [&](Vec3 newPt) { shape.box.halfExtents.x = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityRight))); },
                                                      colorX);
-                    bHandleBusy |= Editor::DotHandle(10001, shapeCenter + entityUp * shape.box.halfExtents.y, yPlane,
+                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 1, shapeCenter + entityUp * shape.box.halfExtents.y, yPlane,
                                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
                                                      [&](Vec3 newPt) { shape.box.halfExtents.y = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityUp))); },
                                                      colorY);
-                    bHandleBusy |= Editor::DotHandle(10002, shapeCenter + entityForward * shape.box.halfExtents.z, zPlane,
+                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 2, shapeCenter + entityForward * shape.box.halfExtents.z, zPlane,
                                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
                                                      [&](Vec3 newPt) { shape.box.halfExtents.z = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityForward))); },
                                                      colorZ);
@@ -1033,7 +1033,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
             if (!bHandleBusy && state->editor.activeDotHandleId == -1) {
                 ImGuizmo::SetGizmoSizeClipSpace(0.10f);
-                ImGuizmo::PushID(0);
+                ImGuizmo::PushID(Editor::GizmoId::PHYSICS_SHAPE_OFFSET);
                 Mat4 mat = glm::translate(Mat4(1.0f), shapeCenter);
                 if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE, ImGuizmo::WORLD, glm::value_ptr(mat))) {
                     shape.offset = Vec3(entityMatInv * Vec4(Vec3(mat[3]), 1.0f));

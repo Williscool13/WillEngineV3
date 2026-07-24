@@ -77,13 +77,13 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         };
 
         const Vec3 widthPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, right) * right);
-        Editor::DotHandle(20000, center + right * comp.halfWidth * transform->scale.x, widthPlaneNormal,
+        Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 0, center + right * comp.halfWidth * transform->scale.x, widthPlaneNormal,
                           vd.view, vd.proj, viewport, vd.cameraPos, state,
                           [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
                           Editor::COLOR_AXIS_X);
 
         const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
-        Editor::DotHandle(20001, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
+        Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 1, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
                           vd.view, vd.proj, viewport, vd.cameraPos, state,
                           [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
                           Editor::COLOR_AXIS_Y);

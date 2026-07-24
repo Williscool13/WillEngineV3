@@ -94,11 +94,16 @@ public struct ReGIRProposal : ILightProposal
     }
 }
 
-/** WorldGridBin: cascaded strongest-K analytic light list. Uniform selection over the cell; RIS applies importance at the real shading point. */
+// Fraction of each light-sampling candidate budget routed to a uniformly-random emissive triangle when the bin holds only analytic lights.
+static const float WORLD_GRID_EMISSIVE_MIX_PROB = 0.5;
+
+/** WorldGridBin: cascaded strongest-K analytic light list. Uniform selection over the cell; RIS applies importance at the real shading point.
+ *  Emissive triangles are never binned, so when they are present each candidate draw is a mixture: with WORLD_GRID_EMISSIVE_MIX_PROB pick a uniform emissive, else draw from the analytic bin. Marginal() returns the exact mixture pdf so the Talbot-MIS denominator stays unbiased. */
 public struct WorldGridProposal : ILightProposal
 {
     public uint2* grid;
     public uint* indexList;
+    public int analyticCount;
 
     uint cellOffset;
     uint cellCount;
@@ -117,12 +122,22 @@ public struct WorldGridProposal : ILightProposal
     {
         lightIdx = -1;
         pSelect = 0.0;
+        // Empty cell: let the caller's uniform-over-all-lights fallback handle it (already covers emissives).
         if (cellCount == 0u) { return false; }
+        uint eCount = uint(max(lightCount - analyticCount, 0));
+        // beta == 0 when no emissives exist: no extra HashStep is drawn, so the emissive-free path stays bit-identical to the pure-bin behaviour.
+        float beta = (eCount > 0u) ? WORLD_GRID_EMISSIVE_MIX_PROB : 0.0;
+        if (beta > 0.0 && HashStep(h) < beta) {
+            uint e = min(uint(HashStep(h) * float(eCount)), eCount - 1u);
+            lightIdx = analyticCount + int(e);
+            pSelect = beta / float(eCount);
+            return true;
+        }
         uint j = min(uint(HashStep(h) * float(cellCount)), cellCount - 1u);
         uint idx = indexList[cellOffset + j];
         if (idx >= uint(lightCount)) { return false; }
         lightIdx = int(idx);
-        pSelect = 1.0 / float(cellCount);
+        pSelect = (1.0 - beta) / float(cellCount);
         return true;
     }
 
@@ -130,8 +145,12 @@ public struct WorldGridProposal : ILightProposal
     {
         // Exact: light is a candidate iff it survived the cell's top-K, at selection pdf 1/count; truncated lights are owned solely by the BRDF technique.
         if (cellCount == 0u) { return 1.0 / float(lightCount); }
+        uint eCount = uint(max(lightCount - analyticCount, 0));
+        float beta = (eCount > 0u) ? WORLD_GRID_EMISSIVE_MIX_PROB : 0.0;
+        // Emissives are never binned; their only selection mass is the mixture's emissive component.
+        if (lightIdx >= analyticCount) { return (eCount > 0u) ? (beta / float(eCount)) : 0.0; }
         for (uint k = 0u; k < cellCount; k++) {
-            if (int(indexList[cellOffset + k]) == lightIdx) { return 1.0 / float(cellCount); }
+            if (int(indexList[cellOffset + k]) == lightIdx) { return (1.0 - beta) / float(cellCount); }
         }
         return 0.0;
     }

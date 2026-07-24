@@ -7,7 +7,7 @@
       "maxRadiance": 1000.0,
       "newFrameWeight": 0.10000000149011612
     },
-    "mode": 1,
+    "mode": 5,
     "smaa": {
       "edgeDetectionMode": 1,
       "localContrastAdaptation": 2.0,
@@ -27,7 +27,7 @@
     }
   },
   "activeInputProfile": "",
-  "activeLightingProfile": "Standard",
+  "activeLightingProfile": "ReSTIR",
   "activePostProcessProfile": "main_post_process",
   "bAutoSaveLighting": false,
   "bAutoSavePostProcess": true,
@@ -164,5 +164,6 @@
     "captureSize": 1024,
     "settleFrames": 240
   },
+  "reflectionProbeLineWidth": 0.019999999552965164,
   "resolutionScale": 0.75
 }
