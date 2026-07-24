@@ -596,7 +596,7 @@ SHADER_PUBLIC struct WorldCacheCarryForwardPushConstant
     SHADER_PUBLIC SHADER_PTR(WorldCacheCell) nextCells;
     SHADER_PUBLIC float4 cameraPos;
     SHADER_PUBLIC uint32_t frameIndex;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t bFreeze;
     SHADER_PUBLIC SHADER_PTR(WorldCacheStats) stats;
 };
 

@@ -29,7 +29,7 @@ static const StringID DDGI_BLEND_VISIBILITY_PASS[DDGI_MAX_CASCADES] = {SID("DDGI
 static const StringID DDGI_RELOCATE_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Relocate 0"), SID("DDGI Probe Relocate 1"), SID("DDGI Probe Relocate 2"), SID("DDGI Probe Relocate 3"), SID("DDGI Probe Relocate 4"), SID("DDGI Probe Relocate 5"), SID("DDGI Probe Relocate 6"), SID("DDGI Probe Relocate 7"), SID("DDGI Probe Relocate 8"), SID("DDGI Probe Relocate 9"), SID("DDGI Probe Relocate 10"), SID("DDGI Probe Relocate 11"), SID("DDGI Probe Relocate 12"), SID("DDGI Probe Relocate 13"), SID("DDGI Probe Relocate 14"), SID("DDGI Probe Relocate 15")};
 static const StringID DDGI_DEBUG_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Debug 0"), SID("DDGI Probe Debug 1"), SID("DDGI Probe Debug 2"), SID("DDGI Probe Debug 3"), SID("DDGI Probe Debug 4"), SID("DDGI Probe Debug 5"), SID("DDGI Probe Debug 6"), SID("DDGI Probe Debug 7"), SID("DDGI Probe Debug 8"), SID("DDGI Probe Debug 9"), SID("DDGI Probe Debug 10"), SID("DDGI Probe Debug 11"), SID("DDGI Probe Debug 12"), SID("DDGI Probe Debug 13"), SID("DDGI Probe Debug 14"), SID("DDGI Probe Debug 15")};
 
-DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const DDGICascades& previous, uint64_t frameNumber)
+DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const DDGICascades& previous, uint64_t frameNumber, bool bFreeze)
 {
     const glm::ivec3 counts = glm::clamp(glm::ivec3(params.probeCountX, params.probeCountY, params.probeCountZ), glm::ivec3(2), glm::ivec3(32));
     const float baseSpacing = glm::max(params.probeSpacing, 0.1f);
@@ -41,7 +41,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
     const bool bColdStart = previous.count == 0;
     const uint32_t updatedCascade = cascades.count == 1 || frameNumber % 2 == 0 ? 0u : 1u + static_cast<uint32_t>((frameNumber / 2) % (cascades.count - 1));
     for (uint32_t k = 0; k < cascades.count; ++k) {
-        cascades.bUpdated[k] = bColdStart || k == updatedCascade;
+        cascades.bUpdated[k] = !bFreeze && (bColdStart || k == updatedCascade);
 
         const float cascadeScale = static_cast<float>(1u << k);
         const float biasScale = params.bScaleBiasPerCascade ? cascadeScale : 1.0f;

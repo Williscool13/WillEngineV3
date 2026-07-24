@@ -6,8 +6,6 @@
 
 #include <cstring>
 #include <glm/gtc/constants.hpp>
-#include <glm/gtc/packing.hpp>
-#include <stb/stb_image_write.h>
 
 #include "camera_system.h"
 #include "ddgi_converge_boost.h"
@@ -21,6 +19,7 @@
 #include "platform/file_utils.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_path.h"
+#include "engine/profiles/profile_library.h"
 #include "game/components/core_components.h"
 #include "game/components/render/reflection_probe_component.h"
 #include "game/gameplay/camera/gameplay_camera.h"
@@ -45,22 +44,6 @@ static const ProbeFaceOrientation kProbeFaceOrientations[6] = {
     {{ 0.0f,  0.0f,  1.0f}, { 0.0f, -1.0f,  0.0f}},
     {{ 0.0f,  0.0f, -1.0f}, { 0.0f, -1.0f,  0.0f}},
 };
-
-static void WriteProbeFaceHdr(Engine::EngineContext* ctx, const uint16_t* pixels, uint32_t square, const Core::Path& path)
-{
-    const uint32_t texelCount = square * square;
-    Core::HeapArray<float> rgb(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::EngineContext, static_cast<size_t>(texelCount) * 3);
-    for (uint32_t i = 0; i < texelCount; ++i) {
-        const size_t src = static_cast<size_t>(i) * 4;
-        const glm::vec2 rgChannels = glm::unpackHalf2x16(static_cast<uint32_t>(pixels[src + 0]) | (static_cast<uint32_t>(pixels[src + 1]) << 16u));
-        const glm::vec2 baChannels = glm::unpackHalf2x16(static_cast<uint32_t>(pixels[src + 2]) | (static_cast<uint32_t>(pixels[src + 3]) << 16u));
-        const size_t dst = static_cast<size_t>(i) * 3;
-        rgb[dst + 0] = rgChannels.x;
-        rgb[dst + 1] = rgChannels.y;
-        rgb[dst + 2] = baChannels.x;
-    }
-    stbi_write_hdr(path.c_str(), static_cast<int>(square), static_cast<int>(square), 3, rgb.Data());
-}
 
 ProbeBakeSystem& ProbeBakeGetOrCreate(Engine::EngineState* state)
 {
@@ -116,8 +99,6 @@ void ProbeBakeScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state,
 void ProbeBakeSystem::Start(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity probe)
 {
     if (bBakeActive) { return; }
-    bManualDumpRequested = false;
-    bManualDumpAwaiting = false;
     probeEntity = probe;
     currentFace = 0;
     settleCounter = 0;
@@ -176,6 +157,7 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
 {
     if (bBakeActive) {
         state->lighting.reflectionProbe = stashedProbeConfig;
+        state->debug.bGIFreeze = stashedGIFreeze;
         ClearProbeBakeHideSet(ctx, state);
         state->inputContext = stashedInputContext;
         if (bakeForcedExtent > 0) {
@@ -214,26 +196,6 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
         stashedViewportWidth = frameBuffer->viewportResizeCommand.sizeX;
         stashedViewportHeight = frameBuffer->viewportResizeCommand.sizeY;
         frameBuffer->viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, bakeForcedExtent, bakeForcedExtent};
-    }
-
-    if (!bBakeActive && bManualDumpRequested) {
-        if (!bManualDumpAwaiting) {
-            frameBuffer->bCaptureProbeFace = true;
-            bManualDumpAwaiting = true;
-        } else if (ctx->IsProbeCaptureReady()) {
-            const Engine::ProbeCaptureStaging& capture = ctx->GetProbeCapture();
-            if (capture.captureSize > 0 && capture.pixels.IsAllocated()) {
-                static uint32_t probeCaptureCounter = 0;
-                Core::Path captureDir = Platform::GetUserDataPath() / "screenshots";
-                Platform::CreateDirectories(captureDir.c_str());
-                Core::InlineString<64> captureName = Core::InlineString<64>::Format("probe_capture_%u.hdr", probeCaptureCounter++);
-                Core::Path capturePath = captureDir / captureName.c_str();
-                WriteProbeFaceHdr(ctx, capture.pixels.Data(), capture.captureSize, capturePath);
-            }
-            ctx->ConsumeProbeCapture();
-            bManualDumpRequested = false;
-            bManualDumpAwaiting = false;
-        }
     }
 
     switch (phase) {
@@ -289,7 +251,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             stashedInputContext = state->inputContext == Engine::InputContext::Console ? Engine::InputContext::Editor : state->inputContext;
             state->inputContext = Engine::InputContext::ProbeBake;
 
-            settleFrames = glm::max(1, stashedProbeConfig.settleFrames);
+            settleFrames = glm::max(1, state->projectConfig.probeBake.settleFrames);
 
             const Component::WorldTransformComponent* worldTransform = state->registry.try_get<Component::WorldTransformComponent>(probeEntity);
             const Component::ReflectionProbeComponent* probe = state->registry.try_get<Component::ReflectionProbeComponent>(probeEntity);
@@ -316,7 +278,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             bakeSnapshot.captureOffset[1] = probe->captureOffset.y;
             bakeSnapshot.captureOffset[2] = probe->captureOffset.z;
 
-            const int32_t crop = glm::clamp(stashedProbeConfig.bakeCaptureSize, 256, 1280);
+            const int32_t crop = glm::clamp(state->projectConfig.probeBake.captureSize, 256, 1280);
             bakeCropSize = static_cast<uint32_t>(crop) & ~1u;
             const uint32_t overscanned = static_cast<uint32_t>(glm::ceil(static_cast<float>(bakeCropSize) * kProbeBakeOverscan));
             bakeForcedExtent = (overscanned + 1u) & ~1u;
@@ -331,7 +293,11 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             state->projectConfig.resolutionScale = 1.0f;
             frameBuffer->viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, bakeForcedExtent, bakeForcedExtent};
 
-            DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, state->lighting.ddgi);
+            stashedGIFreeze = state->debug.bGIFreeze;
+            state->debug.bGIFreeze = false;
+            if (state->projectConfig.probeBake.bAutoConverge) {
+                DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, state->lighting.ddgi);
+            }
 
             phase = Phase::FaceSetup;
             return;
@@ -356,6 +322,9 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             if (settleCounter >= settleFrames) {
                 if (currentFace == 0 && state->ddgiConvergeBoost.bActive) {
                     return;
+                }
+                if (state->projectConfig.probeBake.bAutoFreeze) {
+                    state->debug.bGIFreeze = true;
                 }
                 phase = Phase::CaptureRequested;
             }
@@ -395,6 +364,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
         case Phase::Finishing:
         {
             state->lighting.reflectionProbe = stashedProbeConfig;
+            state->debug.bGIFreeze = stashedGIFreeze;
             ClearProbeBakeHideSet(ctx, state);
             state->inputContext = stashedInputContext;
             if (bakeForcedExtent > 0) {

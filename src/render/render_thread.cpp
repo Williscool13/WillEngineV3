@@ -554,10 +554,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 }
             }
 
-            const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber);
+            const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber, frameBuffer.bFreezeGIField);
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
-                const WorldCacheFrame worldCache = SetupWorldCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos);
+                const WorldCacheFrame worldCache = SetupWorldCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.bFreezeGIField);
                 SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.bDDGIBounceOnly, worldCache);
                 ddgiPreviousCascades = ddgiCascades;
                 const bool bWorldCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.bDDGIBounceOnly;
@@ -657,7 +657,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 uint32_t giGatherMode = 0u;
                 const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.giGatherDebugMode);
                 if (frameBuffer.ddgi.bEnabled && ((frameBuffer.ddgi.bFinalGather && bDDGIApply) || giGatherDebug != 0u)) {
-                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.bGatherSkipRay, giGatherDebug != 0u);
+                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.bGatherSkipRay || frameBuffer.bFreezeGatherRay, giGatherDebug != 0u, frameBuffer.bFreezeScreenFeedback);
                     if (giGather.bValid) {
                         giGatherMode = giGatherDebug != 0u ? giGatherDebug + 1u : 1u;
                     }
@@ -672,7 +672,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         }
                         // No ReSTIR BRDF ray to piggyback here, so reflections trace their own; the shade/denoise/composite path downstream is shared.
                         SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, frameBuffer.reflection);
-                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, bDDGIApply, false, REFLECTION_NO_BRDF_CLAMP);
+                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, bDDGIApply, false, REFLECTION_NO_BRDF_CLAMP, frameBuffer.bFreezeScreenFeedback);
                         if (frameBuffer.reflection.bDenoiserEnabled) {
                             SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, 0u, 1.0f, frameBuffer.reflection, REFLECTION_NO_BRDF_CLAMP);
                         }
@@ -692,7 +692,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
 
                         const bool bReflectionCheckerboardPacked = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX && frameBuffer.reflection.bDenoiserEnabled;
-                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, restir.brdfRoughnessMax);
+                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, restir.brdfRoughnessMax, frameBuffer.bFreezeScreenFeedback);
                         const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                         if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {

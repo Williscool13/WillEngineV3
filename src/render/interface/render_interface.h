@@ -843,8 +843,6 @@ struct ReflectionProbeConfiguration
     bool bEnabled{true};
     float intensity{1.0f};
     bool bDebugDraw{false};
-    int32_t settleFrames{240};
-    int32_t bakeCaptureSize{1024};
     float bakedDiffuseClampK{4.0f};
 };
 
@@ -1018,6 +1016,9 @@ struct FrameBuffer
     float worldCacheDebugExposure = 1.0f;
     int32_t worldCacheDebugBucket = -1;
     bool bDDGIBounceOnly = false;
+    bool bFreezeGIField = false;
+    bool bFreezeScreenFeedback = false;
+    bool bFreezeGatherRay = false;
     float ddgiProbeDebugExposure = 1.0f;
     int32_t ddgiProbeDebugCascade = -1;
     bool bDDGIHideInactiveProbes = false;

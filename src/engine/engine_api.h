@@ -458,6 +458,11 @@ struct DebugState
     float worldCacheDebugExposure{1.0f};
     int32_t worldCacheDebugBucket{-1};
     bool bDDGIBounceOnly{false};
+    /** Master GI freeze; the bFreeze* components below choose which stages halt while it is on. */
+    bool bGIFreeze{false};
+    bool bFreezeGIField{true};
+    bool bFreezeScreenFeedback{true};
+    bool bFreezeGatherRay{false};
     float ddgiProbeDebugExposure{1.0f};
     int32_t ddgiProbeDebugCascade{-1};
     bool bDDGIHideInactiveProbes{false};

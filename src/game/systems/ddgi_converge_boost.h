@@ -10,8 +10,8 @@
 
 namespace Game
 {
-constexpr int32_t DDGI_CONVERGE_SUPER_BOOST_FRAMES = 60;
-constexpr int32_t DDGI_CONVERGE_BOOST_FRAMES = 120;
+constexpr int32_t DDGI_CONVERGE_SUPER_BOOST_FRAMES = 100;
+constexpr int32_t DDGI_CONVERGE_BOOST_FRAMES = 200;
 
 inline void DDGIConvergeBoostTrigger(Engine::DDGIConvergeBoost& boost, const Core::DDGIParams& ddgi)
 {

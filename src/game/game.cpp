@@ -363,6 +363,9 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->worldCacheDebugExposure = state->debug.worldCacheDebugExposure;
     frameBuffer->worldCacheDebugBucket = state->debug.worldCacheDebugBucket;
     frameBuffer->bDDGIBounceOnly = state->debug.bDDGIBounceOnly;
+    frameBuffer->bFreezeGIField = state->debug.bGIFreeze && state->debug.bFreezeGIField;
+    frameBuffer->bFreezeScreenFeedback = state->debug.bGIFreeze && state->debug.bFreezeScreenFeedback;
+    frameBuffer->bFreezeGatherRay = state->debug.bGIFreeze && state->debug.bFreezeGatherRay;
     frameBuffer->ddgiProbeDebugExposure = state->debug.ddgiProbeDebugExposure;
     frameBuffer->ddgiProbeDebugCascade = state->debug.ddgiProbeDebugCascade;
     frameBuffer->bDDGIHideInactiveProbes = state->debug.bDDGIHideInactiveProbes;

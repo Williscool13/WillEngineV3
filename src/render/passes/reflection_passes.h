@@ -60,7 +60,8 @@ void SetupReflectionShadePass(RenderGraph& graph,
                               const Core::RTReflectionConfiguration& reflectionConfig,
                               bool bDDGIApply,
                               bool bCheckerboardPacked,
-                              float brdfRoughnessMax);
+                              float brdfRoughnessMax,
+                              bool bDisableScreenTier);
 } // Render
 
 #endif //WILL_ENGINE_REFLECTION_PASSES_H

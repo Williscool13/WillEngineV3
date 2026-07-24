@@ -39,7 +39,7 @@ struct DDGICascades
  * @param previous cascades used last frame, for frozen windows on skipped cascades
  * @param frameNumber
  */
-DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const DDGICascades& previous, uint64_t frameNumber);
+DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const DDGICascades& previous, uint64_t frameNumber, bool bFreeze);
 
 /**
  * Probe trace + irradiance/visibility blend, run per updated cascade; also uploads DDGI_CASCADES_BUFFER/_PREV_BUFFER. No-op without the TLAS and geometry/material/light buffers.

@@ -53,10 +53,6 @@ struct ProbeBakeSystem
     bool bViewOverrideActive{false};
     /** Latched true once all 6 faces are delivered; buffers stay resident for the assembly checkpoint. */
     bool bFacesReady{false};
-    /** Editor request for a one-off single-face capture dump; serviced by the tick when no bake is active. */
-    bool bManualDumpRequested{false};
-    /** True once the one-off capture request has been issued to the renderer and is awaiting delivery. */
-    bool bManualDumpAwaiting{false};
 
     entt::entity probeEntity{entt::null};
     glm::vec3 capturePosition{0.0f};
@@ -84,6 +80,7 @@ struct ProbeBakeSystem
     Core::ViewData overrideView{};
     Core::ReflectionProbeConfiguration stashedProbeConfig{};
     Engine::InputContext stashedInputContext{};
+    bool stashedGIFreeze{false};
     Core::HeapArray<uint16_t> faceBuffers[6]{};
 
     /** Probe entities awaiting a bake; drained one at a time from the Idle phase. */

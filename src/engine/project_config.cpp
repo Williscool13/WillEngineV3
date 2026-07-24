@@ -90,6 +90,22 @@ ProjectConfig ReadProjectConfig()
         config.gameCameraAspect = Vec2(j["gameCameraAspect"][0].get<float>(), j["gameCameraAspect"][1].get<float>());
     }
 
+    if (j.contains("probeBake") && j["probeBake"].is_object()) {
+        const nlohmann::json& b = j["probeBake"];
+        if (b.contains("settleFrames") && b["settleFrames"].is_number_integer()) {
+            config.probeBake.settleFrames = b["settleFrames"].get<int32_t>();
+        }
+        if (b.contains("captureSize") && b["captureSize"].is_number_integer()) {
+            config.probeBake.captureSize = b["captureSize"].get<int32_t>();
+        }
+        if (b.contains("bAutoConverge") && b["bAutoConverge"].is_boolean()) {
+            config.probeBake.bAutoConverge = b["bAutoConverge"].get<bool>();
+        }
+        if (b.contains("bAutoFreeze") && b["bAutoFreeze"].is_boolean()) {
+            config.probeBake.bAutoFreeze = b["bAutoFreeze"].get<bool>();
+        }
+    }
+
     if (j.contains("cameraPresets") && j["cameraPresets"].is_array()) {
         const nlohmann::json& presets = j["cameraPresets"];
         const size_t count = presets.size() < MAX_CAMERA_PRESETS ? presets.size() : MAX_CAMERA_PRESETS;
@@ -137,6 +153,13 @@ bool WriteProjectConfig(const ProjectConfig& config)
     j["editorCameraNearPlane"] = config.editorCameraNearPlane;
     j["gameCameraLockAspect"] = config.gameCameraLockAspect;
     j["gameCameraAspect"] = {config.gameCameraAspect.x, config.gameCameraAspect.y};
+
+    j["probeBake"] = {
+        {"settleFrames", config.probeBake.settleFrames},
+        {"captureSize", config.probeBake.captureSize},
+        {"bAutoConverge", config.probeBake.bAutoConverge},
+        {"bAutoFreeze", config.probeBake.bAutoFreeze},
+    };
 
     nlohmann::json presets = nlohmann::json::array();
     for (const CameraPreset& p : config.cameraPresets) {

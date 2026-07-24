@@ -8,7 +8,6 @@
     "bFinalGatherTemporal": true,
     "bGatherSkipRay": false,
     "bInfiniteBounce": true,
-    "bOuterLocalNEE": false,
     "bRelocation": true,
     "bScaleBiasPerCascade": true,
     "bounceIntensity": 0.75,
@@ -29,7 +28,9 @@
     "probeSpacing": 1.5,
     "raysPerProbe": 80,
     "viewBias": 0.24749164283275604,
-    "visibilityHysteresis": 0.9700000286102295
+    "visibilityHysteresis": 0.9700000286102295,
+    "worldCacheAccumCap": 16,
+    "worldCacheShadeInterval": 8
   },
   "gtao": {
     "bEnabled": true,
@@ -37,7 +38,7 @@
     "denoisePasses": 2.0,
     "depthMipSamplingOffset": 3.299999952316284,
     "effectFalloffRange": 0.6150000095367432,
-    "effectRadius": 0.5,
+    "effectRadius": 0.15000000596046448,
     "finalValuePower": 2.200000047683716,
     "radiusMultiplier": 1.4570000171661377,
     "sampleDistributionPower": 2.0,
@@ -67,9 +68,8 @@
   "reflectionProbe": {
     "bDebugDraw": false,
     "bEnabled": true,
-    "bakeCaptureSize": 1024,
-    "intensity": 1.0,
-    "settleFrames": 240
+    "bakedDiffuseClampK": 4.0,
+    "intensity": 1.0
   },
   "restir": {
     "adaptiveSpatialBoost": 3.0,

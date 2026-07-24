@@ -46,9 +46,10 @@ struct WorldCacheFrame
  * @param pipelineManager
  * @param frameNumber
  * @param cameraPos current camera world position; carry-forward drops cells whose distance-implied LOD no longer matches their stored level
+ * @param bFreeze suspends carry-forward eviction (LRU + LOD) and pins cell ages, so a frozen GI field keeps its cache intact indefinitely
  * @return
  */
-WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos);
+WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos, bool bFreeze);
 
 /**
  * Shades the frame's armed cells via budgeted indirect dispatch over the compact active list.

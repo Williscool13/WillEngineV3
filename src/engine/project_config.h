@@ -20,6 +20,15 @@ struct CameraPreset
     Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
 };
 
+/** Probe bake pipeline settings; bake-owned, deliberately outside every lighting profile. */
+struct ProbeBakeSettings
+{
+    int32_t settleFrames{240};
+    int32_t captureSize{1024};
+    bool bAutoConverge{true};
+    bool bAutoFreeze{true};
+};
+
 struct ProjectConfig
 {
     Core::InlineString<256> defaultScene{};
@@ -53,6 +62,8 @@ struct ProjectConfig
 
     /** Editor-camera transform bookmarks; shift-click a preset button to save, click to jump. */
     CameraPreset cameraPresets[MAX_CAMERA_PRESETS]{};
+
+    ProbeBakeSettings probeBake{};
 
     [[nodiscard]] float ResolvedGameAspect(float viewportAspect) const
     {

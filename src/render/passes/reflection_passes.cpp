@@ -68,7 +68,8 @@ void SetupReflectionShadePass(RenderGraph& graph,
                               const Core::RTReflectionConfiguration& reflectionConfig,
                               bool bDDGIApply,
                               bool bCheckerboardPacked,
-                              float brdfRoughnessMax)
+                              float brdfRoughnessMax,
+                              bool bDisableScreenTier)
 {
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
     if (reflectionRoughnessMax < 0.0f || !graph.HasBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER)) {
@@ -78,7 +79,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
-    const bool bScreenSpace = reflectionConfig.bScreenSpaceLighting && graph.HasTexture(SID("lit_color_history")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
+    const bool bScreenSpace = reflectionConfig.bScreenSpaceLighting && !bDisableScreenTier && graph.HasTexture(SID("lit_color_history")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
 
     graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);

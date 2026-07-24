@@ -12,7 +12,7 @@
 
 namespace Render
 {
-WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos)
+WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos, bool bFreeze)
 {
     graph.CreateBuffer(WORLD_CACHE_ENTRIES, WORLD_CACHE_ENTRIES_BYTES, false);
     graph.CreateBuffer(WORLD_CACHE_KEYS, WORLD_CACHE_KEYS_BYTES, false);
@@ -50,7 +50,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
         carryPass.ReadWriteBuffer(WORLD_CACHE_KEYS);
         carryPass.ReadWriteBuffer(WORLD_CACHE_CELLS);
         carryPass.ReadWriteBuffer(WORLD_CACHE_STATS);
-        carryPass.Execute([pipelineManager, frameNumber, cameraPos](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        carryPass.Execute([pipelineManager, frameNumber, cameraPos, bFreeze](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("world_cache_carry_forward"));
             if (!pipelineEntry) {
                 return;
@@ -66,6 +66,7 @@ WorldCacheFrame SetupWorldCacheBegin(RenderGraph& graph, PipelineManager* pipeli
                 .nextCells = graph.GetBufferAddress(WORLD_CACHE_CELLS),
                 .cameraPos = glm::vec4(cameraPos, 0.0f),
                 .frameIndex = static_cast<uint32_t>(frameNumber),
+                .bFreeze = bFreeze ? 1u : 0u,
                 .stats = graph.GetBufferAddress(WORLD_CACHE_STATS),
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

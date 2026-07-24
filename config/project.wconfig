@@ -158,5 +158,11 @@
   "gameCameraFovDegrees": 70.0,
   "gameCameraLockAspect": false,
   "gameCameraNearPlane": 0.10000000149011612,
-  "resolutionScale": 1.0
+  "probeBake": {
+    "bAutoConverge": true,
+    "bAutoFreeze": true,
+    "captureSize": 1024,
+    "settleFrames": 240
+  },
+  "resolutionScale": 0.75
 }

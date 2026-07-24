@@ -710,6 +710,77 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
     ImGui::PopID();
 }
 
+static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (ImGui::Button("Bake All Probes##probebakeall")) {
+        ProbeBakeGetOrCreate(state).EnqueueAllProbes(state);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Bake All (2-Pass Interbounce)##probebakeall2")) {
+        ProbeBakeGetOrCreate(state).EnqueueAllProbesInterbounce(state);
+    }
+
+    ProbeBakeSystem* bake = ProbeBakeFind(state);
+    const bool bakeActive = bake && bake->bBakeActive;
+    if (bake && (bakeActive || !bake->bakeQueue.IsEmpty() || bake->bInterbounceBatch)) {
+        if (bake->bInterbounceBatch) {
+            ImGui::Text("Pass %d/2", bake->bakePass);
+        }
+        if (bake->phase == ProbeBakeSystem::Phase::AwaitAssembles) {
+            ImGui::Text("Waiting for probe assembles (%u remaining)", static_cast<uint32_t>(bake->awaitedAssembles.Size()));
+        }
+        if (bake->bakeBatchTotal > 0) {
+            const uint32_t remaining = static_cast<uint32_t>(bake->bakeQueue.Size());
+            const uint32_t done = bake->bakeBatchTotal > remaining ? bake->bakeBatchTotal - remaining : 0;
+            ImGui::Text("Baking probe %u of %u", done, bake->bakeBatchTotal);
+        }
+        if (bakeActive) {
+            ImGui::Text("Face %d/6, settle frame %d/%d", bake->currentFace + 1, bake->settleCounter, bake->settleFrames);
+        }
+        if (ImGui::Button("Cancel Bake##probebakecancel")) {
+            bake->Cancel(ctx, state);
+        }
+    }
+
+    ImGui::SeparatorText("Settings");
+    Engine::ProbeBakeSettings& probeBake = state->projectConfig.probeBake;
+    bool bakeChanged = false;
+    if (Widgets::SliderInt("Settle Frames##bake", &probeBake.settleFrames, 1, 1024, {.tooltip = "Rendered frames held on each cube face before its capture snapshot; covers static-camera TAA convergence plus the corner-leak disocclusion transient. Default 240.", .reset = true, .resetTo = 240.0})) { bakeChanged = true; }
+    if (Widgets::SliderInt("Capture Size##bake", &probeBake.captureSize, 256, 1280, {.tooltip = "Per-face capture resolution in pixels before downsample to the probe resolution; larger values cost bake time only. Default 1024.", .reset = true, .resetTo = 1024.0})) { bakeChanged = true; }
+    if (ImGui::Checkbox("Converge Before Capture##bake", &probeBake.bAutoConverge)) { bakeChanged = true; }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Run the DDGI converge boost once per probe; the first face's capture waits for it to finish on top of the settle.");
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Freeze During Capture##bake", &probeBake.bAutoFreeze)) { bakeChanged = true; }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Engage GI Freeze once the first face has converged and settled, so all 6 faces capture the identical field. Freeze scope follows the checkboxes below. Restored when the probe finishes.");
+    }
+    if (bakeChanged) {
+        Engine::WriteProjectConfig(state->projectConfig);
+    }
+
+    ImGui::Checkbox("Freeze##bake", &state->debug.bGIFreeze);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Manually halts the checked GI stages and carries their state unchanged; sampling keeps reading the frozen data. Converge Now unfreezes. The bake engages this automatically per probe when Freeze During Capture is on.");
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Probes & Cache##freeze", &state->debug.bFreezeGIField);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Stops probe trace/blend/relocation and world-cache shading; carry-forward suspends eviction and pins cell ages so unfreezing does not mass-evict the table.");
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Screen Feedback##freeze", &state->debug.bFreezeScreenFeedback);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Disables the gather screen tier and reflection screen-space hit lighting. Lit history is view-dependent and keeps evolving, which breaks frozen determinism and face-seams probe bakes.");
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Gather Ray##freeze", &state->debug.bFreezeGatherRay);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Forces the gather onto its skip-ray path (world cache at the pixel surface, probes as fallback) while frozen, removing the 1spp cosine ray entirely.");
+    }
+}
+
 void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ImGui::Begin("Lighting")) {
@@ -728,6 +799,12 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             ImGui::PopID();
         };
+
+        if (ImGui::CollapsingHeader("Probe Bake")) {
+            DrawProbeBakeSection(ctx, state);
+        }
+
+        ImGui::Separator();
 
         if (Widgets::SaveBar("lighting", &state->projectConfig.bAutoSaveLighting)) {
             SaveLightingTab(state);
@@ -904,44 +981,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Enable Reflection Probes", &reflectionProbe.bEnabled)) { changed = true; }
             if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
             if (ImGui::Checkbox("Debug Draw Probe Volumes", &reflectionProbe.bDebugDraw)) { changed = true; }
-            if (Widgets::SliderInt("Bake Settle Frames##reflectionprobe", &reflectionProbe.settleFrames, 1, 1024, {.tooltip = "Rendered frames held on each cube face before its capture snapshot; covers static-camera TAA convergence plus the corner-leak disocclusion transient. Default 240.", .reset = true, .resetTo = 240.0})) { changed = true; }
-            if (Widgets::SliderInt("Bake Capture Size##reflectionprobe", &reflectionProbe.bakeCaptureSize, 256, 1280, {.tooltip = "Per-face capture resolution in pixels before downsample to the probe resolution; larger values cost bake time only. Default 1024.", .reset = true, .resetTo = 1024.0})) { changed = true; }
             if (Widgets::SliderFloat("Baked Diffuse Clamp K##reflectionprobe", &reflectionProbe.bakedDiffuseClampK, 1.0f, 16.0f, {.format = "%.1f", .tooltip = "Luminance-ratio ceiling for the world-cache diffuse tier inside a probe volume: cache is scaled down when it exceeds K times the baked probe irradiance. Default 4.0.", .reset = true, .resetTo = 4.0})) { changed = true; }
-
-            if (ImGui::Button("Capture Probe Face (temp)##probecapturetest")) {
-                ProbeBakeGetOrCreate(state).bManualDumpRequested = true;
-            }
-
-            if (ImGui::Button("Bake All Probes In Scene##probebakeall")) {
-                ProbeBakeGetOrCreate(state).EnqueueAllProbes(state);
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Bake All (2-Pass Interbounce)##probebakeall2")) {
-                ProbeBakeGetOrCreate(state).EnqueueAllProbesInterbounce(state);
-            }
-
-            ProbeBakeSystem* bake = ProbeBakeFind(state);
-            const bool bakeActive = bake && bake->bBakeActive;
-
-            if (bake && (bakeActive || !bake->bakeQueue.IsEmpty() || bake->bInterbounceBatch)) {
-                if (bake->bInterbounceBatch) {
-                    ImGui::Text("Pass %d/2", bake->bakePass);
-                }
-                if (bake->phase == ProbeBakeSystem::Phase::AwaitAssembles) {
-                    ImGui::Text("Waiting for probe assembles (%u remaining)", static_cast<uint32_t>(bake->awaitedAssembles.Size()));
-                }
-                if (bake->bakeBatchTotal > 0) {
-                    const uint32_t remaining = static_cast<uint32_t>(bake->bakeQueue.Size());
-                    const uint32_t done = bake->bakeBatchTotal > remaining ? bake->bakeBatchTotal - remaining : 0;
-                    ImGui::Text("Baking probe %u of %u", done, bake->bakeBatchTotal);
-                }
-                if (bakeActive) {
-                    ImGui::Text("Face %d/6, settle frame %d/%d", bake->currentFace + 1, bake->settleCounter, bake->settleFrames);
-                }
-                if (ImGui::Button("Cancel Bake##probebakecancel")) {
-                    bake->Cancel(ctx, state);
-                }
-            }
 
             ImGui::Spacing();
             if (ImGui::Button("Reset Reflection Probes")) {
@@ -1026,6 +1066,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             ImGui::SeparatorText("Blend");
             if (ImGui::Button("Converge Now##ddgi")) {
+                state->debug.bGIFreeze = false;
                 DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, ddgi);
             }
             if (ImGui::IsItemHovered()) {

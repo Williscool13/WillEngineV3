@@ -56,14 +56,8 @@ static bool WriteProfileJson(const char* subdir, const char* name, const nlohman
     return Platform::WriteFile(ProfilePath(subdir, name), std::string_view(dump));
 }
 
-uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames)
+static bool ApplyLightingBundle(const nlohmann::json& j, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::RTReflectionConfiguration& reflection, Core::ReflectionProbeConfiguration& reflectionProbe, Core::GTAOConfiguration& gtao, Core::HeroShadowConfiguration& heroShadow, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity)
 {
-    return ListProfiles("lighting", outNames, maxNames);
-}
-
-bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::RTReflectionConfiguration& reflection, Core::ReflectionProbeConfiguration& reflectionProbe, Core::GTAOConfiguration& gtao, Core::HeroShadowConfiguration& heroShadow, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity)
-{
-    const nlohmann::json j = ReadProfileJson("lighting", name);
     if (!j.is_object()) {
         return false;
     }
@@ -101,7 +95,7 @@ bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Cor
     return true;
 }
 
-bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::RTReflectionConfiguration& reflection, const Core::ReflectionProbeConfiguration& reflectionProbe, const Core::GTAOConfiguration& gtao, const Core::HeroShadowConfiguration& heroShadow, StringID shadingOverride, StringID lightingOverride, float iblIntensity)
+static nlohmann::json BuildLightingBundle(Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::RTReflectionConfiguration& reflection, const Core::ReflectionProbeConfiguration& reflectionProbe, const Core::GTAOConfiguration& gtao, const Core::HeroShadowConfiguration& heroShadow, StringID shadingOverride, StringID lightingOverride, float iblIntensity)
 {
     nlohmann::json j;
     j["lightingMode"] = static_cast<uint32_t>(lightingMode);
@@ -114,7 +108,22 @@ bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, cons
     j["iblIntensity"] = iblIntensity;
     if (shadingOverride) { j["shadingShaderOverride"] = shadingOverride.id; }
     if (lightingOverride) { j["lightingShaderOverride"] = lightingOverride.id; }
-    return WriteProfileJson("lighting", name, j);
+    return j;
+}
+
+uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames)
+{
+    return ListProfiles("lighting", outNames, maxNames);
+}
+
+bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::RTReflectionConfiguration& reflection, Core::ReflectionProbeConfiguration& reflectionProbe, Core::GTAOConfiguration& gtao, Core::HeroShadowConfiguration& heroShadow, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity)
+{
+    return ApplyLightingBundle(ReadProfileJson("lighting", name), lightingMode, restir, ddgi, reflection, reflectionProbe, gtao, heroShadow, shadingOverride, lightingOverride, iblIntensity);
+}
+
+bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::RTReflectionConfiguration& reflection, const Core::ReflectionProbeConfiguration& reflectionProbe, const Core::GTAOConfiguration& gtao, const Core::HeroShadowConfiguration& heroShadow, StringID shadingOverride, StringID lightingOverride, float iblIntensity)
+{
+    return WriteProfileJson("lighting", name, BuildLightingBundle(lightingMode, restir, ddgi, reflection, reflectionProbe, gtao, heroShadow, shadingOverride, lightingOverride, iblIntensity));
 }
 
 bool DeleteLightingProfile(const char* name)
