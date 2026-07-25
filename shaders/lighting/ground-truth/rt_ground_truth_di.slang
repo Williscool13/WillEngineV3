@@ -74,6 +74,9 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.xyz, metallic);
     float nDotV = max(dot(N, V), 0.0);
 
+    float footprint = RayOriginPixelFootprint(ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd), scene.ndcToViewMulXPixelSize, nDotV);
+    float3 shadowOrigin = OffsetGBufferRayOrigin(worldPos, N, footprint, 1.0);
+
     int lightCount = pc.lightData->lightCount;
 
     uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
@@ -139,14 +142,13 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
 
             // Distance/TMax measured from the offset origin so the origin's advance toward the light
             // (cosShade * offset) does not eat the far-end margin and false-hit the light's own mesh.
-            float3 rayOrigin = worldPos + N * 0.05;
-            float3 toLightShadow = lightSamplePos - rayOrigin;
+            float3 toLightShadow = lightSamplePos - shadowOrigin;
             float shadowDist = length(toLightShadow);
             RayDesc shadowRay;
-            shadowRay.Origin = rayOrigin;
+            shadowRay.Origin = shadowOrigin;
             shadowRay.Direction = toLightShadow / shadowDist;
-            shadowRay.TMin = 0.001;
-            shadowRay.TMax = shadowDist - 0.05;
+            shadowRay.TMin = 0.0;
+            shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
             RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
             q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
@@ -190,9 +192,9 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
                 RayDesc sunRay;
-                sunRay.Origin = worldPos + N * 0.05;
+                sunRay.Origin = shadowOrigin;
                 sunRay.Direction = L;
-                sunRay.TMin = 0.001;
+                sunRay.TMin = 0.0;
                 sunRay.TMax = 10000.0;
 
                 RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;

@@ -184,12 +184,14 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
             uint firstTier = GI_GATHER_TIER_BACKFACE;
             float lastHitT = 0.0;
             uint lastTier = GI_GATHER_TIER_BACKFACE;
+            float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(normalize(viewNormal), normalize(-viewPosition))));
+            float3 rayOrigin = OffsetGBufferRayOrigin(worldPosition, worldN, footprint, 2.0);
             for (uint sampleIndex = 0u; sampleIndex < rayCount; ++sampleIndex) {
                 float2 xi = SpatioTemporalBlueNoise2D(gatherPixel, pc.frameIndex, sampleIndex);
                 float3 direction = SampleCosineHemisphere(worldN, xi.x, xi.y);
 
                 RayDesc ray;
-                ray.Origin = worldPosition + worldN * 0.05;
+                ray.Origin = rayOrigin;
                 ray.Direction = direction;
                 ray.TMin = 0.0;
                 ray.TMax = 10000.0;

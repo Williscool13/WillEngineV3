@@ -104,9 +104,9 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
         float NoL = dot(N, L);
         if (NoL > 0.0) {
             RayDesc shadowRay;
-            shadowRay.Origin = worldPosition + N * 0.05;
+            shadowRay.Origin = OffsetHitRayOrigin(worldPosition, N);
             shadowRay.Direction = L;
-            shadowRay.TMin = 0.001;
+            shadowRay.TMin = 0.0;
             shadowRay.TMax = 10000.0;
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
@@ -151,15 +151,15 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             : max(dot(-light.normal.xyz, L), 0.0);
         float atten = LightRangeCull(lightDist, light.range);
         if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
-            float3 rayOrigin = worldPosition + N * 0.05;
+            float3 rayOrigin = OffsetHitRayOrigin(worldPosition, N);
             float3 toLightShadow = lightSamplePos - rayOrigin;
             float shadowDist = length(toLightShadow);
 
             RayDesc shadowRay;
             shadowRay.Origin = rayOrigin;
             shadowRay.Direction = toLightShadow / shadowDist;
-            shadowRay.TMin = 0.001;
-            shadowRay.TMax = shadowDist - 0.05;
+            shadowRay.TMin = 0.0;
+            shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
             shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
@@ -218,6 +218,9 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.xyz, metallic);
     float nDotV = max(dot(N, V), 0.0);
 
+    float footprint = RayOriginPixelFootprint(ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd), scene.ndcToViewMulXPixelSize, nDotV);
+    float3 primaryOrigin = OffsetGBufferRayOrigin(worldPos, N, footprint, 1.0);
+
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
     uint rng = SeedRng(pixel, pc.frameIndex, 0x61C3A9u);
 
@@ -257,14 +260,13 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
         float atten = LightRangeCull(lightDist, al.range);
 
         if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
-            float3 rayOrigin = worldPos + N * 0.05;
-            float3 toLightShadow = lightSamplePos - rayOrigin;
+            float3 toLightShadow = lightSamplePos - primaryOrigin;
             float shadowDist = length(toLightShadow);
             RayDesc shadowRay;
-            shadowRay.Origin = rayOrigin;
+            shadowRay.Origin = primaryOrigin;
             shadowRay.Direction = toLightShadow / shadowDist;
-            shadowRay.TMin = 0.001;
-            shadowRay.TMax = shadowDist - 0.05;
+            shadowRay.TMin = 0.0;
+            shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
             RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
             q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
@@ -298,9 +300,9 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             float cosShade = dot(N, L);
             if (cosShade > 0.0) {
                 RayDesc sunRay;
-                sunRay.Origin = worldPos + N * 0.05;
+                sunRay.Origin = primaryOrigin;
                 sunRay.Direction = L;
-                sunRay.TMin = 0.001;
+                sunRay.TMin = 0.0;
                 sunRay.TMax = 10000.0;
 
                 RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
@@ -331,7 +333,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     float vertexRoughness = roughness;
     float3 vertexNormal = N;
     float3 vertexView = V;
-    float3 origin = worldPos + N * 0.05;
+    float3 origin = primaryOrigin;
     for (uint bounce = 0; bounce < GT_GI_MAX_BOUNCES; ++bounce) {
         float u1 = HashStep(rng);
         float u2 = HashStep(rng);
@@ -344,7 +346,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
         RayDesc ray;
         ray.Origin = origin;
         ray.Direction = direction;
-        ray.TMin = 0.001;
+        ray.TMin = 0.0;
         ray.TMax = 10000.0;
 
         // Light proxies excluded. NEE owns all light emission.
@@ -377,7 +379,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
         vertexRoughness = surface.roughness;
         vertexNormal = surface.normal;
         vertexView = vNext;
-        origin = hitPosition + surface.normal * 0.05;
+        origin = OffsetHitRayOrigin(hitPosition, surface.normal);
     }
 
     float3 newSample = direct + sunLight + indirect + emissiveRGB;

@@ -77,9 +77,9 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         float NoL = dot(N, L);
         if (NoL > 0.0) {
             RayDesc shadowRay;
-            shadowRay.Origin = worldPosition + N * 0.05;
+            shadowRay.Origin = OffsetHitRayOrigin(worldPosition, N);
             shadowRay.Direction = L;
-            shadowRay.TMin = 0.001;
+            shadowRay.TMin = 0.0;
             shadowRay.TMax = 10000.0;
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
@@ -157,9 +157,9 @@ public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance inst
         float NoL = dot(N, L);
         if (NoL > 0.0) {
             RayDesc shadowRay;
-            shadowRay.Origin = worldPosition + N * 0.05;
+            shadowRay.Origin = OffsetHitRayOrigin(worldPosition, N);
             shadowRay.Direction = L;
-            shadowRay.TMin = 0.001;
+            shadowRay.TMin = 0.0;
             shadowRay.TMax = 10000.0;
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
@@ -263,9 +263,9 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
                 float u2 = HashStep(rng);
 
                 RayDesc shadowRay;
-                shadowRay.Origin = worldPosition + N * 0.05;
+                shadowRay.Origin = OffsetHitRayOrigin(worldPosition, N);
                 shadowRay.Direction = SampleSunConeDirection(L, sun.angularRadius, u1, u2);
-                shadowRay.TMin = 0.001;
+                shadowRay.TMin = 0.0;
                 shadowRay.TMax = 10000.0;
 
                 RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;

@@ -72,7 +72,7 @@ void ComputeSSRTrace(uniform SSRTracePushConstant pc, uint3 threadID : SV_Dispat
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
     float3 worldN = normalize(mul(float3x3(scene.invView), N));
     // reflection_shade reconstructs this same origin to turn hitT back into a world position
-    float3 rayOrigin = worldPos + worldN * 0.05;
+    float3 rayOrigin = ReflectionRayOrigin(worldPos, worldN, viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
     float3 rayDir = normalize(mul(float3x3(scene.invView), brdfL));
     refl.rayDir = rayDir;
 

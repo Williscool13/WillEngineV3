@@ -81,6 +81,30 @@ float3 ReconstructWorldPosition(float4x4 invViewProj, float2 uv, float depth) {
     return worldPos.xyz / worldPos.w;
 }
 
+// World size of one pixel at the shading point. 1/NoV (capped 10x) covers the plane-distance error grazing surfaces add.
+float RayOriginPixelFootprint(float viewZ, float2 ndcToViewMulXPixelSize, float NoV)
+{
+    return abs(viewZ) * max(abs(ndcToViewMulXPixelSize.x), abs(ndcToViewMulXPixelSize.y)) / max(NoV, 0.1);
+}
+
+// Lifts a gbuffer position off its surface. Footprint-scaled, which keeps the tangential slide the normal-mapped gbuffer normal introduces sub-pixel.
+float3 OffsetGBufferRayOrigin(float3 worldPos, float3 worldN, float footprint, float scale)
+{
+    return worldPos + worldN * max(0.002, footprint * scale);
+}
+
+// Every reflection producer and reflection_shade must agree on this: hitT is measured from this origin and turned back into a world position there.
+float3 ReflectionRayOrigin(float3 worldPos, float3 worldN, float viewZ, float2 ndcToViewMulXPixelSize, float NoV)
+{
+    return OffsetGBufferRayOrigin(worldPos, worldN, RayOriginPixelFootprint(viewZ, ndcToViewMulXPixelSize, NoV), 2.0);
+}
+
+// Secondary hits carry no pixel footprint; the offset only has to clear the interpolated-normal/triangle mismatch and float32 ulp at this coordinate magnitude.
+float3 OffsetHitRayOrigin(float3 worldPos, float3 worldN)
+{
+    return worldPos + worldN * max(0.002, length(worldPos) * 1e-5);
+}
+
 float3 RGBToYCoCg(float3 rgb) {
     float Y  = dot(rgb, float3( 0.25,  0.5,   0.25));
     float Co = dot(rgb, float3( 0.5,   0.0,  -0.5));

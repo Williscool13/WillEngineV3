@@ -116,8 +116,8 @@ static GTFullSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance in
     return surface;
 }
 
-/** Direct radiance at a vertex: cone-sampled sun + one uniformly picked analytic light, both shadow-ray tested, full (diffuse + specular) BRDF. */
-static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, inout uint rng)
+/** Direct radiance at a vertex: cone-sampled sun + one uniformly picked analytic light, both shadow-ray tested, full (diffuse + specular) BRDF. rayOrigin is P already lifted off its surface; the caller owns that offset because a gbuffer vertex and a bounce vertex need different scales. */
+static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float3 rayOrigin, float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, inout uint rng)
 {
     float3 radiance = float3(0.0);
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
@@ -154,14 +154,13 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
             : max(dot(-al.normal.xyz, L), 0.0);
         float atten = LightRangeCull(lightDist, al.range);
         if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
-            float3 rayOrigin = P + N * 0.05;
             float3 toLightShadow = lightSamplePos - rayOrigin;
             float shadowDist = length(toLightShadow);
             RayDesc shadowRay;
             shadowRay.Origin = rayOrigin;
             shadowRay.Direction = toLightShadow / shadowDist;
-            shadowRay.TMin = 0.001;
-            shadowRay.TMax = shadowDist - 0.05;
+            shadowRay.TMin = 0.0;
+            shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
             shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
@@ -190,9 +189,9 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
         float cosShade = dot(N, L);
         if (cosShade > 0.0) {
             RayDesc sunRay;
-            sunRay.Origin = P + N * 0.05;
+            sunRay.Origin = rayOrigin;
             sunRay.Direction = L;
-            sunRay.TMin = 0.001;
+            sunRay.TMin = 0.0;
             sunRay.TMax = 10000.0;
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
@@ -324,16 +323,19 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
     float3 V = normalize(cameraPos - worldPos);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.xyz, metallic);
 
+    float footprint = RayOriginPixelFootprint(ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd), scene.ndcToViewMulXPixelSize, max(dot(N, V), 0.0));
+    float3 primaryOrigin = OffsetGBufferRayOrigin(worldPos, N, footprint, 1.0);
+
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
     uint rng = SeedRng(pixel, pc.frameIndex, 0x7A1B3Du);
 
     // Direct at the primary surface (full BRDF NEE).
-    float3 direct = EvalDirectLighting(pc, worldPos, N, V, albedo.xyz, metallic, roughness, F0, rng);
+    float3 direct = EvalDirectLighting(pc, worldPos, primaryOrigin, N, V, albedo.xyz, metallic, roughness, F0, rng);
 
     // Indirect: full BRDF path carrying both diffuse and specular lobes. NEE at each bounce, skybox on miss.
     float3 indirect = float3(0.0);
     float3 throughput = float3(1.0);
-    float3 P = worldPos;
+    float3 rayOrigin = primaryOrigin;
     float3 Nv = N;
     float3 Vv = V;
     float3 curAlbedo = albedo.xyz;
@@ -349,9 +351,9 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
         throughput *= bs.weight;
 
         RayDesc ray;
-        ray.Origin = P + Nv * 0.05;
+        ray.Origin = rayOrigin;
         ray.Direction = bs.direction;
-        ray.TMin = 0.001;
+        ray.TMin = 0.0;
         ray.TMax = 10000.0;
 
         // Light proxies excluded. NEE owns all analytic light emission.
@@ -376,10 +378,12 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
         float3 shadingN = dot(surface.normal, -bs.direction) < 0.0 ? -surface.normal : surface.normal;
         float3 Vnext = -bs.direction;
 
-        indirect += throughput * surface.emissive;
-        indirect += throughput * EvalDirectLighting(pc, hitPosition, shadingN, Vnext, surface.albedo, surface.metallic, surface.roughness, surface.F0, rng);
+        float3 hitOrigin = OffsetHitRayOrigin(hitPosition, shadingN);
 
-        P = hitPosition;
+        indirect += throughput * surface.emissive;
+        indirect += throughput * EvalDirectLighting(pc, hitPosition, hitOrigin, shadingN, Vnext, surface.albedo, surface.metallic, surface.roughness, surface.F0, rng);
+
+        rayOrigin = hitOrigin;
         Nv = shadingN;
         Vv = Vnext;
         curAlbedo = surface.albedo;

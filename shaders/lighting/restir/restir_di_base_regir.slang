@@ -55,7 +55,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
-    float worldTexelSize = RestirWorldTexelSize(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
+    float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
@@ -151,9 +151,9 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
 #if RESTIR_ENABLE_BRDF_RAY
                 float3 worldN = normalize(mul(float3x3(scene.invView), N));
                 RayDesc ray;
-                ray.Origin = worldPos + worldN * 0.05;
+                ray.Origin = ReflectionRayOrigin(worldPos, worldN, viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
                 ray.Direction = normalize(mul(float3x3(scene.invView), brdfL));
-                ray.TMin = 0.001;
+                ray.TMin = 0.0;
                 ray.TMax = 1e30;
                 RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
                 q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_ALL, ray);

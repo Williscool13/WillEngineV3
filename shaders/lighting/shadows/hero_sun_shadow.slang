@@ -83,13 +83,14 @@ void ComputeHeroSunShadow(uint3 dtid : SV_DispatchThreadID, uniform HeroSunShado
         return;
     }
 
-    float camDist = length(scene.cameraWorldPos.xyz - worldPos);
-    float originBias = max(0.002, camDist * 0.001);
+    float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
+    float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(viewNormal, normalize(-viewPosition))));
 
     // Origin matches rt_sun_shadow and RestirSunShadowVisible: no NoL division, which would slide the shadow sideways.
     RayDesc ray;
-    ray.Origin = worldPos + worldN * originBias;
-    ray.TMin = 0.001;
+    ray.Origin = OffsetGBufferRayOrigin(worldPos, worldN, footprint, 1.0);
+    ray.TMin = 0.0;
     ray.TMax = tExit;
 
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];

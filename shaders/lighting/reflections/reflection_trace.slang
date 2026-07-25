@@ -65,9 +65,9 @@ void ComputeReflectionTrace(uniform ReflectionTracePushConstant pc, uint3 thread
 
     RayDesc ray;
     // reflection_shade reconstructs this same origin to turn hitT back into a world position
-    ray.Origin = worldPos + worldN * 0.05;
+    ray.Origin = ReflectionRayOrigin(worldPos, worldN, viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
     ray.Direction = normalize(mul(float3x3(scene.invView), brdfL));
-    ray.TMin = 0.001;
+    ray.TMin = 0.0;
     ray.TMax = 1e30;
 
     RayQuery<RAY_FLAG_FORCE_OPAQUE> q;

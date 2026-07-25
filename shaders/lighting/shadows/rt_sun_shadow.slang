@@ -101,17 +101,19 @@ void ComputeRTSunShadow(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPus
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
     // Bias along the surface normal (not toward the camera, which slides the directional shadow sideways across the surface),
-    // scaled by camera distance so a coarsely-reconstructed far position clears itself without anchoring the shadow off-place.
-    float camDist = length(scene.cameraWorldPos.xyz - worldPos);
-    float originBias = max(0.002, camDist * 0.001);
+    // scaled by the pixel footprint so a coarsely-reconstructed far position clears itself without anchoring the shadow off-place.
+    float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
+    float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(viewNormal, normalize(-viewPosition))));
 
     RayDesc ray;
-    ray.Origin = worldPos + worldN * originBias;
+    ray.Origin = OffsetGBufferRayOrigin(worldPos, worldN, footprint, 1.0);
     ray.Direction = rayDir;
-    ray.TMin = 0.001;
+    ray.TMin = 0.0;
     ray.TMax = 10000.0;
 
-    RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+    // First hit, not closest: SIGMA only needs a blocker distance for the penumbra radius, and any-hit traversal ends as soon as the ray is occluded.
+    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     q.TraceRayInline(tlas, 0, INSTANCE_MASK_SUN_OCCLUDER, ray);
     q.Proceed();
 

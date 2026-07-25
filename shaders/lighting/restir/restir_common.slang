@@ -435,25 +435,16 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
     return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * colorMax * s.attenuation;
 }
 
-public float RestirWorldTexelSize(float viewZ, float2 ndcToViewMulXPixelSize, float NoV)
-{
-    // 1/NoV (capped 10x): grazing surfaces need more than a flat 1-texel bias to clear plane-distance error.
-    return abs(viewZ) * max(ndcToViewMulXPixelSize.x, ndcToViewMulXPixelSize.y) / max(NoV, 0.1);
-}
-
 public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize)
 {
-    // Normal-direction offset scaled by distance (slope-scaled by caller); no NoL division (that's for
-    // along-the-ray offsets, not this case, and it causes shadow erosion, which eats contact shadows up close).
-    float bias = max(0.002, worldTexelSize);
-    float3 rayOrigin = worldShadingPos + worldN * bias;
+    float3 rayOrigin = OffsetGBufferRayOrigin(worldShadingPos, worldN, worldTexelSize, 1.0);
     float3 toLight = worldyStar - rayOrigin;
     float lightDist = length(toLight);
     RayDesc shadowRay;
     shadowRay.Origin = rayOrigin;
     shadowRay.Direction = toLight / lightDist;
     shadowRay.TMin = 0.0;
-    shadowRay.TMax = max(0.0, lightDist - 0.05);
+    shadowRay.TMax = max(0.0, lightDist - max(0.002, lightDist * 0.005));
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
     q.Proceed();
@@ -517,9 +508,8 @@ public float EvalSunPHat(float3 LsunView, float3 V, float3 N, float3 albedo, flo
 
 public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize)
 {
-    // Matches the SIGMA sun trace: distance-scaled normal offset, no NoL division.
-    float bias = max(0.002, worldTexelSize);
-    float3 rayOrigin = worldShadingPos + worldN * bias;
+    // Matches the SIGMA sun trace: footprint-scaled normal offset, no NoL division.
+    float3 rayOrigin = OffsetGBufferRayOrigin(worldShadingPos, worldN, worldTexelSize, 1.0);
     RayDesc shadowRay;
     shadowRay.Origin = rayOrigin;
     shadowRay.Direction = worldLsun;
