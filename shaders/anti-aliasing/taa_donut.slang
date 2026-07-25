@@ -152,7 +152,7 @@ void ComputeDonutTaa(
     newID.x = int(floor(frac(linearID) * float(BUFFER_X)));
 
     int2 groupOutputBase = int2(i_groupIdx.xy) * int2(GROUP_X, GROUP_Y);
-    int2 groupBase = int2(OutputToInput(groupOutputBase) - 1.0);
+    int2 groupBase = int2(floor(OutputToInput(groupOutputBase) - 1.0));
 
     if (newID.y < RENAMED_GROUP_Y) {
         Preload(newID, groupBase + newID, inputMax);

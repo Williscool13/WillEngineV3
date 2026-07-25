@@ -125,8 +125,8 @@ void ComputeSSRTrace(uniform SSRTracePushConstant pc, uint3 threadID : SV_Dispat
         if (sampleDepth > 0.0) {
             float sceneLinearDepth = ScreenToViewSpaceDepth(sampleDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
             float rayLinearDepth = 1.0 / lerp(invWStart, invWEnd, travelled / segmentLength);
-            float diff = rayLinearDepth - sceneLinearDepth;
-            if (diff > 0.0 && diff < pc.ssrThickness) {
+
+            if (rayLinearDepth - sceneLinearDepth > 0.0) {
                 bHit = true;
                 hitTravelled = travelled;
                 break;
@@ -160,6 +160,20 @@ void ComputeSSRTrace(uniform SSRTracePushConstant pc, uint3 threadID : SV_Dispat
     float2 hitPixel = screenStart + segmentDir * hi;
     int2 hitCoord = clamp(int2(hitPixel), int2(0, 0), int2(pc.renderExtent) - int2(1, 1));
 
+    float refinedSceneDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(hitCoord, 0)).r;
+    if (refinedSceneDepth <= 0.0) {
+        refl.hitT = REFLECTION_HIT_T_SKY;
+        pc.reflectionDescriptors[pixelIdx] = refl;
+        return;
+    }
+    float refinedSceneLinear = ScreenToViewSpaceDepth(refinedSceneDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    float refinedRayLinear = 1.0 / lerp(invWStart, invWEnd, hi / segmentLength);
+    if (refinedRayLinear - refinedSceneLinear > pc.ssrThickness) {
+        refl.hitT = REFLECTION_HIT_T_SKY;
+        pc.reflectionDescriptors[pixelIdx] = refl;
+        return;
+    }
+
     float3 hitNormal = normalize(mul(float3x3(scene.invView), normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(hitCoord, 0)).r))));
     if (dot(hitNormal, rayDir) >= 0.0) {
         refl.hitT = REFLECTION_HIT_T_SKY;
@@ -177,8 +191,7 @@ void ComputeSSRTrace(uniform SSRTracePushConstant pc, uint3 threadID : SV_Dispat
         return;
     }
 
-    float hitRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(hitCoord, 0)).r;
-    float hitViewDepth = ScreenToViewSpaceDepth(hitRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    float hitViewDepth = refinedSceneLinear;
     float3 hitViewPos = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, hitUV, hitViewDepth);
     float3 hitWorld = mul(scene.invView, float4(hitViewPos, 1.0)).xyz;
 
