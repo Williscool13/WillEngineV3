@@ -11,13 +11,13 @@ import shader_functions;
 import packing_functions;
 import random_common;
 import hit_shading_common;
-import world_cache_hash_common;
-import world_cache_interop;
+import radiance_cache_hash_common;
+import radiance_cache_interop;
 import binning_common;
 import common_interop;
 
 // =============== Shader Summary ============
-// DDGI probe trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits key+read the world radiance cache (last frame's shaded value; NEE shading only as a fallback when the cache has no slot for the hit). Light-proxy hits return the light's emission (front face only), sign-tagged so relocation ignores them.
+// DDGI probe trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits key+read the radiance cache (last frame's shaded value; NEE shading only as a fallback when the cache has no slot for the hit). Light-proxy hits return the light's emission (front face only), sign-tagged so relocation ignores them.
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
@@ -81,45 +81,45 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
             bool bCacheRead = false;
             SceneData scene = pc.sceneData[0];
 
-            if (pc.worldCache != nullptr) {
+            if (pc.radianceCache != nullptr) {
                 float3 hitNormal = DecodeHitNormal(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
-                WorldCacheKey wcKey = WorldCacheComputeKey(hitWorldPos, hitNormal, scene.cameraWorldPos.xyz);
+                RadianceCacheKey wcKey = RadianceCacheComputeKey(hitWorldPos, hitNormal, scene.cameraWorldPos.xyz);
                 bool isNew;
-                uint wcSlot = WorldCacheHashInsert(pc.worldCache->entries, pc.worldCache->keys, pc.worldCache->stats, wcKey, isNew);
-                if (wcSlot != WORLD_CACHE_HASH_INVALID) {
-                    uint2 packedRadiance = pc.worldCache->cells[wcSlot].packedRadiance;
+                uint wcSlot = RadianceCacheHashInsert(pc.radianceCache->entries, pc.radianceCache->keys, pc.radianceCache->stats, wcKey, isNew);
+                if (wcSlot != RADIANCE_CACHE_HASH_INVALID) {
+                    uint2 packedRadiance = pc.radianceCache->cells[wcSlot].packedRadiance;
                     if (isNew) {
                         uint seedCount;
                         uint seedEmissive;
-                        packedRadiance = WorldCacheWarmStartRadiance(pc.worldCache->entries, pc.worldCache->cells, wcKey, seedCount, seedEmissive);
-                        pc.worldCache->cells[wcSlot].packedRadiance = packedRadiance;
-                        pc.worldCache->cells[wcSlot].packedEmissive = seedEmissive;
+                        packedRadiance = RadianceCacheWarmStartRadiance(pc.radianceCache->entries, pc.radianceCache->cells, wcKey, seedCount, seedEmissive);
+                        pc.radianceCache->cells[wcSlot].packedRadiance = packedRadiance;
+                        pc.radianceCache->cells[wcSlot].packedEmissive = seedEmissive;
                         // Inherit the warm-start source's accumulation count so a re-keyed shell keeps its smoothing instead of a 50/50 first shade.
-                        pc.worldCache->cells[wcSlot].changeStreak = seedCount << 16u;
+                        pc.radianceCache->cells[wcSlot].changeStreak = seedCount << 16u;
                     }
 
-                    if (WorldCacheRadianceShaded(packedRadiance)) {
-                        radiance = WorldCacheUnpackRadiance(packedRadiance) + UnpackEmissiveRGBE(pc.worldCache->cells[wcSlot].packedEmissive);
+                    if (RadianceCacheRadianceShaded(packedRadiance)) {
+                        radiance = RadianceCacheUnpackRadiance(packedRadiance) + UnpackEmissiveRGBE(pc.radianceCache->cells[wcSlot].packedEmissive);
                         bCacheRead = true;
                     }
-                    pc.worldCache->cells[wcSlot].lastTouched = pc.frameIndex;
+                    pc.radianceCache->cells[wcSlot].lastTouched = pc.frameIndex;
 
-                    uint shadeInterval = pc.worldCacheShadeInterval + (wcSlot & 3u);
-                    if (isNew || pc.frameIndex - pc.worldCache->cells[wcSlot].lastShaded >= shadeInterval) {
+                    uint shadeInterval = pc.radianceCacheShadeInterval + (wcSlot & 3u);
+                    if (isNew || pc.frameIndex - pc.radianceCache->cells[wcSlot].lastShaded >= shadeInterval) {
                         uint prevActive;
-                        InterlockedExchange(pc.worldCache->active[wcSlot], 1u, prevActive);
+                        InterlockedExchange(pc.radianceCache->active[wcSlot], 1u, prevActive);
                         if (prevActive == 0u) {
                             uint listIndex;
-                            InterlockedAdd(pc.worldCache->activeCount[0], 1u, listIndex);
-                            if (listIndex < WORLD_CACHE_SHADE_BUDGET) {
-                                pc.worldCache->activeList[listIndex] = wcSlot;
-                                pc.worldCache->cells[wcSlot].lastShaded = pc.frameIndex;
-                                WorldCacheHitDescriptor wcHit;
+                            InterlockedAdd(pc.radianceCache->activeCount[0], 1u, listIndex);
+                            if (listIndex < RADIANCE_CACHE_SHADE_BUDGET) {
+                                pc.radianceCache->activeList[listIndex] = wcSlot;
+                                pc.radianceCache->cells[wcSlot].lastShaded = pc.frameIndex;
+                                RadianceCacheHitDescriptor wcHit;
                                 wcHit.instanceID = q.CommittedInstanceID();
                                 wcHit.primitiveIndex = q.CommittedPrimitiveIndex();
                                 wcHit.packedBary = PackUnorm2x16(q.CommittedTriangleBarycentrics());
                                 wcHit.pad = 0u;
-                                pc.worldCache->descriptors[wcSlot] = wcHit;
+                                pc.radianceCache->descriptors[wcSlot] = wcHit;
                             }
                         }
                     }

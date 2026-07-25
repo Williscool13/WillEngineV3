@@ -29,7 +29,7 @@
 
 #include "render/shaders/restir_features_macros.h"
 #include "render/shaders/ddgi_interop.h"
-#include "render/shaders/world_cache_interop.h"
+#include "render/shaders/radiance_cache_interop.h"
 
 namespace Game
 {
@@ -276,30 +276,25 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ImGui::Begin("Debug View")) {
         ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
+        ImGui::SameLine();
         ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
 
-        ImGui::Separator();
-
-        ImGui::Text("Current Debug View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());
-        ImGui::SameLine();
-        if (ImGui::Button("Disable Debug View")) {
-            state->debug.resourceName.Clear();
-        }
-        ImGui::Checkbox("Enable V-Buffer Shade Dispatch Bucketing Visualization", &state->debug.bEnableShadeDispatchBucketingVisualization);
-        ImGui::Checkbox("Enable V-Buffer Lighting Bucketing Visualization", &state->debug.bEnableLightingBucketingVisualization);
+        ImGui::SeparatorText("Debug Visualizations");
 
         ImGui::Checkbox("Enable GPU Debug Draw", &state->debug.bEnableGPUDebug);
         ImGui::SameLine();
         ImGui::Checkbox("Lock##GPUDebug", &state->debug.bLockGPUDebug);
-        ImGui::SameLine();
-        ImGui::Checkbox("Test Pattern##GPUDebug", &state->debug.bGPUDebugTestPattern);
-        ImGui::SameLine();
-        ImGui::Checkbox("Cluster Grid##GPUDebug", &state->debug.bClusterGridDebug);
+
+        if (ImGui::Checkbox("Cluster Grid##GPUDebug", &state->debug.bClusterGridDebug) && state->debug.bClusterGridDebug) {
+            state->debug.bWorldGridDebug = false;
+        }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("FrustumBinning: screen-frustum-tied clusters. Only actually bound in ReSTIR mode (feeds the reflection pass); Default-mode shading uses World Grid instead.");
         }
-
-        ImGui::Checkbox("World Grid##GPUDebug", &state->debug.bWorldGridDebug);
+        ImGui::SameLine();
+        if (ImGui::Checkbox("World Grid##GPUDebug", &state->debug.bWorldGridDebug) && state->debug.bWorldGridDebug) {
+            state->debug.bClusterGridDebug = false;
+        }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("WorldGridBinning: camera-centered cascaded world-space grid used by Default-mode shading.");
         }
@@ -316,20 +311,32 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
-        ImGui::Checkbox("World Cache##GPUDebug", &state->debug.bWorldCacheDebug);
+        ImGui::Checkbox("Probe Preview##GPUDebug", &state->debug.bProbePreview);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("World radiance cache: one solid cube per occupied hash-table cell, colored by decoded radiance (black = occupied but not yet shaded). Cube size follows the cell's LOD; shrunk slightly so neighbors don't merge.");
+            ImGui::SetTooltip("Draws a sphere at every reflection probe's capture position, shaded from its cubemap (disabled probes included if their content is loaded). Specular samples the roughness-selected prefilter mip along the mirror reflection vector; Irradiance samples the diffuse mip along the normal.");
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Irradiance##ProbePreview", &state->debug.bProbePreviewIrradiance);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(200.0f);
+        ImGui::BeginDisabled(state->debug.bProbePreviewIrradiance);
+        Widgets::SliderFloat("Roughness##ProbePreview", &state->debug.probePreviewRoughness, 0.0f, 1.0f, {.format = "%.2f", .tooltip = "Roughness whose prefilter mip the preview sphere displays; matches the mapping shading uses.", .reset = true, .resetTo = 0.0});
+        ImGui::EndDisabled();
+
+        ImGui::Checkbox("Radiance Cache##GPUDebug", &state->debug.bRadianceCacheDebug);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Radiance cache: one solid cube per occupied hash-table cell, colored by decoded radiance (black = occupied but not yet shaded). Cube size follows the cell's LOD; shrunk slightly so neighbors don't merge.");
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(200.0f);
-        Widgets::SliderFloat("Cache Exposure##GPUDebug", &state->debug.worldCacheDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the world cache debug cubes so bright cells do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
+        Widgets::SliderFloat("Cache Exposure##GPUDebug", &state->debug.radianceCacheDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the radiance cache debug cubes so bright cells do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
         {
             const char* bucketLabels[] = {"All", "+X", "-X", "+Y", "-Y", "+Z", "-Z"};
-            int bucketChoice = state->debug.worldCacheDebugBucket + 1;
+            int bucketChoice = state->debug.radianceCacheDebugBucket + 1;
             ImGui::SameLine();
             ImGui::SetNextItemWidth(80.0f);
-            if (ImGui::Combo("Direction##WorldCacheDebug", &bucketChoice, bucketLabels, static_cast<int>(std::size(bucketLabels)))) {
-                state->debug.worldCacheDebugBucket = bucketChoice - 1;
+            if (ImGui::Combo("Direction##RadianceCacheDebug", &bucketChoice, bucketLabels, static_cast<int>(std::size(bucketLabels)))) {
+                state->debug.radianceCacheDebugBucket = bucketChoice - 1;
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("All draws every normal bucket; picking one draws only cells whose normal bucket matches (front/back separation only, not fine direction).");
@@ -399,30 +406,27 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 }
             }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Per-pixel GI leak deconstruction at the primary surface. Cache Cell ID = hash color of the resolved world-cache cell; the same color on both sides of a wall means interior and exterior share one cell. Cache Radiance = what gather tier 1 would return (magenta = found but not servable). DDGI Cheb Gate = weight fractions: red = occlusion test bypassed with a miss-inflated mean, green = bypassed with a plausible mean, blue = test ran. Mean vs Dist = dominant probe's (mean - distance)/spacing: red = bypassed, green = tested; blue overlays std/mean. Coverage = R coverage, G confidence, B serving cascade. Irradiance = raw DDGI injection at the pixel.");
+                ImGui::SetTooltip("Per-pixel GI leak deconstruction at the primary surface. Cache Cell ID = hash color of the resolved radiance-cache cell; the same color on both sides of a wall means interior and exterior share one cell. Cache Radiance = what gather tier 1 would return (magenta = found but not servable). DDGI Cheb Gate = weight fractions: red = occlusion test bypassed with a miss-inflated mean, green = bypassed with a plausible mean, blue = test ran. Mean vs Dist = dominant probe's (mean - distance)/spacing: red = bypassed, green = tested; blue overlays std/mean. Coverage = R coverage, G confidence, B serving cascade. Irradiance = raw DDGI injection at the pixel.");
             }
         }
 
-        ImGui::Separator();
+        ImGui::SeparatorText("Render Target Views");
 
-        ImGui::BeginDisabled(true);
-        ImGui::Checkbox("Enable Portals", &state->debug.bEnablePortal);
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Portals are not currently functional");
+        ImGui::Text("Current Debug View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());
+        ImGui::SameLine();
+        if (ImGui::Button("Disable Debug View")) {
+            state->debug.resourceName.Clear();
         }
-        ImGui::EndDisabled();
+        ImGui::Checkbox("V-Buffer Shade Dispatch Bucketing##DebugView", &state->debug.bEnableShadeDispatchBucketingVisualization);
+        ImGui::SameLine();
+        ImGui::Checkbox("V-Buffer Lighting Bucketing##DebugView", &state->debug.bEnableLightingBucketingVisualization);
 
-
-        ImGui::Separator();
-
-        if (ImGui::CollapsingHeader("Hotkeys", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::CollapsingHeader("Hotkeys")) {
             const char* keyNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
             for (size_t i = 0; i < std::size(DEBUG_HOTKEYS); ++i) {
                 ImGui::Text("%s: %s (%s)", keyNames[i], DEBUG_HOTKEYS[i].name, DEBUG_HOTKEYS[i].resourceName);
             }
         }
-
-        ImGui::Separator();
 
         auto setDebugTarget = [&](const char* name, DebugTransformationType _transform, Core::DebugViewAspect aspect) {
             if (state->debug.resourceName == name && state->debug.viewAspect == aspect && state->debug.transformationType == _transform) {
@@ -454,7 +458,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("History Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirHistoryLightIdx, Core::DebugViewAspect::Depth);
             if (ImGui::Button("History W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirHistoryW, Core::DebugViewAspect::Depth);
         }
-        if (ImGui::CollapsingHeader("RT Reflections Debug")) {
+        if (ImGui::CollapsingHeader("Reflections")) {
             if (ImGui::Button("Raw Traced (Demodulated)")) setDebugTarget("reflection_spec_noisy", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
         if (ImGui::CollapsingHeader("Reflection Probes")) {
@@ -574,16 +578,6 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("SMAA Edges")) setDebugTarget("smaa_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("SMAA Blend Weights")) setDebugTarget("smaa_blend", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("SMAA Output")) setDebugTarget("smaa_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-        }
-
-        if (ImGui::CollapsingHeader("Portal")) {
-            if (ImGui::Button("Portal Albedo")) setDebugTarget("portal_albedo", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Portal Normal")) setDebugTarget("portal_normal", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Portal PBR")) setDebugTarget("portal_pbr", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Portal Emissive")) setDebugTarget("portal_emissive", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Portal Velocity")) setDebugTarget("portal_velocity", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Portal Depth")) setDebugTarget("portal_depth", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("Portal Deferred Resolve")) setDebugTarget("portal_deferred_resolve", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("RELAX Denoiser")) {
@@ -770,7 +764,7 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
     ImGui::SameLine();
     ImGui::Checkbox("Probes & Cache##freeze", &state->debug.bFreezeGIField);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Stops probe trace/blend/relocation and world-cache shading; carry-forward suspends eviction and pins cell ages so unfreezing does not mass-evict the table.");
+        ImGui::SetTooltip("Stops probe trace/blend/relocation and radiance-cache shading; carry-forward suspends eviction and pins cell ages so unfreezing does not mass-evict the table.");
     }
     ImGui::SameLine();
     ImGui::Checkbox("Screen Feedback##freeze", &state->debug.bFreezeScreenFeedback);
@@ -780,7 +774,7 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
     ImGui::SameLine();
     ImGui::Checkbox("Gather Ray##freeze", &state->debug.bFreezeGatherRay);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Forces the gather onto its skip-ray path (world cache at the pixel surface, probes as fallback) while frozen, removing the 1spp cosine ray entirely.");
+        ImGui::SetTooltip("Forces the gather onto its skip-ray path (radiance cache at the pixel surface, probes as fallback) while frozen, removing the 1spp cosine ray entirely.");
     }
 }
 
@@ -989,7 +983,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Enable Reflection Probes", &reflectionProbe.bEnabled)) { changed = true; }
             if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
             if (ImGui::Checkbox("Debug Draw Probe Volumes", &reflectionProbe.bDebugDraw)) { changed = true; }
-            if (Widgets::SliderFloat("Baked Diffuse Clamp K##reflectionprobe", &reflectionProbe.bakedDiffuseClampK, 1.0f, 16.0f, {.format = "%.1f", .tooltip = "Luminance-ratio ceiling for the world-cache diffuse tier inside a probe volume: cache is scaled down when it exceeds K times the baked probe irradiance. Default 4.0.", .reset = true, .resetTo = 4.0})) { changed = true; }
+            if (Widgets::SliderFloat("Baked Diffuse Clamp K##reflectionprobe", &reflectionProbe.bakedDiffuseClampK, 1.0f, 16.0f, {.format = "%.1f", .tooltip = "Luminance-ratio ceiling for the radiance-cache diffuse tier inside a probe volume: cache is scaled down when it exceeds K times the baked probe irradiance. Default 4.0.", .reset = true, .resetTo = 4.0})) { changed = true; }
             if (ImGui::Checkbox("Brute-Force Probe Pick", &reflectionProbe.bBruteForcePick)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Debug: bypass the world-grid probe bin and scan all probes per pixel.");
@@ -1021,7 +1015,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             if (ImGui::Checkbox("GI Diffuse Gather##ddgi", &ddgi.bFinalGather)) { changed = true; }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("TDA-style resolve: one cosine ray per half-res pixel reads last frame's screen at its hit, then the world radiance cache (probes as fallback, skybox on miss) instead of sampling probes at the pixel. Debug views live in the Debug View window.");
+                ImGui::SetTooltip("TDA-style resolve: one cosine ray per half-res pixel reads last frame's screen at its hit, then the radiance cache (probes as fallback, skybox on miss) instead of sampling probes at the pixel. Debug views live in the Debug View window.");
             }
             ImGui::SameLine();
             if (ImGui::Checkbox("Denoise##gigather", &ddgi.bFinalGatherDenoise)) { changed = true; }
@@ -1040,7 +1034,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             if (ImGui::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay)) { changed = true; }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Skips the per-pixel cosine ray entirely: samples the world radiance cache at the pixel's own surface point (probes as fallback, skybox on miss) instead of tracing. No ray noise, but resolution is capped by the cache's cell size (blockier); still runs through the same denoise/upscale/temporal pipeline. Best for clean/simply-textured scenes where the ray's 1spp noise isn't worth it.");
+                ImGui::SetTooltip("Skips the per-pixel cosine ray entirely: samples the radiance cache at the pixel's own surface point (probes as fallback, skybox on miss) instead of tracing. No ray noise, but resolution is capped by the cache's cell size (blockier); still runs through the same denoise/upscale/temporal pipeline. Best for clean/simply-textured scenes where the ray's 1spp noise isn't worth it.");
             }
 
             ImGui::SeparatorText("Volume");
@@ -1078,7 +1072,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Ray hits also sample last frame's probe atlas, so light keeps bouncing (one extra bounce lands per frame, damped by hysteresis). Also gives area/sphere lights indirect, since probes see their proxies directly.");
             }
-            ddgiF("Bounce Intensity##ddgi", &ddgi.bounceIntensity, ddgiDefaults.bounceIntensity, 0.0f, 1.0f, "%.2f", "Scales the DDGI feedback term fed back into the world cache / probes. This is the cache<->DDGI feedback loop, so <1 bounds the loop gain: keeps enclosed high-albedo scenes from saturating and self-lighting. 1 = physically full multi-bounce (can run away in red/boxed geometry). Default 0.75.");
+            ddgiF("Bounce Intensity##ddgi", &ddgi.bounceIntensity, ddgiDefaults.bounceIntensity, 0.0f, 1.0f, "%.2f", "Scales the DDGI feedback term fed back into the radiance cache / probes. This is the cache<->DDGI feedback loop, so <1 bounds the loop gain: keeps enclosed high-albedo scenes from saturating and self-lighting. 1 = physically full multi-bounce (can run away in red/boxed geometry). Default 0.75.");
             ddgiF("Max Ray Radiance##ddgi", &ddgi.maxRayRadiance, ddgiDefaults.maxRayRadiance, 0.0f, 100.0f, "%.1f", "Firefly clamp: hit radiance above this (max channel) is scaled down before blending, taming NEE light-selection spikes and rare bright emissive hits. Dims indirect from very bright small sources. 0 = off. Default 20.");
 
             ImGui::SeparatorText("Blend");
@@ -1087,22 +1081,22 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, ddgi);
             }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Temporarily drops hysteresis, maxes rays, and accelerates world-cache shading (interval + accumulation window) for ~70 frames so dark multi-bounce rooms converge quickly, then restores the values below. Retrigger to restart the schedule.");
+                ImGui::SetTooltip("Temporarily drops hysteresis, maxes rays, and accelerates radiance-cache shading (interval + accumulation window) for ~70 frames so dark multi-bounce rooms converge quickly, then restores the values below. Retrigger to restart the schedule.");
             }
             if (state->ddgiConvergeBoost.bActive) {
                 ImGui::SameLine();
                 ImGui::Text("Converging... %d frames left", DDGI_CONVERGE_BOOST_FRAMES - state->ddgiConvergeBoost.frame);
             }
             ddgiF("Hysteresis##ddgi", &ddgi.hysteresis, ddgiDefaults.hysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for irradiance (RTXGI parity). Probe updates are 1spp Monte Carlo, so the EMA carries most of the smoothing; the darkening fast path plus the min darkening step keep lights-off response quick. Higher = smoother but laggier; 0 = no history. Default 0.97.");
-            ddgiF("Visibility Hysteresis##ddgi", &ddgi.visibilityHysteresis, ddgiDefaults.visibilityHysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for the distance/Chebyshev atlas. The world cache stabilizes radiance only; the visibility integrand still changes every frame with ray rotation, so this stays high. Default 0.97.");
-            int cacheShadeInterval = static_cast<int>(ddgi.worldCacheShadeInterval);
-            if (Widgets::SliderInt("Cache Shade Interval##ddgi", &cacheShadeInterval, 1, 32, {.tooltip = "Frames between world-cache cell re-shades (plus a 0-3 per-slot stagger). Lower = the cache tracks lighting changes faster, at more shade dispatch cost. Interbounce light propagates one cache shade + one probe blend per generation, so this bounds multi-bounce convergence speed. Default 8.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.worldCacheShadeInterval)})) {
-                ddgi.worldCacheShadeInterval = static_cast<uint32_t>(cacheShadeInterval);
+            ddgiF("Visibility Hysteresis##ddgi", &ddgi.visibilityHysteresis, ddgiDefaults.visibilityHysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for the distance/Chebyshev atlas. The radiance cache stabilizes radiance only; the visibility integrand still changes every frame with ray rotation, so this stays high. Default 0.97.");
+            int cacheShadeInterval = static_cast<int>(ddgi.radianceCacheShadeInterval);
+            if (Widgets::SliderInt("Cache Shade Interval##ddgi", &cacheShadeInterval, 1, 32, {.tooltip = "Frames between radiance-cache cell re-shades (plus a 0-3 per-slot stagger). Lower = the cache tracks lighting changes faster, at more shade dispatch cost. Interbounce light propagates one cache shade + one probe blend per generation, so this bounds multi-bounce convergence speed. Default 8.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheShadeInterval)})) {
+                ddgi.radianceCacheShadeInterval = static_cast<uint32_t>(cacheShadeInterval);
                 changed = true;
             }
-            int cacheAccumCap = static_cast<int>(ddgi.worldCacheAccumCap);
-            if (Widgets::SliderInt("Cache Accum Frames##ddgi", &cacheAccumCap, 1, 64, {.tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance; the change-streak dump already cuts history on sustained changes. Default 16.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.worldCacheAccumCap)})) {
-                ddgi.worldCacheAccumCap = static_cast<uint32_t>(cacheAccumCap);
+            int cacheAccumCap = static_cast<int>(ddgi.radianceCacheAccumCap);
+            if (Widgets::SliderInt("Cache Accum Frames##ddgi", &cacheAccumCap, 1, 64, {.tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance; the change-streak dump already cuts history on sustained changes. Default 16.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheAccumCap)})) {
+                ddgi.radianceCacheAccumCap = static_cast<uint32_t>(cacheAccumCap);
                 changed = true;
             }
             ddgiF("Irradiance Gamma##ddgi", &ddgi.irradianceGamma, ddgiDefaults.irradianceGamma, 1.0f, 10.0f, "%.1f", "Perceptual encoding exponent: the atlas stores pow(E, 1/gamma) and blends in that space, so rare bright rays (sky through a small opening) cannot pulse the average. 1 = linear. Default 5.");
@@ -1121,12 +1115,12 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             ddgiF("Min Frontface Distance##ddgi", &ddgi.minFrontfaceDistance, ddgiDefaults.minFrontfaceDistance, 0.0f, 1.0f, "%.2f", "Meters of clearance relocation keeps between a probe and nearby geometry; probes closer than this to a wall get nudged away from it. Default 0.30.");
 
-            ImGui::SeparatorText("World Cache Occupancy");
+            ImGui::SeparatorText("Radiance Cache Occupancy");
             {
                 // Read-only; multi-frame readback latency, so values trail the live cache by 2-3 frames.
-                const Engine::WorldCacheStatsSnapshot& wc = ctx->worldCacheStats;
-                const float occupancyPct = 100.0f * static_cast<float>(wc.occupiedSlots) / static_cast<float>(WORLD_CACHE_HASH_CAPACITY);
-                ImGui::Text("Occupancy: %.1f%% (%u / %u)", occupancyPct, wc.occupiedSlots, WORLD_CACHE_HASH_CAPACITY);
+                const Engine::RadianceCacheStatsSnapshot& wc = ctx->radianceCacheStats;
+                const float occupancyPct = 100.0f * static_cast<float>(wc.occupiedSlots) / static_cast<float>(RADIANCE_CACHE_HASH_CAPACITY);
+                ImGui::Text("Occupancy: %.1f%% (%u / %u)", occupancyPct, wc.occupiedSlots, RADIANCE_CACHE_HASH_CAPACITY);
                 ImGui::Text("Shades/frame: %u", wc.cellsShaded);
                 ImGui::Text("Evictions/frame: %u", wc.cellsEvicted);
                 ImGui::Text("Inserts failed/frame: %u", wc.insertsFailed);

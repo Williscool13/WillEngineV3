@@ -803,8 +803,8 @@ struct DDGIParams
     bool bInfiniteBounce{true};
     float bounceIntensity{0.75f};
     float maxRayRadiance{20.0f};
-    uint32_t worldCacheShadeInterval{8};
-    uint32_t worldCacheAccumCap{16};
+    uint32_t radianceCacheShadeInterval{8};
+    uint32_t radianceCacheAccumCap{16};
 
     float hysteresis{0.97f};
     float visibilityHysteresis{0.97f};
@@ -864,6 +864,22 @@ struct HeroShadowConfiguration
     bool bSilhouetteUniform{false};
 };
 
+/** One editor preview sphere, drawn cubemap-shaded at a reflection probe's capture position. */
+struct ProbePreviewSphere
+{
+    uint32_t cubemapIndex{0};
+    glm::vec3 position{0.0f};
+};
+
+/** Shared settings for the probe preview spheres. */
+struct ProbePreviewSettings
+{
+    bool bActive{false};
+    bool bIrradiance{false};
+    float roughness{0.0f};
+    float radius{0.5f};
+};
+
 struct ViewFamily
 {
     ViewFamily() = default;
@@ -911,6 +927,8 @@ struct ViewFamily
     ArenaVector<LightInfo> lights{};
     ArenaMap<uint32_t, uint32_t> lightEntityToIndex{};
     ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};
+    ProbePreviewSettings probePreviewSettings{};
+    ArenaFixedVector<ProbePreviewSphere> probePreviews{};
 
     uint32_t analyticLightCount{0};
     // MeshPrimitiveStore slot -> base light index of light list
@@ -1011,14 +1029,13 @@ struct FrameBuffer
     bool bEnableLightingBucketingVisualization = false;
     bool bEnableGPUDebug = false;
     bool bLockGPUDebug = false;
-    bool bGPUDebugTestPattern = false;
     bool bDDGIProbeDebug = false;
     bool bClusterGridDebug = false;
     bool bWorldGridDebug = false;
     int32_t worldGridDebugLevel = 0;
-    bool bWorldCacheDebug = false;
-    float worldCacheDebugExposure = 1.0f;
-    int32_t worldCacheDebugBucket = -1;
+    bool bRadianceCacheDebug = false;
+    float radianceCacheDebugExposure = 1.0f;
+    int32_t radianceCacheDebugBucket = -1;
     bool bDDGIBounceOnly = false;
     bool bFreezeGIField = false;
     bool bFreezeScreenFeedback = false;

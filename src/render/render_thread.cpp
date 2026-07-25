@@ -408,11 +408,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     statisticsManager.scratch.visibleMeshletCount = readbackData->meshletCount;
     statisticsManager.scratch.shadingDispatches = readbackData->shadingDispatches;
     statisticsManager.scratch.lightingDispatches = readbackData->lightingDispatches;
-    statisticsManager.scratch.worldCache.occupiedSlots = readbackData->wcOccupied;
-    statisticsManager.scratch.worldCache.cellsCarried = readbackData->wcCarried;
-    statisticsManager.scratch.worldCache.cellsEvicted = readbackData->wcEvicted;
-    statisticsManager.scratch.worldCache.insertsFailed = readbackData->wcInsertsFailed;
-    statisticsManager.scratch.worldCache.cellsShaded = readbackData->wcShaded;
+    statisticsManager.scratch.radianceCache.occupiedSlots = readbackData->wcOccupied;
+    statisticsManager.scratch.radianceCache.cellsCarried = readbackData->wcCarried;
+    statisticsManager.scratch.radianceCache.cellsEvicted = readbackData->wcEvicted;
+    statisticsManager.scratch.radianceCache.insertsFailed = readbackData->wcInsertsFailed;
+    statisticsManager.scratch.radianceCache.cellsShaded = readbackData->wcShaded;
 
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);
@@ -519,7 +519,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         ZoneScopedN("SetupRenderGraph");
 
         if (frameBuffer.bEnableGPUDebug) {
-            SetupGPUDebugBegin(*renderGraph, pipelineManager, frameBuffer.bLockGPUDebug, frameBuffer.bGPUDebugTestPattern, frameNumber);
+            SetupGPUDebugBegin(*renderGraph, frameBuffer.bLockGPUDebug);
         }
 
         // Geometry
@@ -558,30 +558,30 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber, frameBuffer.bFreezeGIField);
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
-                const WorldCacheFrame worldCache = SetupWorldCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.bFreezeGIField);
-                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.bDDGIBounceOnly, worldCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
+                const RadianceCacheFrame radianceCache = SetupRadianceCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.bFreezeGIField);
+                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
                 ddgiPreviousCascades = ddgiCascades;
-                const bool bWorldCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.bDDGIBounceOnly;
-                SetupWorldCacheShade(*renderGraph, pipelineManager, worldCache, 0, bWorldCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.worldCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
-                SetupWorldCacheEnd(*renderGraph, worldCache);
-                if (worldCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
-                    RenderPass& wcStatsReadback = renderGraph->AddPass(SID("World Cache Stats Readback"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::WorldCache);
-                    wcStatsReadback.ReadTransferBuffer(WORLD_CACHE_STATS);
-                    wcStatsReadback.ReadTransferBuffer(WORLD_CACHE_ACTIVE_COUNT);
+                const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.bDDGIBounceOnly;
+                SetupRadianceCacheShade(*renderGraph, pipelineManager, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.radianceCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
+                SetupRadianceCacheEnd(*renderGraph, radianceCache);
+                if (radianceCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
+                    RenderPass& wcStatsReadback = renderGraph->AddPass(SID("Radiance Cache Stats Readback"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::RadianceCache);
+                    wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_STATS);
+                    wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_ACTIVE_COUNT);
                     wcStatsReadback.WriteTransferBuffer(SID("readback_buffer"));
                     wcStatsReadback.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                         const VkBuffer dst = graph.GetBufferHandle(SID("readback_buffer"));
-                        const VkBufferCopy statsCopy{0, offsetof(ReadbackStruct, wcOccupied), sizeof(WorldCacheStats)};
-                        vkCmdCopyBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_STATS), dst, 1, &statsCopy);
+                        const VkBufferCopy statsCopy{0, offsetof(ReadbackStruct, wcOccupied), sizeof(RadianceCacheStats)};
+                        vkCmdCopyBuffer(cmd, graph.GetBufferHandle(RADIANCE_CACHE_STATS), dst, 1, &statsCopy);
                         const VkBufferCopy shadedCopy{0, offsetof(ReadbackStruct, wcShaded), sizeof(uint32_t)};
-                        vkCmdCopyBuffer(cmd, graph.GetBufferHandle(WORLD_CACHE_ACTIVE_COUNT), dst, 1, &shadedCopy);
+                        vkCmdCopyBuffer(cmd, graph.GetBufferHandle(RADIANCE_CACHE_ACTIVE_COUNT), dst, 1, &shadedCopy);
                     });
                 }
                 if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
                     SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure, frameBuffer.ddgiProbeDebugCascade, frameBuffer.bDDGIHideInactiveProbes, frameBuffer.ddgiProbeDebugMode);
                 }
-                if (frameBuffer.bEnableGPUDebug && frameBuffer.bWorldCacheDebug && !frameBuffer.bLockGPUDebug) {
-                    SetupWorldCacheDebug(*renderGraph, pipelineManager, worldCache, frameBuffer.worldCacheDebugExposure, frameBuffer.worldCacheDebugBucket);
+                if (frameBuffer.bEnableGPUDebug && frameBuffer.bRadianceCacheDebug && !frameBuffer.bLockGPUDebug) {
+                    SetupRadianceCacheDebug(*renderGraph, pipelineManager, radianceCache, frameBuffer.radianceCacheDebugExposure, frameBuffer.radianceCacheDebugBucket);
                 }
             }
 
@@ -798,6 +798,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
 
         SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, targets.colorOutput, frameResourceLimits);
+
+        SetupProbePreviewSpheres(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, viewFamily);
 
         if (frameBuffer.bEnableGPUDebug) {
             SetupGPUDebugDraw(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, frameBuffer.bLockGPUDebug);

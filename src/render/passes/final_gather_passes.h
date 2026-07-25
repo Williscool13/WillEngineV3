@@ -41,7 +41,7 @@ struct FinalGatherFrame
 };
 
 /**
- * TDA-style final gather: one cosine-weighted ray per half-res pixel, world radiance cache read at the hit (probes as fallback, skybox on miss), projected into per-channel 2-band SH targets.
+ * TDA-style final gather: one cosine-weighted ray per half-res pixel, radiance cache read at the hit (probes as fallback, skybox on miss), projected into per-channel 2-band SH targets.
  * @param graph
  * @param pipelineManager
  * @param viewFamily
@@ -51,7 +51,7 @@ struct FinalGatherFrame
  * @param frameNumber
  * @param bDenoise
  * @param bTemporalFilter Counter accumulation of the resolved output against carried history; off = this frame's resolve only (raw-signal inspection).
- * @param bSkipRay Skip the cosine ray entirely; sample the world radiance cache at the pixel's own surface point (probes as fallback) instead.
+ * @param bSkipRay Skip the cosine ray entirely; sample the radiance cache at the pixel's own surface point (probes as fallback) instead.
  * @param raysPerPixel Gather rays per half-res pixel, clamped to [1, GI_GATHER_MAX_RAYS_PER_PIXEL]. Uniform across the frame, so cost is flat and rays stay coherent; relative noise falls as 1/sqrt(n), which is the only lever on dark bright-to-dark gradients where a single ray finds a bright aperture too rarely.
  * @param bDebugView A GI-gather debug view is active; disable the screen tier so the debug color written into the composite is not fed back as radiance.
  * @param bDisableScreenTier Disable the lit-history screen tier so ray hits resolve only against world-space sources; set while the GI field is frozen (lit history is view-dependent and keeps evolving, which face-seams probe bakes).

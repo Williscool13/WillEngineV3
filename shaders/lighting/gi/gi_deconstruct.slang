@@ -2,8 +2,8 @@ import common_interop;
 import push_constant_interop;
 import ddgi_interop;
 import ddgi_common;
-import world_cache_interop;
-import world_cache_hash_common;
+import radiance_cache_interop;
+import radiance_cache_hash_common;
 import bindless_declarations;
 import constants_interop;
 import shader_functions;
@@ -164,16 +164,16 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
 
     float3 color = float3(0.0);
     if (pc.mode == GI_DECONSTRUCT_CACHE_KEY || pc.mode == GI_DECONSTRUCT_CACHE_RADIANCE) {
-        WorldCacheKey key = WorldCacheComputeKey(worldPosition, worldN, scene.cameraWorldPos.xyz);
-        uint slot = WorldCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition);
-        if (slot != WORLD_CACHE_HASH_INVALID) {
+        RadianceCacheKey key = RadianceCacheComputeKey(worldPosition, worldN, scene.cameraWorldPos.xyz);
+        uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition);
+        if (slot != RADIANCE_CACHE_HASH_INVALID) {
             if (pc.mode == GI_DECONSTRUCT_CACHE_KEY) {
                 color = GIDeconstructKeyColor(pc.cacheKeys[slot]);
             } else {
                 uint2 packedRadiance = pc.cacheCells[slot].packedRadiance;
                 uint cellCount = (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu;
-                if (WorldCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
-                    color = WorldCacheUnpackRadiance(packedRadiance);
+                if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
+                    color = RadianceCacheUnpackRadiance(packedRadiance);
                 } else {
                     color = float3(0.5, 0.0, 0.5);
                 }

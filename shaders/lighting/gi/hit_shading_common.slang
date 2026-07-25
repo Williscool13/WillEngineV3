@@ -14,15 +14,15 @@ import binning_common;
 import random_common;
 import shader_constants;
 import constants_interop;
-import world_cache_interop;
-import world_cache_hash_common;
+import radiance_cache_interop;
+import radiance_cache_hash_common;
 import reflection_probe_interop;
 import reflection_probe_common;
 
 // Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
 
-/** Geometry-only normal decode, no material/lighting work. Used to key the world cache before deciding whether a full shade is even needed. */
+/** Geometry-only normal decode, no material/lighting work. Used to key the radiance cache before deciding whether a full shade is even needed. */
 public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
@@ -36,7 +36,7 @@ public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, 
     return normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
 }
 
-/** Fallback for DDGI probe rays when the world cache has no slot for the hit: sun (shadow-ray tested) + emissive + IBL/DDGI feedback. Local analytic lights enter GI only via their emissive proxy surfaces. */
+/** Fallback for DDGI probe rays when the radiance cache has no slot for the hit: sun (shadow-ray tested) + emissive + IBL/DDGI feedback. Local analytic lights enter GI only via their emissive proxy surfaces. */
 public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, float maxBias)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
@@ -209,7 +209,7 @@ static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float 
 
 // V = N (NoV = 1): no single ray direction to use, and this value gets read back from every direction later.
 // Returns the non-emissive radiosity; own emission goes out separately so the cell EMA/streak never sees bary-jitter on/off emissive texels.
-public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, uint rngSeed, out float3 outEmissive)
+public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, uint rngSeed, out float3 outEmissive)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -255,7 +255,7 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
         float NoL = dot(N, L);
         if (NoL > 0.0) {
             // Zero angular radius makes every cone sample identical; one ray suffices.
-            uint sampleCount = sun.angularRadius > 0.0 ? WORLD_CACHE_SUN_SAMPLES : 1u;
+            uint sampleCount = sun.angularRadius > 0.0 ? RADIANCE_CACHE_SUN_SAMPLES : 1u;
             float sunVisibility = 0.0;
             for (uint s = 0u; s < sampleCount; s++) {
                 uint rng = rngSeed ^ (s * 0x9E3779B9u);
@@ -288,7 +288,7 @@ public float3 ShadeWorldCacheCell(WorldCacheShadePushConstant pc, Instance insta
     }
     float giW = 0.0;
     if (pc.bFeedbackValid != 0) {
-        float cellSize = WorldCacheCellSizeAtLevel(WorldCacheLevelFromDistance(distance(worldPosition, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz)));
+        float cellSize = RadianceCacheCellSizeAtLevel(RadianceCacheLevelFromDistance(distance(worldPosition, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz)));
         float edgeFade;
         float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, cellSize, edgeFade);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));

@@ -9,7 +9,7 @@
 
 #include "render/render-graph/render_graph.h"
 #include "render/shaders/ddgi_interop.h"
-#include "render/passes/world_cache_passes.h"
+#include "render/passes/radiance_cache_passes.h"
 
 namespace Core
 {
@@ -53,11 +53,11 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
  * @param iblIntensity skybox ambient fallback for hash-miss hits outside DDGI coverage, matching the cache shade's indirect term
  * @param frameNumber
  * @param bBounceOnly debug: zero skybox radiance (and disable feedback) so probes show only one-bounce surface shading
- * @param worldCache this frame's world radiance cache buffers; trace populates it as a side effect when valid, keyed with scene.cameraWorldPos (never the per-cascade window center)
+ * @param radianceCache this frame's radiance cache buffers; trace populates it as a side effect when valid, keyed with scene.cameraWorldPos (never the per-cascade window center)
  * @param reflectionProbeCount baked probes this frame; inside a probe volume the trace's cache-miss fallback shading uses probe irradiance ahead of the skybox ambient
  * @param bReflectionProbeBruteForce debug: bypass the world-grid probe bin for the fallback shading's probe pick
  */
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const WorldCacheFrame& worldCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce);
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce);
 
 /**
  * Declares the pass dependencies for sampling the cascade chain. Returns false when the chain doesn't exist this frame.

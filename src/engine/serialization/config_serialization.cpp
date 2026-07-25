@@ -293,8 +293,8 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"bInfiniteBounce", p.bInfiniteBounce},
         {"bounceIntensity", p.bounceIntensity},
         {"maxRayRadiance", p.maxRayRadiance},
-        {"worldCacheShadeInterval", p.worldCacheShadeInterval},
-        {"worldCacheAccumCap", p.worldCacheAccumCap},
+        {"radianceCacheShadeInterval", p.radianceCacheShadeInterval},
+        {"radianceCacheAccumCap", p.radianceCacheAccumCap},
         {"hysteresis", p.hysteresis},
         {"visibilityHysteresis", p.visibilityHysteresis},
         {"irradianceGamma", p.irradianceGamma},
@@ -335,8 +335,8 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.bInfiniteBounce = dBool("bInfiniteBounce", p.bInfiniteBounce);
     p.bounceIntensity = dFloat("bounceIntensity", p.bounceIntensity);
     p.maxRayRadiance = dFloat("maxRayRadiance", p.maxRayRadiance);
-    p.worldCacheShadeInterval = dUint("worldCacheShadeInterval", p.worldCacheShadeInterval);
-    p.worldCacheAccumCap = dUint("worldCacheAccumCap", p.worldCacheAccumCap);
+    p.radianceCacheShadeInterval = dUint("radianceCacheShadeInterval", p.radianceCacheShadeInterval);
+    p.radianceCacheAccumCap = dUint("radianceCacheAccumCap", p.radianceCacheAccumCap);
     p.hysteresis = dFloat("hysteresis", p.hysteresis);
     p.visibilityHysteresis = dFloat("visibilityHysteresis", p.visibilityHysteresis);
     p.irradianceGamma = dFloat("irradianceGamma", p.irradianceGamma);

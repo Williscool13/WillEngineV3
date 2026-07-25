@@ -5,6 +5,7 @@
 #include "render/passes/debug_passes.h"
 
 #include "render/render_utils.h"
+#include "render/interface/render_interface.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/render-graph/render_pass.h"
@@ -12,7 +13,7 @@
 
 namespace Render
 {
-void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, const bool bLocked, const bool bTestPattern, const uint64_t frameNumber)
+void SetupGPUDebugBegin(RenderGraph& graph, const bool bLocked)
 {
 #ifdef WDEBUG
     if (bLocked) {
@@ -60,31 +61,6 @@ void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, co
         };
         vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(GPU_DEBUG_CUBE_ARGS_BUFFER), 0, sizeof(GPUDebugCubeArgs), &cubeArgs);
     });
-
-    if (bTestPattern) {
-        RenderPass& testPass = graph.AddPass(SID("GPU Debug Test Pattern"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
-        testPass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
-        testPass.WriteBuffer(GPU_DEBUG_SEGMENT_BUFFER);
-        testPass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
-        testPass.WriteBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER);
-        testPass.Execute([pipelineManager, frameNumber](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_test_pattern"));
-            if (!pipelineEntry) {
-                return;
-            }
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-
-            GPUDebugTestPatternPushConstant pc{
-                .args = graph.GetBufferAddress(GPU_DEBUG_ARGS_BUFFER),
-                .segmentBuffer = graph.GetBufferAddress(GPU_DEBUG_SEGMENT_BUFFER),
-                .sphereArgs = graph.GetBufferAddress(GPU_DEBUG_SPHERE_ARGS_BUFFER),
-                .sphereBuffer = graph.GetBufferAddress(GPU_DEBUG_SPHERE_INSTANCE_BUFFER),
-                .frameIndex = static_cast<uint32_t>(frameNumber),
-            };
-            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, 1, 1, 1);
-        });
-    }
 #endif
 }
 
@@ -205,6 +181,55 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
     graph.CarryBufferToNextFrame(GPU_DEBUG_CUBE_ARGS_BUFFER, GPU_DEBUG_CUBE_ARGS_BUFFER, 0);
     graph.CarryBufferToNextFrame(GPU_DEBUG_CUBE_INSTANCE_BUFFER, GPU_DEBUG_CUBE_INSTANCE_BUFFER, 0);
 #endif
+}
+
+void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, const Core::ViewFamily& viewFamily)
+{
+    const Core::ProbePreviewSettings settings = viewFamily.probePreviewSettings;
+    if (!settings.bActive || viewFamily.probePreviews.IsEmpty() || !graph.HasTexture(depthTarget)) {
+        return;
+    }
+
+    RenderPass& pass = graph.AddPass(SID("Probe Preview Spheres"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, RenderCategory::Debug);
+    pass.WriteColorAttachment(targetImage);
+    pass.ReadWriteDepthAttachment(depthTarget);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    // Arena-backed span; the frame's view family outlives graph execution
+    pass.Execute([pipelineManager, settings, spheres = viewFamily.probePreviews.Data(), sphereCount = viewFamily.probePreviews.Size(), width = renderExtent[0], height = renderExtent[1], depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("probe_preview_sphere"));
+        if (!pipelineEntry) {
+            return;
+        }
+
+        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targetImage), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthTarget), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+
+        vkCmdBeginRendering(cmd, &renderInfo);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+
+        // 64 stacks x 64 slices x 6, mirroring probe_preview_sphere.slang
+        constexpr uint32_t PROBE_PREVIEW_SPHERE_VERTEX_COUNT = 64u * 64u * 6u;
+        for (size_t i = 0; i < sphereCount; ++i) {
+            ProbePreviewSpherePushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .sceneDataIndex = 0,
+                .cubemapIndex = spheres[i].cubemapIndex,
+                .centerRadius = {spheres[i].position, settings.radius},
+                .roughness = settings.roughness,
+                .bIrradiance = settings.bIrradiance ? 1u : 0u,
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+            vkCmdDraw(cmd, PROBE_PREVIEW_SPHERE_VERTEX_COUNT, 1, 0, 0);
+        }
+
+        vkCmdEndRendering(cmd);
+    });
 }
 void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, uint32_t sceneIndex, float clusterZNear, float clusterZFar)
 {

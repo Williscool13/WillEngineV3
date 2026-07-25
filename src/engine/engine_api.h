@@ -449,14 +449,16 @@ struct DebugState
     bool bEnableLightingBucketingVisualization{false};
     bool bEnableGPUDebug{false};
     bool bLockGPUDebug{false};
-    bool bGPUDebugTestPattern{false};
     bool bDDGIProbeDebug{false};
+    bool bProbePreview{false};
+    bool bProbePreviewIrradiance{false};
+    float probePreviewRoughness{0.0f};
     bool bClusterGridDebug{false};
     bool bWorldGridDebug{false};
     int32_t worldGridDebugLevel{0};
-    bool bWorldCacheDebug{false};
-    float worldCacheDebugExposure{1.0f};
-    int32_t worldCacheDebugBucket{-1};
+    bool bRadianceCacheDebug{false};
+    float radianceCacheDebugExposure{1.0f};
+    int32_t radianceCacheDebugBucket{-1};
     bool bDDGIBounceOnly{false};
     /** Master GI freeze; the bFreeze* components below choose which stages halt while it is on. */
     bool bGIFreeze{false};
@@ -485,8 +487,8 @@ struct DDGIConvergeBoost
     float stashedVisibilityHysteresis{0.0f};
     uint32_t stashedRaysPerProbe{0};
     uint32_t stashedOuterRaysPerProbe{0};
-    uint32_t stashedWorldCacheShadeInterval{0};
-    uint32_t stashedWorldCacheAccumCap{0};
+    uint32_t stashedRadianceCacheShadeInterval{0};
+    uint32_t stashedRadianceCacheAccumCap{0};
 };
 
 struct EngineState

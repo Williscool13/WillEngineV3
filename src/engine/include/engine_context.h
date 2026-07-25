@@ -66,7 +66,7 @@ struct WindowContext
 };
 
 
-struct WorldCacheStatsSnapshot
+struct RadianceCacheStatsSnapshot
 {
     uint32_t occupiedSlots{};
     uint32_t cellsCarried{};
@@ -134,7 +134,7 @@ struct EngineContext
     /** Set when any model/font finished loading or a model/font was reclaimed this frame; gates the per-frame asset-resolve block. */
     bool bAssetsChangedThisFrame{false};
 
-    WorldCacheStatsSnapshot worldCacheStats{};
+    RadianceCacheStatsSnapshot radianceCacheStats{};
 
     ProbeCaptureStaging probeCapture{};
 

@@ -12,7 +12,7 @@
 
 namespace Render
 {
-struct WorldCacheStatistics
+struct RadianceCacheStatistics
 {
     uint32_t occupiedSlots{};
     uint32_t cellsCarried{};
@@ -30,8 +30,8 @@ struct RendererStatistics
     uint32_t shadingDispatches{};
     uint32_t lightingDispatches{};
 
-    // World radiance cache occupancy (multi-frame readback latency)
-    WorldCacheStatistics worldCache{};
+    // Radiance cache occupancy (multi-frame readback latency)
+    RadianceCacheStatistics radianceCache{};
 
     // Pipeline statistics (whole-frame query)
     uint64_t meshInvocations{};

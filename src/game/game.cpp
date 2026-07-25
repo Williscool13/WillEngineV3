@@ -354,14 +354,13 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bEnableLightingBucketingVisualization = state->debug.bEnableLightingBucketingVisualization;
     frameBuffer->bEnableGPUDebug = state->debug.bEnableGPUDebug;
     frameBuffer->bLockGPUDebug = state->debug.bLockGPUDebug;
-    frameBuffer->bGPUDebugTestPattern = state->debug.bGPUDebugTestPattern;
     frameBuffer->bDDGIProbeDebug = state->debug.bDDGIProbeDebug;
     frameBuffer->bClusterGridDebug = state->debug.bClusterGridDebug;
     frameBuffer->bWorldGridDebug = state->debug.bWorldGridDebug;
     frameBuffer->worldGridDebugLevel = state->debug.worldGridDebugLevel;
-    frameBuffer->bWorldCacheDebug = state->debug.bWorldCacheDebug;
-    frameBuffer->worldCacheDebugExposure = state->debug.worldCacheDebugExposure;
-    frameBuffer->worldCacheDebugBucket = state->debug.worldCacheDebugBucket;
+    frameBuffer->bRadianceCacheDebug = state->debug.bRadianceCacheDebug;
+    frameBuffer->radianceCacheDebugExposure = state->debug.radianceCacheDebugExposure;
+    frameBuffer->radianceCacheDebugBucket = state->debug.radianceCacheDebugBucket;
     frameBuffer->bDDGIBounceOnly = state->debug.bDDGIBounceOnly;
     frameBuffer->bFreezeGIField = state->debug.bGIFreeze && state->debug.bFreezeGIField;
     frameBuffer->bFreezeScreenFeedback = state->debug.bGIFreeze && state->debug.bFreezeScreenFeedback;

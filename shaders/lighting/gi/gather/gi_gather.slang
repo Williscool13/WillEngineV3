@@ -11,8 +11,8 @@ import packing_functions;
 import pbr_functions;
 import random_common;
 import hit_shading_common;
-import world_cache_hash_common;
-import world_cache_interop;
+import radiance_cache_hash_common;
+import radiance_cache_interop;
 import gi_gather_common;
 import reflection_probe_interop;
 import reflection_probe_common;
@@ -121,18 +121,18 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
             if (dot(geoN, worldN) < 0.0) {
                 geoN = -geoN;
             }
-            WorldCacheKey key = WorldCacheComputeKey(worldPosition, geoN, scene.cameraWorldPos.xyz);
-            uint slot = WorldCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition);
-            uint2 packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(WORLD_CACHE_RADIANCE_UNSHADED, WORLD_CACHE_RADIANCE_UNSHADED);
-            uint cellCount = slot != WORLD_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
+            RadianceCacheKey key = RadianceCacheComputeKey(worldPosition, geoN, scene.cameraWorldPos.xyz);
+            uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition);
+            uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
+            uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
             int probeIndex = -1;
             float probeFade = 0.0;
             if (pc.reflectionProbeCount > 0u) {
                 probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
             }
             // Count gate: a count-1 cell is one bary-jittered point; the probe tier is smoother while cells stream in.
-            if (WorldCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
-                radiance = WorldCacheUnpackRadiance(packedRadiance);
+            if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
+                radiance = RadianceCacheUnpackRadiance(packedRadiance);
                 tier = GI_GATHER_TIER_CACHE;
                 if (probeIndex >= 0) {
                     ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
@@ -264,17 +264,17 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                         }
 
                         if (!bResolved) {
-                            WorldCacheKey key = WorldCacheComputeKey(hitWorldPos, hit.normal, scene.cameraWorldPos.xyz);
-                            uint slot = WorldCacheHashFindLodTolerant(pc.cacheEntries, key, hitWorldPos);
-                            uint2 packedRadiance = slot != WORLD_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(WORLD_CACHE_RADIANCE_UNSHADED, WORLD_CACHE_RADIANCE_UNSHADED);
-                            uint cellCount = slot != WORLD_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
+                            RadianceCacheKey key = RadianceCacheComputeKey(hitWorldPos, hit.normal, scene.cameraWorldPos.xyz);
+                            uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, hitWorldPos);
+                            uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
+                            uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
                             int probeIndex = -1;
                             float probeFade = 0.0;
                             if (pc.reflectionProbeCount > 0u) {
                                 probeIndex = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
                             }
-                            if (WorldCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
-                                radiance = WorldCacheUnpackRadiance(packedRadiance);
+                            if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
+                                radiance = RadianceCacheUnpackRadiance(packedRadiance);
                                 tier = GI_GATHER_TIER_CACHE;
                                 if (probeIndex >= 0) {
                                     ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];

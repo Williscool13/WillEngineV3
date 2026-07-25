@@ -471,12 +471,12 @@ void PipelineManager::RegisterPipelines()
                             sizeof(FrustumBinningPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("world_grid_binning"), src / "world_grid_binning.spv", "ComputeWorldGridBinning",
                             sizeof(WorldGridBinningPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("world_cache_carry_forward"), src / "world_cache_carry_forward.spv", "ComputeWorldCacheCarryForward",
-                            sizeof(WorldCacheCarryForwardPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("world_cache_shade"), src / "world_cache_shade.spv", "ComputeWorldCacheShade",
-                            sizeof(WorldCacheShadePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("world_cache_build_indirect"), src / "world_cache_build_indirect.spv", "ComputeWorldCacheBuildIndirect",
-                            sizeof(WorldCacheBuildIndirectPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("radiance_cache_carry_forward"), src / "radiance_cache_carry_forward.spv", "ComputeRadianceCacheCarryForward",
+                            sizeof(RadianceCacheCarryForwardPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("radiance_cache_shade"), src / "radiance_cache_shade.spv", "ComputeRadianceCacheShade",
+                            sizeof(RadianceCacheShadePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("radiance_cache_build_indirect"), src / "radiance_cache_build_indirect.spv", "ComputeRadianceCacheBuildIndirect",
+                            sizeof(RadianceCacheBuildIndirectPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gi_gather"), src / "gi_gather.spv", "ComputeGIGather",
                             sizeof(GIGatherPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gi_denoise"), src / "gi_denoise.spv", "ComputeGIDenoise",
@@ -490,11 +490,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ClusterGridDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gpu_debug_world_grid"), src / "gpu_debug_world_grid.spv", "ComputeGPUDebugWorldGrid",
                             sizeof(WorldGridDebugPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("gpu_debug_world_cache"), src / "gpu_debug_world_cache.spv", "ComputeGPUDebugWorldCache",
-                            sizeof(WorldCacheDebugPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("gpu_debug_test_pattern"), src / "gpu_debug_test_pattern.spv", "ComputeGPUDebugTestPattern",
-                            sizeof(GPUDebugTestPatternPushConstant), PipelineCategory::Critical);
-
+    RegisterComputePipeline(SID("gpu_debug_radiance_cache"), src / "gpu_debug_radiance_cache.spv", "ComputeGPUDebugRadianceCache",
+                            sizeof(RadianceCacheDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("ddgi_probe_debug"), src / "ddgi_probe_debug.spv", "ComputeDDGIProbeDebug",
                             sizeof(DDGIProbeDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gi_deconstruct"), src / "gi_deconstruct.spv", "ComputeGIDeconstruct",
@@ -1051,6 +1048,35 @@ void PipelineManager::RegisterPipelines()
             builder,
             sizeof(GPUDebugSphereDrawPushConstant),
             VK_SHADER_STAGE_VERTEX_BIT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    // Reflection probe preview sphere (editor, single instance, cubemap-shaded)
+    {
+        builder.AddShaderStage(src / "probe_preview_sphere.spv", VK_SHADER_STAGE_VERTEX_BIT, "VertexProbePreviewSphere");
+        builder.AddShaderStage(src / "probe_preview_sphere.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentProbePreviewSphere");
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        VkPipelineColorBlendAttachmentState blendState{
+            .blendEnable = VK_FALSE,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+
+        builder.SetupBlending(&blendState, 1);
+
+        VkFormat colorFormats[1] = {
+            COLOR_ATTACHMENT_FORMAT,
+        };
+        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("probe_preview_sphere"),
+            builder,
+            sizeof(ProbePreviewSpherePushConstant),
+            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
             PipelineCategory::Critical
         );
         builder.Clear();

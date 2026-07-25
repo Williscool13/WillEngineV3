@@ -1618,7 +1618,8 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
     auto view = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
     for (auto [entity, probe, worldTransform] : view.each()) {
         if (vf.reflectionProbes.IsFull()) { break; }
-        if (!probe.bEnabled) { continue; }
+        const bool bPreview = state->debug.bProbePreview;
+        if (!probe.bEnabled && !bPreview) { continue; }
         if (!probe.contentHandle.IsValid()) { continue; }
         Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
         if (!cubemap || cubemap->loadState != Render::Cubemap::LoadState::Loaded) { continue; }
@@ -1643,6 +1644,17 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
                                           : srcScale;
         const glm::mat4 world = glm::translate(glm::mat4(1.0f), srcTranslation) * glm::mat4_cast(srcRotation) * glm::scale(glm::mat4(1.0f), halfExtents);
         const glm::vec3 capturePos = srcTranslation + srcRotation * srcCaptureOffset;
+
+        if (bPreview && !vf.probePreviews.IsFull()) {
+            vf.probePreviewSettings.bActive = true;
+            vf.probePreviewSettings.bIrradiance = state->debug.bProbePreviewIrradiance;
+            vf.probePreviewSettings.roughness = state->debug.probePreviewRoughness;
+            vf.probePreviews.PushBack(Core::ProbePreviewSphere{
+                .cubemapIndex = cubemap->bindlessHandle.index,
+                .position = capturePos,
+            });
+        }
+        if (!probe.bEnabled) { continue; }
 
         uint32_t flags = 0u;
         if (bSphere) { flags |= REFLECTION_PROBE_FLAG_SPHERE; }

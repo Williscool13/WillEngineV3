@@ -25,7 +25,7 @@ import ddgi_interop;
 import reflection_interop;
 import reflection_probe_interop;
 import world_grid_interop;
-import world_cache_interop;
+import radiance_cache_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -42,7 +42,7 @@ import world_cache_interop;
 #include "reflection_interop.h"
 #include "reflection_probe_interop.h"
 #include "world_grid_interop.h"
-#include "world_cache_interop.h"
+#include "radiance_cache_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
@@ -594,32 +594,32 @@ SHADER_PUBLIC struct WorldGridDebugPushConstant
     SHADER_PUBLIC uint32_t pad0;
 };
 
-SHADER_PUBLIC struct WorldCacheCarryForwardPushConstant
+SHADER_PUBLIC struct RadianceCacheCarryForwardPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(uint) prevEntries;
     SHADER_PUBLIC SHADER_PTR(uint2) prevKeys;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) prevCells;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheCell) prevCells;
     SHADER_PUBLIC SHADER_PTR(uint) nextEntries;
     SHADER_PUBLIC SHADER_PTR(uint2) nextKeys;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) nextCells;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheCell) nextCells;
     SHADER_PUBLIC float4 cameraPos;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t bFreeze;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheStats) stats;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheStats) stats;
 };
 
-SHADER_PUBLIC struct WorldCacheBuildIndirectPushConstant
+SHADER_PUBLIC struct RadianceCacheBuildIndirectPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(uint) activeCount;
     SHADER_PUBLIC SHADER_PTR(uint) indirectArgs;
 };
 
-SHADER_PUBLIC struct WorldCacheShadePushConstant
+SHADER_PUBLIC struct RadianceCacheShadePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(uint) activeList;
     SHADER_PUBLIC SHADER_PTR(uint) activeCount;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheHitDescriptor) descriptors;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cells;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheHitDescriptor) descriptors;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheCell) cells;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) previousCascades;
@@ -649,7 +649,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC SHADER_PTR(uint) cacheEntries;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cacheCells;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheCell) cacheCells;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
@@ -1223,20 +1223,21 @@ SHADER_PUBLIC struct GPUDebugBuildIndirectPushConstant
     SHADER_PUBLIC SHADER_PTR(GPUDebugCubeArgs) cubeArgs;
 };
 
-SHADER_PUBLIC struct GPUDebugTestPatternPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(GPUDebugDrawArgs) args;
-    SHADER_PUBLIC SHADER_PTR(DebugLineSegment) segmentBuffer;
-    SHADER_PUBLIC SHADER_PTR(GPUDebugSphereArgs) sphereArgs;
-    SHADER_PUBLIC SHADER_PTR(DebugSphereInstance) sphereBuffer;
-    SHADER_PUBLIC uint32_t frameIndex;
-};
-
 SHADER_PUBLIC struct GPUDebugSphereDrawPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(DebugSphereInstance) instanceBuffer;
     SHADER_PUBLIC uint32_t sceneDataIndex;
+};
+
+SHADER_PUBLIC struct ProbePreviewSpherePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t cubemapIndex;
+    SHADER_PUBLIC float4 centerRadius;
+    SHADER_PUBLIC float roughness;
+    SHADER_PUBLIC uint32_t bIrradiance;
 };
 
 SHADER_PUBLIC struct GPUDebugCubeDrawPushConstant
@@ -1246,13 +1247,13 @@ SHADER_PUBLIC struct GPUDebugCubeDrawPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
-SHADER_PUBLIC struct WorldCacheDebugPushConstant
+SHADER_PUBLIC struct RadianceCacheDebugPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(GPUDebugCubeArgs) cubeArgs;
     SHADER_PUBLIC SHADER_PTR(DebugCubeInstance) cubeBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) entries;
     SHADER_PUBLIC SHADER_PTR(uint2) keys;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cells;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheCell) cells;
     SHADER_PUBLIC float exposure;
     SHADER_PUBLIC int32_t bucketFilter;
 };
@@ -1280,7 +1281,7 @@ SHADER_PUBLIC struct GIDeconstructPushConstant
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC SHADER_PTR(uint) cacheEntries;
     SHADER_PUBLIC SHADER_PTR(uint2) cacheKeys;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheCell) cacheCells;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheCell) cacheCells;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
@@ -1317,7 +1318,7 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC SHADER_PTR(float4) probeOffsets;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) previousCascades;
-    SHADER_PUBLIC SHADER_PTR(WorldCacheBuffers) worldCache;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheBuffers) radianceCache;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
     SHADER_PUBLIC uint32_t tlasIndex;
@@ -1328,7 +1329,7 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC float maxRayRadiance;
     SHADER_PUBLIC float bounceIntensity;
     SHADER_PUBLIC float iblIntensity;
-    SHADER_PUBLIC uint32_t worldCacheShadeInterval;
+    SHADER_PUBLIC uint32_t radianceCacheShadeInterval;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;

@@ -143,7 +143,7 @@ public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos
     return (diffuse + specular) * attenuation * emitterCos * pl.effectiveIntensity * pl.color;
 }
 
-/** Diffuse-only punctual shade for view-independent sinks (world radiance cache): identical to ShadePunctual minus the representative-point specular lobe, which is meaningless when V is forced to N. */
+/** Diffuse-only punctual shade for view-independent sinks (radiance cache): identical to ShadePunctual minus the representative-point specular lobe, which is meaningless when V is forced to N. */
 public float3 ShadePunctualDiffuse(PunctualLight pl, float3 N, float3 V, float3 viewPos, float3 albedo, float metallic, float roughness, float3 F0)
 {
     if (!pl.valid) { return float3(0.0); }

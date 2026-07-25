@@ -9,19 +9,17 @@
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
 
+namespace Core
+{
+struct ViewFamily;
+}
+
 namespace Render
 {
 class PipelineManager;
 
-/**
- * Ensures the GPU debug draw buffers exist and, when not locked, resets the segment counter.
- * @param graph
- * @param pipelineManager
- * @param bLocked
- * @param bTestPattern spawns the reference producer pass (animated grid of boxes)
- * @param frameNumber
- */
-void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, bool bLocked, bool bTestPattern, uint64_t frameNumber);
+/** Ensures the GPU debug draw buffers exist and, when not locked, resets the segment counter. */
+void SetupGPUDebugBegin(RenderGraph& graph, bool bLocked);
 
 /**
  * Converts the appended counts into indirect args and draws the segments and spheres (spheres first, opaque depth-writing; blended lines on top).
@@ -34,6 +32,9 @@ void SetupGPUDebugBegin(RenderGraph& graph, PipelineManager* pipelineManager, bo
  * @param bLocked
  */
 void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, bool bLocked);
+
+/** Draws a cubemap-shaded preview sphere (roughness-mip or irradiance) at every gathered reflection probe's capture position, into the lit target with depth test. No-op when the request is inactive. */
+void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, const Core::ViewFamily& viewFamily);
 
 /**
  * Emits the froxel cluster grid (FrustumBinning) AABBs as world-space wireframe boxes into the GPU debug segment buffer, colored by depth slice.

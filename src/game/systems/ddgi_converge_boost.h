@@ -20,8 +20,8 @@ inline void DDGIConvergeBoostTrigger(Engine::DDGIConvergeBoost& boost, const Cor
         boost.stashedVisibilityHysteresis = ddgi.visibilityHysteresis;
         boost.stashedRaysPerProbe = ddgi.raysPerProbe;
         boost.stashedOuterRaysPerProbe = ddgi.outerRaysPerProbe;
-        boost.stashedWorldCacheShadeInterval = ddgi.worldCacheShadeInterval;
-        boost.stashedWorldCacheAccumCap = ddgi.worldCacheAccumCap;
+        boost.stashedRadianceCacheShadeInterval = ddgi.radianceCacheShadeInterval;
+        boost.stashedRadianceCacheAccumCap = ddgi.radianceCacheAccumCap;
         boost.bActive = true;
     }
     boost.frame = 0;
@@ -38,22 +38,22 @@ inline void DDGIConvergeBoostTick(Engine::DDGIConvergeBoost& boost, Core::DDGIPa
         ddgi.visibilityHysteresis = 0.5f;
         ddgi.raysPerProbe = DDGI_MAX_RAYS_PER_PROBE;
         ddgi.outerRaysPerProbe = DDGI_MAX_RAYS_PER_PROBE;
-        ddgi.worldCacheShadeInterval = 2;
-        ddgi.worldCacheAccumCap = 1;
+        ddgi.radianceCacheShadeInterval = 2;
+        ddgi.radianceCacheAccumCap = 1;
     } else if (boost.frame < DDGI_CONVERGE_BOOST_FRAMES) {
         ddgi.hysteresis = 0.9f;
         ddgi.visibilityHysteresis = 0.9f;
         ddgi.raysPerProbe = DDGI_MAX_RAYS_PER_PROBE;
         ddgi.outerRaysPerProbe = DDGI_MAX_RAYS_PER_PROBE;
-        ddgi.worldCacheShadeInterval = 4;
-        ddgi.worldCacheAccumCap = 4;
+        ddgi.radianceCacheShadeInterval = 4;
+        ddgi.radianceCacheAccumCap = 4;
     } else {
         ddgi.hysteresis = boost.stashedHysteresis;
         ddgi.visibilityHysteresis = boost.stashedVisibilityHysteresis;
         ddgi.raysPerProbe = boost.stashedRaysPerProbe;
         ddgi.outerRaysPerProbe = boost.stashedOuterRaysPerProbe;
-        ddgi.worldCacheShadeInterval = boost.stashedWorldCacheShadeInterval;
-        ddgi.worldCacheAccumCap = boost.stashedWorldCacheAccumCap;
+        ddgi.radianceCacheShadeInterval = boost.stashedRadianceCacheShadeInterval;
+        ddgi.radianceCacheAccumCap = boost.stashedRadianceCacheAccumCap;
         boost.bActive = false;
         return;
     }

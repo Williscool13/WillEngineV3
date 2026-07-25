@@ -6,9 +6,9 @@ import lights_interop;
 import world_grid_interop;
 import binning_common;
 import packing_functions;
-import world_cache_hash_common;
+import radiance_cache_hash_common;
 import shader_functions;
-import world_cache_interop;
+import radiance_cache_interop;
 
 // =============== Shader Summary ============
 // GPU debug draw support: converts the appended segment count into mesh-task indirect args.
