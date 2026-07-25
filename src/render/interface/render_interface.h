@@ -818,6 +818,7 @@ struct DDGIParams
     bool bFinalGatherDenoise{true};
     bool bFinalGatherTemporal{true};
     bool bGatherSkipRay{false};
+    uint32_t gatherRaysPerPixel{1};
     float normalBias{0.1f};
     float viewBias{0.3f};
 

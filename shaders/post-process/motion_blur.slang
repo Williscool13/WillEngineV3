@@ -16,8 +16,10 @@ void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConst
     if (any(dtid.xy >= pc.extent)) { return; }
     uint2 pixelCoord = dtid.xy;
 
-    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixelCoord, 0));
-    float depth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
+    int2 srcCoord = min(int2((float2(pixelCoord) + 0.5) * float2(pc.renderExtent) / float2(pc.extent)), int2(pc.renderExtent) - 1);
+
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(srcCoord, 0));
+    float depth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(srcCoord, 0)).r;
     if ((gt1.w & GBUFFER1_LIT_BIT) == 0u || depth <= 0.0) {
         rdgStorageFloat2[pc.outputIndex][pixelCoord] = float2(0.0, 0.0);
         return;
@@ -25,7 +27,7 @@ void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConst
 
     float2 velocity = UnpackMotionVectors(gt1.g);
     if (pc.bObjectOnly != 0u) {
-        float2 uv = (float2(pixelCoord) + 0.5) / float2(pc.extent);
+        float2 uv = (float2(srcCoord) + 0.5) / float2(pc.renderExtent);
         float3 worldPos = ReconstructWorldPosition(pc.sceneData.invViewProj, uv, depth);
         float4 prevClip = mul(pc.sceneData.prevViewProj, float4(worldPos, 1.0));
         if (prevClip.w <= 1e-6) {
@@ -149,7 +151,8 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     }
 
     float2 centerVelocityUv = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg * 0.5;
-    float centerViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
+    int2 centerDepthCoord = min(int2(uv * float2(pc.renderExtent)), int2(pc.renderExtent) - 1);
+    float centerViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(centerDepthCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
     float centerSpreadLen = min(length(centerVelocityUv * pc.velocityScale * pc.srcBufferSize), float(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
@@ -175,8 +178,9 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
             if (!pairValid[side]) { continue; }
 
             int2 sampleCoord = int2(sampleUV * pc.srcBufferSize);
+            int2 sampleDepthCoord = min(int2(sampleUV * float2(pc.renderExtent)), int2(pc.renderExtent) - 1);
             pairColor[side] = rdgTexturesFloat4[pc.sceneColorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], sampleUV, 0).rgb;
-            float sampleViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
+            float sampleViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(sampleDepthCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
             float2 sampleVelocityUv = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).rg * 0.5;
             float sampleSpreadLen = min(length(sampleVelocityUv * pc.velocityScale * pc.srcBufferSize), float(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
 

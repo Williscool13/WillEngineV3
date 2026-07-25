@@ -171,6 +171,8 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     RenderGraph& graph = ctx.graph;
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
+    const uint32_t renderWidth = ctx.preAaExtent[0];
+    const uint32_t renderHeight = ctx.preAaExtent[1];
     PipelineManager* pipelines = ctx.pipelines;
     StringID velocity = ctx.targets.gbufferOne;
     StringID depthStencil = ctx.targets.depthCopy;
@@ -189,10 +191,11 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     velocityExtractPass.ReadSampledImage(velocity);
     velocityExtractPass.ReadSampledImage(depthStencil);
     velocityExtractPass.WriteStorageImage(SID("motion_blur_velocity"));
-    velocityExtractPass.Execute([width, height, pipelines, velocity, depthStencil, bObjectOnly](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    velocityExtractPass.Execute([width, height, renderWidth, renderHeight, pipelines, velocity, depthStencil, bObjectOnly](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurVelocityExtractPushConstant pc{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
             .extent = {width, height},
+            .renderExtent = {renderWidth, renderHeight},
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
             .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_velocity")),
@@ -257,10 +260,11 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     motionBlurReconstructionPass.ReadSampledImage(depthStencil);
     motionBlurReconstructionPass.ReadSampledImage(SID("motion_blur_tiled_neighbor_max"));
     motionBlurReconstructionPass.WriteStorageImage(SID("motion_blur_output"));
-    motionBlurReconstructionPass.Execute([width, height, input, pipelines, velocity, depthStencil, velocityScale, depthScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    motionBlurReconstructionPass.Execute([width, height, renderWidth, renderHeight, input, pipelines, velocity, depthStencil, velocityScale, depthScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurReconstructionPushConstant pc{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
             .srcBufferSize = {width, height},
+            .renderExtent = {renderWidth, renderHeight},
             .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
             .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),

@@ -6,6 +6,7 @@
     "bFinalGather": true,
     "bFinalGatherDenoise": true,
     "bFinalGatherTemporal": true,
+    "bGatherGuided": false,
     "bGatherSkipRay": false,
     "bInfiniteBounce": true,
     "bRelocation": true,
@@ -15,7 +16,7 @@
     "cascadeCount": 6,
     "distanceExponent": 50.0,
     "edgeBlendCells": 3.0,
-    "hysteresis": 0.5,
+    "hysteresis": 0.9700000286102295,
     "irradianceGamma": 5.0,
     "irradianceThreshold": 0.25,
     "maxRayRadiance": 20.0,
@@ -62,8 +63,12 @@
     "bDenoiserEnabled": false,
     "bEnabled": false,
     "bScreenSpaceLighting": false,
+    "bScreenSpaceTrace": false,
     "intensity": 1.0,
-    "roughnessMax": 0.44999998807907104
+    "lightSpecularFromReflectionsMax": 0.35353535413742065,
+    "ssrMaxSteps": 64,
+    "ssrThickness": 0.30000001192092896,
+    "tracedRoughnessMax": 0.3525252342224121
   },
   "reflectionProbe": {
     "bBruteForcePick": false,
@@ -90,7 +95,6 @@
     "bInitialVisibility": true,
     "bPermutationSampling": true,
     "boilingFilterStrength": 0.20000000298023224,
-    "brdfRoughnessMax": 0.44999998807907104,
     "confidenceBlurRadius": 3,
     "confidenceDarknessBias": 0.5432098507881165,
     "confidenceHistoryLength": 4.0,
@@ -138,7 +142,7 @@
       "stabilizationStrength": 1.0
     },
     "reflectionRelax": {
-      "atrousIterations": 5,
+      "atrousIterations": 2,
       "denoisingRange": 1000.0,
       "depthThreshold": 0.003000000026077032,
       "diffBlurRadius": 30.0,
@@ -214,7 +218,6 @@
     "spatialNeighbors": 1,
     "spatialPasses": 1,
     "spatialRadius": 30,
-    "specularDeferRoughnessMax": 1.0,
     "svgf": {
       "alphaMin": 0.10000000149011612,
       "atrousIterations": 4,

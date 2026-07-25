@@ -680,6 +680,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC float bakedDiffuseClampK;
     SHADER_PUBLIC uint32_t pad0;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    SHADER_PUBLIC uint32_t rayCount;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -1064,6 +1065,7 @@ SHADER_PUBLIC struct MotionBlurVelocityExtractPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 extent;
+    SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t depthBufferIndex;
     SHADER_PUBLIC uint32_t outputIndex;
@@ -1091,6 +1093,7 @@ SHADER_PUBLIC struct MotionBlurReconstructionPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 srcBufferSize;
+    SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneColorIndex;
     SHADER_PUBLIC uint32_t velocityBufferIndex;
     SHADER_PUBLIC uint32_t depthBufferIndex;

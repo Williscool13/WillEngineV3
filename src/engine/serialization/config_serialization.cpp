@@ -306,6 +306,7 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"bFinalGatherDenoise", p.bFinalGatherDenoise},
         {"bFinalGatherTemporal", p.bFinalGatherTemporal},
         {"bGatherSkipRay", p.bGatherSkipRay},
+        {"gatherRaysPerPixel", p.gatherRaysPerPixel},
         {"normalBias", p.normalBias},
         {"viewBias", p.viewBias},
         {"bRelocation", p.bRelocation},
@@ -346,6 +347,7 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.bFinalGather = dBool("bFinalGather", p.bFinalGather);
     p.bFinalGatherDenoise = dBool("bFinalGatherDenoise", p.bFinalGatherDenoise);
     p.bFinalGatherTemporal = dBool("bFinalGatherTemporal", p.bFinalGatherTemporal);
+    p.gatherRaysPerPixel = dUint("gatherRaysPerPixel", p.gatherRaysPerPixel);
     p.bGatherSkipRay = dBool("bGatherSkipRay", p.bGatherSkipRay);
     p.normalBias = dFloat("normalBias", p.normalBias);
     p.viewBias = dFloat("viewBias", p.viewBias);

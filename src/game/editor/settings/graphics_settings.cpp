@@ -25,6 +25,7 @@
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "engine/profiles/profile_library.h"
+#include "render/passes/final_gather_passes.h"
 
 #include "render/shaders/restir_features_macros.h"
 #include "render/shaders/ddgi_interop.h"
@@ -380,7 +381,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::SetNextItemWidth(120.0f);
             ImGui::Combo("View##GIGatherDebug", &state->debug.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)));
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Fullscreen final-gather view; runs the gather even when it is not applied to lighting. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where each ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history).");
+                ImGui::SetTooltip("Fullscreen final-gather view; runs the gather even when it is not applied to lighting. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where each ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface, magenta baked probe. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history).");
             }
         }
 
@@ -1031,6 +1032,11 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Temporal##gigather", &ddgi.bFinalGatherTemporal)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Counter accumulation of the resolved gather across frames (up to 32). Off = this frame's result only; with Denoise also off the composite shows the raw gather.");
+            }
+            int gatherRaysPerPixel = static_cast<int>(ddgi.gatherRaysPerPixel);
+            if (Widgets::SliderInt("Rays Per Pixel##gigather", &gatherRaysPerPixel, 1, static_cast<int>(Render::GI_GATHER_MAX_RAYS_PER_PIXEL), {.tooltip = "Gather rays per half-res pixel, uniform across the frame so cost stays flat and rays stay coherent. Relative noise falls as 1/sqrt(n), which is the only lever that reaches the bright-to-dark gradients near small light slits, where one ray finds the aperture too rarely for any reweighting to help. Trace cost is linear.", .reset = true, .resetTo = 1.0})) {
+                ddgi.gatherRaysPerPixel = static_cast<uint32_t>(gatherRaysPerPixel);
+                changed = true;
             }
             if (ImGui::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay)) { changed = true; }
             if (ImGui::IsItemHovered()) {
