@@ -189,8 +189,6 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bCheckerboard", p.bCheckerboard},
         {"boilingFilterStrength", p.boilingFilterStrength},
         {"bInitialVisibility", p.bInitialVisibility},
-        {"brdfRoughnessMax", p.brdfRoughnessMax},
-        {"specularDeferRoughnessMax", p.specularDeferRoughnessMax},
         {"regirWClamp", p.regirWClamp},
         {"restirWClamp", p.restirWClamp},
         {"lightProposal", static_cast<uint32_t>(p.lightProposal)},
@@ -233,8 +231,6 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bCheckerboard = getBool("bCheckerboard", p.bCheckerboard);
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
-    p.brdfRoughnessMax = r.contains("brdfRoughnessMax") && r["brdfRoughnessMax"].is_number() ? r["brdfRoughnessMax"].get<float>() : p.brdfRoughnessMax;
-    p.specularDeferRoughnessMax = r.contains("specularDeferRoughnessMax") && r["specularDeferRoughnessMax"].is_number() ? r["specularDeferRoughnessMax"].get<float>() : p.specularDeferRoughnessMax;
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
     p.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(getUint("lightProposal", static_cast<uint32_t>(p.lightProposal)));
@@ -357,26 +353,35 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.minFrontfaceDistance = dFloat("minFrontfaceDistance", p.minFrontfaceDistance);
 }
 
-nlohmann::json ToJson(const Core::RTReflectionConfiguration& p)
+nlohmann::json ToJson(const Core::ReflectionConfiguration& p)
 {
     return {
         {"bEnabled", p.bEnabled},
         {"bDenoiserEnabled", p.bDenoiserEnabled},
         {"bScreenSpaceLighting", p.bScreenSpaceLighting},
-        {"roughnessMax", p.roughnessMax},
+        {"bScreenSpaceTrace", p.bScreenSpaceTrace},
+        {"tracedRoughnessMax", p.tracedRoughnessMax},
+        {"lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax},
         {"intensity", p.intensity},
+        {"ssrThickness", p.ssrThickness},
+        {"ssrMaxSteps", p.ssrMaxSteps},
     };
 }
 
-void FromJson(const nlohmann::json& r, Core::RTReflectionConfiguration& p)
+void FromJson(const nlohmann::json& r, Core::ReflectionConfiguration& p)
 {
     auto rBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
     auto rFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
+    auto rInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number_integer() ? r[k].get<int32_t>() : def; };
     p.bEnabled = rBool("bEnabled", p.bEnabled);
     p.bDenoiserEnabled = rBool("bDenoiserEnabled", p.bDenoiserEnabled);
     p.bScreenSpaceLighting = rBool("bScreenSpaceLighting", p.bScreenSpaceLighting);
-    p.roughnessMax = rFloat("roughnessMax", p.roughnessMax);
+    p.bScreenSpaceTrace = rBool("bScreenSpaceTrace", p.bScreenSpaceTrace);
+    p.tracedRoughnessMax = rFloat("tracedRoughnessMax", p.tracedRoughnessMax);
+    p.lightSpecularFromReflectionsMax = rFloat("lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax);
     p.intensity = rFloat("intensity", p.intensity);
+    p.ssrThickness = rFloat("ssrThickness", p.ssrThickness);
+    p.ssrMaxSteps = rInt("ssrMaxSteps", p.ssrMaxSteps);
 }
 
 nlohmann::json ToJson(const Core::ReflectionProbeConfiguration& p)

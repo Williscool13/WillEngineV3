@@ -25,10 +25,9 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
                                   uint64_t frameNumber,
                                   uint32_t activeCheckerboardField,
                                   float checkerboardResolveAccumSpeed,
-                                  const Core::RTReflectionConfiguration& reflectionConfig,
-                                  float brdfRoughnessMax)
+                                  const Core::ReflectionConfiguration& reflectionConfig)
 {
-    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
     if (reflectionRoughnessMax < 0.0f || !reflectionConfig.bDenoiserEnabled || !graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET)) { return; }
 
     const bool bCheckerboard = activeCheckerboardField != 0u;

@@ -450,7 +450,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC float reflectionRoughnessMax;
     SHADER_PUBLIC float brdfRoughnessMax;
     SHADER_PUBLIC float finalWClamp;
-    SHADER_PUBLIC float specularDeferRoughnessMax;
+    SHADER_PUBLIC float lightSpecularFromReflectionsMax;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -478,7 +478,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t bValidateVisibility;
     SHADER_PUBLIC float wClamp;
     SHADER_PUBLIC uint32_t activeCheckerboardField;
-    SHADER_PUBLIC float specularDeferRoughnessMax;
+    SHADER_PUBLIC float lightSpecularFromReflectionsMax;
 };
 
 SHADER_PUBLIC struct ReSTIRBoilingFilterPushConstant
@@ -548,7 +548,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t giDataIndex;
     SHADER_PUBLIC uint32_t giGatherMode;
     SHADER_PUBLIC float reflectionRoughnessMax;
-    SHADER_PUBLIC float specularDeferRoughnessMax;
+    SHADER_PUBLIC float lightSpecularFromReflectionsMax;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC uint32_t pad2;
@@ -772,6 +772,23 @@ SHADER_PUBLIC struct ReflectionTracePushConstant
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC float roughnessMax;
+};
+
+SHADER_PUBLIC struct SSRTracePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ReflectionHitDescriptor) reflectionDescriptors;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC float roughnessMax;
+    SHADER_PUBLIC float ssrThickness;
+    SHADER_PUBLIC uint32_t ssrMaxSteps;
+    SHADER_PUBLIC float edgeFade;
+    SHADER_PUBLIC uint32_t activeCheckerboardField;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct ReflectionShadePushConstant

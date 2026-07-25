@@ -949,21 +949,26 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
-        if (ImGui::CollapsingHeader("RT Reflections")) {
-            Core::RTReflectionConfiguration& reflection = state->lighting.reflection;
-            static const Core::RTReflectionConfiguration reflectionDefaults{};
+        if (ImGui::CollapsingHeader("Reflections")) {
+            Core::ReflectionConfiguration& reflection = state->lighting.reflection;
+            static const Core::ReflectionConfiguration reflectionDefaults{};
 
-            if (ImGui::Checkbox("Enable RT Reflections", &reflection.bEnabled)) { changed = true; }
+            if (ImGui::Checkbox("Enable Reflections", &reflection.bEnabled)) { changed = true; }
             if (ImGui::Checkbox("Enable Reflection Denoiser", &reflection.bDenoiserEnabled)) { changed = true; }
             if (ImGui::Checkbox("Screen-Space Hit Lighting", &reflection.bScreenSpaceLighting)) { changed = true; }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reproject the reflection hit into last frame's lit image and reuse that fully shadowed color; falls back to unshadowed analytic hit shading when the hit is off-screen or occluded."); }
+            if (ImGui::Checkbox("Screen-Space Trace", &reflection.bScreenSpaceTrace)) { changed = true; }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Default mode only: march the reflection ray against the depth buffer instead of the TLAS. Off-screen and occluded rays fall back to reflection probes then the skybox."); }
 
             auto reflF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
                 if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
             };
 
-            reflF("Roughness Max##reflection", &reflection.roughnessMax, reflectionDefaults.roughnessMax, 0.0f, 1.0f, "%.2f", "Surfaces rougher than this fall back to the prefiltered skybox reflection instead of being ray traced. Lower = only near-mirror surfaces get traced reflections, cheaper. Default 0.3.");
+            reflF("Traced Roughness Max##reflection", &reflection.tracedRoughnessMax, reflectionDefaults.tracedRoughnessMax, 0.0f, 1.0f, "%.2f", "Surfaces rougher than this fall back to the prefiltered skybox reflection instead of being ray traced. Lower = only near-mirror surfaces get traced reflections, cheaper. Default 0.3.");
+            reflF("Light Specular From Reflections Max##reflection", &reflection.lightSpecularFromReflectionsMax, reflectionDefaults.lightSpecularFromReflectionsMax, 0.0f, 1.0f, "%.2f", "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular; low = only near-mirror deferred. Default 1.0.");
             reflF("Intensity##reflection", &reflection.intensity, reflectionDefaults.intensity, 0.0f, 2.0f, "%.2f", "Multiplier on the traced reflection radiance before compositing. Default 1.0.");
+            reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "Screen-space trace only: view-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
+            if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Screen-space trace only: maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
 
             if (reflection.bDenoiserEnabled && state->debug.restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
                 ImGui::SeparatorText("Reflection Denoiser (RELAX)");
@@ -972,7 +977,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             ImGui::Spacing();
             if (ImGui::Button("Reset RT Reflections")) {
-                reflection = Core::RTReflectionConfiguration{};
+                reflection = Core::ReflectionConfiguration{};
                 changed = true;
             }
         }
@@ -1220,14 +1225,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     changed = true;
                 }
                 ImGui::EndDisabled();
-                if (Widgets::SliderFloat("BRDF Ray Roughness Max", &restir.brdfRoughnessMax, 0.0f, 1.0f,
-                                         {.format = "%.2f", .tooltip = "Roughness ceiling for the base pass's piggybacked BRDF-importance-sampled ray. Reflections can only narrow within this, never exceed it.", .reset = true, .resetTo = 0.3f})) {
-                    changed = true;
-                }
-                if (Widgets::SliderFloat("Specular Defer Roughness Max", &restir.specularDeferRoughnessMax, 0.0f, 1.0f,
-                                         {.format = "%.2f", .tooltip = "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) rather than shaded analytically. 1.0 = providers own all specular (pure baked-probe mode, avoids double-counting when lights are baked into probes); low = only near-mirror deferred. Independent of the RT reflection toggle.", .reset = true, .resetTo = 0.1f})) {
-                    changed = true;
-                }
 
                 ImGui::SeparatorText("Temporal");
                 if (ImGui::Checkbox("Temporal Reuse", &restir.bEnableTemporal)) {

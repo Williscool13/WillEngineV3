@@ -58,7 +58,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
     float p_hat_center_atCenter = 0.0;
     if (validCenter) {
         centerVS = UnpackLightVS(pc.lightVS[center.lightIdx]);
-        p_hat_center_atCenter = EvalReservoirPHatLight(centerVS, center.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.specularDeferRoughnessMax);
+        p_hat_center_atCenter = EvalReservoirPHatLight(centerVS, center.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.lightSpecularFromReflectionsMax);
     }
 
     ReservoirAccum accum = ReservoirAccumEmpty();
@@ -138,14 +138,14 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         float Mi = validCenter ? min(float(neighbor.M), 20.0 * float(center.M)) : float(neighbor.M);
 
         LightView neighborVS = UnpackLightVS(pc.lightVS[neighbor.lightIdx]);
-        float p_hat_neighbor_atNeighbor = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, pc.specularDeferRoughnessMax);
-        float p_hat_neighbor_atCenter = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.specularDeferRoughnessMax);
+        float p_hat_neighbor_atNeighbor = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, pc.lightSpecularFromReflectionsMax);
+        float p_hat_neighbor_atCenter = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.lightSpecularFromReflectionsMax);
 
         float denomNeighbor = Mi * p_hat_neighbor_atNeighbor + Mc * p_hat_neighbor_atCenter;
         float misNeighbor = (denomNeighbor > 0.0) ? (Mi * p_hat_neighbor_atNeighbor) / denomNeighbor : 0.0;
 
         if (validCenter) {
-            float p_hat_center_atNeighbor = EvalReservoirPHatLight(centerVS, center.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, pc.specularDeferRoughnessMax);
+            float p_hat_center_atNeighbor = EvalReservoirPHatLight(centerVS, center.sampleOffsetPacked, neighborViewPosition, neighborN, neighborV, nli.albedo.xyz, neighborF0, nli.metallic, neighborRoughness, pc.lightSpecularFromReflectionsMax);
             float denomCenter = Mi * p_hat_center_atNeighbor + Mc * p_hat_center_atCenter;
             if (denomCenter > 0.0) {
                 centerMisAccum += (Mc * p_hat_center_atCenter) / denomCenter;
@@ -183,9 +183,9 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         if (pc.bValidateVisibility != 0u) {
             float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
             float3 worldN = normalize(mul(float3x3(scene.invView), N));
-            p_hat_final = EvalReservoirPHatVisibilityLight(winnerVS, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.invView, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize, pc.specularDeferRoughnessMax);
+            p_hat_final = EvalReservoirPHatVisibilityLight(winnerVS, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.invView, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize, pc.lightSpecularFromReflectionsMax);
         } else {
-            p_hat_final = EvalReservoirPHatLight(winnerVS, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.specularDeferRoughnessMax);
+            p_hat_final = EvalReservoirPHatLight(winnerVS, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.lightSpecularFromReflectionsMax);
         }
         ReservoirFinalize(combined, accum, p_hat_final, float(neighborCount));
     } else {

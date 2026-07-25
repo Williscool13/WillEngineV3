@@ -27,13 +27,9 @@ inline const StringID REFLECTION_HIT_DESCRIPTORS_BUFFER = SID("reflection_hit_de
 inline const StringID REFLECTION_SPEC_NOISY_TARGET = SID("reflection_spec_noisy");
 inline const StringID REFLECTION_SPEC_DENOISED_TARGET = SID("reflection_spec_denoised");
 
-/** The dedicated trace produces its own ray at any roughness, so nothing clamps the slider; pass this where a piggybacked producer would supply brdfRoughnessMax. */
-inline constexpr float REFLECTION_NO_BRDF_CLAMP = FLT_MAX;
-
-/** Piggybacked BRDF ray means no ray exists past brdfRoughnessMax regardless of the slider; negative return disables (roughness is never negative). */
-inline float ComputeReflectionRoughnessMax(const Core::RTReflectionConfiguration& reflectionConfig, float brdfRoughnessMax)
+inline float ComputeReflectionRoughnessMax(const Core::ReflectionConfiguration& config)
 {
-    return reflectionConfig.bEnabled ? glm::min(reflectionConfig.roughnessMax, brdfRoughnessMax) : -1.0f;
+    return config.bEnabled ? config.tracedRoughnessMax : -1.0f;
 }
 
 /**
@@ -46,7 +42,20 @@ void SetupReflectionTracePass(RenderGraph& graph,
                               const RenderTargets& targets,
                               uint32_t sceneIndex,
                               uint64_t frameNumber,
-                              const Core::RTReflectionConfiguration& reflectionConfig);
+                              const Core::ReflectionConfiguration& reflectionConfig);
+
+/**
+ * Screen-space alternative to SetupReflectionTracePass: marches the same GGX ray against depth_copy instead of the TLAS, writing the shared
+ * reflection descriptor buffer with the REFLECTION_INSTANCE_NONE sentinel. Every pixel is written, so no clear pass is required. Requires no TLAS.
+ */
+void SetupSSRTracePass(RenderGraph& graph,
+                       PipelineManager* pipelineManager,
+                       Core::Array<uint32_t, 2> renderExtent,
+                       const RenderTargets& targets,
+                       uint32_t sceneIndex,
+                       uint64_t frameNumber,
+                       uint32_t activeCheckerboardField,
+                       const Core::ReflectionConfiguration& reflectionConfig);
 
 /** Shades each hit in the reflection descriptor buffer (sun + one NEE light + emissive + DDGI irradiance, reusing ShadeProbeRayHit); sky misses sample the skybox; ReSTIR-owned hits contribute nothing. Demodulated output; no-op when disabled. */
 void SetupReflectionShadePass(RenderGraph& graph,
@@ -57,10 +66,9 @@ void SetupReflectionShadePass(RenderGraph& graph,
                               uint32_t sceneIndex,
                               uint64_t frameNumber,
                               uint32_t activeCheckerboardField,
-                              const Core::RTReflectionConfiguration& reflectionConfig,
+                              const Core::ReflectionConfiguration& reflectionConfig,
                               bool bDDGIApply,
                               bool bCheckerboardPacked,
-                              float brdfRoughnessMax,
                               bool bDisableScreenTier);
 } // Render
 

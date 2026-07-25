@@ -14,7 +14,7 @@ namespace Core
 {
 struct ViewFamily;
 struct Arena;
-struct RTReflectionConfiguration;
+struct ReflectionConfiguration;
 }
 
 namespace Render
@@ -31,8 +31,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint64_t frameNumber,
                        const Core::ReSTIRParams& restirParams,
                        uint32_t activeCheckerboardField,
-                       const Core::RTReflectionConfiguration& reflectionConfig,
-                       bool bResetHistory);
+                       const Core::ReflectionConfiguration& reflectionConfig,
+                       bool bResetHistory,
+                       bool bSkipReflectionPiggyback);
 
 void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     PipelineManager* pipelineManager,
@@ -55,8 +56,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                float iblIntensity,
                                uint64_t frameNumber,
                                bool bDDGIApply,
-                               const Core::RTReflectionConfiguration& reflectionConfig,
-                               float brdfRoughnessMax,
+                               const Core::ReflectionConfiguration& reflectionConfig,
                                uint32_t giGatherMode);
 } // Render
 

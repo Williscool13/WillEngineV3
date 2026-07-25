@@ -367,7 +367,7 @@ struct LightingState
     Core::HeroShadowConfiguration heroShadow{};
 
     Core::DDGIParams ddgi{};
-    Core::RTReflectionConfiguration reflection{};
+    Core::ReflectionConfiguration reflection{};
     Core::ReflectionProbeConfiguration reflectionProbe{};
     float iblIntensity{1.0f};
     CubemapHandle skybox{CubemapHandle::INVALID};

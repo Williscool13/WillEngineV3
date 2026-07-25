@@ -21,9 +21,9 @@ void SetupReflectionTracePass(RenderGraph& graph,
                               const RenderTargets& targets,
                               uint32_t sceneIndex,
                               uint64_t frameNumber,
-                              const Core::RTReflectionConfiguration& reflectionConfig)
+                              const Core::ReflectionConfiguration& reflectionConfig)
 {
-    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, REFLECTION_NO_BRDF_CLAMP);
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
     if (reflectionRoughnessMax < 0.0f || !graph.HasBuffer(RT_TLAS_BUFFER)) {
         return;
     }
@@ -57,6 +57,54 @@ void SetupReflectionTracePass(RenderGraph& graph,
         });
 }
 
+static constexpr float SSR_EDGE_FADE = 0.1f;
+
+void SetupSSRTracePass(RenderGraph& graph,
+                       PipelineManager* pipelineManager,
+                       Core::Array<uint32_t, 2> renderExtent,
+                       const RenderTargets& targets,
+                       uint32_t sceneIndex,
+                       uint64_t frameNumber,
+                       uint32_t activeCheckerboardField,
+                       const Core::ReflectionConfiguration& reflectionConfig)
+{
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
+    if (reflectionRoughnessMax < 0.0f) {
+        return;
+    }
+
+    graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent[0] * renderExtent[1], true);
+
+    RenderPass& pass = graph.AddPass(SID("[Reflection] SSR Trace"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.depthCopy);
+    pass.WriteBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
+
+    pass.Execute([pipelineManager, sceneIndex, renderExtent, frameNumber, reflectionRoughnessMax, ssrThickness = reflectionConfig.ssrThickness, ssrMaxSteps = reflectionConfig.ssrMaxSteps, activeCheckerboardField,
+            gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            SSRTracePushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .reflectionDescriptors = graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER),
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .sceneDataIndex = sceneIndex,
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+                .roughnessMax = reflectionRoughnessMax,
+                .ssrThickness = ssrThickness,
+                .ssrMaxSteps = static_cast<uint32_t>(ssrMaxSteps),
+                .edgeFade = SSR_EDGE_FADE,
+                .activeCheckerboardField = activeCheckerboardField,
+                .pad0 = 0u,
+            };
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ssr_trace"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
+        });
+}
+
 void SetupReflectionShadePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
                               const Core::ViewFamily& viewFamily,
@@ -65,13 +113,12 @@ void SetupReflectionShadePass(RenderGraph& graph,
                               uint32_t sceneIndex,
                               uint64_t frameNumber,
                               uint32_t activeCheckerboardField,
-                              const Core::RTReflectionConfiguration& reflectionConfig,
+                              const Core::ReflectionConfiguration& reflectionConfig,
                               bool bDDGIApply,
                               bool bCheckerboardPacked,
-                              float brdfRoughnessMax,
                               bool bDisableScreenTier)
 {
-    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
     if (reflectionRoughnessMax < 0.0f || !graph.HasBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER)) {
         return;
     }
@@ -79,7 +126,8 @@ void SetupReflectionShadePass(RenderGraph& graph,
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
-    const bool bScreenSpace = reflectionConfig.bScreenSpaceLighting && !bDisableScreenTier && graph.HasTexture(SID("lit_color_history")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
+    const bool bSSRSource = reflectionConfig.bScreenSpaceTrace;
+    const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && graph.HasTexture(SID("lit_color_history")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
 
     graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);

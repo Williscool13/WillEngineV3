@@ -21,9 +21,11 @@ Sun and skybox always bake in. In-world text/sprites bake in. Debug draws/outlin
 
 ## Bake behavior
 
-- Hijacks the main viewport: per face, history resets, ~48 settle frames, snapshot. ~5s per probe.
+- Hijacks the main viewport: per face, history resets, settle frames (default 240), snapshot.
 - Captured post-TAA, pre-post-processing (raw HDR).
-- Bakes record the converged scene. Rebake after lighting changes.
+- Bakes record the converged scene. Rebake after lighting changes; rebakes hot-reload in place.
+- 2-pass interbounce: pass 1 bakes probes-off, pass 2 rebakes with pass-1 results.
+- Output = `assets/probes/probe_<id>.wprobe`. Duplicated entities re-roll their ID.
 
 ## Bake lighting profile (user responsibility)
 

@@ -38,8 +38,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint64_t frameNumber,
                                         bool bDDGIApply,
                                         uint32_t giGatherMode,
-                                        const Core::RTReflectionConfiguration& reflectionConfig,
-                                        float specularDeferRoughnessMax);
+                                        const Core::ReflectionConfiguration& reflectionConfig);
 
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,

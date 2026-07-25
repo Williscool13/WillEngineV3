@@ -109,8 +109,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint64_t frameNumber,
                                         bool bDDGIApply,
                                         uint32_t giGatherMode,
-                                        const Core::RTReflectionConfiguration& reflectionConfig,
-                                        float specularDeferRoughnessMax)
+                                        const Core::ReflectionConfiguration& reflectionConfig)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -119,7 +118,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
 
-    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, REFLECTION_NO_BRDF_CLAMP);
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
     const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
     const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
@@ -174,7 +173,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
-            bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax, specularDeferRoughnessMax,
+            bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax, lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
             buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -215,7 +214,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .giDataIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA) : ~0x0u,
                     .giGatherMode = bGIGather ? giGatherMode : 0u,
                     .reflectionRoughnessMax = reflectionRoughnessMax,
-                    .specularDeferRoughnessMax = specularDeferRoughnessMax,
+                    .lightSpecularFromReflectionsMax = lightSpecularFromReflectionsMax,
                     .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                     .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
                     .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,

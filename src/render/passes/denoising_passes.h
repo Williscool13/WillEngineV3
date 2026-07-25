@@ -10,7 +10,7 @@
 #include "render/types/render_types.h"
 #include "render/shaders/ddgi_interop.h"
 
-namespace Core { struct ViewFamily; struct RTReflectionConfiguration; }
+namespace Core { struct ViewFamily; struct ReflectionConfiguration; }
 
 namespace Render
 {
@@ -28,8 +28,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         uint32_t activeCheckerboardField,
                         float checkerboardResolveAccumSpeed,
                         bool bDDGIApply,
-                        const Core::RTReflectionConfiguration& reflectionConfig,
-                        float brdfRoughnessMax,
+                        const Core::ReflectionConfiguration& reflectionConfig,
                         uint32_t giGatherMode);
 
 void SetupReBLURDenoiser(RenderGraph& graph,
@@ -44,9 +43,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          uint32_t activeCheckerboardField,
                          float checkerboardResolveAccumSpeed,
                          bool bDDGIApply,
-                         const Core::RTReflectionConfiguration& reflectionConfig,
-                         float brdfRoughnessMax,
-                         uint32_t giGatherMode);
+                         const Core::ReflectionConfiguration& reflectionConfig,
+                          uint32_t giGatherMode);
 } // Render
 
 #endif //WILL_ENGINE_DENOISING_PASSES_H

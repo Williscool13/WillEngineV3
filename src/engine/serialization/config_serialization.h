@@ -11,7 +11,7 @@ namespace Core
 {
 struct ReSTIRParams;
 struct DDGIParams;
-struct RTReflectionConfiguration;
+struct ReflectionConfiguration;
 struct ReflectionProbeConfiguration;
 struct HeroShadowConfiguration;
 struct GTAOConfiguration;
@@ -33,8 +33,8 @@ void FromJson(const nlohmann::json& j, Core::ReSTIRParams& p);
 nlohmann::json ToJson(const Core::DDGIParams& p);
 void FromJson(const nlohmann::json& j, Core::DDGIParams& p);
 
-nlohmann::json ToJson(const Core::RTReflectionConfiguration& p);
-void FromJson(const nlohmann::json& j, Core::RTReflectionConfiguration& p);
+nlohmann::json ToJson(const Core::ReflectionConfiguration& p);
+void FromJson(const nlohmann::json& j, Core::ReflectionConfiguration& p);
 
 nlohmann::json ToJson(const Core::ReflectionProbeConfiguration& p);
 void FromJson(const nlohmann::json& j, Core::ReflectionProbeConfiguration& p);

@@ -444,6 +444,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReSTIRRemodulatePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("reflection_trace"), src / "reflection_trace.spv", "ComputeReflectionTrace",
                             sizeof(ReflectionTracePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("ssr_trace"), src / "ssr_trace.spv", "ComputeSSRTrace",
+                            sizeof(SSRTracePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("reflection_shade"), src / "reflection_shade.spv", "ComputeReflectionShade",
                             sizeof(ReflectionShadePushConstant), PipelineCategory::Critical);
 

@@ -33,8 +33,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         uint32_t activeCheckerboardField,
                         float checkerboardResolveAccumSpeed,
                         bool bDDGIApply,
-                        const Core::RTReflectionConfiguration& reflectionConfig,
-                        float brdfRoughnessMax,
+                        const Core::ReflectionConfiguration& reflectionConfig,
                         uint32_t giGatherMode)
 {
     const bool bCheckerboard = activeCheckerboardField != 0u;
@@ -558,7 +557,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const StringID gbufferTwo = targets.gbufferTwo;
         const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
         const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
-        const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
+        const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
         const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
         const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
@@ -640,9 +639,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          uint32_t activeCheckerboardField,
                          float checkerboardResolveAccumSpeed,
                          bool bDDGIApply,
-                         const Core::RTReflectionConfiguration& reflectionConfig,
-                         float brdfRoughnessMax,
-                         uint32_t giGatherMode)
+                         const Core::ReflectionConfiguration& reflectionConfig,
+                          uint32_t giGatherMode)
 {
     const bool bCheckerboard = activeCheckerboardField != 0u;
     // NRD resolves checkerboard inside the prepass, so it must run when checkerboard is on
@@ -1140,7 +1138,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         const StringID gbufferTwo = targets.gbufferTwo;
         const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
         const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
-        const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
+        const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
         const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
         const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 

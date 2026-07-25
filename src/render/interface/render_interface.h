@@ -728,9 +728,6 @@ struct ReSTIRParams
     bool bCheckerboard{false};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
-    float brdfRoughnessMax{0.3f};
-    // Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular (pure baked-probe mode); low = only near-mirror deferred. Independent of whether the RT reflection pass is enabled.
-    float specularDeferRoughnessMax{0.1f};
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};
@@ -828,14 +825,18 @@ struct DDGIParams
     float minFrontfaceDistance{0.3f};
 };
 
-struct RTReflectionConfiguration
+struct ReflectionConfiguration
 {
     bool bEnabled{true};
     bool bDenoiserEnabled{true};
     bool bScreenSpaceLighting{true};
+    bool bScreenSpaceTrace{false};
 
-    float roughnessMax{0.3f};
+    float tracedRoughnessMax{0.3f};
+    float lightSpecularFromReflectionsMax{1.0f};
     float intensity{1.0f};
+    float ssrThickness{0.3f};
+    int32_t ssrMaxSteps{64};
 };
 
 struct ReflectionProbeConfiguration
@@ -1033,7 +1034,7 @@ struct FrameBuffer
     bool bLogRDG = false;
     ReSTIRParams restir{};
     DDGIParams ddgi{};
-    RTReflectionConfiguration reflection{};
+    ReflectionConfiguration reflection{};
     ReflectionProbeConfiguration reflectionProbe{};
 
     bool bTakeScreenshot{false};

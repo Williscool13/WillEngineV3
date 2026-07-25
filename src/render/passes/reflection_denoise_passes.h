@@ -9,7 +9,7 @@
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
 
-namespace Core { struct ViewFamily; struct RTReflectionConfiguration; }
+namespace Core { struct ViewFamily; struct ReflectionConfiguration; }
 
 namespace Render
 {
@@ -24,8 +24,7 @@ void SetupReflectionRELAXDenoiser(RenderGraph& graph,
                                   uint64_t frameNumber,
                                   uint32_t activeCheckerboardField,
                                   float checkerboardResolveAccumSpeed,
-                                  const Core::RTReflectionConfiguration& reflectionConfig,
-                                  float brdfRoughnessMax);
+                                  const Core::ReflectionConfiguration& reflectionConfig);
 } // Render
 
 #endif //WILL_ENGINE_REFLECTION_DENOISE_PASSES_H

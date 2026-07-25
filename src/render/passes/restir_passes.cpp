@@ -30,12 +30,13 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint64_t frameNumber,
                        const Core::ReSTIRParams& restirParams,
                        uint32_t activeCheckerboardField,
-                       const Core::RTReflectionConfiguration& reflectionConfig,
-                       bool bResetHistory)
+                       const Core::ReflectionConfiguration& reflectionConfig,
+                       bool bResetHistory,
+                       bool bSkipReflectionPiggyback)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const uint32_t reservoirBufferSize = pixelCount * static_cast<uint32_t>(sizeof(Reservoir));
-    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, restirParams.brdfRoughnessMax);
+    const float reflectionRoughnessMax = bSkipReflectionPiggyback ? -1.0f : ComputeReflectionRoughnessMax(reflectionConfig);
     const uint32_t reflectionBufferSize = pixelCount * static_cast<uint32_t>(sizeof(ReflectionHitDescriptor));
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
@@ -299,8 +300,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
                 .activeCheckerboardField = field,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
-                .brdfRoughnessMax = restirParams.brdfRoughnessMax,
-                .specularDeferRoughnessMax = restirParams.specularDeferRoughnessMax,
+                .brdfRoughnessMax = reflectionConfig.tracedRoughnessMax,
+                .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -525,7 +526,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .bValidateVisibility = bLastPass ? 1u : 0u,
                 .wClamp = restirParams.restirWClamp,
                 .activeCheckerboardField = field,
-                .specularDeferRoughnessMax = restirParams.specularDeferRoughnessMax,
+                .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -641,15 +642,14 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                float iblIntensity,
                                uint64_t frameNumber,
                                bool bDDGIApply,
-                               const Core::RTReflectionConfiguration& reflectionConfig,
-                               float brdfRoughnessMax,
+                               const Core::ReflectionConfiguration& reflectionConfig,
                                uint32_t giGatherMode)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
-    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig, brdfRoughnessMax);
+    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
     const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
     const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 

@@ -292,6 +292,10 @@ void ReflectionProbeComponent::OnConstruct(entt::registry& registry, entt::entit
 {
     auto& comp = registry.get<ReflectionProbeComponent>(entity);
     auto* state = registry.ctx().get<Engine::EngineState*>();
+
+    comp.contentHandle = Engine::CubemapHandle::INVALID;
+    comp.contentSource = ContentSource::None;
+    comp.bBakeRequested = false;
     if (comp.probeId == 0) {
         comp.probeId = state->rng();
     }
