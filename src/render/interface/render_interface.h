@@ -862,6 +862,8 @@ struct HeroShadowConfiguration
     float silhouetteRimStrength{0.8f};
     // Uniform mode: blur the whole silhouette together when the hero OBJECT moves (camera motion excluded), instead of per-pixel motion gating.
     bool bSilhouetteUniform{false};
+    bool bMaskEnabled{true};
+    float maskStrength{1.0f};
 };
 
 /** One editor preview sphere, drawn cubemap-shaded at a reflection probe's capture position. */
@@ -923,6 +925,8 @@ struct ViewFamily
     bool bHasHero{false};
     /** Camera-independent hero object motion this frame, [0,1], from the hero model-matrix delta. Drives uniform silhouette AA. */
     float heroMotionAmount{0.0f};
+    /** Hero bounding sphere (xyz world center, w radius), valid while bHasHero and w > 0. From local bounds * scale; drives the analytic silhouette mask. */
+    glm::vec4 heroSphere{0.0f};
     HeroShadowConfiguration heroShadow{};
     ArenaVector<LightInfo> lights{};
     ArenaMap<uint32_t, uint32_t> lightEntityToIndex{};

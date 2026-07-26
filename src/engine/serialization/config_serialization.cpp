@@ -418,6 +418,8 @@ nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)
         {"bSilhouetteEnabled", p.bSilhouetteEnabled},
         {"silhouetteRimStrength", p.silhouetteRimStrength},
         {"bSilhouetteUniform", p.bSilhouetteUniform},
+        {"bMaskEnabled", p.bMaskEnabled},
+        {"maskStrength", p.maskStrength},
     };
 }
 
@@ -430,6 +432,8 @@ void FromJson(const nlohmann::json& r, Core::HeroShadowConfiguration& p)
     p.bSilhouetteEnabled = r.contains("bSilhouetteEnabled") && r["bSilhouetteEnabled"].is_boolean() ? r["bSilhouetteEnabled"].get<bool>() : p.bSilhouetteEnabled;
     p.silhouetteRimStrength = r.contains("silhouetteRimStrength") && r["silhouetteRimStrength"].is_number() ? r["silhouetteRimStrength"].get<float>() : p.silhouetteRimStrength;
     p.bSilhouetteUniform = r.contains("bSilhouetteUniform") && r["bSilhouetteUniform"].is_boolean() ? r["bSilhouetteUniform"].get<bool>() : p.bSilhouetteUniform;
+    p.bMaskEnabled = r.contains("bMaskEnabled") && r["bMaskEnabled"].is_boolean() ? r["bMaskEnabled"].get<bool>() : p.bMaskEnabled;
+    p.maskStrength = r.contains("maskStrength") && r["maskStrength"].is_number() ? r["maskStrength"].get<float>() : p.maskStrength;
 }
 
 nlohmann::json ToJson(const Core::GTAOConfiguration& p)

@@ -4,6 +4,7 @@
  */
 import common_interop;
 import push_constant_interop;
+import constants_interop;
 import bindless_declarations;
 
 [[vk::push_constant]]
@@ -26,6 +27,11 @@ void ComputeHeroReactive(uint3 threadID: SV_DispatchThreadID)
             float prev = rdgTexturesFloat[pc.historyIndex].Load(int3(coord, 0)).r;
             reactive = max(reactive, abs(now - prev));
         }
+    }
+
+    if (pc.sceneShadowIndex != ~0x0u) {
+        float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.renderExtent);
+        reactive *= rdgTexturesFloat2[pc.sceneShadowIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
     }
 
     rdgStorageFloat[pc.outputIndex][threadID.xy] = saturate(reactive * pc.reactiveScale);

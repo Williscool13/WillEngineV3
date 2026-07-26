@@ -1174,6 +1174,17 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
+        if (ImGui::Checkbox("Analytic Sphere Mask", &heroShadow.bMaskEnabled)) { changed = true; }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Donut TAA only. Places the hero's outline with an exact ray-vs-sphere test at output resolution, re-compositing the one-pixel edge band from hero-classified neighbors. Requires a spherical hero. Suppresses the rim blur inside the band it claims. Debug: Hero Silhouette Rim view, blue channel.");
+        }
+        if (heroShadow.bMaskEnabled) {
+            if (Widgets::SliderFloat("Mask Strength", &heroShadow.maskStrength, 0.0f, 1.0f)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Blend of the analytic edge over the standard resolve. 1 = pixel-exact edge; low values barely alter the image while still lighting up the debug band, useful for verifying the circle hugs the raster silhouette.");
+            }
+        }
+
         if (bDefaultMode || bReSTIRMode) {
             ImGui::SeparatorText("Directional Sun Shadow");
 

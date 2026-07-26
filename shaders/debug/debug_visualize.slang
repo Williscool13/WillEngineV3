@@ -309,10 +309,13 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(0.0, (asuint(srcPixel.w) & GBUFFER1_HERO_BIT) != 0u ? 1.0 : 0.0, 0.0);
             break;
         }
-        case 39: { // HeroRim: R = applied weight, G = rim coverage. Green = blurred (bright = weight); red = rim covered but motion gate off.
+        case 39: { // HeroRim: green = rim weight, red = rim covered but motion-gated off, blue = analytic mask (bright = applied, dim = gated band).
             float weight = srcPixel.r;
             float coverage = srcPixel.g;
-            srcPixel.xyz = (coverage > 0.0) ? (weight > 0.0 ? float3(0.0, weight, 0.0) : float3(coverage, 0.0, 0.0)) : float3(0.0);
+            float maskWeight = srcPixel.b;
+            float maskBand = srcPixel.a;
+            float3 rim = (coverage > 0.0) ? (weight > 0.0 ? float3(0.0, weight, 0.0) : float3(coverage, 0.0, 0.0)) : float3(0.0);
+            srcPixel.xyz = rim + float3(0.0, 0.0, max(maskWeight, maskBand * 0.25));
             break;
         }
         case 40: { // ReflectionProbeIndex: hash-color the probe covering the pixel. Black = sky, magenta = no probe.

@@ -861,6 +861,7 @@ SHADER_PUBLIC struct HeroReactivePushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float reactiveScale;
     SHADER_PUBLIC int32_t dilationRadius;
+    SHADER_PUBLIC uint32_t sceneShadowIndex;
 };
 
 // Donut-ported native-res TAA resolve (shaders/donut_taa.slang); fields match the shader.
@@ -890,6 +891,8 @@ SHADER_PUBLIC struct DonutTaaPushConstant
     SHADER_PUBLIC float heroRimStrength;
     SHADER_PUBLIC uint32_t heroRimDebugIndex;
     SHADER_PUBLIC float heroRimUniformGate; // >= 0: uniform-mode gate (whole silhouette); < 0: per-pixel motion gating.
+    SHADER_PUBLIC float4 heroSphere; // xyz = world center, w = radius; w <= 0 disables the analytic silhouette mask.
+    SHADER_PUBLIC float heroMaskStrength;
 };
 
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant

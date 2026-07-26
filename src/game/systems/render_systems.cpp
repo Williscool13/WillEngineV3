@@ -1054,6 +1054,24 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 }
 
+static void MergeHeroSphere(glm::vec4& sphere, const glm::vec3& center, float radius)
+{
+    if (radius <= 0.0f) { return; }
+    if (sphere.w <= 0.0f) {
+        sphere = glm::vec4(center, radius);
+        return;
+    }
+    const glm::vec3 delta = center - glm::vec3(sphere);
+    const float dist = glm::length(delta);
+    if (sphere.w >= dist + radius) { return; }
+    if (radius >= dist + sphere.w) {
+        sphere = glm::vec4(center, radius);
+        return;
+    }
+    const float merged = 0.5f * (sphere.w + dist + radius);
+    sphere = glm::vec4(glm::vec3(sphere) + delta * ((merged - sphere.w) / dist), merged);
+}
+
 static void AccumulateWorldAABB(glm::vec3& boundsMin, glm::vec3& boundsMax, bool& bHasBounds, const Engine::AABB& localBounds, const glm::mat4& worldMatrix)
 {
     if (localBounds.min.x > localBounds.max.x) { return; }
@@ -1146,6 +1164,11 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                         const float speed = glm::length(curPos - prevPos) / dt / radius;
                         vf.heroMotionAmount = glm::max(vf.heroMotionAmount, glm::smoothstep(0.1f, 1.0f, speed));
                     }
+
+                    const glm::vec3 localCenter = 0.5f * (model->bounds.aabb.min + model->bounds.aabb.max);
+                    const float minHalf = glm::min(glm::min(modelHalf.x, modelHalf.y), modelHalf.z);
+                    const float maxScale = glm::max(glm::max(glm::length(lin[0]), glm::length(lin[1])), glm::length(lin[2]));
+                    MergeHeroSphere(vf.heroSphere, glm::vec3(renderTransform.modelMatrix * glm::vec4(localCenter, 1.0f)), minHalf * maxScale);
                 }
             }
 

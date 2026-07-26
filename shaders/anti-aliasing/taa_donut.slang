@@ -135,6 +135,14 @@ float2 OutputToInput(int2 pixelPosRelativeToOrigin)
         - 0.5 + pc.inputViewOrigin + inputPixelOffset;
 }
 
+float HeroConeAngle(float2 uv, float3 axis)
+{
+    float2 ndc = uv * 2.0 - 1.0 - pc.sceneData.jitter;
+    float4 h = mul(pc.sceneData.invViewProj, float4(ndc, 0.5, 1.0));
+    float3 dir = normalize(h.xyz / h.w - pc.sceneData.cameraWorldPos.xyz);
+    return atan2(length(cross(dir, axis)), dot(dir, axis));
+}
+
 [shader("compute")]
 [numthreads(GROUP_X, GROUP_Y, 1)]
 void ComputeDonutTaa(
@@ -277,36 +285,81 @@ void ComputeDonutTaa(
         resultPQ = thisPixelColor;
     }
 
-    if (pc.heroRimStrength > 0.0) {
+    const bool bHeroMask = pc.heroMaskStrength > 0.0 && pc.heroSphere.w > 0.0;
+    if (bHeroMask || pc.heroRimStrength > 0.0) {
         // The full 3x3 s_Hero is already in the apron this thread read for its moments; no extra gbuffer taps.
         int2 sc = inputPosShared + int2(1, 1);
         uint heroCount = 0;
+        float3 heroSum = float3(0.0);
+        float3 bgSum = float3(0.0);
         [unroll]
         for (int ry = -1; ry <= 1; ry++)
         {
             [unroll]
             for (int rx = -1; rx <= 1; rx++)
             {
-                heroCount += (s_Hero[sc.y + ry][sc.x + rx] != 0u) ? 1u : 0u;
+                bool bHero = s_Hero[sc.y + ry][sc.x + rx] != 0u;
+                float3 c = s_ColorsAndLengths[sc.y + ry][sc.x + rx].rgb;
+                heroCount += bHero ? 1u : 0u;
+                heroSum += bHero ? c : float3(0.0);
+                bgSum += bHero ? float3(0.0) : c;
             }
         }
-        // Coverage feathers the rim across the 3x3 (peaks at the 50/50 boundary, 0 in pure hero/background), so the treated
-        // band is a smooth ramp instead of a render-res staircase of blurred-vs-sharp mask edges.
-        float frac = float(heroCount) / 9.0;
-        float coverage = 1.0 - abs(2.0 * frac - 1.0);
 
-        // Uniform mode gates the whole silhouette on the hero's own (camera-excluded) motion; else per-pixel on the local dilated MV.
-        float rimMotion = (pc.heroRimUniformGate >= 0.0) ? pc.heroRimUniformGate : smoothstep(0.5, 2.0, length(longestMV));
-        float rimWeight = pc.heroRimStrength * rimMotion * coverage;
+        float maskWeight = 0.0;
+        float maskBand = 0.0;
+        if (bHeroMask) {
+            float3 toCenter = pc.heroSphere.xyz - pc.sceneData.cameraWorldPos.xyz;
+            float dist = length(toCenter);
+            float radius = pc.heroSphere.w;
+            // Grazing/inside: the near-clip carves holes that are not the silhouette.
+            if (dist > radius * 1.05) {
+                float3 axis = toCenter / dist;
+                float theta = asin(saturate(radius / dist));
+                float2 uvC = (float2(outputPixelPos) + 0.5) * pc.outputTextureSizeInv;
+                float phi = HeroConeAngle(uvC, axis);
+                float phiX = HeroConeAngle(uvC + float2(pc.outputTextureSizeInv.x, 0.0), axis);
+                float phiY = HeroConeAngle(uvC + float2(0.0, pc.outputTextureSizeInv.y), axis);
+                float pixelAngle = max(length(float2(phiX - phi, phiY - phi)), 1e-6);
+                float coverage = saturate(0.5 + (theta - phi) / pixelAngle);
+                float band = saturate(min(coverage, 1.0 - coverage) * 4.0);
+                // Coarse-LOD polygons diverge from the circle when small on screen; the rim ring owns distant balls.
+                band *= smoothstep(24.0, 48.0, theta / pixelAngle);
 
-        if (rimWeight > 0.0) {
-            // Isotropic 3x3 mean: an axis-quantized 2-tap can't follow a curved (mostly diagonal) silhouette and reinforces the staircase.
-            resultPQ = lerp(resultPQ, colorMoment1, rimWeight);
+                uint bgCount = 9u - heroCount;
+                if (band > 0.0 && heroCount >= 2u && bgCount >= 2u) {
+                    // Observed coverage disagreeing means an occluder crossing the band, or model error.
+                    float agreement = saturate(1.0 - abs(float(heroCount) / 9.0 - coverage) * 2.5);
+                    maskBand = band * agreement;
+                    maskWeight = maskBand * saturate(pc.heroMaskStrength);
+                    float3 edgeColor = lerp(bgSum / float(bgCount), heroSum / float(heroCount), coverage);
+                    resultPQ = lerp(resultPQ, edgeColor, maskWeight);
+                }
+            }
         }
 
-        // Debug: R = applied weight, G = rim coverage. Coloured in debug_visualize (HeroRim); only bound when that view is active.
+        float rimWeight = 0.0;
+        float rimCoverage = 0.0;
+        if (pc.heroRimStrength > 0.0) {
+            // Coverage feathers the rim across the 3x3 (peaks at the 50/50 boundary, 0 in pure hero/background), so the treated
+            // band is a smooth ramp instead of a render-res staircase of blurred-vs-sharp mask edges.
+            float frac = float(heroCount) / 9.0;
+            rimCoverage = 1.0 - abs(2.0 * frac - 1.0);
+
+            // Uniform mode gates the whole silhouette on the hero's own (camera-excluded) motion; else per-pixel on the local dilated MV.
+            float rimMotion = (pc.heroRimUniformGate >= 0.0) ? pc.heroRimUniformGate : smoothstep(0.5, 2.0, length(longestMV));
+            // Unsuppressed rim re-blurs the analytic edge.
+            rimWeight = pc.heroRimStrength * rimMotion * rimCoverage * (1.0 - maskWeight);
+
+            if (rimWeight > 0.0) {
+                // Isotropic 3x3 mean: an axis-quantized 2-tap can't follow a curved (mostly diagonal) silhouette and reinforces the staircase.
+                resultPQ = lerp(resultPQ, colorMoment1, rimWeight);
+            }
+        }
+
+        // Debug: R = rim weight, G = rim coverage, B = mask weight, A = pre-strength band. Only bound when the HeroRim view is active.
         if (pc.heroRimDebugIndex != ~0x0u) {
-            rdgStorageFloat4[pc.heroRimDebugIndex][outputPixelPos] = float4(rimWeight, coverage, 0.0, 1.0);
+            rdgStorageFloat4[pc.heroRimDebugIndex][outputPixelPos] = float4(rimWeight, rimCoverage, maskWeight, maskBand);
         }
     }
 
