@@ -126,7 +126,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
             ddgiPC.vertexAttrBuffer = pc.vertexAttrBuffer;
             ddgiPC.tlasIndex = pc.tlasIndex;
             ddgiPC.previousCascades = pc.ddgiCascades;
-            ddgiPC.bFeedbackValid = pc.bDDGIApply;
+            ddgiPC.previousBaseCellZFlags = pc.bDDGIApply != 0 ? (1u << 16u) : 0u;
 
             WorldGridPunctualLights worldGridLights = (WorldGridPunctualLights)0;
             if (pc.worldGridBuffer != nullptr) {

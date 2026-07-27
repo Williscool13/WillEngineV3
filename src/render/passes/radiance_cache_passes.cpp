@@ -109,6 +109,7 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
         return;
     }
     const bool bFeedback = bDDGIFeedbackValid && graph.HasBuffer(DDGI_CASCADES_BUFFER);
+    const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
 
     RenderPass& indirectPass = graph.AddPass(SID("Radiance Cache Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RadianceCache);
     indirectPass.ReadWriteBuffer(RADIANCE_CACHE_ACTIVE_COUNT);
@@ -147,10 +148,14 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
     pass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
     pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
     if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
+    if (bWorldGrid) {
+        pass.ReadBuffer(SID("world_grid_light_grid"));
+        pass.ReadBuffer(SID("world_grid_index_list"));
+    }
     if (bFeedback) {
         AddDDGISampleDependencies(graph, pass);
     }
-    pass.Execute([pipelineManager, sceneIndex, bFeedback, skyboxIndex, iblIntensity, maxRadiance, bounceIntensity, accumCap, reflectionProbeCount, bReflectionProbeBruteForce](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, sceneIndex, bFeedback, bWorldGrid, skyboxIndex, iblIntensity, maxRadiance, bounceIntensity, accumCap, reflectionProbeCount, bReflectionProbeBruteForce](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("radiance_cache_shade"));
         if (!pipelineEntry) {
             return;
@@ -183,6 +188,8 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
             .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
             .worldGridProbeGrid = (!bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
             .stats = graph.GetBufferAddress(RADIANCE_CACHE_STATS),
+            .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
+            .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
             .reflectionProbeCount = reflectionProbeCount,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

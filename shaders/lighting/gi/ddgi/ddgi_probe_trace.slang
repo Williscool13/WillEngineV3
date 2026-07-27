@@ -28,13 +28,14 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
     int3 slot = DDGISlotFromProbeIndex(probeIndex, pc.volume);
     int3 cell = DDGICellFromSlot(slot, pc.volume);
     DDGIVolumeParams previousVolume = pc.volume;
-    previousVolume.baseCell = pc.previousBaseCell;
+    previousVolume.baseCell = int3(int(pc.previousBaseCellXY & 0xFFFFu) - 32768, int(pc.previousBaseCellXY >> 16u) - 32768, int(pc.previousBaseCellZFlags & 0xFFFFu) - 32768);
     bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == cell);
 
+    uint raysPerProbe = pc.raysAndShadeInterval & 0xFFFFu;
     // Inactive probes trace only the sentinel budget
-    uint rayBudget = pc.raysPerProbe;
+    uint rayBudget = raysPerProbe;
     if (pc.probeActive != nullptr && bSameCellPrev && pc.probeActive[probeIndex] == 0) {
-        rayBudget = min(DDGI_SENTINEL_RAYS, pc.raysPerProbe);
+        rayBudget = min(DDGI_SENTINEL_RAYS, raysPerProbe);
     }
     if (rayIndex >= rayBudget) {
         return;
@@ -65,14 +66,6 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
         if (instance.lightIndex != 0xFFFFFFFF) {
             float3 radiance = float3(0.0);
-            if (q.CommittedTriangleFrontFace()) {
-                LightInfo light = pc.lightData->lights[instance.lightIndex];
-                radiance = UnpackUnorm4x8(light.packedColor).rgb * light.intensity;
-                float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
-                if (pc.maxRayRadiance > 0.0 && maxChannel > pc.maxRayRadiance) {
-                    radiance *= pc.maxRayRadiance / maxChannel;
-                }
-            }
             // Negative x tags a light-proxy hit so relocation/classification skip it; x carries -(emission.r + 1) for the irradiance blend to decode.
             result = float4(-(radiance.r + 1.0), radiance.g, radiance.b, hitT);
         } else if (q.CommittedTriangleFrontFace()) {
@@ -104,7 +97,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                     }
                     pc.radianceCache->cells[wcSlot].lastTouched = pc.frameIndex;
 
-                    uint shadeInterval = pc.radianceCacheShadeInterval + (wcSlot & 3u);
+                    uint shadeInterval = (pc.raysAndShadeInterval >> 16u) + (wcSlot & 3u);
                     if (isNew || pc.frameIndex - pc.radianceCache->cells[wcSlot].lastShaded >= shadeInterval) {
                         uint prevActive;
                         InterlockedExchange(pc.radianceCache->active[wcSlot], 1u, prevActive);
@@ -127,7 +120,8 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
             }
 
             if (!bCacheRead) {
-                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, 0.75 * hitT);
+                uint neeSeed = SeedRng(uint2(probeIndex, rayIndex), pc.frameIndex, 0x1E5CACEu);
+                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, neeSeed, 0.75 * hitT);
             }
 
             // Firefly clamp
@@ -142,7 +136,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         }
     } else {
         float3 radiance = float3(0.0);
-        if (pc.skyboxIndex >= 0 && pc.bBounceOnly == 0) {
+        if (pc.skyboxIndex >= 0 && (pc.previousBaseCellZFlags & (1u << 17u)) == 0u) {
             // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
             float3 skyDirection = float3(direction.x, -direction.y, direction.z);
             // Mip 4 is the roughness-1.0 (blurriest) prefiltered level. Reduces flickering from high frequency variance.
@@ -150,5 +144,5 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         }
         result = float4(radiance, 10000.0);
     }
-    pc.rayData[probeIndex * pc.raysPerProbe + rayIndex] = result;
+    pc.rayData[probeIndex * raysPerProbe + rayIndex] = result;
 }

@@ -641,6 +641,8 @@ SHADER_PUBLIC struct RadianceCacheShadePushConstant
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC SHADER_PTR(RadianceCacheStats) stats;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC uint32_t pad0;
 };
@@ -1310,8 +1312,8 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
 {
     SHADER_PUBLIC DDGIVolumeParams volume;
     SHADER_PUBLIC float4 rayRotation;
-    SHADER_PUBLIC int3 previousBaseCell;
-    SHADER_PUBLIC uint32_t bFeedbackValid;
+    SHADER_PUBLIC uint32_t previousBaseCellXY; // low 16 = x + 32768, high 16 = y + 32768
+    SHADER_PUBLIC uint32_t previousBaseCellZFlags; // low 16 = z + 32768, bit 16 = feedback valid, bit 17 = bounce only
     SHADER_PUBLIC SHADER_PTR(float4) rayData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
@@ -1327,16 +1329,16 @@ SHADER_PUBLIC struct DDGIProbeTracePushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
-    SHADER_PUBLIC uint32_t raysPerProbe;
-    SHADER_PUBLIC uint32_t bBounceOnly;
+    SHADER_PUBLIC uint32_t raysAndShadeInterval; // low 16 = raysPerProbe, high 16 = radiance cache shade interval
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC float maxRayRadiance;
     SHADER_PUBLIC float bounceIntensity;
     SHADER_PUBLIC float iblIntensity;
-    SHADER_PUBLIC uint32_t radianceCacheShadeInterval;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
 };
 
 SHADER_PUBLIC struct DDGIProbeBlendPushConstant
