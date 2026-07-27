@@ -42,6 +42,15 @@ void HCPreload(uint2 sharedPos, int2 globalPos, RelaxDiffuseSpecularConstants* r
     s_DiffNoisy_IsValid[sharedPos.y][sharedPos.x] = RelaxPackF16x4(float4(diffNoisy, isValid));
 }
 
+void HCWriteEmpty(RelaxHistoryClampingPushConstant pc, int2 pixelPos)
+{
+    rdgStorageFloat4[pc.outSpecIndex][pixelPos] = float4(0.0);
+    rdgStorageFloat4[pc.outSpecFastIndex][pixelPos] = float4(0.0);
+    rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(0.0);
+    rdgStorageFloat4[pc.outDiffFastIndex][pixelPos] = float4(0.0);
+    rdgStorageFloat[pc.outHistoryLengthIndex][pixelPos] = 0.0;
+}
+
 [shader("compute")]
 [numthreads(HC_GROUP_X, HC_GROUP_Y, 1)]
 void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 threadPos : SV_GroupThreadID, uint2 groupPos : SV_GroupID, int2 pixelPos : SV_DispatchThreadID, uint threadIndex : SV_GroupIndex)
@@ -65,8 +74,11 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
     }
     GroupMemoryBarrierWithGroupSync();
 
-    if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    // RDG aliases transients and never clears them, so a skipped texel would hand the next reader another resource's content.
+    bool bInRect = pixelPos.x < rc.gRectSize.x && pixelPos.y < rc.gRectSize.y;
+    if (isSky != 0.0 || !bInRect)
     {
+        if (bInRect) { HCWriteEmpty(pc, pixelPos); }
         return;
     }
 
@@ -74,6 +86,7 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
     float4 specNoisyCenter = RelaxUnpackF16x4(s_SpecNoisy_IsValid[sharedCenter.y][sharedCenter.x]);
     if (specNoisyCenter.w == 0.0)
     {
+        HCWriteEmpty(pc, pixelPos);
         return;
     }
 
@@ -144,18 +157,19 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
     float3 specYCoCg = MLRgbToYCoCg(specHistory.rgb);
     float3 clampedSpecYCoCg = rc.gSpecMaxFastAccumulatedFrameNum < rc.gSpecMaxAccumulatedFrameNum
         ? clamp(specYCoCg, specColorMin, specColorMax) : specYCoCg;
-    float3 clampedSpec = MLYCoCgToRgb(clampedSpecYCoCg);
+    // Per-channel clamping of a YCoCg box is not gamut-preserving: a Cg below the box floor reconstructs as negative green with R/B lifted, which survives to the composite as magenta.
+    float3 clampedSpec = max(MLYCoCgToRgb(clampedSpecYCoCg), 0.0);
 
     float4 diffHistory = rdgTexturesFloat4[pc.diffIndex].Load(int3(pixelPos, 0));
     float3 diffYCoCg = MLRgbToYCoCg(diffHistory.rgb);
     float3 clampedDiffYCoCg = rc.gDiffMaxFastAccumulatedFrameNum < rc.gDiffMaxAccumulatedFrameNum
         ? clamp(diffYCoCg, diffColorMin, diffColorMax) : diffYCoCg;
-    float3 clampedDiff = MLYCoCgToRgb(clampedDiffYCoCg);
+    float3 clampedDiff = max(MLYCoCgToRgb(clampedDiffYCoCg), 0.0);
 
     // If history length <= gHistoryFixFrameNum, copy from responsive history (rgb only: the responsive .a is a
     // hitT, not a 2nd moment; the moment correction below retargets the slow .a to the new rgb).
     float4 outSpec = float4(clampedSpec, specHistory.a);
-    float3 specResponsiveCenter = MLYCoCgToRgb(specCenterYCoCg.rgb);
+    float3 specResponsiveCenter = max(MLYCoCgToRgb(specCenterYCoCg.rgb), 0.0);
     float4 outSpecResponsive = float4(specResponsiveCenter, specCenterYCoCg.a);
     if (historyLength <= rc.gHistoryFixFrameNum)
     {
@@ -163,7 +177,7 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
     }
 
     float4 outDiff = float4(clampedDiff, diffHistory.a);
-    float3 diffResponsiveCenter = MLYCoCgToRgb(diffCenterYCoCg.rgb);
+    float3 diffResponsiveCenter = max(MLYCoCgToRgb(diffCenterYCoCg.rgb), 0.0);
     float4 outDiffResponsive = float4(diffResponsiveCenter, 0);
     if (historyLength <= rc.gHistoryFixFrameNum)
     {
@@ -229,6 +243,12 @@ void RelaxHistoryClampingMain(uniform RelaxHistoryClampingPushConstant pc, int2 
     float3 diffNoisy = RelaxUnpackF16x4(s_DiffNoisy_IsValid[sharedCenter.y][sharedCenter.x]).rgb;
     outDiff.rgb = lerp(outDiff.rgb, diffNoisy, diffResetAmount);
     outDiffResponsive.rgb = lerp(outDiffResponsive.rgb, diffNoisy, diffResetAmount);
+
+    // Antilag acceleration and history reset are both additive/extrapolating, so they can drive a channel below zero on their own.
+    outSpec.rgb = max(outSpec.rgb, 0.0);
+    outSpecResponsive.rgb = max(outSpecResponsive.rgb, 0.0);
+    outDiff.rgb = max(outDiff.rgb, 0.0);
+    outDiffResponsive.rgb = max(outDiffResponsive.rgb, 0.0);
 
     // 2nd moment correction
     float outSpecL = MLLuminance(outSpec.rgb);

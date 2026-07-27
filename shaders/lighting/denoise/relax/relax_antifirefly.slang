@@ -19,13 +19,17 @@ static const int AF_BUFFER_Y = AF_GROUP_Y + AF_BORDER * 2;
 
 groupshared uint2 s_Spec[AF_BUFFER_Y][AF_BUFFER_X];
 groupshared uint2 s_Diff[AF_BUFFER_Y][AF_BUFFER_X];
+groupshared uint s_Valid[AF_BUFFER_Y][AF_BUFFER_X];
 
 void AFPreload(uint2 sharedPos, int2 globalPos, RelaxDiffuseSpecularConstants* rc,
-    uint specIndex, uint diffIndex)
+    uint specIndex, uint diffIndex, uint viewZIndex)
 {
     globalPos = clamp(globalPos, int2(0, 0), rc.gRectSize - 1);
-    s_Spec[sharedPos.y][sharedPos.x] = RelaxPackF16x4(rdgTexturesFloat4[specIndex].Load(int3(globalPos, 0)));
-    s_Diff[sharedPos.y][sharedPos.x] = RelaxPackF16x4(rdgTexturesFloat4[diffIndex].Load(int3(globalPos, 0)));
+    // The 1px border routinely reaches an adjacent tile the producer skipped; an invalid tap must not be eligible to win the min/max.
+    bool bValid = RelaxIsInDenoisingRange(rdgTexturesFloat[viewZIndex].Load(int3(globalPos, 0)).r, rc.gDenoisingRange);
+    s_Valid[sharedPos.y][sharedPos.x] = bValid ? 1u : 0u;
+    s_Spec[sharedPos.y][sharedPos.x] = RelaxPackF16x4(bValid ? rdgTexturesFloat4[specIndex].Load(int3(globalPos, 0)) : float4(0.0));
+    s_Diff[sharedPos.y][sharedPos.x] = RelaxPackF16x4(bValid ? rdgTexturesFloat4[diffIndex].Load(int3(globalPos, 0)) : float4(0.0));
 }
 
 [shader("compute")]
@@ -46,14 +50,21 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
             uint2 newId = uint2(virtualIndex % AF_BUFFER_X, virtualIndex / AF_BUFFER_X);
             if (stage == 0 || virtualIndex < AF_BUFFER_X * AF_BUFFER_Y)
             {
-                AFPreload(newId, groupBase + int2(newId), rc, pc.specIndex, pc.diffIndex);
+                AFPreload(newId, groupBase + int2(newId), rc, pc.specIndex, pc.diffIndex, pc.viewZIndex);
             }
         }
     }
     GroupMemoryBarrierWithGroupSync();
 
-    if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    // RDG aliases transients and never clears them, so a skipped texel would hand the next reader another resource's content.
+    bool bInRect = pixelPos.x < rc.gRectSize.x && pixelPos.y < rc.gRectSize.y;
+    if (isSky != 0.0 || !bInRect)
     {
+        if (bInRect)
+        {
+            rdgStorageFloat4[pc.outSpecIndex][pixelPos] = float4(0.0);
+            rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(0.0);
+        }
         return;
     }
 
@@ -61,6 +72,8 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
     float centerViewZ = rdgTexturesFloat[pc.viewZIndex].Load(int3(fullPixel, 0)).r;
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
     {
+        rdgStorageFloat4[pc.outSpecIndex][pixelPos] = float4(0.0);
+        rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(0.0);
         return;
     }
 
@@ -87,6 +100,7 @@ void RelaxAntiFireflyMain(uniform RelaxAntiFireflyPushConstant pc, int2 threadPo
             if (any(p < int2(0, 0)) || any(p >= rc.gRectSize)) { continue; }
 
             uint2 si = uint2(threadPos) + AF_BORDER + uint2(xx, yy);
+            if (s_Valid[si.y][si.x] == 0u) { continue; }
 
             float specLum = MLLuminance(RelaxUnpackF16x4(s_Spec[si.y][si.x]).rgb);
             float diffLum = MLLuminance(RelaxUnpackF16x4(s_Diff[si.y][si.x]).rgb);

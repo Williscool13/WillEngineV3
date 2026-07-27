@@ -18,6 +18,7 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
     RelaxDiffuseSpecularConstants* rc = pc.constants;
     int stepSize = int(pc.stepSize);
 
+    // No zero-fill on skip: the last iteration writes the ReSTIR inputs, whose skipped texels must keep the undenoised value (remodulate masks on the gbuffer geometry bit, not the denoising range). Scratch holes are only read by the tap loop below, which masks them.
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
     if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
     {
@@ -63,9 +64,12 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
                 float sampleTapRoughness;
                 float sampleViewZ;
                 RelaxLoadGuide(pc.guideIndex, tapFullPixel, sampleNormal, sampleTapRoughness, sampleViewZ);
+                if (!RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange)) { continue; }
                 float depthW = RelaxGetBilateralWeight(abs(sampleViewZ), abs(centerViewZ));
                 float normalW = RelaxComputeWeight(MLAcosApproxPositive(dot(centerNormal, sampleNormal)), normalWeightParam, 0.0);
                 float w = depthW * normalW;
+                // Unweighted accumulation would still ingest a non-finite tap, since garbage * 0 is NaN, not 0.
+                if (!(w > 0.0)) { continue; }
 
                 float4 sampleSpec = rdgTexturesFloat4[pc.specIndex].Load(int3(p, 0));
                 float4 sampleDiff = rdgTexturesFloat4[pc.diffIndex].Load(int3(p, 0));
@@ -132,6 +136,7 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
         static const float gaussKernel[2][2] = { { 1.0 / 4.0, 1.0 / 8.0 }, { 1.0 / 8.0, 1.0 / 16.0 } };
         float4 specMoments = float4(0.0);
         float4 diffMoments = float4(0.0);
+        float momentWSum = 0.0;
         [unroll]
         for (int dy = -1; dy <= 1; dy++)
         {
@@ -139,11 +144,16 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             for (int dx = -1; dx <= 1; dx++)
             {
                 int2 p = clamp(pixelPos + int2(dx, dy), int2(0, 0), rc.gRectSize - int2(1, 1));
+                if (!RelaxIsInDenoisingRange(RelaxLoadGuideViewZ(pc.guideIndex, p), rc.gDenoisingRange)) { continue; }
                 float k = gaussKernel[abs(dx)][abs(dy)];
                 specMoments += rdgTexturesFloat4[pc.specIndex].Load(int3(p, 0)) * k;
                 diffMoments += rdgTexturesFloat4[pc.diffIndex].Load(int3(p, 0)) * k;
+                momentWSum += k;
             }
         }
+        // Dropped taps would otherwise deflate the moments and under-blur silhouettes.
+        specMoments /= max(momentWSum, 1e-6);
+        diffMoments /= max(momentWSum, 1e-6);
         float specM1 = MLLuminance(specMoments.rgb);
         centerSpecVar = max(0.0, specMoments.a - specM1 * specM1);
         float diffM1 = MLLuminance(diffMoments.rgb);

@@ -200,6 +200,19 @@ float LoadVirtualMotionBasedPrevData(
     return dot(bilinearTapsValid, 1.0) == 4.0 ? 1.0 : 0.0;
 }
 
+/** RDG aliases transients and never clears them, so a skipped texel would hand the next reader another resource's content. Every dispatched thread must leave a defined value. */
+void TAWriteEmpty(RelaxTemporalAccumulationPushConstant pc, int2 pixelPos)
+{
+    rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(0.0);
+    rdgStorageFloat4[pc.outDiffFastIndex][pixelPos] = float4(0.0);
+    rdgStorageFloat[pc.outHistoryLengthIndex][pixelPos] = 0.0;
+    rdgStorageFloat4[pc.outSpecIndex][pixelPos] = float4(0.0);
+    rdgStorageFloat4[pc.outSpecFastIndex][pixelPos] = float4(0.0);
+    rdgStorageFloat[pc.outSpecHitDistIndex][pixelPos] = 0.0;
+    rdgStorageFloat[pc.outSpecReprojConfidenceIndex][pixelPos] = 0.0;
+    rdgStorageFloat4[pc.outPrevNRIndex][pixelPos] = RelaxPackPrevNormalRoughness(float4(0.0, 0.0, 1.0, 0.0));
+}
+
 [shader("compute")]
 [numthreads(TA_GROUP_X, TA_GROUP_Y, 1)]
 void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant pc, int2 threadPos : SV_GroupThreadID, uint2 groupPos : SV_GroupID, int2 pixelPos : SV_DispatchThreadID, uint threadIndex : SV_GroupIndex)
@@ -224,8 +237,10 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     }
     GroupMemoryBarrierWithGroupSync();
 
-    if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    bool bInRect = pixelPos.x < rc.gRectSize.x && pixelPos.y < rc.gRectSize.y;
+    if (isSky != 0.0 || !bInRect)
     {
+        if (bInRect) { TAWriteEmpty(pc, pixelPos); }
         return;
     }
 
@@ -236,6 +251,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     RelaxLoadGuide(pc.guideIndex, fullPixel, currentNormal, currentRoughness, currentLinearZ);
     if (!RelaxIsInDenoisingRange(currentLinearZ, rc.gDenoisingRange))
     {
+        TAWriteEmpty(pc, pixelPos);
         return;
     }
 

@@ -46,9 +46,16 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
 {
     RelaxDiffuseSpecularConstants* rc = pc.constants;
 
+    // RDG aliases transients and never clears them, so a skipped texel would hand the next reader another resource's content.
     float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
-    if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    bool bInRect = pixelPos.x < rc.gRectSize.x && pixelPos.y < rc.gRectSize.y;
+    if (isSky != 0.0 || !bInRect)
     {
+        if (bInRect)
+        {
+            rdgStorageFloat4[pc.diffOutIndex][pixelPos] = float4(0.0);
+            rdgStorageFloat4[pc.specOutIndex][pixelPos] = float4(0.0);
+        }
         return;
     }
 
@@ -59,6 +66,8 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
     RelaxLoadGuide(pc.guideIndex, fullPixel, centerNormal, centerRoughness, centerViewZ);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
     {
+        rdgStorageFloat4[pc.diffOutIndex][pixelPos] = float4(0.0);
+        rdgStorageFloat4[pc.specOutIndex][pixelPos] = float4(0.0);
         return;
     }
 
