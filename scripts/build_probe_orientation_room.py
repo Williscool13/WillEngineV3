@@ -18,15 +18,21 @@ Color key:            Expected label reading orientation:
   -Z cyan
 
 Emissive walls make the test lighting-independent; no sun, no sky exposure.
-Add a ReflectionProbeComponent entity at the origin in the editor (component
-has no wscene key yet), then Bake Selected Probe.
+
+WARNING: the live assets/scenes/probe_orientation_room.wscene has been edited in the
+editor since this script last wrote it -- it carries a hand-placed Probe entity (whose
+probeId names a baked .wprobe) and three hand-made view spheres. RE-RUNNING THIS SCRIPT
+DISCARDS THOSE. Only re-run if you mean to go back to the generated state.
 """
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wscene_authoring as wa
-from wscene_authoring import base_entity, box_params, sphere_params, next_id, PROCEDURAL, TEXT3D
+
+wa.seed_ids("probe_orientation_room")   # must precede every next_id() call; see seed_ids()
+
+from wscene_authoring import base_entity, box_params, sphere_params, name_id, PROCEDURAL, TEXT3D
 
 MAT_MIRROR = 12524225612196796220   # reflective_restir (metallic 1, roughness 0)
 MAT_GLOSSY = 13687812491276665160   # somewhat_reflective (metallic 1, roughness 0.305)
@@ -38,13 +44,19 @@ LIT_EMISSIVE = 12304496605836952073
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAT_DIR = os.path.join(REPO, "assets", "materials")
 SCENE_PATH = os.path.join(REPO, "assets", "scenes", "probe_orientation_room.wscene")
+# Pinned: leaving this to the tail of the next_id() sequence changed the scene's identity
+# every time an entity was added ahead of it.
+SCENE_ID = 92882415086882491
 
 _SAMPLER = {"addressModeU": 0, "addressModeV": 0, "addressModeW": 0, "anisotropyEnable": 0,
             "magFilter": 1, "maxAnisotropy": 1.0, "maxLod": 1000.0, "minFilter": 1,
             "minLod": 0.0, "mipLodBias": 0.0, "mipmapMode": 1}
 
 def emissive_material(name, rgb, strength):
-    mid = next_id()
+    # id derives from the material's own (unique) file name -- NOT next_id(), which handed these
+    # the same ids as build_lighting_lab.py's first 7 materials, so one set silently replaced the
+    # other in the asset manager and the lab rendered with these emissives on its walls.
+    mid = name_id(name)
     body = {
         "alphaProperties": [0.5, 0.0, 0.0, 0.0],
         "colorFactor": [0.0, 0.0, 0.0, 1.0],
@@ -136,7 +148,6 @@ view_sphere("View Sphere Mirror", (-1.5, -2.8, 0.0), MAT_MIRROR)
 view_sphere("View Sphere Glossy", ( 1.5, -2.8, 0.0), MAT_GLOSSY)
 
 editor_camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 0.0, -2.0]}
-scene_id = next_id()
-wa.write_scene(SCENE_PATH, entities, scene_id, "Probe Orientation Room", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, "Probe Orientation Room", editor_camera=editor_camera)
 print(f"wrote {SCENE_PATH} ({len(entities)} entities)")
 print(f"wrote 7 materials to {MAT_DIR}")

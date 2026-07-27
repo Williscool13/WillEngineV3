@@ -38,6 +38,7 @@ LIGHT_SPHERE = "8299222229286905880"   # SphereLightComponent: color[3], intensi
 # NOTE: light `color` is packed to 8-bit [0,1] on the GPU -- HDR brightness MUST come from `intensity`, never color>1.
 # `range` is the influence/falloff+cull radius (NOT the emissive size). `drawEmissiveSurface`=visible glowing rep mesh.
 GIZMO = "9701894349906914118"       # DebugGizmoComponent: color, extents, lineWidth, shape (0=Box?,2=Sphere confirmed)
+PROBE = "2655446179632275286"       # ReflectionProbeComponent: probeId, bEnabled, shape, fadeMargin, captureOffset, bParallax, resolution, standInEnvMap
 
 # NOT yet keyed (no example scene exists with these -- do NOT guess the hash,
 # re-derive from a scene that actually uses them, or accept the runtime risk):
@@ -151,9 +152,30 @@ def spiral_math(outer_radius, total_height, total_sweep_deg, sample_radius=None)
 # =============================================================================
 # id / entity assembly
 # =============================================================================
+def name_id(name):
+    """FNV-1a 64 of `name`, masked to 63 bits. Order-independent, so unlike next_id() it survives
+    entities/assets being added or removed ahead of it. Use it for every id an asset is keyed by
+    (material ids, probeIds, scene ids): the id then follows the unique asset NAME and two
+    generators can never mint the same one."""
+    h = 0xCBF29CE484222325
+    for b in name.encode("utf-8"):
+        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h & 0x7FFFFFFFFFFFFFFF
+
 _ctr = [0x1234567890ABCDEF]
+
+def seed_ids(namespace):
+    """Reseed next_id() from `namespace`. CALL THIS FIRST in every generator script, with the
+    scene's name. next_id() is a fixed deterministic sequence, so two scripts that both start
+    from the default seed hand out THE SAME ids -- which silently collided the lighting lab's
+    first 7 materials with the probe orientation room's 7 emissives (whichever asset scanned
+    last won the id, so the lab rendered with emissive walls). Anything an asset is keyed by
+    should come from name_id(), not from this sequence at all."""
+    _ctr[0] = name_id(namespace) | 1
+
 def next_id():
-    """splitmix64-style unique id -- no true randomness needed, just uniqueness."""
+    """splitmix64-style unique id -- unique only WITHIN one seed_ids() namespace, and only for
+    a fixed call order. Fine for entity stable ids; do NOT key assets off it (see seed_ids)."""
     _ctr[0] = (_ctr[0] + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
     z = _ctr[0]
     z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
@@ -213,6 +235,26 @@ def add_directional_light(entity, color=(1.0, 1.0, 1.0), intensity=2.0, priority
     angular_radius_deg = sun-disk half-angle (0 = hard shadow, larger = softer penumbra)."""
     entity[LIGHT_DIRECTIONAL] = {"color": list(color), "intensity": intensity, "priority": priority,
                                   "angularRadiusDegrees": angular_radius_deg}
+    return entity
+
+# ---- reflection probes (Transform + probe component; no physics, no mesh) ----
+# Verified 2026-07-27 against reflection_probe_component.cpp Serialize() + render_systems.cpp:1664.
+PROBE_BOX, PROBE_SPHERE = 0, 1
+PROBE_RES_128, PROBE_RES_256 = 0, 1
+
+def add_reflection_probe(entity, probe_id, shape=PROBE_BOX, fade_margin=0.0, capture_offset=(0.0, 0.0, 0.0),
+                         parallax=True, resolution=PROBE_RES_256, stand_in_env_map=0, enabled=True):
+    """Box probe bounds = transform.scale as HALF-EXTENTS (sphere: max component = radius), rotated by
+    transform.rotation. The capture is taken at translation + rotation*capture_offset -- keep that point
+    out of any mesh or emissive light rep, or the cubemap bakes the inside of that object.
+    fade_margin is a world-space fade band at the boundary (0 = hard edge, right for a sealed room whose
+    walls sit on the boundary). Shading picks the SMALLEST-volume probe containing the pixel, so a nested
+    room can simply get its own smaller probe. `probe_id` must be non-zero and stable across runs --
+    it names the baked assets/probes/probe_<id>.wprobe; use name_id("..."). stand_in_env_map 0 = none
+    (probe contributes nothing until baked)."""
+    entity[PROBE] = {"probeId": probe_id, "bEnabled": enabled, "shape": shape, "fadeMargin": fade_margin,
+                      "captureOffset": list(capture_offset), "bParallax": parallax,
+                      "resolution": resolution, "standInEnvMap": stand_in_env_map}
     return entity
 
 ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT = 0, 1, 2

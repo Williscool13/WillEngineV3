@@ -20,10 +20,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wscene_authoring as wa
+wa.seed_ids("lighting_lab")   # must precede every next_id() call; see seed_ids()
+
 from wscene_authoring import (
-    base_entity, box_params, sphere_params, icosa_params, next_id,
+    base_entity, box_params, sphere_params, icosa_params, next_id, name_id,
     PROCEDURAL, PHYSICS, NAME, FOLDER, SCENE_FOLDER, TEXT3D,
     add_area_light, add_sphere_light, add_directional_light,
+    add_reflection_probe, PROBE_RES_128, PROBE_RES_256,
 )
 
 ROBOTO_FONT = 11302268835193496650   # assets/fonts/Roboto/Roboto.wsfont (baked FontID)
@@ -31,6 +34,9 @@ ROBOTO_FONT = 11302268835193496650   # assets/fonts/Roboto/Roboto.wsfont (baked 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAT_DIR = os.path.join(REPO, "assets", "materials")
 SCENE_PATH = os.path.join(REPO, "assets", "scenes", "lighting_lab.wscene")
+# Pinned: next_id() is a deterministic sequence, so leaving the scene id to the tail of that
+# sequence would change the scene's identity every time an entity is added ahead of it.
+SCENE_ID = 908694288083905623
 
 FRAG_SHADER = 11262630175972558216
 LIT_RESTIR = 7554520945661456859       # pbr_restir / reflective_restir lighting shader
@@ -44,7 +50,10 @@ _SAMPLER = {"addressModeU": 0, "addressModeV": 0, "addressModeW": 0, "anisotropy
             "magFilter": 1, "maxAnisotropy": 1.0, "maxLod": 1000.0, "minFilter": 1,
             "minLod": 0.0, "mipLodBias": 0.0, "mipmapMode": 1}
 
-def write_material(mid, name, color_factor, emissive_factor, metal_rough, lighting_shader):
+def write_material(name, color_factor, emissive_factor, metal_rough, lighting_shader):
+    # id derives from the material's own (unique) file name -- NOT next_id(), which handed the
+    # first 7 of these the same ids as build_probe_orientation_room.py's 7 emissives.
+    mid = name_id(name)
     body = {
         "alphaProperties": [0.5, 0.0, 0.0, 0.0],
         "colorFactor": list(color_factor),
@@ -74,13 +83,13 @@ def write_material(mid, name, color_factor, emissive_factor, metal_rough, lighti
     return mid
 
 def diffuse(name, rgb):
-    return write_material(next_id(), name, [rgb[0], rgb[1], rgb[2], 1.0], [0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], LIT_RESTIR)
+    return write_material(name, [rgb[0], rgb[1], rgb[2], 1.0], [0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], LIT_RESTIR)
 
 def metal(name, roughness):
-    return write_material(next_id(), name, [0.9, 0.9, 0.9, 1.0], [0.0, 0.0, 0.0, 0.0], [1.0, roughness, 0.0, 0.0], LIT_RESTIR)
+    return write_material(name, [0.9, 0.9, 0.9, 1.0], [0.0, 0.0, 0.0, 0.0], [1.0, roughness, 0.0, 0.0], LIT_RESTIR)
 
 def emissive(name, rgb, strength):
-    return write_material(next_id(), name, [0.0, 0.0, 0.0, 1.0], [rgb[0], rgb[1], rgb[2], strength], [0.0, 1.0, 0.0, 0.0], LIT_EMISSIVE)
+    return write_material(name, [0.0, 0.0, 0.0, 1.0], [rgb[0], rgb[1], rgb[2], strength], [0.0, 1.0, 0.0, 0.0], LIT_EMISSIVE)
 
 # ---- author supporting materials ----
 MAT = {}
@@ -184,6 +193,8 @@ def face_dir(dx, dy, dz):
 # =============================================================================
 WALL_T = 0.15
 
+CELL_BOX = {}   # tag -> (cx, cz, W, H, D), recorded by cell_shell so probe placement doesn't restate it
+
 def cell_shell(entities, tag, cx, cz, W, H, D, mat_floor, mat_wall, mat_ceiling=None, mat_left=None, mat_right=None, mat_back=None,
                floor_physics=True, close_front=False, open_top=False):
     """Open-front (toward -Z) 5-sided room. z-fight-free: full-footprint floor/ceiling slabs;
@@ -197,6 +208,7 @@ def cell_shell(entities, tag, cx, cz, W, H, D, mat_floor, mat_wall, mat_ceiling=
         mat_right = mat_wall
     if mat_back is None:
         mat_back = mat_wall
+    CELL_BOX[tag] = (cx, cz, W, H, D)
     x0, z0 = cx - W * 0.5, cz - D * 0.5
     T = WALL_T
     box(entities, f"[{tag}] Floor", (x0, 0.0, z0), (W, T, D), mat_floor, physics=floor_physics)
@@ -230,6 +242,53 @@ def front_with_doorway(entities, tag, cx, cz, W, H, D, material, door_w=1.6, doo
     box(entities, f"[{tag}] Front L", (x0 + T, T, z0), (side, H - 2 * T, T), material)
     box(entities, f"[{tag}] Front R", (x0 + W - T - side, T, z0), (side, H - 2 * T, T), material)
     box(entities, f"[{tag}] Lintel", (x0 + T + side, door_h, z0), (door_w, (H - T) - door_h, T), material)
+
+# =============================================================================
+# reflection probes -- one box probe per cell, bounds sitting MID-WALL so every
+# interior surface is inside the volume and every exterior face is outside it
+# (a probe reaching past the shell would reflect a cell's interior onto its back).
+# fadeMargin stays 0: cells are sealed and never blend into a neighbour, and a
+# fade band would dim the probe exactly on the walls that sit on the boundary.
+# =============================================================================
+HT = WALL_T * 0.5
+
+# Cells whose box centre -- the default capture point -- lands inside a mesh or an emissive
+# light rep. Capturing from in there bakes that object's interior, not the room.
+CAPTURE_OFFSET = {
+    "Opposing": (0.0, 0.0, -2.0),    # centre pillar
+    "Overlap": (0.0, 0.0, -1.5),     # centre pole
+    "Banner": (0.0, 0.0, -1.2),      # two-sided banner spans the centre plane; capture on the red side
+    "Edge": (1.2, 0.0, 0.0),         # centre blade; capture on the lit side
+    "EmMesh": (0.0, 1.0, 0.0),       # squashed icosa emitter spans the whole centre slab
+    "Rotate": (0.0, 0.0, -1.8),      # icosa emitter on the centre pedestal
+}
+# Full-height, full-depth centre divider: one probe per half, split on the divider's mid-plane.
+SPLIT_CELLS = {"Penumbra", "IBL"}
+# Sharp-specular cells earn 256; everything else is a small diffuse room where 128 is plenty
+# (and 26 rooms at 256 is ~60MB of .wprobe and a much longer bake).
+RES_256_CELLS = {"Mirror", "Rough", "ChromeCol"}
+
+def probe_box(entities, name, x0, x1, y0, y1, z0, z1, capture=(0.0, 0.0, 0.0), resolution=PROBE_RES_128):
+    """Axis-aligned box probe spanning the given world extents; `capture` is relative to its centre."""
+    center = ((x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5)
+    half = ((x1 - x0) * 0.5, (y1 - y0) * 0.5, (z1 - z0) * 0.5)
+    e = base_entity(name, center, scale=half)
+    add_reflection_probe(e, name_id(name), capture_offset=capture, resolution=resolution)
+    entities.append(e)
+    return e
+
+def place_probes(entities, tag):
+    cx, cz, W, H, D = CELL_BOX[tag]
+    x0, x1 = cx - W * 0.5 + HT, cx + W * 0.5 - HT
+    y0, y1 = HT, H - HT
+    z0, z1 = cz - D * 0.5 + HT, cz + D * 0.5 - HT
+    cap = CAPTURE_OFFSET.get(tag, (0.0, 0.0, 0.0))
+    res = PROBE_RES_256 if tag in RES_256_CELLS else PROBE_RES_128
+    if tag in SPLIT_CELLS:
+        probe_box(entities, f"[{tag}] Probe L", x0, cx, y0, y1, z0, z1, cap, res)
+        probe_box(entities, f"[{tag}] Probe R", cx, x1, y0, y1, z0, z1, cap, res)
+        return
+    probe_box(entities, f"[{tag}] Probe", x0, x1, y0, y1, z0, z1, cap, res)
 
 # =============================================================================
 # cell builders -- each takes (entities, cx, cz) and builds a self-contained test
@@ -346,6 +405,10 @@ def c_nested(e, cx, cz):
     box(e, "[Nested] In Front R", (ix + iw - side, WALL_T, iz), (side, ih, T), MAT["white"])
     box(e, "[Nested] In Lintel", (ix + side, WALL_T + 2.2, iz), (iw - 2 * side, ih - 2.2, T), MAT["white"])
     add_sphere_light(light_entity(e, "[Nested] Light", (cx, WALL_T + 1.4, iz + idp * 0.5)), intensity=55, radius=0.15, draw_range=LR + 4)
+    # inner room gets its own probe on top of the cell-wide one; shading picks the smallest containing
+    # volume, so this is the nesting test. Capture pulled toward the doorway, off the light at the centre.
+    probe_box(e, "[Nested] Probe Inner", ix + HT, ix + iw - HT, HT, WALL_T + ih - HT, iz + HT, iz + idp - HT,
+              capture=(0.0, 0.0, -1.15))
 
 # ---- DI stress ----
 def c_many_emitters(e, cx, cz):
@@ -472,6 +535,7 @@ for i, (group, tag, builder) in enumerate(CELLS):
     start = len(entities)
     builder(entities, cx, cz)
     label(entities, f"[{tag}] Label", tag, (cx, 8.5, cz))
+    place_probes(entities, tag)
     if group not in group_fid:
         group_fid[group] = next_id()
         groups_order.append(group)
@@ -503,7 +567,7 @@ entities.extend(folders)
 # editor_camera rotation is [w,x,y,z] (same as entities, per scene_system.cpp:233/320).
 # 180 deg about Y = turn around to look +Z, staying upright (cells open toward -Z).
 editor_camera = {"rotation": [0.0, 0.0, 1.0, 0.0], "translation": [0.0, 6.0, -20.0]}
-scene_id = next_id()
-wa.write_scene(SCENE_PATH, entities, scene_id, "Lighting Lab", editor_camera=editor_camera)
-print(f"wrote {SCENE_PATH} ({len(entities)} entities, {len(CELLS)} cells, {len(folders)} folders)")
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, "Lighting Lab", editor_camera=editor_camera)
+probe_count = sum(1 for ent in entities if wa.PROBE in ent)
+print(f"wrote {SCENE_PATH} ({len(entities)} entities, {len(CELLS)} cells, {len(folders)} folders, {probe_count} probes)")
 print(f"wrote materials to {MAT_DIR}")
