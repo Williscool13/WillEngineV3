@@ -22,7 +22,13 @@ import reflection_probe_common;
 
 static const float GI_GATHER_MAX_RADIANCE = 20.0;
 static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
-static const float GI_GATHER_NEAR_FIELD_METERS = 0.25;
+
+/** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
+static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
+{
+    float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
+    return maxChannel > maxRadiance ? radiance * (maxRadiance / maxChannel) : radiance;
+}
 
 static float3 SampleCosineHemisphere(float3 n, float u1, float u2)
 {
@@ -168,7 +174,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                 }
             }
 
-            radiance = min(radiance, float3(maxRadiance));
+            radiance = GIGatherClampRadiance(radiance, maxRadiance);
             shR = float4(radiance.r, 0.0, 0.0, 0.0);
             shG = float4(radiance.g, 0.0, 0.0, 0.0);
             shB = float4(radiance.b, 0.0, 0.0, 0.0);
@@ -186,6 +192,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
             uint lastTier = GI_GATHER_TIER_BACKFACE;
             float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(normalize(viewNormal), normalize(-viewPosition))));
             float3 rayOrigin = OffsetGBufferRayOrigin(worldPosition, worldN, footprint, 2.0);
+            uint2 originCellKey = RadianceCachePackKey(RadianceCacheComputeKey(worldPosition, worldN, scene.cameraWorldPos.xyz));
             for (uint sampleIndex = 0u; sampleIndex < rayCount; ++sampleIndex) {
                 float2 xi = SpatioTemporalBlueNoise2D(gatherPixel, pc.frameIndex, sampleIndex);
                 float3 direction = SampleCosineHemisphere(worldN, xi.x, xi.y);
@@ -268,6 +275,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                         if (!bResolved) {
                             RadianceCacheKey key = RadianceCacheComputeKey(hitWorldPos, hit.normal, scene.cameraWorldPos.xyz);
                             uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, hitWorldPos);
+                            bool bSelfCell = slot != RADIANCE_CACHE_HASH_INVALID && all(pc.cacheKeys[slot] == originCellKey);
                             uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
                             uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
                             int probeIndex = -1;
@@ -275,7 +283,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                             if (pc.reflectionProbeCount > 0u) {
                                 probeIndex = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
                             }
-                            if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
+                            if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u && !bSelfCell) {
                                 radiance = RadianceCacheUnpackRadiance(packedRadiance);
                                 tier = GI_GATHER_TIER_CACHE;
                                 if (probeIndex >= 0) {
@@ -322,10 +330,8 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                     tier = GI_GATHER_TIER_SKY;
                 }
 
-                radiance *= saturate(hitT / GI_GATHER_NEAR_FIELD_METERS);
-
                 // Prescaled so eval at n is sh.x + dot(sh.yzw, n) = E/pi; the NoD clamp bounds the 1/pdf weight (eval amplification capped ~1.5x).
-                radiance = min(radiance, float3(maxRadiance));
+                radiance = GIGatherClampRadiance(radiance, maxRadiance);
                 float NoD = max(dot(worldN, direction), 0.25);
                 float l0 = 0.25 / NoD;
                 float3 l1 = direction * (0.5 / NoD);

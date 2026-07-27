@@ -16,7 +16,8 @@ static const int GI_DENOISE_TILE = GI_DENOISE_GROUP + 2 * GI_DENOISE_TILE_RADIUS
 static const float GI_DENOISE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_DENOISE_NORMAL_POWER = 32.0;
 static const float GI_DENOISE_HITT_SENSITIVITY = 3.0;
-static const float GI_DENOISE_FIREFLY_LUMA_SCALE = 4.0;
+static const float GI_DENOISE_FIREFLY_SCALE = 4.0;
+static const float GI_DENOISE_HITT_FAR_METERS = 8.0;
 
 groupshared uint2 sShR[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared uint2 sShG[GI_DENOISE_TILE * GI_DENOISE_GROUP];
@@ -54,7 +55,9 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         sNormal[t] = g.x;
         sViewZ[t] = valid ? asfloat(g.y) : 0.0;
         // Sky misses opt out of the hitT guide (sentinel -1): a miss is a legit 0-radiance sample of the same integral as a neighboring hit, but hitT=10000 vs metres walls them off; with no IBL that blocks exactly the smoothing the outdoor speckle needs.
-        sHitT[t] = uint(data.y + 0.5) == GI_GATHER_TIER_SKY ? -1.0 : data.x;
+        // Far surface hits take the same opt-out. Past a few metres the exact distance carries no geometric correlation, but the edge-stop still reads the gap as a hard boundary and walls a far-bright outlier off from the near-dark neighbours that should average it down.
+        bool bFarField = uint(data.y + 0.5) == GI_GATHER_TIER_SKY || data.x >= GI_DENOISE_HITT_FAR_METERS;
+        sHitT[t] = bFarField ? -1.0 : data.x;
         sAO[t] = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(fullPixel, 0)).y : 1.0;
     }
     GroupMemoryBarrierWithGroupSync();
@@ -81,21 +84,23 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             float hitR = sViewZ[centerIdx + 1] != 0.0 && sHitT[centerIdx + 1] >= 0.0 ? sHitT[centerIdx + 1] : centerHitT;
             centerHitT = min(centerHitT, min(hitL, hitR));
 
-            // Anti-firefly: a 1spp ray that lands on a tiny ultra-bright patch (e.g. an area light's floor-contact strip, radiance clamped only at 20) is spatially isolated
-            float centerLuma = dot(float3(sumR.x, sumG.x, sumB.x), float3(0.2126, 0.7152, 0.0722));
-            float maxNeighborLuma = -1.0;
+            // Anti-firefly: a 1spp ray that lands on a tiny ultra-bright patch (e.g. an area light's floor-contact strip, radiance clamped only at 20) is spatially isolated.
+            // Max-channel, not Rec.709 luma: a blue outlier weighs 0.0722 there and would need ~10x the magnitude of a green one to trip the same cap.
+            float3 centerL0 = float3(sumR.x, sumG.x, sumB.x);
+            float centerMag = max(centerL0.r, max(centerL0.g, centerL0.b));
+            float maxNeighborMag = -1.0;
             [unroll]
             for (int d = -GI_DENOISE_RADIUS; d <= GI_DENOISE_RADIUS; d++) {
                 if (d == 0) { continue; }
                 uint idx = uint(int(centerIdx) + d);
                 if (sViewZ[idx] == 0.0) { continue; }
                 float3 tapL0 = float3(UnpackHalf2x16Pair(sShR[idx]).x, UnpackHalf2x16Pair(sShG[idx]).x, UnpackHalf2x16Pair(sShB[idx]).x);
-                maxNeighborLuma = max(maxNeighborLuma, dot(tapL0, float3(0.2126, 0.7152, 0.0722)));
+                maxNeighborMag = max(maxNeighborMag, max(tapL0.r, max(tapL0.g, tapL0.b)));
             }
-            float lumaEps = 1e-3;
-            float lumaCap = maxNeighborLuma * GI_DENOISE_FIREFLY_LUMA_SCALE + lumaEps;
-            if (maxNeighborLuma >= 0.0 && centerLuma > lumaCap) {
-                float fireflyScale = lumaCap / centerLuma;
+            float magEps = 1e-3;
+            float magCap = maxNeighborMag * GI_DENOISE_FIREFLY_SCALE + magEps;
+            if (maxNeighborMag >= 0.0 && centerMag > magCap) {
+                float fireflyScale = magCap / centerMag;
                 sumR *= fireflyScale;
                 sumG *= fireflyScale;
                 sumB *= fireflyScale;

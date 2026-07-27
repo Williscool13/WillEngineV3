@@ -39,7 +39,7 @@
     "denoisePasses": 2.0,
     "depthMipSamplingOffset": 3.299999952316284,
     "effectFalloffRange": 0.6150000095367432,
-    "effectRadius": 0.5,
+    "effectRadius": 0.15000000596046448,
     "finalValuePower": 2.200000047683716,
     "radiusMultiplier": 1.4570000171661377,
     "sampleDistributionPower": 2.0,
@@ -48,7 +48,7 @@
     "thinOccluderCompensation": 0.0
   },
   "heroShadow": {
-    "bEnabled": true,
+    "bEnabled": false,
     "bMaskEnabled": false,
     "bSilhouetteEnabled": false,
     "bSilhouetteUniform": true,
@@ -184,7 +184,7 @@
       "denoisingRange": 2000.0,
       "depthThreshold": 0.003000000026077032,
       "diffBlurRadius": 30.0,
-      "diffMaxAccumFrames": 64.0,
+      "diffMaxAccumFrames": 32.0,
       "diffMaxFastAccumFrames": 6.0,
       "diffMaxLuminanceRelativeDifference": 100.0,
       "diffPhiLuminance": 2.0,

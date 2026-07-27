@@ -37,6 +37,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(RADIANCE_CACHE_ENTRIES);
+    pass.ReadBuffer(RADIANCE_CACHE_KEYS);
     pass.ReadWriteBuffer(RADIANCE_CACHE_CELLS);
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
@@ -75,6 +76,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .ddgiCascades = bCascades ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
             .cacheEntries = graph.GetBufferAddress(RADIANCE_CACHE_ENTRIES),
+            .cacheKeys = graph.GetBufferAddress(RADIANCE_CACHE_KEYS),
             .cacheCells = graph.GetBufferAddress(RADIANCE_CACHE_CELLS),
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),

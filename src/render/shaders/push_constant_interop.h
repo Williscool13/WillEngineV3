@@ -652,6 +652,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC SHADER_PTR(uint) cacheEntries;
+    SHADER_PUBLIC SHADER_PTR(uint2) cacheKeys;
     SHADER_PUBLIC SHADER_PTR(RadianceCacheCell) cacheCells;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
