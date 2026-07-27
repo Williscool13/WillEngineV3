@@ -20,6 +20,8 @@ static const float GI_UPSCALE_CLAMP_MIN_HISTORY = 4.0;
 static const float GI_UPSCALE_CLAMP_DEV_SCALE = 4.0;
 static const float GI_UPSCALE_CLAMP_RELATIVE = 1.0;
 static const float GI_UPSCALE_CLAMP_EPS = 4e-3;
+static const float GI_UPSCALE_HISTORY_FIX_FRAMES = 8.0;
+static const float GI_UPSCALE_HISTORY_FIX_STRIDE = 8.0;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -145,67 +147,105 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         bHasCurrent = false;
     }
 
-    float3 result = current;
-    float accum = 1.0;
+    GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
     if (pc.bHistoryValid != 0u) {
         float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
-        GIGatherHistory history = GIGatherFetchHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
-        if (history.quality > 0.0) {
-            float n = min(history.count, GI_GATHER_MAX_ACCUM - 1.0);
+        history = GIGatherFetchHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+    }
 
-            float neighborhoodMotionPixels = 0.0;
+    // History fix: a pixel with no accumulation to lean on trades spatial resolution for variance, widening over the half-res SH with the same plane/normal guides the footprint uses.
+    // Stride collapses as history builds and the whole block drops out at GI_UPSCALE_HISTORY_FIX_FRAMES, so steady-state pixels pay only the compare.
+    if (bHasCurrent && history.count < GI_UPSCALE_HISTORY_FIX_FRAMES) {
+        int stride = int(round(GI_UPSCALE_HISTORY_FIX_STRIDE / (1.0 + history.count)));
+        if (stride >= 1) {
+            int2 gatherCenter = int2(pixel >> 1u);
+            float3 fixSum = current;
+            float fixW = 1.0;
             [unroll]
-            for (int oy = -1; oy <= 1; oy++) {
+            for (int fy = -1; fy <= 1; fy++) {
                 [unroll]
-                for (int ox = -1; ox <= 1; ox++) {
-                    bool bCenterTap = ox == 0 && oy == 0;
-                    int2 tap = clamp(int2(pixel) + int2(ox, oy) * 2, int2(0), int2(pc.renderExtent) - int2(1));
-                    uint4 tapGt1 = bCenterTap ? gt1 : rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tap, 0));
-                    if ((tapGt1.w & 1u) == 0u) {
-                        continue;
-                    }
-                    float tapDepth = bCenterTap ? depth : rdgTexturesFloat[pc.depthIndex].Load(int3(tap, 0)).r;
-                    if (tapDepth <= 0.0) {
-                        continue;
-                    }
-                    float2 tapUv = (float2(tap) + 0.5) / float2(pc.renderExtent);
-                    float tapViewZ = ScreenToViewSpaceDepth(tapDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-                    float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
-                    float4 tapPrevClip = mul(scene.prevViewProj, float4(mul(scene.invView, float4(tapXv, 1.0)).xyz, 1.0));
-                    if (tapPrevClip.w <= 0.0) {
-                        continue;
-                    }
+                for (int fx = -1; fx <= 1; fx++) {
+                    if (fx == 0 && fy == 0) { continue; }
+                    int2 tap = clamp(gatherCenter + int2(fx, fy) * stride, int2(0), int2(pc.gatherExtent) - 1);
+                    uint2 tapGuide = rdgTexturesUInt2[pc.guideIndex].Load(int3(tap, 0)).xy;
+                    if (asfloat(tapGuide.y) == 0.0) { continue; }
+                    if (uint(rdgTexturesFloat2[pc.dataIndex].Load(int3(tap, 0)).y + 0.5) == GI_GATHER_TIER_BACKFACE) { continue; }
 
-                    float2 tapStaticDeltaUv = ((tapPrevClip.xy / tapPrevClip.w) * 0.5 + 0.5) - tapUv - scene.jitter * 0.5 + scene.prevJitter * 0.5;
-                    float2 tapMvUv = UnpackMotionVectors(tapGt1.g) * 0.5;
-                    neighborhoodMotionPixels = max(neighborhoodMotionPixels, length((tapMvUv - tapStaticDeltaUv) * float2(pc.renderExtent)));
+                    uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent);
+                    float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
+                    float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, asfloat(tapGuide.y));
+                    float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
+                    w *= pow(saturate(dot(centerNormal, UnpackNormalOct16(tapGuide.x))), GI_UPSCALE_NORMAL_POWER);
+                    if (w <= 1e-4) { continue; }
+
+                    float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
+                    float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
+                    float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
+                    fixSum += max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0)) * w;
+                    fixW += w;
                 }
             }
-            // Neighborhood object-motion reset: anything moving nearby caps history so indirect shadowing re-converges instead of trailing the mover
-            if (neighborhoodMotionPixels > GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {
-                n = min(n, GI_UPSCALE_MOVING_MAX_ACCUM);
-            }
+            current = fixSum / fixW;
+        }
+    }
 
-            if (bHasCurrent) {
-                // A short history cannot ghost, and min() keeps the relative floor from collapsing on 1-spp noise while still shrinking to the smaller side on a real step change.
-                if (clampTaps > 1.5 && history.count > GI_UPSCALE_CLAMP_MIN_HISTORY) {
-                    float3 mean = irrM1 / clampTaps;
-                    float3 dev = sqrt(max(irrM2 / clampTaps - mean * mean, float3(0.0)));
+    float3 result = current;
+    float accum = 1.0;
+    if (history.quality > 0.0) {
+        float n = min(history.count, GI_GATHER_MAX_ACCUM - 1.0);
 
-                    float3 relative = min(abs(history.color), abs(current)) * GI_UPSCALE_CLAMP_RELATIVE;
-                    float3 devFloor = max(dev * GI_UPSCALE_CLAMP_DEV_SCALE, relative + float3(GI_UPSCALE_CLAMP_EPS));
-                    float3 histDist = abs(history.color - current) / devFloor;
-                    float3 closest = clamp(history.color, current - devFloor, current + devFloor);
-                    history.color = lerp(history.color, closest, smoothstep(float3(1.0), float3(3.0), histDist));
+        float neighborhoodMotionPixels = 0.0;
+        [unroll]
+        for (int oy = -1; oy <= 1; oy++) {
+            [unroll]
+            for (int ox = -1; ox <= 1; ox++) {
+                bool bCenterTap = ox == 0 && oy == 0;
+                int2 tap = clamp(int2(pixel) + int2(ox, oy) * 2, int2(0), int2(pc.renderExtent) - int2(1));
+                uint4 tapGt1 = bCenterTap ? gt1 : rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tap, 0));
+                if ((tapGt1.w & 1u) == 0u) {
+                    continue;
                 }
-                // quality damps this frame's blend only; feeding it back would make count' = q*count + 1 settle at 1/(1-q) and pin every reprojection edge below 10 samples forever
-                float nBlend = n * history.quality;
-                result = (nBlend * history.color + current) / (nBlend + 1.0);
-                accum = n + 1.0;
-            } else {
-                result = history.color;
-                accum = max(n, 1.0);
+                float tapDepth = bCenterTap ? depth : rdgTexturesFloat[pc.depthIndex].Load(int3(tap, 0)).r;
+                if (tapDepth <= 0.0) {
+                    continue;
+                }
+                float2 tapUv = (float2(tap) + 0.5) / float2(pc.renderExtent);
+                float tapViewZ = ScreenToViewSpaceDepth(tapDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+                float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
+                float4 tapPrevClip = mul(scene.prevViewProj, float4(mul(scene.invView, float4(tapXv, 1.0)).xyz, 1.0));
+                if (tapPrevClip.w <= 0.0) {
+                    continue;
+                }
+
+                float2 tapStaticDeltaUv = ((tapPrevClip.xy / tapPrevClip.w) * 0.5 + 0.5) - tapUv - scene.jitter * 0.5 + scene.prevJitter * 0.5;
+                float2 tapMvUv = UnpackMotionVectors(tapGt1.g) * 0.5;
+                neighborhoodMotionPixels = max(neighborhoodMotionPixels, length((tapMvUv - tapStaticDeltaUv) * float2(pc.renderExtent)));
             }
+        }
+        // Neighborhood object-motion reset: anything moving nearby caps history so indirect shadowing re-converges instead of trailing the mover
+        if (neighborhoodMotionPixels > GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {
+            n = min(n, GI_UPSCALE_MOVING_MAX_ACCUM);
+        }
+
+        if (bHasCurrent) {
+            // A short history cannot ghost, and min() keeps the relative floor from collapsing on 1-spp noise while still shrinking to the smaller side on a real step change.
+            if (clampTaps > 1.5 && history.count > GI_UPSCALE_CLAMP_MIN_HISTORY) {
+                float3 mean = irrM1 / clampTaps;
+                float3 dev = sqrt(max(irrM2 / clampTaps - mean * mean, float3(0.0)));
+
+                float3 relative = min(abs(history.color), abs(current)) * GI_UPSCALE_CLAMP_RELATIVE;
+                float3 devFloor = max(dev * GI_UPSCALE_CLAMP_DEV_SCALE, relative + float3(GI_UPSCALE_CLAMP_EPS));
+                float3 histDist = abs(history.color - current) / devFloor;
+                float3 closest = clamp(history.color, current - devFloor, current + devFloor);
+                history.color = lerp(history.color, closest, smoothstep(float3(1.0), float3(3.0), histDist));
+            }
+            // quality damps this frame's blend only; feeding it back would make count' = q*count + 1 settle at 1/(1-q) and pin every reprojection edge below 10 samples forever
+            float nBlend = n * history.quality;
+            result = (nBlend * history.color + current) / (nBlend + 1.0);
+            accum = n + 1.0;
+        } else {
+            result = history.color;
+            accum = max(n, 1.0);
         }
     }
 
