@@ -22,7 +22,7 @@ namespace Game::Component
  */
 struct StaticMeshPrimitiveComponent
 {
-    Vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: include in probe bake (nonzero=included, default; 0=excluded, legacy scenes store 1), z: exclude from DDGI (0=contributes, default), w: hero (excluded from the traced sun shadow)
+    Vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: include in probe bake (nonzero=included, default; 0=excluded, legacy scenes store 1), z: exclude from DDGI (0=contributes, default), w: free
 
     Engine::ModelID modelId{};
     uint32_t primitiveOrdinal{~0u};

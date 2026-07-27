@@ -35,7 +35,6 @@
 
 import common_interop;
 import constants_interop;
-import flags_interop;
 import shader_functions;
 import push_constant_interop;
 import bindless_declarations;
@@ -50,7 +49,6 @@ static const int RENAMED_GROUP_Y = (GROUP_X * GROUP_Y) / BUFFER_X;
 
 groupshared float4 s_ColorsAndLengths[BUFFER_Y][BUFFER_X]; // .rgb = PQ color, .a = dot(pixelMV, pixelMV)
 groupshared float2 s_MotionVectors[BUFFER_Y][BUFFER_X];
-groupshared uint s_Hero[BUFFER_Y][BUFFER_X]; // hero flag from the same gbuffer load, for the silhouette rim test
 
 static const float pq_m1 = 0.1593017578125;
 static const float pq_m2 = 78.84375;
@@ -125,7 +123,6 @@ void Preload(int2 sharedID, int2 globalID, int2 inputMax)
 
     s_ColorsAndLengths[sharedID.y][sharedID.x] = float4(color, motionLength);
     s_MotionVectors[sharedID.y][sharedID.x] = motion;
-    s_Hero[sharedID.y][sharedID.x] = gbufferOne.w & GBUFFER1_HERO_BIT;
 }
 
 float2 OutputToInput(int2 pixelPosRelativeToOrigin)
@@ -133,14 +130,6 @@ float2 OutputToInput(int2 pixelPosRelativeToOrigin)
     float2 inputPixelOffset = -pc.sceneData.jitter * 0.5 * pc.inputViewSize;
     return (float2(pixelPosRelativeToOrigin) + 0.5) * pc.inputOverOutputViewSize
         - 0.5 + pc.inputViewOrigin + inputPixelOffset;
-}
-
-float HeroConeAngle(float2 uv, float3 axis)
-{
-    float2 ndc = uv * 2.0 - 1.0 - pc.sceneData.jitter;
-    float4 h = mul(pc.sceneData.invViewProj, float4(ndc, 0.5, 1.0));
-    float3 dir = normalize(h.xyz / h.w - pc.sceneData.cameraWorldPos.xyz);
-    return atan2(length(cross(dir, axis)), dot(dir, axis));
 }
 
 [shader("compute")]
@@ -272,95 +261,11 @@ void ComputeDonutTaa(
         float sampleWeight = saturate(1.0 - upscalingFactor * dot(distanceToLowResPixel, distanceToLowResPixel));
         float blendWeight = saturate(max(motionWeight, sampleWeight) * newFrameWeight);
 
-        // Snap to current on the hero shadow's moving contour; render-res mask sampled at the resolved input pixel.
-        if (pc.heroReactiveIndex != ~0x0u) {
-            float heroReactive = rdgTexturesFloat[pc.heroReactiveIndex].Load(int3(clamp(inputPosInt, int2(0, 0), inputMax), 0)).r;
-            blendWeight = lerp(blendWeight, 1.0, heroReactive);
-        }
-
         resultPQ = lerp(historyClamped, thisPixelColor, blendWeight);
     }
     else
     {
         resultPQ = thisPixelColor;
-    }
-
-    const bool bHeroMask = pc.heroMaskStrength > 0.0 && pc.heroSphere.w > 0.0;
-    if (bHeroMask || pc.heroRimStrength > 0.0) {
-        // The full 3x3 s_Hero is already in the apron this thread read for its moments; no extra gbuffer taps.
-        int2 sc = inputPosShared + int2(1, 1);
-        uint heroCount = 0;
-        float3 heroSum = float3(0.0);
-        float3 bgSum = float3(0.0);
-        [unroll]
-        for (int ry = -1; ry <= 1; ry++)
-        {
-            [unroll]
-            for (int rx = -1; rx <= 1; rx++)
-            {
-                bool bHero = s_Hero[sc.y + ry][sc.x + rx] != 0u;
-                float3 c = s_ColorsAndLengths[sc.y + ry][sc.x + rx].rgb;
-                heroCount += bHero ? 1u : 0u;
-                heroSum += bHero ? c : float3(0.0);
-                bgSum += bHero ? float3(0.0) : c;
-            }
-        }
-
-        float maskWeight = 0.0;
-        float maskBand = 0.0;
-        if (bHeroMask) {
-            float3 toCenter = pc.heroSphere.xyz - pc.sceneData.cameraWorldPos.xyz;
-            float dist = length(toCenter);
-            float radius = pc.heroSphere.w;
-            // Grazing/inside: the near-clip carves holes that are not the silhouette.
-            if (dist > radius * 1.05) {
-                float3 axis = toCenter / dist;
-                float theta = asin(saturate(radius / dist));
-                float2 uvC = (float2(outputPixelPos) + 0.5) * pc.outputTextureSizeInv;
-                float phi = HeroConeAngle(uvC, axis);
-                float phiX = HeroConeAngle(uvC + float2(pc.outputTextureSizeInv.x, 0.0), axis);
-                float phiY = HeroConeAngle(uvC + float2(0.0, pc.outputTextureSizeInv.y), axis);
-                float pixelAngle = max(length(float2(phiX - phi, phiY - phi)), 1e-6);
-                float coverage = saturate(0.5 + (theta - phi) / pixelAngle);
-                float band = saturate(min(coverage, 1.0 - coverage) * 4.0);
-                // Coarse-LOD polygons diverge from the circle when small on screen; the rim ring owns distant balls.
-                band *= smoothstep(24.0, 48.0, theta / pixelAngle);
-
-                uint bgCount = 9u - heroCount;
-                if (band > 0.0 && heroCount >= 2u && bgCount >= 2u) {
-                    // Observed coverage disagreeing means an occluder crossing the band, or model error.
-                    float agreement = saturate(1.0 - abs(float(heroCount) / 9.0 - coverage) * 2.5);
-                    maskBand = band * agreement;
-                    maskWeight = maskBand * saturate(pc.heroMaskStrength);
-                    float3 edgeColor = lerp(bgSum / float(bgCount), heroSum / float(heroCount), coverage);
-                    resultPQ = lerp(resultPQ, edgeColor, maskWeight);
-                }
-            }
-        }
-
-        float rimWeight = 0.0;
-        float rimCoverage = 0.0;
-        if (pc.heroRimStrength > 0.0) {
-            // Coverage feathers the rim across the 3x3 (peaks at the 50/50 boundary, 0 in pure hero/background), so the treated
-            // band is a smooth ramp instead of a render-res staircase of blurred-vs-sharp mask edges.
-            float frac = float(heroCount) / 9.0;
-            rimCoverage = 1.0 - abs(2.0 * frac - 1.0);
-
-            // Uniform mode gates the whole silhouette on the hero's own (camera-excluded) motion; else per-pixel on the local dilated MV.
-            float rimMotion = (pc.heroRimUniformGate >= 0.0) ? pc.heroRimUniformGate : smoothstep(0.5, 2.0, length(longestMV));
-            // Unsuppressed rim re-blurs the analytic edge.
-            rimWeight = pc.heroRimStrength * rimMotion * rimCoverage * (1.0 - maskWeight);
-
-            if (rimWeight > 0.0) {
-                // Isotropic 3x3 mean: an axis-quantized 2-tap can't follow a curved (mostly diagonal) silhouette and reinforces the staircase.
-                resultPQ = lerp(resultPQ, colorMoment1, rimWeight);
-            }
-        }
-
-        // Debug: R = rim weight, G = rim coverage, B = mask weight, A = pre-strength band. Only bound when the HeroRim view is active.
-        if (pc.heroRimDebugIndex != ~0x0u) {
-            rdgStorageFloat4[pc.heroRimDebugIndex][outputPixelPos] = float4(rimWeight, rimCoverage, maskWeight, maskBand);
-        }
     }
 
     float3 result = PQDecode(resultPQ);

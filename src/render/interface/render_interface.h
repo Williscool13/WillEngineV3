@@ -303,8 +303,6 @@ struct PrimitiveInstanceData
     uint32_t lightIndex{0xFFFFFFFFu};
     uint32_t emissiveTriLightBase{0xFFFFFFFFu};
     bool ddgiVisible{true};
-    /** Hero instances are excluded from the traced sun shadow and shadowed by the deterministic hero pass instead. */
-    bool bHero{false};
 };
 
 struct CustomShaderDraw
@@ -849,23 +847,6 @@ struct ReflectionProbeConfiguration
     bool bBruteForcePick{false};
 };
 
-struct HeroShadowConfiguration
-{
-    // Ray-traced sun shadow cast by the hero.
-    bool bEnabled{true};
-    int32_t sampleCount{16};
-    // TAA: snaps the shadow's moving contour to the current frame.
-    float shadowReactiveScale{2.0f};
-    int32_t shadowReactiveDilation{1};
-    // TAA: softens the hero object's own outline under motion, independent of the shadow toggle.
-    bool bSilhouetteEnabled{true};
-    float silhouetteRimStrength{0.8f};
-    // Uniform mode: blur the whole silhouette together when the hero OBJECT moves (camera motion excluded), instead of per-pixel motion gating.
-    bool bSilhouetteUniform{false};
-    bool bMaskEnabled{true};
-    float maskStrength{1.0f};
-};
-
 /** One editor preview sphere, drawn cubemap-shaded at a reflection probe's capture position. */
 struct ProbePreviewSphere
 {
@@ -919,15 +900,6 @@ struct ViewFamily
     int32_t skyboxLOD{0};
 
     DirectionalLight directionalLight{};
-    /** World AABB enclosing every hero instance, valid only while bHasHero. Sizes the hero sun-shadow footprint test, so it must stay conservative. */
-    glm::vec3 heroBoundsMin{0.0f};
-    glm::vec3 heroBoundsMax{0.0f};
-    bool bHasHero{false};
-    /** Camera-independent hero object motion this frame, [0,1], from the hero model-matrix delta. Drives uniform silhouette AA. */
-    float heroMotionAmount{0.0f};
-    /** Hero bounding sphere (xyz world center, w radius), valid while bHasHero and w > 0. From local bounds * scale; drives the analytic silhouette mask. */
-    glm::vec4 heroSphere{0.0f};
-    HeroShadowConfiguration heroShadow{};
     ArenaVector<LightInfo> lights{};
     ArenaMap<uint32_t, uint32_t> lightEntityToIndex{};
     ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};

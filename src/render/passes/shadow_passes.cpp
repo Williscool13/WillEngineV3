@@ -51,61 +51,6 @@ void SetupShadowsResolve(RenderGraph& graph,
         });
 }
 
-void SetupHeroSunShadow(RenderGraph& graph,
-                        PipelineManager* pipelineManager,
-                        const Core::ViewFamily& viewFamily,
-                        Core::Array<uint32_t, 2> renderExtent,
-                        const RenderTargets& targets,
-                        uint32_t sceneIndex)
-{
-    if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
-    if (!viewFamily.directionalLight.bEnabled) { return; }
-    if (!viewFamily.bHasHero) { return; }
-
-    const glm::vec3 heroBoundsMin = viewFamily.heroBoundsMin;
-    const glm::vec3 heroBoundsMax = viewFamily.heroBoundsMax;
-    const uint32_t sampleCount = static_cast<uint32_t>(viewFamily.heroShadow.sampleCount);
-
-    VkClearValue heroClear{};
-    heroClear.color = {{1.0f, 1.0f, 1.0f, 1.0f}};
-    graph.CreateTexture(HERO_SUN_SHADOW_TARGET, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {heroClear}, true);
-
-    RenderPass& pass = graph.AddPass(SID("Hero Sun Shadow"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::HeroDirectionalLight);
-    pass.ReadTLASBuffer(RT_TLAS_BUFFER);
-    pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadBuffer(LIGHT_DATA_BUFFER);
-    pass.ReadSampledImage(targets.depthCopy);
-    pass.ReadSampledImage(targets.gbufferOne);
-    pass.WriteStorageImage(HERO_SUN_SHADOW_TARGET);
-    pass.Execute([pipelineManager, sceneIndex, renderExtent, heroBoundsMin, heroBoundsMax, sampleCount,
-            depth = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("hero_sun_shadow"));
-            if (!pipeline) { return; }
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-
-            HeroSunShadowPushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
-                .heroBoundsMin = {heroBoundsMin.x, heroBoundsMin.y, heroBoundsMin.z, 0.0f},
-                .heroBoundsMax = {heroBoundsMax.x, heroBoundsMax.y, heroBoundsMax.z, 0.0f},
-                .renderExtent = {renderExtent[0], renderExtent[1]},
-                .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
-                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex(HERO_SUN_SHADOW_TARGET),
-                .sceneDataIndex = sceneIndex,
-                .sampleCount = sampleCount,
-            };
-            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-
-            const uint32_t groupsX = (renderExtent[0] + 7) / 8;
-            const uint32_t groupsY = (renderExtent[1] + 7) / 8;
-            vkCmdDispatch(cmd, groupsX, groupsY, 1);
-        });
-
-    graph.CarryTextureToNextFrame(HERO_SUN_SHADOW_TARGET, HERO_SUN_SHADOW_HISTORY, VK_IMAGE_USAGE_SAMPLED_BIT);
-}
-
 static void AddSigmaBlurPass(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::SIGMAParams& sigma,

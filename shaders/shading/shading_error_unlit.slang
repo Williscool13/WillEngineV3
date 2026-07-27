@@ -41,7 +41,7 @@ void ComputeShadingErrorUnlit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
         PackNormalOct16(shadingInputs.interp.normalVS),
         PackMotionVectors(shadingInputs.velocity),
         PackPBR(1.0, 0.0),
-        GBUFFER1_LIT_BIT | ((data.instance.flags & INSTANCE_FLAG_HERO) != 0u ? GBUFFER1_HERO_BIT : 0u) | PackViewZDelta(shadingInputs.viewZDelta)
+        GBUFFER1_LIT_BIT | PackViewZDelta(shadingInputs.viewZDelta)
     );
     rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGBA8(albedo), PackEmissiveRGBE(float3(0.0)));
 }

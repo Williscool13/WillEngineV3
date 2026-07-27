@@ -1,6 +1,5 @@
 import push_constant_interop;
 import constants_interop;
-import flags_interop;
 import restir_interop;
 
 import bindless_declarations;
@@ -295,27 +294,6 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
         case 35: { // BentNormal: oct16 in R32_UINT (raw uint, float() is lossy). Same view-space RGB encoding as case 10 so it A/Bs against GBuffer Normal.
             uint p = rdgTexturesUInt[pc.textureIndexInArray].Load(sampleTexCoord).r;
             srcPixel = float4(UnpackNormalOct16(p) * 0.5 + 0.5, 1.0);
-            break;
-        }
-        case 36: { // HeroSunShadow: hero visibility, black = fully hero-shadowed, white = the hero takes nothing away.
-            srcPixel.xyz = float3(srcPixel.x);
-            break;
-        }
-        case 37: { // HeroReactive: TAA snap mask, red = where TAA is forced to current (the moving shadow contour). Dark = normal temporal blend.
-            srcPixel.xyz = float3(srcPixel.x, 0.0, 0.0);
-            break;
-        }
-        case 38: { // HeroFlag: gbuffer_one.w hero bit, green = hero-flagged geometry.
-            srcPixel.xyz = float3(0.0, (asuint(srcPixel.w) & GBUFFER1_HERO_BIT) != 0u ? 1.0 : 0.0, 0.0);
-            break;
-        }
-        case 39: { // HeroRim: green = rim weight, red = rim covered but motion-gated off, blue = analytic mask (bright = applied, dim = gated band).
-            float weight = srcPixel.r;
-            float coverage = srcPixel.g;
-            float maskWeight = srcPixel.b;
-            float maskBand = srcPixel.a;
-            float3 rim = (coverage > 0.0) ? (weight > 0.0 ? float3(0.0, weight, 0.0) : float3(coverage, 0.0, 0.0)) : float3(0.0);
-            srcPixel.xyz = rim + float3(0.0, 0.0, max(maskWeight, maskBand * 0.25));
             break;
         }
         case 40: { // ReflectionProbeIndex: hash-color the probe covering the pixel. Black = sky, magenta = no probe.

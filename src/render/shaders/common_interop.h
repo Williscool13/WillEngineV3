@@ -79,10 +79,6 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     ReblurInternalData = 33,
     ReblurData2 = 34,
     BentNormal = 35,
-    HeroSunShadow = 36,
-    HeroReactive = 37,
-    HeroFlag = 38,
-    HeroRim = 39,
     ReflectionProbeIndex = 40,
     ReflectionProbeBinDisagreement = 41,
 };

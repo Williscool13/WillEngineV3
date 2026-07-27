@@ -364,8 +364,6 @@ struct LightingState
     Core::PostProcessConfiguration postProcess{};
     Core::SIGMAParams sigmaParams{};
 
-    Core::HeroShadowConfiguration heroShadow{};
-
     Core::DDGIParams ddgi{};
     Core::ReflectionConfiguration reflection{};
     Core::ReflectionProbeConfiguration reflectionProbe{};

@@ -265,7 +265,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineState->projectConfig = ReadProjectConfig();
         engineState->lighting.aaConfig = engineState->projectConfig.aaConfig;
         if (!engineState->projectConfig.activeLightingProfile.IsEmpty()) {
-            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.ddgi, engineState->lighting.reflection, engineState->lighting.reflectionProbe, engineState->lighting.gtaoConfig, engineState->lighting.heroShadow, engineState->debug.shadingShaderOverride, engineState->debug.lightingShaderOverride, engineState->lighting.iblIntensity);
+            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.ddgi, engineState->lighting.reflection, engineState->lighting.reflectionProbe, engineState->lighting.gtaoConfig, engineState->debug.shadingShaderOverride, engineState->debug.lightingShaderOverride, engineState->lighting.iblIntensity);
         }
         if (!engineState->projectConfig.activePostProcessProfile.IsEmpty()) {
             Profiles::LoadPostProcessProfile(engineState->projectConfig.activePostProcessProfile.c_str(), engineState->lighting.postProcess);

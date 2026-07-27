@@ -516,7 +516,6 @@ public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 
     shadowRay.TMin = 0.0;
     shadowRay.TMax = 1e30;
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-    // Hero instances are absent from this mask; their sun shadow comes from the deterministic hero pass instead.
     q.TraceRayInline(tlas, 0, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
     q.Proceed();
     return q.CommittedStatus() == COMMITTED_NOTHING;

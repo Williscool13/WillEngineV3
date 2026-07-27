@@ -44,7 +44,7 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->lighting.heroShadow, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
     }
     Engine::WriteProjectConfig(cfg);
 }
@@ -68,7 +68,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->lighting.heroShadow, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -88,7 +88,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->lighting.heroShadow, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -489,8 +489,6 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("View Space Position")) setDebugTarget("depth_target", DebugTransformationType::ViewSpacePosition, Core::DebugViewAspect::Depth);
             ImGui::SameLine();
             if (ImGui::Button("NdotV")) setDebugTarget("gbuffer_one", DebugTransformationType::NdotV, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Hero Flag")) setDebugTarget("gbuffer_one", DebugTransformationType::HeroFlag, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("Lighting")) {
@@ -522,16 +520,6 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Stabilized Penumbra")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowPenumbra, Core::DebugViewAspect::None);
         }
 
-        if (ImGui::CollapsingHeader("Hero Sun Shadow")) {
-            if (ImGui::Button("Hero Visibility")) setDebugTarget("hero_sun_shadow", DebugTransformationType::HeroSunShadow, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Hero Shadow Prev")) setDebugTarget("hero_sun_shadow_history", DebugTransformationType::HeroSunShadow, Core::DebugViewAspect::None);
-            if (ImGui::Button("Hero TAA Reactive")) setDebugTarget("hero_reactive", DebugTransformationType::HeroReactive, Core::DebugViewAspect::None);
-            if (ImGui::Button("Hero Silhouette Rim")) setDebugTarget("hero_rim", DebugTransformationType::HeroRim, Core::DebugViewAspect::None);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Silhouette AA coverage (needs a hero + Silhouette AA > 0). Green = the outline is being blurred (brighter = stronger). Red = a silhouette edge detected but the motion gate suppressed the blur, so it stays crisp/jaggy. If donut-motion edges show red, the gate floor is too high for that speed.");
-            }
-        }
 
         if (ImGui::CollapsingHeader("ReBLUR")) {
             if (ImGui::Button("Frames (DATA1)")) setDebugTarget("reblur_data1", DebugTransformationType::None, Core::DebugViewAspect::None);
@@ -1142,55 +1130,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Reset DDGI")) {
                 ddgi = Core::DDGIParams{};
                 changed = true;
-            }
-        }
-
-        Core::HeroShadowConfiguration& heroShadow = state->lighting.heroShadow;
-        ImGui::SeparatorText("Hero Sun Shadow");
-        if (ImGui::Checkbox("Enabled##HeroShadow", &heroShadow.bEnabled)) { changed = true; }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Deterministic noise-free sun shadow for hero-flagged meshes, which the traced sun shadow excludes. Off ignores every hero flag in the scene: the pass is never built (zero cost) and that geometry returns to the traced sun shadow.");
-        }
-
-        if (heroShadow.bEnabled) {
-            if (Widgets::SliderInt("Hero Shadow Rays", &heroShadow.sampleCount, 4, 64)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Sun-disk rays per shadowed pixel. Sets the penumbra's gradient steps (rays + 1 levels), so raise it when a hero casts from far above its receiver and the soft edge bands. Cost is linear but only over pixels the hero actually shadows.");
-            }
-            if (Widgets::SliderFloat("Shadow Contour Reactivity", &heroShadow.shadowReactiveScale, 0.0f, 8.0f)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("How hard TAA snaps to the current frame where the hero shadow swept a pixel, killing the trailing smear on the moving contour. Higher is crisper but reintroduces a little aliasing on that thin band; 0 disables the reaction (shadow trails under motion).");
-            }
-            if (Widgets::SliderInt("Shadow Reactive Dilation", &heroShadow.shadowReactiveDilation, 0, 3)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Conservatively grows the reactive mask by this many pixels so a sub-pixel gap at the contour cannot leave a sliver of stale history. 1 is usually enough; raise if the shadow edge still trails a hairline. Use the Debug View 'Hero TAA Reactive' target to see the covered band.");
-            }
-        }
-
-        ImGui::SeparatorText("Hero Object Silhouette");
-        if (ImGui::Checkbox("Enabled##HeroSilhouette", &heroShadow.bSilhouetteEnabled)) { changed = true; }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Softens the hero object's own outline under motion (not the shadow). Independent of the sun-shadow toggle. Off skips the rim treatment entirely.");
-        }
-        if (heroShadow.bSilhouetteEnabled) {
-            if (Widgets::SliderFloat("Silhouette AA", &heroShadow.silhouetteRimStrength, 0.0f, 1.0f)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Donut TAA only. Blends the silhouette toward a local spatial average, replacing the history that smears when a rolling surface's motion vectors track the spinning texture instead of the translating outline. Higher is smoother (more FXAA-like) but softer.");
-            }
-            if (ImGui::Checkbox("Uniform (object motion)", &heroShadow.bSilhouetteUniform)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Blurs the whole silhouette together whenever the hero OBJECT is moving (camera motion alone does not trigger it), instead of gating each pixel on the local motion vector. Removes the patchy blurred/crisp seam on a rolling ball, at the cost of blurring the whole outline uniformly. Best for a single hero (e.g. the ball).");
-            }
-        }
-
-        if (ImGui::Checkbox("Analytic Sphere Mask", &heroShadow.bMaskEnabled)) { changed = true; }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Donut TAA only. Places the hero's outline with an exact ray-vs-sphere test at output resolution, re-compositing the one-pixel edge band from hero-classified neighbors. Requires a spherical hero. Suppresses the rim blur inside the band it claims. Debug: Hero Silhouette Rim view, blue channel.");
-        }
-        if (heroShadow.bMaskEnabled) {
-            if (Widgets::SliderFloat("Mask Strength", &heroShadow.maskStrength, 0.0f, 1.0f)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Blend of the analytic edge over the standard resolve. 1 = pixel-exact edge; low values barely alter the image while still lighting up the debug band, useful for verifying the circle hugs the raster silhouette.");
             }
         }
 

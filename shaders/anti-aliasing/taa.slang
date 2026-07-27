@@ -235,12 +235,6 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
         float turnover = saturate(grazing * depthMotionFrac * pc.grazingTurnoverStrength);
         alpha = lerp(alpha, 1.0, turnover);
 
-        // Snap to current on the hero shadow's moving contour (deterministic mask, no history wanted there).
-        if (pc.heroReactiveIndex != ~0x0u) {
-            float heroReactive = rdgTexturesFloat[pc.heroReactiveIndex].Load(int3(texelCoord, 0)).r;
-            alpha = lerp(alpha, 1.0, heroReactive);
-        }
-
         resultYCoCg = lerp(historyYCoCg, currentYCoCg, alpha);
     }
 

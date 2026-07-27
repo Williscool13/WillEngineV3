@@ -533,14 +533,9 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
 
     if (open) {
         bool visible = component.modelFlags.x != 0.0f;
-        bool hero = component.modelFlags.w != 0.0f;
         bool ddgiContribution = component.modelFlags.z == 0.0f;
         if (ImGui::Checkbox("Visible##proceduralmesh", &visible)) {
             component.modelFlags.x = visible ? 1.0f : 0.0f;
-        }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Hero##proceduralmesh", &hero)) {
-            component.modelFlags.w = hero ? 1.0f : 0.0f;
         }
         ImGui::SameLine();
         if (ImGui::Checkbox("DDGI Contribution##proceduralmesh", &ddgiContribution)) {

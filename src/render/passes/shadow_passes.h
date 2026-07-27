@@ -13,27 +13,12 @@ namespace Render
 {
 class PipelineManager;
 
-inline const StringID HERO_SUN_SHADOW_TARGET = SID("hero_sun_shadow");
-inline const StringID HERO_SUN_SHADOW_HISTORY = SID("hero_sun_shadow_history");
-
 void SetupShadowsResolve(RenderGraph& graph,
                          PipelineManager* pipelineManager,
                          const Core::ViewFamily& viewFamily,
                          Core::Array<uint32_t, 2> renderExtent,
                          const RenderTargets& targets,
                          uint32_t sceneIndex);
-
-/**
- * @brief Deterministic sun shadow cast by hero instances, which the traced sun shadow excludes.
- * Fixed sun-disk quadrature against the hero BLASes only, so the result is noise-free and needs no denoiser.
- * Writes full-res visibility to hero_sun_shadow. No-ops without a TLAS, a sun, or a hero in the scene.
- */
-void SetupHeroSunShadow(RenderGraph& graph,
-                        PipelineManager* pipelineManager,
-                        const Core::ViewFamily& viewFamily,
-                        Core::Array<uint32_t, 2> renderExtent,
-                        const RenderTargets& targets,
-                        uint32_t sceneIndex);
 
 /**
  * SIGMA shadow denoiser (penumbra-aware spatial filter) over the rt_sun_shadow signal.

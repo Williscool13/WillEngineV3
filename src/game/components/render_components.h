@@ -55,7 +55,6 @@ struct MeshRuntime
     Engine::StaticModelHandle modelHandle{};
     bool visible{true};
     bool ddgiVisible{true};
-    bool bHero{false};
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };

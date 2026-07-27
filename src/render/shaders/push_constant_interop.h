@@ -851,21 +851,9 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC float invalidHistoryBlend;
     SHADER_PUBLIC float lumaBoostCap;
     SHADER_PUBLIC float grazingTurnoverStrength;
-    SHADER_PUBLIC uint32_t heroReactiveIndex;
     SHADER_PUBLIC SHADER_PTR(float) exposureLuminance;
     SHADER_PUBLIC float exposureTarget;
     SHADER_PUBLIC float pad1;
-};
-
-SHADER_PUBLIC struct HeroReactivePushConstant
-{
-    SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint32_t currentIndex;
-    SHADER_PUBLIC uint32_t historyIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float reactiveScale;
-    SHADER_PUBLIC int32_t dilationRadius;
-    SHADER_PUBLIC uint32_t sceneShadowIndex;
 };
 
 // Donut-ported native-res TAA resolve (shaders/donut_taa.slang); fields match the shader.
@@ -891,12 +879,6 @@ SHADER_PUBLIC struct DonutTaaPushConstant
     SHADER_PUBLIC float2 outputTextureSizeInv;
     SHADER_PUBLIC float2 inputOverOutputViewSize;
     SHADER_PUBLIC float2 outputOverInputViewSize;
-    SHADER_PUBLIC uint32_t heroReactiveIndex;
-    SHADER_PUBLIC float heroRimStrength;
-    SHADER_PUBLIC uint32_t heroRimDebugIndex;
-    SHADER_PUBLIC float heroRimUniformGate; // >= 0: uniform-mode gate (whole silhouette); < 0: per-pixel motion gating.
-    SHADER_PUBLIC float4 heroSphere; // xyz = world center, w = radius; w <= 0 disables the analytic silhouette mask.
-    SHADER_PUBLIC float heroMaskStrength;
 };
 
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant
@@ -1841,21 +1823,6 @@ SHADER_PUBLIC struct RTSunShadowPushConstant
     SHADER_PUBLIC uint32_t outputGbufferIndex; // for half res
 };
 
-SHADER_PUBLIC struct HeroSunShadowPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
-    SHADER_PUBLIC float4 heroBoundsMin;
-    SHADER_PUBLIC float4 heroBoundsMax;
-    SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint32_t tlasIndex;
-    SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t sampleCount;
-};
-
 SHADER_PUBLIC struct DirectionalLightPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -1864,10 +1831,8 @@ SHADER_PUBLIC struct DirectionalLightPushConstant
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t shadowIndex;
-    SHADER_PUBLIC uint32_t heroShadowIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t _pad0;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint2 shadowExtent;
     SHADER_PUBLIC uint32_t pixelScale;

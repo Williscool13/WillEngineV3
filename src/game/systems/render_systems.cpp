@@ -1054,74 +1054,28 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 }
 
-static void MergeHeroSphere(glm::vec4& sphere, const glm::vec3& center, float radius)
-{
-    if (radius <= 0.0f) { return; }
-    if (sphere.w <= 0.0f) {
-        sphere = glm::vec4(center, radius);
-        return;
-    }
-    const glm::vec3 delta = center - glm::vec3(sphere);
-    const float dist = glm::length(delta);
-    if (sphere.w >= dist + radius) { return; }
-    if (radius >= dist + sphere.w) {
-        sphere = glm::vec4(center, radius);
-        return;
-    }
-    const float merged = 0.5f * (sphere.w + dist + radius);
-    sphere = glm::vec4(glm::vec3(sphere) + delta * ((merged - sphere.w) / dist), merged);
-}
-
-static void AccumulateWorldAABB(glm::vec3& boundsMin, glm::vec3& boundsMax, bool& bHasBounds, const Engine::AABB& localBounds, const glm::mat4& worldMatrix)
-{
-    if (localBounds.min.x > localBounds.max.x) { return; }
-    for (uint32_t i = 0; i < 8; ++i) {
-        const glm::vec3 corner{
-            (i & 1) ? localBounds.max.x : localBounds.min.x,
-            (i & 2) ? localBounds.max.y : localBounds.min.y,
-            (i & 4) ? localBounds.max.z : localBounds.min.z,
-        };
-        const glm::vec3 world = glm::vec3(worldMatrix * glm::vec4(corner, 1.0f));
-        if (!bHasBounds) {
-            boundsMin = world;
-            boundsMax = world;
-            bHasBounds = true;
-        }
-        else {
-            boundsMin = glm::min(boundsMin, world);
-            boundsMax = glm::max(boundsMax, world);
-        }
-    }
-}
-
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     auto& materialManager = ctx->materialManager; {
         ZoneScopedN("SyncMeshVisibility");
-        const bool bHeroEnabled = state->lighting.heroShadow.bEnabled;
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
             runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
-            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::StaticMeshPrimitiveComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
-            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::ProceduralMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
             runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
-            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::SplineMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
-            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::Text3DComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
             runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
-            runtime.bHero = bHeroEnabled && meshComponent.modelFlags.w != 0.0f;
         }
     }
 
@@ -1146,32 +1100,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
 
-            if (runtime.bHero) {
-                const Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
-                if (model && model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
-                    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
-                    AccumulateWorldAABB(vf.heroBoundsMin, vf.heroBoundsMax, vf.bHasHero, model->bounds.aabb, renderTransform.modelMatrix);
-
-                    // Camera-independent object motion (model matrices never carry the camera): world speed in radii/sec.
-                    const glm::vec3 curPos = glm::vec3(renderTransform.modelMatrix[3]);
-                    const glm::vec3 prevPos = glm::vec3(renderTransform.previousMatrix[3]);
-                    const glm::vec3 modelHalf = 0.5f * (model->bounds.aabb.max - model->bounds.aabb.min);
-                    const glm::mat3 lin = glm::mat3(renderTransform.modelMatrix);
-                    const glm::vec3 worldHalf = glm::abs(lin[0]) * modelHalf.x + glm::abs(lin[1]) * modelHalf.y + glm::abs(lin[2]) * modelHalf.z;
-                    const float radius = glm::max(glm::max(worldHalf.x, worldHalf.y), worldHalf.z);
-                    const float dt = frameBuffer->timeFrame.deltaTime;
-                    if (dt > 0.0f && radius > 1e-5f) {
-                        const float speed = glm::length(curPos - prevPos) / dt / radius;
-                        vf.heroMotionAmount = glm::max(vf.heroMotionAmount, glm::smoothstep(0.1f, 1.0f, speed));
-                    }
-
-                    const glm::vec3 localCenter = 0.5f * (model->bounds.aabb.min + model->bounds.aabb.max);
-                    const float minHalf = glm::min(glm::min(modelHalf.x, modelHalf.y), modelHalf.z);
-                    const float maxScale = glm::max(glm::max(glm::length(lin[0]), glm::length(lin[1])), glm::length(lin[2]));
-                    MergeHeroSphere(vf.heroSphere, glm::vec3(renderTransform.modelMatrix * glm::vec4(localCenter, 1.0f)), minHalf * maxScale);
-                }
-            }
-
             uint32_t modelIndex = 0;
             uint32_t lastNode = ~0u;
             const uint32_t base = runtime.range.offset;
@@ -1192,7 +1120,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     .blasDeviceAddress = inst.blasDeviceAddress,
                     .emissiveTriLightBase = triBase ? *triBase : 0xFFFFFFFFu,
                     .ddgiVisible = runtime.ddgiVisible,
-                    .bHero = runtime.bHero,
                 });
             }
         }

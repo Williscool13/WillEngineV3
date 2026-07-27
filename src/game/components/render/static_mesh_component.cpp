@@ -177,14 +177,9 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
     if (open) {
         bool visible = component.modelFlags.x != 0.0f;
-        bool hero = component.modelFlags.w != 0.0f;
         bool ddgiContribution = component.modelFlags.z == 0.0f;
         if (ImGui::Checkbox("Visible", &visible)) {
             component.modelFlags.x = visible ? 1.0f : 0.0f;
-        }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Hero", &hero)) {
-            component.modelFlags.w = hero ? 1.0f : 0.0f;
         }
         ImGui::SameLine();
         if (ImGui::Checkbox("DDGI Contribution", &ddgiContribution)) {

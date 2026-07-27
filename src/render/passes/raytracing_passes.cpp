@@ -78,7 +78,7 @@ void SetupTLASBuild(RenderGraph& graph,
         const bool isLightProxy = src.lightIndex != 0xFFFFFFFFu;
         uint32_t mask = isLightProxy ? INSTANCE_MASK_LIGHT_PROXY : INSTANCE_MASK_OCCLUDER;
         if (!isLightProxy && src.ddgiVisible) { mask |= INSTANCE_MASK_DDGI; }
-        if (!isLightProxy) { mask |= src.bHero ? INSTANCE_MASK_HERO : INSTANCE_MASK_SUN_OCCLUDER; }
+        if (!isLightProxy) { mask |= INSTANCE_MASK_SUN_OCCLUDER; }
         inst.mask = static_cast<uint8_t>(mask);
         inst.instanceShaderBindingTableRecordOffset = 0;
         inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;

@@ -408,34 +408,6 @@ void FromJson(const nlohmann::json& r, Core::ReflectionProbeConfiguration& p)
     p.bBruteForcePick = rBool("bBruteForcePick", p.bBruteForcePick);
 }
 
-nlohmann::json ToJson(const Core::HeroShadowConfiguration& p)
-{
-    return {
-        {"bEnabled", p.bEnabled},
-        {"sampleCount", p.sampleCount},
-        {"shadowReactiveScale", p.shadowReactiveScale},
-        {"shadowReactiveDilation", p.shadowReactiveDilation},
-        {"bSilhouetteEnabled", p.bSilhouetteEnabled},
-        {"silhouetteRimStrength", p.silhouetteRimStrength},
-        {"bSilhouetteUniform", p.bSilhouetteUniform},
-        {"bMaskEnabled", p.bMaskEnabled},
-        {"maskStrength", p.maskStrength},
-    };
-}
-
-void FromJson(const nlohmann::json& r, Core::HeroShadowConfiguration& p)
-{
-    p.bEnabled = r.contains("bEnabled") && r["bEnabled"].is_boolean() ? r["bEnabled"].get<bool>() : p.bEnabled;
-    p.sampleCount = r.contains("sampleCount") && r["sampleCount"].is_number_integer() ? r["sampleCount"].get<int32_t>() : p.sampleCount;
-    p.shadowReactiveScale = r.contains("shadowReactiveScale") && r["shadowReactiveScale"].is_number() ? r["shadowReactiveScale"].get<float>() : p.shadowReactiveScale;
-    p.shadowReactiveDilation = r.contains("shadowReactiveDilation") && r["shadowReactiveDilation"].is_number_integer() ? r["shadowReactiveDilation"].get<int32_t>() : p.shadowReactiveDilation;
-    p.bSilhouetteEnabled = r.contains("bSilhouetteEnabled") && r["bSilhouetteEnabled"].is_boolean() ? r["bSilhouetteEnabled"].get<bool>() : p.bSilhouetteEnabled;
-    p.silhouetteRimStrength = r.contains("silhouetteRimStrength") && r["silhouetteRimStrength"].is_number() ? r["silhouetteRimStrength"].get<float>() : p.silhouetteRimStrength;
-    p.bSilhouetteUniform = r.contains("bSilhouetteUniform") && r["bSilhouetteUniform"].is_boolean() ? r["bSilhouetteUniform"].get<bool>() : p.bSilhouetteUniform;
-    p.bMaskEnabled = r.contains("bMaskEnabled") && r["bMaskEnabled"].is_boolean() ? r["bMaskEnabled"].get<bool>() : p.bMaskEnabled;
-    p.maskStrength = r.contains("maskStrength") && r["maskStrength"].is_number() ? r["maskStrength"].get<float>() : p.maskStrength;
-}
-
 nlohmann::json ToJson(const Core::GTAOConfiguration& p)
 {
     return {
