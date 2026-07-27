@@ -619,7 +619,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     ImGui::End();
 }
 
-static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const char* idScope)
+static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const char* idScope, bool bShowChromaAtrous)
 {
     ImGui::PushID(idScope);
 
@@ -663,6 +663,11 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
 
     ImGui::SeparatorText("A-Trous / Edge Stopping");
     relaxI("ATrous Iterations", &relax.atrousIterations, relaxDefaults.atrousIterations, 2, 8, "Number of A-trous wavelet (spatial) passes; step doubles each pass (reach ~2^n px). More = wider denoising, costlier. NRD default 5. Default 5.");
+    if (bShowChromaAtrous) {
+        if (ImGui::Checkbox("Chroma Widening##relax", &relax.bChromaAtrous)) { changed = true; }
+        relaxTip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on.");
+        relaxI("Chroma Widening Passes", &relax.chromaAtrousIterations, relaxDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
+    }
     relaxF("Lobe Angle Fraction", &relax.lobeAngleFraction, relaxDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance, as a fraction of the BRDF lobe angle. Lower preserves sharper normal detail; higher blurs across normals. Default 0.15.");
     relaxF("Roughness Fraction", &relax.roughnessFraction, relaxDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Higher blends across differing roughness; lower keeps roughness boundaries crisp. Default 0.15.");
     relaxF("Spec Lobe Angle Slack", &relax.specLobeAngleSlack, relaxDefaults.specLobeAngleSlack, 0.f, 1.f, "%.3f", "Extra angular slack added to the specular lobe for edge stopping, loosening normal/view rejection. Default 0.15.");
@@ -955,7 +960,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             if (reflection.bDenoiserEnabled && state->debug.restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
                 ImGui::SeparatorText("Reflection Denoiser (RELAX)");
-                DrawRELAXParamsUI(changed, state->debug.restir.reflectionRelax, "reflection_relax");
+                DrawRELAXParamsUI(changed, state->debug.restir.reflectionRelax, "reflection_relax", false);
             }
 
             ImGui::Spacing();
@@ -1011,6 +1016,11 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ImGui::SetTooltip("Separable bilateral blur on the gather SH before compositing (normal/depth/hit-distance edge stopping). Off = raw 1spp signal, for A/B.");
             }
             ImGui::SameLine();
+            if (ImGui::Checkbox("Chroma##gigather", &ddgi.bFinalGatherChromaDenoise)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Extra denoise iterations on chroma (CoCg chromaticity) only, luminance carried. Targets the low-frequency red/blue patching without softening luminance detail. Requires Denoise.");
+            }
+            ImGui::SameLine();
             if (ImGui::Checkbox("Temporal##gigather", &ddgi.bFinalGatherTemporal)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Counter accumulation of the resolved gather across frames (up to 32). Off = this frame's result only; with Denoise also off the composite shows the raw gather.");
@@ -1018,6 +1028,11 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             int gatherRaysPerPixel = static_cast<int>(ddgi.gatherRaysPerPixel);
             if (Widgets::SliderInt("Rays Per Pixel##gigather", &gatherRaysPerPixel, 1, static_cast<int>(Render::GI_GATHER_MAX_RAYS_PER_PIXEL), {.tooltip = "Gather rays per half-res pixel, uniform across the frame so cost stays flat and rays stay coherent. Relative noise falls as 1/sqrt(n), which is the only lever that reaches the bright-to-dark gradients near small light slits, where one ray finds the aperture too rarely for any reweighting to help. Trace cost is linear.", .reset = true, .resetTo = 1.0})) {
                 ddgi.gatherRaysPerPixel = static_cast<uint32_t>(gatherRaysPerPixel);
+                changed = true;
+            }
+            int gatherChromaPasses = static_cast<int>(ddgi.gatherChromaDenoisePasses);
+            if (Widgets::SliderInt("Chroma Passes##gigather", &gatherChromaPasses, 1, 4, {.tooltip = "Chroma-only denoise pass count; strides 8/16/32/64, each added pass doubles the hue-smoothing reach. Default 2.", .reset = true, .resetTo = 2.0})) {
+                ddgi.gatherChromaDenoisePasses = static_cast<uint32_t>(gatherChromaPasses);
                 changed = true;
             }
             if (ImGui::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay)) { changed = true; }
@@ -1323,7 +1338,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     });
                     ImGui::EndDisabled();
 
-                    DrawRELAXParamsUI(changed, relax, "main_relax");
+                    DrawRELAXParamsUI(changed, relax, "main_relax", true);
                 }
 
                 if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {

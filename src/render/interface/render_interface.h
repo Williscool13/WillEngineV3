@@ -612,6 +612,9 @@ struct RELAXParams
 
     // A-Trous / edge stopping
     int32_t atrousIterations{5};
+    // Diffuse-only CoCg iterations
+    bool bChromaAtrous{true};
+    int32_t chromaAtrousIterations{2};
     float spatialVarianceEstimationHistoryThreshold{3.f};
     float lobeAngleFraction{0.5f};
     float roughnessFraction{0.15f};
@@ -814,6 +817,8 @@ struct DDGIParams
     bool bApplyToLighting{true};
     bool bFinalGather{false};
     bool bFinalGatherDenoise{true};
+    bool bFinalGatherChromaDenoise{true};
+    uint32_t gatherChromaDenoisePasses{2};
     bool bFinalGatherTemporal{true};
     bool bGatherSkipRay{false};
     uint32_t gatherRaysPerPixel{1};

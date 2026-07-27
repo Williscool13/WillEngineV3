@@ -252,3 +252,93 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
     rdgStorageFloat4[pc.outSpecIndex][pixelPos] = outSpec;
     rdgStorageFloat4[pc.outDiffIndex][pixelPos] = outDiff;
 }
+
+// Diffuse chroma-only widening: DI hue error is reservoir-correlated at the spatial-reuse radius, so CoCg needs reach past it. No luma edge-stop; a right-luma/wrong-hue sample passes it anyway.
+[shader("compute")]
+[numthreads(16, 16, 1)]
+void RelaxAtrousChromaMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_DispatchThreadID)
+{
+    RelaxDiffuseSpecularConstants* rc = pc.constants;
+    int stepSize = int(pc.stepSize);
+
+    float isSky = rdgTexturesFloat[pc.tilesIndex].Load(int3(pixelPos >> 4, 0)).r;
+    if (isSky != 0.0 || pixelPos.x >= rc.gRectSize.x || pixelPos.y >= rc.gRectSize.y)
+    {
+        return;
+    }
+
+    float3 centerNormal;
+    float centerRoughness;
+    float centerViewZ;
+    RelaxLoadGuide(pc.guideIndex, pixelPos, centerNormal, centerRoughness, centerViewZ);
+    if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange))
+    {
+        return;
+    }
+
+    float historyLength = 255.0 * rdgTexturesFloat[pc.historyLengthIndex].Load(int3(pixelPos, 0)).r;
+    float diffuseLobeAngleFraction = rc.gLobeAngleFraction / sqrt(float(stepSize));
+    diffuseLobeAngleFraction = lerp(0.99, diffuseLobeAngleFraction, saturate(historyLength / 5.0));
+    float diffuseNormalWeightParam = RelaxGetNormalWeightParam2(1.0, diffuseLobeAngleFraction);
+
+    float3 centerWorldPos = RelaxGetCurrentWorldPosFromPixelPos(pixelPos, centerViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
+    float depthThreshold = rc.gDepthThreshold * (rc.gOrthoMode == 0 ? centerViewZ : 1.0);
+
+    static const float kernelWeights[2] = { 0.44198, 0.27901 };
+
+    int2 offset = 0;
+    if (stepSize > 4)
+    {
+        float2 rnd = RngHashGetFloat2(uint2(pixelPos), rc.gFrameIndex);
+        offset = int2(float(stepSize) * 0.5 * (rnd - 0.5));
+    }
+
+    float4 centerDiff = rdgTexturesFloat4[pc.diffIndex].Load(int3(pixelPos, 0));
+    float centerY = dot(centerDiff.rgb, float3(0.25, 0.5, 0.25));
+    float2 centerCoCg = float2(0.5 * (centerDiff.r - centerDiff.b), 0.25 * (2.0 * centerDiff.g - centerDiff.r - centerDiff.b));
+
+    // Filter chromaticity (CoCg/Y), not absolute CoCg: chroma magnitude scales with intensity, so absolute filtering across a steep luminance gradient dumps the bright side's chroma onto dim pixels (desaturated bright blotches near lights).
+    float sumW = kernelWeights[0] * kernelWeights[0];
+    float2 sumCoCg = centerCoCg / max(centerY, 1e-6) * sumW;
+
+    [unroll]
+    for (int j = -1; j <= 1; j++)
+    {
+        [unroll]
+        for (int i = -1; i <= 1; i++)
+        {
+            if (i == 0 && j == 0) { continue; }
+
+            int2 p = pixelPos + offset + int2(i, j) * stepSize;
+            bool isInside = all(p >= int2(0, 0)) && all(p < rc.gRectSize);
+            float kernel = kernelWeights[abs(i)] * kernelWeights[abs(j)];
+
+            float3 sampleNormal;
+            float sampleRoughness;
+            float sampleViewZ;
+            RelaxLoadGuide(pc.guideIndex, p, sampleNormal, sampleRoughness, sampleViewZ);
+            float3 sampleWorldPos = RelaxGetCurrentWorldPosFromPixelPos(p, sampleViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
+
+            float geometryW = RelaxGetPlaneDistanceWeightAtrous(centerWorldPos, centerNormal, sampleWorldPos, depthThreshold);
+            geometryW *= kernel;
+            geometryW *= float(isInside && RelaxIsInDenoisingRange(sampleViewZ, rc.gDenoisingRange));
+
+            float normalWDiff = RelaxComputeWeight(MLAcosApproxPositive(dot(centerNormal, sampleNormal)), diffuseNormalWeightParam, 0.0);
+            float wDiff = geometryW * normalWDiff;
+            if (wDiff > 1e-4)
+            {
+                float3 sampleRgb = rdgTexturesFloat4[pc.diffIndex].Load(int3(p, 0)).rgb;
+                float sampleY = dot(sampleRgb, float3(0.25, 0.5, 0.25));
+                sumCoCg += float2(0.5 * (sampleRgb.r - sampleRgb.b), 0.25 * (2.0 * sampleRgb.g - sampleRgb.r - sampleRgb.b)) / max(sampleY, 1e-6) * wDiff;
+                sumW += wDiff;
+            }
+        }
+    }
+
+    float2 coCg = sumCoCg / sumW * centerY;
+    float3 delta = float3(coCg.x - coCg.y, coCg.y, -coCg.x - coCg.y);
+    // Scale chroma back rather than per-channel clamping, so widened chroma can neither push RGB negative nor hue-shift via clipping.
+    float minDelta = min(delta.r, min(delta.g, delta.b));
+    float chromaScale = minDelta < 0.0 ? saturate(centerY / max(-minDelta, 1e-6)) : 1.0;
+    rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(centerY + chromaScale * delta, centerDiff.a);
+}

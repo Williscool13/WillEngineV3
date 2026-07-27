@@ -274,9 +274,9 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
 
                         if (!bResolved) {
                             RadianceCacheKey key = RadianceCacheComputeKey(hitWorldPos, hit.normal, scene.cameraWorldPos.xyz);
-                            // A hit inside the shading point's own cell reads back the radiance this pixel just contributed, a self-feedback loop with bounceIntensity as its gain. Fall through to the probe tier instead of trusting the cell.
-                            bool bSelfCell = all(RadianceCachePackKey(key) == originCellKey);
                             uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, hitWorldPos);
+                            // A hit inside the shading point's own cell reads back the radiance this pixel just contributed, a self-feedback loop with bounceIntensity as its gain.
+                            // Fall through to the probe tier instead of trusting the cell. Tested against the found slot's key, not the computed one, since the lookup is LOD-tolerant.
                             bool bSelfCell = slot != RADIANCE_CACHE_HASH_INVALID && all(pc.cacheKeys[slot] == originCellKey);
                             uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
                             uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;

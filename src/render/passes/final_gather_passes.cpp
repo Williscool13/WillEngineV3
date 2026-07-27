@@ -13,7 +13,7 @@
 
 namespace Render
 {
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier)
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(RADIANCE_CACHE_ENTRIES) || !graph.HasBuffer(RADIANCE_CACHE_CELLS)
         || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER)
@@ -124,9 +124,11 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         graph.CreateTexture(GI_GATHER_SH_G, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
         graph.CreateTexture(GI_GATHER_SH_B, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
 
-        constexpr uint32_t denoiseStrides[] = {1u, 2u, 4u};
-        for (uint32_t iteration = 0; iteration < 3; iteration++) {
+        constexpr uint32_t denoiseStrides[] = {1u, 2u, 4u, 8u, 16u, 32u, 64u};
+        const uint32_t denoiseIterations = 3u + glm::min(chromaDenoisePasses, 4u);
+        for (uint32_t iteration = 0; iteration < denoiseIterations; iteration++) {
             const uint32_t stepSize = denoiseStrides[iteration];
+            const bool bChromaPass = iteration >= 3u;
             for (uint32_t direction = 0; direction < 2; direction++) {
                 const StringID srcShR = direction != 0 ? GI_GATHER_TMP_SH_R : (iteration == 0 ? GI_GATHER_RAW_SH_R : GI_GATHER_SH_R);
                 const StringID srcShG = direction != 0 ? GI_GATHER_TMP_SH_G : (iteration == 0 ? GI_GATHER_RAW_SH_G : GI_GATHER_SH_G);
@@ -135,7 +137,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
                 const StringID dstShG = direction == 0 ? GI_GATHER_TMP_SH_G : GI_GATHER_SH_G;
                 const StringID dstShB = direction == 0 ? GI_GATHER_TMP_SH_B : GI_GATHER_SH_B;
 
-                const Core::InlineString<32> passName = Core::InlineString<32>::Format("GI Diffuse Denoise %s %u", direction == 0 ? "H" : "V", iteration);
+                const Core::InlineString<40> passName = Core::InlineString<40>::Format("GI Diffuse %sDenoise %s %u", bChromaPass ? "Chroma " : "", direction == 0 ? "H" : "V", iteration);
                 RenderPass& blur = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
                 blur.ReadBuffer(SCENE_DATA_BUFFER);
                 blur.ReadSampledImage(GI_GATHER_GUIDE);
@@ -150,8 +152,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
                 blur.WriteStorageImage(dstShG);
                 blur.WriteStorageImage(dstShB);
 
-                blur.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, direction, stepSize, srcShR, srcShG, srcShB, dstShR, dstShG, dstShB, bAO](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_denoise"));
+                blur.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, direction, stepSize, srcShR, srcShG, srcShB, dstShR, dstShG, dstShB, bAO, bChromaPass](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bChromaPass ? SID("gi_denoise_chroma") : SID("gi_denoise"));
                     if (!pipelineEntry) {
                         return;
                     }

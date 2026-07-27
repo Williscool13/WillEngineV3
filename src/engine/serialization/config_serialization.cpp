@@ -44,6 +44,8 @@ static nlohmann::json RelaxToJson(const Core::RELAXParams& rx)
         {"historyResetAmount", rx.historyResetAmount},
         {"enablePrepass", rx.enablePrepass},
         {"enableAntiFirefly", rx.enableAntiFirefly},
+        {"bChromaAtrous", rx.bChromaAtrous},
+        {"chromaAtrousIterations", rx.chromaAtrousIterations},
     };
 }
 
@@ -86,6 +88,8 @@ static void RelaxFromJson(const nlohmann::json& r, Core::RELAXParams& p)
     p.historyResetAmount = getFloat("historyResetAmount", p.historyResetAmount);
     p.enablePrepass = getBool("enablePrepass", p.enablePrepass);
     p.enableAntiFirefly = getBool("enableAntiFirefly", p.enableAntiFirefly);
+    p.bChromaAtrous = getBool("bChromaAtrous", p.bChromaAtrous);
+    p.chromaAtrousIterations = getInt("chromaAtrousIterations", p.chromaAtrousIterations);
 }
 
 static nlohmann::json ReblurToJson(const Core::ReBLURParams& rb)
@@ -304,6 +308,8 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"bApplyToLighting", p.bApplyToLighting},
         {"bFinalGather", p.bFinalGather},
         {"bFinalGatherDenoise", p.bFinalGatherDenoise},
+        {"bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise},
+        {"gatherChromaDenoisePasses", p.gatherChromaDenoisePasses},
         {"bFinalGatherTemporal", p.bFinalGatherTemporal},
         {"bGatherSkipRay", p.bGatherSkipRay},
         {"gatherRaysPerPixel", p.gatherRaysPerPixel},
@@ -346,6 +352,8 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.bApplyToLighting = dBool("bApplyToLighting", p.bApplyToLighting);
     p.bFinalGather = dBool("bFinalGather", p.bFinalGather);
     p.bFinalGatherDenoise = dBool("bFinalGatherDenoise", p.bFinalGatherDenoise);
+    p.bFinalGatherChromaDenoise = dBool("bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise);
+    p.gatherChromaDenoisePasses = dUint("gatherChromaDenoisePasses", p.gatherChromaDenoisePasses);
     p.bFinalGatherTemporal = dBool("bFinalGatherTemporal", p.bFinalGatherTemporal);
     p.gatherRaysPerPixel = dUint("gatherRaysPerPixel", p.gatherRaysPerPixel);
     p.bGatherSkipRay = dBool("bGatherSkipRay", p.bGatherSkipRay);

@@ -503,6 +503,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     // Last iteration writes into the intermediates so remodulate can composite them.
     {
         const int32_t iters = glm::max(1, params.atrousIterations);
+        const int32_t chromaIters = params.bChromaAtrous ? glm::clamp(params.chromaAtrousIterations, 1, 4) : 0;
         const StringID scratchSpec[2] = {SID("relax_atrous_spec_0"), SID("relax_atrous_spec_1")};
         const StringID scratchDiff[2] = {SID("relax_atrous_diff_0"), SID("relax_atrous_diff_1")};
 
@@ -511,7 +512,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             const StringID specIn = (i == 0) ? SID("relax_spec_hist") : scratchSpec[(i - 1) & 1];
             const StringID diffIn = (i == 0) ? SID("relax_diff_hist") : scratchDiff[(i - 1) & 1];
             const StringID specOut = isLast ? specInput : scratchSpec[i & 1];
-            const StringID diffOut = isLast ? diffInput : scratchDiff[i & 1];
+
+            const StringID diffOut = (isLast && chromaIters == 0) ? diffInput : scratchDiff[i & 1];
             const uint32_t stepSize = 1u << static_cast<uint32_t>(i);
 
             const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReLAX] ATrous %d", i);
@@ -548,6 +550,45 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                     vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
                 });
+        }
+
+        constexpr uint32_t chromaStrides[] = {32u, 64u, 128u, 256u};
+        for (int32_t c = 0; c < chromaIters; c++) {
+            const bool isLastChroma = (c == chromaIters - 1);
+            const StringID diffIn = scratchDiff[(iters - 1 + c) & 1];
+            const StringID diffOut = isLastChroma ? diffInput : scratchDiff[(iters + c) & 1];
+            const uint32_t stepSize = chromaStrides[c];
+
+            const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReLAX] ATrous Chroma %d", c);
+
+            auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+            pass.ReadBuffer(SID("relax_constants"));
+            pass.ReadSampledImage(SID("relax_tiles"));
+            pass.ReadSampledImage(SID("relax_guide"));
+            pass.ReadSampledImage(SID("relax_history_length"));
+            pass.ReadSampledImage(diffIn);
+            pass.WriteStorageImage(diffOut);
+
+            pass.Execute([pipelineManager, diffIn, diffOut, stepSize, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                RelaxAtrousPushConstant pc{
+                    .constants = graph.GetBufferAddress(SID("relax_constants")),
+                    .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
+                    .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_guide")),
+                    .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_history_length")),
+                    .specVarIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
+                    .diffVarIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
+                    .specReprojConfidenceIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
+                    .specIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
+                    .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
+                    .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
+                    .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
+                    .stepSize = stepSize,
+                };
+                const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_atrous_chroma"));
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+                vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
+            });
         }
     }
 

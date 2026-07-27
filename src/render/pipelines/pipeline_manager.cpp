@@ -481,6 +481,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(GIGatherPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gi_denoise"), src / "gi_denoise.spv", "ComputeGIDenoise",
                             sizeof(GIDenoisePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gi_denoise_chroma"), src / "gi_denoise.spv", "ComputeGIDenoiseChroma",
+                            sizeof(GIDenoisePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gi_upscale"), src / "gi_upscale.spv", "ComputeGIUpscale",
                             sizeof(GIUpscalePushConstant), PipelineCategory::Critical);
 
@@ -574,6 +576,8 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("relax_history_clamping"), src / "relax_history_clamping.spv", "RelaxHistoryClampingMain",
                             sizeof(RelaxHistoryClampingPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("relax_atrous"), src / "relax_atrous.spv", "RelaxAtrousMain",
+                            sizeof(RelaxAtrousPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("relax_atrous_chroma"), src / "relax_atrous.spv", "RelaxAtrousChromaMain",
                             sizeof(RelaxAtrousPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("relax_antifirefly"), src / "relax_antifirefly.spv", "RelaxAntiFireflyMain",
                             sizeof(RelaxAntiFireflyPushConstant), PipelineCategory::Critical);
