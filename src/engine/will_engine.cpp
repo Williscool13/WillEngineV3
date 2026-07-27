@@ -1425,7 +1425,7 @@ void WillEngine::Run()
                 }
 
                 const Render::RadianceCacheStatistics wcStats = renderThread->GetRendererStatistics().radianceCache;
-                engineContext->radianceCacheStats = {wcStats.occupiedSlots, wcStats.cellsCarried, wcStats.cellsEvicted, wcStats.insertsFailed, wcStats.cellsShaded};
+                engineContext->radianceCacheStats = {wcStats.occupiedSlots, wcStats.cellsCarried, wcStats.cellsEvicted, wcStats.insertsFailed, wcStats.cellsDumped, wcStats.cellsDark, wcStats.cellsShaded};
 
                 Core::FrameBuffer* currentFrameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
                 ImDrawDataSnapshot* currentImguiSnapshot = engineRenderSynchronization->GetCurrentImguiSnapshot();

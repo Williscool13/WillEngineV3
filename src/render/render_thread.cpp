@@ -412,6 +412,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     statisticsManager.scratch.radianceCache.cellsCarried = readbackData->wcCarried;
     statisticsManager.scratch.radianceCache.cellsEvicted = readbackData->wcEvicted;
     statisticsManager.scratch.radianceCache.insertsFailed = readbackData->wcInsertsFailed;
+    statisticsManager.scratch.radianceCache.cellsDumped = readbackData->wcDumped;
+    statisticsManager.scratch.radianceCache.cellsDark = readbackData->wcDark;
     statisticsManager.scratch.radianceCache.cellsShaded = readbackData->wcShaded;
 
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());

@@ -135,6 +135,7 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
     pass.ReadIndirectBuffer(RADIANCE_CACHE_SHADE_ARGS);
     pass.ReadBuffer(RADIANCE_CACHE_DESCRIPTORS);
     pass.ReadWriteBuffer(RADIANCE_CACHE_CELLS);
+    pass.ReadWriteBuffer(RADIANCE_CACHE_STATS);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
@@ -181,6 +182,7 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
             .accumCap = accumCap,
             .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
             .worldGridProbeGrid = (!bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
+            .stats = graph.GetBufferAddress(RADIANCE_CACHE_STATS),
             .reflectionProbeCount = reflectionProbeCount,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

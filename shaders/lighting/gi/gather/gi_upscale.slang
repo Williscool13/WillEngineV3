@@ -16,6 +16,10 @@ static const float GI_UPSCALE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_UPSCALE_NORMAL_POWER = 32.0;
 static const float GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS = 1.5;
 static const float GI_UPSCALE_MOVING_MAX_ACCUM = 4.0;
+static const float GI_UPSCALE_CLAMP_MIN_HISTORY = 4.0;
+static const float GI_UPSCALE_CLAMP_DEV_SCALE = 4.0;
+static const float GI_UPSCALE_CLAMP_RELATIVE = 1.0;
+static const float GI_UPSCALE_CLAMP_EPS = 4e-3;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -147,7 +151,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
         GIGatherHistory history = GIGatherFetchHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
         if (history.quality > 0.0) {
-            float n = min(history.count, GI_GATHER_MAX_ACCUM - 1.0) * history.quality;
+            float n = min(history.count, GI_GATHER_MAX_ACCUM - 1.0);
 
             float neighborhoodMotionPixels = 0.0;
             [unroll]
@@ -183,17 +187,20 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
             }
 
             if (bHasCurrent) {
-                if (clampTaps > 1.5) {
+                // A short history cannot ghost, and min() keeps the relative floor from collapsing on 1-spp noise while still shrinking to the smaller side on a real step change.
+                if (clampTaps > 1.5 && history.count > GI_UPSCALE_CLAMP_MIN_HISTORY) {
                     float3 mean = irrM1 / clampTaps;
                     float3 dev = sqrt(max(irrM2 / clampTaps - mean * mean, float3(0.0)));
 
-                    float devEps = 4e-4;
-                    float3 devFloor = max(dev * 4.0, abs(history.color) * 0.4 + float3(devEps));
+                    float3 relative = min(abs(history.color), abs(current)) * GI_UPSCALE_CLAMP_RELATIVE;
+                    float3 devFloor = max(dev * GI_UPSCALE_CLAMP_DEV_SCALE, relative + float3(GI_UPSCALE_CLAMP_EPS));
                     float3 histDist = abs(history.color - current) / devFloor;
                     float3 closest = clamp(history.color, current - devFloor, current + devFloor);
                     history.color = lerp(history.color, closest, smoothstep(float3(1.0), float3(3.0), histDist));
                 }
-                result = (n * history.color + current) / (n + 1.0);
+                // quality damps this frame's blend only; feeding it back would make count' = q*count + 1 settle at 1/(1-q) and pin every reprojection edge below 10 samples forever
+                float nBlend = n * history.quality;
+                result = (nBlend * history.color + current) / (nBlend + 1.0);
                 accum = n + 1.0;
             } else {
                 result = history.color;

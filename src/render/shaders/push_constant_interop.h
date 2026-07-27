@@ -640,6 +640,7 @@ SHADER_PUBLIC struct RadianceCacheShadePushConstant
     SHADER_PUBLIC uint32_t accumCap;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    SHADER_PUBLIC SHADER_PTR(RadianceCacheStats) stats;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC uint32_t pad0;
 };

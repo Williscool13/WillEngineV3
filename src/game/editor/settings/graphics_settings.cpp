@@ -1127,6 +1127,15 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("Full-probe hash insert failures (trace + carry-forward combined). Non-zero means the cache is over capacity and cells are being dropped.");
                 }
+                const float shadeDenom = static_cast<float>(glm::max(wc.cellsShaded, 1u));
+                ImGui::Text("Streak dumps/frame: %u (%.1f%%)", wc.cellsDumped, 100.0f * static_cast<float>(wc.cellsDumped) / shadeDenom);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Shade events where the change-streak detector fired and cut accumulated history. A high percentage means the detector is reading representative variance as real change and the cache is not accumulating.");
+                }
+                ImGui::Text("Dark cells/frame: %u (%.1f%%)", wc.cellsDark, 100.0f * static_cast<float>(wc.cellsDark) / shadeDenom);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Shade events whose previous luma sat below 0.01, where the relative change threshold degenerates into a fixed absolute of 0.0035 and trips on ordinary noise.");
+                }
             }
 
             ImGui::Spacing();

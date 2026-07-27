@@ -87,6 +87,8 @@ SHADER_PUBLIC struct RadianceCacheStats
     SHADER_PUBLIC uint cellsCarried; // survivors re-inserted into this frame's table
     SHADER_PUBLIC uint cellsEvicted; // survivors dropped (LRU age, LOD revalidation, or failed re-insert)
     SHADER_PUBLIC uint insertsFailed; // full-probe insert failures from both trace and carry-forward
+    SHADER_PUBLIC uint cellsDumped; // shade events where the change streak fired and clamped the accumulated count
+    SHADER_PUBLIC uint cellsDark; // shade events whose previous luma sat below the 0.01 clamp, where the relative change threshold degenerates to a fixed absolute
 };
 
 SHADER_PUBLIC struct RadianceCacheBuffers
