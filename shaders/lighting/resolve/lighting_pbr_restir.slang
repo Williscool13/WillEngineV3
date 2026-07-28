@@ -15,6 +15,7 @@ import bindless_declarations;
 
 // Directional-light hit distance for the denoiser's specular hitT channel; matches the sun trace TMax.
 static const float SUN_SPEC_HIT_T = 10000.0;
+static const float NEIGHBOR_REJECT_DISTANCE = 3.0e+38;
 
 float3 SanitizeRadiance(float3 c) {
     c.x = (isnan(c.x) || isinf(c.x)) ? 0.0 : c.x;
@@ -33,7 +34,9 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     }
 
     uint field = pc.activeCheckerboardField;
-    if (field != 0u && !IsActiveCheckerboardPixel(int2(pixel), false, field)) {
+    bool bFullRate = pc.bFullRateResolve != 0u;
+    bool bHole = field != 0u && !IsActiveCheckerboardPixel(int2(pixel), false, field);
+    if (bHole && !bFullRate) {
         return;
     }
     uint2 rcoord = PixelPosToReservoirPos(pixel, field);
@@ -55,6 +58,23 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
 
+    if (bHole) {
+        int xl = int(pixel.x) - 1;
+        int xr = int(pixel.x) + 1;
+        float dl = NEIGHBOR_REJECT_DISTANCE;
+        float dr = NEIGHBOR_REJECT_DISTANCE;
+        if (xl >= 0) {
+            float rawL = rdgTexturesFloat[pc.depthIndex].Load(int3(xl, int(pixel.y), 0)).r;
+            if (rawL > 0.0) { dl = abs(ScreenToViewSpaceDepth(rawL, scene.depthLinearizeMult, scene.depthLinearizeAdd) - viewSpaceDepth); }
+        }
+        if (xr < int(pc.renderExtent.x)) {
+            float rawR = rdgTexturesFloat[pc.depthIndex].Load(int3(xr, int(pixel.y), 0)).r;
+            if (rawR > 0.0) { dr = abs(ScreenToViewSpaceDepth(rawR, scene.depthLinearizeMult, scene.depthLinearizeAdd) - viewSpaceDepth); }
+        }
+        int borrowX = (dl <= dr) ? max(xl, 0) : min(xr, int(pc.renderExtent.x) - 1);
+        rcoord = uint2(uint(borrowX) >> 1u, pixel.y);
+    }
+
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
 
@@ -71,6 +91,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
 
     uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
     uint pixelIdx = rcoord.y * stride + rcoord.x;
+    uint sunIdx = bFullRate ? (pixel.y * pc.renderExtent.x + pixel.x) : pixelIdx;
 
     bool bAnyLight = pc.reservoirBuffer != 0;
     if (bAnyLight)
@@ -130,7 +151,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
 
     if (pc.sunReservoirBuffer != 0)
     {
-        Reservoir rs = pc.sunReservoirBuffer[pixelIdx];
+        Reservoir rs = pc.sunReservoirBuffer[sunIdx];
         // lightIdx: ~0u empty, 0u winner shadowed, 1u winner lit; W excludes visibility (see restir_di_sun.slang).
         if (rs.lightIdx == 1u && rs.W > 0.0)
         {
@@ -190,11 +211,11 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     float4 diffPacked = float4(SanitizeRadiance(diffuseOut), diffHitT);
     float4 specPacked = float4(SanitizeRadiance(specularOut), specHitT);
 
-    uint2 writeCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? rcoord : pixel;
+    uint2 writeCoord = (field != 0u && !bFullRate && pc.bCheckerboardPacked != 0u) ? PixelPosToReservoirPos(pixel, field) : pixel;
     rdgStorageFloat4[pc.primaryOutputImageIndex][writeCoord] = diffPacked;
     rdgStorageFloat4[pc.secondaryOutputImageIndex][writeCoord] = specPacked;
 
-    if (field != 0u && pc.bCheckerboardPacked == 0u) {
+    if (field != 0u && !bFullRate && pc.bCheckerboardPacked == 0u) {
         int2 o = OppositeFieldPixel(pixel, field);
         if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
             // Keep hitT in the duplicated field: a zeroed .w oscillates the accumulated hit distance toward

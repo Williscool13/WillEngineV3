@@ -1212,6 +1212,12 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (ImGui::Checkbox("Checkerboard Rendering", &restir.bCheckerboard)) {
                     changed = true;
                 }
+                ImGui::BeginDisabled(!restir.bCheckerboard);
+                if (ImGui::Checkbox("Full-Rate Resolve", &restir.bCheckerboardFullRateResolve)) {
+                    changed = true;
+                }
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Keeps the expensive local-light reservoir passes half-rate, but traces sun visibility full-rate and shades every pixel. Hole pixels borrow a depth-matched horizontal neighbor's local reservoir and re-shade it at their own surface. The denoisers then receive a full-rate signal with no checkerboard reconstruction."); }
+                ImGui::EndDisabled();
                 ImGui::BeginDisabled(!RESTIR_ENABLE_PERMUTATION_SAMPLING);
                 if (ImGui::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
                     changed = true;

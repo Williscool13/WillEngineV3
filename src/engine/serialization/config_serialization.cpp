@@ -195,6 +195,7 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bEnableTemporal", p.bEnableTemporal},
         {"temporalMCap", p.temporalMCap},
         {"bCheckerboard", p.bCheckerboard},
+        {"bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve},
         {"boilingFilterStrength", p.boilingFilterStrength},
         {"bInitialVisibility", p.bInitialVisibility},
         {"bSunLight", p.bSunLight},
@@ -239,6 +240,7 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bEnableTemporal = getBool("bEnableTemporal", p.bEnableTemporal);
     p.temporalMCap = getUint("temporalMCap", p.temporalMCap);
     p.bCheckerboard = getBool("bCheckerboard", p.bCheckerboard);
+    p.bCheckerboardFullRateResolve = getBool("bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve);
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
     p.bSunLight = getBool("bSunLight", p.bSunLight);

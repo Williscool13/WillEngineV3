@@ -44,7 +44,8 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     Core::Arena& arena,
                                     uint64_t frameNumber,
                                     uint32_t activeCheckerboardField,
-                                    uint32_t bCheckerboardPacked);
+                                    uint32_t bCheckerboardPacked,
+                                    uint32_t bFullRateResolve);
 
 void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                PipelineManager* pipelineManager,

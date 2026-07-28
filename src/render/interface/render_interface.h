@@ -731,6 +731,8 @@ struct ReSTIRParams
     uint32_t temporalMCap{20u};
     bool bTemporalSearch{true};
     bool bCheckerboard{false};
+    // With bCheckerboard: local-light reservoirs stay half-rate, sun visibility and the lighting resolve run full-rate so the denoisers see no checkerboard.
+    bool bCheckerboardFullRateResolve{true};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
     bool bSunLight{true};

@@ -564,7 +564,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t reflectionIndex;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t bDDGIApply;
-    SHADER_PUBLIC uint32_t pad1;
+    SHADER_PUBLIC uint32_t bFullRateResolve;
     SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
     SHADER_PUBLIC uint32_t giResolvedIndex;

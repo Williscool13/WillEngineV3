@@ -204,6 +204,7 @@ private:
     uint32_t rtGroundTruthGIAccumCount{0};
     uint32_t rtGroundTruthFullAccumCount{0};
     uint32_t previousRestirCheckerboardField{0};
+    bool previousRestirFullRateResolve{false};
     DDGICascades ddgiPreviousCascades{};
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
