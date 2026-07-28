@@ -729,6 +729,8 @@ struct ReSTIRParams
     bool bCheckerboard{false};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
+    bool bSunLight{true};
+    uint32_t sunTemporalMCap{0u};
     float regirWClamp{0.0f};
     float restirWClamp{20.0f};
     bool bResetReGIR{false};

@@ -1220,6 +1220,20 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (Widgets::SliderFloat("Boiling Filter (0=off)", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
                     changed = true;
                 }
+                ImGui::SeparatorText("Sun");
+                if (ImGui::Checkbox("Sun Reservoir", &restir.bSunLight)) {
+                    changed = true;
+                }
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Directional sun as a second DI reservoir, denoised by RELAX with the local lights. Off: SIGMA + directional composite path."); }
+                if (restir.bSunLight) {
+                    int sunMCap = static_cast<int>(restir.sunTemporalMCap);
+                    if (Widgets::SliderInt("Sun Temporal M Cap", &sunMCap, 0, 64)) {
+                        restir.sunTemporalMCap = static_cast<uint32_t>(sunMCap);
+                        changed = true;
+                    }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Cone-direction persistence: the sample re-jitters with probability 1/(M+1) per frame. 0 (default) = fresh jitter every frame, the well-conditioned input RELAX expects; higher holds binary visibility per pixel and blotches static penumbra."); }
+                }
+
                 ImGui::BeginDisabled(!RESTIR_ENABLE_ANTILAG);
                 featureSection("Antilag", &restir.bEnableAntilag, [&] {
                     if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,

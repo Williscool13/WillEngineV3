@@ -13,6 +13,9 @@ import restir_common;
 
 import bindless_declarations;
 
+// Directional-light hit distance for the denoiser's specular hitT channel; matches the sun trace TMax.
+static const float SUN_SPEC_HIT_T = 10000.0;
+
 float3 SanitizeRadiance(float3 c) {
     c.x = (isnan(c.x) || isinf(c.x)) ? 0.0 : c.x;
     c.y = (isnan(c.y) || isinf(c.y)) ? 0.0 : c.y;
@@ -62,14 +65,14 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     float3 diffuseRadiance = float3(0.0);
     float3 specularRadiance = float3(0.0);
     float hitDistance = 0.0;
+    float bestSpecLum = -1.0;
+
+    uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
+    uint pixelIdx = rcoord.y * stride + rcoord.x;
 
     bool bAnyLight = pc.reservoirBuffer != 0;
     if (bAnyLight)
     {
-        uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
-        uint pixelIdx = rcoord.y * stride + rcoord.x;
-        float bestSpecLum = -1.0;
-
         Reservoir r = pc.reservoirBuffer[pixelIdx];
 
         if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->lightCount))
@@ -109,6 +112,49 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
                     {
                         bestSpecLum = specLum;
                         hitDistance = s.dist;
+                    }
+                }
+            }
+        }
+    }
+
+    if (pc.sunReservoirBuffer != 0)
+    {
+        Reservoir rs = pc.sunReservoirBuffer[pixelIdx];
+        // lightIdx: ~0u empty, 0u winner shadowed, 1u winner lit; W excludes visibility (see restir_di_sun.slang).
+        if (rs.lightIdx == 1u && rs.W > 0.0)
+        {
+            DirectionalLightData sun = pc.lightData->directionalLight;
+            float2 sunXi = UnpackUnorm2x16(rs.sampleOffsetPacked);
+            float sunPdf;
+            float3 sunDirW = SampleSunConeDirection(SunDirectionWorld(sun), sun.angularRadius, sunXi.x, sunXi.y, sunPdf);
+            float3 Lsun = normalize(mul(float3x3(scene.view), sunDirW));
+            float nDotLsun = dot(N, Lsun);
+            if (nDotLsun > 0.0)
+            {
+                float3 Hsun = normalize(V + Lsun);
+                float NDFsun = D_GGX(N, Hsun, roughness);
+                float Gsun = G_SMITH_HEIGHT_CORRELATED(N, V, Lsun, roughness);
+                float3 Fsun = F_SCHLICK(V, Hsun, F0);
+                float3 specularSun = (NDFsun * Gsun * Fsun) / max(4.0 * nDotV * nDotLsun, 0.001);
+
+                float3 kDsun = (1.0 - Fsun) * (1.0 - li.metallic);
+                float orenNayarSun = Diffuse_OrenNayar(nDotLsun, nDotV, Lsun, V, roughness);
+
+                float3 commonSun = SunRadiance(sun) * nDotLsun * rs.W;
+                diffuseRadiance += kDsun * li.albedo.xyz * orenNayarSun * commonSun;
+
+                // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
+                if (roughness > pc.lightSpecularFromReflectionsMax)
+                {
+                    float3 specContribution = specularSun * commonSun;
+                    specularRadiance += specContribution;
+
+                    float specLum = dot(specContribution, float3(0.2126, 0.7152, 0.0722));
+                    if (specLum > bestSpecLum)
+                    {
+                        bestSpecLum = specLum;
+                        hitDistance = SUN_SPEC_HIT_T;
                     }
                 }
             }

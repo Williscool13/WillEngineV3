@@ -434,6 +434,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_temporal"), src / "restir_di_temporal.spv", "ComputeReSTIRDITemporal",
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("restir_di_sun"), src / "restir_di_sun.spv", "ComputeReSTIRDISun",
+                            sizeof(ReSTIRDISunPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_boiling_filter"), src / "restir_boiling_filter.spv", "ComputeReSTIRBoilingFilter",
                             sizeof(ReSTIRBoilingFilterPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_confidence_gradient"), src / "restir_confidence_gradient.spv", "ComputeReSTIRConfidenceGradient",

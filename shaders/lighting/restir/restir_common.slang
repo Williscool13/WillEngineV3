@@ -521,6 +521,21 @@ public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 
     return q.CommittedStatus() == COMMITTED_NOTHING;
 }
 
+public float RestirSunShadowBlockerT(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize)
+{
+    // First accepted hit, not nearest (same as the SIGMA trace): an approximate blocker distance is enough.
+    float3 rayOrigin = OffsetGBufferRayOrigin(worldShadingPos, worldN, worldTexelSize, 1.0);
+    RayDesc shadowRay;
+    shadowRay.Origin = rayOrigin;
+    shadowRay.Direction = worldLsun;
+    shadowRay.TMin = 0.0;
+    shadowRay.TMax = 1e30;
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    q.TraceRayInline(tlas, 0, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
+    q.Proceed();
+    return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? q.CommittedRayT() : -1.0;
+}
+
 /** Non-sun variant for callers that already unpacked the light; the sun branch, sun argument load, and per-call lightVS element load are hoisted out. */
 public float EvalReservoirPHatLight(LightView vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
                                     float3 albedo, float3 F0, float metallic, float roughness, float lightSpecularFromReflectionsMax)

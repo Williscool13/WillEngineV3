@@ -193,6 +193,8 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"bCheckerboard", p.bCheckerboard},
         {"boilingFilterStrength", p.boilingFilterStrength},
         {"bInitialVisibility", p.bInitialVisibility},
+        {"bSunLight", p.bSunLight},
+        {"sunTemporalMCap", p.sunTemporalMCap},
         {"regirWClamp", p.regirWClamp},
         {"restirWClamp", p.restirWClamp},
         {"lightProposal", static_cast<uint32_t>(p.lightProposal)},
@@ -235,6 +237,8 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     p.bCheckerboard = getBool("bCheckerboard", p.bCheckerboard);
     p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
     p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
+    p.bSunLight = getBool("bSunLight", p.bSunLight);
+    p.sunTemporalMCap = getUint("sunTemporalMCap", p.sunTemporalMCap);
     p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
     p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
     p.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(getUint("lightProposal", static_cast<uint32_t>(p.lightProposal)));

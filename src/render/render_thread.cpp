@@ -726,7 +726,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     }
                 }
 
-                if (viewFamily.directionalLight.bEnabled && (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)) {
+                const bool bSunViaReSTIR = viewFamily.lightingMode == Core::LightingMode::ReSTIR && restir.bSunLight;
+                if (viewFamily.directionalLight.bEnabled && !bSunViaReSTIR && (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)) {
                     const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
                     const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
                     SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, targets, 0, frameNumber, sunShadowPixelScale);

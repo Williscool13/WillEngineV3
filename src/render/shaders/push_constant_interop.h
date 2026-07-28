@@ -481,6 +481,29 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC float lightSpecularFromReflectionsMax;
 };
 
+SHADER_PUBLIC struct ReSTIRDISunPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t prevGbufferOneIndex;
+    SHADER_PUBLIC uint32_t prevDepthIndex;
+    SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t prevTlasIndex;
+    SHADER_PUBLIC uint32_t signalIndex;
+    SHADER_PUBLIC uint32_t blockerIndex;
+    SHADER_PUBLIC uint32_t prevBlockerIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t mCap;
+    SHADER_PUBLIC uint32_t activeCheckerboardField;
+};
+
 SHADER_PUBLIC struct ReSTIRBoilingFilterPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(Reservoir) inputBuffer;
@@ -553,6 +576,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC uint32_t pad2;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) sunReservoirBuffer;
 };
 
 // Unused: kept around alongside WorldGridBinningPushConstant.
