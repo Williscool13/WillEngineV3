@@ -381,6 +381,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     }
 
     if (restirParams.bSunLight && viewFamily.directionalLight.bEnabled && bHasTLAS) {
+        const uint32_t sunCheckerboardField = (activeCheckerboardField != 0u && restirParams.bCheckerboardFullRateResolve) ? 0u : activeCheckerboardField;
         graph.CreateBuffer(SID("restir_sun_reservoir"), reservoirBufferSize, true);
         const bool bHasSunHistory = graph.HasBuffer(SID("restir_sun_reservoir_history")) && !bResetHistory;
         const bool bHasPrevTlas = bConfidence && graph.HasBuffer(SID("rt_tlas_history"));
@@ -404,7 +405,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         if (bConfidence) { sunPass.WriteStorageImage(SID("restir_signal")); }
         if (bConfidence) { sunPass.WriteStorageImage(SID("restir_sun_blocker")); }
         if (bHasPrevBlocker) { sunPass.ReadSampledImage(SID("restir_sun_blocker_prev")); }
-        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasSunHistory, bHasPrevTlas, bConfidence, bHasPrevBlocker, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasSunHistory, bHasPrevTlas, bConfidence, bHasPrevBlocker, field = sunCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_sun"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -612,7 +613,8 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     Core::Arena& arena,
                                     uint64_t frameNumber,
                                     uint32_t activeCheckerboardField,
-                                    uint32_t bCheckerboardPacked)
+                                    uint32_t bCheckerboardPacked,
+                                    uint32_t bFullRateResolve)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -656,7 +658,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
-            field = activeCheckerboardField, packed = bCheckerboardPacked,
+            field = activeCheckerboardField, packed = bCheckerboardPacked, fullRate = bFullRateResolve,
             buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
@@ -690,6 +692,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                     .activeCheckerboardField = field,
                     .bCheckerboardPacked = packed,
+                    .bFullRateResolve = fullRate,
                     .sunReservoirBuffer = graph.TryGetBufferAddress(SID("restir_sun_reservoir")),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
