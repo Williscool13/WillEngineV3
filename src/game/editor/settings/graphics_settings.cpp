@@ -1361,6 +1361,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     auto reblurF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.4f", const char* tip = nullptr) {
                         changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
                     };
+                    auto reblurI = [&](const char* label, int* v, int def, int mn, int mx, const char* tip = nullptr) {
+                        changed |= Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)});
+                    };
 
                     if (ImGui::Checkbox("Prepass##reblur", &reblur.enablePrepass)) { changed = true; }
                     ImGui::SameLine();
@@ -1394,6 +1397,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     reblurF("Max Blur Radius", &reblur.maxBlurRadius, reblurDefaults.maxBlurRadius, 0.f, 60.f, "%.1f", "Base (max) denoising radius (px); shrinks as history grows. Default 30.");
                     reblurF("Diffuse Prepass Blur Radius", &reblur.diffusePrepassBlurRadius, reblurDefaults.diffusePrepassBlurRadius, 0.f, 100.f, "%.1f", "Diffuse pre-blur radius (px). 0 disables. Default 30.");
                     reblurF("Specular Prepass Blur Radius", &reblur.specularPrepassBlurRadius, reblurDefaults.specularPrepassBlurRadius, 0.f, 100.f, "%.1f", "Specular pre-blur radius (px). 0 disables. Default 50.");
+                    if (ImGui::Checkbox("Chroma Widening##reblur", &reblur.bChromaAtrous)) { changed = true; }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on."); }
+                    reblurI("Chroma Widening Passes", &reblur.chromaAtrousIterations, reblurDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
 
                     ImGui::SeparatorText("History Fix");
                     reblurF("Hist Fix Frame Num", &reblur.historyFixFrameNum, reblurDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill. Default 3.");

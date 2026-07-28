@@ -1126,6 +1126,9 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     addBlur(SID("[ReBLUR] Blur"), SID("reblur_spec_hfix"), SID("reblur_diff_hfix"), SID("reblur_spec_blur"), SID("reblur_diff_blur"), 0u);
     addBlur(SID("[ReBLUR] Post-Blur"), SID("reblur_spec_blur"), SID("reblur_diff_blur"), SID("reblur_spec_hist"), SID("reblur_diff_hist"), 1u);
 
+    const int32_t chromaIters = params.bChromaAtrous ? glm::clamp(params.chromaAtrousIterations, 1, 4) : 0;
+    const StringID stabilizationDiffOut = chromaIters > 0 ? SID("reblur_diff_blur") : diffInput;
+
     // Pass 8: Temporal stabilization (luma-only stabilized ping-pong, surface + virtual motion via the DATA2
     // occlusion bits, antilag feedback written into the carried internal data, final RGB into intermediates)
     {
@@ -1145,8 +1148,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.WriteStorageImage(SID("reblur_diff_luma_stab"));
         pass.WriteStorageImage(SID("reblur_internal_data"));
         pass.WriteStorageImage(specInput);
-        pass.WriteStorageImage(diffInput);
-        pass.Execute([pipelineManager, gbufferOne, depth, specInput, diffInput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.WriteStorageImage(stabilizationDiffOut);
+        pass.Execute([pipelineManager, gbufferOne, depth, specInput, stabilizationDiffOut, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const StringID fallbackSpecStab = graph.HasTexture(SID("reblur_spec_luma_stab_history")) ? SID("reblur_spec_luma_stab_history") : SID("reblur_spec_hit_dist");
             const StringID fallbackDiffStab = graph.HasTexture(SID("reblur_diff_luma_stab_history")) ? SID("reblur_diff_luma_stab_history") : SID("reblur_spec_hit_dist");
             ReblurStabilizationPushConstant pc{
@@ -1164,7 +1167,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .outSpecLumaStabIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_luma_stab")),
                 .outDiffLumaStabIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_luma_stab")),
                 .outSpecFinalIndex = graph.GetStorageImageViewDescriptorIndex(specInput),
-                .outDiffFinalIndex = graph.GetStorageImageViewDescriptorIndex(diffInput),
+                .outDiffFinalIndex = graph.GetStorageImageViewDescriptorIndex(stabilizationDiffOut),
                 .outInternalDataIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_internal_data")),
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_stabilization"));
@@ -1172,6 +1175,45 @@ void SetupReBLURDenoiser(RenderGraph& graph,
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
         });
+    }
+
+    // Pass 8b: Diffuse-only chroma widening, ping-ponging the two spatial scratch buffers.
+    {
+        constexpr uint32_t chromaStrides[] = {32u, 64u, 128u, 256u};
+        for (int32_t c = 0; c < chromaIters; c++) {
+            const bool isLastChroma = (c == chromaIters - 1);
+            const StringID inTex = (c & 1) ? SID("reblur_diff_hfix") : SID("reblur_diff_blur");
+            const StringID outTex = isLastChroma ? diffInput : ((c & 1) ? SID("reblur_diff_blur") : SID("reblur_diff_hfix"));
+            const uint32_t stepSize = chromaStrides[c];
+
+            const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReBLUR] Chroma %d", c);
+
+            auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+            pass.ReadBuffer(SID("reblur_constants"));
+            pass.ReadSampledImage(SID("reblur_tiles"));
+            pass.ReadSampledImage(gbufferOne);
+            pass.ReadSampledImage(depth);
+            pass.ReadSampledImage(SID("reblur_data1"));
+            pass.ReadSampledImage(inTex);
+            pass.WriteStorageImage(outTex);
+
+            pass.Execute([pipelineManager, gbufferOne, depth, inTex, outTex, stepSize, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                ReblurChromaPushConstant pc{
+                    .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                    .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                    .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                    .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                    .data1Index = graph.GetSampledImageViewDescriptorIndex(SID("reblur_data1")),
+                    .diffIndex = graph.GetSampledImageViewDescriptorIndex(inTex),
+                    .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(outTex),
+                    .stepSize = stepSize,
+                };
+                const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_chroma"));
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+                vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
+            });
+        }
     }
 
     // Pass 9: Remodulate denoised diff/spec into final color (reuses the ReSTIR remodulate shader).

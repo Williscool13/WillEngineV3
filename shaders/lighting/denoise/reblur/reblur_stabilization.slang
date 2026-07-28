@@ -141,7 +141,11 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
         diffLuma = min(diffLuma, diffLumaM1 * (1.2 + 1.0 / (1.0 + data1.x)));
     }
 
-    float smbDiffLumaHistory = max(FetchLumaHistory(pc.prevDiffLumaStabIndex, smbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, smbOcclusion), 0.0);
+    // The carried luma history aliases unwritten memory on the first frame, so seed it from the current signal.
+    float smbDiffLumaHistory = diffLuma;
+    if (rc.gResetHistory == 0) {
+        smbDiffLumaHistory = max(FetchLumaHistory(pc.prevDiffLumaStabIndex, smbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, smbOcclusion), 0.0);
+    }
 
     float diffAntilag = ReblurComputeAntilag(smbDiffLumaHistory, diffLumaM1, diffLumaSigma, smbFootprintQuality * data1.x, rc.gAntilagSettings, rc.gFramerateScale);
 
@@ -182,8 +186,12 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     vmbBilinear.weights = frac(vmbPos - 0.5);
     float vmbFootprintQuality = sqrt(saturate(dot(MLGetBilinearCustomWeights(vmbBilinear, vmbOcclusion), 1.0)));
 
-    float smbSpecLumaHistory = max(FetchLumaHistory(pc.prevSpecLumaStabIndex, smbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, smbOcclusion), 0.0);
-    float vmbSpecLumaHistory = max(FetchLumaHistory(pc.prevSpecLumaStabIndex, vmbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, vmbOcclusion), 0.0);
+    float smbSpecLumaHistory = specLuma;
+    float vmbSpecLumaHistory = specLuma;
+    if (rc.gResetHistory == 0) {
+        smbSpecLumaHistory = max(FetchLumaHistory(pc.prevSpecLumaStabIndex, smbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, smbOcclusion), 0.0);
+        vmbSpecLumaHistory = max(FetchLumaHistory(pc.prevSpecLumaStabIndex, vmbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, vmbOcclusion), 0.0);
+    }
     float specLumaHistory = lerp(smbSpecLumaHistory, vmbSpecLumaHistory, virtualHistoryAmount);
 
     float specFootprintQuality = lerp(smbFootprintQuality, vmbFootprintQuality, virtualHistoryAmount);

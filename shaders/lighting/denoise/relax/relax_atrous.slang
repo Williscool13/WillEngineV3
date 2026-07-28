@@ -329,7 +329,7 @@ void RelaxAtrousChromaMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : S
             {
                 float3 sampleRgb = rdgTexturesFloat4[pc.diffIndex].Load(int3(p, 0)).rgb;
                 float sampleY = dot(sampleRgb, float3(0.25, 0.5, 0.25));
-                sumCoCg += float2(0.5 * (sampleRgb.r - sampleRgb.b), 0.25 * (2.0 * sampleRgb.g - sampleRgb.r - sampleRgb.b)) / max(sampleY, 1e-6) * wDiff;
+                sumCoCg += float2(0.5 * (sampleRgb.r - sampleRgb.b), 0.25 * (2.0 * sampleRgb.g - sampleRgb.r - sampleRgb.b)) / max(sampleY, max(0.05 * centerY, 1e-6)) * wDiff;
                 sumW += wDiff;
             }
         }

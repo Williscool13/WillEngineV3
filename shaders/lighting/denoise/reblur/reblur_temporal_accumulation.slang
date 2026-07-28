@@ -49,8 +49,9 @@ float IsReprojectionTapValid(float3 currentWorldPos, float3 previousWorldPos, fl
     return d > disocclusionThreshold ? 0.0 : 1.0;
 }
 
-/** Surface-motion reprojection. Slow history stays float4 (YCoCg + normalized hitDist); fast history is
- *  single-channel luma. Per-lobe accum speeds come from the carried packed internal data.
+/** Surface-motion reprojection. Only the diffuse history is fetched here (slow float4 + fast luma); the
+ *  specular history is fetched once in the main body at the selected footprint, so the surface footprint
+ *  (occlusion weights, sample position, catrom flag) is returned instead.
  *  Returns 0 = not found, 1 = bilinear, 2 = bicubic. */
 float LoadSurfaceMotionBasedPrevData(
     ReblurDiffuseSpecularConstants* rc,
@@ -59,10 +60,10 @@ float LoadSurfaceMotionBasedPrevData(
     float disocclusionThreshold,
     out float footprintQuality, out float diffAccumSpeed, out float smbSpecAccumSpeed,
     out float fbits, out bool smbAllowCatRom, out float3 prevNormalFlatOut,
-    out float4 prevSpecIllum, out float prevSpecResponsiveLuma, out float prevReflectionHitT,
+    out float4 smbOcclusionWeights, out float2 prevPixelPosFloatOut,
     out float4 prevDiffIllum, out float prevDiffResponsiveLuma,
-    uint historySpecIndex, uint historyDiffIndex, uint historySpecFastIndex, uint historyDiffFastIndex,
-    uint prevViewZIndex, uint prevInternalDataIndex, uint prevSpecHitDistIndex, uint prevNormalRoughnessIndex)
+    uint historyDiffIndex, uint historyDiffFastIndex,
+    uint prevViewZIndex, uint prevInternalDataIndex, uint prevNormalRoughnessIndex)
 {
     float2 prevPixelPosFloat = prevUVSMB * rc.gRectSizePrev;
     int2 bilinearOrigin = int2(floor(prevPixelPosFloat - 0.5));
@@ -120,16 +121,11 @@ float LoadSurfaceMotionBasedPrevData(
     float4 bilinearCustomWeights = MLGetBilinearCustomWeights(bilinear, bilinearTapsValid);
 
     bool useBicubic = bicubicFootprintValid > 0;
-    BicubicFilterDiffSpec(prevPixelPosFloat, rc.gResourceSizeInvPrev,
-        bilinearCustomWeights, useBicubic,
-        historySpecIndex, prevSpecIllum,
-        historyDiffIndex, prevDiffIllum);
+    BicubicFilterSingle(prevPixelPosFloat, rc.gResourceSizeInvPrev, bilinearCustomWeights, useBicubic, historyDiffIndex, prevDiffIllum);
 
     // Fast history uses the same occlusion-aware custom weights as slow history so disoccluded corner
     // taps don't bleed across silhouettes into the fast clamp box.
     float2 gatherOrigin = (float2(bilinearOrigin) + 1.0) * rc.gResourceSizeInvPrev;
-    float4 prevSpecFasts = rdgTexturesFloat[historySpecFastIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
-    prevSpecResponsiveLuma = max(RelaxBilinearWeightedFloat(prevSpecFasts.x, prevSpecFasts.y, prevSpecFasts.z, prevSpecFasts.w, bilinearCustomWeights), 0.0);
     float4 prevDiffFasts = rdgTexturesFloat[historyDiffFastIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
     prevDiffResponsiveLuma = max(RelaxBilinearWeightedFloat(prevDiffFasts.x, prevDiffFasts.y, prevDiffFasts.z, prevDiffFasts.w, bilinearCustomWeights), 0.0);
     // Per-lobe accumulated frame counts (already incremented at pack time).
@@ -141,8 +137,8 @@ float LoadSurfaceMotionBasedPrevData(
     diffAccumSpeed = RelaxBilinearWeightedFloat(id00.x, id10.x, id01.x, id11.x, bilinearCustomWeights);
     smbSpecAccumSpeed = RelaxBilinearWeightedFloat(id00.y, id10.y, id01.y, id11.y, bilinearCustomWeights);
 
-    float4 prevHitTs = rdgTexturesFloat[prevSpecHitDistIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
-    prevReflectionHitT = max(0.001, RelaxBilinearWeightedFloat(prevHitTs.x, prevHitTs.y, prevHitTs.z, prevHitTs.w, bilinearCustomWeights));
+    smbOcclusionWeights = bilinearCustomWeights;
+    prevPixelPosFloatOut = prevPixelPosFloat;
 
     fbits = bilinearTapsValid.x * 1.0 + bilinearTapsValid.y * 2.0 + bilinearTapsValid.z * 4.0 + bilinearTapsValid.w * 8.0;
     smbAllowCatRom = useBicubic;
@@ -155,84 +151,89 @@ float LoadSurfaceMotionBasedPrevData(
     return reprojectionFound;
 }
 
-/** Virtual-motion reprojection for specular. Slow history stays float4; fast history is single-channel luma.
- *  Also returns the vmb spec accum speed, footprint quality, and 4 occlusion bits (packed <<4 into DATA2
- *  by the caller). Returns 1 = found, 0 = not found. */
-float LoadVirtualMotionBasedPrevData(
+/** Virtual-motion reprojection for specular. Fetches no illumination history: it produces the virtual
+ *  footprint (occlusion weights, sample position, catrom flag, accum speed, bilinear roughness weight)
+ *  that the caller uses for the single history fetch. Occlusion combines the per-tap roughness weight,
+ *  the normal threshold angle (which also rejects backfacing taps) and the plane distance. The 4
+ *  occlusion bits are packed <<4 into DATA2 by the caller. */
+void LoadVirtualMotionBasedPrevData(
     ReblurDiffuseSpecularConstants* rc,
-    float3 currentWorldPos, float3 currentNormal, float currentLinearZ,
-    float3 virtualWorldPos, bool surfaceBicubicValid, float2 prevUVSMB, float disocclusionThreshold,
-    out float4 prevSpecIllum, out float prevSpecResponsiveLuma,
-    out float3 prevNormal, out float prevRoughness, out float prevReflectionHitT, out float2 prevUVVMB,
-    out float vmbSpecAccumSpeed, out float vmbFootprintQuality, out float vmbFbits,
-    uint historySpecIndex, uint historySpecFastIndex, uint prevViewZIndex, uint prevSpecHitDistIndex,
-    uint prevNormalRoughnessIndex, uint prevInternalDataIndex)
+    float3 currentWorldPos, float3 currentNormal, float currentRoughness, float currentLinearZ, float NoV,
+    float3 virtualWorldPos, bool smbAllowCatRom, float disocclusionThreshold,
+    out float4 vmbOcclusionWeights, out float2 prevVirtualPixelPosFloat, out float2 prevUVVMB,
+    out bool vmbAllowCatRom, out float vmbFootprintQuality, out float vmbSpecAccumSpeed, out float vmbRoughnessWeight,
+    out float3 prevNormal, out float prevReflectionHitT, out float vmbFbits,
+    uint prevViewZIndex, uint prevSpecHitDistIndex, uint prevNormalRoughnessIndex, uint prevInternalDataIndex)
 {
     float4 prevVirtualClip = mul(rc.gWorldToClipPrev, float4(virtualWorldPos, 1.0));
     prevVirtualClip.xy /= prevVirtualClip.w;
     prevUVVMB = prevVirtualClip.xy * float2(0.5, 0.5) + 0.5;
 
-    float2 prevVirtualPixelPosFloat = prevUVVMB * rc.gRectSizePrev;
+    prevVirtualPixelPosFloat = prevUVVMB * rc.gRectSizePrev;
     int2 bilinearOrigin = int2(floor(prevVirtualPixelPosFloat - 0.5));
-    float2 bilinearWeights = frac(prevVirtualPixelPosFloat - 0.5);
     float2 gatherOrigin = (float2(bilinearOrigin) + 1.0) * rc.gResourceSizeInvPrev;
 
-    float3 currWorldPosNoDelta = currentWorldPos - rc.gCameraDelta.xyz;
+    MLBilinear bilinear;
+    bilinear.origin = float2(bilinearOrigin);
+    bilinear.weights = frac(prevVirtualPixelPosFloat - 0.5);
 
-    float4 vmbDisocclusionThreshold = disocclusionThreshold * (rc.gOrthoMode == 0 ? currentLinearZ : 1.0);
+    int3 pn = int3(bilinearOrigin, 0);
+    float4 pnr00 = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].Load(pn));
+    float4 pnr10 = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].Load(pn + int3(1, 0, 0)));
+    float4 pnr01 = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].Load(pn + int3(0, 1, 0)));
+    float4 pnr11 = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].Load(pn + int3(1, 1, 0)));
+
+    float2 relaxedRoughnessWeightParams = RelaxGetRelaxedRoughnessWeightParams(currentRoughness * currentRoughness, rc.gRoughnessFraction);
+    float4 roughnessWeights = float4(
+        RelaxComputeWeight(pnr00.w * pnr00.w, relaxedRoughnessWeightParams.x, relaxedRoughnessWeightParams.y),
+        RelaxComputeWeight(pnr10.w * pnr10.w, relaxedRoughnessWeightParams.x, relaxedRoughnessWeightParams.y),
+        RelaxComputeWeight(pnr01.w * pnr01.w, relaxedRoughnessWeightParams.x, relaxedRoughnessWeightParams.y),
+        RelaxComputeWeight(pnr11.w * pnr11.w, relaxedRoughnessWeightParams.x, relaxedRoughnessWeightParams.y));
+
+    float4 plainBilinearWeights = MLGetBilinearCustomWeights(bilinear, float4(1.0, 1.0, 1.0, 1.0));
+    vmbRoughnessWeight = RelaxBilinearWeightedFloat(roughnessWeights.x, roughnessWeights.y, roughnessWeights.z, roughnessWeights.w, plainBilinearWeights);
+
+    float4 vmbNoN2x2 = float4(dot(pnr00.xyz, currentNormal), dot(pnr10.xyz, currentNormal), dot(pnr01.xyz, currentNormal), dot(pnr11.xyz, currentNormal));
+
+    float4 vmbOcclusion = step(0.5, roughnessWeights);
+    vmbOcclusion *= float4(vmbNoN2x2 > REBLUR_ALMOST_ZERO_ANGLE);
+
+    float pixelSize = RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, 1.0, currentLinearZ);
+    float frustumSize = pixelSize * min(float(rc.gRectSize.x), float(rc.gRectSize.y));
+    float4 vmbDisocclusionThreshold = disocclusionThreshold * frustumSize * lerp(0.1, 1.0, NoV);
     vmbDisocclusionThreshold *= RelaxIsInScreenBilinear(float2(bilinearOrigin), rc.gRectSizePrev);
     vmbDisocclusionThreshold -= NRD_EPS;
+
+    float3 currWorldPosNoDelta = currentWorldPos - rc.gCameraDelta.xyz;
 
     float4 prevVZs = RelaxGatherLinearViewZ(prevViewZIndex, gatherOrigin).wzxy;
     float3 tap00 = RelaxGetPreviousWorldPosFromPixelPos(bilinearOrigin + int2(0,0), prevVZs.x, rc.gRectSizePrev, rc.gPrevFrustumForward, rc.gPrevFrustumRight, rc.gPrevFrustumUp, rc.gOrthoMode);
     float3 tap10 = RelaxGetPreviousWorldPosFromPixelPos(bilinearOrigin + int2(1,0), prevVZs.y, rc.gRectSizePrev, rc.gPrevFrustumForward, rc.gPrevFrustumRight, rc.gPrevFrustumUp, rc.gOrthoMode);
     float3 tap01 = RelaxGetPreviousWorldPosFromPixelPos(bilinearOrigin + int2(0,1), prevVZs.z, rc.gRectSizePrev, rc.gPrevFrustumForward, rc.gPrevFrustumRight, rc.gPrevFrustumUp, rc.gOrthoMode);
     float3 tap11 = RelaxGetPreviousWorldPosFromPixelPos(bilinearOrigin + int2(1,1), prevVZs.w, rc.gRectSizePrev, rc.gPrevFrustumForward, rc.gPrevFrustumRight, rc.gPrevFrustumUp, rc.gOrthoMode);
-    float4 bilinearTapsValid = float4(
+    vmbOcclusion *= float4(
         IsReprojectionTapValid(currWorldPosNoDelta, tap00, currentNormal, vmbDisocclusionThreshold.x),
         IsReprojectionTapValid(currWorldPosNoDelta, tap10, currentNormal, vmbDisocclusionThreshold.y),
         IsReprojectionTapValid(currWorldPosNoDelta, tap01, currentNormal, vmbDisocclusionThreshold.z),
         IsReprojectionTapValid(currWorldPosNoDelta, tap11, currentNormal, vmbDisocclusionThreshold.w));
 
-    prevSpecIllum = 0; prevSpecResponsiveLuma = 0;
-    prevNormal = currentNormal; prevRoughness = 0;
-    prevReflectionHitT = rc.gDenoisingRange;
+    vmbFbits = vmbOcclusion.x * 16.0 + vmbOcclusion.y * 32.0 + vmbOcclusion.z * 64.0 + vmbOcclusion.w * 128.0;
 
-    vmbFbits = bilinearTapsValid.x * 16.0 + bilinearTapsValid.y * 32.0 + bilinearTapsValid.z * 64.0 + bilinearTapsValid.w * 128.0;
-    vmbSpecAccumSpeed = 0.0;
-    vmbFootprintQuality = 0.0;
+    vmbOcclusionWeights = MLGetBilinearCustomWeights(bilinear, vmbOcclusion);
 
-    if (dot(bilinearTapsValid, 1.0) > 0.0)
-    {
-        MLBilinear bilinear;
-        bilinear.origin = float2(bilinearOrigin);
-        bilinear.weights = bilinearWeights;
-        float4 bilinearCustomWeights = MLGetBilinearCustomWeights(bilinear, bilinearTapsValid);
-        bool useBicubic = (surfaceBicubicValid) && all(bilinearTapsValid == 1);
+    // Per-lobe spec accum speed at the virtual footprint.
+    uint4 vmbInternalDatas = rdgTexturesUInt[prevInternalDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
+    vmbSpecAccumSpeed = RelaxBilinearWeightedFloat(
+        ReblurUnpackInternalData(vmbInternalDatas.x).y, ReblurUnpackInternalData(vmbInternalDatas.y).y,
+        ReblurUnpackInternalData(vmbInternalDatas.z).y, ReblurUnpackInternalData(vmbInternalDatas.w).y,
+        vmbOcclusionWeights);
+    vmbFootprintQuality = sqrt(saturate(dot(vmbOcclusionWeights, 1.0)));
+    vmbAllowCatRom = dot(vmbOcclusion, 1.0) > 3.5 && smbAllowCatRom;
 
-        // Per-lobe spec accum speed at the virtual footprint.
-        uint4 vmbInternalDatas = rdgTexturesUInt[prevInternalDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
-        vmbSpecAccumSpeed = RelaxBilinearWeightedFloat(
-            ReblurUnpackInternalData(vmbInternalDatas.x).y, ReblurUnpackInternalData(vmbInternalDatas.y).y,
-            ReblurUnpackInternalData(vmbInternalDatas.z).y, ReblurUnpackInternalData(vmbInternalDatas.w).y,
-            bilinearCustomWeights);
-        vmbFootprintQuality = sqrt(saturate(dot(bilinearCustomWeights, 1.0)));
-
-        BicubicFilterSingle(prevVirtualPixelPosFloat, rc.gResourceSizeInvPrev, bilinearCustomWeights, useBicubic, historySpecIndex, prevSpecIllum);
-
-        float2 uvVMB = prevUVVMB * rc.gRectSizePrev * rc.gResourceSizeInvPrev;
-        SamplerState lin = rdgSamplers[RDG_LINEAR_SAMPLER_INDEX];
-        float4 vmbSpecFasts = rdgTexturesFloat[historySpecFastIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
-        prevSpecResponsiveLuma = max(RelaxBilinearWeightedFloat(vmbSpecFasts.x, vmbSpecFasts.y, vmbSpecFasts.z, vmbSpecFasts.w, bilinearCustomWeights), 0.0);
-
-        prevReflectionHitT = max(0.001, rdgTexturesFloat[prevSpecHitDistIndex].SampleLevel(lin, uvVMB, 0).r);
-
-        float4 prevNR = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].SampleLevel(lin, uvVMB, 0));
-        prevNormal = prevNR.xyz;
-        prevRoughness = prevNR.w;
-    }
-
-    return dot(bilinearTapsValid, 1.0) == 4.0 ? 1.0 : 0.0;
+    float2 uvVMB = prevUVVMB * rc.gRectSizePrev * rc.gResourceSizeInvPrev;
+    SamplerState lin = rdgSamplers[RDG_LINEAR_SAMPLER_INDEX];
+    prevReflectionHitT = max(0.001, rdgTexturesFloat[prevSpecHitDistIndex].SampleLevel(lin, uvVMB, 0).r);
+    prevNormal = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].SampleLevel(lin, uvVMB, 0)).xyz;
 }
 
 [shader("compute")]
@@ -313,9 +314,6 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     float4 specularIllumination = rdgTexturesFloat4[pc.specInputIndex].Load(int3(pixelPos, 0));
     float4 diffuseIllumination = rdgTexturesFloat4[pc.diffInputIndex].Load(int3(pixelPos, 0));
 
-    // World hit distance for the tracking / reprojection math (signal .w is normalized).
-    float specHitDistWorld = ReblurDenormHitDist(specularIllumination.w, currentLinearZ, rc.gHitDistParams, currentRoughness);
-
     float hitTM1 = sharedNormalSpecHitT[sharedMemoryIndex.y][sharedMemoryIndex.x].a;
     float minHitDist3x3 = hitTM1 == 0.0 ? NRD_INF : hitTM1;
     // Normal average over the 2x2 quad only; min hit distance over the full 3x3.
@@ -348,23 +346,24 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     float disocclusionThreshold = rc.gDisocclusionThreshold;
 
     float footprintQuality;
-    float4 prevSpecIllumSMB, prevDiffIllumSMB;
-    float prevSpecResponsiveSMB, prevDiffResponsiveSMB;
-    float prevReflectionHitTSMB;
+    float4 prevDiffIllumSMB;
+    float prevDiffResponsiveSMB;
     float diffAccumSpeed, smbSpecAccumSpeed;
     float fbits;
     bool smbAllowCatRom;
     float3 smbPrevNormalFlat;
+    float4 smbOcclusionWeights;
+    float2 smbPixelPosFloat;
 
     float SMBReprojectionFound = LoadSurfaceMotionBasedPrevData(
         rc, prevWorldPos, prevUVSMB, currentLinearZ, normalize(currentNormalAveraged),
         specularIllumination.a, NoV, smbParallaxInPixelsMax, disocclusionThreshold,
         footprintQuality, diffAccumSpeed, smbSpecAccumSpeed,
         fbits, smbAllowCatRom, smbPrevNormalFlat,
-        prevSpecIllumSMB, prevSpecResponsiveSMB, prevReflectionHitTSMB,
+        smbOcclusionWeights, smbPixelPosFloat,
         prevDiffIllumSMB, prevDiffResponsiveSMB,
-        pc.historySpecIndex, pc.historyDiffIndex, pc.historySpecFastIndex, pc.historyDiffFastIndex,
-        pc.prevViewZIndex, pc.prevInternalDataIndex, pc.prevSpecHitDistIndex, pc.prevNormalRoughnessIndex);
+        pc.historyDiffIndex, pc.historyDiffFastIndex,
+        pc.prevViewZIndex, pc.prevInternalDataIndex, pc.prevNormalRoughnessIndex);
 
     float3 Vprev = (rc.gOrthoMode == 0) ? -normalize(prevWorldPos - rc.gCameraDelta.xyz) : -normalize(rc.gPrevFrustumForward.xyz);
     float NoVprev = abs(dot(currentNormal, Vprev));
@@ -453,34 +452,38 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
 
     float3 virtualWorldPos = RelaxGetXvirtual(hitDist, curvature, currentWorldPos, prevWorldPos, currentNormal, V, currentRoughness);
 
-    float4 prevSpecIllumVMB;
-    float prevSpecResponsiveVMB;
+    float4 vmbOcclusionWeights;
+    float2 vmbPixelPosFloat, prevUVVMB;
+    bool vmbAllowCatRom;
+    float vmbFootprintQuality, vmbSpecAccumSpeed, vmbRoughnessWeight, vmbFbits;
     float3 prevNormalVMB;
-    float prevRoughnessVMB, prevReflectionHitTVMB;
-    float2 prevUVVMB;
+    float prevReflectionHitTVMB;
 
-    float vmbSpecAccumSpeed, vmbFootprintQuality, vmbFbits;
-    float VMBReprojectionFound = LoadVirtualMotionBasedPrevData(
-        rc, currentWorldPos, currentNormal, currentLinearZ,
-        virtualWorldPos, SMBReprojectionFound == 2.0, prevUVSMB, disocclusionThreshold,
-        prevSpecIllumVMB, prevSpecResponsiveVMB,
-        prevNormalVMB, prevRoughnessVMB, prevReflectionHitTVMB, prevUVVMB,
-        vmbSpecAccumSpeed, vmbFootprintQuality, vmbFbits,
-        pc.historySpecIndex, pc.historySpecFastIndex, pc.prevViewZIndex, pc.prevSpecHitDistIndex,
-        pc.prevNormalRoughnessIndex, pc.prevInternalDataIndex);
+    LoadVirtualMotionBasedPrevData(
+        rc, currentWorldPos, currentNormal, currentRoughness, currentLinearZ, NoV,
+        virtualWorldPos, smbAllowCatRom, disocclusionThreshold,
+        vmbOcclusionWeights, vmbPixelPosFloat, prevUVVMB,
+        vmbAllowCatRom, vmbFootprintQuality, vmbSpecAccumSpeed, vmbRoughnessWeight,
+        prevNormalVMB, prevReflectionHitTVMB, vmbFbits,
+        pc.prevViewZIndex, pc.prevSpecHitDistIndex, pc.prevNormalRoughnessIndex, pc.prevInternalDataIndex);
 
     float vmbSpecModConfidence = min(vmbFootprintQuality, historyConfidence);
     vmbSpecAccumSpeed *= lerp(vmbSpecModConfidence, 1.0, 1.0 / (1.0 + vmbSpecAccumSpeed));
     fbits += vmbFbits;
 
-    if (rc.gResetHistory != 0) { diffAccumSpeed = 0.0; smbSpecAccumSpeed = 0.0; vmbSpecAccumSpeed = 0.0; }
+    // No texture is cleared on the first frame: the history descriptors alias unwritten memory, so seed
+    // every carried value from the current frame instead of trusting IEEE lerp to kill NaN.
+    if (rc.gResetHistory != 0)
+    {
+        diffAccumSpeed = 0.0;
+        smbSpecAccumSpeed = 0.0;
+        vmbSpecAccumSpeed = 0.0;
+        prevDiffIllumSMB = diffuseIllumination;
+        prevDiffResponsiveSMB = ReblurGetLuma(diffuseIllumination);
+        prevReflectionHitTVMB = hitDist;
+    }
 
-    // --- Virtual history amount (kept virtual-motion logic) ---
-    float4 D = MLGetSpecularDominantDirection(currentNormal, V, currentRoughnessModified);
-    float virtualHistoryAmount = VMBReprojectionFound * D.w;
-    virtualHistoryAmount *= (rc.gOrthoMode == 0) ? 1.0 : 0.75;
-    virtualHistoryAmount *= float(dot(prevNormalVMB, currentNormalAveraged) > 0.0);
-
+    // --- Virtual history confidence (roughness, normal, prev-prev, parallax) ---
     float2 uvDiff = prevUVVMB - prevUVSMB;
     float uvDiffLengthInPixels = length(uvDiff * float2(rc.gRectSize));
 
@@ -490,15 +493,14 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     float curvatureAngle = atan(tanCurvature);
 
     // Lobe tolerance tightens as the virtual history accumulates.
-    float lobeHalfAngle = max(atan(MLGetSpecularLobeTanHalfAngle(currentRoughnessModified, 0.75 / (1.0 + vmbSpecAccumSpeed))), RELAX_NORMAL_ULP);
-    float normalWeight = RelaxGetEncodingAwareNormalWeight(currentNormal, prevNormalVMB, lobeHalfAngle, curvatureAngle, RELAX_NORMAL_ULP);
-    virtualHistoryAmount *= lerp(1.0 - saturate(uvDiffLengthInPixels), 1.0, normalWeight);
+    float lobeTanHalfAngle = MLGetSpecularLobeTanHalfAngle(currentRoughnessModified, 0.75 / (1.0 + vmbSpecAccumSpeed));
+    float lobeHalfAngle = max(atan(lobeTanHalfAngle), RELAX_NORMAL_ULP);
 
-    float2 relaxedRoughnessWeightParams = RelaxGetRelaxedRoughnessWeightParams(currentRoughness * currentRoughness, rc.gRoughnessFraction);
-    float virtualRoughnessWeight = RelaxComputeWeight(prevRoughnessVMB * prevRoughnessVMB, relaxedRoughnessWeightParams.x, relaxedRoughnessWeightParams.y);
-    virtualRoughnessWeight = lerp(1.0 - saturate(uvDiffLengthInPixels), 1.0, virtualRoughnessWeight);
-    virtualHistoryAmount *= (rc.gOrthoMode == 0) ? virtualRoughnessWeight : 1.0;
+    float virtualRoughnessWeight = lerp(1.0 - saturate(uvDiffLengthInPixels), 1.0, vmbRoughnessWeight);
     float specVMBConfidence = virtualRoughnessWeight * 0.9 + 0.1;
+
+    float normalWeight = RelaxGetEncodingAwareNormalWeight(currentNormal, prevNormalVMB, lobeHalfAngle, curvatureAngle, RELAX_NORMAL_ULP);
+    specVMBConfidence *= lerp(1.0 - saturate(uvDiffLengthInPixels), 1.0, normalWeight);
 
     float2 uvDiffNorm = uvDiff * MLRsqrt(MLLengthSquared(uvDiff));
     uvDiffNorm /= rc.gRectSizePrev;
@@ -514,34 +516,23 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
         ? RelaxGetEncodingAwareNormalWeight(prevNormalVMB, backNR1.rgb, lobeHalfAngle, curvatureAngle * 2.0, RELAX_NORMAL_ULP) : 1.0;
     prevPrevNormalWeight *= RelaxIsInScreenNearest(backUV2) == 1.0
         ? RelaxGetEncodingAwareNormalWeight(prevNormalVMB, backNR2.rgb, lobeHalfAngle, curvatureAngle * 3.0, RELAX_NORMAL_ULP) : 1.0;
-    virtualHistoryAmount *= 0.33 + 0.67 * prevPrevNormalWeight;
     specVMBConfidence *= 0.33 + 0.67 * prevPrevNormalWeight;
 
+    float2 relaxedRoughnessWeightParams = RelaxGetRelaxedRoughnessWeightParams(currentRoughness * currentRoughness, rc.gRoughnessFraction);
     float rw = RelaxComputeWeight(backNR1.w * backNR1.w, relaxedRoughnessWeightParams.x, relaxedRoughnessWeightParams.y);
     rw *= RelaxComputeWeight(backNR2.w * backNR2.w, relaxedRoughnessWeightParams.x, relaxedRoughnessWeightParams.y);
-    virtualHistoryAmount *= (rc.gOrthoMode == 0) ? rw * 0.9 + 0.1 : 1.0;
+    specVMBConfidence *= rw * 0.9 + 0.1;
 
-    // --- Specular hit-distance confidence (kept; world hit distances) ---
-    float SMC = RelaxGetSpecMagicCurve(currentRoughnessModified);
-    float hitDistC = lerp(specHitDistWorld, prevReflectionHitTSMB, SMC);
-    float hitDist1 = hitDistC / (2.0 * curvature * hitDistC + 1.0);
-    float hitDist2 = prevReflectionHitTVMB / (2.0 * curvature * prevReflectionHitTVMB + 1.0);
-    float maxDistHD = max(hitDist1, hitDist2);
-    float dHitT = abs(hitDist1 - hitDist2);
-    float hitDistConfidence = 1.0 - saturate(lerp(20.0, 0.0, SMC) * dHitT / (currentLinearZ + maxDistHD));
-    hitDistConfidence = lerp(hitDistConfidence, 1.0, SMC);
-
+    // Parallax: how far the virtual position moves when the carried hit distance replaces the current one.
     float hitDistForTrackingPrev = prevReflectionHitTVMB;
     float3 prevVirtualWorldPos = RelaxGetXvirtual(hitDistForTrackingPrev, curvature, currentWorldPos, prevWorldPos, currentNormal, V, currentRoughness);
     float2 prevUVVMBTest = MLGetScreenUv(rc.gWorldToClipPrev, prevVirtualWorldPos);
-    float lobeTanHalfAngle = max(RelaxGetSpecLobeTanHalfAngle(currentRoughness, 0.6), 0.5 * rc.gRectSizeInv.x);
-    float unproj1 = min(hitDist, hitDistForTrackingPrev) / RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, 1.0, max(length(virtualWorldPos), length(prevVirtualWorldPos)));
-    float lobeRadiusInPixels = lobeTanHalfAngle * unproj1;
+    float tanHalfAngle = lobeTanHalfAngle + tanCurvature;
+    float pixelSizeAtXvirtual = RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, 1.0, length(virtualWorldPos));
+    float r = tanHalfAngle * min(hitDist, hitDistForTrackingPrev) / pixelSizeAtXvirtual;
+    r = max(r, 0.1);
     float deltaParallaxInPixels = length((prevUVVMBTest - prevUVVMB) * float2(rc.gRectSize));
-    hitDistConfidence *= MLSmoothStep(lobeRadiusInPixels + 0.25, 0.0, deltaParallaxInPixels);
-
-    // Fold the hit-distance/parallax confidence into the virtual-motion confidence (NRD virtualHistoryConfidence).
-    specVMBConfidence *= hitDistConfidence;
+    specVMBConfidence *= MLLinearStep(r, 0.0, deltaParallaxInPixels);
 
     // Surface history confidence: parallax angle vs an accumulation-tightened lobe angle.
     float surfaceHistoryConfidence = SMBReprojectionFound > 0 ? 1.0 : 0.0;
@@ -552,7 +543,9 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
 
         float smbNonLinear = 1.0 / (1.0 + smbSpecAccumSpeed);
         float hitDistNormalization = ReblurGetHitDistNormalization(currentLinearZ, rc.gHitDistParams, currentRoughness);
-        float h = lerp(prevSpecIllumSMB.w, specularIllumination.w, smbNonLinear) * hitDistNormalization;
+        float hPrev = rdgTexturesFloat4[pc.historySpecIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], saturate(prevUVSMB) * rc.gRectSizePrev * rc.gResourceSizeInvPrev, 0).w;
+        hPrev = rc.gResetHistory != 0 ? specularIllumination.w : hPrev;
+        float h = lerp(hPrev, specularIllumination.w, smbNonLinear) * hitDistNormalization;
 
         float tana0 = MLGetSpecularLobeTanHalfAngle(currentRoughnessModified, 0.75);
         tana0 *= lerp(NoV, 1.0, currentRoughnessModified);
@@ -562,6 +555,9 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
         float a0 = max(atan(tana0), 1.5 / 255.0);
         float f = MLLinearStep(a0, 0.0, a);
         surfaceHistoryConfidence *= f * f * f * f;
+
+        // Very high roughness: specular motion regresses to surface motion, so stop distrusting it.
+        surfaceHistoryConfidence = lerp(surfaceHistoryConfidence, 1.0, MLLinearStep(0.8, 0.9, currentRoughnessModified));
     }
     float virtualHistoryConfidence = specVMBConfidence;
 
@@ -588,10 +584,9 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     smbSpecAccumSpeed = min(smbSpecAccumSpeed, maxFrameNum.x);
     vmbSpecAccumSpeed = min(vmbSpecAccumSpeed, maxFrameNum.y);
 
-    // Fallback between smb and vmb driven by their accumulated frame counts.
-    float fallbackMagic = vmbSpecAccumSpeed > smbSpecAccumSpeed ? 8.0 : 0.5;
-    virtualHistoryAmount *= 1.0 + (vmbSpecAccumSpeed - smbSpecAccumSpeed) / (fallbackMagic * max(vmbSpecAccumSpeed, smbSpecAccumSpeed) + 1.0);
-    virtualHistoryAmount = saturate(virtualHistoryAmount);
+    // Pick one history: "1" if vmb accumulated at least as much as smb, pull towards smb by the delta otherwise.
+    float virtualHistoryAmount = saturate(1.0 + (vmbSpecAccumSpeed - smbSpecAccumSpeed) / (1.0 + 0.5 * max(vmbSpecAccumSpeed, smbSpecAccumSpeed)));
+    virtualHistoryAmount = virtualHistoryAmount >= 0.5 ? 1.0 : 0.0;
 
     // ===== Accumulation (per-lobe) =====
     // Checkerboard: hole pixels carry prepass-reconstructed data; slow their accumulation.
@@ -599,21 +594,34 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     bool specHasData = hasData;
     bool diffHasData = hasData;
 
-    // --- Specular slow history (YCoCg + normalized hit distance) ---
-    float4 smbSpecHistory = ReblurClampNegativeToZero(prevSpecIllumSMB);
-    float4 vmbSpecHistory = ReblurClampNegativeToZero(prevSpecIllumVMB);
-    float specMinHitDistLimit = ReblurGetMinAllowedLimitForHitDistNonLinearAccumSpeed(currentRoughnessModified, rc.gMaxAccumulatedFrameNum);
-    float smbSpecNonLinear = 1.0 / (1.0 + smbSpecAccumSpeed);
-    float vmbSpecNonLinear = 1.0 / (1.0 + vmbSpecAccumSpeed);
-    if (!specHasData) {
-        smbSpecNonLinear *= lerp(1.0 - rc.gCheckerboardResolveAccumSpeed, 1.0, smbSpecNonLinear);
-        vmbSpecNonLinear *= lerp(1.0 - rc.gCheckerboardResolveAccumSpeed, 1.0, vmbSpecNonLinear);
+    // --- Specular history: one fetch at the selected footprint (YCoCg + normalized hit distance) ---
+    float2 specPixelPosFloat = virtualHistoryAmount < 0.5 ? smbPixelPosFloat : vmbPixelPosFloat;
+    float4 specOcclusionWeights = virtualHistoryAmount < 0.5 ? smbOcclusionWeights : vmbOcclusionWeights;
+    bool specAllowCatRom = virtualHistoryAmount < 0.5
+        ? (smbAllowCatRom && smbSpecAccumSpeed > rc.gHistoryFixFrameNum)
+        : (vmbAllowCatRom && vmbSpecAccumSpeed > rc.gHistoryFixFrameNum);
+
+    float4 specHistory;
+    BicubicFilterSingle(specPixelPosFloat, rc.gResourceSizeInvPrev, specOcclusionWeights, specAllowCatRom, pc.historySpecIndex, specHistory);
+    specHistory = ReblurClampNegativeToZero(specHistory);
+
+    float2 specGatherOrigin = (floor(specPixelPosFloat - 0.5) + 1.0) * rc.gResourceSizeInvPrev;
+    float4 specFasts = rdgTexturesFloat[pc.historySpecFastIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], specGatherOrigin).wzxy;
+    float specFastHistory = max(RelaxBilinearWeightedFloat(specFasts.x, specFasts.y, specFasts.z, specFasts.w, specOcclusionWeights), 0.0);
+
+    if (rc.gResetHistory != 0)
+    {
+        specHistory = specularIllumination;
+        specFastHistory = ReblurGetLuma(specularIllumination);
     }
-    float4 smbSpec = ReblurMixHistoryAndCurrent(smbSpecHistory, specularIllumination, smbSpecNonLinear, specMinHitDistLimit);
-    float4 vmbSpec = ReblurMixHistoryAndCurrent(vmbSpecHistory, specularIllumination, vmbSpecNonLinear, specMinHitDistLimit);
-    float4 specResult = lerp(smbSpec, vmbSpec, virtualHistoryAmount);
-    float4 specHistory = lerp(smbSpecHistory, vmbSpecHistory, virtualHistoryAmount);
+
     float specAccumSpeed = lerp(smbSpecAccumSpeed, vmbSpecAccumSpeed, virtualHistoryAmount);
+    float specMinHitDistLimit = ReblurGetMinAllowedLimitForHitDistNonLinearAccumSpeed(currentRoughnessModified, rc.gMaxAccumulatedFrameNum);
+    float specNonLinear = 1.0 / (1.0 + specAccumSpeed);
+    if (!specHasData) {
+        specNonLinear *= lerp(1.0 - rc.gCheckerboardResolveAccumSpeed, 1.0, specNonLinear);
+    }
+    float4 specResult = ReblurMixHistoryAndCurrent(specHistory, specularIllumination, specNonLinear, specMinHitDistLimit);
 
     // Firefly suppressor (slow).
     float specMaxRelativeIntensity = rc.gFireflySuppressorMinRelativeScale + REBLUR_FIREFLY_SUPPRESSOR_MAX_RELATIVE_INTENSITY / (specAccumSpeed + 1.0);
@@ -627,10 +635,9 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     float specHitDistMaxRelativeIntensity = 1.2 + 1.0 / (specAccumSpeed + 1.0);
     specResult.w = lerp(specResult.w, min(specResult.w, specHistory.w * specHitDistMaxRelativeIntensity), specAntifireflyFactor);
 
-    // --- Specular fast history (luma; blend confidence + fast history once, then one non-linear speed) ---
+    // --- Specular fast history (luma) ---
     float specHistoryConfidence = lerp(surfaceHistoryConfidence, virtualHistoryConfidence, virtualHistoryAmount);
     float specFastNonLinear = ReblurGetNonLinearAccumSpeed(specAccumSpeed, rc.gMaxFastAccumulatedFrameNum, specHistoryConfidence, specHasData, rc.gCheckerboardResolveAccumSpeed);
-    float specFastHistory = lerp(prevSpecResponsiveSMB, prevSpecResponsiveVMB, virtualHistoryAmount);
     float currentSpecLuma = ReblurGetLuma(specularIllumination);
     float specFastResult = lerp(specFastHistory, currentSpecLuma, specFastNonLinear);
     float specFastClamped = min(specFastResult, ReblurGetLuma(specHistory) * specMaxRelativeIntensity * REBLUR_FIREFLY_SUPPRESSOR_FAST_RELATIVE_INTENSITY);

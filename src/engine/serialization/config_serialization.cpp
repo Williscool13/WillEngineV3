@@ -130,6 +130,8 @@ static nlohmann::json ReblurToJson(const Core::ReBLURParams& rb)
         {"enableAntiFirefly", rb.enableAntiFirefly},
         {"enableStabilizationFireflyCleanup", rb.enableStabilizationFireflyCleanup},
         {"enableTemporalStabilization", rb.enableTemporalStabilization},
+        {"bChromaAtrous", rb.bChromaAtrous},
+        {"chromaAtrousIterations", rb.chromaAtrousIterations},
     };
 }
 
@@ -174,6 +176,8 @@ static void ReblurFromJson(const nlohmann::json& r, Core::ReBLURParams& p)
     p.enableAntiFirefly = getBool("enableAntiFirefly", p.enableAntiFirefly);
     p.enableStabilizationFireflyCleanup = getBool("enableStabilizationFireflyCleanup", p.enableStabilizationFireflyCleanup);
     p.enableTemporalStabilization = getBool("enableTemporalStabilization", p.enableTemporalStabilization);
+    p.bChromaAtrous = getBool("bChromaAtrous", p.bChromaAtrous);
+    p.chromaAtrousIterations = getInt("chromaAtrousIterations", p.chromaAtrousIterations);
 }
 
 nlohmann::json ToJson(const Core::ReSTIRParams& p)

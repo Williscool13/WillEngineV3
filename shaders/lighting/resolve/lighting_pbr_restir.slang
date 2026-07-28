@@ -64,7 +64,9 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
 
     float3 diffuseRadiance = float3(0.0);
     float3 specularRadiance = float3(0.0);
-    float hitDistance = 0.0;
+    float diffHitDistance = 0.0;
+    float specHitDistance = 0.0;
+    float bestDiffLum = -1.0;
     float bestSpecLum = -1.0;
 
     uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
@@ -99,7 +101,15 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
                 float3 alColor = UnpackUnorm4x8(vs.packedColor).rgb;
                 float3 commonTerm = s.cosShade * LightGeometryTerm(s) * vs.intensity * alColor * s.attenuation * r.W;
 
-                diffuseRadiance += diffuseAl * commonTerm;
+                float3 diffContribution = diffuseAl * commonTerm;
+                diffuseRadiance += diffContribution;
+
+                float diffLum = dot(diffContribution, float3(0.2126, 0.7152, 0.0722));
+                if (diffLum > bestDiffLum)
+                {
+                    bestDiffLum = diffLum;
+                    diffHitDistance = s.dist;
+                }
 
                 // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
                 if (roughness > pc.lightSpecularFromReflectionsMax)
@@ -111,7 +121,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
                     if (specLum > bestSpecLum)
                     {
                         bestSpecLum = specLum;
-                        hitDistance = s.dist;
+                        specHitDistance = s.dist;
                     }
                 }
             }
@@ -142,7 +152,15 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
                 float orenNayarSun = Diffuse_OrenNayar(nDotLsun, nDotV, Lsun, V, roughness);
 
                 float3 commonSun = SunRadiance(sun) * nDotLsun * rs.W;
-                diffuseRadiance += kDsun * li.albedo.xyz * orenNayarSun * commonSun;
+                float3 diffContribution = kDsun * li.albedo.xyz * orenNayarSun * commonSun;
+                diffuseRadiance += diffContribution;
+
+                float diffLum = dot(diffContribution, float3(0.2126, 0.7152, 0.0722));
+                if (diffLum > bestDiffLum)
+                {
+                    bestDiffLum = diffLum;
+                    diffHitDistance = SUN_SPEC_HIT_T;
+                }
 
                 // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
                 if (roughness > pc.lightSpecularFromReflectionsMax)
@@ -154,7 +172,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
                     if (specLum > bestSpecLum)
                     {
                         bestSpecLum = specLum;
-                        hitDistance = SUN_SPEC_HIT_T;
+                        specHitDistance = SUN_SPEC_HIT_T;
                     }
                 }
             }
@@ -167,9 +185,10 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     float3 specReflectance = F0 * envBRDF.x + envBRDF.y;
     float3 specularOut = specularRadiance / max(specReflectance, float3(0.01, 0.01, 0.01));
 
-    float hitT = (isnan(hitDistance) || isinf(hitDistance)) ? 0.0 : hitDistance;
-    float4 diffPacked = float4(SanitizeRadiance(diffuseOut), hitT);
-    float4 specPacked = float4(SanitizeRadiance(specularOut), hitT);
+    float diffHitT = (isnan(diffHitDistance) || isinf(diffHitDistance)) ? 0.0 : diffHitDistance;
+    float specHitT = (isnan(specHitDistance) || isinf(specHitDistance)) ? 0.0 : specHitDistance;
+    float4 diffPacked = float4(SanitizeRadiance(diffuseOut), diffHitT);
+    float4 specPacked = float4(SanitizeRadiance(specularOut), specHitT);
 
     uint2 writeCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? rcoord : pixel;
     rdgStorageFloat4[pc.primaryOutputImageIndex][writeCoord] = diffPacked;

@@ -687,6 +687,10 @@ struct ReBLURParams
     float maxBlurRadius{30.f};
     float minHitDistanceWeight{0.1f};
 
+    // Diffuse-only CoCg iterations
+    bool bChromaAtrous{true};
+    int32_t chromaAtrousIterations{2};
+
     // Antilag
     float antilagLuminanceSigmaScale{2.f};
     float antilagLuminanceSensitivity{3.f};

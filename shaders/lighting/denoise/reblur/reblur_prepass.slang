@@ -91,7 +91,7 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
         if (diffSum.a == 0.0) { blurRadius = max(blurRadius, 1.0); }
 
         float normalWeightParam = RelaxGetNormalWeightParam2(1.0, 0.25 * rc.gLobeAngleFraction);
-        float2 hitDistanceWeightParams = ReblurGetHitDistanceWeightParams(diffSum.a, 1.0 / 9.0, 1.0);
+        float2 hitDistanceWeightParams = ReblurGetHitDistanceWeightParams(diffSum.a, 1.0 / 9.0);
         float weightSum = 1.0;
 
         for (int i = 0; i < 8; i++) {
@@ -156,7 +156,7 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
         if (specSum.a == 0.0) { blurRadius = max(blurRadius, 1.0); }
 
         float normalWeightParam = RelaxGetNormalWeightParam2(centerRoughness, 0.5 * rc.gLobeAngleFraction);
-        float2 hitDistanceWeightParams = ReblurGetHitDistanceWeightParams(specSum.a, 1.0 / 9.0, centerRoughness);
+        float2 hitDistanceWeightParams = ReblurGetHitDistanceWeightParams(specSum.a, 1.0 / 9.0);
         float2 roughnessWeightParams = RelaxGetRoughnessWeightParams(centerRoughness, rc.gRoughnessFraction);
         float specMinHitDistanceWeight = rc.gMinHitDistanceWeight * REBLUR_PRE_PASS_FRACTION_SCALE * smc;
 

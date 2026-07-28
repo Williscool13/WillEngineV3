@@ -240,14 +240,8 @@ public float4 ReblurBackEndUnpack(float4 data)
 /** @brief Non-linear accumulation speed from a linear accumulated-frame count: f = 1 / (1 + N). */
 public float ReblurGetNonLinearAccumSpeed(float framesNum) { return 1.0 / (1.0 + framesNum); }
 
-/** @brief NRD blur radius: maxBlurRadius * sqrt01(areaFactor) * radiusScale, clamped to minBlurRadius.
- *  areaFactor (= hitDistFactor[*roughness] * nonLinearAccumSpeed) drives AREA not radius, hence the sqrt;
- *  this keeps a meaningful radius at convergence instead of collapsing linearly to ~minBlurRadius. */
-public float ReblurGetBlurRadius(float maxBlurRadius, float minBlurRadius, float areaFactor, float radiusScale)
-{
-    float r = maxBlurRadius * sqrt(saturate(areaFactor)) * radiusScale;
-    return max(r, minBlurRadius);
-}
+/** @brief Spec magic curve with power 0.5, as used by the NRD spatial filters (fixes roughness < 0.1). */
+public float ReblurGetSpecMagicCurve05(float roughness) { return RelaxGetSpecMagicCurve(roughness, 0.5); }
 
 /** @brief Lobe tolerance tightens as history accumulates. 1.5/255 = normal-encoding error floor (oct16). */
 public float ReblurGetNormalWeightParam(float nonLinearAccumSpeed, float lobeAngleFraction, float roughness)
@@ -258,12 +252,9 @@ public float ReblurGetNormalWeightParam(float nonLinearAccumSpeed, float lobeAng
     return 1.0 / angle;
 }
 
-/** @brief Exponential weight sharpens toward 0.0005 as history converges (clamped by the spec magic
- *  curve so smooth specular stays strict). Normalized domain. */
-public float2 ReblurGetHitDistanceWeightParams(float hitDist, float nonLinearAccumSpeed, float roughness)
+/** @brief Exponential weight sharpens as history converges. Normalized domain. */
+public float2 ReblurGetHitDistanceWeightParams(float hitDist, float nonLinearAccumSpeed)
 {
-    float smc = RelaxGetSpecMagicCurve(roughness);
-    float norm = lerp(0.0005, 1.0, min(nonLinearAccumSpeed, smc));
-    float a = 1.0 / norm;
+    float a = 1.0 / nonLinearAccumSpeed;
     return float2(a, -hitDist * a);
 }

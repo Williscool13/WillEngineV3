@@ -600,6 +600,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReblurBlurPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("reblur_stabilization"), src / "reblur_stabilization.spv", "ReblurStabilizationMain",
                             sizeof(ReblurStabilizationPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("reblur_chroma"), src / "reblur_chroma.spv", "ReblurChromaMain",
+                            sizeof(ReblurChromaPushConstant), PipelineCategory::Critical);
 
 
     RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure.spv", "ComputeExposureHistogram",

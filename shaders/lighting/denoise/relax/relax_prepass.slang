@@ -203,7 +203,7 @@ void RelaxPrepassMain(uniform RelaxPrepassPushConstant pc, int2 pixelPos : SV_Di
         float specMinHitDistanceWeight = specSum.a == 0.0 ? 1.0 : rc.gMinHitDistanceWeight * smc;
 
         // Spec hitT is not averaged; a stochastic min is taken instead (NRD), since blurred hitT degrades virtual-motion tracking
-        float minHitT = specSum.a == 0.0 ? rc.gDenoisingRange : specSum.a;
+        float minHitT = specSum.a == 0.0 ? NRD_INF : specSum.a;
         float weightSum = 1.0;
         uint rngState = MLHashCombine(MLSequenceHash(uint(pixelPos.x) + uint(pixelPos.y) * 65536u), rc.gFrameIndex);
 

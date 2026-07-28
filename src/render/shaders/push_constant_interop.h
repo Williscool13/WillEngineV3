@@ -1744,6 +1744,18 @@ SHADER_PUBLIC struct ReblurBlurPushConstant
     SHADER_PUBLIC uint32_t isPostBlur;
 };
 
+SHADER_PUBLIC struct ReblurChromaPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;
+    SHADER_PUBLIC uint32_t tilesIndex;
+    SHADER_PUBLIC uint32_t normalRoughnessIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t data1Index;
+    SHADER_PUBLIC uint32_t diffIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t stepSize;
+};
+
 SHADER_PUBLIC struct ReblurStabilizationPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(ReblurDiffuseSpecularConstants) constants;

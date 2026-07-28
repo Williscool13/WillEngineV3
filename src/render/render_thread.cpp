@@ -703,7 +703,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         }
                         SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked);
 
-                        const bool bReflectionCheckerboardPacked = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX && frameBuffer.reflection.bDenoiserEnabled;
+                        const bool bReflectionCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) && frameBuffer.reflection.bDenoiserEnabled;
                         SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, frameBuffer.bFreezeScreenFeedback);
                         const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
@@ -712,6 +712,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                             SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
+                            SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection);
                             SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, restirCheckerboardField, restirCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode);
                         }
                         else {
