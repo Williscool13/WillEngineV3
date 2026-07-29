@@ -4,6 +4,7 @@ import restir_interop;
 import restir_common;
 import regir_hash_common;
 import binning_common;
+import lights_interop;
 import random_common;
 import packing_functions;
 
@@ -94,64 +95,88 @@ public struct ReGIRProposal : ILightProposal
     }
 }
 
-// Fraction of each light-sampling candidate budget routed to a uniformly-random emissive triangle when the bin holds only analytic lights.
-static const float WORLD_GRID_EMISSIVE_MIX_PROB = 0.5;
-
-/** WorldGridBin: cascaded strongest-K analytic light list. Uniform selection over the cell; RIS applies importance at the real shading point.
- *  Emissive triangles are never binned, so when they are present each candidate draw is a mixture: with WORLD_GRID_EMISSIVE_MIX_PROB pick a uniform emissive, else draw from the analytic bin. Marginal() returns the exact mixture pdf so the Talbot-MIS denominator stays unbiased. */
+/** WorldGridBin: cascaded strongest-K light list. Uniform selection over the cell; RIS applies importance at the real shading point.
+ *  The cell holds analytic lights and emissive groups (whole mesh instances) in two parallel top-K lists, and a draw picks uniformly
+ *  across their union, then uniformly within the chosen group. Both terms are exact, so Marginal() keeps the Talbot-MIS denominator unbiased. */
 public struct WorldGridProposal : ILightProposal
 {
     public uint2* grid;
     public uint* indexList;
+    public uint2* emissiveGrid;
+    public uint* emissiveIndexList;
+    public LightData* lightData;
     public int analyticCount;
 
     uint cellOffset;
     uint cellCount;
+    uint groupOffset;
+    uint groupCount;
 
     [mutating] public void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h)
     {
         cellOffset = 0u;
         cellCount = 0u;
+        groupOffset = 0u;
+        groupCount = 0u;
         WorldGridKey key = WorldGridResolveCell(worldPos, cameraPos);
         uint2 cell = grid[key.cellIndex];
         cellOffset = cell.x;
         cellCount = cell.y;
+        if (emissiveGrid != nullptr) {
+            uint2 g = emissiveGrid[key.cellIndex];
+            groupOffset = g.x;
+            groupCount = g.y;
+        }
     }
 
     public bool Draw(uint i, uint m, int lightCount, inout uint h, out int lightIdx, out float pSelect)
     {
         lightIdx = -1;
         pSelect = 0.0;
+        uint total = cellCount + groupCount;
         // Empty cell: let the caller's uniform-over-all-lights fallback handle it (already covers emissives).
-        if (cellCount == 0u) { return false; }
-        uint eCount = uint(max(lightCount - analyticCount, 0));
-        float beta = (eCount > 0u) ? WORLD_GRID_EMISSIVE_MIX_PROB : 0.0;
+        if (total == 0u) { return false; }
 
         float u = (float(i) + HashStep(h)) / float(m);
-        if (u < beta) {
-            uint e = min(uint(u / beta * float(eCount)), eCount - 1u);
-            lightIdx = analyticCount + int(e);
-            pSelect = beta / float(eCount);
+        uint j = min(uint(u * float(total)), total - 1u);
+        if (j < cellCount) {
+            uint idx = indexList[cellOffset + j];
+            if (idx >= uint(lightCount)) { return false; }
+            lightIdx = int(idx);
+            pSelect = 1.0 / float(total);
             return true;
         }
-        uint j = min(uint((u - beta) / (1.0 - beta) * float(cellCount)), cellCount - 1u);
-        uint idx = indexList[cellOffset + j];
+
+        // Group path draws one extra step; with no emissive groups present it is never taken
+        EmissiveGroup group = lightData->emissiveGroups[emissiveIndexList[groupOffset + (j - cellCount)]];
+        if (group.lightCount == 0u) { return false; }
+        uint t = min(uint(HashStep(h) * float(group.lightCount)), group.lightCount - 1u);
+        uint idx = group.firstLight + t;
         if (idx >= uint(lightCount)) { return false; }
         lightIdx = int(idx);
-        pSelect = (1.0 - beta) / float(cellCount);
+        pSelect = 1.0 / (float(total) * float(group.lightCount));
         return true;
     }
 
     public float Marginal(int lightIdx, LightView vs, int lightCount)
     {
-        // Exact: light is a candidate iff it survived the cell's top-K, at selection pdf 1/count; truncated lights are owned solely by the BRDF technique.
-        if (cellCount == 0u) { return 1.0 / float(lightCount); }
-        uint eCount = uint(max(lightCount - analyticCount, 0));
-        float beta = (eCount > 0u) ? WORLD_GRID_EMISSIVE_MIX_PROB : 0.0;
-        // Emissives are never binned; their only selection mass is the mixture's emissive component.
-        if (lightIdx >= analyticCount) { return (eCount > 0u) ? (beta / float(eCount)) : 0.0; }
-        for (uint k = 0u; k < cellCount; k++) {
-            if (int(indexList[cellOffset + k]) == lightIdx) { return (1.0 - beta) / float(cellCount); }
+        // Exact: a light is a candidate iff it survived its cell list, at the same pdf the draw used
+        uint total = cellCount + groupCount;
+        if (total == 0u) { return 1.0 / float(lightCount); }
+
+        if (lightIdx < analyticCount) {
+            for (uint k = 0u; k < cellCount; k++) {
+                if (int(indexList[cellOffset + k]) == lightIdx) { return 1.0 / float(total); }
+            }
+            return 0.0;
+        }
+
+        // Group runs are disjoint, so an emissive triangle matches at most one binned group.
+        for (uint k = 0u; k < groupCount; k++) {
+            EmissiveGroup group = lightData->emissiveGroups[emissiveIndexList[groupOffset + k]];
+            if (uint(lightIdx) >= group.firstLight && uint(lightIdx) < group.firstLight + group.lightCount) {
+                return 1.0 / (float(total) * float(group.lightCount));
+            }
         }
         return 0.0;
     }

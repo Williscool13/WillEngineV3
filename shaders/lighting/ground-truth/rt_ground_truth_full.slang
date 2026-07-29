@@ -103,8 +103,10 @@ static GTFullSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance in
         emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, 0).rgb;
     }
 
-    float metallic = material.metalRoughFactors.x;
-    float roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
+    float metallic;
+    float mrRoughness;
+    SampleMetalRoughLod(material, uv, 0, metallic, mrRoughness);
+    float roughness = max(mrRoughness, MIN_ROUGHNESS);
 
     GTFullSurface surface;
     surface.normal = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));

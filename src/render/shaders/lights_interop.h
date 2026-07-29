@@ -95,15 +95,33 @@ SHADER_PUBLIC struct LightVSData
     SHADER_PUBLIC float _pad1;
 };
 
+SHADER_PUBLIC SHADER_CONST int MAX_EMISSIVE_GROUPS = 1024;
+
+/**
+ * One emissive mesh primitive instance: a contiguous run of LIGHT_TYPE_TRIANGLE entries in LightData::lights.
+ */
+SHADER_PUBLIC struct EmissiveGroup
+{
+    SHADER_PUBLIC float3 aabbMin;
+    SHADER_PUBLIC uint firstLight;
+    SHADER_PUBLIC float3 aabbMax;
+    SHADER_PUBLIC uint lightCount;
+    SHADER_PUBLIC float power;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+};
+
 SHADER_PUBLIC struct LightData
 {
     SHADER_PUBLIC int lightCount;
     // Lights [0, analyticLightCount) are analytic (area/sphere); [analyticLightCount, lightCount) are emissive triangles
     SHADER_PUBLIC int analyticLightCount;
-    float _pad0;
+    SHADER_PUBLIC int emissiveGroupCount;
     float _pad1;
     SHADER_PUBLIC DirectionalLightData directionalLight;
     SHADER_PUBLIC LightInfo lights[MAX_LIGHTS];
+    SHADER_PUBLIC EmissiveGroup emissiveGroups[MAX_EMISSIVE_GROUPS];
 };
 
 

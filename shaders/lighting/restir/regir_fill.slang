@@ -72,7 +72,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
         h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
         uint hj = h ^ 0x68bc21ebu; hj ^= hj >> 15u; hj *= 0x2c1b3c6du; hj ^= hj >> 12u;
-        float3 jitterWS = (float3(HashStep(hj), HashStep(hj), HashStep(hj)) - 0.5) * cellSize;
+        float3 jitterWS = (float3(HashStep(hj), HashStep(hj), HashStep(hj)) - 0.5) * (2.0 * cellSize);
         float3 sampleVS = mul(scene.view, float4(cellCenterWS + jitterWS, 1.0)).xyz;
 
         ReGIRReservoir res = ReGIRReservoirEmpty();

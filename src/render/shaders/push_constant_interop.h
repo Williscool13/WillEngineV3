@@ -427,6 +427,8 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(ReflectionHitDescriptor) reflectionDescriptors;
     SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridEmissiveGrid;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridEmissiveIndexList;
     SHADER_PUBLIC uint32_t _pad0;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
@@ -599,6 +601,8 @@ SHADER_PUBLIC struct WorldGridBinningPushConstant
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridEmissiveGrid;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridEmissiveIndexList;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t pad0;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;

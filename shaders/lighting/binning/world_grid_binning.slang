@@ -127,6 +127,35 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
 
     pc.worldGridBuffer[flatIndex] = uint2(indexOffset, count);
 
+    uint groupOffset = flatIndex * MAX_EMISSIVE_GROUPS_PER_WORLD_GRID_CELL;
+    uint groupCount = 0u;
+    float minGroupPower = 1e30;
+    uint minGroupSlot = 0u;
+    int emissiveGroupCount = pc.lightData->emissiveGroupCount;
+    for (int g = 0; g < emissiveGroupCount; g++)
+    {
+        EmissiveGroup group = pc.lightData->emissiveGroups[g];
+        if (any(group.aabbMin > aabbMax) || any(group.aabbMax < aabbMin)) { continue; }
+
+        if (groupCount < MAX_EMISSIVE_GROUPS_PER_WORLD_GRID_CELL)
+        {
+            pc.worldGridEmissiveIndexList[groupOffset + groupCount] = uint(g);
+            if (group.power < minGroupPower) { minGroupPower = group.power; minGroupSlot = groupCount; }
+            groupCount++;
+        }
+        else if (group.power > minGroupPower)
+        {
+            pc.worldGridEmissiveIndexList[groupOffset + minGroupSlot] = uint(g);
+            minGroupPower = 1e30;
+            for (uint k = 0u; k < MAX_EMISSIVE_GROUPS_PER_WORLD_GRID_CELL; k++)
+            {
+                float hp = pc.lightData->emissiveGroups[pc.worldGridEmissiveIndexList[groupOffset + k]].power;
+                if (hp < minGroupPower) { minGroupPower = hp; minGroupSlot = k; }
+            }
+        }
+    }
+    pc.worldGridEmissiveGrid[flatIndex] = uint2(groupOffset, groupCount);
+
     // Smallest-volume probe whose influence volume intersects this cell; ascending-index strict-less tie-break. Written unconditionally (aliased RDG buffers are not zeroed).
     uint bestProbe = WORLD_GRID_PROBE_SENTINEL;
     float bestProbeVolume = 1e30;

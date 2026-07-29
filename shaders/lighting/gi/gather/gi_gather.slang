@@ -76,7 +76,10 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
     }
     GatherHitSurface s;
     s.normal = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
-    s.diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
+    float metallic;
+    float mrRoughness;
+    SampleMetalRoughLod(material, uv, HIT_SHADING_TEXTURE_LOD, metallic, mrRoughness);
+    s.diffuseColor = albedo.rgb * (1.0 - metallic);
     s.bEmissive = any(material.emissiveFactor.rgb * material.emissiveFactor.w > float3(0.0));
     return s;
 }

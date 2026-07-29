@@ -1655,6 +1655,11 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         for (int32_t i = 0; i < lightData->lightCount; i++) {
             lightData->lights[i] = viewFamily.lights[i];
         }
+
+        lightData->emissiveGroupCount = static_cast<int32_t>(glm::min(viewFamily.emissiveGroups.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS)));
+        for (int32_t i = 0; i < lightData->emissiveGroupCount; i++) {
+            lightData->emissiveGroups[i] = viewFamily.emissiveGroups[i];
+        }
     }
 
     // Power alias table (rebuilt every frame on the CPU, world space)

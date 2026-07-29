@@ -1511,6 +1511,10 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
                             (0xFFu << 24);
                     const glm::mat4 m = renderTransform.modelMatrix * inst.modelSpaceTransform;
                     const glm::mat3 m3 = glm::mat3(m);
+                    const auto groupFirst = static_cast<uint32_t>(vf.lights.Size());
+                    glm::vec3 groupMin{FLT_MAX};
+                    glm::vec3 groupMax{-FLT_MAX};
+                    float groupPower = 0.0f;
                     for (uint32_t t = 0; t < pushCount; ++t) {
                         const glm::vec3 v0 = glm::vec3(m * glm::vec4(set->verts[t * 3 + 0], 1.0f));
                         const glm::vec3 e1 = m3 * set->verts[t * 3 + 1];
@@ -1519,6 +1523,11 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
                         const float area = 0.5f * glm::length(cr);
                         // Degenerate triangles still occupy a slot (zero intensity) so base + PrimitiveIndex() stays aligned
                         const bool bDegenerate = area <= 1e-8f;
+                        if (!bDegenerate) {
+                            groupMin = glm::min(groupMin, glm::min(v0, glm::min(v0 + e1, v0 + e2)));
+                            groupMax = glm::max(groupMax, glm::max(v0, glm::max(v0 + e1, v0 + e2)));
+                            groupPower += intensity * area;
+                        }
                         vf.lights.PushBack(LightInfo{
                             .position = {v0, 0.0f},
                             .normal = {bDegenerate ? glm::vec3(0.0f, 1.0f, 0.0f) : cr / (2.0f * area), 0.0f},
@@ -1528,6 +1537,16 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
                             .intensity = bDegenerate ? 0.0f : intensity,
                             .range = state->debug.restir.emissiveTriRangeMultiplier * glm::sqrt(intensity * area),
                             .type = LIGHT_TYPE_TRIANGLE,
+                        });
+                    }
+
+                    if (groupPower > 0.0f && !vf.emissiveGroups.IsFull()) {
+                        vf.emissiveGroups.PushBack(EmissiveGroup{
+                            .aabbMin = groupMin,
+                            .firstLight = groupFirst,
+                            .aabbMax = groupMax,
+                            .lightCount = pushCount,
+                            .power = groupPower,
                         });
                     }
                 }

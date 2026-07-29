@@ -83,8 +83,11 @@ static GTSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instan
 
     GTSurface surface;
     surface.normal = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
-    surface.diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    surface.roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
+    float metallic;
+    float mrRoughness;
+    SampleMetalRoughLod(material, uv, 0, metallic, mrRoughness);
+    surface.diffuseColor = albedo.rgb * (1.0 - metallic);
+    surface.roughness = max(mrRoughness, MIN_ROUGHNESS);
     surface.emissive = emissive;
     return surface;
 }

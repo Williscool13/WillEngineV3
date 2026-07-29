@@ -1,4 +1,6 @@
 import constants_interop;
+import model_interop;
+import bindless_declarations;
 
 import shader_constants;
 module pbr_functions;
@@ -6,6 +8,18 @@ module pbr_functions;
 
 public static const bool LIGHT_INVERSE_SQUARE = true;
 public static const float LIGHT_GEOM_MIN_DIST2 = 0.1;
+
+public void SampleMetalRoughLod(MaterialProperties material, float2 uv, float lod, out float metallic, out float roughness)
+{
+    metallic = material.metalRoughFactors.x;
+    roughness = material.metalRoughFactors.y;
+    if (material.textureImageIndices.y >= 0) {
+        float2 mrUv = uv * material.metalRoughUvTransform.xy + material.metalRoughUvTransform.zw;
+        float4 mr = assetTextures[material.textureImageIndices.y].SampleLevel(assetSamplers[material.textureSamplerIndices.y], mrUv, lod);
+        roughness *= mr.g;
+        metallic *= mr.b;
+    }
+}
 
 /** Full attenuation: inverse-square times windowed range cull; use when the path has no separate geometry term. */
 public float LightDistanceFalloff(float dist, float range)

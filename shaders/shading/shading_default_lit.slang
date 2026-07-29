@@ -52,7 +52,15 @@ void ComputeShadingDefaultLit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
 
     float metallic  = material.metalRoughFactors.x;
     float roughness = material.metalRoughFactors.y;
-    // TODO: metallic/roughness texture sampling
+    if (material.textureImageIndices.y >= 0) {
+        float2 mrUV = shadingInputs.interp.uv * material.metalRoughUvTransform.xy + material.metalRoughUvTransform.zw;
+        float2 ddxM = shadingInputs.uvDdx * material.metalRoughUvTransform.xy;
+        float2 ddyM = shadingInputs.uvDdy * material.metalRoughUvTransform.xy;
+        // glTF packs roughness in G and metalness in B.
+        float4 mr = assetTextures[material.textureImageIndices.y].SampleGrad(assetSamplers[material.textureSamplerIndices.y], mrUV, ddxM, ddyM);
+        roughness *= mr.g;
+        metallic *= mr.b;
+    }
 
     // Normal map
     if (material.textureImageIndices.z >= 0) {

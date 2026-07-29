@@ -158,8 +158,11 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
         emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
     }
-    float3 diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    float roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
+    float metallic;
+    float mrRoughness;
+    SampleMetalRoughLod(material, uv, HIT_SHADING_TEXTURE_LOD, metallic, mrRoughness);
+    float3 diffuseColor = albedo.rgb * (1.0 - metallic);
+    float roughness = max(mrRoughness, MIN_ROUGHNESS);
     float3 V = -rayDirection;
     float NoV = max(dot(N, V), 0.0);
 
@@ -194,7 +197,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         worldGridLights.camPos = pc.sceneData[0].cameraWorldPos.xyz;
         worldGridLights.grid = pc.worldGridBuffer;
         worldGridLights.indexList = pc.worldGridIndexList;
-        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, diffuseColor, material.metalRoughFactors.x, roughness, rngSeed);
+        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, diffuseColor, metallic, roughness, rngSeed);
     }
 
     float3 indirectDiffuse = float3(0.0);
@@ -251,8 +254,11 @@ public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance inst
         float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
         emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
     }
-    float3 diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    float roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
+    float metallic;
+    float mrRoughness;
+    SampleMetalRoughLod(material, uv, HIT_SHADING_TEXTURE_LOD, metallic, mrRoughness);
+    float3 diffuseColor = albedo.rgb * (1.0 - metallic);
+    float roughness = max(mrRoughness, MIN_ROUGHNESS);
     float3 V = -rayDirection;
     float NoV = max(dot(N, V), 0.0);
 
@@ -283,11 +289,11 @@ public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance inst
         float3 viewPos = mul(worldGridLights.view, float4(worldPosition, 1.0)).xyz;
         float3 viewN = normalize(mul((float3x3)worldGridLights.view, N));
         float3 viewV = normalize(mul((float3x3)worldGridLights.view, V));
-        float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, material.metalRoughFactors.x);
+        float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, metallic);
         for (uint j = 0; j < gridEntry.y; j++) {
             uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
             PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], worldGridLights.view);
-            radiance += ShadePunctual(punctual, viewN, viewV, viewPos, albedo.rgb, material.metalRoughFactors.x, roughness, F0);
+            radiance += ShadePunctual(punctual, viewN, viewV, viewPos, albedo.rgb, metallic, roughness, F0);
         }
     }
 
@@ -349,8 +355,11 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
         float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
         emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
     }
-    float3 diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    float roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
+    float metallic;
+    float mrRoughness;
+    SampleMetalRoughLod(material, uv, HIT_SHADING_TEXTURE_LOD, metallic, mrRoughness);
+    float3 diffuseColor = albedo.rgb * (1.0 - metallic);
+    float roughness = max(mrRoughness, MIN_ROUGHNESS);
     float3 V = N;
     float NoV = 1.0;
     // A proxy's analytic light is sampled directly by NEE
@@ -399,7 +408,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
         worldGridLights.camPos = pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz;
         worldGridLights.grid = pc.worldGridBuffer;
         worldGridLights.indexList = pc.worldGridIndexList;
-        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, diffuseColor, material.metalRoughFactors.x, roughness, rngSeed);
+        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, diffuseColor, metallic, roughness, rngSeed);
     }
 
     float3 indirectDiffuse = float3(0.0);

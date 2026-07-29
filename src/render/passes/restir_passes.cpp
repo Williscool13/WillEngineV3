@@ -252,6 +252,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
         } else if (bWorldGrid) {
             basePass.ReadBuffer(SID("world_grid_light_grid"));
             basePass.ReadBuffer(SID("world_grid_index_list"));
+            basePass.ReadBuffer(SID("world_grid_emissive_grid"));
+            basePass.ReadBuffer(SID("world_grid_emissive_index_list"));
         }
         basePass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         basePass.ReadSampledImage(targets.gbufferOne);
@@ -281,6 +283,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .reflectionDescriptors = reflectionRoughnessMax >= 0.0f ? graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER) : 0,
                 .worldGridBuffer = bBin ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
                 .worldGridIndexList = bBin ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
+                .worldGridEmissiveGrid = bBin ? graph.GetBufferAddress(SID("world_grid_emissive_grid")) : 0,
+                .worldGridEmissiveIndexList = bBin ? graph.GetBufferAddress(SID("world_grid_emissive_index_list")) : 0,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),

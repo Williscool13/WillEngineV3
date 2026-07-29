@@ -920,6 +920,7 @@ struct ViewFamily
     ArenaFixedVector<ProbePreviewSphere> probePreviews{};
 
     uint32_t analyticLightCount{0};
+    ArenaFixedVector<EmissiveGroup> emissiveGroups{};
     // MeshPrimitiveStore slot -> base light index of light list
     ArenaMap<uint32_t, uint32_t> triLightBaseBySlot{};
 

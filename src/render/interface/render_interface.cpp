@@ -13,6 +13,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     modelMatrices = ArenaVector<Model>(&arena, wm.modelMatrices);
     lights = ArenaVector<LightInfo>(&arena, wm.lights);
     reflectionProbes = ArenaFixedVector<ReflectionProbeGPU>(&arena, MAX_REFLECTION_PROBES);
+    emissiveGroups = ArenaFixedVector<EmissiveGroup>(&arena, MAX_EMISSIVE_GROUPS);
     probePreviews = ArenaFixedVector<ProbePreviewSphere>(&arena, MAX_REFLECTION_PROBES);
 
     primitiveInstances = ArenaVector<PrimitiveInstanceData>(&arena, wm.primitiveInstances);
