@@ -19,6 +19,8 @@ namespace Game::Component
 {
 struct EntityFolderComponent
 {
+    static constexpr const char* COMPONENT_NAME = "EntityFolderComponent";
+
     /**
      * Immediate containing folder, referencing a SceneFolderComponent::folderId.
      * Invalid (or pointing at a missing anchor) means the entity sits at the scene root.
@@ -36,6 +38,8 @@ struct EntityFolderComponent
  */
 struct SceneFolderComponent
 {
+    static constexpr const char* COMPONENT_NAME = "SceneFolderComponent";
+
     StringID folderId;
     StringID parentFolder;
     Core::ShortString name;

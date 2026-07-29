@@ -97,6 +97,8 @@ struct PhysicsShapeDesc
 
 struct PhysicsBodyDesc
 {
+    static constexpr const char* COMPONENT_NAME = "PhysicsBodyDesc";
+
     PhysicsMotionType motionType{PhysicsMotionType::Static};
     float mass{1.0f};
     float friction{0.5f};

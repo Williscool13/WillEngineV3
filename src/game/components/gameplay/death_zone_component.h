@@ -16,6 +16,8 @@ namespace Game::Component
 {
 struct DeathZoneComponent
 {
+    static constexpr const char* COMPONENT_NAME = "DeathZoneComponent";
+
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }

@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """
 Helper library for hand-authoring .wscene files without parsing an existing
-scene's JSON by hand each time. Component-type keys and field schemas below
-are compile-time TypeSID hashes (Game::TypeSID<T>(), from __FUNCSIG__) copied
-out of an existing scene file (assets/scenes/new_scene.wscene) -- they cannot
-be invented, only copied. If they ever stop matching (component renamed /
-hash scheme changed), re-derive by grepping src/game/components/**/*.cpp for
-the Serialize() field names shown per key below and cross-referencing an
-up-to-date example scene.
+scene's JSON by hand each time. Component-type keys are computed, not copied:
+they are fnv1a64 of the name each component is registered under in
+component_registry.cpp (see component_key() below). Any registered component is
+therefore writable from here. Field schemas per key are noted inline.
 
 Usage: import this file, call the helpers to build entity dicts, append to a
 list, then call write_scene(path, entities, scene_id, scene_name).
@@ -18,32 +15,49 @@ for the narrative version of everything below.
 import json
 import math
 
-# ---- component-type keys (decimal-string TypeSID hashes) ----
-TRANSFORM = "1884906092559237059"   # TransformComponent: translation/rotation(wxyz)/scale
-NAME = "3048324656540157766"        # NameComponent: name
-STABLEID = "7294468376066398399"    # StableIdComponent: id, sortOrder
-FOLDER = "5210556776496121574"      # EntityFolderComponent: folderId (0 = root/no folder, always safe)
-HIERARCHY = "4784584514156000932"   # HierarchyComponent: parentStableId (StringID of parent's StableIdComponent.id)
-SCENE_FOLDER = "17650859514759584199"  # SceneFolderComponent (folder metadata pseudo-entities): folderId, name, parentFolder
-PROCEDURAL = "1254610073680810491"  # ProceduralMeshComponent (render): flattened shape params + material/modelFlags/renderOffset/renderRotation/type
-PHYSICS = "5740098829229280260"     # PhysicsBodyDesc: motionType/mass/friction/restitution/motionQuality/layerOverride/.../shapes[]
-TEXT3D = "11498742042741893857"     # Text3DComponent (render): fontId/text/depth/flatness/tracking/scale/smoothNormals/material/modelFlags/renderOffset/renderRotation
-SPLINE = "7578841921361002753"      # SplineMeshComponent (render): profile/railing/spline fields, flattened (see spline_fields())
-STATIC_MESH = "6701167194273300414"     # StaticMeshComponent: modelId, modelFlags, renderOffset, renderRotation
-STATIC_MESH_PRIMITIVE = "9501467225504619303"  # StaticMeshPrimitiveComponent: modelId, primitiveOrdinal, modelFlags, renderOffset, renderRotation
-SPAWN = "7249683205650136767"       # PlayerSpawnComponent: offset, priority
-LIGHT_DIRECTIONAL = "10824031899279087785"  # DirectionalLightComponent: color, intensity, priority, angularRadiusDegrees; direction = rotation*(0,0,1), highest priority wins
-LIGHT_AREA = "9298580231829766696"     # AreaLightComponent: color[3], intensity, halfWidth, halfHeight, range, drawEmissiveSurface; world extent = half*transform.scale, emissive quad = unit XZ plane
-LIGHT_SPHERE = "8299222229286905880"   # SphereLightComponent: color[3], intensity, radius, range, drawEmissiveSurface; world radius = radius*transform.scale.x
+def _fnv1a64(text):
+    h = 0xCBF29CE484222325
+    for b in text.encode("utf-8"):
+        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+def component_key(component_name):
+    """fnv1a64 of a component's COMPONENT_NAME (see Game::TypeSID). Full 64 bits, unlike name_id().
+    If one stops matching, that component's COMPONENT_NAME changed and every asset needs migrating."""
+    return str(_fnv1a64(component_name))
+
+# ---- component-type keys ----
+TRANSFORM = component_key("TransformComponent")             # translation/rotation(wxyz)/scale
+NAME = component_key("NameComponent")                       # name
+STABLEID = component_key("StableIdComponent")               # id, sortOrder
+FOLDER = component_key("EntityFolderComponent")             # folderId (0 = root/no folder, always safe)
+HIERARCHY = component_key("HierarchyComponent")             # parentStableId (StringID of parent's StableIdComponent.id)
+SCENE_FOLDER = component_key("SceneFolderComponent")        # folder metadata pseudo-entities: folderId, name, parentFolder
+PROCEDURAL = component_key("ProceduralMeshComponent")       # flattened shape params + material/modelFlags/renderOffset/renderRotation/type
+PHYSICS = component_key("PhysicsBodyDesc")                  # motionType/mass/friction/restitution/motionQuality/layerOverride/.../shapes[]
+TEXT3D = component_key("Text3DComponent")                   # fontId/text/depth/flatness/tracking/scale/smoothNormals/material/modelFlags/renderOffset/renderRotation
+SPLINE = component_key("SplineMeshComponent")               # profile/railing/spline fields, flattened (see spline_fields())
+STATIC_MESH = component_key("StaticMeshComponent")          # modelId, modelFlags, materialOverrides{slot:id}, primitiveBlacklist[], renderOffset, renderRotation. ONE entity = one whole model.
+STATIC_MESH_PRIMITIVE = component_key("StaticMeshPrimitiveComponent")  # modelId, primitiveOrdinal, modelFlags, renderOffset, renderRotation
+SPAWN = component_key("PlayerSpawnComponent")               # offset, priority
+LIGHT_DIRECTIONAL = component_key("DirectionalLightComponent")  # color, intensity, priority, angularRadiusDegrees; direction = rotation*(0,0,1), highest priority wins
+LIGHT_AREA = component_key("AreaLightComponent")            # color[3], intensity, halfWidth, halfHeight, range, drawEmissiveSurface; world extent = half*transform.scale, emissive quad = unit XZ plane
+LIGHT_SPHERE = component_key("SphereLightComponent")        # color[3], intensity, radius, range, drawEmissiveSurface; world radius = radius*transform.scale.x
 # NOTE: light `color` is packed to 8-bit [0,1] on the GPU -- HDR brightness MUST come from `intensity`, never color>1.
 # `range` is the influence/falloff+cull radius (NOT the emissive size). `drawEmissiveSurface`=visible glowing rep mesh.
-GIZMO = "9701894349906914118"       # DebugGizmoComponent: color, extents, lineWidth, shape (0=Box?,2=Sphere confirmed)
-PROBE = "2655446179632275286"       # ReflectionProbeComponent: probeId, bEnabled, shape, fadeMargin, captureOffset, bParallax, resolution, standInEnvMap
+GIZMO = component_key("DebugGizmoComponent")                # color, extents, lineWidth, shape (0=Box?,2=Sphere confirmed)
+PROBE = component_key("ReflectionProbeComponent")           # probeId, bEnabled, shape, fadeMargin, captureOffset, bParallax, resolution, standInEnvMap
 
-# NOT yet keyed (no example scene exists with these -- do NOT guess the hash,
-# re-derive from a scene that actually uses them, or accept the runtime risk):
-#   CheckpointComponent (checkpointId, priority, spawnOffset, spawnRotation)
-#   PrefabInstanceComponent
+# Schemas below observed in level0.wscene; payload fields verified there, not against source.
+PREFAB_INSTANCE = component_key("PrefabInstanceComponent")  # prefabId (matches a .wprefab header id), bMasterPrefab
+CHECKPOINT = component_key("CheckpointComponent")           # checkpointId, priority, spawnOffset[3], spawnRotation[3]
+PATH_MOVER = component_key("PathMoverComponent")            # pointSettings[]{easing,speed,waitTime,rotation[xyzw]}, loopMode, direction, currentSegment, bIsWaiting
+DEATH_ZONE = component_key("DeathZoneComponent")            # tag, payload is null
+WORLD_TEXT = component_key("TextComponent")                 # text, fontId, textMaterialId, renderSizePx, color[4]
+
+# Registered but unused by any authored scene so far; keys are still correct, schemas are not
+# documented here: FreeCameraComponent, CharacterPhysicsComponent, DrawPhysicsDebugTag,
+# MotionBlurMovementComponent, AntiGravityTag, FloorTag, RotateInPlaceComponent.
 
 # =============================================================================
 # .wscene file structure

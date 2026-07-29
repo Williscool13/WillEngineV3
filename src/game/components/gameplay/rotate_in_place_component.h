@@ -18,6 +18,8 @@ namespace Game::Component
 {
 struct RotateInPlaceComponent
 {
+    static constexpr const char* COMPONENT_NAME = "RotateInPlaceComponent";
+
     glm::vec3 axis{0.0f, 1.0f, 0.0f};
     float speedDegrees{45.0f};
     bool bWorldSpace{false};

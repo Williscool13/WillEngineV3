@@ -19,6 +19,8 @@ namespace Game::Component
 {
 struct CheckpointComponent
 {
+    static constexpr const char* COMPONENT_NAME = "CheckpointComponent";
+
     StringID checkpointId{};
     int32_t priority{0};
     glm::vec3 spawnOffset{0.0f, 0.0f, 0.0f};

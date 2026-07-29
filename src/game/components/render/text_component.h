@@ -20,6 +20,8 @@ namespace Game::Component
 {
 struct TextComponent
 {
+    static constexpr const char* COMPONENT_NAME = "TextComponent";
+
     Engine::FontID fontId{};
     Engine::TextMaterialID textMaterialId{};
     Core::InlineString<256> text{};

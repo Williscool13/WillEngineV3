@@ -21,14 +21,15 @@ concept TagComponent = std::is_empty_v<T>;
 template<typename T>
 concept DataComponent = !std::is_empty_v<T>;
 
-template<DataComponent T>
-void RegisterComponent(Engine::ComponentRegistry& componentRegistry, const char* name, bool hidden, bool hideInInspector)
+template<DataComponent T> requires NamedComponent<T>
+void RegisterComponent(Engine::ComponentRegistry& componentRegistry, bool hidden, bool hideInInspector)
 {
     auto typeId = TypeSID<T>();
     auto index = componentRegistry.registry.Size();
+    assert(componentRegistry.registryMapping.Find(typeId) == nullptr && "COMPONENT_NAME collision");
     componentRegistry.registry.PushBack({
         typeId,
-        name,
+        T::COMPONENT_NAME,
         [](const entt::registry& reg, entt::entity e, nlohmann::json& json) {
             if constexpr (HasSerialize<T>) {
                 T::Serialize(reg.get<T>(e), json);
@@ -76,14 +77,15 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, const char*
     componentRegistry.registryMapping[typeId] = index;
 }
 
-template<TagComponent T>
-void RegisterComponent(Engine::ComponentRegistry& componentRegistry, const char* name, bool hidden, bool hideInInspector)
+template<TagComponent T> requires NamedComponent<T>
+void RegisterComponent(Engine::ComponentRegistry& componentRegistry, bool hidden, bool hideInInspector)
 {
     auto typeId = TypeSID<T>();
     auto index = componentRegistry.registry.Size();
+    assert(componentRegistry.registryMapping.Find(typeId) == nullptr && "COMPONENT_NAME collision");
     componentRegistry.registry.PushBack({
         typeId,
-        name,
+        T::COMPONENT_NAME,
         [](const entt::registry&, entt::entity, nlohmann::json&) {},
         [](entt::registry& reg, entt::entity e, const nlohmann::json&) {
             (void) reg.get_or_emplace<T>(e);

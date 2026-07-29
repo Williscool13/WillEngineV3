@@ -21,6 +21,8 @@ namespace Game::Component
 {
 struct StaticMeshComponent
 {
+    static constexpr const char* COMPONENT_NAME = "StaticMeshComponent";
+
     static constexpr size_t MaxMaterialOverrides = 32;
     static constexpr size_t MaxBlacklist = 64;
 

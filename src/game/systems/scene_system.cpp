@@ -119,11 +119,16 @@ StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry&
         auto entity = registry.create();
         for (auto& [key, compJson] : entityJson.items()) {
             uint64_t typeId = std::stoull(key);
+            bool bFound = false;
             for (Engine::ComponentEntry& entry : componentRegistry.registry) {
                 if (entry.typeId.id == typeId) {
                     entry.deserialize(registry, entity, compJson);
+                    bFound = true;
                     break;
                 }
+            }
+            if (!bFound) {
+                LOG_WARN(Game, "Scene component key {} matches no registered component; dropped on load", typeId);
             }
         }
         registry.emplace<Component::SceneComponent>(entity, sceneId);
@@ -657,11 +662,16 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
     entt::entity entity = state->registry.create();
     for (auto& [key, compJson] : prefabData->componentJson.items()) {
         uint64_t typeId = std::stoull(key);
+        bool bFound = false;
         for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
             if (entry.typeId.id == typeId) {
                 entry.deserialize(state->registry, entity, compJson);
+                bFound = true;
                 break;
             }
+        }
+        if (!bFound) {
+            LOG_WARN(Game, "Prefab component key {} matches no registered component; dropped on spawn", typeId);
         }
     }
 
@@ -707,13 +717,18 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
 
         for (auto& [key, compJson] : cacheIt->items()) {
             uint64_t typeId = std::stoull(key);
+            bool bFound = false;
             for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.typeId.id == typeId) {
                     if (!entry.has(state->registry, entity)) {
                         entry.deserialize(state->registry, entity, compJson);
                     }
+                    bFound = true;
                     break;
                 }
+            }
+            if (!bFound) {
+                LOG_WARN(Game, "Prefab component key {} matches no registered component; skipped", typeId);
             }
         }
     }

@@ -27,6 +27,8 @@ namespace Game::Component
  */
 struct Text3DComponent
 {
+    static constexpr const char* COMPONENT_NAME = "Text3DComponent";
+
     Engine::FontID fontId{};
     Core::InlineString<256> text{};
     float depth{0.2f};

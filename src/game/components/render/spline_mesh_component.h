@@ -21,6 +21,8 @@ namespace Game::Component
 {
 struct SplineMeshComponent
 {
+    static constexpr const char* COMPONENT_NAME = "SplineMeshComponent";
+
     Engine::Spline spline;
     float radius{0.5f};
     float rollAngle{0.0f};

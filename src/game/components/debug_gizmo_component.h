@@ -29,6 +29,8 @@ enum class DebugGizmoShape : uint8_t
 
 struct DebugGizmoComponent
 {
+    static constexpr const char* COMPONENT_NAME = "DebugGizmoComponent";
+
     DebugGizmoShape shape{DebugGizmoShape::Sphere};
     glm::vec3 extents{0.5f};
     glm::vec4 color{0.0f, 1.0f, 0.0f, 1.0f};

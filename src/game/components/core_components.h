@@ -29,6 +29,8 @@ namespace Game::Component
  */
 struct TransformComponent
 {
+    static constexpr const char* COMPONENT_NAME = "TransformComponent";
+
     glm::vec3 translation{0.0f, 0.0f, 0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 scale{1.0f, 1.0f, 1.0f};;
@@ -90,6 +92,8 @@ inline glm::mat4 GetMatrix(const WorldTransformComponent& transform)
  */
 struct HierarchyComponent
 {
+    static constexpr const char* COMPONENT_NAME = "HierarchyComponent";
+
     entt::entity parent{entt::null};
     StringID parentStableId;
     uint16_t depth{0};

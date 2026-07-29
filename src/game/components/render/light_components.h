@@ -21,6 +21,8 @@ struct TransformComponent;
 
 struct AreaLightComponent
 {
+    static constexpr const char* COMPONENT_NAME = "AreaLightComponent";
+
     Vec3 color{1.0f, 1.0f, 1.0f};
     float intensity{1.0f};
     float halfWidth{1.0f};
@@ -50,6 +52,8 @@ glm::mat4 ComputeAreaLightQuadMatrix(const TransformComponent& transform, const 
 
 struct SphereLightComponent
 {
+    static constexpr const char* COMPONENT_NAME = "SphereLightComponent";
+
     Vec3 color{1.0f, 1.0f, 1.0f};
     float intensity{1.0f};
     float radius{0.5f};
@@ -78,6 +82,8 @@ glm::mat4 ComputeSphereLightMatrix(const TransformComponent& transform, const Sp
 
 struct DirectionalLightComponent
 {
+    static constexpr const char* COMPONENT_NAME = "DirectionalLightComponent";
+
     Vec3 color{1.0f, 1.0f, 1.0f};
     float intensity{2.0f};
     int32_t priority{0};

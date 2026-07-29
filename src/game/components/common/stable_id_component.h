@@ -29,6 +29,8 @@ namespace Game::Component
  */
 struct StableIdComponent
 {
+    static constexpr const char* COMPONENT_NAME = "StableIdComponent";
+
     StringID id;
     uint64_t sortOrder{0};
 

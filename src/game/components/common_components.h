@@ -20,6 +20,8 @@ namespace Game::Component
 {
 struct NameComponent
 {
+    static constexpr const char* COMPONENT_NAME = "NameComponent";
+
     Core::InlineString<256> name;
 
     static void Serialize(const NameComponent& comp, nlohmann::json& json);
@@ -32,6 +34,8 @@ struct DoNotSerializeTag
 
 struct PrefabInstanceComponent
 {
+    static constexpr const char* COMPONENT_NAME = "PrefabInstanceComponent";
+
     StringID prefabId;
     bool bMasterPrefab{false};
 

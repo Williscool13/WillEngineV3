@@ -49,7 +49,9 @@ struct SetVelocityTag
 };
 
 struct DrawPhysicsDebugTag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "DrawPhysicsDebugTag";
+};
 }
 
 #endif //WILL_ENGINE_PHYSICS_COMPONENTS_H

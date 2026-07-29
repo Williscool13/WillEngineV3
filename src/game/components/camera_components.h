@@ -25,6 +25,8 @@ struct EditorCameraTag
 
 struct FreeCameraComponent
 {
+    static constexpr const char* COMPONENT_NAME = "FreeCameraComponent";
+
     float moveSpeed = 5.0f;
     float lookSpeed = 0.1f;
 

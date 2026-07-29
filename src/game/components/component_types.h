@@ -4,23 +4,21 @@
 
 #ifndef WILL_ENGINE_COMPONENT_TYPES_H
 #define WILL_ENGINE_COMPONENT_TYPES_H
+#include <concepts>
+
 #include "core/string_id.h"
 
 
 namespace Game
 {
 template<typename T>
+concept NamedComponent = requires {
+    { T::COMPONENT_NAME } -> std::convertible_to<const char*>;
+};
+
+template<NamedComponent T>
 StringID TypeSID() {
-#if defined(_MSC_VER)
-    constexpr auto sig = __FUNCSIG__;
-#elif defined(__clang__)
-    constexpr auto sig = __PRETTY_FUNCTION__;
-#elif defined(__GNUC__)
-    constexpr auto sig = __PRETTY_FUNCTION__;
-#else
-#error "Unsupported compiler"
-#endif
-    return StringID(sig, strlen(sig));
+    return StringID(T::COMPONENT_NAME, strlen(T::COMPONENT_NAME));
 }
 }
 

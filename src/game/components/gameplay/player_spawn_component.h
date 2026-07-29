@@ -17,6 +17,8 @@ namespace Game::Component
 {
 struct PlayerSpawnComponent
 {
+    static constexpr const char* COMPONENT_NAME = "PlayerSpawnComponent";
+
     int32_t priority{0};
     glm::vec3 offset{0.0f, 0.0f, 0.0f};
 

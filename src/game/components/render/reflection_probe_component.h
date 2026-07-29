@@ -28,6 +28,8 @@ struct WorldTransformComponent;
 
 struct ReflectionProbeComponent
 {
+    static constexpr const char* COMPONENT_NAME = "ReflectionProbeComponent";
+
     enum class Shape : uint32_t
     {
         Box = 0,

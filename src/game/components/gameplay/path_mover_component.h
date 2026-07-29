@@ -86,6 +86,8 @@ struct PathPointSettings
 
 struct PathMoverComponent
 {
+    static constexpr const char* COMPONENT_NAME = "PathMoverComponent";
+
     Engine::Spline spline;
     Core::InlineVector<PathPointSettings, Engine::Spline::MaxPoints> pointSettings;
     PathLoopMode loopMode{PathLoopMode::PingPong};

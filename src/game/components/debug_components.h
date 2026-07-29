@@ -10,15 +10,21 @@ namespace Game::Component
 {
 struct MotionBlurMovementComponent
 {
+    static constexpr const char* COMPONENT_NAME = "MotionBlurMovementComponent";
+
     bool bIsHorizontal{false};
 
     static void Serialize(const MotionBlurMovementComponent& comp, nlohmann::json& json);
     static void Deserialize(MotionBlurMovementComponent& comp, const nlohmann::json& json);
 };
 struct AntiGravityTag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "AntiGravityTag";
+};
 struct FloorTag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "FloorTag";
+};
 
 struct CubemapVisualizeTag{};
 }

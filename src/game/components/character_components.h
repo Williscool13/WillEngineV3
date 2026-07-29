@@ -13,6 +13,8 @@ namespace Game::Component
 {
 struct CharacterPhysicsComponent
 {
+    static constexpr const char* COMPONENT_NAME = "CharacterPhysicsComponent";
+
     JPH::Ref<JPH::CharacterVirtual> character;
     JPH::ShapeRefC capsuleShape;
     JPH::ShapeRefC standingShape;
