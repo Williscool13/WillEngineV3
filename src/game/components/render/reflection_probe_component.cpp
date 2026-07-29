@@ -142,6 +142,13 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
             bake.EnqueueProbeInterbounce(state, entity);
         }
         ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(bake.bBakeActive || bake.bInterbounceBatch || !bake.bakeQueue.IsEmpty());
+        if (ImGui::Button("Dry Run##rp")) {
+            bake.StartDryRun(ctx, state, entity);
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Walks the 6 bake faces with the real bake view, hide set, and settle pacing, but captures and writes nothing."); }
 
         const char* sourceLabel = "None";
         switch (comp.contentSource) {

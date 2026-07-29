@@ -78,7 +78,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
 
-    float roughness = max(li.roughness, 0.045);
+    float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
     float nDotV = max(dot(N, V), 0.0);
 

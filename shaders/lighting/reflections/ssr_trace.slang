@@ -4,6 +4,7 @@ import reflection_interop;
 
 import shader_functions;
 import packing_functions;
+import shader_constants;
 import restir_common;
 import random_common;
 
@@ -48,7 +49,7 @@ void ComputeSSRTrace(uniform SSRTracePushConstant pc, uint3 threadID : SV_Dispat
     float roughness;
     float metallic;
     UnpackPBR(gt1.b, roughness, metallic);
-    roughness = max(roughness, 0.045);
+    roughness = max(roughness, MIN_ROUGHNESS);
     if (roughness > pc.roughnessMax) {
         pc.reflectionDescriptors[pixelIdx] = refl;
         return;

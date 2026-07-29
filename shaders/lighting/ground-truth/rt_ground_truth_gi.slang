@@ -84,7 +84,7 @@ static GTSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instan
     GTSurface surface;
     surface.normal = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
     surface.diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    surface.roughness = max(material.metalRoughFactors.y, 0.045);
+    surface.roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
     surface.emissive = emissive;
     return surface;
 }
@@ -211,7 +211,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     UnpackPBR(gt1.b, roughness, metallic);
     float4 albedo = UnpackAlbedoRGBA8(gt2.r);
     float3 emissiveRGB = UnpackEmissiveRGBE(gt2.g);
-    roughness = max(roughness, 0.045);
+    roughness = max(roughness, MIN_ROUGHNESS);
 
     float3 N = normalize(mul(float3x3(scene.invView), viewNormal));
     float3 V = normalize(cameraPos - worldPos);

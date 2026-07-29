@@ -5,6 +5,7 @@ import bindless_declarations;
 import shader_functions;
 import pbr_functions;
 import packing_functions;
+import shader_constants;
 import restir_common;
 import lights_interop;
 import ddgi_interop;
@@ -68,7 +69,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     float roughness;
     float metallic;
     UnpackPBR(gt1.b, roughness, metallic);
-    roughness = max(roughness, 0.045);
+    roughness = max(roughness, MIN_ROUGHNESS);
     const float3 albedo = UnpackAlbedoRGBA8(gt2.r).rgb;
     const float3 emissive = UnpackEmissiveRGBE(gt2.g);
 

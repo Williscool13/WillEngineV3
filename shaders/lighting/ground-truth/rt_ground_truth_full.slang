@@ -104,7 +104,7 @@ static GTFullSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance in
     }
 
     float metallic = material.metalRoughFactors.x;
-    float roughness = max(material.metalRoughFactors.y, 0.045);
+    float roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
 
     GTFullSurface surface;
     surface.normal = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
@@ -317,7 +317,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
     UnpackPBR(gt1.b, roughness, metallic);
     float4 albedo = UnpackAlbedoRGBA8(gt2.r);
     float3 emissiveRGB = UnpackEmissiveRGBE(gt2.g);
-    roughness = max(roughness, 0.045);
+    roughness = max(roughness, MIN_ROUGHNESS);
 
     float3 N = normalize(mul(float3x3(scene.invView), viewNormal));
     float3 V = normalize(cameraPos - worldPos);

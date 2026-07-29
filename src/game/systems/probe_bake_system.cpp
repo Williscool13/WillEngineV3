@@ -106,8 +106,16 @@ void ProbeBakeSystem::Start(Engine::EngineContext* ctx, Engine::EngineState* sta
     bakeCropSize = 0;
     bakeForcedExtent = 0;
     bFacesReady = false;
+    bDryRun = false;
     bBakeActive = true;
     phase = Phase::Starting;
+}
+
+void ProbeBakeSystem::StartDryRun(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity probe)
+{
+    if (bBakeActive) { return; }
+    Start(ctx, state, probe);
+    bDryRun = bBakeActive;
 }
 
 void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState* state)
@@ -176,6 +184,7 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
     bakePass = 1;
     bViewOverrideActive = false;
     bBakeActive = false;
+    bDryRun = false;
     phase = Phase::Idle;
 }
 
@@ -326,6 +335,11 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 if (state->projectConfig.probeBake.bAutoFreeze) {
                     state->debug.bGIFreeze = true;
                 }
+                if (bDryRun) {
+                    ++currentFace;
+                    phase = (currentFace >= 6) ? Phase::Finishing : Phase::FaceSetup;
+                    return;
+                }
                 phase = Phase::CaptureRequested;
             }
             return;
@@ -374,7 +388,8 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             }
             bViewOverrideActive = false;
             bBakeActive = false;
-            bFacesReady = true;
+            bFacesReady = !bDryRun;
+            bDryRun = false;
 
             bool bAllFacesReady = captureSize > 0;
             for (const auto & faceBuffer : faceBuffers) {

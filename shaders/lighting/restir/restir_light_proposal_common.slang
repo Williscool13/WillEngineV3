@@ -125,15 +125,16 @@ public struct WorldGridProposal : ILightProposal
         // Empty cell: let the caller's uniform-over-all-lights fallback handle it (already covers emissives).
         if (cellCount == 0u) { return false; }
         uint eCount = uint(max(lightCount - analyticCount, 0));
-        // beta == 0 when no emissives exist: no extra HashStep is drawn, so the emissive-free path stays bit-identical to the pure-bin behaviour.
         float beta = (eCount > 0u) ? WORLD_GRID_EMISSIVE_MIX_PROB : 0.0;
-        if (beta > 0.0 && HashStep(h) < beta) {
-            uint e = min(uint(HashStep(h) * float(eCount)), eCount - 1u);
+
+        float u = (float(i) + HashStep(h)) / float(m);
+        if (u < beta) {
+            uint e = min(uint(u / beta * float(eCount)), eCount - 1u);
             lightIdx = analyticCount + int(e);
             pSelect = beta / float(eCount);
             return true;
         }
-        uint j = min(uint(HashStep(h) * float(cellCount)), cellCount - 1u);
+        uint j = min(uint((u - beta) / (1.0 - beta) * float(cellCount)), cellCount - 1u);
         uint idx = indexList[cellOffset + j];
         if (idx >= uint(lightCount)) { return false; }
         lightIdx = int(idx);

@@ -725,7 +725,7 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
             ImGui::Text("Baking probe %u of %u", done, bake->bakeBatchTotal);
         }
         if (bakeActive) {
-            ImGui::Text("Face %d/6, settle frame %d/%d", bake->currentFace + 1, bake->settleCounter, bake->settleFrames);
+            ImGui::Text(bake->bDryRun ? "Face %d/6, settle frame %d/%d (dry run)" : "Face %d/6, settle frame %d/%d", bake->currentFace + 1, bake->settleCounter, bake->settleFrames);
         }
         if (ImGui::Button("Cancel Bake##probebakecancel")) {
             bake->Cancel(ctx, state);
@@ -953,7 +953,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             };
 
             reflF("Traced Roughness Max##reflection", &reflection.tracedRoughnessMax, reflectionDefaults.tracedRoughnessMax, 0.0f, 1.0f, "%.2f", "Surfaces rougher than this fall back to the prefiltered skybox reflection instead of being ray traced. Lower = only near-mirror surfaces get traced reflections, cheaper. Default 0.3.");
-            reflF("Light Specular From Reflections Max##reflection", &reflection.lightSpecularFromReflectionsMax, reflectionDefaults.lightSpecularFromReflectionsMax, 0.0f, 1.0f, "%.2f", "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular; low = only near-mirror deferred. Default 1.0.");
+            reflF("Light Specular From Reflections Max##reflection", &reflection.lightSpecularFromReflectionsMax, reflectionDefaults.lightSpecularFromReflectionsMax, 0.0f, 1.0f, "%.2f", "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular; low = only near-mirror deferred. Default 0.3 (= traced max; DI owns rough spec, probe bakes hide light proxies to avoid double count).");
             reflF("Intensity##reflection", &reflection.intensity, reflectionDefaults.intensity, 0.0f, 2.0f, "%.2f", "Multiplier on the traced reflection radiance before compositing. Default 1.0.");
             reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "Screen-space trace only: view-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
             if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Screen-space trace only: maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }

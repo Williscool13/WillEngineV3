@@ -58,10 +58,10 @@
     "bScreenSpaceLighting": false,
     "bScreenSpaceTrace": false,
     "intensity": 1.0,
-    "lightSpecularFromReflectionsMax": 0.35353535413742065,
+    "lightSpecularFromReflectionsMax": 0.0,
     "ssrMaxSteps": 64,
     "ssrThickness": 0.30000001192092896,
-    "tracedRoughnessMax": 0.3525252342224121
+    "tracedRoughnessMax": 0.0
   },
   "reflectionProbe": {
     "bBruteForcePick": false,

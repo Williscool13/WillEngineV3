@@ -1137,7 +1137,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
             emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
 
-            for (const auto& [entity, light, areaLightTransform] : state->registry.view<Component::AreaLightComponent, Component::AreaLightTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
+            for (const auto& [entity, light, areaLightTransform] : state->registry.view<Component::AreaLightComponent, Component::AreaLightTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>).each()) {
                 if (!light.drawEmissiveSurface) { continue; }
                 const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
                 frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(areaLightTransform.modelMatrix, areaLightTransform.previousMatrix);
@@ -1185,7 +1185,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
             emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
 
-            for (const auto& [entity, light, sphereLightTransform] : state->registry.view<Component::SphereLightComponent, Component::SphereLightTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
+            for (const auto& [entity, light, sphereLightTransform] : state->registry.view<Component::SphereLightComponent, Component::SphereLightTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>).each()) {
                 if (!light.drawEmissiveSurface) { continue; }
                 const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
                 frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(sphereLightTransform.modelMatrix, sphereLightTransform.previousMatrix);
@@ -1336,40 +1336,42 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
 {
     entt::registry& registry = state->registry;
 
-    for (auto [entity, mesh] : registry.view<Component::StaticMeshComponent>().each()) {
+    for (const auto& [entity, mesh] : registry.view<Component::StaticMeshComponent>().each()) {
         if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
-    for (auto [entity, mesh] : registry.view<Component::StaticMeshPrimitiveComponent>().each()) {
+    for (const auto& [entity, mesh] : registry.view<Component::StaticMeshPrimitiveComponent>().each()) {
         if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
-    for (auto [entity, mesh] : registry.view<Component::ProceduralMeshComponent>().each()) {
+    for (const auto& [entity, mesh] : registry.view<Component::ProceduralMeshComponent>().each()) {
         if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
-    for (auto [entity, mesh] : registry.view<Component::SplineMeshComponent>().each()) {
+    for (const auto& [entity, mesh] : registry.view<Component::SplineMeshComponent>().each()) {
         if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
-    for (auto [entity, mesh] : registry.view<Component::Text3DComponent>().each()) {
+    for (const auto& [entity, mesh] : registry.view<Component::Text3DComponent>().each()) {
         if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
 
-    for (auto [entity, light] : registry.view<Component::AreaLightComponent>().each()) {
+    for (const auto& [entity, light] : registry.view<Component::AreaLightComponent>().each()) {
         if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+        registry.emplace_or_replace<Component::ProbeBakeProxyHiddenTag>(entity);
     }
-    for (auto [entity, light] : registry.view<Component::SphereLightComponent>().each()) {
+    for (const auto& [entity, light] : registry.view<Component::SphereLightComponent>().each()) {
         if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+        registry.emplace_or_replace<Component::ProbeBakeProxyHiddenTag>(entity);
     }
 
     for (auto entity : registry.view<Component::DynamicPhysicsBodyComponent>()) {
         registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity);
     }
-    for (auto [entity, body] : registry.view<Component::PhysicsBodyDesc>().each()) {
+    for (const auto& [entity, body] : registry.view<Component::PhysicsBodyDesc>().each()) {
         if (body.motionType != Component::PhysicsMotionType::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
 }
 
 void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    state->registry.clear<Component::ProbeBakeHiddenTag>();
+    state->registry.clear<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>();
 }
 
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
@@ -1448,7 +1450,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
                 if (!runtime.range.IsValid() || !runtime.visible) { continue; }
                 const Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
                 if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded || model->modelData.emissiveTriangles.IsEmpty()) { continue; }
-                uint64_t sortKey = static_cast<uint64_t>(entity);
+                auto sortKey = static_cast<uint64_t>(entity);
                 if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                     sortKey = stable->id.id;
                 }
@@ -1538,7 +1540,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         int32_t bestPriority = INT32_MIN;
         bool found = false;
         auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
-        for (auto [entity, light, transform] : dirView.each()) {
+        for (const auto& [entity, light, transform] : dirView.each()) {
             if (light.priority > bestPriority) {
                 bestPriority = light.priority;
                 vf.directionalLight.direction = transform.rotation * glm::vec3(0.0f, 0.0f, 1.0f);
@@ -1566,7 +1568,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
     vf.bReflectionProbeBruteForce = config.bBruteForcePick;
 
     auto view = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
-    for (auto [entity, probe, worldTransform] : view.each()) {
+    for (const auto& [entity, probe, worldTransform] : view.each()) {
         if (vf.reflectionProbes.IsFull()) { break; }
         const bool bPreview = state->debug.bProbePreview;
         if (!probe.bEnabled && !bPreview) { continue; }
@@ -1723,7 +1725,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     };
 
-    for (auto [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>().each()) {
         if (!shouldDraw(entity)) { continue; }
         const Vec3 center = transform.translation;
         const Vec3 right = transform.rotation * Vec3(1.0f, 0.0f, 0.0f);
@@ -1736,7 +1738,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         addHemisphereVolume(center, forward, right, up, light.range, rangeColor);
     }
 
-    for (auto [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>().each()) {
         if (!shouldDraw(entity)) { continue; }
         constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
         constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
@@ -1746,7 +1748,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     }
 
-    for (auto [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>().each()) {
         if (!shouldDraw(entity)) { continue; }
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
@@ -2041,8 +2043,8 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);
 
-    const float vpWidth = static_cast<float>(ctx->windowContext.viewportWidth);
-    const float vpHeight = static_cast<float>(ctx->windowContext.viewportHeight);
+    const auto vpWidth = static_cast<float>(ctx->windowContext.viewportWidth);
+    const auto vpHeight = static_cast<float>(ctx->windowContext.viewportHeight);
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     const Engine::Font* uiFont = ctx->assetManager->GetFont(state->uiFont);

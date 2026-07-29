@@ -43,7 +43,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
     float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
-    float roughness = max(li.roughness, 0.045);
+    float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
     Reservoir center = pc.inputBuffer[centerIdx];
@@ -109,7 +109,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
         uint4 neighborGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(neighborFullPixel, 0));
         float3 neighborN = normalize(UnpackNormalOct16(neighborGt1.r));
-        if (dot(N, neighborN) < 0.906) {
+        if (dot(N, neighborN) < 0.5) {
             continue;
         }
 
@@ -132,7 +132,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         }
 
         float3 neighborV = normalize(-neighborViewPosition);
-        float neighborRoughness = max(nli.roughness, 0.045);
+        float neighborRoughness = max(nli.roughness, RESTIR_MIN_ROUGHNESS);
         float3 neighborF0 = lerp(float3(0.04, 0.04, 0.04), nli.albedo.xyz, nli.metallic);
 
         float Mi = validCenter ? min(float(neighbor.M), 20.0 * float(center.M)) : float(neighbor.M);

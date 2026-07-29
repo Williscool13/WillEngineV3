@@ -1,5 +1,7 @@
 module shader_constants;
 
+public static const float MIN_ROUGHNESS = 0.045;
+
 public static const float2 POISSON_DISK_8[8] = {
 	float2(-0.2602728,0.3234085), float2(-0.3268174,0.0442592), float2(0.1996002,0.1386711),
 	float2(0.2615348,-0.1569698), float2(-0.2869459,-0.3421305), float2(0.1351001,-0.4352284),

@@ -56,7 +56,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
     float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
-    float roughness = max(li.roughness, 0.045);
+    float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
     int mBrdf = (roughness <= pc.brdfRoughnessMax) ? RESTIR_M_BRDF : 0;
@@ -86,7 +86,8 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
             int lightIdx;
             float pSelect;
             if (!prop.Draw(uint(i), uint(RESTIR_M_LIGHT), lightCount, h, lightIdx, pSelect)) {
-                lightIdx = clamp(int(HashStep(h) * float(lightCount)), 0, lightCount - 1);
+                float u = (float(i) + HashStep(h)) / float(RESTIR_M_LIGHT);
+                lightIdx = clamp(int(u * float(lightCount)), 0, lightCount - 1);
                 pSelect = invLightCount;
             }
 

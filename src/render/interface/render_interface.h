@@ -845,7 +845,7 @@ struct ReflectionConfiguration
     bool bScreenSpaceTrace{false};
 
     float tracedRoughnessMax{0.3f};
-    float lightSpecularFromReflectionsMax{1.0f};
+    float lightSpecularFromReflectionsMax{0.3f};
     float intensity{1.0f};
     float ssrThickness{0.3f};
     int32_t ssrMaxSteps{64};

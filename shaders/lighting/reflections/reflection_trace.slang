@@ -5,6 +5,7 @@ import instance_mask_interop;
 
 import shader_functions;
 import packing_functions;
+import shader_constants;
 import restir_common;
 import random_common;
 
@@ -39,7 +40,7 @@ void ComputeReflectionTrace(uniform ReflectionTracePushConstant pc, uint3 thread
     float roughness;
     float metallic;
     UnpackPBR(gt1.b, roughness, metallic);
-    roughness = max(roughness, 0.045);
+    roughness = max(roughness, MIN_ROUGHNESS);
     if (roughness > pc.roughnessMax) {
         pc.reflectionDescriptors[pixelIdx] = refl;
         return;

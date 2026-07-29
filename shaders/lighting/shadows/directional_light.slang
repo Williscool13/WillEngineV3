@@ -6,6 +6,7 @@ import lights_interop;
 import shader_functions;
 import pbr_functions;
 import packing_functions;
+import shader_constants;
 
 import bindless_declarations;
 
@@ -38,7 +39,7 @@ void ComputeDirectionalLight(uniform DirectionalLightPushConstant pc, uint3 thre
 
     float3 N = normalize(viewNormal);
     float3 V = normalize(-viewPosition);
-    roughness = max(roughness, 0.045);
+    roughness = max(roughness, MIN_ROUGHNESS);
 
     float3 L = normalize(mul((float3x3)scene.view, normalize(-pc.lightData->directionalLight.directionIntensity.xyz)));
     float3 H = normalize(V + L);

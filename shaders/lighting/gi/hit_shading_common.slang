@@ -159,7 +159,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
     }
     float3 diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    float roughness = max(material.metalRoughFactors.y, 0.045);
+    float roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
     float3 V = -rayDirection;
     float NoV = max(dot(N, V), 0.0);
 
@@ -252,7 +252,7 @@ public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance inst
         emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
     }
     float3 diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    float roughness = max(material.metalRoughFactors.y, 0.045);
+    float roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
     float3 V = -rayDirection;
     float NoV = max(dot(N, V), 0.0);
 
@@ -350,7 +350,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
         emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
     }
     float3 diffuseColor = albedo.rgb * (1.0 - material.metalRoughFactors.x);
-    float roughness = max(material.metalRoughFactors.y, 0.045);
+    float roughness = max(material.metalRoughFactors.y, MIN_ROUGHNESS);
     float3 V = N;
     float NoV = 1.0;
     // A proxy's analytic light is sampled directly by NEE

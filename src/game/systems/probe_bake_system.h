@@ -53,6 +53,8 @@ struct ProbeBakeSystem
     bool bViewOverrideActive{false};
     /** Latched true once all 6 faces are delivered; buffers stay resident for the assembly checkpoint. */
     bool bFacesReady{false};
+    /** Preview-only run: same face walk, hide set, and settle pacing, but no capture, assemble, or file output. */
+    bool bDryRun{false};
 
     entt::entity probeEntity{entt::null};
     glm::vec3 capturePosition{0.0f};
@@ -100,6 +102,9 @@ struct ProbeBakeSystem
 
     /** Kicks a bake for the given probe entity; no-op if a bake is already active. */
     void Start(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity probe);
+
+    /** Kicks a preview-only walk of the given probe's faces; renders and settles exactly like a bake but captures and writes nothing. */
+    void StartDryRun(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity probe);
 
     /** Queues every reflection-probe entity in the scene for baking; replaces any pending queue. */
     void EnqueueAllProbes(Engine::EngineState* state);

@@ -7,6 +7,7 @@ Everything, except:
 1. **Flagged meshes**: "Probe Bake Exclude" checkbox (any mesh component type).
 2. **Flagged lights**: same checkbox on area/sphere. Excluded = no DI, no GI, no emissive surface.
 3. **Movers**: dynamic and kinematic physics bodies, auto-excluded.
+4. **Light proxy surfaces**: all area/sphere emissive proxies, auto-excluded. 
 
 Sun and skybox always bake in. In-world text/sprites bake in. Debug draws/outlines are suppressed by the bake.
 

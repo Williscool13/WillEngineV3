@@ -76,7 +76,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
     float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
-    float roughness = max(li.roughness, 0.045);
+    float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
@@ -104,7 +104,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
 #endif
         uint searchTaps = 1u;
 #if RESTIR_ENABLE_TEMPORAL_SEARCH
-        if (pc.bTemporalSearch != 0u) { searchTaps = 5u; }
+        if (pc.bTemporalSearch != 0u) { searchTaps = 9u; }
 #endif
         float3 currWorldN = normalize(mul(float3x3(scene.invView), N));
         float NoV = abs(dot(N, normalize(viewPosition)));
@@ -128,7 +128,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
             uint2 historyFullPixel = tapPixel;
             float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));
             float3 historyWorldN = normalize(mul(transpose(float3x3(scene.prevView)), historyN));
-            if (dot(currWorldN, historyWorldN) < 0.906) { continue; }
+            if (dot(currWorldN, historyWorldN) < 0.5) { continue; }
             float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyFullPixel, 0)).r;
             float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
             if (abs(historyViewDepth - expectedPrevViewDepth) * NoV > disocclusionThreshold) { continue; }

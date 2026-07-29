@@ -8,6 +8,7 @@ import restir_interop;
 import shader_functions;
 import pbr_functions;
 import packing_functions;
+import shader_constants;
 import visibility_lighting_common;
 import restir_common;
 
@@ -41,7 +42,7 @@ void ComputeLightingGroundTruth(uniform VisibilityLightingPushConstant pc, uint3
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
 
-    float roughness = max(li.roughness, 0.045);
+    float roughness = max(li.roughness, MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
     float nDotV = max(dot(N, V), 0.0);
 

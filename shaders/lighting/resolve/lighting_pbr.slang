@@ -8,6 +8,7 @@ import ddgi_common;
 import shader_functions;
 import pbr_functions;
 import packing_functions;
+import shader_constants;
 import punctual_lighting_common;
 import world_grid_interop;
 import binning_common;
@@ -48,7 +49,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
     float3 worldPosition = mul(pc.sceneData[pc.sceneDataIndex].invView, float4(viewPosition, 1.0)).xyz;
 
     // Clamp roughness so D_GGX never produces 0/0 at NdotH=1 (degenerate delta lobe)
-    float roughness = max(li.roughness, 0.045);
+    float roughness = max(li.roughness, MIN_ROUGHNESS);
 
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
     float nDotV = max(dot(N, V), 0.0);

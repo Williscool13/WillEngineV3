@@ -10,6 +10,7 @@ import ddgi_interop;
 import shader_functions;
 import pbr_functions;
 import packing_functions;
+import shader_constants;
 import visibility_lighting_common;
 import restir_common;
 import ddgi_common;
@@ -44,7 +45,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
     float roughness;
     float metallic;
     UnpackPBR(gt1.b, roughness, metallic);
-    roughness = max(roughness, 0.045);
+    roughness = max(roughness, MIN_ROUGHNESS);
     if (roughness > pc.roughnessMax) {
         return;
     }
