@@ -107,7 +107,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
         float tapV = pc.skyVisIndex != ~0x0u ? rdgTexturesFloat[pc.skyVisIndex].Load(int3(tap, 0)).r : 0.0;
         // Clamp moments must see the same total the blend produces, or the box drags history toward the sky-less SH.
-        float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0)) + tapV * skyTerm;float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0)) + tapV * skyTerm;
+        float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0)) + tapV * skyTerm;
         irrM1 += tapIrr;
         irrM2 += tapIrr * tapIrr;
         clampTaps += 1.0;

@@ -25,7 +25,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
     skyboxPass.WriteColorAttachment(targets.colorOutput);
     skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
     skyboxPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            outputColor = targets.colorOutput, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            outputColor = targets.colorOutput, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD, skyIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkViewport viewport = VkHelpers::GenerateViewport(width, height);
             vkCmdSetViewport(cmd, 0, 1, &viewport);
             VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -43,6 +43,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
                 .sceneDataIndex = sceneIndex,
                 .cubemapIndex = skyboxIndex,
                 .skyboxLOD = skyboxLOD,
+                .intensity = skyIntensity,
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));

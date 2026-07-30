@@ -99,7 +99,7 @@ struct DirectionalLightComponent
 };
 
 /**
- * Scene-declared sky, the only skybox source. Highest priority wins; the winner drives skyboxIndex and overrides the profile iblIntensity, so bakes are reproducible from scene data alone. No component (or none loaded) = no skybox.
+ * Scene-declared sky, the only skybox source. Highest priority wins; the winner drives skyboxIndex and its intensity multiplies the profile iblIntensity. No component (or none loaded) = no skybox.
  */
 struct SkyboxComponent
 {

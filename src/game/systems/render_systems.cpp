@@ -1254,7 +1254,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         if (bestHandle.IsValid()) {
             frameBuffer->mainViewFamily.skyboxIndex = bestHandle.index;
             frameBuffer->mainViewFamily.skyboxLOD = state->lighting.skyboxLOD;
-            frameBuffer->mainViewFamily.iblIntensity = bestIntensity;
+            frameBuffer->mainViewFamily.iblIntensity *= bestIntensity;
         }
     }
 }

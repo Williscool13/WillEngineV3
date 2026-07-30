@@ -1434,6 +1434,7 @@ SHADER_PUBLIC struct EnvironmentSkyboxPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC int32_t cubemapIndex;
     SHADER_PUBLIC int32_t skyboxLOD;
+    SHADER_PUBLIC float intensity;
 };
 
 SHADER_PUBLIC struct BRDFLUTPushConstant

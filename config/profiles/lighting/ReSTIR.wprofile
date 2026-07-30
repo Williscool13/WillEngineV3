@@ -62,7 +62,7 @@
     "lightSpecularFromReflectionsMax": 0.0,
     "ssrMaxSteps": 64,
     "ssrThickness": 0.30000001192092896,
-    "tracedRoughnessMax": 0.0
+    "tracedRoughnessMax": 1.0
   },
   "reflectionProbe": {
     "bBruteForcePick": false,
