@@ -175,7 +175,8 @@ void ComputeGIDenoiseChroma(uniform GIDenoisePushConstant pc, uint3 dtid : SV_Di
         SceneData scene = pc.sceneData[pc.sceneDataIndex];
         float4 shY = 0.25 * shR + 0.5 * shG + 0.25 * shB;
         // Filter chromaticity (CoCg/Y L0), not absolute CoCg: chroma magnitude scales with intensity, so absolute filtering across a steep luminance gradient dumps the bright side's chroma onto dim pixels (desaturated bright blotches near lights).
-        float invCenterY = 1.0 / max(shY.x, 1e-6);
+        float centerY = max(shY.x, 1e-6);
+        float invCenterY = 1.0 / centerY;
         float4 sumCo = 0.5 * (shR - shB) * invCenterY;
         float4 sumCg = 0.25 * (2.0 * shG - shR - shB) * invCenterY;
         float sumW = 1.0;
@@ -221,7 +222,11 @@ void ComputeGIDenoiseChroma(uniform GIDenoisePushConstant pc, uint3 dtid : SV_Di
             float4 tapShR = rdgTexturesFloat4[pc.srcShRIndex].Load(int3(tap, 0));
             float4 tapShG = rdgTexturesFloat4[pc.srcShGIndex].Load(int3(tap, 0));
             float4 tapShB = rdgTexturesFloat4[pc.srcShBIndex].Load(int3(tap, 0));
-            float tapNorm = w / max(0.25 * tapShR.x + 0.5 * tapShG.x + 0.25 * tapShB.x, 1e-6);
+            float tapY = max(0.25 * tapShR.x + 0.5 * tapShG.x + 0.25 * tapShB.x, 1e-6);
+            w *= pow(min(centerY, tapY) / max(centerY, tapY), pc.chromaLumaPower);
+            if (w <= 1e-4) { continue; }
+
+            float tapNorm = w / tapY;
             sumCo += 0.5 * (tapShR - tapShB) * tapNorm;
             sumCg += 0.25 * (2.0 * tapShG - tapShR - tapShB) * tapNorm;
             sumW += w;

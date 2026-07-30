@@ -732,7 +732,7 @@ SHADER_PUBLIC struct GIDenoisePushConstant
     SHADER_PUBLIC uint32_t direction;
     SHADER_PUBLIC uint32_t stepSize;
     SHADER_PUBLIC uint32_t aoIndex;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC float chromaLumaPower;
 };
 
 SHADER_PUBLIC struct GIUpscalePushConstant
@@ -1637,6 +1637,7 @@ SHADER_PUBLIC struct RelaxAtrousPushConstant
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
     SHADER_PUBLIC uint32_t stepSize;
+    SHADER_PUBLIC float chromaLumaPower;
 };
 
 SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
@@ -1758,6 +1759,7 @@ SHADER_PUBLIC struct ReblurChromaPushConstant
     SHADER_PUBLIC uint32_t diffIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
     SHADER_PUBLIC uint32_t stepSize;
+    SHADER_PUBLIC float chromaLumaPower;
 };
 
 SHADER_PUBLIC struct ReblurStabilizationPushConstant

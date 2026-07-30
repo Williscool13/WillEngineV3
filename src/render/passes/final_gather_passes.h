@@ -51,6 +51,7 @@ struct FinalGatherFrame
  * @param frameNumber
  * @param bDenoise
  * @param chromaDenoisePasses Extra denoise iterations on CoCg chromaticity only, Y carried (strides doubling from 8, clamped to [0, 4]; 0 = off); targets low-frequency lighting-chroma noise the shared-radius chain cannot reach. Requires bDenoise.
+ * @param chromaLumaPower Falloff exponent on the tap/center luminance ratio in the chroma passes; the only guard stopping a lit region's hue from bleeding across a cast shadow, whose other edge-stops are all geometric. 0 disables it.
  * @param bTemporalFilter Counter accumulation of the resolved output against carried history; off = this frame's resolve only (raw-signal inspection).
  * @param bSkipRay Skip the cosine ray entirely; sample the radiance cache at the pixel's own surface point (probes as fallback) instead.
  * @param raysPerPixel Gather rays per half-res pixel, clamped to [1, GI_GATHER_MAX_RAYS_PER_PIXEL]. Uniform across the frame, so cost is flat and rays stay coherent; relative noise falls as 1/sqrt(n), which is the only lever on dark bright-to-dark gradients where a single ray finds a bright aperture too rarely.
@@ -58,7 +59,7 @@ struct FinalGatherFrame
  * @param bDisableScreenTier Disable the lit-history screen tier so ray hits resolve only against world-space sources; set while the GI field is frozen (lit history is view-dependent and keeps evolving, which face-seams probe bakes).
  * @return
  */
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier);
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier);
 
 /**
  * Full-screen GI leak deconstruction at the primary surface, written to gi_deconstruct_target for the debug visualizer.

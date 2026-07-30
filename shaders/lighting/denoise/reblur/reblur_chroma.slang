@@ -81,6 +81,9 @@ void ReblurChromaMain(uniform ReblurChromaPushConstant pc, int2 pixelPos : SV_Di
                 float sampleY = dot(sampleRgb, float3(0.25, 0.5, 0.25));
                 // Floor the ratio denominator against the center luma so a near-black tap cannot contribute an unbounded chromaticity.
                 float denom = max(sampleY, max(0.05 * centerY, 1e-6));
+                float safeCenterY = max(centerY, 1e-6);
+                float safeSampleY = max(sampleY, 1e-6);
+                wDiff *= pow(min(safeCenterY, safeSampleY) / max(safeCenterY, safeSampleY), pc.chromaLumaPower);
                 sumCoCg += float2(0.5 * (sampleRgb.r - sampleRgb.b), 0.25 * (2.0 * sampleRgb.g - sampleRgb.r - sampleRgb.b)) / denom * wDiff;
                 sumW += wDiff;
             }

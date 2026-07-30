@@ -569,7 +569,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(diffIn);
             pass.WriteStorageImage(diffOut);
 
-            pass.Execute([pipelineManager, diffIn, diffOut, stepSize, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            pass.Execute([pipelineManager, diffIn, diffOut, stepSize, width, height, chromaLumaPower = params.chromaLumaPower](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 RelaxAtrousPushConstant pc{
                     .constants = graph.GetBufferAddress(SID("relax_constants")),
                     .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
@@ -583,6 +583,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                     .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
                     .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
                     .stepSize = stepSize,
+                    .chromaLumaPower = chromaLumaPower,
                 };
                 const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_atrous_chroma"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1197,7 +1198,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(inTex);
             pass.WriteStorageImage(outTex);
 
-            pass.Execute([pipelineManager, gbufferOne, depth, inTex, outTex, stepSize, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            pass.Execute([pipelineManager, gbufferOne, depth, inTex, outTex, stepSize, width, height, chromaLumaPower = params.chromaLumaPower](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 ReblurChromaPushConstant pc{
                     .constants = graph.GetBufferAddress(SID("reblur_constants")),
                     .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
@@ -1207,6 +1208,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                     .diffIndex = graph.GetSampledImageViewDescriptorIndex(inTex),
                     .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(outTex),
                     .stepSize = stepSize,
+                    .chromaLumaPower = chromaLumaPower,
                 };
                 const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_chroma"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

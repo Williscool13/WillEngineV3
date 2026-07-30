@@ -46,6 +46,7 @@ static nlohmann::json RelaxToJson(const Core::RELAXParams& rx)
         {"enableAntiFirefly", rx.enableAntiFirefly},
         {"bChromaAtrous", rx.bChromaAtrous},
         {"chromaAtrousIterations", rx.chromaAtrousIterations},
+        {"chromaLumaPower", rx.chromaLumaPower},
     };
 }
 
@@ -90,6 +91,7 @@ static void RelaxFromJson(const nlohmann::json& r, Core::RELAXParams& p)
     p.enableAntiFirefly = getBool("enableAntiFirefly", p.enableAntiFirefly);
     p.bChromaAtrous = getBool("bChromaAtrous", p.bChromaAtrous);
     p.chromaAtrousIterations = getInt("chromaAtrousIterations", p.chromaAtrousIterations);
+    p.chromaLumaPower = getFloat("chromaLumaPower", p.chromaLumaPower);
 }
 
 static nlohmann::json ReblurToJson(const Core::ReBLURParams& rb)
@@ -132,6 +134,7 @@ static nlohmann::json ReblurToJson(const Core::ReBLURParams& rb)
         {"enableTemporalStabilization", rb.enableTemporalStabilization},
         {"bChromaAtrous", rb.bChromaAtrous},
         {"chromaAtrousIterations", rb.chromaAtrousIterations},
+        {"chromaLumaPower", rb.chromaLumaPower},
     };
 }
 
@@ -178,6 +181,7 @@ static void ReblurFromJson(const nlohmann::json& r, Core::ReBLURParams& p)
     p.enableTemporalStabilization = getBool("enableTemporalStabilization", p.enableTemporalStabilization);
     p.bChromaAtrous = getBool("bChromaAtrous", p.bChromaAtrous);
     p.chromaAtrousIterations = getInt("chromaAtrousIterations", p.chromaAtrousIterations);
+    p.chromaLumaPower = getFloat("chromaLumaPower", p.chromaLumaPower);
 }
 
 nlohmann::json ToJson(const Core::ReSTIRParams& p)
@@ -318,6 +322,7 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"bFinalGatherDenoise", p.bFinalGatherDenoise},
         {"bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise},
         {"gatherChromaDenoisePasses", p.gatherChromaDenoisePasses},
+        {"gatherChromaLumaPower", p.gatherChromaLumaPower},
         {"bFinalGatherTemporal", p.bFinalGatherTemporal},
         {"bGatherSkipRay", p.bGatherSkipRay},
         {"gatherRaysPerPixel", p.gatherRaysPerPixel},
@@ -362,6 +367,7 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.bFinalGatherDenoise = dBool("bFinalGatherDenoise", p.bFinalGatherDenoise);
     p.bFinalGatherChromaDenoise = dBool("bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise);
     p.gatherChromaDenoisePasses = dUint("gatherChromaDenoisePasses", p.gatherChromaDenoisePasses);
+    p.gatherChromaLumaPower = dFloat("gatherChromaLumaPower", p.gatherChromaLumaPower);
     p.bFinalGatherTemporal = dBool("bFinalGatherTemporal", p.bFinalGatherTemporal);
     p.gatherRaysPerPixel = dUint("gatherRaysPerPixel", p.gatherRaysPerPixel);
     p.bGatherSkipRay = dBool("bGatherSkipRay", p.bGatherSkipRay);

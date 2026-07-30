@@ -13,7 +13,7 @@
 
 namespace Render
 {
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier)
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(RADIANCE_CACHE_ENTRIES) || !graph.HasBuffer(RADIANCE_CACHE_CELLS)
         || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER)
@@ -152,7 +152,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
                 blur.WriteStorageImage(dstShG);
                 blur.WriteStorageImage(dstShB);
 
-                blur.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, direction, stepSize, srcShR, srcShG, srcShB, dstShR, dstShG, dstShB, bAO, bChromaPass](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                blur.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, direction, stepSize, srcShR, srcShG, srcShB, dstShR, dstShG, dstShB, bAO, bChromaPass, chromaLumaPower](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bChromaPass ? SID("gi_denoise_chroma") : SID("gi_denoise"));
                     if (!pipelineEntry) {
                         return;
@@ -175,6 +175,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
                         .direction = direction,
                         .stepSize = stepSize,
                         .aoIndex = bAO ? graph.GetSampledImageViewDescriptorIndex(SID("shadows_resolve_target")) : ~0x0u,
+                        .chromaLumaPower = chromaLumaPower,
                     };
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, (gatherExtent[0] + 15u) / 16u, (gatherExtent[1] + 15u) / 16u, 1);

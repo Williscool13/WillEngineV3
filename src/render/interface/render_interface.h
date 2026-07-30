@@ -615,6 +615,7 @@ struct RELAXParams
     // Diffuse-only CoCg iterations
     bool bChromaAtrous{true};
     int32_t chromaAtrousIterations{2};
+    float chromaLumaPower{2.f};
     float spatialVarianceEstimationHistoryThreshold{3.f};
     float lobeAngleFraction{0.5f};
     float roughnessFraction{0.15f};
@@ -690,6 +691,7 @@ struct ReBLURParams
     // Diffuse-only CoCg iterations
     bool bChromaAtrous{true};
     int32_t chromaAtrousIterations{2};
+    float chromaLumaPower{2.f};
 
     // Antilag
     float antilagLuminanceSigmaScale{2.f};
@@ -826,6 +828,7 @@ struct DDGIParams
     bool bFinalGatherDenoise{true};
     bool bFinalGatherChromaDenoise{true};
     uint32_t gatherChromaDenoisePasses{2};
+    float gatherChromaLumaPower{2.f};
     bool bFinalGatherTemporal{true};
     bool bGatherSkipRay{false};
     uint32_t gatherRaysPerPixel{1};

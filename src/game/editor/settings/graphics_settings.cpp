@@ -667,6 +667,7 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
         if (ImGui::Checkbox("Chroma Widening##relax", &relax.bChromaAtrous)) { changed = true; }
         relaxTip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on.");
         relaxI("Chroma Widening Passes", &relax.chromaAtrousIterations, relaxDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
+        relaxF("Chroma Luma Ratio Power", &relax.chromaLumaPower, relaxDefaults.chromaLumaPower, 0.f, 6.f, "%.2f", "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.");
     }
     relaxF("Lobe Angle Fraction", &relax.lobeAngleFraction, relaxDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance, as a fraction of the BRDF lobe angle. Lower preserves sharper normal detail; higher blurs across normals. Default 0.15.");
     relaxF("Roughness Fraction", &relax.roughnessFraction, relaxDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Higher blends across differing roughness; lower keeps roughness boundaries crisp. Default 0.15.");
@@ -1035,6 +1036,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ddgi.gatherChromaDenoisePasses = static_cast<uint32_t>(gatherChromaPasses);
                 changed = true;
             }
+            if (Widgets::SliderFloat("Chroma Luma Ratio Power##gigather", &ddgi.gatherChromaLumaPower, 0.0f, 6.0f, {.tooltip = "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight in these passes is geometric, so without this a cast shadow (same plane, same normal, same AO) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.", .reset = true, .resetTo = 2.0})) {
+                changed = true;
+            }
             if (ImGui::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Skips the per-pixel cosine ray entirely: samples the radiance cache at the pixel's own surface point (probes as fallback, skybox on miss) instead of tracing. No ray noise, but resolution is capped by the cache's cell size (blockier); still runs through the same denoise/upscale/temporal pipeline. Best for clean/simply-textured scenes where the ray's 1spp noise isn't worth it.");
@@ -1398,6 +1402,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     if (ImGui::Checkbox("Chroma Widening##reblur", &reblur.bChromaAtrous)) { changed = true; }
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on."); }
                     reblurI("Chroma Widening Passes", &reblur.chromaAtrousIterations, reblurDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
+                    reblurF("Chroma Luma Ratio Power", &reblur.chromaLumaPower, reblurDefaults.chromaLumaPower, 0.f, 6.f, "%.2f", "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off. Integer values compile to a multiply chain. Default 2.");
 
                     ImGui::SeparatorText("History Fix");
                     reblurF("Hist Fix Frame Num", &reblur.historyFixFrameNum, reblurDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill. Default 3.");
