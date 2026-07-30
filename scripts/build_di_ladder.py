@@ -8,12 +8,16 @@ Two SEPARATE ladders (the backends fail by different mechanisms; one ladder
 could not attribute the result), each a lab-style grid of open-front 8x4x8
 rooms. Flip backends via the ILightProposal switch and compare identical rooms.
 
-  Analytic wing (columns 0-3): N sphere lights, N in {4, 16, 64, 256}.
+  Analytic wing (leftmost columns): N sphere lights, N in {4, 16, 64, 256}.
     Crosses MAX_LIGHTS_PER_WORLD_GRID_CELL=64: the 256-cluster rung overflows
     strongest-K eviction; 64 sits exactly at the cap.
-  Emissive wing (columns 5-8): N emissive box instances (each = 12 triangles =
+  Emissive wing (middle columns): N emissive box instances (each = 12 triangles =
     one EmissiveGroup), N in {4, 16, 64}. Crosses
     MAX_EMISSIVE_GROUPS_PER_WORLD_GRID_CELL=16 the same way.
+  Area wing (rightmost columns): N downward-facing 0.3m rect area lights, same
+    rungs as the sphere wing. One-sidedness is the added stressor: a quad
+    contributes nothing above its plane, so half of every naive proposal's
+    domain is dead, and clustered heroes can be fully occluded by orientation.
 
 Per-wing axes (one room per combination, rows = density rung):
   power distribution: Uniform (all N equal) vs Heavy (one hero carries 50% of
@@ -44,8 +48,8 @@ wa.seed_ids("di_ladder")   # must precede every next_id() call
 
 from wscene_authoring import (
     base_entity, box_params, next_id, name_id, add_procedural, add_room,
-    add_sphere_light, add_skybox, RENDER_DEFAULTS,
-    PROCEDURAL, NAME, FOLDER, SCENE_FOLDER, TEXT3D,
+    add_sphere_light, add_area_light, add_skybox, add_world_text, RENDER_DEFAULTS,
+    PROCEDURAL, NAME, FOLDER, SCENE_FOLDER,
 )
 import asset_index
 
@@ -113,9 +117,13 @@ HERO_FRAC = 0.5
 
 ANALYTIC_RUNGS = [4, 16, 64, 256]
 EMISSIVE_RUNGS = [4, 16, 64]
+AREA_RUNGS = [4, 16, 64, 256]
 ANALYTIC_TOTAL = 240.0          # summed sphere-light intensity per room; 4-rung lights land at 60 each, lab-typical
 EMISSIVE_TOTAL = 720.0          # summed emissive strength per room (0.25 boxes, ~0.375 m^2 each)
+AREA_TOTAL = 240.0              # summed area-light intensity per room
 EMITTER_SIZE = 0.25
+AREA_HALF_EXTENT = 0.15
+DOWN = (0.7071067811865476, 0.7071067811865476, 0.0, 0.0)   # +90 about X: local +Z (quad normal) points -Y
 
 LATTICE = {4: (2, 1, 2), 16: (4, 2, 2), 64: (4, 4, 4), 256: (8, 4, 8)}
 CLUSTER_EXTENT = (1.8, 1.8, 1.8)     # fits one 2m cascade-0 cell
@@ -156,6 +164,7 @@ for n in EMISSIVE_RUNGS:
     EM_MAT[("U", n)] = write_emissive_material(f"dl_em_u{n}", WHITE, EMISSIVE_TOTAL / n)
     EM_MAT[("D", n)] = write_emissive_material(f"dl_em_d{n}", WHITE, EMISSIVE_TOTAL * (1.0 - HERO_FRAC) / (n - 1))
 EM_MAT["HERO"] = write_emissive_material("dl_em_hero", HERO_TINT, EMISSIVE_TOTAL * HERO_FRAC)
+TEXT_MATERIAL = IDX.text_material("default_diegetic")
 
 # =============================================================================
 # entity helpers
@@ -176,16 +185,18 @@ def render_box(entities, name, corner, size, material, folder_id=0):
     entities.append(e)
     return e
 
-def light_entity(entities, name, pos, folder_id=0):
-    e = base_entity(name, pos, folder_id=folder_id)
+def light_entity(entities, name, pos, folder_id=0, rot=(1.0, 0.0, 0.0, 0.0)):
+    e = base_entity(name, pos, rot, folder_id=folder_id)
     entities.append(e)
     return e
 
-def label(entities, name, text, pos, folder_id=0, scale=0.9):
-    e = base_entity(name, pos, (0.0, 0.0, 1.0, 0.0), folder_id=folder_id)   # 180 about Y: face -Z, toward the aisle
-    e[TEXT3D] = {"depth": 0.05, "flatness": 0.0005, "fontId": ROBOTO_FONT, "material": 0,
-                 "modelFlags": [1.0, 1.0, 0.0, 0.0], "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0],
-                 "scale": scale, "smoothNormals": True, "text": text, "tracking": 0.05, "align": 1, "anchor": 2}
+# Unlit world text, NOT emissive Text3D: glyph meshes with an emissive material would
+# be gathered as emissive triangle lights and pollute the very selection this scene measures.
+LABEL_SIZE_PX = 0.5
+
+def label(entities, name, text, pos, folder_id=0):
+    e = base_entity(name, pos, (0.0, 0.0, 1.0, 0.0), folder_id=folder_id)   # 180 about Y: glyph face points -Z, toward the aisle
+    add_world_text(e, text, ROBOTO_FONT, TEXT_MATERIAL, render_size_px=LABEL_SIZE_PX)
     entities.append(e)
     return e
 
@@ -211,6 +222,15 @@ def analytic_room(entities, tag, cx, cz, n, heavy, clustered, folder_id):
         e = light_entity(entities, f"[{tag}] L{i:03d}", pos, folder_id)
         add_sphere_light(e, color=tint, intensity=p, radius=0.05, draw_range=LIGHT_RANGE, draw_emissive=False)
 
+def area_room(entities, tag, cx, cz, n, heavy, clustered, folder_id):
+    room_shell(entities, tag, cx, cz, folder_id)
+    pts = room_positions(n, clustered, cx, cz)
+    pw = powers(n, heavy, AREA_TOTAL)
+    for i, (pos, p) in enumerate(zip(pts, pw)):
+        tint = HERO_TINT if (heavy and i == 0) else WHITE
+        e = light_entity(entities, f"[{tag}] L{i:03d}", pos, folder_id, rot=DOWN)
+        add_area_light(e, color=tint, intensity=p, half_width=AREA_HALF_EXTENT, half_height=AREA_HALF_EXTENT, draw_range=LIGHT_RANGE, draw_emissive=False)
+
 def emissive_room(entities, tag, cx, cz, n, heavy, clustered, folder_id):
     room_shell(entities, tag, cx, cz, folder_id)
     pts = room_positions(n, clustered, cx, cz)
@@ -228,28 +248,34 @@ def emissive_room(entities, tag, cx, cz, n, heavy, clustered, folder_id):
 # =============================================================================
 entities = []
 folders = []
-wing_fid = {"Analytic": next_id(), "Emissive": next_id()}
+wing_fid = {"Analytic": next_id(), "Emissive": next_id(), "Area": next_id()}
 
-def build_wing(wing, rungs, col0, builder):
+TAIL_NAMES = {"U": "Uniform", "H": "Heavy"}
+LAYOUT_NAMES = {"C": "Clustered", "S": "Spread"}
+
+def build_wing(wing, prefix, rungs, col0, builder):
     for row, n in enumerate(rungs):
         for col, (tail, layout) in enumerate(COMBOS):
-            tag = f"{wing[0]}{n}-{tail}{layout}"
+            tag = f"{prefix}{n}-{tail}{layout}"
             cx = (col0 + col) * PITCH
             cz = row * PITCH
             fid = next_id()
             folders.append({SCENE_FOLDER: {"folderId": fid, "name": tag, "parentFolder": wing_fid[wing]}})
             builder(entities, tag, cx, cz, n, tail == "H", layout == "C", fid)
-            label(entities, f"[{tag}] Label", tag, (cx, 6.2, cz), fid)
+            text = f"{wing} {n} - {TAIL_NAMES[tail]} {LAYOUT_NAMES[layout]}"
+            # Just above the open front, over the entrance the viewer approaches from
+            label(entities, f"[{tag}] Label", text, (cx, 4.8, cz - ROOM[2] * 0.5 - 0.5), fid)
 
-build_wing("Analytic", ANALYTIC_RUNGS, -4.5, analytic_room)
-build_wing("Emissive", EMISSIVE_RUNGS, 0.5, emissive_room)
+build_wing("Analytic", "A", ANALYTIC_RUNGS, -4.5, analytic_room)
+build_wing("Emissive", "E", EMISSIVE_RUNGS, 0.5, emissive_room)
+build_wing("Area", "AR", AREA_RUNGS, 5.0, area_room)
 
 for wing, fid in wing_fid.items():
     folders.append({SCENE_FOLDER: {"folderId": fid, "name": wing, "parentFolder": 0}})
 
-# shared ground under both wings; top sits 2cm below the room floor slabs (which span -WALL_T..0) so no plane is shared
+# shared ground under the wings; top sits 2cm below the room floor slabs (which span -WALL_T..0) so no plane is shared
 gx0 = (-4.5 - 0.5) * PITCH - 6.0
-gx1 = (0.5 + 3.5) * PITCH + 6.0
+gx1 = (5.0 + 3.5) * PITCH + 6.0
 gz0 = -10.0
 gz1 = 3 * PITCH + 12.0
 solid_box(entities, "Ground", (gx0, -WALL_T - 0.02 - 0.5, gz0), (gx1 - gx0, 0.5, gz1 - gz0), MAT_WALL)
@@ -264,10 +290,11 @@ entities.extend(folders)
 editor_camera = {"rotation": [0.0, 0.0, 1.0, 0.0], "translation": [-2.0 * PITCH, 5.0, -14.0]}
 wa.write_scene(SCENE_PATH, entities, SCENE_ID, "DI Ladder", editor_camera=editor_camera)
 
-n_lights = sum(1 for e in entities if wa.LIGHT_SPHERE in e)
+n_spheres = sum(1 for e in entities if wa.LIGHT_SPHERE in e)
+n_areas = sum(1 for e in entities if wa.LIGHT_AREA in e)
 n_emitters = sum(1 for e in entities if PROCEDURAL in e and e[NAME]["name"].startswith("[E") and "] E" in e[NAME]["name"])
-n_rooms = len(ANALYTIC_RUNGS) * len(COMBOS) + len(EMISSIVE_RUNGS) * len(COMBOS)
+n_rooms = (len(ANALYTIC_RUNGS) + len(EMISSIVE_RUNGS) + len(AREA_RUNGS)) * len(COMBOS)
 print(f"wrote {SCENE_PATH} ({len(entities)} entities, {n_rooms} rooms)")
-print(f"analytic lights: {n_lights} (peak clustered cell {max(ANALYTIC_RUNGS)} vs MAX_LIGHTS_PER_WORLD_GRID_CELL=64)")
+print(f"analytic lights: {n_spheres} sphere + {n_areas} area (peak clustered cell {max(ANALYTIC_RUNGS)} vs MAX_LIGHTS_PER_WORLD_GRID_CELL=64)")
 print(f"emissive groups: {n_emitters} of MAX_EMISSIVE_GROUPS=1024 (peak clustered cell {max(EMISSIVE_RUNGS)} vs per-cell cap 16)")
-print(f"vf.lights estimate: {n_lights} analytic + {n_emitters * 12} emissive tris = {n_lights + n_emitters * 12} of MAX_LIGHTS=32768")
+print(f"vf.lights estimate: {n_spheres + n_areas} analytic + {n_emitters * 12} emissive tris = {n_spheres + n_areas + n_emitters * 12} of MAX_LIGHTS=32768")

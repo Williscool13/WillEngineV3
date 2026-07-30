@@ -95,15 +95,17 @@ public struct ReGIRProposal : ILightProposal
     }
 }
 
-/** WorldGridBin: cascaded strongest-K light list. Uniform selection over the cell; RIS applies importance at the real shading point.
- *  The cell holds analytic lights and emissive groups (whole mesh instances) in two parallel top-K lists, and a draw picks uniformly
- *  across their union, then uniformly within the chosen group. Both terms are exact, so Marginal() keeps the Talbot-MIS denominator unbiased. */
+/** WorldGridBin: cascaded strongest-K light list. The cell holds analytic lights and emissive groups (whole mesh instances) in two
+ *  parallel top-K lists. A draw splits between the two lists proportional to their kept-set power sums (so low-power emissive groups
+ *  cannot starve the analytic candidate budget), then picks uniformly among analytics, or a group by its power share and a triangle
+ *  uniformly within it. All terms are exact, so Marginal() keeps the Talbot-MIS denominator unbiased. */
 public struct WorldGridProposal : ILightProposal
 {
     public uint2* grid;
     public uint* indexList;
     public uint2* emissiveGrid;
     public uint* emissiveIndexList;
+    public float2* cellPower;
     public LightData* lightData;
     public int analyticCount;
 
@@ -111,6 +113,8 @@ public struct WorldGridProposal : ILightProposal
     uint cellCount;
     uint groupOffset;
     uint groupCount;
+    float analyticPow;
+    float groupPow;
 
     [mutating] public void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h)
     {
@@ -118,6 +122,8 @@ public struct WorldGridProposal : ILightProposal
         cellCount = 0u;
         groupOffset = 0u;
         groupCount = 0u;
+        analyticPow = 0.0;
+        groupPow = 0.0;
         WorldGridKey key = WorldGridResolveCell(worldPos, cameraPos);
         uint2 cell = grid[key.cellIndex];
         cellOffset = cell.x;
@@ -127,6 +133,18 @@ public struct WorldGridProposal : ILightProposal
             groupOffset = g.x;
             groupCount = g.y;
         }
+        if (cellPower != nullptr) {
+            float2 p = cellPower[key.cellIndex];
+            analyticPow = p.x;
+            groupPow = p.y;
+        }
+    }
+
+    bool UsePowerSplit()
+    {
+        if (cellCount > 0u && analyticPow <= 0.0) { return false; }
+        if (groupCount > 0u && groupPow <= 0.0) { return false; }
+        return analyticPow + groupPow > 0.0;
     }
 
     public bool Draw(uint i, uint m, int lightCount, inout uint h, out int lightIdx, out float pSelect)
@@ -138,6 +156,36 @@ public struct WorldGridProposal : ILightProposal
         if (total == 0u) { return false; }
 
         float u = (float(i) + HashStep(h)) / float(m);
+
+        if (UsePowerSplit()) {
+            float T = analyticPow + groupPow;
+            float pA = analyticPow / T;
+            // Branch on counts, never on float compares alone: pA==1.0 is not guaranteed exact, and the group path with groupCount==0 underflows the index
+            if (groupCount == 0u || (cellCount > 0u && u < pA)) {
+                uint j = min(uint((u / max(pA, 1e-8)) * float(cellCount)), cellCount - 1u);
+                uint idx = indexList[cellOffset + j];
+                if (idx >= uint(lightCount)) { return false; }
+                lightIdx = int(idx);
+                pSelect = pA / float(cellCount);
+                return true;
+            }
+            float target = (u - pA) / max(1.0 - pA, 1e-8) * groupPow;
+            float accum = 0.0;
+            uint pick = groupCount - 1u;
+            for (uint k = 0u; k < groupCount; k++) {
+                accum += lightData->emissiveGroups[emissiveIndexList[groupOffset + k]].power;
+                if (target < accum) { pick = k; break; }
+            }
+            EmissiveGroup group = lightData->emissiveGroups[emissiveIndexList[groupOffset + pick]];
+            if (group.lightCount == 0u) { return false; }
+            uint t = min(uint(HashStep(h) * float(group.lightCount)), group.lightCount - 1u);
+            uint idx = group.firstLight + t;
+            if (idx >= uint(lightCount)) { return false; }
+            lightIdx = int(idx);
+            pSelect = (group.power / T) / float(group.lightCount);
+            return true;
+        }
+
         uint j = min(uint(u * float(total)), total - 1u);
         if (j < cellCount) {
             uint idx = indexList[cellOffset + j];
@@ -164,9 +212,14 @@ public struct WorldGridProposal : ILightProposal
         uint total = cellCount + groupCount;
         if (total == 0u) { return 1.0 / float(lightCount); }
 
+        bool bPowerSplit = UsePowerSplit();
+        float T = analyticPow + groupPow;
+
         if (lightIdx < analyticCount) {
             for (uint k = 0u; k < cellCount; k++) {
-                if (int(indexList[cellOffset + k]) == lightIdx) { return 1.0 / float(total); }
+                if (int(indexList[cellOffset + k]) == lightIdx) {
+                    return bPowerSplit ? (analyticPow / T) / float(cellCount) : 1.0 / float(total);
+                }
             }
             return 0.0;
         }
@@ -175,7 +228,7 @@ public struct WorldGridProposal : ILightProposal
         for (uint k = 0u; k < groupCount; k++) {
             EmissiveGroup group = lightData->emissiveGroups[emissiveIndexList[groupOffset + k]];
             if (uint(lightIdx) >= group.firstLight && uint(lightIdx) < group.firstLight + group.lightCount) {
-                return 1.0 / (float(total) * float(group.lightCount));
+                return bPowerSplit ? (group.power / T) / float(group.lightCount) : 1.0 / (float(total) * float(group.lightCount));
             }
         }
         return 0.0;

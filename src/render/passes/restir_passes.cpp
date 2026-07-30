@@ -254,6 +254,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             basePass.ReadBuffer(SID("world_grid_index_list"));
             basePass.ReadBuffer(SID("world_grid_emissive_grid"));
             basePass.ReadBuffer(SID("world_grid_emissive_index_list"));
+            basePass.ReadBuffer(SID("world_grid_cell_power"));
         }
         basePass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         basePass.ReadSampledImage(targets.gbufferOne);
@@ -285,6 +286,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .worldGridIndexList = bBin ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
                 .worldGridEmissiveGrid = bBin ? graph.GetBufferAddress(SID("world_grid_emissive_grid")) : 0,
                 .worldGridEmissiveIndexList = bBin ? graph.GetBufferAddress(SID("world_grid_emissive_index_list")) : 0,
+                .worldGridCellPower = bBin ? graph.GetBufferAddress(SID("world_grid_cell_power")) : 0,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -373,6 +375,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .bTemporalSearch = restirParams.bTemporalSearch ? 1u : 0u,
                     .activeCheckerboardField = field,
                     .finalWClamp = (restirParams.spatialPasses == 0u) ? restirParams.restirWClamp : 0.0f,
+                    .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -616,7 +619,8 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     uint64_t frameNumber,
                                     uint32_t activeCheckerboardField,
                                     uint32_t bCheckerboardPacked,
-                                    uint32_t bFullRateResolve)
+                                    uint32_t bFullRateResolve,
+                                    const Core::ReflectionConfiguration& reflectionConfig)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -695,6 +699,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .activeCheckerboardField = field,
                     .bCheckerboardPacked = packed,
                     .bFullRateResolve = fullRate,
+                    .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
                     .sunVisIndex = graph.HasTexture(SID("restir_sun_vis")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_sun_vis")) : ~0x0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

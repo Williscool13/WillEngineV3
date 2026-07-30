@@ -294,6 +294,7 @@ void ComputeReSTIRDIBaseBin(uniform ReSTIRDICombinedTemporalPushConstant pc, uin
     prop.indexList = pc.worldGridIndexList;
     prop.emissiveGrid = pc.worldGridEmissiveGrid;
     prop.emissiveIndexList = pc.worldGridEmissiveIndexList;
+    prop.cellPower = pc.worldGridCellPower;
     prop.lightData = pc.lightData;
     prop.analyticCount = pc.lightData->analyticLightCount;
     ReSTIRDIBase(prop, pc, threadID);

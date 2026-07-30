@@ -220,7 +220,7 @@
     "remodulateOutput": 0,
     "restirWClamp": 0.0,
     "spatialMCap": 2000,
-    "spatialNeighbors": 1,
+    "spatialNeighbors": 3,
     "spatialPasses": 1,
     "spatialRadius": 30,
     "svgf": {
@@ -231,7 +231,7 @@
       "sigmaLuminance": 4.0,
       "sigmaNormal": 64.0
     },
-    "temporalMCap": 10
+    "temporalMCap": 20
   },
   "shadingShaderOverride": 11262630175972558216
 }

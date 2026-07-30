@@ -127,6 +127,12 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
 
     pc.worldGridBuffer[flatIndex] = uint2(indexOffset, count);
 
+    float analyticPowerSum = 0.0;
+    for (uint k = 0u; k < count; k++)
+    {
+        analyticPowerSum += WorldGridLightPower(pc.lightData->lights[pc.worldGridIndexList[indexOffset + k]]);
+    }
+
     uint groupOffset = flatIndex * MAX_EMISSIVE_GROUPS_PER_WORLD_GRID_CELL;
     uint groupCount = 0u;
     float minGroupPower = 1e30;
@@ -155,6 +161,13 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
         }
     }
     pc.worldGridEmissiveGrid[flatIndex] = uint2(groupOffset, groupCount);
+
+    float groupPowerSum = 0.0;
+    for (uint k = 0u; k < groupCount; k++)
+    {
+        groupPowerSum += pc.lightData->emissiveGroups[pc.worldGridEmissiveIndexList[groupOffset + k]].power;
+    }
+    pc.worldGridCellPower[flatIndex] = float2(analyticPowerSum, groupPowerSum);
 
     // Smallest-volume probe whose influence volume intersects this cell; ascending-index strict-less tie-break. Written unconditionally (aliased RDG buffers are not zeroed).
     uint bestProbe = WORLD_GRID_PROBE_SENTINEL;

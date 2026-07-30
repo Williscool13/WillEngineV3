@@ -70,6 +70,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
     graph.CreateBuffer(SID("world_grid_index_list"), indexBytes, false);
     graph.CreateBuffer(SID("world_grid_emissive_grid"), gridBytes, false);
     graph.CreateBuffer(SID("world_grid_emissive_index_list"), emissiveIndexBytes, false);
+    graph.CreateBuffer(SID("world_grid_cell_power"), static_cast<VkDeviceSize>(WORLD_GRID_CELL_COUNT) * 2u * sizeof(float), false);
     graph.CreateBuffer(SID("world_grid_probe_grid"), static_cast<VkDeviceSize>(WORLD_GRID_CELL_COUNT) * sizeof(uint32_t), false);
 
     const uint32_t probeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
@@ -82,6 +83,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
     binning.WriteBuffer(SID("world_grid_index_list"));
     binning.WriteBuffer(SID("world_grid_emissive_grid"));
     binning.WriteBuffer(SID("world_grid_emissive_index_list"));
+    binning.WriteBuffer(SID("world_grid_cell_power"));
     binning.WriteBuffer(SID("world_grid_probe_grid"));
     binning.Execute([pipelineManager, sceneIndex, probeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("world_grid_binning"));
@@ -95,6 +97,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
             .worldGridIndexList = graph.GetBufferAddress(SID("world_grid_index_list")),
             .worldGridEmissiveGrid = graph.GetBufferAddress(SID("world_grid_emissive_grid")),
             .worldGridEmissiveIndexList = graph.GetBufferAddress(SID("world_grid_emissive_index_list")),
+            .worldGridCellPower = graph.GetBufferAddress(SID("world_grid_cell_power")),
             .sceneDataIndex = sceneIndex,
             .reflectionProbes = probeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
             .worldGridProbeGrid = graph.GetBufferAddress(SID("world_grid_probe_grid")),

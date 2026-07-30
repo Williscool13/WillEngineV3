@@ -100,76 +100,103 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     float3 directLight = float3(0.0);
 
     if (lightCount > 0) {
-        int lightIdx = clamp(int(rng0 * float(lightCount)), 0, lightCount - 1);
-        LightInfo al = pc.lightData->lights[lightIdx];
-
-        // Sample a point on the light in world space (branch by type)
-        float3 lightSamplePos;
-        float lightArea;
-        if (al.type == LIGHT_TYPE_SPHERE) {
-            float radius = al.right.w;
-            float z = 1.0 - 2.0 * xi.x;
-            float rr = sqrt(max(1.0 - z * z, 0.0));
-            float phi = 2.0 * PI * xi.y;
-            float3 dir = float3(rr * cos(phi), rr * sin(phi), z);
-            lightSamplePos = al.position.xyz + radius * dir;
-            lightArea = 4.0 * PI * radius * radius;
-        } else if (al.type == LIGHT_TYPE_TRIANGLE) {
-            float su = sqrt(xi.x);
-            float b1 = 1.0 - su;
-            float b2 = xi.y * su;
-            lightSamplePos = al.position.xyz + b1 * al.right.xyz + b2 * al.up.xyz;
-            lightArea = 0.5 * length(cross(al.right.xyz, al.up.xyz));
-        } else {
-            lightSamplePos = al.position.xyz
-                + al.right.xyz * (xi.x * 2.0 - 1.0) * al.right.w
-                + al.up.xyz    * (xi.y * 2.0 - 1.0) * al.up.w;
-            lightArea = 4.0 * al.right.w * al.up.w;
+        // Range-culled uniform NEE
+        int inRange = 0;
+        int lightIdx = -1;
+        for (int pass = 0; pass < 2 && lightIdx < 0; pass++) {
+            int target = (pass == 1 && inRange > 0) ? clamp(int(rng0 * float(inRange)), 0, inRange - 1) : 0;
+            int seen = 0;
+            for (int li = 0; li < lightCount; li++) {
+                LightInfo cand = pc.lightData->lights[li];
+                float extent;
+                if (cand.type == LIGHT_TYPE_SPHERE) {
+                    extent = cand.right.w;
+                } else if (cand.type == LIGHT_TYPE_TRIANGLE) {
+                    extent = max(length(cand.right.xyz), length(cand.up.xyz));
+                } else {
+                    extent = cand.right.w + cand.up.w;
+                }
+                if (distance(worldPos, cand.position.xyz) - extent >= cand.range) { continue; }
+                if (pass == 0) {
+                    inRange++;
+                } else if (seen++ == target) {
+                    lightIdx = li;
+                    break;
+                }
+            }
+            if (inRange == 0) { break; }
         }
+        if (lightIdx >= 0) {
+            LightInfo al = pc.lightData->lights[lightIdx];
 
-        float3 toLight = lightSamplePos - worldPos;
-        float lightDist = max(length(toLight), 1e-5);
-        float3 L = toLight / lightDist;
+            // Sample a point on the light in world space (branch by type)
+            float3 lightSamplePos;
+            float lightArea;
+            if (al.type == LIGHT_TYPE_SPHERE) {
+                float radius = al.right.w;
+                float z = 1.0 - 2.0 * xi.x;
+                float rr = sqrt(max(1.0 - z * z, 0.0));
+                float phi = 2.0 * PI * xi.y;
+                float3 dir = float3(rr * cos(phi), rr * sin(phi), z);
+                lightSamplePos = al.position.xyz + radius * dir;
+                lightArea = 4.0 * PI * radius * radius;
+            } else if (al.type == LIGHT_TYPE_TRIANGLE) {
+                float su = sqrt(xi.x);
+                float b1 = 1.0 - su;
+                float b2 = xi.y * su;
+                lightSamplePos = al.position.xyz + b1 * al.right.xyz + b2 * al.up.xyz;
+                lightArea = 0.5 * length(cross(al.right.xyz, al.up.xyz));
+            } else {
+                lightSamplePos = al.position.xyz
+                    + al.right.xyz * (xi.x * 2.0 - 1.0) * al.right.w
+                    + al.up.xyz    * (xi.y * 2.0 - 1.0) * al.up.w;
+                lightArea = 4.0 * al.right.w * al.up.w;
+            }
 
-        float cosShade = max(dot(N, L), 0.0);
-        float cosLight = (al.type == LIGHT_TYPE_SPHERE)
-            ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
-            : max(dot(-al.normal.xyz, L), 0.0);
-        float atten = LightRangeCull(lightDist, al.range);
+            float3 toLight = lightSamplePos - worldPos;
+            float lightDist = max(length(toLight), 1e-5);
+            float3 L = toLight / lightDist;
 
-        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
-            RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+            float cosShade = max(dot(N, L), 0.0);
+            float cosLight = (al.type == LIGHT_TYPE_SPHERE)
+                ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
+                : max(dot(-al.normal.xyz, L), 0.0);
+            float atten = LightRangeCull(lightDist, al.range);
 
-            // Distance/TMax measured from the offset origin so the origin's advance toward the light
-            // (cosShade * offset) does not eat the far-end margin and false-hit the light's own mesh.
-            float3 toLightShadow = lightSamplePos - shadowOrigin;
-            float shadowDist = length(toLightShadow);
-            RayDesc shadowRay;
-            shadowRay.Origin = shadowOrigin;
-            shadowRay.Direction = toLightShadow / shadowDist;
-            shadowRay.TMin = 0.0;
-            shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
+            if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
+                RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
 
-            RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-            q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
-            q.Proceed();
+                // Distance/TMax measured from the offset origin so the origin's advance toward the light
+                // (cosShade * offset) does not eat the far-end margin and false-hit the light's own mesh.
+                float3 toLightShadow = lightSamplePos - shadowOrigin;
+                float shadowDist = length(toLightShadow);
+                RayDesc shadowRay;
+                shadowRay.Origin = shadowOrigin;
+                shadowRay.Direction = toLightShadow / shadowDist;
+                shadowRay.TMin = 0.0;
+                shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
-            bool visible = (q.CommittedStatus() == COMMITTED_NOTHING);
-            if (visible) {
-                float3 H = normalize(V + L);
-                float NDF = D_GGX(N, H, roughness);
-                float G = G_SMITH_HEIGHT_CORRELATED(N, V, L, roughness);
-                float3 F = F_SCHLICK(V, H, F0);
-                float3 spec = (NDF * G * F) / max(4.0 * nDotV * max(dot(N, L), 0.0), 0.001);
+                RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+                q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
+                q.Proceed();
 
-                float3 kS = F;
-                float3 kD = (1.0 - kS) * (1.0 - metallic);
-                float orenNayar = Diffuse_OrenNayar(cosShade, nDotV, L, V, roughness);
-                float3 diff = kD * albedo.xyz * orenNayar;
+                bool visible = (q.CommittedStatus() == COMMITTED_NOTHING);
+                if (visible) {
+                    float3 H = normalize(V + L);
+                    float NDF = D_GGX(N, H, roughness);
+                    float G = G_SMITH_HEIGHT_CORRELATED(N, V, L, roughness);
+                    float3 F = F_SCHLICK(V, H, F0);
+                    float3 spec = (NDF * G * F) / max(4.0 * nDotV * max(dot(N, L), 0.0), 0.001);
 
-                float geomTerm = LightGeometryTerm(cosLight, lightDist);
-                float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                directLight = (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(lightCount) * lightArea;
+                    float3 kS = F;
+                    float3 kD = (1.0 - kS) * (1.0 - metallic);
+                    float orenNayar = Diffuse_OrenNayar(cosShade, nDotV, L, V, roughness);
+                    float3 diff = kD * albedo.xyz * orenNayar;
+
+                    float geomTerm = LightGeometryTerm(cosLight, lightDist);
+                    float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
+                    directLight = (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(inRange) * lightArea;
+                }
             }
         }
     }

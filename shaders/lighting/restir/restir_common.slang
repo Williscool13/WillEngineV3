@@ -215,6 +215,89 @@ public float SphereConeOneMinusCosThetaMax(float d2, float radius)
     return sin2ThetaMax / (1.0 + sqrt(max(1.0 - sin2ThetaMax, 0.0)));
 }
 
+static const float QUAD_SOLID_ANGLE_MIN = 1e-6;
+
+struct SphQuad
+{
+    float3 o;
+    float3 x;
+    float3 y;
+    float3 z;
+    float z0;
+    float x0;
+    float y0;
+    float x1;
+    float y1;
+    float b0;
+    float b1;
+    float k;
+    float S;
+}
+
+// Urena et al. 2013, "An Area-Preserving Parametrization for Spherical Rectangles"
+SphQuad SphQuadInit(float3 corner, float3 ex, float3 ey, float3 o)
+{
+    SphQuad sq;
+    sq.o = o;
+    float exl = length(ex);
+    float eyl = length(ey);
+    sq.x = ex / exl;
+    sq.y = ey / eyl;
+    sq.z = cross(sq.x, sq.y);
+    float3 d = corner - o;
+    sq.z0 = dot(d, sq.z);
+    if (sq.z0 > 0.0)
+    {
+        sq.z = -sq.z;
+        sq.z0 = -sq.z0;
+    }
+    sq.x0 = dot(d, sq.x);
+    sq.y0 = dot(d, sq.y);
+    sq.x1 = sq.x0 + exl;
+    sq.y1 = sq.y0 + eyl;
+
+    float3 v00 = float3(sq.x0, sq.y0, sq.z0);
+    float3 v01 = float3(sq.x0, sq.y1, sq.z0);
+    float3 v10 = float3(sq.x1, sq.y0, sq.z0);
+    float3 v11 = float3(sq.x1, sq.y1, sq.z0);
+    float3 n0 = normalize(cross(v00, v10));
+    float3 n1 = normalize(cross(v10, v11));
+    float3 n2 = normalize(cross(v11, v01));
+    float3 n3 = normalize(cross(v01, v00));
+    float g0 = acos(clamp(-dot(n0, n1), -1.0, 1.0));
+    float g1 = acos(clamp(-dot(n1, n2), -1.0, 1.0));
+    float g2 = acos(clamp(-dot(n2, n3), -1.0, 1.0));
+    float g3 = acos(clamp(-dot(n3, n0), -1.0, 1.0));
+    sq.b0 = n0.z;
+    sq.b1 = n2.z;
+    sq.k = 2.0 * PI - g2 - g3;
+    sq.S = g0 + g1 - sq.k;
+    return sq;
+}
+
+float3 SphQuadSample(SphQuad sq, float u, float v)
+{
+    float au = u * sq.S + sq.k;
+    // sin(au) is legitimately negative over most of the u range (k ~ pi for frontal quads); the epsilon guard must keep its sign or the u dimension collapses
+    float sinAu = sin(au);
+    float fu = (cos(au) * sq.b0 - sq.b1) / (abs(sinAu) > 1e-7 ? sinAu : (sinAu >= 0.0 ? 1e-7 : -1e-7));
+    float cu = (fu > 0.0 ? 1.0 : -1.0) / sqrt(fu * fu + sq.b0 * sq.b0);
+    cu = clamp(cu, -1.0, 1.0);
+
+    float xu = -(cu * sq.z0) / max(sqrt(1.0 - cu * cu), 1e-7);
+    xu = clamp(xu, sq.x0, sq.x1);
+
+    float d = sqrt(xu * xu + sq.z0 * sq.z0);
+    float h0 = sq.y0 / sqrt(d * d + sq.y0 * sq.y0);
+    float h1 = sq.y1 / sqrt(d * d + sq.y1 * sq.y1);
+    float hv = h0 + v * (h1 - h0);
+    float hv2 = hv * hv;
+    float yv = (hv2 < 1.0 - 1e-6) ? (hv * d) / sqrt(1.0 - hv2) : sq.y1;
+    yv = clamp(yv, sq.y0, sq.y1);
+
+    return sq.o + xu * sq.x + yv * sq.y + sq.z0 * sq.z;
+}
+
 public float3 SampleLightSurface(LightView vs, float3 shadingPos, float uU, float uV)
 {
     if (vs.type == LIGHT_TYPE_SPHERE)
@@ -245,7 +328,15 @@ public float3 SampleLightSurface(LightView vs, float3 shadingPos, float uU, floa
         float b2 = uV * su;
         return vs.center + b1 * vs.right + b2 * vs.up;
     }
-    return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
+    float3 ex = (2.0 * vs.halfWidth) * vs.right;
+    float3 ey = (2.0 * vs.halfHeight) * vs.up;
+    float3 corner = vs.center - vs.halfWidth * vs.right - vs.halfHeight * vs.up;
+    SphQuad sq = SphQuadInit(corner, ex, ey, shadingPos);
+    if (!(sq.S > QUAD_SOLID_ANGLE_MIN))
+    {
+        return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
+    }
+    return SphQuadSample(sq, uU, uV);
 }
 
 public float LightSamplePdfArea(LightView vs, float3 shadingPos, float3 samplePos)
@@ -264,7 +355,23 @@ public float LightSamplePdfArea(LightView vs, float3 shadingPos, float3 samplePo
         float cosLight = max(dot(outwardN, -L), 0.0);
         return pdfSolidAngle * cosLight / dist2;
     }
-    return 1.0 / vs.area;
+    if (vs.type == LIGHT_TYPE_TRIANGLE)
+    {
+        return 1.0 / vs.area;
+    }
+    float3 ex = (2.0 * vs.halfWidth) * vs.right;
+    float3 ey = (2.0 * vs.halfHeight) * vs.up;
+    float3 corner = vs.center - vs.halfWidth * vs.right - vs.halfHeight * vs.up;
+    SphQuad sq = SphQuadInit(corner, ex, ey, shadingPos);
+    if (!(sq.S > QUAD_SOLID_ANGLE_MIN))
+    {
+        return 1.0 / vs.area;
+    }
+    float3 toSample = samplePos - shadingPos;
+    float dist2 = max(dot(toSample, toSample), 1e-8);
+    float3 L = toSample * rsqrt(dist2);
+    float cosLight = max(dot(-vs.normal, L), 0.0);
+    return cosLight / (dist2 * sq.S);
 }
 
 public float3 ReGIRCellSize() { return float3(REGIR_CELL_SIZE_X, REGIR_CELL_SIZE_Y, REGIR_CELL_SIZE_Z); }
