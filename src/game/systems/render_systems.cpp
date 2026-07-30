@@ -74,6 +74,9 @@ void ConnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnConstruct>();
     registry.on_destroy<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnDestroy>();
+
+    registry.on_construct<Component::SkyboxComponent>().connect<&Component::SkyboxComponent::OnConstruct>();
+    registry.on_destroy<Component::SkyboxComponent>().connect<&Component::SkyboxComponent::OnDestroy>();
 }
 
 void DisconnectRenderObservers(entt::registry& registry)
@@ -109,6 +112,9 @@ void DisconnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnConstruct>();
     registry.on_destroy<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnDestroy>();
+
+    registry.on_construct<Component::SkyboxComponent>().disconnect<&Component::SkyboxComponent::OnConstruct>();
+    registry.on_destroy<Component::SkyboxComponent>().disconnect<&Component::SkyboxComponent::OnDestroy>();
 }
 
 void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -1229,11 +1235,26 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
-    if (state->lighting.skybox.IsValid()) {
-        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(state->lighting.skybox);
-        if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded) {
-            frameBuffer->mainViewFamily.skyboxIndex = state->lighting.skybox.index;
+    {
+        int32_t bestPriority = INT32_MIN;
+        Engine::CubemapHandle bestHandle{Engine::CubemapHandle::INVALID};
+        float bestIntensity = 1.0f;
+        for (auto&& [entity, sky] : state->registry.view<Component::SkyboxComponent>().each()) {
+            if (!sky.envMap.IsValid() || ctx->assetManager->GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
+            if (!sky.handle.IsValid()) {
+                sky.handle = ctx->assetManager->LoadCubemap(sky.envMap);
+            }
+            Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(sky.handle);
+            if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded && sky.priority > bestPriority) {
+                bestPriority = sky.priority;
+                bestHandle = sky.handle;
+                bestIntensity = sky.intensity;
+            }
+        }
+        if (bestHandle.IsValid()) {
+            frameBuffer->mainViewFamily.skyboxIndex = bestHandle.index;
             frameBuffer->mainViewFamily.skyboxLOD = state->lighting.skyboxLOD;
+            frameBuffer->mainViewFamily.iblIntensity = bestIntensity;
         }
     }
 }

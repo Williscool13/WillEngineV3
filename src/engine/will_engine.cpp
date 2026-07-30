@@ -1135,9 +1135,6 @@ void WillEngine::Run()
     renderThread->Start();
     timeManager->Reset();
 
-    // engineState->lighting.skybox = assetManager->LoadCubemap(assetManager->FindCubemapByName("kloofendal_48d_partly_cloudy_puresky_4k"));
-    engineState->lighting.skybox = assetManager->LoadCubemap(assetManager->FindCubemapByName("modern_evening_street_4k"));
-
     SDL_Event e;
     auto nextFrameTime = std::chrono::steady_clock::now();
     while (true) {

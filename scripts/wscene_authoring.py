@@ -43,6 +43,7 @@ SPAWN = component_key("PlayerSpawnComponent")               # offset, priority
 LIGHT_DIRECTIONAL = component_key("DirectionalLightComponent")  # color, intensity, priority, angularRadiusDegrees; direction = rotation*(0,0,1), highest priority wins
 LIGHT_AREA = component_key("AreaLightComponent")            # color[3], intensity, halfWidth, halfHeight, range, drawEmissiveSurface; world extent = half*transform.scale, emissive quad = unit XZ plane
 LIGHT_SPHERE = component_key("SphereLightComponent")        # color[3], intensity, radius, range, drawEmissiveSurface; world radius = radius*transform.scale.x
+SKYBOX = component_key("SkyboxComponent")                   # envMap (uint64 env map asset id), intensity, priority; highest priority wins, overrides profile iblIntensity while active
 # NOTE: light `color` is packed to 8-bit [0,1] on the GPU -- HDR brightness MUST come from `intensity`, never color>1.
 # `range` is the influence/falloff+cull radius (NOT the emissive size). `drawEmissiveSurface`=visible glowing rep mesh.
 GIZMO = component_key("DebugGizmoComponent")                # color, extents, lineWidth, shape (0=Box?,2=Sphere confirmed)
@@ -258,6 +259,13 @@ def add_directional_light(entity, color=(1.0, 1.0, 1.0), intensity=2.0, priority
     angular_radius_deg = sun-disk half-angle (0 = hard shadow, larger = softer penumbra)."""
     entity[LIGHT_DIRECTIONAL] = {"color": list(color), "intensity": intensity, "priority": priority,
                                   "angularRadiusDegrees": angular_radius_deg}
+    return entity
+
+def add_skybox(entity, envmap_id, intensity=1.0, priority=0):
+    """Scene-declared sky. envmap_id = env map asset id (asset_index.envmap(name)). Highest priority
+    wins; while active it drives the skybox AND overrides the lighting profile's iblIntensity, so probe
+    bakes are reproducible from scene data. Transform is ignored."""
+    entity[SKYBOX] = {"envMap": envmap_id, "intensity": intensity, "priority": priority}
     return entity
 
 # ---- reflection probes (Transform + probe component; no physics, no mesh) ----

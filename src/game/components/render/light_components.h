@@ -9,6 +9,8 @@
 #include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/engine_api.h"
+#include "engine/asset_manager_types.h"
+#include "engine/core/environment_map_id.h"
 
 namespace Core
 {
@@ -94,6 +96,31 @@ struct DirectionalLightComponent
     static void Serialize(const DirectionalLightComponent& comp, nlohmann::json& json);
 
     static void Deserialize(DirectionalLightComponent& comp, const nlohmann::json& json);
+};
+
+/**
+ * Scene-declared sky, the only skybox source. Highest priority wins; the winner drives skyboxIndex and overrides the profile iblIntensity, so bakes are reproducible from scene data alone. No component (or none loaded) = no skybox.
+ */
+struct SkyboxComponent
+{
+    static constexpr const char* COMPONENT_NAME = "SkyboxComponent";
+
+    Engine::EnvironmentMapID envMap{};
+    float intensity{1.0f};
+    int32_t priority{0};
+
+    // Runtime-only: refcounted cubemap acquired lazily by the skybox gather.
+    Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+
+    static void Serialize(const SkyboxComponent& comp, nlohmann::json& json);
+
+    static void Deserialize(SkyboxComponent& comp, const nlohmann::json& json);
+
+    static void OnConstruct(entt::registry& registry, entt::entity entity);
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 }
 

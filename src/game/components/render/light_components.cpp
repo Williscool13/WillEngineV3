@@ -250,4 +250,73 @@ void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::
 {
     registry.remove<SphereLightTransformComponent>(entity);
 }
+
+Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+{
+    bool open = ImGui::CollapsingHeader("Skybox", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X##deleteskybox");
+    ImGui::PopStyleColor();
+
+    if (open) {
+        auto& comp = registry.get<SkyboxComponent>(entity);
+        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+
+        static bool bShowProbes = false;
+
+        const Engine::AssetManager::CachedCubemapMetadata* currentMeta = ctx->assetManager->GetCubemapMetadata(comp.envMap);
+        const char* preview = currentMeta ? currentMeta->name.c_str() : "None";
+        if (ImGui::BeginCombo("Env Map##sky", preview)) {
+            for (const auto& [id, meta] : ctx->assetManager->GetCubemapCache()) {
+                if (!bShowProbes && meta.source.Extension() == ".wprobe" && id != comp.envMap) { continue; }
+                const bool selected = id == comp.envMap;
+                if (ImGui::Selectable(meta.name.c_str(), selected) && id != comp.envMap) {
+                    if (comp.handle.IsValid()) {
+                        ctx->assetManager->UnloadCubemap(comp.handle);
+                        comp.handle = Engine::CubemapHandle::INVALID;
+                    }
+                    comp.envMap = id;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::Checkbox("Show Probes In Selection##sky", &bShowProbes);
+
+        ImGui::DragFloat("Intensity##sky", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        ImGui::DragInt("Priority##sky", &comp.priority, 1.0f, -100, 100);
+    }
+
+    return {.requestRemoval = remove};
+}
+
+void Component::SkyboxComponent::Serialize(const SkyboxComponent& comp, nlohmann::json& json)
+{
+    json["envMap"] = comp.envMap.id;
+    json["intensity"] = comp.intensity;
+    json["priority"] = comp.priority;
+}
+
+void Component::SkyboxComponent::Deserialize(SkyboxComponent& comp, const nlohmann::json& json)
+{
+    if (!json.is_object()) { return; }
+    comp.envMap = Engine::EnvironmentMapID{json.value("envMap", uint64_t{0})};
+    comp.intensity = json.value("intensity", 1.0f);
+    comp.priority = json.value("priority", 0);
+}
+
+void Component::SkyboxComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+{
+    registry.get<SkyboxComponent>(entity).handle = Engine::CubemapHandle::INVALID;
+}
+
+void Component::SkyboxComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    auto& comp = registry.get<SkyboxComponent>(entity);
+    if (comp.handle.IsValid()) {
+        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        ctx->assetManager->UnloadCubemap(comp.handle);
+        comp.handle = Engine::CubemapHandle::INVALID;
+    }
+}
 } // Game

@@ -49,6 +49,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::AreaLightComponent>(componentRegistry, false, false);
     RegisterComponent<Component::SphereLightComponent>(componentRegistry, false, false);
     RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, false, false);
+    RegisterComponent<Component::SkyboxComponent>(componentRegistry, false, false);
     RegisterComponent<Component::ReflectionProbeComponent>(componentRegistry, false, false);
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, false, false);
     RegisterComponent<Component::SplineMeshComponent>(componentRegistry, false, false);

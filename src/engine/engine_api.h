@@ -368,7 +368,6 @@ struct LightingState
     Core::ReflectionConfiguration reflection{};
     Core::ReflectionProbeConfiguration reflectionProbe{};
     float iblIntensity{1.0f};
-    CubemapHandle skybox{CubemapHandle::INVALID};
     int32_t skyboxLOD{0};
 };
 
