@@ -401,6 +401,95 @@ def add_wall(entities, name, p_start, p_end, lateral_offset, height=0.6, thickne
     return e
 
 # =============================================================================
+# gameplay / structural components
+# Field names verified 2026-07-29 against each component's Serialize().
+# =============================================================================
+def add_prefab_instance(entity, prefab_id, master=False):
+    """Marks the entity as an instance of assets/prefabs/<x>.wprefab (prefab_id = that file's
+    header id; asset_index.prefab("Barrel")). The entity still needs its own components -- this
+    records provenance so editor edits can propagate, it does not expand the prefab for you."""
+    entity[PREFAB_INSTANCE] = {"prefabId": prefab_id, "bMasterPrefab": master}
+    return entity
+
+def set_parent(child, parent):
+    """Parents child to parent by stable id. IMPORTANT: a parented entity's TransformComponent
+    becomes LOCAL to the parent (core_components.h:28), so translation/rotation/scale you already
+    set are reinterpreted as offsets -- parent first, then position, or compose it yourself.
+    Physics stays world-authoritative regardless."""
+    entity_id = parent[STABLEID]["id"]
+    child[HIERARCHY] = {"parentStableId": entity_id}
+    return child
+
+def add_checkpoint(entity, checkpoint_id, priority=0, spawn_offset=(0.0, 0.0, 0.0), spawn_rotation=(0.0, 0.0, 0.0)):
+    """Respawn point. spawn_rotation is EULER xyz here, not a quaternion (unlike TransformComponent).
+    Highest `priority` wins when several are active. checkpoint_id must be stable across runs: name_id("...")."""
+    entity[CHECKPOINT] = {"checkpointId": checkpoint_id, "priority": priority,
+                          "spawnOffset": list(spawn_offset), "spawnRotation": list(spawn_rotation)}
+    return entity
+
+def add_world_text(entity, text, font_id, text_material_id=0, render_size_px=48.0, color=(1.0, 1.0, 1.0, 1.0)):
+    """Screen-facing text billboarded in the world. Distinct from add_text3d(), which extrudes real
+    geometry and carries a collider; this one is a camera-facing glyph quad with no physics."""
+    entity[WORLD_TEXT] = {"text": text, "fontId": font_id, "textMaterialId": text_material_id,
+                          "renderSizePx": render_size_px, "color": list(color)}
+    return entity
+
+# =============================================================================
+# kit layout -- placement maths only, so the caller picks the material/motion per piece
+# =============================================================================
+ROOM_FACES = ("floor", "ceiling", "west", "east", "south", "north")
+
+def room_boxes(inner_size, wall_t=0.25, origin=(0.0, 0.0, 0.0), faces=ROOM_FACES):
+    """Slabs for a box room whose INTERIOR is exactly inner_size starting at origin.
+    Returns [(face, corner_pos, size)] ready for box_params, which is corner-pivot.
+    Faces tile without overlapping: floor/ceiling take the full footprint, west/east span
+    the full Z, south/north fill only the remaining X gap. Omit faces for an open room."""
+    ox, oy, oz = origin
+    sx, sy, sz = inner_size
+    t = wall_t
+    out = []
+    for face in faces:
+        if face == "floor":
+            out.append((face, (ox - t, oy - t, oz - t), (sx + 2 * t, t, sz + 2 * t)))
+        elif face == "ceiling":
+            out.append((face, (ox - t, oy + sy, oz - t), (sx + 2 * t, t, sz + 2 * t)))
+        elif face == "west":
+            out.append((face, (ox - t, oy, oz - t), (t, sy, sz + 2 * t)))
+        elif face == "east":
+            out.append((face, (ox + sx, oy, oz - t), (t, sy, sz + 2 * t)))
+        elif face == "south":
+            out.append((face, (ox, oy, oz - t), (sx, sy, t)))
+        elif face == "north":
+            out.append((face, (ox, oy, oz + sz), (sx, sy, t)))
+        else:
+            raise ValueError("unknown room face {!r}, expected one of {}".format(face, ROOM_FACES))
+    return out
+
+def add_room(entities, name_prefix, inner_size, wall_t=0.25, origin=(0.0, 0.0, 0.0), faces=ROOM_FACES,
+             material=0, motion=0, folder_id=0):
+    """Builds room_boxes() as entities named "<prefix> <face>". Returns them in face order."""
+    made = []
+    for face, pos, size in room_boxes(inner_size, wall_t, origin, faces):
+        e = base_entity("{} {}".format(name_prefix, face), pos, folder_id=folder_id)
+        fields, idx = box_params(*size)
+        add_procedural(e, idx, fields, motion=motion)
+        e[PROCEDURAL]["material"] = material
+        entities.append(e)
+        made.append(e)
+    return made
+
+def grid_positions(cols, rows, spacing, origin=(0.0, 0.0, 0.0)):
+    """[(pos, col, row)] on the XZ plane. spacing is (dx, dz) or a scalar."""
+    dx, dz = spacing if isinstance(spacing, (tuple, list)) else (spacing, spacing)
+    ox, oy, oz = origin
+    return [((ox + c * dx, oy, oz + r * dz), c, r) for r in range(rows) for c in range(cols)]
+
+def floor_levels(count, storey_height, origin_y=0.0):
+    """Y offsets for stacked storeys. storey_height must already include the slab thickness,
+    or successive floors interpenetrate: interior height + wall_t is the usual value."""
+    return [origin_y + i * storey_height for i in range(count)]
+
+# =============================================================================
 # top-level write
 # =============================================================================
 def write_scene(path, entities, scene_id, scene_name, editor_camera=None):
