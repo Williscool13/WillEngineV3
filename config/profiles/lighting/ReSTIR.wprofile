@@ -219,7 +219,6 @@
     "spatialNeighbors": 1,
     "spatialPasses": 1,
     "spatialRadius": 30,
-    "sunTemporalMCap": 0,
     "svgf": {
       "alphaMin": 0.10000000149011612,
       "atrousIterations": 4,

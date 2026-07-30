@@ -386,10 +386,12 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
     if (restirParams.bSunLight && viewFamily.directionalLight.bEnabled && bHasTLAS) {
         const uint32_t sunCheckerboardField = (activeCheckerboardField != 0u && restirParams.bCheckerboardFullRateResolve) ? 0u : activeCheckerboardField;
-        graph.CreateBuffer(SID("restir_sun_reservoir"), reservoirBufferSize, true);
-        const bool bHasSunHistory = graph.HasBuffer(SID("restir_sun_reservoir_history")) && !bResetHistory;
+        // Packed like the reservoir buffers were: one texel per dispatched lane, so the checkerboard leaves no unwritten texels in the aliased target.
+        const uint32_t sunVisWidth = (sunCheckerboardField != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+        graph.CreateTexture(SID("restir_sun_vis"), TextureInfo{VK_FORMAT_R32_UINT, sunVisWidth, renderExtent[1], 1}, {std::nullopt}, true);
         const bool bHasPrevTlas = bConfidence && graph.HasBuffer(SID("rt_tlas_history"));
         const bool bHasPrevBlocker = bConfidence && graph.HasTexture(SID("restir_sun_blocker_prev"));
+        const bool bSunReproject = bConfidence && !bResetHistory && graph.HasTexture(SID("gbuffer_one_history")) && graph.HasTexture(SID("depth_history"));
         if (bConfidence) {
             graph.CreateTexture(SID("restir_sun_blocker"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
         }
@@ -397,33 +399,31 @@ void SetupReSTIRPasses(RenderGraph& graph,
         RenderPass& sunPass = graph.AddPass(SID("[ReSTIR DI] Sun"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         sunPass.ReadBuffer(SCENE_DATA_BUFFER);
         sunPass.ReadBuffer(SID("light_data"));
-        if (bHasSunHistory) { sunPass.ReadBuffer(SID("restir_sun_reservoir_history")); }
         sunPass.ReadSampledImage(targets.gbufferOne);
         sunPass.ReadSampledImage(targets.gbufferTwo);
         sunPass.ReadSampledImage(targets.depthCopy);
-        if (bHasSunHistory) { sunPass.ReadSampledImage(SID("gbuffer_one_history")); }
-        if (bHasSunHistory) { sunPass.ReadSampledImage(SID("depth_history")); }
+        if (bSunReproject) { sunPass.ReadSampledImage(SID("gbuffer_one_history")); }
+        if (bSunReproject) { sunPass.ReadSampledImage(SID("depth_history")); }
         sunPass.ReadTLASBuffer(RT_TLAS_BUFFER);
         if (bHasPrevTlas) { sunPass.ReadTLASBuffer(SID("rt_tlas_history")); }
-        sunPass.WriteBuffer(SID("restir_sun_reservoir"));
+        sunPass.WriteStorageImage(SID("restir_sun_vis"));
         if (bConfidence) { sunPass.WriteStorageImage(SID("restir_signal")); }
         if (bConfidence) { sunPass.WriteStorageImage(SID("restir_sun_blocker")); }
         if (bHasPrevBlocker) { sunPass.ReadSampledImage(SID("restir_sun_blocker_prev")); }
-        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasSunHistory, bHasPrevTlas, bConfidence, bHasPrevBlocker, field = sunCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bSunReproject, bHasPrevTlas, bConfidence, bHasPrevBlocker, field = sunCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_sun"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             ReSTIRDISunPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(SID("light_data")),
-                .historyBuffer = bHasSunHistory ? graph.GetBufferAddress(SID("restir_sun_reservoir_history")) : 0,
-                .outputBuffer = graph.GetBufferAddress(SID("restir_sun_reservoir")),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .prevGbufferOneIndex = bHasSunHistory ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0u,
-                .prevDepthIndex = bHasSunHistory ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : ~0u,
+                .visIndex = graph.GetStorageImageViewDescriptorIndex(SID("restir_sun_vis")),
+                .prevGbufferOneIndex = bSunReproject ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0u,
+                .prevDepthIndex = bSunReproject ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : ~0u,
                 .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
                 .prevTlasIndex = bHasPrevTlas ? graph.GetAccelerationStructureDescriptorIndex(SID("rt_tlas_history")) : ~0u,
                 .signalIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex(SID("restir_signal")) : ~0u,
@@ -431,7 +431,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .prevBlockerIndex = bHasPrevBlocker ? graph.GetSampledImageViewDescriptorIndex(SID("restir_sun_blocker_prev")) : ~0u,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
-                .mCap = restirParams.sunTemporalMCap,
                 .activeCheckerboardField = field,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -442,7 +441,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 
-        graph.CarryBufferToNextFrame(SID("restir_sun_reservoir"), SID("restir_sun_reservoir_history"), 0);
         if (bConfidence) {
             graph.CarryTextureToNextFrame(SID("restir_sun_blocker"), SID("restir_sun_blocker_prev"), VK_IMAGE_USAGE_SAMPLED_BIT);
         }
@@ -641,8 +639,8 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     if (graph.HasBuffer(SID("restir_reservoir_final"))) {
         lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
     }
-    if (graph.HasBuffer(SID("restir_sun_reservoir"))) {
-        lightingResolve.ReadBuffer(SID("restir_sun_reservoir"));
+    if (graph.HasTexture(SID("restir_sun_vis"))) {
+        lightingResolve.ReadSampledImage(SID("restir_sun_vis"));
     }
     if (graph.HasBuffer(SID("restir_lights_vs"))) {
         lightingResolve.ReadBuffer(SID("restir_lights_vs"));
@@ -697,7 +695,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .activeCheckerboardField = field,
                     .bCheckerboardPacked = packed,
                     .bFullRateResolve = fullRate,
-                    .sunReservoirBuffer = graph.TryGetBufferAddress(SID("restir_sun_reservoir")),
+                    .sunVisIndex = graph.HasTexture(SID("restir_sun_vis")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_sun_vis")) : ~0x0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

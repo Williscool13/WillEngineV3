@@ -91,7 +91,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
 
     uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
     uint pixelIdx = rcoord.y * stride + rcoord.x;
-    uint sunIdx = bFullRate ? (pixel.y * pc.renderExtent.x + pixel.x) : pixelIdx;
+    uint2 sunCoord = bFullRate ? pixel : rcoord;
 
     bool bAnyLight = pc.reservoirBuffer != 0;
     if (bAnyLight)
@@ -149,16 +149,14 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
         }
     }
 
-    if (pc.sunReservoirBuffer != 0)
+    if (pc.sunVisIndex != ~0x0u)
     {
-        Reservoir rs = pc.sunReservoirBuffer[sunIdx];
-        // lightIdx: ~0u empty, 0u winner shadowed, 1u winner lit; W excludes visibility (see restir_di_sun.slang).
-        if (rs.lightIdx == 1u && rs.W > 0.0)
+        uint sunVis = rdgTexturesUInt[pc.sunVisIndex].Load(int3(sunCoord, 0)).r;
+        if (sunVis != SUN_VIS_EMPTY)
         {
             DirectionalLightData sun = pc.lightData->directionalLight;
-            float2 sunXi = UnpackUnorm2x16(rs.sampleOffsetPacked);
-            float sunPdf;
-            float3 sunDirW = SampleSunConeDirection(SunDirectionWorld(sun), sun.angularRadius, sunXi.x, sunXi.y, sunPdf);
+            float2 sunXi = UnpackUnorm2x16(sunVis);
+            float3 sunDirW = SampleSunConeDirection(SunDirectionWorld(sun), sun.angularRadius, sunXi.x, sunXi.y);
             float3 Lsun = normalize(mul(float3x3(scene.view), sunDirW));
             float nDotLsun = dot(N, Lsun);
             if (nDotLsun > 0.0)
@@ -172,7 +170,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
                 float3 kDsun = (1.0 - Fsun) * (1.0 - li.metallic);
                 float orenNayarSun = Diffuse_OrenNayar(nDotLsun, nDotV, Lsun, V, roughness);
 
-                float3 commonSun = SunRadiance(sun) * nDotLsun * rs.W;
+                float3 commonSun = SunIlluminance(sun) * nDotLsun;
                 float3 diffContribution = kDsun * li.albedo.xyz * orenNayarSun * commonSun;
                 diffuseRadiance += diffContribution;
 

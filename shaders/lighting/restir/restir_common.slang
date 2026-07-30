@@ -467,21 +467,16 @@ public float3 SunDirectionWorld(DirectionalLightData sun)
     return normalize(-sun.directionIntensity.xyz);
 }
 
-public float SunConeSolidAngle(float angularRadius)
+// Uniform cone sampling over the sun disk has pdf 1/solidAngle, which cancels the solid-angle divide that
+// would turn illuminance into radiance. Both terms are therefore dropped and the shading path uses illuminance directly.
+public float3 SunIlluminance(DirectionalLightData sun)
 {
-    if (angularRadius <= 1e-4) { return 1.0; }
-    return 2.0 * PI * (1.0 - cos(angularRadius));
+    return UnpackUnorm4x8(sun.packedColor).rgb * sun.directionIntensity.w;
 }
 
-public float3 SunRadiance(DirectionalLightData sun)
-{
-    return UnpackUnorm4x8(sun.packedColor).rgb * sun.directionIntensity.w / SunConeSolidAngle(sun.angularRadius);
-}
-
-public float3 SampleSunConeDirection(float3 LsunWorld, float angularRadius, float u1, float u2, out float pdf)
+public float3 SampleSunConeDirection(float3 LsunWorld, float angularRadius, float u1, float u2)
 {
     if (angularRadius <= 1e-4) {
-        pdf = 1.0;
         return LsunWorld;
     }
     float cosThetaMax = cos(angularRadius);
@@ -492,11 +487,19 @@ public float3 SampleSunConeDirection(float3 LsunWorld, float angularRadius, floa
     float3 up = abs(LsunWorld.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
     float3 tang = normalize(cross(up, LsunWorld));
     float3 bitang = cross(LsunWorld, tang);
-    pdf = 1.0 / (2.0 * PI * (1.0 - cosThetaMax));
     return normalize(localDir.x * tang + localDir.y * bitang + localDir.z * LsunWorld);
 }
 
-public float EvalSunPHat(float3 LsunView, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 sunRadiance)
+// Sun visibility target encoding: unorm16x2 cone sample when lit, SUN_VIS_EMPTY when shadowed, facing away or unshaded.
+public static const uint SUN_VIS_EMPTY = ~0u;
+
+public uint EncodeSunVis(float2 xi)
+{
+    // Clamped so a legitimate sample can never quantize onto the sentinel.
+    return PackUnorm2x16(min(xi, float2(0.99998, 0.99998)));
+}
+
+public float EvalSunPHat(float3 LsunView, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 sunIlluminance)
 {
     float cosShade = max(dot(N, LsunView), 0.0);
     if (cosShade <= 0.0) { return 0.0; }
@@ -504,8 +507,8 @@ public float EvalSunPHat(float3 LsunView, float3 V, float3 N, float3 albedo, flo
     float3 H = normalize(V + LsunView);
     float D = D_GGX(N, H, roughness);
     float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
-    // Max-channel to match EvalPHat: a tinted sun (sunset) must not inflate W into chromatic fireflies.
-    float sunMax = max(sunRadiance.r, max(sunRadiance.g, sunRadiance.b));
+    // Max-channel to match EvalPHat: a tinted sun (sunset) must not inflate the signal into chromatic fireflies.
+    float sunMax = max(sunIlluminance.r, max(sunIlluminance.g, sunIlluminance.b));
     return brdf * cosShade * sunMax;
 }
 
