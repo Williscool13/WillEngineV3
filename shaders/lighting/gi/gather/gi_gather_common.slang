@@ -5,7 +5,7 @@ import bindless_declarations;
 import constants_interop;
 import shader_functions;
 
-public static const float GI_GATHER_MAX_ACCUM = 32.0;
+public static const float GI_GATHER_MAX_ACCUM = 64.0;
 public static const float GI_GATHER_DISOCCLUSION_SENSITIVITY = 0.01;
 
 public static const uint GI_GATHER_TIER_SCREEN = 0u;

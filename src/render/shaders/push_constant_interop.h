@@ -710,7 +710,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC float bakedDiffuseClampK;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t skyVisIndex;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t rayCount;
 };
@@ -733,6 +733,8 @@ SHADER_PUBLIC struct GIDenoisePushConstant
     SHADER_PUBLIC uint32_t stepSize;
     SHADER_PUBLIC uint32_t aoIndex;
     SHADER_PUBLIC float chromaLumaPower;
+    SHADER_PUBLIC uint32_t srcSkyVisIndex;
+    SHADER_PUBLIC uint32_t dstSkyVisIndex;
 };
 
 SHADER_PUBLIC struct GIUpscalePushConstant
@@ -753,7 +755,7 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t guideIndex;
     SHADER_PUBLIC uint32_t bHistoryValid;
     SHADER_PUBLIC uint32_t dataIndex;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t skyVisIndex;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;

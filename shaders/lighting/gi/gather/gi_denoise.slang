@@ -26,6 +26,7 @@ groupshared uint sNormal[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sViewZ[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sHitT[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sAO[GI_DENOISE_TILE * GI_DENOISE_GROUP];
+groupshared float sSkyVis[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 
 [shader("compute")]
 [numthreads(GI_DENOISE_GROUP, GI_DENOISE_GROUP, 1)]
@@ -59,6 +60,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         bool bFarField = uint(data.y + 0.5) == GI_GATHER_TIER_SKY || data.x >= GI_DENOISE_HITT_FAR_METERS;
         sHitT[t] = bFarField ? -1.0 : data.x;
         sAO[t] = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(fullPixel, 0)).y : 1.0;
+        sSkyVis[t] = rdgTexturesFloat[pc.srcSkyVisIndex].Load(int3(p, 0)).r;
     }
     GroupMemoryBarrierWithGroupSync();
 
@@ -74,6 +76,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
     float4 sumR = UnpackHalf2x16Pair(sShR[centerIdx]);
     float4 sumG = UnpackHalf2x16Pair(sShG[centerIdx]);
     float4 sumB = UnpackHalf2x16Pair(sShB[centerIdx]);
+    float skyVis = sSkyVis[centerIdx];
     float centerViewZ = sViewZ[centerIdx];
     if (centerViewZ != 0.0) {
         float3 centerNormal = UnpackNormalOct16(sNormal[centerIdx]);
@@ -94,6 +97,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
                 if (d == 0) { continue; }
                 uint idx = uint(int(centerIdx) + d);
                 if (sViewZ[idx] == 0.0) { continue; }
+                if (sSkyVis[idx] >= 0.999) { continue; }
                 float3 tapL0 = float3(UnpackHalf2x16Pair(sShR[idx]).x, UnpackHalf2x16Pair(sShG[idx]).x, UnpackHalf2x16Pair(sShB[idx]).x);
                 maxNeighborMag = max(maxNeighborMag, max(tapL0.r, max(tapL0.g, tapL0.b)));
             }
@@ -114,6 +118,8 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
 
         const int2 dir = horizontal ? int2(1, 0) : int2(0, 1);
         float sumW = 1.0;
+        float sumV = skyVis;
+        float sumWV = 1.0;
         [unroll]
         for (int d = -GI_DENOISE_RADIUS; d <= GI_DENOISE_RADIUS; d++) {
             if (d == 0) { continue; }
@@ -132,6 +138,8 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             float w = exp(-0.66 * r * r);
             w *= exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
             w *= pow(saturate(dot(centerNormal, tapNormal)), GI_DENOISE_NORMAL_POWER);
+            // Sky visibility averages across the hit/miss boundary by design: geometric stops only, no hitT or AO steering.
+            float wV = w;
             if (centerHitT >= 0.0 && tapHitT >= 0.0) {
                 w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 0.25));
             }
@@ -142,16 +150,20 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             sumG += UnpackHalf2x16Pair(sShG[idx]) * w;
             sumB += UnpackHalf2x16Pair(sShB[idx]) * w;
             sumW += w;
+            sumV += sSkyVis[idx] * wV;
+            sumWV += wV;
         }
         float invW = 1.0 / sumW;
         sumR *= invW;
         sumG *= invW;
         sumB *= invW;
+        skyVis = sumV / sumWV;
     }
 
     rdgStorageFloat4[pc.dstShRIndex][gatherPixel] = sumR;
     rdgStorageFloat4[pc.dstShGIndex][gatherPixel] = sumG;
     rdgStorageFloat4[pc.dstShBIndex][gatherPixel] = sumB;
+    rdgStorageFloat[pc.dstSkyVisIndex][gatherPixel] = skyVis;
 }
 
 // Chroma-only widening: YCoCg commutes with SH and the kernel, so CoCg gets extra wide iterations while Y keeps the base chain's resolution. Direct loads; an LDS tile at these strides would be oversized.

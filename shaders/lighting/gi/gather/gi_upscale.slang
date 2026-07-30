@@ -20,6 +20,9 @@ static const float GI_UPSCALE_CLAMP_MIN_HISTORY = 4.0;
 static const float GI_UPSCALE_CLAMP_DEV_SCALE = 4.0;
 static const float GI_UPSCALE_CLAMP_RELATIVE = 1.0;
 static const float GI_UPSCALE_CLAMP_EPS = 4e-3;
+static const float GI_UPSCALE_MOMENTS_LERP = 0.25;
+static const float GI_UPSCALE_CLAMP_TEMPORAL_SCALE = 3.0;
+static const float GI_UPSCALE_CHANGE_SENSITIVITY = 0.05;
 static const float GI_UPSCALE_HISTORY_FIX_FRAMES = 8.0;
 static const float GI_UPSCALE_HISTORY_FIX_STRIDE = 8.0;
 
@@ -36,6 +39,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
     if (depth <= 0.0 || (gt1.w & 1u) == 0u) {
         rdgStorageFloat4[pc.outputIndex][pixel] = float4(0.0);
+        // The bilinear moments fetch touches these texels at geometry/sky boundaries, and aliased RDG memory is never zeroed.
+        rdgStorageFloat2[pc.momentsIndex][pixel] = float2(0.0);
         return;
     }
 
@@ -53,14 +58,22 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float invPlaneSigma = 1.0 / (GI_UPSCALE_PLANE_DIST_SIGMA * abs(centerViewZ));
     float centerAO = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(pixel, 0)).y : 1.0;
 
+    // Restores the sky the gather SH no longer carries: filtered miss fraction times prefiltered sky irradiance.
+    float3 skyTerm = float3(0.0);
+    if (pc.skyVisIndex != ~0x0u && pc.skyboxIndex >= 0) {
+        skyTerm = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], evalN) * pc.iblIntensity;
+    }
+
     float4 shR = float4(0.0);
     float4 shG = float4(0.0);
     float4 shB = float4(0.0);
     float sumW = 0.0;
+    float sumV = 0.0;
     float4 fbShR = float4(0.0);
     float4 fbShG = float4(0.0);
     float4 fbShB = float4(0.0);
     float fbW = 0.0;
+    float fbV = 0.0;
     float3 irrM1 = float3(0.0);
     float3 irrM2 = float3(0.0);
     float clampTaps = 0.0;
@@ -92,7 +105,9 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
         float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
         float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
-        float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0));
+        float tapV = pc.skyVisIndex != ~0x0u ? rdgTexturesFloat[pc.skyVisIndex].Load(int3(tap, 0)).r : 0.0;
+        // Clamp moments must see the same total the blend produces, or the box drags history toward the sky-less SH.
+        float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0)) + tapV * skyTerm;float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0)) + tapV * skyTerm;
         irrM1 += tapIrr;
         irrM2 += tapIrr * tapIrr;
         clampTaps += 1.0;
@@ -100,12 +115,14 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         shG += tapShG * w;
         shB += tapShB * w;
         sumW += w;
+        sumV += tapV * w;
         float2 bw2 = lerp(1.0 - footprintFrac, footprintFrac, float2(float(i & 1u), float(i >> 1u)));
         float bw = bw2.x * bw2.y;
         fbShR += tapShR * bw;
         fbShG += tapShG * bw;
         fbShB += tapShB * bw;
         fbW += bw;
+        fbV += tapV * bw;
     }
 
     float3 worldPos = mul(scene.invView, float4(centerXv, 1.0)).xyz;
@@ -114,11 +131,11 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float3 current;
     if (sumW > 1e-4) {
         float invW = 1.0 / sumW;
-        current = max(float3(shR.x + dot(shR.yzw, evalN), shG.x + dot(shG.yzw, evalN), shB.x + dot(shB.yzw, evalN)) * invW, float3(0.0));
+        current = max(float3(shR.x + dot(shR.yzw, evalN), shG.x + dot(shG.yzw, evalN), shB.x + dot(shB.yzw, evalN)) * invW, float3(0.0)) + sumV * invW * skyTerm;
     } else if (fbW > 1e-4) {
         // All taps guide-rejected but valid geometry exists (sub-half-res features: slots, trim): bilinear over the valid taps only. A single best tap is quad-constant and shows as 2x2 blocks; bilinear is continuous, and backface/sky texels never enter (validity-gated above).
         float invW = 1.0 / fbW;
-        current = max(float3(fbShR.x + dot(fbShR.yzw, evalN), fbShG.x + dot(fbShG.yzw, evalN), fbShB.x + dot(fbShB.yzw, evalN)) * invW, float3(0.0));
+        current = max(float3(fbShR.x + dot(fbShR.yzw, evalN), fbShG.x + dot(fbShG.yzw, evalN), fbShB.x + dot(fbShB.yzw, evalN)) * invW, float3(0.0)) + fbV * invW * skyTerm;
     } else if (!bAnyBackfaceTap) {
         current = float3(0.0);
         if (pc.skyboxIndex >= 0) {
@@ -222,11 +239,44 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                     float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
                     float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
                     float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
-                    fixSum += max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0)) * w;
+                    float3 fixIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0));
+                    if (pc.skyVisIndex != ~0x0u) {
+                        fixIrr += rdgTexturesFloat[pc.skyVisIndex].Load(int3(tap, 0)).r * skyTerm;
+                    }
+                    fixSum += fixIrr * w;
                     fixW += w;
                 }
             }
             current = fixSum / fixW;
+        }
+    }
+
+    // Temporal luma moments: spatial dev over 4 correlated post-atrous taps underestimates true 1rpp deviation, so stationary noise is measured over time instead.
+    float curLuma = Luma(current);
+    float2 curMoments = float2(curLuma, curLuma * curLuma);
+    float2 prevMoments = curMoments;
+    bool bMoments = false;
+    if (pc.bMomentsValid != 0u && history.quality > 0.0) {
+        float2 momentsUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
+        if (all(momentsUv >= float2(0.0)) && all(momentsUv <= float2(1.0))) {
+            prevMoments = rdgTexturesFloat2[pc.momentsHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], momentsUv, 0).rg;
+            bMoments = true;
+        }
+    }
+    // Deviation from PRE-update moments so this frame's change cannot mask itself.
+    float temporalDev = sqrt(max(prevMoments.y - prevMoments.x * prevMoments.x, 0.0));
+    rdgStorageFloat2[pc.momentsIndex][pixel] = bHasCurrent ? lerp(prevMoments, curMoments, GI_UPSCALE_MOMENTS_LERP) : prevMoments;
+
+    float changeResponse = 0.0;
+    if (bMoments && bHasCurrent) {
+        float histLuma = Luma(history.color);
+        float temporalChange = abs(histLuma - curLuma) / max(histLuma + curLuma, 1e-4);
+        // Relative change against relative deviation: fires on genuine lighting change, stays quiet where the pixel is merely noisy.
+        float relDev = temporalDev / max(prevMoments.x, 1e-4);
+        changeResponse = smoothstep(0.1, 1.0, GI_UPSCALE_CHANGE_SENSITIVITY * temporalChange / max(relDev, 0.02));
+        if (changeResponse > 0.0) {
+            n = min(n, lerp(GI_GATHER_MAX_ACCUM - 1.0, GI_UPSCALE_MOVING_MAX_ACCUM, changeResponse));
+            nBlend = n * history.quality;
         }
     }
 
@@ -241,6 +291,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
 
                 float3 relative = min(abs(history.color), abs(current)) * GI_UPSCALE_CLAMP_RELATIVE;
                 float3 devFloor = max(dev * GI_UPSCALE_CLAMP_DEV_SCALE, relative + float3(GI_UPSCALE_CLAMP_EPS));
+                // A correlated noise frame collapses both spatial dev and the relative floor, letting the box snap converged history onto it; genuine change shrinks the temporal floor so the clamp still bites.
+                devFloor = max(devFloor, float3(temporalDev * GI_UPSCALE_CLAMP_TEMPORAL_SCALE * lerp(1.0, 0.25, changeResponse)));
                 float3 histDist = abs(history.color - current) / devFloor;
                 float3 closest = clamp(history.color, current - devFloor, current + devFloor);
                 history.color = lerp(history.color, closest, smoothstep(float3(1.0), float3(3.0), histDist));

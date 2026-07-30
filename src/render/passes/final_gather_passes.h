@@ -28,8 +28,13 @@ inline const StringID GI_GATHER_RAW_SH_B = SID("gi_gather_raw_sh_b");
 inline const StringID GI_GATHER_TMP_SH_R = SID("gi_gather_tmp_sh_r");
 inline const StringID GI_GATHER_TMP_SH_G = SID("gi_gather_tmp_sh_g");
 inline const StringID GI_GATHER_TMP_SH_B = SID("gi_gather_tmp_sh_b");
+inline const StringID GI_GATHER_SKY_VIS = SID("gi_gather_sky_vis");
+inline const StringID GI_GATHER_RAW_SKY_VIS = SID("gi_gather_raw_sky_vis");
+inline const StringID GI_GATHER_TMP_SKY_VIS = SID("gi_gather_tmp_sky_vis");
 inline const StringID GI_GATHER_RESOLVED = SID("gi_gather_resolved");
 inline const StringID GI_GATHER_HISTORY = SID("gi_gather_history");
+inline const StringID GI_GATHER_MOMENTS = SID("gi_gather_moments");
+inline const StringID GI_GATHER_MOMENTS_HISTORY = SID("gi_gather_moments_history");
 inline const StringID GI_DECONSTRUCT_TARGET = SID("gi_deconstruct_target");
 
 inline constexpr uint32_t GI_GATHER_MAX_RAYS_PER_PIXEL = 8u;
