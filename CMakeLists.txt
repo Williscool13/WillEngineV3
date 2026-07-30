@@ -103,6 +103,13 @@ add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
 add_compile_definitions(GLM_ENABLE_EXPERIMENTAL)
 # EnTT Debug-build perf on Windows: https://github.com/skypjack/entt/wiki/Frequently-Asked-Questions#why-is-my-debug-build-on-windows-so-slow
 add_compile_definitions(ENTT_DISABLE_ASSERT)
+# __FUNCTION__ in a lambda is bare operator() on Clang/GCC
+# __FUNCSIG__/__PRETTY_FUNCTION__ keep the enclosing function and are not diagnosed.
+if (MSVC)
+    add_compile_definitions(SPDLOG_FUNCTION=__FUNCSIG__)
+else ()
+    add_compile_definitions(SPDLOG_FUNCTION=__PRETTY_FUNCTION__)
+endif ()
 if (MSVC)
     add_compile_definitions($<$<CONFIG:Debug>:_ITERATOR_DEBUG_LEVEL=0>)
     add_compile_options($<$<CONFIG:Debug>:/JMC->)

@@ -36,6 +36,15 @@ struct InlineString
         buf[len] = '\0';
     }
 
+    template<size_t M>
+    explicit InlineString(const InlineString<M>& other)
+    {
+        len = other.len;
+        if (len >= N) { len = N - 1; }
+        memcpy(buf, other.buf, len);
+        buf[len] = '\0';
+    }
+
     template<typename... Args>
     [[nodiscard]] static InlineString Format(const char* fmt, Args&&... args)
     {

@@ -40,6 +40,7 @@
 
 #if WILL_EDITOR
 #include "editor/asset-generation/asset_generator.h"
+#include "editor/asset-generation/asset_source_catalog.h"
 #endif
 
 #if PROFILER_ENABLED
@@ -963,138 +964,102 @@ void WillEngine::EditorImgui()
     if (ImGui::Checkbox("Fast Mode##assetgen", &fastMode)) {
         assetGenerator->SetFastMode(fastMode);
     }
-    if (ImGui::Button("Recreate All Assets (excl. Intel Sponza)")) {
-        const Core::Path assets = Platform::GetAssetPath();
-        assetGenerator->RequestModelGenerate(assets / "dragon/dragon.gltf", assets / "dragon/dragon.wsmesh");
-        assetGenerator->RequestModelGenerate(assets / "BoxTextured.glb", assets / "BoxTextured.wsmesh");
-        assetGenerator->RequestModelGenerate(assets / "BoxTextured4k.glb", assets / "BoxTextured4k.wsmesh");
-        assetGenerator->RequestModelGenerate(assets / "Sphere.glb", assets / "Sphere.wsmesh");
-        assetGenerator->RequestModelGenerate(assets / "sponza2/sponza.gltf", assets / "sponza2/sponza.wsmesh");
-        assetGenerator->RequestModelGenerate(assets / "Plane.glb", assets / "Plane.wsmesh");
-        assetGenerator->RequestModelGenerate(assets / "LightPanel.glb", assets / "LightPanel.wsmesh");
-        assetGenerator->RequestTextureGenerateFromFile(
-            assets / "textures/smiling_friend.jpg",
-            assets / "textures/smiling_friend.wtexture",
-            true,
-            DXGI_FORMAT_BC7_UNORM_SRGB);
-        assetGenerator->RequestTextureGenerateFromFile(
-            assets / "textures/prototype_texture_dark.png",
-            assets / "textures/prototype_texture_dark.wtexture",
-            true,
-            DXGI_FORMAT_BC7_UNORM_SRGB);
-        assetGenerator->RequestTextureGenerateFromFile(
-            assets / "textures/sprites/sprite_point_light.png",
-            assets / "textures/sprites/sprite_point_light.wtexture",
-            true,
-            DXGI_FORMAT_BC7_UNORM_SRGB);
-        assetGenerator->RequestTextureGenerateFromFile(
-            assets / "textures/sprites/sprite_area_light.png",
-            assets / "textures/sprites/sprite_area_light.wtexture",
-            true,
-            DXGI_FORMAT_BC7_UNORM_SRGB);
-        assetGenerator->RequestTextureGenerateFromFile(
-            assets / "textures/sprites/sprite_directional_light.png",
-            assets / "textures/sprites/sprite_directional_light.wtexture",
-            true,
-            DXGI_FORMAT_BC7_UNORM_SRGB);
-        assetGenerator->GenerateBRDFLUT(assets / "textures/brdf_lut.wtexture");
-        assetGenerator->GenerateSMAATextures(assets / "textures");
-        assetGenerator->GenerateBlueNoiseTexture(assets / "textures/blue_noise.wtexture");
-        assetGenerator->RequestFontGenerate(
-            assets / "fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf",
-            assets / "fonts/Roboto/Roboto.wsfont");
-        assetGenerator->RequestFontGenerate(
-            assets / "fonts/JetBrainsMono/fonts/ttf/JetBrainsMonoNL-Regular.ttf",
-            assets / "fonts/JetBrainsMono/JetBrainsMono.wsfont");
-    }
-
     if (ImGui::CollapsingHeader("Asset Generation")) {
-        if (ImGui::CollapsingHeader("Individual Assets##individual")) {
-            ImGui::Separator();
-            ImGui::Text("Generate Models:");
+        static Editor::AssetSourceCatalog* sourceCatalog = nullptr;
+        if (sourceCatalog == nullptr) {
+            sourceCatalog = new(memoryManager.PersistentAllocRaw(sizeof(Editor::AssetSourceCatalog), Core::AllocTag::AssetGenerator)) Editor::AssetSourceCatalog{};
+            sourceCatalog->Scan(memoryManager);
+        }
 
-            if (ImGui::Button("Intel Sponza")) {
-                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "IntelSponza.glb", Platform::GetAssetPath() / "IntelSponza.wsmesh");
+        auto requestGenerate = [this](const Editor::AssetSourceEntry& entry) {
+            const Core::Path output = Editor::AssetSourceCatalog::OutputPathFor(entry);
+            if (output.IsEmpty()) {
+                return;
             }
-            if (ImGui::Button("dragon.wsmesh")) {
-                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "dragon/dragon.gltf", Platform::GetAssetPath() / "dragon/dragon.wsmesh");
-            }
-
-            if (ImGui::Button("BoxTextured.wsmesh")) {
-                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "BoxTextured.glb", Platform::GetAssetPath() / "BoxTextured.wsmesh");
-            }
-
-            if (ImGui::Button("BoxTextured4k.wsmesh")) {
-                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "BoxTextured4k.glb", Platform::GetAssetPath() / "BoxTextured4k.wsmesh");
-            }
-            if (ImGui::Button("Sphere.wsmesh")) {
-                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "Sphere.glb", Platform::GetAssetPath() / "Sphere.wsmesh");
-            }
-
-            if (ImGui::Button("sponza.wsmesh")) {
-                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "sponza2/sponza.gltf", Platform::GetAssetPath() / "sponza2/sponza.wsmesh");
-            }
-            if (ImGui::Button("plane.wsmesh")) {
-                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "Plane.glb", Platform::GetAssetPath() / "Plane.wsmesh");
-            }
-            if (ImGui::Button("LightPanel.wsmesh")) {
-                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "LightPanel.glb", Platform::GetAssetPath() / "LightPanel.wsmesh");
-            }
-            if (ImGui::Button("LumberyardBistro.wsmesh")) {
-                assetGenerator->RequestModelGenerate(
-                    Core::Path{"D:/source/repos/RTXDI-Assets/bistro/bistro.gltf"},
-                    Platform::GetAssetPath() / "models/LumberyardBistro/LumberyardBistro.wsmesh",
-                    Platform::GetAssetPath() / "models/LumberyardBistro/textures"
-                );
-            }
-
-            ImGui::SeparatorText("Generate Environment Map:"); {
-                static Core::InlineVector<Core::Path, 32> hdrFiles;
-                static int selectedHdrIdx = 0;
-                static bool hdrScanned = false;
-
-                if (ImGui::Button("Refresh##hdr") || !hdrScanned) {
-                    hdrFiles.Clear();
-                    Core::Path tempPaths[32];
-                    const uint32_t found = Platform::FindFilesByExtension(
-                        Platform::GetAssetPath(), ".hdr", tempPaths, 32);
-                    for (uint32_t i = 0; i < found; ++i) {
-                        hdrFiles.PushBack(std::move(tempPaths[i]));
-                    }
-                    selectedHdrIdx = 0;
-                    hdrScanned = true;
+            switch (entry.kind) {
+                case Editor::AssetSourceKind::Model: {
+                    assetGenerator->RequestModelGenerate(entry.sourcePath, output, Editor::AssetSourceCatalog::TextureOutputDirFor(entry));
+                    break;
                 }
+                case Editor::AssetSourceKind::Texture: {
+                    assetGenerator->RequestTextureGenerateFromFile(entry.sourcePath, output, true, DXGI_FORMAT_BC7_UNORM_SRGB);
+                    break;
+                }
+                case Editor::AssetSourceKind::EnvironmentMap: {
+                    assetGenerator->RequestEnvironmentMapGenerate(entry.sourcePath, output);
+                    break;
+                }
+                case Editor::AssetSourceKind::Font: {
+                    assetGenerator->RequestFontGenerate(entry.sourcePath, output);
+                    break;
+                }
+            }
+        };
 
-                if (!hdrFiles.IsEmpty()) {
-                    selectedHdrIdx = std::clamp(selectedHdrIdx, 0, static_cast<int>(hdrFiles.Size()) - 1);
+        if (ImGui::Button("Rescan Sources")) {
+            sourceCatalog->Scan(memoryManager);
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(sourceCatalog->outdatedCount == 0);
+        const auto regenLabel = Core::InlineString<64>::Format("Regenerate Outdated (%u)###regen_outdated", sourceCatalog->outdatedCount);
+        if (ImGui::Button(regenLabel.c_str())) {
+            for (const Editor::AssetSourceEntry& entry : sourceCatalog->entries) {
+                if (entry.state == Editor::AssetOutputState::Outdated && entry.kind != Editor::AssetSourceKind::Font) {
+                    requestGenerate(entry);
+                }
+            }
+        }
+        ImGui::EndDisabled();
+
+        const std::string_view assetRootView = Platform::GetAssetPath().View();
+        auto drawSourceSection = [&](const char* title, Editor::AssetSourceKind kind, ImGuiTreeNodeFlags flags) {
+            uint32_t count = 0;
+            for (const Editor::AssetSourceEntry& entry : sourceCatalog->entries) {
+                if (entry.kind == kind) {
+                    count++;
+                }
+            }
+            const auto header = Core::InlineString<64>::Format("%s (%u)###%s", title, count, title);
+            if (!ImGui::TreeNodeEx(header.c_str(), flags)) {
+                return;
+            }
+            for (const Editor::AssetSourceEntry& entry : sourceCatalog->entries) {
+                if (entry.kind != kind) {
+                    continue;
+                }
+                ImGui::PushID(&entry);
+                if (ImGui::SmallButton("Generate")) {
+                    requestGenerate(entry);
                 }
                 ImGui::SameLine();
-                ImGui::SetNextItemWidth(-1);
-                ImGui::BeginDisabled(hdrFiles.IsEmpty());
-                const char* previewLabel = hdrFiles.IsEmpty() ? "No .hdr files found" : hdrFiles[selectedHdrIdx].Filename().data();
-                if (ImGui::BeginCombo("##hdr_list", previewLabel)) {
-                    for (int i = 0; i < static_cast<int>(hdrFiles.Size()); ++i) {
-                        const bool selected = (i == selectedHdrIdx);
-                        if (ImGui::Selectable(hdrFiles[i].Filename().data(), selected)) {
-                            selectedHdrIdx = i;
-                        }
-                    }
-                    ImGui::EndCombo();
+                std::string_view label = entry.sourcePath.View();
+                if (label.size() > assetRootView.size() && label.substr(0, assetRootView.size()) == assetRootView) {
+                    label = label.substr(assetRootView.size() + 1);
                 }
-                ImGui::EndDisabled();
-
-                ImGui::BeginDisabled(hdrFiles.IsEmpty());
-                if (ImGui::Button("Generate##envmap")) {
-                    const Core::Path& hdrPath = hdrFiles[selectedHdrIdx];
-                    const auto stem = hdrPath.Stem();
-                    Core::InlineString<256> outName;
-                    outName.Append(stem.data(), stem.size());
-                    outName.Append(".wenvmap");
-                    const Core::Path outputPath = hdrPath.Parent() / outName.c_str();
-                    assetGenerator->RequestEnvironmentMapGenerate(hdrPath, outputPath);
+                ImGui::TextUnformatted(label.data(), label.data() + label.size());
+                if (entry.state == Editor::AssetOutputState::Missing) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("not generated");
                 }
-                ImGui::EndDisabled();
+                else if (entry.state == Editor::AssetOutputState::Outdated) {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "outdated");
+                }
+                ImGui::PopID();
             }
+            ImGui::TreePop();
+        };
+
+        drawSourceSection("Models", Editor::AssetSourceKind::Model, ImGuiTreeNodeFlags_DefaultOpen);
+        drawSourceSection("Textures", Editor::AssetSourceKind::Texture, ImGuiTreeNodeFlags_DefaultOpen);
+        drawSourceSection("Environment Maps", Editor::AssetSourceKind::EnvironmentMap, ImGuiTreeNodeFlags_DefaultOpen);
+        drawSourceSection("Fonts", Editor::AssetSourceKind::Font, ImGuiTreeNodeFlags_None);
+
+        if (ImGui::Button("Generate Derived (BRDF LUT, SMAA, Blue Noise)")) {
+            assetGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
+            assetGenerator->GenerateSMAATextures(Platform::GetAssetPath() / "textures");
+            assetGenerator->GenerateBlueNoiseTexture(Platform::GetAssetPath() / "textures/blue_noise.wtexture");
+        }
 
             ImGui::SeparatorText("Skybox LOD:"); {
                 static constexpr const char* kLODLabels[] = {"Specular 0", "Specular 1", "Specular 2", "Specular 3", "Diffuse"};
@@ -1110,71 +1075,6 @@ void WillEngine::EditorImgui()
                 }
             }
 
-            if (ImGui::Button("Generate BRDF LUT, Smiling Friend, and Prototype Texture")) {
-                assetGenerator->RequestTextureGenerateFromFile(
-                    Platform::GetAssetPath() / "textures/smiling_friend.jpg",
-                    Platform::GetAssetPath() / "textures/smiling_friend.wtexture",
-                    true,
-                    DXGI_FORMAT_BC7_UNORM_SRGB);
-                assetGenerator->RequestTextureGenerateFromFile(
-                    Platform::GetAssetPath() / "textures/prototype_texture_dark.png",
-                    Platform::GetAssetPath() / "textures/prototype_texture_dark.wtexture",
-                    true,
-                    DXGI_FORMAT_BC7_UNORM_SRGB);
-                assetGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
-                assetGenerator->GenerateSMAATextures(Platform::GetAssetPath() / "textures");
-                assetGenerator->GenerateBlueNoiseTexture(Platform::GetAssetPath() / "textures/blue_noise.wtexture");
-            }
-
-            if (ImGui::Button("Generate Roboto")) {
-                assetGenerator->RequestFontGenerate(
-                    Platform::GetAssetPath() / "fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf",
-                    Platform::GetAssetPath() / "fonts/Roboto/Roboto.wsfont");
-            }
-
-            if (ImGui::Button("Generate JetBrainsMono")) {
-                assetGenerator->RequestFontGenerate(
-                    Platform::GetAssetPath() / "fonts/JetBrainsMono/fonts/ttf/JetBrainsMonoNL-Regular.ttf",
-                    Platform::GetAssetPath() / "fonts/JetBrainsMono/JetBrainsMono.wsfont");
-            }
-
-            if (ImGui::Button("Generate FascinateInline")) {
-                assetGenerator->RequestFontGenerate(
-                    Platform::GetAssetPath() / "fonts/FascinateInline/FascinateInline-Regular.ttf",
-                    Platform::GetAssetPath() / "fonts/FascinateInline/FascinateInline.wsfont");
-            }
-
-            ImGui::SeparatorText("Sprites:");
-            static bool spriteFlipY = true;
-            ImGui::Checkbox("Flip Y##sprite", &spriteFlipY);
-            ImGui::SameLine();
-            if (ImGui::Button("Generate sprite_point_light")) {
-                assetGenerator->RequestTextureGenerateFromFile(
-                    Platform::GetAssetPath() / "textures/sprites/sprite_point_light.png",
-                    Platform::GetAssetPath() / "textures/sprites/sprite_point_light.wtexture",
-                    true,
-                    DXGI_FORMAT_BC7_UNORM_SRGB,
-                    spriteFlipY);
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Generate sprite_area_light")) {
-                assetGenerator->RequestTextureGenerateFromFile(
-                    Platform::GetAssetPath() / "textures/sprites/sprite_area_light.png",
-                    Platform::GetAssetPath() / "textures/sprites/sprite_area_light.wtexture",
-                    true,
-                    DXGI_FORMAT_BC7_UNORM_SRGB,
-                    spriteFlipY);
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Generate sprite_directional_light")) {
-                assetGenerator->RequestTextureGenerateFromFile(
-                    Platform::GetAssetPath() / "textures/sprites/sprite_directional_light.png",
-                    Platform::GetAssetPath() / "textures/sprites/sprite_directional_light.wtexture",
-                    true,
-                    DXGI_FORMAT_BC7_UNORM_SRGB,
-                    spriteFlipY);
-            }
-
             ImGui::SeparatorText("Procedural Textures:");
             if (ImGui::Button("Load Yellow Texture")) {
                 assetManager->LoadProceduralTexture(SID("yellow_texture"), 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
@@ -1182,7 +1082,6 @@ void WillEngine::EditorImgui()
             if (ImGui::Button("Load Domain Warp")) {
                 assetManager->LoadProceduralTexture(SID("domain_warp"), 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
             }
-        }
 
         ImGui::Separator();
         ImGui::Text("Generation Progress:");
