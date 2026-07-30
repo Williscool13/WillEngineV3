@@ -544,6 +544,95 @@ static void HullDoor(const DoorParams& p, Core::Vector<Vec3>& out)
     }
 }
 
+// Greedy maximal-rectangle cover of the solid cells in GenerateWall's cut grid
+static void CompoundWall(const WallParams& p, Core::Vector<SplineColliderPrimitive>& out)
+{
+    const float sx = p.sizeX, sy = p.sizeY, sz = p.sizeZ;
+    if (sx <= 0.0f || sy <= 0.0f || sz <= 0.0f) { return; }
+
+    struct Rect { float x0, y0, x1, y1; };
+    Rect holes[WallParams::MAX_OPENINGS];
+    int holeCount = 0;
+    const int32_t count = glm::clamp(p.openingCount, 0, WallParams::MAX_OPENINGS);
+    for (int32_t i = 0; i < count; i++) {
+        const WallOpening& o = p.openings[i];
+        const Rect r{glm::clamp(o.x, 0.0f, sx), glm::clamp(o.y, 0.0f, sy), glm::clamp(o.x + o.w, 0.0f, sx), glm::clamp(o.y + o.h, 0.0f, sy)};
+        if (r.x1 - r.x0 > 1e-5f && r.y1 - r.y0 > 1e-5f) { holes[holeCount++] = r; }
+    }
+
+    constexpr int MAX_CUTS = 2 + 2 * WallParams::MAX_OPENINGS;
+    float xs[MAX_CUTS], ys[MAX_CUTS];
+    int xn = 0, yn = 0;
+    auto insertCut = [](float* arr, int& n, float v) {
+        for (int i = 0; i < n; i++) {
+            if (glm::abs(arr[i] - v) < 1e-5f) { return; }
+            if (v < arr[i]) {
+                for (int j = n; j > i; j--) { arr[j] = arr[j - 1]; }
+                arr[i] = v;
+                n++;
+                return;
+            }
+        }
+        arr[n++] = v;
+    };
+    insertCut(xs, xn, 0.0f);
+    insertCut(xs, xn, sx);
+    insertCut(ys, yn, 0.0f);
+    insertCut(ys, yn, sy);
+    for (int i = 0; i < holeCount; i++) {
+        insertCut(xs, xn, holes[i].x0);
+        insertCut(xs, xn, holes[i].x1);
+        insertCut(ys, yn, holes[i].y0);
+        insertCut(ys, yn, holes[i].y1);
+    }
+
+    const int cols = xn - 1, rows = yn - 1;
+    bool solid[(MAX_CUTS - 1) * (MAX_CUTS - 1)];
+    bool used[(MAX_CUTS - 1) * (MAX_CUTS - 1)] = {};
+    for (int cy = 0; cy < rows; cy++) {
+        for (int cx = 0; cx < cols; cx++) {
+            const float mx = (xs[cx] + xs[cx + 1]) * 0.5f;
+            const float my = (ys[cy] + ys[cy + 1]) * 0.5f;
+            bool inHole = false;
+            for (int i = 0; i < holeCount; i++) {
+                if (mx > holes[i].x0 && mx < holes[i].x1 && my > holes[i].y0 && my < holes[i].y1) {
+                    inHole = true;
+                    break;
+                }
+            }
+            solid[cy * cols + cx] = !inHole;
+        }
+    }
+
+    for (int cy = 0; cy < rows; cy++) {
+        for (int cx = 0; cx < cols; cx++) {
+            if (!solid[cy * cols + cx] || used[cy * cols + cx]) { continue; }
+            int cx1 = cx;
+            while (cx1 + 1 < cols && solid[cy * cols + cx1 + 1] && !used[cy * cols + cx1 + 1]) { cx1++; }
+            int cy1 = cy;
+            bool grow = true;
+            while (grow && cy1 + 1 < rows) {
+                for (int x = cx; x <= cx1; x++) {
+                    if (!solid[(cy1 + 1) * cols + x] || used[(cy1 + 1) * cols + x]) {
+                        grow = false;
+                        break;
+                    }
+                }
+                if (grow) { cy1++; }
+            }
+            for (int y = cy; y <= cy1; y++) {
+                for (int x = cx; x <= cx1; x++) { used[y * cols + x] = true; }
+            }
+
+            SplineColliderPrimitive prim{};
+            prim.type = SplineColliderPrimitiveType::Box;
+            prim.halfExtents = Vec3((xs[cx1 + 1] - xs[cx]) * 0.5f, (ys[cy1 + 1] - ys[cy]) * 0.5f, sz * 0.5f);
+            prim.position = Vec3((xs[cx] + xs[cx1 + 1]) * 0.5f, (ys[cy] + ys[cy1 + 1]) * 0.5f, sz * 0.5f);
+            out.PushBack(prim);
+        }
+    }
+}
+
 bool CanBuildProceduralCollider(const ProceduralParams& params)
 {
     return std::holds_alternative<BoxParams>(params)
@@ -562,6 +651,7 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<RingParams>(params)
         || std::holds_alternative<ArchParams>(params)
         || std::holds_alternative<DoorParams>(params)
+        || std::holds_alternative<WallParams>(params)
         || std::holds_alternative<TetrahedronParams>(params)
         || std::holds_alternative<OctahedronParams>(params)
         || std::holds_alternative<IcosahedronParams>(params)
@@ -655,6 +745,11 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
     if (const auto* p = std::get_if<ArchParams>(&params)) {
         outKind = PhysicsColliderKind::Compound;
         CompoundArch(*p, outPrimitives);
+        return true;
+    }
+    if (const auto* p = std::get_if<WallParams>(&params)) {
+        outKind = PhysicsColliderKind::Compound;
+        CompoundWall(*p, outPrimitives);
         return true;
     }
 

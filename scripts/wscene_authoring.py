@@ -132,11 +132,20 @@ def spiral_params(stepCount, totalHeight, outerRadius, centerColumnRadius, tread
             "degreesPerStep": degreesPerStep, "totalSweep": totalSweep, "bSpecifyDegreesPerStep": specifyDegrees,
             "arcSegments": arcSegments, "bShowCenterColumn": showColumn, "bRamp": ramp}, 23
 def ring_params(outer, inner, slices=32, doubleSided=True): return {"outerRadius": outer, "innerRadius": inner, "slices": slices, "bDoubleSided": doubleSided}, 24
+def wall_params(size_x, size_y, size_z, openings=()):
+    """Slab with up to 8 rectangular holes through its thickness (Z). Corner pivot like box_params.
+    openings = iterable of (x, y, w, h) in face-plane coords: x along size_x, y along size_y, from the
+    corner origin. One welded mesh, no coplanar overlaps; collider = compound of the solid spans.
+    Replaces the three-boxes-plus-lintel doorway idiom."""
+    ops = [list(o) for o in openings]
+    if len(ops) > 8:
+        raise ValueError(f"wall_params: {len(ops)} openings, max is 8")
+    return {"sizeX": size_x, "sizeY": size_y, "sizeZ": size_z, "openings": ops}, 25
 
 # proceduralType index -> variant name, for reference / error messages
 PROC_TYPE_NAMES = ["monostate", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door",
                     "Plane", "Sphere", "SubdividedSphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                    "Icosahedron", "Dodecahedron", "KleinBottle", "TrefoilKnot", "CurvedRamp", "Bowl", "SpiralStaircase", "Ring"]
+                    "Icosahedron", "Dodecahedron", "KleinBottle", "TrefoilKnot", "CurvedRamp", "Bowl", "SpiralStaircase", "Ring", "Wall"]
 
 # =============================================================================
 # Spiral staircase ramp-mode geometry (ported from CompoundSpiralStaircase in

@@ -378,6 +378,16 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                         shapeJson["slices"] = p.slices;
                         shapeJson["bDoubleSided"] = p.bDoubleSided;
                     }
+                    else if constexpr (std::is_same_v<T, Engine::WallParams>) {
+                        shapeJson["sizeX"] = p.sizeX;
+                        shapeJson["sizeY"] = p.sizeY;
+                        shapeJson["sizeZ"] = p.sizeZ;
+                        shapeJson["openings"] = nlohmann::json::array();
+                        const int32_t n = glm::clamp(p.openingCount, 0, Engine::WallParams::MAX_OPENINGS);
+                        for (int32_t i = 0; i < n; i++) {
+                            shapeJson["openings"].push_back({p.openings[i].x, p.openings[i].y, p.openings[i].w, p.openings[i].h});
+                        }
+                    }
                 }, shape.proceduralParams);
                 break;
         }
@@ -632,6 +642,19 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                         p.innerRadius = shapeJson["innerRadius"].get<float>();
                         p.slices = shapeJson["slices"].get<int32_t>();
                         p.bDoubleSided = shapeJson.value("bDoubleSided", true);
+                        shape.proceduralParams = p;
+                    }
+                    else if (ptype == 25) {
+                        Engine::WallParams p{};
+                        p.sizeX = shapeJson["sizeX"].get<float>();
+                        p.sizeY = shapeJson["sizeY"].get<float>();
+                        p.sizeZ = shapeJson["sizeZ"].get<float>();
+                        if (shapeJson.contains("openings")) {
+                            for (const auto& e : shapeJson["openings"]) {
+                                if (p.openingCount >= Engine::WallParams::MAX_OPENINGS) { break; }
+                                p.openings[p.openingCount++] = {e[0].get<float>(), e[1].get<float>(), e[2].get<float>(), e[3].get<float>()};
+                            }
+                        }
                         shape.proceduralParams = p;
                     }
                 }

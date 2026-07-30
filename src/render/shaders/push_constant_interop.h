@@ -763,6 +763,9 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    SHADER_PUBLIC uint32_t momentsIndex;
+    SHADER_PUBLIC uint32_t momentsHistoryIndex;
+    SHADER_PUBLIC uint32_t bMomentsValid;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant

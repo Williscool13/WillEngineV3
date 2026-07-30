@@ -179,8 +179,10 @@ struct StaircaseParams
     float totalDepth{3.0f};
     float totalHeight{2.0f};
     bool bSpecifyStepHeight{false};
+    uint8_t _pad0[3]{};
     float stepHeight{0.2f};
     bool bIsClosed{true};
+    uint8_t _pad1[3]{};
 };
 
 struct BoxParams
@@ -194,6 +196,7 @@ struct CylinderParams
     float height{2.0f};
     int32_t slices{16};
     bool bCapped{true};
+    uint8_t _pad0[3]{};
 };
 
 struct CapsuleParams
@@ -220,6 +223,7 @@ struct ArchParams
     float thickness{0.3f};
     int32_t sides{8};
     bool bFillCorners{false};
+    uint8_t _pad0[3]{};
 };
 
 struct WedgeParams
@@ -235,6 +239,7 @@ struct ConeParams
     float height{2.0f};
     int32_t slices{16};
     bool bCapped{true};
+    uint8_t _pad0[3]{};
 };
 
 /**
@@ -250,6 +255,7 @@ struct DoorParams
     int32_t sides{8};
     bool bHalf{false};
     bool bFlip{false};
+    uint8_t _pad0[2]{};
 };
 
 struct PlaneParams
@@ -393,6 +399,7 @@ struct CurvedRampParams
     float radius{2.0f};
     int32_t segments{8};
     bool bHalfPipe{false};
+    uint8_t _pad0[3]{};
     float flatLength{1.0f};
     float lipHeight{0.02f};
 };
@@ -408,15 +415,18 @@ struct SpiralStaircaseParams
     float stepHeight{0.2f};
     float totalHeight{2.4f};
     bool bSpecifyStepHeight{false};
+    uint8_t _pad0[3]{};
     float outerRadius{1.5f};
     float centerColumnRadius{0.25f};
     float treadThickness{0.08f};
     float degreesPerStep{30.0f};
     float totalSweep{360.0f};
     bool bSpecifyDegreesPerStep{false};
+    uint8_t _pad1[3]{};
     int32_t arcSegments{6};
     bool bShowCenterColumn{true};
     bool bRamp{false};
+    uint8_t _pad2[2]{};
 };
 
 /**
@@ -429,10 +439,33 @@ struct RingParams
     float innerRadius{0.25f};
     int32_t slices{32};
     bool bDoubleSided{true};
+    uint8_t _pad0[3]{};
+};
+
+struct WallOpening
+{
+    float x{0.0f};
+    float y{0.0f};
+    float w{0.0f};
+    float h{0.0f};
+};
+
+/**
+ * Slab with up to MAX_OPENINGS rectangular holes through its thickness (Z). Corner pivot like BoxParams; openings are (x, y, w, h) in the face plane.
+ */
+struct WallParams
+{
+    static constexpr int32_t MAX_OPENINGS = 8;
+
+    float sizeX{4.0f};
+    float sizeY{3.0f};
+    float sizeZ{0.2f};
+    int32_t openingCount{0};
+    WallOpening openings[MAX_OPENINGS]{};
 };
 
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
-    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams>;
+    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams, WallParams>;
 
 /** Horizontal placement of each line relative to the model origin. */
 enum class Text3DAlign : uint8_t

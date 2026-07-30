@@ -228,6 +228,7 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
                    [&](const Engine::BowlParams& p) { bSuccess = GenerateBowl(p); },
                    [&](const Engine::SpiralStaircaseParams& p) { bSuccess = GenerateSpiralStaircase(p); },
                    [&](const Engine::RingParams& p) { bSuccess = GenerateRing(p); },
+                   [&](const Engine::WallParams& p) { bSuccess = GenerateWall(p); },
                }, params);
     return bSuccess;
 }
@@ -810,6 +811,138 @@ bool ProceduralModelLoadSlot::GenerateRing(const Engine::RingParams& p)
     if (p.bDoubleSided) { addFace(-1.0f); }
 
     return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateWall(const Engine::WallParams& p)
+{
+    ZoneScopedN("GenerateWall");
+
+    const float sx = p.sizeX, sy = p.sizeY, sz = p.sizeZ;
+    if (sx <= 0.0f || sy <= 0.0f || sz <= 0.0f) { return false; }
+
+    struct Rect { float x0, y0, x1, y1; };
+    Rect holes[Engine::WallParams::MAX_OPENINGS];
+    int holeCount = 0;
+    const int32_t count = glm::clamp(p.openingCount, 0, Engine::WallParams::MAX_OPENINGS);
+    for (int32_t i = 0; i < count; i++) {
+        const Engine::WallOpening& o = p.openings[i];
+        const Rect r{glm::clamp(o.x, 0.0f, sx), glm::clamp(o.y, 0.0f, sy), glm::clamp(o.x + o.w, 0.0f, sx), glm::clamp(o.y + o.h, 0.0f, sy)};
+        if (r.x1 - r.x0 > 1e-5f && r.y1 - r.y0 > 1e-5f) { holes[holeCount++] = r; }
+    }
+
+    // Full-span cuts so cells share corners exactly (no T-junctions)
+    constexpr int MAX_CUTS = 2 + 2 * Engine::WallParams::MAX_OPENINGS;
+    float xs[MAX_CUTS], ys[MAX_CUTS];
+    int xn = 0, yn = 0;
+    auto insertCut = [](float* arr, int& n, float v) {
+        for (int i = 0; i < n; i++) {
+            if (glm::abs(arr[i] - v) < 1e-5f) { return; }
+            if (v < arr[i]) {
+                for (int j = n; j > i; j--) { arr[j] = arr[j - 1]; }
+                arr[i] = v;
+                n++;
+                return;
+            }
+        }
+        arr[n++] = v;
+    };
+    insertCut(xs, xn, 0.0f);
+    insertCut(xs, xn, sx);
+    insertCut(ys, yn, 0.0f);
+    insertCut(ys, yn, sy);
+    for (int i = 0; i < holeCount; i++) {
+        insertCut(xs, xn, holes[i].x0);
+        insertCut(xs, xn, holes[i].x1);
+        insertCut(ys, yn, holes[i].y0);
+        insertCut(ys, yn, holes[i].y1);
+    }
+
+    const int cols = xn - 1, rows = yn - 1;
+    bool solid[(MAX_CUTS - 1) * (MAX_CUTS - 1)];
+    for (int cy = 0; cy < rows; cy++) {
+        for (int cx = 0; cx < cols; cx++) {
+            const float mx = (xs[cx] + xs[cx + 1]) * 0.5f;
+            const float my = (ys[cy] + ys[cy + 1]) * 0.5f;
+            bool inHole = false;
+            for (int i = 0; i < holeCount; i++) {
+                if (mx > holes[i].x0 && mx < holes[i].x1 && my > holes[i].y0 && my < holes[i].y1) {
+                    inHole = true;
+                    break;
+                }
+            }
+            solid[cy * cols + cx] = !inHole;
+        }
+    }
+    auto cellSolid = [&](int cx, int cy) { return solid[cy * cols + cx]; };
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+
+    auto addQuad = [&](Vec3 n, Vec3 t,
+                       Vec3 v0, Vec3 v1, Vec3 v2, Vec3 v3,
+                       Vec2 uv0, Vec2 uv1, Vec2 uv2, Vec2 uv3) {
+        const auto base = static_cast<uint32_t>(vertices.Size());
+        auto push = [&](Vec3 pos, Vec2 uv) {
+            Engine::FullVertex v{};
+            v.position = pos;
+            v.normal = n;
+            v.uv = {uv.x, uv.y};
+            v.tangent = {t.x, t.y, t.z, 1.0f};
+            v.color = {1, 1, 1, 1};
+            vertices.PushBack(v);
+        };
+        push(v0, uv0);
+        push(v1, uv1);
+        push(v2, uv2);
+        push(v3, uv3);
+        indices.PushBack(base); indices.PushBack(base + 1); indices.PushBack(base + 2);
+        indices.PushBack(base); indices.PushBack(base + 2); indices.PushBack(base + 3);
+    };
+
+    // Per-face conventions match GenerateBox; boundary faces point from solid into void
+    for (int cy = 0; cy < rows; cy++) {
+        for (int cx = 0; cx < cols; cx++) {
+            if (!cellSolid(cx, cy)) { continue; }
+            const float x0 = xs[cx], x1 = xs[cx + 1], y0 = ys[cy], y1 = ys[cy + 1];
+
+            addQuad({0, 0, 1}, {1, 0, 0},
+                    {x0, y0, sz}, {x1, y0, sz}, {x1, y1, sz}, {x0, y1, sz},
+                    {x0, y0}, {x1, y0}, {x1, y1}, {x0, y1});
+            addQuad({0, 0, -1}, {1, 0, 0},
+                    {x0, y0, 0}, {x0, y1, 0}, {x1, y1, 0}, {x1, y0, 0},
+                    {sx - x0, y0}, {sx - x0, y1}, {sx - x1, y1}, {sx - x1, y0});
+
+            const bool voidL = cx == 0 || !cellSolid(cx - 1, cy);
+            const bool voidR = cx == cols - 1 || !cellSolid(cx + 1, cy);
+            const bool voidB = cy == 0 || !cellSolid(cx, cy - 1);
+            const bool voidT = cy == rows - 1 || !cellSolid(cx, cy + 1);
+
+            if (voidR) {
+                addQuad({1, 0, 0}, {0, 0, -1},
+                        {x1, y0, 0}, {x1, y1, 0}, {x1, y1, sz}, {x1, y0, sz},
+                        {sz, y0}, {sz, y1}, {0, y1}, {0, y0});
+            }
+            if (voidL) {
+                addQuad({-1, 0, 0}, {0, 0, -1},
+                        {x0, y0, sz}, {x0, y1, sz}, {x0, y1, 0}, {x0, y0, 0},
+                        {sz, y0}, {sz, y1}, {0, y1}, {0, y0});
+            }
+            if (voidT) {
+                addQuad({0, 1, 0}, {-1, 0, 0},
+                        {x0, y1, 0}, {x0, y1, sz}, {x1, y1, sz}, {x1, y1, 0},
+                        {sx - x0, 0}, {sx - x0, sz}, {sx - x1, sz}, {sx - x1, 0});
+            }
+            if (voidB) {
+                addQuad({0, -1, 0}, {1, 0, 0},
+                        {x0, y0, 0}, {x1, y0, 0}, {x1, y0, sz}, {x0, y0, sz},
+                        {x0, 0}, {x1, 0}, {x1, sz}, {x0, sz});
+            }
+        }
+    }
+
+    if (vertices.Size() == 0) { return false; }
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)

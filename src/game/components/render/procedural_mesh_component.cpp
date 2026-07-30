@@ -218,6 +218,16 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
             json["slices"] = p.slices;
             json["bDoubleSided"] = p.bDoubleSided;
         }
+        else if constexpr (std::is_same_v<T, Engine::WallParams>) {
+            json["sizeX"] = p.sizeX;
+            json["sizeY"] = p.sizeY;
+            json["sizeZ"] = p.sizeZ;
+            json["openings"] = nlohmann::json::array();
+            const int32_t n = glm::clamp(p.openingCount, 0, Engine::WallParams::MAX_OPENINGS);
+            for (int32_t i = 0; i < n; i++) {
+                json["openings"].push_back({p.openings[i].x, p.openings[i].y, p.openings[i].w, p.openings[i].h});
+            }
+        }
     }, comp.params);
 }
 
@@ -435,6 +445,19 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.bDoubleSided = json.value("bDoubleSided", true);
         comp.params = p;
     }
+    else if (type == 25) {
+        Engine::WallParams p{};
+        p.sizeX = json["sizeX"].get<float>();
+        p.sizeY = json["sizeY"].get<float>();
+        p.sizeZ = json["sizeZ"].get<float>();
+        if (json.contains("openings")) {
+            for (const auto& e : json["openings"]) {
+                if (p.openingCount >= Engine::WallParams::MAX_OPENINGS) { break; }
+                p.openings[p.openingCount++] = {e[0].get<float>(), e[1].get<float>(), e[2].get<float>(), e[3].get<float>()};
+            }
+        }
+        comp.params = p;
+    }
 }
 
 /**
@@ -576,13 +599,14 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 if (ImGui::Selectable("Bowl")) selectShape(Engine::BowlParams{});
                 if (ImGui::Selectable("Spiral Staircase")) selectShape(Engine::SpiralStaircaseParams{});
                 if (ImGui::Selectable("Ring")) selectShape(Engine::RingParams{});
+                if (ImGui::Selectable("Wall")) selectShape(Engine::WallParams{});
                 ImGui::EndCombo();
             }
         }
         else {
             static constexpr const char* shapeNames[] = {
                 "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring"
+                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall"
             };
             ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
             ImGui::SameLine();
@@ -967,6 +991,38 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::Checkbox("Double Sided", &p.bDoubleSided)) { dirty = true; }
                     if (p.innerRadius <= 1e-4f) { ImGui::TextDisabled("Inner radius 0 -> solid disc"); }
+                }
+                else if constexpr (std::is_same_v<T, Engine::WallParams>) {
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Y", &p.sizeY, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+
+                    ImGui::SeparatorText("Openings");
+                    int removeIdx = -1;
+                    for (int32_t i = 0; i < p.openingCount; i++) {
+                        ImGui::PushID(i);
+                        ImGui::DragFloat4("##opening", &p.openings[i].x, 0.01f, 0.0f, 100.0f, "%.2f");
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("X")) { removeIdx = i; }
+                        ImGui::PopID();
+                    }
+                    if (removeIdx >= 0) {
+                        for (int32_t i = removeIdx; i < p.openingCount - 1; i++) { p.openings[i] = p.openings[i + 1]; }
+                        p.openings[p.openingCount - 1] = {};
+                        p.openingCount--;
+                        dirty = true;
+                    }
+                    if (p.openingCount < Engine::WallParams::MAX_OPENINGS) {
+                        if (ImGui::Button("Add Opening")) {
+                            p.openings[p.openingCount++] = {p.sizeX * 0.25f, p.sizeY * 0.25f, p.sizeX * 0.5f, p.sizeY * 0.5f};
+                            dirty = true;
+                        }
+                    }
+                    ImGui::TextDisabled("x, y, w, h in face plane (X along Size X, Y along Size Y)");
                 }
             }, component.params);
 
