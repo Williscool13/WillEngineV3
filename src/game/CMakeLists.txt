@@ -60,6 +60,8 @@ set(GAME_SOURCES
         components/render/procedural_mesh_component.cpp
         components/render/spline_mesh_component.cpp
         components/render/spline_mesh_component.h
+        components/render/module_mesh_component.cpp
+        components/render/module_mesh_component.h
 
         components/gameplay/checkpoint_component.cpp
         components/gameplay/checkpoint_component.h

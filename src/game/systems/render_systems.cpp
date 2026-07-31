@@ -25,6 +25,7 @@
 #include "game/input/game_actions.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
+#include "game/components/render/module_mesh_component.h"
 #include "game/components/render/text3d_component.h"
 #include "game/components/render/light_components.h"
 #include "game/components/render/reflection_probe_component.h"
@@ -59,6 +60,9 @@ void ConnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnConstruct>();
     registry.on_destroy<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnDestroy>();
+
+    registry.on_construct<Component::ModuleMeshComponent>().connect<&Component::ModuleMeshComponent::OnConstruct>();
+    registry.on_destroy<Component::ModuleMeshComponent>().connect<&Component::ModuleMeshComponent::OnDestroy>();
 
     registry.on_construct<Component::TextComponent>().connect<&Component::TextComponent::OnConstruct>();
     registry.on_destroy<Component::TextComponent>().connect<&Component::TextComponent::OnDestroy>();
@@ -97,6 +101,9 @@ void DisconnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::SplineMeshComponent>().disconnect<&Component::SplineMeshComponent::OnConstruct>();
     registry.on_destroy<Component::SplineMeshComponent>().disconnect<&Component::SplineMeshComponent::OnDestroy>();
+
+    registry.on_construct<Component::ModuleMeshComponent>().disconnect<&Component::ModuleMeshComponent::OnConstruct>();
+    registry.on_destroy<Component::ModuleMeshComponent>().disconnect<&Component::ModuleMeshComponent::OnDestroy>();
 
     registry.on_construct<Component::TextComponent>().disconnect<&Component::TextComponent::OnConstruct>();
     registry.on_destroy<Component::TextComponent>().disconnect<&Component::TextComponent::OnDestroy>();
@@ -792,6 +799,97 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 }
 
+static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState* state, Component::MeshRuntime* runtime, Engine::StaticModel* model, const Component::ModuleMeshComponent& meshComponent)
+{
+    FreeMeshRange(ctx, state, runtime);
+
+    if (model->modelData.meshes.IsEmpty()) { return; }
+    Engine::MeshInformation& mesh = model->modelData.meshes[0];
+    const auto count = static_cast<uint32_t>(mesh.primitiveProperties.Size());
+    if (count == 0) { return; }
+
+    Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
+    Engine::MeshPrimitiveStore::Range range = store.Allocate(count);
+    if (!range.IsValid()) {
+        LOG_ERROR(Game, "Static primitive store full; cannot resolve module runtime for model ({})", model->name.c_str());
+        return;
+    }
+
+    uint32_t writeIndex = range.offset;
+    for (uint32_t j = 0; j < count; ++j) {
+        Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
+        // materialIndex carries the module slot (see FinalizeGeometryGroups)
+        Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
+        if (primitive.materialIndex >= 0 && primitive.materialIndex < Engine::MAX_MODULE_SLOTS) {
+            const Engine::MaterialID slotMat = meshComponent.slotMaterials[primitive.materialIndex];
+            if (slotMat.IsValid() && ctx->materialManager->DoesMutableMaterialExist(slotMat)) {
+                matID = slotMat;
+            }
+        }
+        store[writeIndex] = {
+            .primitiveIndex = primitive.index,
+            .originalMaterialIndex = primitive.materialIndex,
+            .sourceNodeIndex = 0,
+            .modelPrimitiveOrdinal = j,
+            .materialID = matID,
+            .blasDeviceAddress = primitive.blasDeviceAddress,
+            .modelSpaceTransform = glm::mat4(1.0f),
+        };
+        ctx->materialManager->AcquireMaterial(matID);
+        ++writeIndex;
+    }
+    runtime->range = range;
+}
+
+void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::ModuleMeshComponent, Component::ModuleMeshLoadPendingTag>();
+    if (view.size_hint() == 0) { return; }
+
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    for (auto [entity, meshComponent] : view.each()) {
+        if (meshComponent.params.parts.IsEmpty()) { continue; }
+        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
+        runtime.modelHandle = ctx->assetManager->LoadModuleModel(meshComponent.params);
+        if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
+    }
+    for (const entt::entity entity : started) {
+        state->registry.remove<Component::ModuleMeshLoadPendingTag>(entity);
+        state->registry.emplace_or_replace<Component::ModuleMeshLoadingTag>(entity);
+    }
+}
+
+void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::ModuleMeshComponent, Component::ModuleMeshLoadingTag>();
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    for (const auto& [entity, meshComponent] : view.each()) {
+        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        if (!runtime) continue;
+
+        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
+        if (!model) {
+            LOG_ERROR(Game, "Module model ({}) is not in the asset manager.", runtime->modelHandle.index);
+            continue;
+        }
+        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+            continue;
+        }
+
+        FillModuleMeshRange(ctx, state, runtime, model, meshComponent);
+
+        resolved.PushBack(entity);
+    }
+
+    for (const auto entity : resolved) {
+        state->registry.remove<Component::ModuleMeshLoadingTag>(entity);
+    }
+}
+
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadPendingTag>();
@@ -1078,6 +1176,10 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::SplineMeshComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
+        }
+        for (auto [entity, meshComponent, runtime] : state->registry.view<Component::ModuleMeshComponent, Component::MeshRuntime>().each()) {
+            runtime.visible = meshComponent.modelFlags.x != 0.0f;
+            runtime.ddgiVisible = meshComponent.modelFlags.z == 0.0f;
         }
         for (auto [entity, meshComponent, runtime] : state->registry.view<Component::Text3DComponent, Component::MeshRuntime>().each()) {
             runtime.visible = meshComponent.modelFlags.x != 0.0f;
@@ -1367,6 +1469,9 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
     for (const auto& [entity, mesh] : registry.view<Component::SplineMeshComponent>().each()) {
+        if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+    for (const auto& [entity, mesh] : registry.view<Component::ModuleMeshComponent>().each()) {
         if (mesh.modelFlags.y == 0.0f) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
     for (const auto& [entity, mesh] : registry.view<Component::Text3DComponent>().each()) {

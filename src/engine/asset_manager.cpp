@@ -40,6 +40,10 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       deferredTextureBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager),
       deferredCubemapBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager)
 {
+    for (uint32_t i = MAX_LOADED_MODULE_MODELS; i > 0; i--) {
+        moduleParamsFreeList.PushBack(i - 1);
+    }
+
 #if WILL_EDITOR
     // Creates white/error if they don't exist. Also creates BRDF LUT
     Editor::CreateCriticalEngineResources(&memoryManager);
@@ -389,6 +393,75 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
         LOG_TRACE(Asset, "Requesting spline model load: {}", model.name.c_str());
+    }
+    assetLoadManager->RequestProceduralModelLoad(&model);
+    return handle;
+}
+
+StaticModelHandle AssetManager::LoadModuleModel(const ModuleParams& params)
+{
+    constexpr uint8_t kind = 77;
+    uint64_t hash = fnv1a64(&kind, sizeof(kind));
+    const size_t partCount = params.parts.Size();
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&partCount), sizeof(partCount), hash);
+    for (const ModulePart& part : params.parts) {
+        const size_t idx = part.shape.index();
+        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&idx), sizeof(idx), hash);
+        std::visit([&hash]<typename T0>(const T0& v) {
+            if constexpr (!std::is_same_v<std::decay_t<T0>, std::monostate>) {
+                hash = fnv1a64(reinterpret_cast<const uint8_t*>(&v), sizeof(v), hash);
+            }
+        }, part.shape);
+        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&part.offset), sizeof(part.offset), hash);
+        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&part.rotation), sizeof(part.rotation), hash);
+        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&part.materialSlot), sizeof(part.materialSlot), hash);
+    }
+
+    ModelID moduleModelId{hash};
+
+    StaticModelHandle* existingPtr = modelIdToHandle.Find(moduleModelId);
+    if (existingPtr != nullptr) {
+        StaticModelHandle existingHandle = *existingPtr;
+        if (modelAllocator.IsValid(existingHandle)) {
+            StaticModel& model = models[existingHandle.index];
+            model.refCount++;
+            model.retireFrame = 0;
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Module model already loaded: {}, refCount: {}", moduleModelId.id, model.refCount);
+            }
+            return existingHandle;
+        }
+        modelIdToHandle.Remove(moduleModelId);
+    }
+
+    if (moduleParamsFreeList.IsEmpty()) {
+        LOG_ERROR(Asset, "Module params pool exhausted ({} live module models)", MAX_LOADED_MODULE_MODELS);
+        return StaticModelHandle::INVALID;
+    }
+
+    StaticModelHandle handle = modelAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate model slot for module");
+        return StaticModelHandle::INVALID;
+    }
+
+    const uint32_t paramsSlot = moduleParamsFreeList.Back();
+    moduleParamsFreeList.PopBack();
+    moduleParamsPool[paramsSlot] = params;
+
+    static int32_t moduleCounter = 0;
+    StaticModel& model = models[handle.index];
+    model.selfHandle = handle;
+    model.name = Core::InlineString<128>::Format("Module Mesh %d", moduleCounter++);
+    model.modelId = moduleModelId;
+    model.moduleParams = &moduleParamsPool[paramsSlot];
+    model.refCount = 1;
+    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+
+    modelIdToHandle[moduleModelId] = handle;
+
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting module model load: {}", model.name.c_str());
     }
     assetLoadManager->RequestProceduralModelLoad(&model);
     return handle;
@@ -1097,6 +1170,9 @@ bool AssetManager::ResolveUnloads()
         }
         UnfreezeModel(model.modelId); // drained: lift any hot-reload freeze
         assert(!model.text3DFontHandle.IsValid() && "Text3D font ref must be released at finalize (ResolveLoads) before a model can be reclaimed");
+        if (model.moduleParams != nullptr) {
+            moduleParamsFreeList.PushBack(static_cast<uint32_t>(model.moduleParams - moduleParamsPool.Data()));
+        }
         modelAllocator.Remove(model.selfHandle);
         model = {};
         modelsUnloadedThisTick++;

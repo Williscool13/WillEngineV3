@@ -15,6 +15,7 @@ inline constexpr uint32_t MAX_LOADED_CUBEMAPS = 256;
 inline constexpr uint32_t MAX_LOADED_AUDIO = 128;
 inline constexpr uint32_t MAX_LOADED_FONTS = 64;
 inline constexpr uint32_t MAX_LOADED_COLLIDERS = 2048;
+inline constexpr uint32_t MAX_LOADED_MODULE_MODELS = 256;
 
 inline constexpr uint32_t MAX_CACHED_MODELS = 4096;
 inline constexpr uint32_t MAX_CACHED_TEXTURES = 4096;

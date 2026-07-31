@@ -88,6 +88,8 @@ public: // Models
 
     StaticModelHandle LoadSplineModel(const SplineParams& params);
 
+    StaticModelHandle LoadModuleModel(const ModuleParams& params);
+
     /**
      * Loads (or dedups) an extruded 3D-text model, resolving the font by id. Dedup key is the identity (font + text + depth + flatness + tracking + scale + smoothNormals).
      * The model holds a font ref until it finalizes so the generation worker can read the glyph contours.
@@ -380,6 +382,9 @@ private:
     Core::InlineMap<ModelID, StaticModelHandle, 4096> modelIdToHandle;
     Core::HandleAllocator<StaticModel, MAX_LOADED_MODELS> modelAllocator;
     Core::Array<StaticModel, MAX_LOADED_MODELS> models;
+
+    Core::Array<ModuleParams, MAX_LOADED_MODULE_MODELS> moduleParamsPool;
+    Core::InlineVector<uint32_t, MAX_LOADED_MODULE_MODELS> moduleParamsFreeList;
 
     Core::InlineMap<PhysicsColliderID, PhysicsColliderHandle, 4096> colliderIdToHandle;
     Core::HandleAllocator<PhysicsColliderAsset, MAX_LOADED_COLLIDERS> colliderAllocator;

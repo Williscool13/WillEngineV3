@@ -37,6 +37,7 @@ PROCEDURAL = component_key("ProceduralMeshComponent")       # flattened shape pa
 PHYSICS = component_key("PhysicsBodyDesc")                  # motionType/mass/friction/restitution/motionQuality/layerOverride/.../shapes[]
 TEXT3D = component_key("Text3DComponent")                   # fontId/text/depth/flatness/tracking/scale/smoothNormals/material/modelFlags/renderOffset/renderRotation
 SPLINE = component_key("SplineMeshComponent")               # profile/railing/spline fields, flattened (see spline_fields())
+MODULE = component_key("ModuleMeshComponent")               # parts[]{type, <shape fields>, offset[3], rotation[wxyz], slot}, slotMaterials[8], modelFlags; see add_module()
 STATIC_MESH = component_key("StaticMeshComponent")          # modelId, modelFlags, materialOverrides{slot:id}, primitiveBlacklist[], renderOffset, renderRotation. ONE entity = one whole model.
 STATIC_MESH_PRIMITIVE = component_key("StaticMeshPrimitiveComponent")  # modelId, primitiveOrdinal, modelFlags, renderOffset, renderRotation
 SPAWN = component_key("PlayerSpawnComponent")               # offset, priority
@@ -323,6 +324,28 @@ def add_text3d(entity, text, font_id, depth=0.2, flatness=0.0005, tracking=0.05,
                                "align": align, "anchor": anchor}}
     entity[PHYSICS] = {"motionType": motion, "mass": 1.0, "friction": 0.5, "restitution": 0.0, "motionQuality": 0,
                         "layerOverride": 65535, "enhancedInternalEdgeRemoval": False, "isSensor": False, "shapes": [shape]}
+    return entity
+
+def module_part(shape, offset=(0.0, 0.0, 0.0), rotation=(1.0, 0.0, 0.0, 0.0), slot=0):
+    """One part of a module: shape = the (fields, idx) pair any *_params helper returns.
+    rotation is [w,x,y,z]. slot = material slot 0..7; parts sharing a slot merge into one primitive."""
+    fields, idx = shape
+    if not 0 <= slot <= 7:
+        raise ValueError(f"module_part: slot {slot} out of range 0..7")
+    return {"type": idx, **fields, "offset": list(offset), "rotation": list(rotation), "slot": slot}
+
+def add_module(entity, parts, materials=(), model_flags=(1.0, 1.0, 0.0, 0.0)):
+    """Kit piece: up to 32 module_part() shapes baked into ONE content-hashed model with one
+    primitive per used material slot; identical part lists dedupe across entities. materials =
+    material id per slot (0 or omitted = engine default material) -- re-skin per instance by
+    changing this list only. Modules have NO collider asset: give the entity a PhysicsBodyDesc
+    with a few per-part procedural collider shapes if it needs collision."""
+    parts = list(parts)
+    if len(parts) > 32:
+        raise ValueError(f"add_module: {len(parts)} parts, max is 32")
+    mats = [materials[i] if i < len(materials) else 0 for i in range(8)]
+    entity[MODULE] = {"modelFlags": list(model_flags), "renderOffset": [0.0, 0.0, 0.0],
+                      "renderRotation": [1.0, 0.0, 0.0, 0.0], "slotMaterials": mats, "parts": parts}
     return entity
 
 def add_static_mesh(entity, model_id, lighting_shader=0, shading_shader=0, material_overrides=None, primitive_blacklist=None):

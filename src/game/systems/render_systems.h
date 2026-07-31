@@ -41,12 +41,14 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
 void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);

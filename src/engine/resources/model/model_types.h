@@ -500,6 +500,25 @@ struct CorrugatedPanelParams
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
     , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams, WallParams, LatticeParams, CorrugatedPanelParams>;
 
+inline constexpr int32_t MAX_MODULE_PARTS = 32;
+inline constexpr int32_t MAX_MODULE_SLOTS = 8;
+
+struct ModulePart
+{
+    ProceduralParams shape{};
+    Vec3 offset{0.0f};
+    Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    int32_t materialSlot{0};
+};
+
+/**
+ * A kit piece: several procedural shapes baked into one model.
+ */
+struct ModuleParams
+{
+    Core::InlineVector<ModulePart, MAX_MODULE_PARTS> parts;
+};
+
 /** Horizontal placement of each line relative to the model origin. */
 enum class Text3DAlign : uint8_t
 {

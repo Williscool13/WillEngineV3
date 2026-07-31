@@ -73,6 +73,11 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
     json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
     json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
 
+    SerializeProceduralShape(comp.params, json);
+}
+
+void Component::SerializeProceduralShape(const Engine::ProceduralParams& params, nlohmann::json& json)
+{
     std::visit([&json](const auto& p) {
         using T = std::decay_t<decltype(p)>;
         if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
@@ -245,7 +250,7 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
             json["ribWidth"] = p.ribWidth;
             json["ribCount"] = p.ribCount;
         }
-    }, comp.params);
+    }, params);
 }
 
 void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& comp, const nlohmann::json& json)
@@ -264,7 +269,12 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         comp.renderRotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
     }
 
-    int32_t type = json["type"].get<int32_t>();
+    comp.params = DeserializeProceduralShape(json["type"].get<int32_t>(), json);
+}
+
+Engine::ProceduralParams Component::DeserializeProceduralShape(int32_t type, const nlohmann::json& json)
+{
+    Engine::ProceduralParams params{};
     if (type == 1) {
         Engine::StaircaseParams p{};
         p.stepCount = json["stepCount"].get<int32_t>();
@@ -274,14 +284,14 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.bSpecifyStepHeight = json.value("bSpecifyStepHeight", false);
         p.stepHeight = json.value("stepHeight", p.totalHeight / static_cast<float>(std::max(p.stepCount, 1)));
         p.bIsClosed = json.value("bIsClosed", true);
-        comp.params = p;
+        params = p;
     }
     else if (type == 2) {
         Engine::BoxParams p{};
         p.sizeX = json["sizeX"].get<float>();
         p.sizeY = json["sizeY"].get<float>();
         p.sizeZ = json["sizeZ"].get<float>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 3) {
         Engine::CylinderParams p{};
@@ -289,7 +299,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.height = json["height"].get<float>();
         p.slices = json["slices"].get<int32_t>();
         p.bCapped = json["bCapped"].get<bool>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 4) {
         Engine::CapsuleParams p{};
@@ -297,7 +307,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.height = json["height"].get<float>();
         p.slices = json["slices"].get<int32_t>();
         p.rings = json["rings"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 5) {
         Engine::TorusParams p{};
@@ -305,7 +315,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.tubeRadius = json["tubeRadius"].get<float>();
         p.slices = json["slices"].get<int32_t>();
         p.stacks = json["stacks"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 6) {
         Engine::ArchParams p{};
@@ -315,14 +325,14 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.thickness = json["thickness"].get<float>();
         p.sides = json["sides"].get<int32_t>();
         p.bFillCorners = json.value("bFillCorners", false);
-        comp.params = p;
+        params = p;
     }
     else if (type == 7) {
         Engine::WedgeParams p{};
         p.sizeX = json["sizeX"].get<float>();
         p.sizeY = json["sizeY"].get<float>();
         p.sizeZ = json["sizeZ"].get<float>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 8) {
         Engine::ConeParams p{};
@@ -330,7 +340,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.height = json["height"].get<float>();
         p.slices = json["slices"].get<int32_t>();
         p.bCapped = json["bCapped"].get<bool>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 9) {
         Engine::DoorParams p{};
@@ -342,7 +352,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.sides = json["sides"].get<int32_t>();
         p.bHalf = json["bHalf"].get<bool>();
         p.bFlip = json.value("bFlip", false);
-        comp.params = p;
+        params = p;
     }
     else if (type == 10) {
         Engine::PlaneParams p{};
@@ -350,27 +360,27 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.sizeZ = json["sizeZ"].get<float>();
         p.tilesX = json["tilesX"].get<int32_t>();
         p.tilesZ = json["tilesZ"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 11) {
         Engine::SphereParams p{};
         p.radius = json["radius"].get<float>();
         p.slices = json["slices"].get<int32_t>();
         p.stacks = json["stacks"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 12) {
         Engine::SubdividedSphereParams p{};
         p.radius = json["radius"].get<float>();
         p.subdivisions = glm::clamp(json["subdivisions"].get<int32_t>(), 0, 4);
-        comp.params = p;
+        params = p;
     }
     else if (type == 13) {
         Engine::HemisphereParams p{};
         p.radius = json["radius"].get<float>();
         p.slices = json["slices"].get<int32_t>();
         p.stacks = json["stacks"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 14) {
         Engine::PipeParams p{};
@@ -378,34 +388,34 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.innerRadius = json["innerRadius"].get<float>();
         p.height = json["height"].get<float>();
         p.slices = json["slices"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 15) {
         Engine::TetrahedronParams p{};
         p.radius = json["radius"].get<float>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 16) {
         Engine::OctahedronParams p{};
         p.radius = json["radius"].get<float>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 17) {
         Engine::IcosahedronParams p{};
         p.radius = json["radius"].get<float>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 18) {
         Engine::DodecahedronParams p{};
         p.radius = json["radius"].get<float>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 19) {
         Engine::KleinBottleParams p{};
         p.scale = json["scale"].get<float>();
         p.slices = json["slices"].get<int32_t>();
         p.stacks = json["stacks"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 20) {
         Engine::TrefoilKnotParams p{};
@@ -413,7 +423,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.tubeRadius = json["tubeRadius"].get<float>();
         p.slices = json["slices"].get<int32_t>();
         p.stacks = json["stacks"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 21) {
         Engine::CurvedRampParams p{};
@@ -424,7 +434,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.bHalfPipe = json.value("bHalfPipe", false);
         p.flatLength = json.value("flatLength", 1.0f);
         p.lipHeight = json.value("lipHeight", 0.02f);
-        comp.params = p;
+        params = p;
     }
     else if (type == 22) {
         Engine::BowlParams p{};
@@ -435,7 +445,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.lipHeight = json.value("lipHeight", 0.02f);
         p.slices = json["slices"].get<int32_t>();
         p.segments = json["segments"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
     else if (type == 23) {
         Engine::SpiralStaircaseParams p{};
@@ -452,7 +462,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.arcSegments = json.value("arcSegments", 6);
         p.bShowCenterColumn = json.value("bShowCenterColumn", true);
         p.bRamp = json.value("bRamp", false);
-        comp.params = p;
+        params = p;
     }
     else if (type == 24) {
         Engine::RingParams p{};
@@ -460,7 +470,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.innerRadius = json["innerRadius"].get<float>();
         p.slices = json["slices"].get<int32_t>();
         p.bDoubleSided = json.value("bDoubleSided", true);
-        comp.params = p;
+        params = p;
     }
     else if (type == 25) {
         Engine::WallParams p{};
@@ -473,7 +483,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
                 p.openings[p.openingCount++] = {e[0].get<float>(), e[1].get<float>(), e[2].get<float>(), e[3].get<float>()};
             }
         }
-        comp.params = p;
+        params = p;
     }
     else if (type == 26) {
         Engine::LatticeParams p{};
@@ -484,7 +494,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.braceSize = json["braceSize"].get<float>();
         p.bayCount = json["bayCount"].get<int32_t>();
         p.pattern = json.value("pattern", 0);
-        comp.params = p;
+        params = p;
     }
     else if (type == 27) {
         Engine::CorrugatedPanelParams p{};
@@ -494,8 +504,9 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.ribDepth = json["ribDepth"].get<float>();
         p.ribWidth = json["ribWidth"].get<float>();
         p.ribCount = json["ribCount"].get<int32_t>();
-        comp.params = p;
+        params = p;
     }
+    return params;
 }
 
 /**

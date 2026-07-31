@@ -38,7 +38,7 @@ wa.seed_ids("di_arch")   # must precede every next_id() call
 
 from wscene_authoring import (
     base_entity, box_params, wall_params, lattice_params, corrugated_params,
-    next_id, name_id, add_procedural, add_path_mover,
+    next_id, name_id, add_procedural, add_path_mover, module_part, add_module,
     add_static_mesh, add_sphere_light, add_area_light, add_skybox, add_world_text,
     add_reflection_probe, add_prefab_instance, basis_for, mat_to_quat,
     RENDER_DEFAULTS, PROCEDURAL, PHYSICS, SCENE_FOLDER, PROBE_BOX, EASE_IN_OUT_SINE,
@@ -270,7 +270,23 @@ add_path_mover(e, [(-2.0, 1.0, 26.0), (6.0, 1.0, 26.0), (6.0, 3.0, 30.0)],
                speed=2.0, wait_time=0.5, easing=EASE_IN_OUT_SINE)
 entities.append(e)
 
-label("Props Label", "Phase 2 Props - Lattice, Corrugated Panel, Path Mover", (-1.0, 5.5, 18.5), fid_props)
+# Kiosk module: structure on slot 0, trim + finial on slot 1. Two instances with swapped
+# slot materials share ONE content-hashed model and re-skin at resolve time.
+KIOSK_PARTS = [
+    module_part(wall_params(3.0, 3.0, 0.2, [(0.9, 1.0, 1.2, 1.2)]), slot=0),
+    module_part(box_params(0.2, 3.0, 1.5), offset=(0.0, 0.0, 0.2), slot=0),
+    module_part(box_params(0.2, 3.0, 1.5), offset=(2.8, 0.0, 0.2), slot=0),
+    module_part(box_params(3.4, 0.2, 2.1), offset=(-0.2, 3.0, -0.2), slot=1),
+    module_part(box_params(1.6, 0.1, 0.15), offset=(0.7, 0.9, -0.15), slot=1),
+    module_part(box_params(1.6, 0.15, 0.15), offset=(0.7, 2.2, -0.15), slot=1),
+    module_part(lattice_params(0.3, 1.5, 0.3, chord=0.04, brace=0.03, bays=3), offset=(1.35, 3.2, 0.7), slot=1),
+]
+for name, cx, mats in (("Kiosk A", 13.5, [MAT_WALL, MAT_FLOOR]), ("Kiosk B", 17.5, [MAT_FLOOR, MAT_WALL])):
+    e = base_entity(name, (cx, PROP_Y, 19.0), folder_id=fid_props)
+    add_module(e, KIOSK_PARTS, materials=mats)
+    entities.append(e)
+
+label("Props Label", "Phase 2 Props - Lattice, Corrugated Panel, Path Mover, Module", (-1.0, 5.5, 18.5), fid_props)
 
 # =============================================================================
 # ground, sky, camera

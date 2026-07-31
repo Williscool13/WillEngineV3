@@ -293,6 +293,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::StaticMeshPrimitivePendingKickoff(ctx, state);
     Game::ProceduralMeshPendingKickoff(ctx, state);
     Game::SplineMeshPendingKickoff(ctx, state);
+    Game::ModuleMeshPendingKickoff(ctx, state);
     Game::TextFontPendingKickoff(ctx, state);
     Game::Text3DGeneratePendingKickoff(ctx, state);
     Game::PhysicsMeshPendingKickoff(ctx, state);
@@ -304,6 +305,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         Game::StaticMeshPrimitiveLoadResolve(ctx, state);
         Game::ProceduralMeshLoadResolve(ctx, state);
         Game::SplineMeshLoadResolve(ctx, state);
+        Game::ModuleMeshLoadResolve(ctx, state);
         Game::Text3DLoadResolve(ctx, state);
         Game::PhysicsMeshLoadResolve(ctx, state);
     }

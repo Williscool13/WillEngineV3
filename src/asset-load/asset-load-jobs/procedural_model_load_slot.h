@@ -95,6 +95,21 @@ private:
 
     bool FinalizeGeometry(Core::Span<const Engine::FullVertex> vertices, Core::Span<const uint32_t> indices);
 
+    struct ModuleGroupRange
+    {
+        uint32_t indexStart{0};
+        uint32_t indexCount{0};
+        int32_t slot{0};
+    };
+
+    bool FinalizeGeometryGroups(Core::Span<const Engine::FullVertex> vertices, Core::Span<const uint32_t> indices, Core::Span<const ModuleGroupRange> groups);
+
+    bool GenerateShapeVariant(Engine::ProceduralParams& params);
+
+    // While set, FinalizeGeometry appends into these instead of building the model (module part accumulation)
+    Core::Vector<Engine::FullVertex>* moduleSinkVertices{nullptr};
+    Core::Vector<uint32_t>* moduleSinkIndices{nullptr};
+
     bool GenerateStaircase(const Engine::StaircaseParams& p);
     bool GenerateBox(const Engine::BoxParams& p);
     bool GenerateCylinder(const Engine::CylinderParams& p);
@@ -122,6 +137,7 @@ private:
     bool GenerateWall(const Engine::WallParams& p);
     bool GenerateLattice(const Engine::LatticeParams& p);
     bool GenerateCorrugatedPanel(const Engine::CorrugatedPanelParams& p);
+    bool GenerateModule(const Engine::ModuleParams& p);
     bool GenerateSpline(const Engine::SplineParams& p);
     bool GenerateText3D(const Engine::Text3DParams& p);
 };

@@ -199,8 +199,15 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
         return GenerateSpline(*outputModel->splineParams);
     }
 
-    Engine::ProceduralParams& params = outputModel->proceduralParams;
+    if (outputModel->moduleParams != nullptr) {
+        return GenerateModule(*outputModel->moduleParams);
+    }
 
+    return GenerateShapeVariant(outputModel->proceduralParams);
+}
+
+bool ProceduralModelLoadSlot::GenerateShapeVariant(Engine::ProceduralParams& params)
+{
     bool bSuccess = false;
     std::visit(overloaded{
                    [](std::monostate) {},
@@ -305,6 +312,17 @@ bool ProceduralModelLoadSlot::GenerateStaircase(const Engine::StaircaseParams& p
 bool ProceduralModelLoadSlot::FinalizeGeometry(Core::Span<const Engine::FullVertex> vertices, Core::Span<const uint32_t> indices)
 {
     if (vertices.IsEmpty() || indices.IsEmpty()) return false;
+
+    if (moduleSinkVertices != nullptr) {
+        const auto base = static_cast<uint32_t>(moduleSinkVertices->Size());
+        for (size_t i = 0; i < vertices.Size(); ++i) {
+            moduleSinkVertices->PushBack(vertices[i]);
+        }
+        for (size_t i = 0; i < indices.Size(); ++i) {
+            moduleSinkIndices->PushBack(base + indices[i]);
+        }
+        return true;
+    }
 
     // Meshoptimizer remap pipeline
     Core::HeapArray<uint32_t> remap(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, vertices.Size());
@@ -412,6 +430,150 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(Core::Span<const Engine::FullVert
         Core::HeapArray<Vec3> allPositions(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, remappedVertices.Size());
         for (size_t i = 0; i < remappedVertices.Size(); ++i) {
             allPositions[i] = remappedVertices[i].position;
+        }
+        outputModel->bounds = ComputeBounds(allPositions);
+    }
+
+    return true;
+}
+
+bool ProceduralModelLoadSlot::FinalizeGeometryGroups(Core::Span<const Engine::FullVertex> vertices, Core::Span<const uint32_t> indices, Core::Span<const ModuleGroupRange> groups)
+{
+    if (vertices.IsEmpty() || indices.IsEmpty() || groups.IsEmpty() || groups.Size() > Engine::MAX_MODULE_SLOTS) { return false; }
+
+    // Per-group mirror of FinalizeGeometry
+    struct GroupBuild
+    {
+        Core::HeapArray<Engine::FullVertex> verts;
+        Core::HeapArray<uint32_t> indices;
+        Core::HeapArray<meshopt_Meshlet> meshlets;
+        Core::HeapArray<uint32_t> meshletVertices;
+        Core::HeapArray<uint8_t> meshletTriangles;
+        size_t meshletCount{0};
+        size_t meshletVertexCount{0};
+        size_t meshletTriangleCount{0};
+        Engine::MeshBounds bounds{};
+    };
+    GroupBuild builds[Engine::MAX_MODULE_SLOTS];
+    const size_t groupCount = groups.Size();
+
+    size_t totalVerts = 0, totalIndices = 0, totalMeshlets = 0, totalMeshletVerts = 0, totalMeshletTris = 0;
+
+    for (size_t g = 0; g < groupCount; ++g) {
+        const uint32_t* groupIdx = indices.Data() + groups[g].indexStart;
+        const size_t groupIdxCount = groups[g].indexCount;
+        if (groupIdxCount == 0) { return false; }
+        GroupBuild& gb = builds[g];
+
+        Core::HeapArray<uint32_t> remap(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, vertices.Size());
+        size_t uniqueVertices = meshopt_generateVertexRemap(remap.Data(), groupIdx, groupIdxCount, vertices.Data(), vertices.Size(), sizeof(Engine::FullVertex));
+
+        gb.indices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, groupIdxCount);
+        meshopt_remapIndexBuffer(gb.indices.Data(), groupIdx, groupIdxCount, remap.Data());
+
+        gb.verts = Core::HeapArray<Engine::FullVertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, uniqueVertices);
+        meshopt_remapVertexBuffer(gb.verts.Data(), vertices.Data(), vertices.Size(), sizeof(Engine::FullVertex), remap.Data());
+
+        meshopt_optimizeVertexCache(gb.indices.Data(), gb.indices.Data(), groupIdxCount, uniqueVertices);
+        meshopt_optimizeOverdraw(gb.indices.Data(), gb.indices.Data(), groupIdxCount, &gb.verts[0].position.x, uniqueVertices, sizeof(Engine::FullVertex), 1.05f);
+        meshopt_optimizeVertexFetch(gb.verts.Data(), gb.indices.Data(), groupIdxCount, gb.verts.Data(), uniqueVertices, sizeof(Engine::FullVertex));
+
+        size_t maxMeshlets = meshopt_buildMeshletsBound(groupIdxCount, MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
+        gb.meshlets = Core::HeapArray<meshopt_Meshlet>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, maxMeshlets);
+        gb.meshletVertices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, maxMeshlets * MESHLET_MAX_VERTICES);
+        gb.meshletTriangles = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, maxMeshlets * MESHLET_MAX_TRIANGLES * 3);
+
+        gb.meshletCount = meshopt_buildMeshlets(
+            gb.meshlets.Data(), gb.meshletVertices.Data(), gb.meshletTriangles.Data(),
+            gb.indices.Data(), groupIdxCount,
+            &gb.verts[0].position.x, uniqueVertices, sizeof(Engine::FullVertex),
+            MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, 0.0f);
+
+        const meshopt_Meshlet& lastMeshlet = gb.meshlets[gb.meshletCount - 1];
+        gb.meshletVertexCount = lastMeshlet.vertex_offset + lastMeshlet.vertex_count;
+        gb.meshletTriangleCount = lastMeshlet.triangle_offset + lastMeshlet.triangle_count * 3;
+        for (size_t i = 0; i < gb.meshletCount; ++i) {
+            meshopt_optimizeMeshlet(&gb.meshletVertices[gb.meshlets[i].vertex_offset], &gb.meshletTriangles[gb.meshlets[i].triangle_offset], gb.meshlets[i].triangle_count, gb.meshlets[i].vertex_count);
+        }
+
+        gb.bounds = CalculateMeshBounds(gb.verts);
+        if (gb.bounds.aabbExtents.x < 1e-6f) { gb.bounds.aabbExtents.x = 1.0f; }
+        if (gb.bounds.aabbExtents.y < 1e-6f) { gb.bounds.aabbExtents.y = 1.0f; }
+        if (gb.bounds.aabbExtents.z < 1e-6f) { gb.bounds.aabbExtents.z = 1.0f; }
+
+        totalVerts += gb.verts.Size();
+        totalIndices += groupIdxCount;
+        totalMeshlets += gb.meshletCount;
+        totalMeshletVerts += gb.meshletVertexCount;
+        totalMeshletTris += gb.meshletTriangleCount;
+    }
+
+    assert(rawData.vertices.Size() == 0);
+    assert(rawData.indices.Size() == 0);
+
+    rawData.vertices = Core::HeapArray<Engine::Vertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, totalVerts);
+    rawData.indices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, totalIndices);
+    rawData.meshletVertices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, totalMeshletVerts);
+    rawData.meshletTriangles = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, totalMeshletTris);
+    rawData.meshlets = Core::HeapArray<Meshlet>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, totalMeshlets);
+    rawData.primitives = Core::HeapArray<Primitive>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, groupCount);
+    rawData.allMeshes = Core::HeapArray<Engine::MeshInformation>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 1);
+    rawData.allMeshes[0].name = Core::InlineString<64>(outputModel->name.c_str());
+
+    size_t vBase = 0, iBase = 0, mBase = 0, mvBase = 0, mtBase = 0;
+    for (size_t g = 0; g < groupCount; ++g) {
+        GroupBuild& gb = builds[g];
+        for (size_t i = 0; i < gb.verts.Size(); ++i) {
+            rawData.vertices[vBase + i] = CompressVertex(gb.verts[i], gb.bounds);
+        }
+        for (size_t i = 0; i < gb.indices.Size(); ++i) {
+            rawData.indices[iBase + i] = gb.indices[i] + static_cast<uint32_t>(vBase);
+        }
+        for (size_t i = 0; i < gb.meshletVertexCount; ++i) {
+            rawData.meshletVertices[mvBase + i] = gb.meshletVertices[i];
+        }
+        for (size_t i = 0; i < gb.meshletTriangleCount; ++i) {
+            rawData.meshletTriangles[mtBase + i] = gb.meshletTriangles[i];
+        }
+        for (size_t i = 0; i < gb.meshletCount; ++i) {
+            const meshopt_Meshlet& m = gb.meshlets[i];
+            meshopt_Bounds mBounds = meshopt_computeMeshletBounds(
+                &gb.meshletVertices[m.vertex_offset], &gb.meshletTriangles[m.triangle_offset], m.triangle_count,
+                reinterpret_cast<const float*>(gb.verts.Data()), gb.verts.Size(), sizeof(Engine::FullVertex));
+
+            rawData.meshlets[mBase + i] = {
+                .meshletBoundingSphere = {mBounds.center[0], mBounds.center[1], mBounds.center[2], mBounds.radius},
+                .coneApex = {mBounds.cone_apex[0], mBounds.cone_apex[1], mBounds.cone_apex[2]},
+                .coneCutoff = mBounds.cone_cutoff,
+                .coneAxis = {mBounds.cone_axis[0], mBounds.cone_axis[1], mBounds.cone_axis[2]},
+                .vertexOffset = static_cast<uint32_t>(vBase),
+                .meshletVertexOffset = static_cast<uint32_t>(mvBase) + m.vertex_offset,
+                .meshletTriangleOffset = static_cast<uint32_t>(mtBase) + m.triangle_offset,
+                .meshletVertexCount = m.vertex_count,
+                .meshletTriangleCount = m.triangle_count,
+            };
+        }
+
+        rawData.primitives[g].meshletOffset = IVec4(static_cast<int>(mBase));
+        rawData.primitives[g].meshletCount = IVec4(static_cast<int>(gb.meshletCount));
+        rawData.primitives[g].boundingSphere = {gb.bounds.sphere.center, gb.bounds.sphere.radius};
+        rawData.primitives[g].boundingBoxMin = gb.bounds.aabb.min;
+        rawData.primitives[g].boundingBoxMax = gb.bounds.aabb.max;
+        rawData.primitives[g].bHasTransparent = 0;
+        rawData.primitives[g].indexOffset = static_cast<uint32_t>(iBase);
+        rawData.allMeshes[0].primitiveProperties.PushBack({static_cast<uint32_t>(g), groups[g].slot});
+
+        vBase += gb.verts.Size();
+        iBase += gb.indices.Size();
+        mBase += gb.meshletCount;
+        mvBase += gb.meshletVertexCount;
+        mtBase += gb.meshletTriangleCount;
+    }
+
+    {
+        Core::HeapArray<Vec3> allPositions(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, vertices.Size());
+        for (size_t i = 0; i < vertices.Size(); ++i) {
+            allPositions[i] = vertices[i].position;
         }
         outputModel->bounds = ComputeBounds(allPositions);
     }
@@ -1142,6 +1304,49 @@ bool ProceduralModelLoadSlot::GenerateCorrugatedPanel(const Engine::CorrugatedPa
     }
 
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
+bool ProceduralModelLoadSlot::GenerateModule(const Engine::ModuleParams& p)
+{
+    ZoneScopedN("GenerateModule");
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::InlineVector<ModuleGroupRange, Engine::MAX_MODULE_SLOTS> groups;
+
+    moduleSinkVertices = &vertices;
+    moduleSinkIndices = &indices;
+    bool bOk = true;
+    for (int32_t slot = 0; slot < Engine::MAX_MODULE_SLOTS && bOk; slot++) {
+        const auto indexStart = static_cast<uint32_t>(indices.Size());
+        for (const Engine::ModulePart& part : p.parts) {
+            if (part.materialSlot != slot || std::holds_alternative<std::monostate>(part.shape)) { continue; }
+            const size_t base = vertices.Size();
+            Engine::ProceduralParams shape = part.shape;
+            if (!GenerateShapeVariant(shape)) {
+                bOk = false;
+                break;
+            }
+            const glm::mat3 rot = glm::mat3_cast(part.rotation);
+            for (size_t i = base; i < vertices.Size(); ++i) {
+                Engine::FullVertex& v = vertices[i];
+                v.position = rot * v.position + part.offset;
+                v.normal = rot * v.normal;
+                const Vec3 t = rot * Vec3(v.tangent.x, v.tangent.y, v.tangent.z);
+                v.tangent = {t.x, t.y, t.z, v.tangent.w};
+            }
+        }
+        const auto count = static_cast<uint32_t>(indices.Size()) - indexStart;
+        if (bOk && count > 0) {
+            groups.PushBack({indexStart, count, slot});
+        }
+    }
+    moduleSinkVertices = nullptr;
+    moduleSinkIndices = nullptr;
+    if (!bOk || groups.IsEmpty()) { return false; }
+
+    return FinalizeGeometryGroups(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()),
+                                  Core::Span<const ModuleGroupRange>(groups.Data(), groups.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)

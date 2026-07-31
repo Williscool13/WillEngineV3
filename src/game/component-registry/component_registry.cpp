@@ -16,6 +16,7 @@
 #include "game/components/physics/physics_components.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
+#include "game/components/render/module_mesh_component.h"
 #include "game/components/gameplay/checkpoint_component.h"
 #include "game/components/gameplay/death_zone_component.h"
 #include "game/components/gameplay/path_mover_component.h"
@@ -53,6 +54,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::ReflectionProbeComponent>(componentRegistry, false, false);
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, false, false);
     RegisterComponent<Component::SplineMeshComponent>(componentRegistry, false, false);
+    RegisterComponent<Component::ModuleMeshComponent>(componentRegistry, false, false);
     RegisterComponent<Component::Text3DComponent>(componentRegistry, false, false);
 
     RegisterComponent<Component::CharacterPhysicsComponent>(componentRegistry, false, false);

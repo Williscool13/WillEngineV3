@@ -46,6 +46,10 @@ struct ProceduralMeshLoadingTag
 {};
 
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);
+
+/** Flat shape-field (de)serialization shared with ModuleMeshComponent parts; "type" (variant index) is written by the caller. */
+void SerializeProceduralShape(const Engine::ProceduralParams& params, nlohmann::json& json);
+Engine::ProceduralParams DeserializeProceduralShape(int32_t type, const nlohmann::json& json);
 }
 
 #endif //WILL_ENGINE_PROCEDURAL_MESH_COMPONENT_H
