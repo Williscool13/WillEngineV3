@@ -34,6 +34,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateTexture(GI_GATHER_GUIDE, TextureInfo{VK_FORMAT_R32G32_UINT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
 
     const bool bScreenSpace = !bDebugView && !bDisableScreenTier && graph.HasTexture(SID("lit_color_history")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
+    const bool bDemodulate = bScreenSpace && graph.HasTexture(GI_GATHER_HISTORY);
 
     RenderPass& pass = graph.AddPass(SID("GI Diffuse Gather"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
@@ -56,6 +57,9 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         pass.ReadSampledImage(SID("depth_history"));
         pass.ReadSampledImage(SID("gbuffer_one_history"));
     }
+    if (bDemodulate) {
+        pass.ReadSampledImage(GI_GATHER_HISTORY);
+    }
     const bool bCascades = AddDDGISampleDependencies(graph, pass);
     pass.WriteStorageImage(gatherShR);
     pass.WriteStorageImage(gatherShG);
@@ -66,7 +70,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
     const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, bCascades, bScreenSpace, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute,
+    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, bCascades, bScreenSpace, bDemodulate, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy, bakedDiffuseClampK = viewFamily.bakedDiffuseClampK,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_gather"));
@@ -112,6 +116,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .skyVisIndex = graph.GetStorageImageViewDescriptorIndex(gatherSkyVis),
             .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
             .rayCount = glm::clamp(raysPerPixel, 1u, GI_GATHER_MAX_RAYS_PER_PIXEL),
+            .giHistoryIndex = bDemodulate ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_HISTORY) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (gatherExtent[0] + 7u) / 8u, (gatherExtent[1] + 7u) / 8u, 1);

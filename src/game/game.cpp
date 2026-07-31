@@ -326,11 +326,11 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     const auto frameEnd = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);
-    constexpr auto targetFrameTime = std::chrono::microseconds(1000);
+    constexpr auto targetFrameTime = std::chrono::microseconds(3000);
 
     if (elapsed < targetFrameTime) {
         ZoneScopedN("WaitForTargetFrameTime");
-        std::this_thread::sleep_for(targetFrameTime - elapsed);
+        SDL_DelayNS(std::chrono::duration_cast<std::chrono::nanoseconds>(targetFrameTime - elapsed).count());
     }
 }
 

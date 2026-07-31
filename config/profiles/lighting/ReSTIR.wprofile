@@ -88,7 +88,7 @@
     "bEnableConfidence": false,
     "bEnableTemporal": true,
     "bInitialVisibility": true,
-    "bPermutationSampling": true,
+    "bPermutationSampling": false,
     "bSunLight": true,
     "boilingFilterStrength": 0.20000000298023224,
     "confidenceBlurRadius": 6,

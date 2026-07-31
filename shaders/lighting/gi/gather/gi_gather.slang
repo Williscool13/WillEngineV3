@@ -87,6 +87,28 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
     return s;
 }
 
+static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, float3 normal, float3 direction, float hitT, int probeIndex, float probeFade)
+{
+    float3 indirectDiffuse = float3(0.0);
+    float giW = 0.0;
+    if (pc.skyboxIndex >= 0) {
+        indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], normal) * pc.iblIntensity;
+    }
+    if (pc.bCascadesValid != 0) {
+        float edgeFade;
+        float4 gi = DDGISampleIrradianceCascaded(hitWorldPos, normal, direction, pc.ddgiCascades, 0.75 * hitT, edgeFade);
+        indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
+        giW = gi.w;
+    }
+    if (probeIndex >= 0) {
+        ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+        float3 probeIrr = SampleReflectionProbeIrradiance(probe, normal) * probe.intensity;
+        probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
+        indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
+    }
+    return indirectDiffuse;
+}
+
 /** Cache-then-probe resolution at a ray hit; shared by front-face hits whose screen tier failed and backface hits. */
 static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos, float3 hitWorldPos, GatherHitSurface hit, float3 direction, float hitT, uint2 originCellKey, out uint tier)
 {
@@ -117,24 +139,7 @@ static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos,
         pc.cacheCells[slot].lastTouched = pc.frameIndex;
     } else {
         // No light loop at fallback hits; their own direct light is missing (TDA's same trade).
-        float3 indirectDiffuse = float3(0.0);
-        float giW = 0.0;
-        if (pc.skyboxIndex >= 0) {
-            indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], hit.normal) * pc.iblIntensity;
-        }
-        if (pc.bCascadesValid != 0) {
-            float edgeFade;
-            float4 gi = DDGISampleIrradianceCascaded(hitWorldPos, hit.normal, direction, pc.ddgiCascades, 0.75 * hitT, edgeFade);
-            indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
-            giW = gi.w;
-        }
-        if (probeIndex >= 0) {
-            ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
-            float3 probeIrr = SampleReflectionProbeIrradiance(probe, hit.normal) * probe.intensity;
-            probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
-            indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
-        }
-        radiance = hit.diffuseColor * indirectDiffuse;
+        radiance = hit.diffuseColor * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, probeIndex, probeFade);
         tier = GI_GATHER_TIER_PROBE;
         if (probeIndex >= 0 && probeFade > 0.5) {
             tier = GI_GATHER_TIER_BAKED;
@@ -310,6 +315,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                 int2 base = int2(floor(texelPos));
                                 float2 f = texelPos - float2(base);
                                 float3 sum = float3(0.0);
+                                float3 giPrevSum = float3(0.0);
                                 float sumW = 0.0;
                                 [unroll]
                                 for (uint c = 0; c < 4; c++) {
@@ -341,10 +347,23 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                         continue;
                                     }
                                     sum += rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(corner, 0)).rgb * w;
+                                    if (pc.giHistoryIndex != ~0x0u) {
+                                        giPrevSum += rdgTexturesFloat4[pc.giHistoryIndex].Load(int3(corner, 0)).rgb * w;
+                                    }
                                     sumW += w;
                                 }
                                 if (sumW > 1e-3) {
                                     radiance = sum / sumW;
+                                    // Demodulate the recirculated GI: lit history contains last frame's gather output (composite kD*albedo*gtao*gi), so the loop gain is ~albedo and screen-space artifacts self-sustain (frame-entry seam). Subtract it and re-source the indirect component from the world tiers; direct stays exact. diffuseColor stands in for the composite factor, so the subtraction over-reaches where AO is dark; the floor bounds it.
+                                    if (pc.giHistoryIndex != ~0x0u) {
+                                        int demodProbeIndex = -1;
+                                        float demodProbeFade = 0.0;
+                                        if (pc.reflectionProbeCount > 0u) {
+                                            demodProbeIndex = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, demodProbeFade);
+                                        }
+                                        float3 worldIndirect = ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, demodProbeIndex, demodProbeFade);
+                                        radiance = max(radiance - hit.diffuseColor * (giPrevSum / sumW), float3(0.0)) + hit.diffuseColor * worldIndirect;
+                                    }
                                     tier = GI_GATHER_TIER_SCREEN;
                                     bResolved = true;
                                 }

@@ -715,6 +715,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t skyVisIndex;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t rayCount;
+    SHADER_PUBLIC uint32_t giHistoryIndex;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
