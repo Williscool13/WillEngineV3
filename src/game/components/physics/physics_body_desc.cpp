@@ -388,6 +388,23 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                             shapeJson["openings"].push_back({p.openings[i].x, p.openings[i].y, p.openings[i].w, p.openings[i].h});
                         }
                     }
+                    else if constexpr (std::is_same_v<T, Engine::LatticeParams>) {
+                        shapeJson["sizeX"] = p.sizeX;
+                        shapeJson["sizeY"] = p.sizeY;
+                        shapeJson["sizeZ"] = p.sizeZ;
+                        shapeJson["chordSize"] = p.chordSize;
+                        shapeJson["braceSize"] = p.braceSize;
+                        shapeJson["bayCount"] = p.bayCount;
+                        shapeJson["pattern"] = p.pattern;
+                    }
+                    else if constexpr (std::is_same_v<T, Engine::CorrugatedPanelParams>) {
+                        shapeJson["sizeX"] = p.sizeX;
+                        shapeJson["sizeY"] = p.sizeY;
+                        shapeJson["sizeZ"] = p.sizeZ;
+                        shapeJson["ribDepth"] = p.ribDepth;
+                        shapeJson["ribWidth"] = p.ribWidth;
+                        shapeJson["ribCount"] = p.ribCount;
+                    }
                 }, shape.proceduralParams);
                 break;
         }
@@ -657,6 +674,27 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                         }
                         shape.proceduralParams = p;
                     }
+                    else if (ptype == 26) {
+                        Engine::LatticeParams p{};
+                        p.sizeX = shapeJson["sizeX"].get<float>();
+                        p.sizeY = shapeJson["sizeY"].get<float>();
+                        p.sizeZ = shapeJson["sizeZ"].get<float>();
+                        p.chordSize = shapeJson["chordSize"].get<float>();
+                        p.braceSize = shapeJson["braceSize"].get<float>();
+                        p.bayCount = shapeJson["bayCount"].get<int32_t>();
+                        p.pattern = shapeJson.value("pattern", 0);
+                        shape.proceduralParams = p;
+                    }
+                    else if (ptype == 27) {
+                        Engine::CorrugatedPanelParams p{};
+                        p.sizeX = shapeJson["sizeX"].get<float>();
+                        p.sizeY = shapeJson["sizeY"].get<float>();
+                        p.sizeZ = shapeJson["sizeZ"].get<float>();
+                        p.ribDepth = shapeJson["ribDepth"].get<float>();
+                        p.ribWidth = shapeJson["ribWidth"].get<float>();
+                        p.ribCount = shapeJson["ribCount"].get<int32_t>();
+                        shape.proceduralParams = p;
+                    }
                 }
                 if (shapeJson.contains("splineParams")) {
                     const auto& sp = shapeJson["splineParams"];
@@ -884,11 +922,12 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 {
                     bool bHasAny = false;
                     const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
-                    static constexpr Core::Array<const char*, 25> kProceduralNames = {
+                    static constexpr Core::Array<const char*, 28> kProceduralNames = {
                         nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
                         "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
                         "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
                         "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring",
+                        "Wall", "Lattice", "Corrugated Panel",
                     };
                     const size_t idx = shape.proceduralParams.index();
 

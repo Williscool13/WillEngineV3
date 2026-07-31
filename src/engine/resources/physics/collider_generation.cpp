@@ -633,6 +633,94 @@ static void CompoundWall(const WallParams& p, Core::Vector<SplineColliderPrimiti
     }
 }
 
+// One oriented box per member (local Y along the member), mirrors GenerateLattice's membership exactly.
+static void CompoundLattice(const LatticeParams& p, Core::Vector<SplineColliderPrimitive>& out)
+{
+    const float sx = p.sizeX, sy = p.sizeY, sz = p.sizeZ;
+    if (sx <= 0.0f || sy <= 0.0f || sz <= 0.0f) { return; }
+    const int bays = glm::max(1, p.bayCount);
+    const float chord = glm::clamp(p.chordSize, 0.005f, glm::min(sx, sz));
+    const float brace = glm::clamp(p.braceSize, 0.005f, glm::min(sx, sz));
+
+    auto addMember = [&](Vec3 a, Vec3 b, float t) {
+        const Vec3 seg = b - a;
+        const float len = glm::length(seg);
+        if (len < 1e-5f) { return; }
+        const Vec3 y = seg / len;
+        const Vec3 ref = (std::abs(y.y) < 0.99f) ? Vec3(0.0f, 1.0f, 0.0f) : Vec3(1.0f, 0.0f, 0.0f);
+        const Vec3 x = glm::normalize(glm::cross(ref, y));
+        const Vec3 z = glm::cross(x, y);
+        PushBoxPrim((a + b) * 0.5f, Vec3(t * 0.5f, len * 0.5f, t * 0.5f), BasisToQuat(x, y, z), out);
+    };
+
+    const float ch = chord * 0.5f, bh = brace * 0.5f;
+    const float cxs[2] = {ch, sx - ch}, czs[2] = {ch, sz - ch};
+    const float bayH = sy / static_cast<float>(bays);
+    auto ringY = [&](int i) { return glm::clamp(static_cast<float>(i) * bayH, bh, sy - bh); };
+
+    for (int ix = 0; ix < 2; ix++) {
+        for (int iz = 0; iz < 2; iz++) {
+            addMember({cxs[ix], 0, czs[iz]}, {cxs[ix], sy, czs[iz]}, chord);
+        }
+    }
+    for (int i = 0; i <= bays; i++) {
+        const float y = ringY(i);
+        addMember({cxs[0], y, czs[0]}, {cxs[1], y, czs[0]}, brace);
+        addMember({cxs[0], y, czs[1]}, {cxs[1], y, czs[1]}, brace);
+        addMember({cxs[0], y, czs[0]}, {cxs[0], y, czs[1]}, brace);
+        addMember({cxs[1], y, czs[0]}, {cxs[1], y, czs[1]}, brace);
+    }
+    for (int i = 0; i < bays; i++) {
+        const float y0 = ringY(i), y1 = ringY(i + 1);
+        for (int face = 0; face < 4; face++) {
+            Vec3 c0, c1;
+            if (face < 2) {
+                c0 = {cxs[0], 0, czs[face]};
+                c1 = {cxs[1], 0, czs[face]};
+            }
+            else {
+                c0 = {cxs[face - 2], 0, czs[0]};
+                c1 = {cxs[face - 2], 0, czs[1]};
+            }
+            if (p.pattern == 0 || ((i + face) & 1) == 0) {
+                addMember({c0.x, y0, c0.z}, {c1.x, y1, c1.z}, brace);
+            }
+            if (p.pattern == 0 || ((i + face) & 1) == 1) {
+                addMember({c1.x, y0, c1.z}, {c0.x, y1, c0.z}, brace);
+            }
+        }
+    }
+}
+
+// Web slab + one box per rib (flanks folded into the rib box), mirrors GenerateCorrugatedPanel's profile.
+static void CompoundCorrugatedPanel(const CorrugatedPanelParams& p, Core::Vector<SplineColliderPrimitive>& out)
+{
+    const float sx = p.sizeX, sy = p.sizeY, base = p.sizeZ;
+    if (sx <= 0.0f || sy <= 0.0f || base <= 0.0f) { return; }
+    const int ribs = glm::max(1, p.ribCount);
+    const float pitch = sx / static_cast<float>(ribs);
+    const float w = glm::clamp(p.ribWidth, 0.0f, glm::max(0.0f, pitch - 2e-3f));
+    const float flank = glm::min(glm::max(p.ribDepth, 0.0f), (pitch - w) * 0.5f);
+    const float depth = glm::max(p.ribDepth, 0.0f);
+
+    SplineColliderPrimitive web{};
+    web.type = SplineColliderPrimitiveType::Box;
+    web.halfExtents = Vec3(sx * 0.5f, sy * 0.5f, base * 0.5f);
+    web.position = web.halfExtents;
+    out.PushBack(web);
+
+    if (depth <= 0.0f || w <= 0.0f) { return; }
+    const float ribHalfX = w * 0.5f + flank * 0.5f;
+    for (int i = 0; i < ribs; i++) {
+        const float c = (static_cast<float>(i) + 0.5f) * pitch;
+        SplineColliderPrimitive prim{};
+        prim.type = SplineColliderPrimitiveType::Box;
+        prim.halfExtents = Vec3(ribHalfX, sy * 0.5f, depth * 0.5f);
+        prim.position = Vec3(c, sy * 0.5f, base + depth * 0.5f);
+        out.PushBack(prim);
+    }
+}
+
 bool CanBuildProceduralCollider(const ProceduralParams& params)
 {
     return std::holds_alternative<BoxParams>(params)
@@ -652,6 +740,8 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<ArchParams>(params)
         || std::holds_alternative<DoorParams>(params)
         || std::holds_alternative<WallParams>(params)
+        || std::holds_alternative<LatticeParams>(params)
+        || std::holds_alternative<CorrugatedPanelParams>(params)
         || std::holds_alternative<TetrahedronParams>(params)
         || std::holds_alternative<OctahedronParams>(params)
         || std::holds_alternative<IcosahedronParams>(params)
@@ -750,6 +840,16 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
     if (const auto* p = std::get_if<WallParams>(&params)) {
         outKind = PhysicsColliderKind::Compound;
         CompoundWall(*p, outPrimitives);
+        return true;
+    }
+    if (const auto* p = std::get_if<LatticeParams>(&params)) {
+        outKind = PhysicsColliderKind::Compound;
+        CompoundLattice(*p, outPrimitives);
+        return true;
+    }
+    if (const auto* p = std::get_if<CorrugatedPanelParams>(&params)) {
+        outKind = PhysicsColliderKind::Compound;
+        CompoundCorrugatedPanel(*p, outPrimitives);
         return true;
     }
 

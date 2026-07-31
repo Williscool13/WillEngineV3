@@ -52,7 +52,7 @@ PROBE = component_key("ReflectionProbeComponent")           # probeId, bEnabled,
 # Schemas below observed in level0.wscene; payload fields verified there, not against source.
 PREFAB_INSTANCE = component_key("PrefabInstanceComponent")  # prefabId (matches a .wprefab header id), bMasterPrefab
 CHECKPOINT = component_key("CheckpointComponent")           # checkpointId, priority, spawnOffset[3], spawnRotation[3]
-PATH_MOVER = component_key("PathMoverComponent")            # pointSettings[]{easing,speed,waitTime,rotation[xyzw]}, loopMode, direction, currentSegment, bIsWaiting
+PATH_MOVER = component_key("PathMoverComponent")            # spline{bClosed,mode,points}, pointSettings[]{easing,speed,waitTime,rotation[xyzw] NOT wxyz}, loopMode, + runtime state; see add_path_mover()
 DEATH_ZONE = component_key("DeathZoneComponent")            # tag, payload is null
 WORLD_TEXT = component_key("TextComponent")                 # text, fontId, textMaterialId, renderSizePx, color[4]
 
@@ -143,10 +143,27 @@ def wall_params(size_x, size_y, size_z, openings=()):
         raise ValueError(f"wall_params: {len(ops)} openings, max is 8")
     return {"sizeX": size_x, "sizeY": size_y, "sizeZ": size_z, "openings": ops}, 25
 
+def lattice_params(size_x, size_y, size_z, chord=0.06, brace=0.04, bays=4, pattern=0):
+    """4-chord truss in the corner-pivot envelope, long axis Y. Chords at the XZ footprint corners,
+    a horizontal brace ring at every bay boundary. pattern: 0 = X-brace (both diagonals per side face
+    per bay), 1 = single diagonal alternating per bay. Collider = compound box per member.
+    Replaces hand-placed mast brace/diagonal entity stacks."""
+    return {"sizeX": size_x, "sizeY": size_y, "sizeZ": size_z, "chordSize": chord, "braceSize": brace,
+            "bayCount": bays, "pattern": pattern}, 26
+
+def corrugated_params(size_x, size_y, size_z=0.05, rib_depth=0.05, rib_width=0.2, rib_count=6):
+    """Corrugated sheet: flat back at z=0, web size_z thick, rib_count trapezoidal ribs protruding to
+    z = size_z + rib_depth, evenly pitched across X, running the full Y (45-degree flanks, steepened
+    when the pitch cannot fit them). Corner pivot. Collider = web box + one box per rib.
+    Replaces per-rib box stacks on container-style panels."""
+    return {"sizeX": size_x, "sizeY": size_y, "sizeZ": size_z, "ribDepth": rib_depth,
+            "ribWidth": rib_width, "ribCount": rib_count}, 27
+
 # proceduralType index -> variant name, for reference / error messages
 PROC_TYPE_NAMES = ["monostate", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door",
                     "Plane", "Sphere", "SubdividedSphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                    "Icosahedron", "Dodecahedron", "KleinBottle", "TrefoilKnot", "CurvedRamp", "Bowl", "SpiralStaircase", "Ring", "Wall"]
+                    "Icosahedron", "Dodecahedron", "KleinBottle", "TrefoilKnot", "CurvedRamp", "Bowl", "SpiralStaircase", "Ring", "Wall",
+                    "Lattice", "CorrugatedPanel"]
 
 # =============================================================================
 # Spiral staircase ramp-mode geometry (ported from CompoundSpiralStaircase in
@@ -461,6 +478,38 @@ def add_checkpoint(entity, checkpoint_id, priority=0, spawn_offset=(0.0, 0.0, 0.
     Highest `priority` wins when several are active. checkpoint_id must be stable across runs: name_id("...")."""
     entity[CHECKPOINT] = {"checkpointId": checkpoint_id, "priority": priority,
                           "spawnOffset": list(spawn_offset), "spawnRotation": list(spawn_rotation)}
+    return entity
+
+LOOP_ONCE, LOOP_LOOP, LOOP_PINGPONG = 0, 1, 2
+# EasingType order in path_mover_component.h (verified 2026-07-31): Linear, EaseInQuad, EaseOutQuad,
+# EaseInOutQuad, EaseInCubic, EaseOutCubic, EaseInOutCubic, EaseInQuart, EaseOutQuart, EaseInOutQuart,
+# EaseInExpo, EaseOutExpo, EaseInOutExpo, EaseInSine, EaseOutSine, EaseInOutSine
+EASE_LINEAR, EASE_IN_OUT_QUAD, EASE_IN_OUT_CUBIC, EASE_IN_OUT_SINE = 0, 3, 6, 15
+
+def add_path_mover(entity, points, speed=1.0, wait_time=0.0, easing=EASE_LINEAR, loop_mode=LOOP_PINGPONG,
+                   mode=1, point_settings=None):
+    """Moves the entity along a spline of world-space points (mode: 0=Linear, 1=CatmullRom;
+    Spline.MaxPoints=64). Pair with a Kinematic physics body (motionType=1) so the platform sweeps
+    riders instead of teleporting through them. speed/wait_time/easing broadcast to every point;
+    point_settings (list of dicts, one per point) overrides per point with keys speed, waitTime,
+    easing, rotation. IMPORTANT: pointSettings rotation is [x,y,z,w] (path_mover_component.cpp:100),
+    UNLIKE TransformComponent quats which are [w,x,y,z]. loop_mode: 0=Once, 1=Loop (deserialize
+    force-closes the spline), 2=PingPong."""
+    pts = [list(p) for p in points]
+    if len(pts) > 64:
+        raise ValueError(f"add_path_mover: {len(pts)} points, Spline.MaxPoints is 64")
+    settings = []
+    for i in range(len(pts)):
+        ps = {"rotation": [0.0, 0.0, 0.0, 1.0], "easing": easing, "speed": speed, "waitTime": wait_time}
+        if point_settings is not None and i < len(point_settings):
+            ps.update(point_settings[i])
+        settings.append(ps)
+    entity[PATH_MOVER] = {
+        "loopMode": loop_mode,
+        "spline": {"bClosed": loop_mode == LOOP_LOOP, "mode": mode, "points": pts},
+        "pointSettings": settings,
+        "currentSegment": 0, "progress": 0.0, "direction": 1, "bIsWaiting": False, "waitTimer": 0.0,
+    }
     return entity
 
 def add_world_text(entity, text, font_id, text_material_id=0, render_size_px=48.0, color=(1.0, 1.0, 1.0, 1.0)):

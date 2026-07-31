@@ -464,8 +464,41 @@ struct WallParams
     WallOpening openings[MAX_OPENINGS]{};
 };
 
+/**
+ * Straight 4-chord truss inside the corner-pivot envelope (0,0,0)..(size), long axis Y. Chords run the
+ * full height at the XZ footprint corners; bayCount bays stack along Y with a horizontal ring of braces
+ * at every bay boundary. pattern 0 = X-brace (both diagonals per side face per bay), 1 = single diagonal
+ * alternating direction per bay. Members are square-section boxes meeting at chord centerlines.
+ */
+struct LatticeParams
+{
+    float sizeX{0.5f};
+    float sizeY{3.0f};
+    float sizeZ{0.5f};
+    float chordSize{0.06f};
+    float braceSize{0.04f};
+    int32_t bayCount{4};
+    int32_t pattern{0};
+};
+
+/**
+ * Corrugated sheet: flat back at z=0, web sizeZ thick, ribCount trapezoidal ribs protruding to
+ * z = sizeZ + ribDepth, evenly pitched across X and running the full Y. Each rib is a plateau of
+ * ribWidth with 45-degree flanks (flank run = ribDepth, steepened when the pitch cannot fit them).
+ * Corner pivot like BoxParams.
+ */
+struct CorrugatedPanelParams
+{
+    float sizeX{2.4f};
+    float sizeY{2.4f};
+    float sizeZ{0.05f};
+    float ribDepth{0.05f};
+    float ribWidth{0.2f};
+    int32_t ribCount{6};
+};
+
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
-    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams, WallParams>;
+    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams, WallParams, LatticeParams, CorrugatedPanelParams>;
 
 /** Horizontal placement of each line relative to the model origin. */
 enum class Text3DAlign : uint8_t

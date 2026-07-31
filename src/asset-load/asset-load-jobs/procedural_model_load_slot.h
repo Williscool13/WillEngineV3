@@ -120,6 +120,8 @@ private:
     bool GenerateSpiralStaircase(const Engine::SpiralStaircaseParams& p);
     bool GenerateRing(const Engine::RingParams& p);
     bool GenerateWall(const Engine::WallParams& p);
+    bool GenerateLattice(const Engine::LatticeParams& p);
+    bool GenerateCorrugatedPanel(const Engine::CorrugatedPanelParams& p);
     bool GenerateSpline(const Engine::SplineParams& p);
     bool GenerateText3D(const Engine::Text3DParams& p);
 };

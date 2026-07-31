@@ -37,10 +37,11 @@ import wscene_authoring as wa
 wa.seed_ids("di_arch")   # must precede every next_id() call
 
 from wscene_authoring import (
-    base_entity, box_params, wall_params, next_id, name_id, add_procedural,
+    base_entity, box_params, wall_params, lattice_params, corrugated_params,
+    next_id, name_id, add_procedural, add_path_mover,
     add_static_mesh, add_sphere_light, add_area_light, add_skybox, add_world_text,
     add_reflection_probe, add_prefab_instance, basis_for, mat_to_quat,
-    RENDER_DEFAULTS, PROCEDURAL, PHYSICS, SCENE_FOLDER, PROBE_BOX,
+    RENDER_DEFAULTS, PROCEDURAL, PHYSICS, SCENE_FOLDER, PROBE_BOX, EASE_IN_OUT_SINE,
 )
 import asset_index
 
@@ -117,17 +118,18 @@ shell = base_entity("Sibenik Cathedral", (0.0, SHELL_Y, 0.0), folder_id=fid_sibe
 add_static_mesh(shell, SIBENIK_MODEL, lighting_shader=LIT_RESTIR)
 entities.append(shell)
 
-# Nave chandeliers along the long axis
+# Nave chandeliers along the long axis. Emitters are deliberately fat: near-point
+# sources blotch/boil at this sample budget, and that stress is the ladder's job, not this scene's.
 for i, x in enumerate(range(-15, 16, 5)):
     e = light_entity(f"Chandelier {i}", (float(x), 6.0, 0.0), fid_sibenik)
-    add_sphere_light(e, color=WARM, intensity=140.0, radius=0.12, draw_range=14.0, draw_emissive=True)
+    add_sphere_light(e, color=WARM, intensity=140.0, radius=0.25, draw_range=14.0, draw_emissive=True)
 
 # Aisle candles, one line per side
 ci = 0
 for side in (-1.0, 1.0):
     for x in range(-14, 15, 4):
         e = light_entity(f"Candle {ci}", (float(x), 1.6, side * 6.2), fid_sibenik)
-        add_sphere_light(e, color=CANDLE, intensity=12.0, radius=0.04, draw_range=5.0, draw_emissive=True)
+        add_sphere_light(e, color=CANDLE, intensity=12.0, radius=0.12, draw_range=5.0, draw_emissive=True)
         ci += 1
 
 # Apse feature: one broad panel washing back down the nave, two candle stands
@@ -135,15 +137,19 @@ e = light_entity("Apse Panel", (16.0, 5.0, 0.0), fid_sibenik, rot=facing((-1.0, 
 add_area_light(e, color=(0.9, 0.95, 1.0), intensity=220.0, half_width=1.5, half_height=1.0, draw_range=18.0, draw_emissive=True)
 for k, z in enumerate((-2.0, 2.0)):
     e = light_entity(f"Apse Candle {k}", (16.0, 1.2, z), fid_sibenik)
-    add_sphere_light(e, color=CANDLE, intensity=25.0, radius=0.05, draw_range=6.0, draw_emissive=True)
+    add_sphere_light(e, color=CANDLE, intensity=25.0, radius=0.12, draw_range=6.0, draw_emissive=True)
 
-# Clerestory fills: cool panels just inside the upper side walls, aimed inward-down 45
+# Window fills: cool panels hung in the open nave volume above the arcade, aimed
+# down-outward 45 like light shafts falling from the clerestory. Free air is the only
+# placement that survives Sibenik's interior shells (aisle/chapel vaults hollow out the
+# wide body; the nave core walls sit at |z| ~3.5-4 with the vault above): the nave axis
+# volume is proven open by the chandeliers. Corners swing 0.49 in z: 2.8 + 0.49 < 3.5.
 wi = 0
 for side in (-1.0, 1.0):
     rot = facing((0.0, -1.0, -side))
     for x in (-10.0, 0.0, 10.0):
-        e = light_entity(f"Window Fill {wi}", (x, 11.0, side * 7.8), fid_sibenik, rot=rot)
-        add_area_light(e, color=DAYLIGHT, intensity=90.0, half_width=0.5, half_height=0.9, draw_range=16.0, draw_emissive=True)
+        e = light_entity(f"Window Fill {wi}", (x, 13.0, side * 2.8), fid_sibenik, rot=rot)
+        add_area_light(e, color=DAYLIGHT, intensity=90.0, half_width=0.5, half_height=0.7, draw_range=15.0, draw_emissive=True)
         wi += 1
 
 # Barrel props in the south aisle: prefab provenance + the prefab's own components
@@ -217,6 +223,54 @@ for i, (tag, openings) in enumerate(RUNGS):
     label(f"[{tag}] Label", text, (cx, 4.7, Z0 - 0.7), fid)
 
 label("Wing Label", f"Aperture Sweep - constant panel power {PANEL_INTENSITY:.0f}", (0.0, 6.2, Z0 - 0.7), fid_wing)
+
+# =============================================================================
+# Phase 2 props: new shapes + a path mover, on the ground between chapel and wing
+# =============================================================================
+fid_props = folder("Phase 2 Props")
+PROP_Y = GROUND_TOP
+
+e = base_entity("Mast X-Brace", (-12.3, PROP_Y, 19.7), folder_id=fid_props)
+fields, idx = lattice_params(0.6, 6.0, 0.6, chord=0.08, brace=0.05, bays=6, pattern=0)
+add_procedural(e, idx, fields)
+e[PROCEDURAL]["material"] = MAT_WALL
+entities.append(e)
+
+e = base_entity("Mast Single-Diagonal", (-6.3, PROP_Y, 19.7), folder_id=fid_props)
+fields, idx = lattice_params(0.6, 6.0, 0.6, chord=0.08, brace=0.05, bays=6, pattern=1)
+add_procedural(e, idx, fields)
+e[PROCEDURAL]["material"] = MAT_WALL
+entities.append(e)
+
+# Horizontal truss between the masts: -90 about Z maps local +Y (long axis) to world +X;
+# local X then points -Y, so the envelope hangs 0.6 below the origin
+e = base_entity("Truss Beam", (-11.7, 4.3, 19.7), rot=(0.7071068, 0.0, 0.0, -0.7071068), folder_id=fid_props)
+fields, idx = lattice_params(0.6, 5.4, 0.6, chord=0.06, brace=0.04, bays=5, pattern=0)
+add_procedural(e, idx, fields)
+e[PROCEDURAL]["material"] = MAT_WALL
+entities.append(e)
+
+for name, cx, kwargs in (
+    ("Panel Default", 4.0, {}),
+    ("Panel Chunky", 7.0, {"rib_depth": 0.12, "rib_width": 0.4, "rib_count": 4}),
+    ("Panel Fine", 10.0, {"rib_depth": 0.03, "rib_width": 0.1, "rib_count": 12}),
+):
+    e = base_entity(name, (cx, PROP_Y, 20.0), folder_id=fid_props)
+    fields, idx = corrugated_params(2.4, 2.4, **kwargs)
+    add_procedural(e, idx, fields)
+    e[PROCEDURAL]["material"] = MAT_FLOOR
+    entities.append(e)
+
+# Kinematic patrol platform exercising add_path_mover
+e = base_entity("Patrol Platform", (-2.0, 1.0, 26.0), folder_id=fid_props)
+fields, idx = box_params(2.0, 0.3, 2.0)
+add_procedural(e, idx, fields, motion=1)
+e[PROCEDURAL]["material"] = MAT_FLOOR
+add_path_mover(e, [(-2.0, 1.0, 26.0), (6.0, 1.0, 26.0), (6.0, 3.0, 30.0)],
+               speed=2.0, wait_time=0.5, easing=EASE_IN_OUT_SINE)
+entities.append(e)
+
+label("Props Label", "Phase 2 Props - Lattice, Corrugated Panel, Path Mover", (-1.0, 5.5, 18.5), fid_props)
 
 # =============================================================================
 # ground, sky, camera

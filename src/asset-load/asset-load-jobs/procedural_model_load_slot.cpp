@@ -229,6 +229,8 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
                    [&](const Engine::SpiralStaircaseParams& p) { bSuccess = GenerateSpiralStaircase(p); },
                    [&](const Engine::RingParams& p) { bSuccess = GenerateRing(p); },
                    [&](const Engine::WallParams& p) { bSuccess = GenerateWall(p); },
+                   [&](const Engine::LatticeParams& p) { bSuccess = GenerateLattice(p); },
+                   [&](const Engine::CorrugatedPanelParams& p) { bSuccess = GenerateCorrugatedPanel(p); },
                }, params);
     return bSuccess;
 }
@@ -941,6 +943,203 @@ bool ProceduralModelLoadSlot::GenerateWall(const Engine::WallParams& p)
     }
 
     if (vertices.Size() == 0) { return false; }
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
+bool ProceduralModelLoadSlot::GenerateLattice(const Engine::LatticeParams& p)
+{
+    ZoneScopedN("GenerateLattice");
+
+    const float sx = p.sizeX, sy = p.sizeY, sz = p.sizeZ;
+    if (sx <= 0.0f || sy <= 0.0f || sz <= 0.0f) { return false; }
+    const int bays = glm::max(1, p.bayCount);
+    const float chord = glm::clamp(p.chordSize, 0.005f, glm::min(sx, sz));
+    const float brace = glm::clamp(p.braceSize, 0.005f, glm::min(sx, sz));
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+
+    auto addRect = [&](Vec3 v0, Vec3 v1, Vec3 v2, Vec3 v3) {
+        const Vec3 e1 = v1 - v0;
+        const Vec3 e2 = v3 - v0;
+        const Vec3 n = glm::normalize(glm::cross(e1, v2 - v0));
+        const float lu = glm::length(e1), lv = glm::length(e2);
+        const Vec3 t = e1 / lu;
+        const auto base = static_cast<uint32_t>(vertices.Size());
+        auto push = [&](Vec3 pos, Vec2 uv) {
+            Engine::FullVertex v{};
+            v.position = pos;
+            v.normal = n;
+            v.uv = {uv.x, uv.y};
+            v.tangent = {t.x, t.y, t.z, 1.0f};
+            v.color = {1, 1, 1, 1};
+            vertices.PushBack(v);
+        };
+        push(v0, {0, 0});
+        push(v1, {lu, 0});
+        push(v2, {lu, lv});
+        push(v3, {0, lv});
+        indices.PushBack(base); indices.PushBack(base + 1); indices.PushBack(base + 2);
+        indices.PushBack(base); indices.PushBack(base + 2); indices.PushBack(base + 3);
+    };
+
+    auto addMember = [&](Vec3 a, Vec3 b, float t) {
+        const Vec3 seg = b - a;
+        const float len = glm::length(seg);
+        if (len < 1e-5f) { return; }
+        const Vec3 fwd = seg / len;
+        const Vec3 ref = glm::abs(fwd.y) < 0.99f ? Vec3(0, 1, 0) : Vec3(1, 0, 0);
+        const Vec3 right = glm::normalize(glm::cross(ref, fwd));
+        const Vec3 up = glm::cross(fwd, right);
+        const float h = t * 0.5f;
+        const Vec3 n00 = a - right * h - up * h, n10 = a + right * h - up * h;
+        const Vec3 n11 = a + right * h + up * h, n01 = a - right * h + up * h;
+        const Vec3 f00 = n00 + seg, f10 = n10 + seg, f11 = n11 + seg, f01 = n01 + seg;
+        addRect(n00, n01, n11, n10);
+        addRect(f00, f10, f11, f01);
+        addRect(n10, n11, f11, f10);
+        addRect(n00, f00, f01, n01);
+        addRect(f01, n01, n11, f11);
+        addRect(n00, n10, f10, f00);
+    };
+
+    // Membership must stay in lockstep with CompoundLattice in collider_generation.cpp
+    const float ch = chord * 0.5f, bh = brace * 0.5f;
+    const float cxs[2] = {ch, sx - ch}, czs[2] = {ch, sz - ch};
+    const float bayH = sy / static_cast<float>(bays);
+    auto ringY = [&](int i) { return glm::clamp(static_cast<float>(i) * bayH, bh, sy - bh); };
+
+    for (int ix = 0; ix < 2; ix++) {
+        for (int iz = 0; iz < 2; iz++) {
+            addMember({cxs[ix], 0, czs[iz]}, {cxs[ix], sy, czs[iz]}, chord);
+        }
+    }
+    for (int i = 0; i <= bays; i++) {
+        const float y = ringY(i);
+        addMember({cxs[0], y, czs[0]}, {cxs[1], y, czs[0]}, brace);
+        addMember({cxs[0], y, czs[1]}, {cxs[1], y, czs[1]}, brace);
+        addMember({cxs[0], y, czs[0]}, {cxs[0], y, czs[1]}, brace);
+        addMember({cxs[1], y, czs[0]}, {cxs[1], y, czs[1]}, brace);
+    }
+    // Side faces: 0/1 = czs[0]/czs[1] planes (corners vary in X), 2/3 = cxs planes (corners vary in Z)
+    for (int i = 0; i < bays; i++) {
+        const float y0 = ringY(i), y1 = ringY(i + 1);
+        for (int face = 0; face < 4; face++) {
+            Vec3 c0, c1;
+            if (face < 2) {
+                c0 = {cxs[0], 0, czs[face]};
+                c1 = {cxs[1], 0, czs[face]};
+            }
+            else {
+                c0 = {cxs[face - 2], 0, czs[0]};
+                c1 = {cxs[face - 2], 0, czs[1]};
+            }
+            if (p.pattern == 0 || ((i + face) & 1) == 0) {
+                addMember({c0.x, y0, c0.z}, {c1.x, y1, c1.z}, brace);
+            }
+            if (p.pattern == 0 || ((i + face) & 1) == 1) {
+                addMember({c1.x, y0, c1.z}, {c0.x, y1, c0.z}, brace);
+            }
+        }
+    }
+
+    if (vertices.Size() == 0) { return false; }
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
+bool ProceduralModelLoadSlot::GenerateCorrugatedPanel(const Engine::CorrugatedPanelParams& p)
+{
+    ZoneScopedN("GenerateCorrugatedPanel");
+
+    const float sx = p.sizeX, sy = p.sizeY, base = p.sizeZ;
+    if (sx <= 0.0f || sy <= 0.0f || base <= 0.0f) { return false; }
+    const int ribs = glm::max(1, p.ribCount);
+    const float pitch = sx / static_cast<float>(ribs);
+    // Plateau capped just under the pitch so the profile always returns to base between ribs (ends stay plain valleys)
+    const float w = glm::clamp(p.ribWidth, 0.0f, glm::max(0.0f, pitch - 2e-3f));
+    const float flank = glm::min(glm::max(p.ribDepth, 0.0f), (pitch - w) * 0.5f);
+    const float depth = glm::max(p.ribDepth, 0.0f);
+
+    // Front profile breakpoints (x, z), left to right; valleys at z=base, plateaus at base+depth
+    Core::Vector<Vec2> prof(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    auto addPoint = [&](float x, float z) {
+        if (prof.Size() > 0 && glm::abs(prof[prof.Size() - 1].x - x) < 1e-6f && glm::abs(prof[prof.Size() - 1].y - z) < 1e-6f) { return; }
+        prof.PushBack({x, z});
+    };
+    addPoint(0.0f, base);
+    if (depth > 0.0f && w > 0.0f) {
+        for (int i = 0; i < ribs; i++) {
+            const float c = (static_cast<float>(i) + 0.5f) * pitch;
+            addPoint(c - w * 0.5f - flank, base);
+            addPoint(c - w * 0.5f, base + depth);
+            addPoint(c + w * 0.5f, base + depth);
+            addPoint(c + w * 0.5f + flank, base);
+        }
+    }
+    addPoint(sx, base);
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+
+    auto addQuad = [&](Vec3 n, Vec3 t,
+                       Vec3 v0, Vec3 v1, Vec3 v2, Vec3 v3,
+                       Vec2 uv0, Vec2 uv1, Vec2 uv2, Vec2 uv3) {
+        const auto vbase = static_cast<uint32_t>(vertices.Size());
+        auto push = [&](Vec3 pos, Vec2 uv) {
+            Engine::FullVertex v{};
+            v.position = pos;
+            v.normal = n;
+            v.uv = {uv.x, uv.y};
+            v.tangent = {t.x, t.y, t.z, 1.0f};
+            v.color = {1, 1, 1, 1};
+            vertices.PushBack(v);
+        };
+        push(v0, uv0);
+        push(v1, uv1);
+        push(v2, uv2);
+        push(v3, uv3);
+        indices.PushBack(vbase); indices.PushBack(vbase + 1); indices.PushBack(vbase + 2);
+        indices.PushBack(vbase); indices.PushBack(vbase + 2); indices.PushBack(vbase + 3);
+    };
+
+    // Front: one Y-extruded strip per profile segment; U = arc length so the texture does not stretch on flanks
+    float arc = 0.0f;
+    for (size_t s = 0; s + 1 < prof.Size(); s++) {
+        const Vec2 a = prof[s], b = prof[s + 1];
+        const float dx = b.x - a.x, dz = b.y - a.y;
+        const float segLen = glm::sqrt(dx * dx + dz * dz);
+        if (segLen < 1e-6f) { continue; }
+        const Vec3 n = Vec3(-dz, 0.0f, dx) / segLen;
+        const Vec3 t = Vec3(dx, 0.0f, dz) / segLen;
+        addQuad(n, t,
+                {a.x, 0, a.y}, {b.x, 0, b.y}, {b.x, sy, b.y}, {a.x, sy, a.y},
+                {arc, 0}, {arc + segLen, 0}, {arc + segLen, sy}, {arc, sy});
+        arc += segLen;
+    }
+    // Back
+    addQuad({0, 0, -1}, {1, 0, 0},
+            {0, 0, 0}, {0, sy, 0}, {sx, sy, 0}, {sx, 0, 0},
+            {sx, 0}, {sx, sy}, {0, sy}, {0, 0});
+    // Ends (profile starts and ends in a valley, so both are plain base-thickness rects)
+    addQuad({-1, 0, 0}, {0, 0, -1},
+            {0, 0, base}, {0, sy, base}, {0, sy, 0}, {0, 0, 0},
+            {base, 0}, {base, sy}, {0, sy}, {0, 0});
+    addQuad({1, 0, 0}, {0, 0, -1},
+            {sx, 0, 0}, {sx, sy, 0}, {sx, sy, base}, {sx, 0, base},
+            {base, 0}, {base, sy}, {0, sy}, {0, 0});
+    // Caps: one vertical strip per profile segment, back line to profile
+    for (size_t s = 0; s + 1 < prof.Size(); s++) {
+        const Vec2 a = prof[s], b = prof[s + 1];
+        if (b.x - a.x < 1e-6f) { continue; }
+        addQuad({0, 1, 0}, {0, 0, 1},
+                {a.x, sy, 0}, {a.x, sy, a.y}, {b.x, sy, b.y}, {b.x, sy, 0},
+                {a.x, 0}, {a.x, a.y}, {b.x, b.y}, {b.x, 0});
+        addQuad({0, -1, 0}, {1, 0, 0},
+                {a.x, 0, 0}, {b.x, 0, 0}, {b.x, 0, b.y}, {a.x, 0, a.y},
+                {a.x, 0}, {b.x, 0}, {b.x, b.y}, {a.x, a.y});
+    }
 
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }

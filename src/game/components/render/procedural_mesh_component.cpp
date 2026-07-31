@@ -228,6 +228,23 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
                 json["openings"].push_back({p.openings[i].x, p.openings[i].y, p.openings[i].w, p.openings[i].h});
             }
         }
+        else if constexpr (std::is_same_v<T, Engine::LatticeParams>) {
+            json["sizeX"] = p.sizeX;
+            json["sizeY"] = p.sizeY;
+            json["sizeZ"] = p.sizeZ;
+            json["chordSize"] = p.chordSize;
+            json["braceSize"] = p.braceSize;
+            json["bayCount"] = p.bayCount;
+            json["pattern"] = p.pattern;
+        }
+        else if constexpr (std::is_same_v<T, Engine::CorrugatedPanelParams>) {
+            json["sizeX"] = p.sizeX;
+            json["sizeY"] = p.sizeY;
+            json["sizeZ"] = p.sizeZ;
+            json["ribDepth"] = p.ribDepth;
+            json["ribWidth"] = p.ribWidth;
+            json["ribCount"] = p.ribCount;
+        }
     }, comp.params);
 }
 
@@ -458,6 +475,27 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         }
         comp.params = p;
     }
+    else if (type == 26) {
+        Engine::LatticeParams p{};
+        p.sizeX = json["sizeX"].get<float>();
+        p.sizeY = json["sizeY"].get<float>();
+        p.sizeZ = json["sizeZ"].get<float>();
+        p.chordSize = json["chordSize"].get<float>();
+        p.braceSize = json["braceSize"].get<float>();
+        p.bayCount = json["bayCount"].get<int32_t>();
+        p.pattern = json.value("pattern", 0);
+        comp.params = p;
+    }
+    else if (type == 27) {
+        Engine::CorrugatedPanelParams p{};
+        p.sizeX = json["sizeX"].get<float>();
+        p.sizeY = json["sizeY"].get<float>();
+        p.sizeZ = json["sizeZ"].get<float>();
+        p.ribDepth = json["ribDepth"].get<float>();
+        p.ribWidth = json["ribWidth"].get<float>();
+        p.ribCount = json["ribCount"].get<int32_t>();
+        comp.params = p;
+    }
 }
 
 /**
@@ -600,13 +638,15 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 if (ImGui::Selectable("Spiral Staircase")) selectShape(Engine::SpiralStaircaseParams{});
                 if (ImGui::Selectable("Ring")) selectShape(Engine::RingParams{});
                 if (ImGui::Selectable("Wall")) selectShape(Engine::WallParams{});
+                if (ImGui::Selectable("Lattice")) selectShape(Engine::LatticeParams{});
+                if (ImGui::Selectable("Corrugated Panel")) selectShape(Engine::CorrugatedPanelParams{});
                 ImGui::EndCombo();
             }
         }
         else {
             static constexpr const char* shapeNames[] = {
                 "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall"
+                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel"
             };
             ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
             ImGui::SameLine();
@@ -1023,6 +1063,36 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                         }
                     }
                     ImGui::TextDisabled("x, y, w, h in face plane (X along Size X, Y along Size Y)");
+                }
+                else if constexpr (std::is_same_v<T, Engine::LatticeParams>) {
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Y", &p.sizeY, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Chord Size", &p.chordSize, 0.005f, 0.005f, 2.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Brace Size", &p.braceSize, 0.005f, 0.005f, 2.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Bay Count", &p.bayCount, 1, 1, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    const char* patterns[] = {"X-Brace", "Single Diagonal"};
+                    if (ImGui::Combo("Pattern", &p.pattern, patterns, 2)) { dirty = true; }
+                }
+                else if constexpr (std::is_same_v<T, Engine::CorrugatedPanelParams>) {
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Y", &p.sizeY, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.005f, 0.005f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Rib Depth", &p.ribDepth, 0.005f, 0.0f, 5.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Rib Width", &p.ribWidth, 0.005f, 0.0f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Rib Count", &p.ribCount, 1, 1, 128);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
             }, component.params);
 
