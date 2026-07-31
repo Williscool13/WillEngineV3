@@ -25,6 +25,35 @@ static const float GI_UPSCALE_CLAMP_TEMPORAL_SCALE = 3.0;
 static const float GI_UPSCALE_CHANGE_SENSITIVITY = 0.05;
 static const float GI_UPSCALE_HISTORY_FIX_FRAMES = 8.0;
 static const float GI_UPSCALE_HISTORY_FIX_STRIDE = 8.0;
+static const float GI_UPSCALE_SUPPORT_FULL = 2.0;
+
+/** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
+static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
+{
+    float3 irr = float3(0.0);
+    if (pc.skyboxIndex >= 0) {
+        irr = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], evalN) * pc.iblIntensity;
+    }
+    float giW = 0.0;
+    if (pc.bCascadesValid != 0) {
+        float3 cameraDirection = normalize(mul((float3x3)scene.invView, centerXv));
+        float edgeFade;
+        float4 gi = DDGISampleIrradianceCascaded(worldPos, evalN, cameraDirection, pc.ddgiCascades, length(centerXv), edgeFade);
+        irr = gi.rgb * gi.w + irr * (1.0 - max(gi.w, edgeFade));
+        giW = gi.w;
+    }
+    if (pc.reflectionProbeCount > 0u) {
+        float probeFade;
+        int probeIndex = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
+        if (probeIndex >= 0) {
+            ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+            float3 probeIrr = SampleReflectionProbeIrradiance(probe, evalN) * probe.intensity;
+            probeIrr *= lerp(1.0, min(1.0, Luma(irr) / max(Luma(probeIrr), 1e-4)), giW);
+            irr = lerp(irr, probeIrr, probeFade);
+        }
+    }
+    return irr;
+}
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -137,28 +166,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float invW = 1.0 / fbW;
         current = max(float3(fbShR.x + dot(fbShR.yzw, evalN), fbShG.x + dot(fbShG.yzw, evalN), fbShB.x + dot(fbShB.yzw, evalN)) * invW, float3(0.0)) + fbV * invW * skyTerm;
     } else if (!bAnyBackfaceTap) {
-        current = float3(0.0);
-        if (pc.skyboxIndex >= 0) {
-            current = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], evalN) * pc.iblIntensity;
-        }
-        float giW = 0.0;
-        if (pc.bCascadesValid != 0) {
-            float3 cameraDirection = normalize(mul((float3x3)scene.invView, centerXv));
-            float edgeFade;
-            float4 gi = DDGISampleIrradianceCascaded(worldPos, evalN, cameraDirection, pc.ddgiCascades, length(centerXv), edgeFade);
-            current = gi.rgb * gi.w + current * (1.0 - max(gi.w, edgeFade));
-            giW = gi.w;
-        }
-        if (pc.reflectionProbeCount > 0u) {
-            float probeFade;
-            int probeIndex = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
-            if (probeIndex >= 0) {
-                ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
-                float3 probeIrr = SampleReflectionProbeIrradiance(probe, evalN) * probe.intensity;
-                probeIrr *= lerp(1.0, min(1.0, Luma(current) / max(Luma(probeIrr), 1e-4)), giW);
-                current = lerp(current, probeIrr, probeFade);
-            }
-        }
+        current = GIUpscaleWorldIrradiance(pc, scene, worldPos, evalN, centerXv);
     } else {
         current = float3(0.0);
         bHasCurrent = false;
@@ -221,8 +229,13 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                     fixW += w;
                 }
             }
+            current = fixSum / fixW;
 
-            current = lerp(fixSum / fixW, current, nBlend / GI_UPSCALE_HISTORY_FIX_FRAMES);
+            // Thin geometry (railings, trim): nothing else lies on the surface, so the footprint and fix taps reject, jitter keeps history from accumulating, and the pixel shows raw 1spp and boils. Trade precision for stability with the world tiers.
+            float support = max(saturate((sumW + fixW - 1.0) / GI_UPSCALE_SUPPORT_FULL), nBlend / GI_UPSCALE_HISTORY_FIX_FRAMES);
+            if (support < 1.0) {
+                current = lerp(GIUpscaleWorldIrradiance(pc, scene, worldPos, evalN, centerXv), current, support);
+            }
         }
     }
 

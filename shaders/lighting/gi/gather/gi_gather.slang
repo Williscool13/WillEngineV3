@@ -22,9 +22,9 @@ import reflection_probe_common;
 // Sky misses do not feed the SH; the miss fraction goes to a scalar sky-visibility channel, filtered separately and multiplied by prefiltered sky irradiance at upscale.
 
 static const float GI_GATHER_MAX_RADIANCE = 20.0;
+static const float GI_GATHER_MAX_RADIANCE_MIN = 0.05;
+static const float GI_GATHER_FIREFLY_EXPECTATION_K = 8.0;
 static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
-static const float GI_GATHER_SCREEN_CLAMP_MIN = 0.5;
-static const float GI_GATHER_SCREEN_CLAMP_MAX = 2.0;
 
 /** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
 static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
@@ -246,6 +246,16 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
             shB = float4(radiance.b, 0.0, 0.0, 0.0);
             data = float2(0.0, float(tier));
         } else {
+            // Firefly clamp keyed to the local expectation: the flat cap is meaningless at dusk (spikes clamp to 20 against ~0.01 ambient), and any small bright region (a range-limited light's lit footprint) seen from far arrives as rare full-brightness hits. The probe field already carries that energy smoothly; this only bounds per-ray variance.
+            if (pc.bCascadesValid != 0) {
+                float3 cameraDirection = normalize(mul((float3x3)scene.invView, viewPosition));
+                float edgeFade;
+                float4 expected = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
+                if (expected.w > 0.5) {
+                    maxRadiance = clamp(GI_GATHER_FIREFLY_EXPECTATION_K * Luma(expected.rgb * expected.w), GI_GATHER_MAX_RADIANCE_MIN, GI_GATHER_MAX_RADIANCE);
+                }
+            }
+
             // Uniform count, deliberately not adaptive: a per-pixel count diverges inside the wave, and the lost ray coherence plus the frame-time swing cost more than the extra rays buy.
             uint rayCount = max(pc.rayCount, 1u);
             float4 sumR = float4(0.0);
@@ -334,16 +344,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                     sumW += w;
                                 }
                                 if (sumW > 1e-3) {
-                                    float3 screenRadiance = sum / sumW;
-                                    uint fallbackTier;
-                                    float3 fallback = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, originCellKey, fallbackTier);
-                                    float screenLuma = Luma(screenRadiance);
-                                    float fallbackLuma = Luma(fallback);
-                                    radiance = screenRadiance;
-                                    if (screenLuma > 1e-6) {
-                                        float target = clamp(screenLuma, fallbackLuma * GI_GATHER_SCREEN_CLAMP_MIN, fallbackLuma * GI_GATHER_SCREEN_CLAMP_MAX + 1e-4);
-                                        radiance *= target / screenLuma;
-                                    }
+                                    radiance = sum / sumW;
                                     tier = GI_GATHER_TIER_SCREEN;
                                     bResolved = true;
                                 }

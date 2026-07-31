@@ -71,24 +71,14 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
     GIGatherHistory result = { float3(0.0), 0.0, 0.0 };
 
     float2 historyUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
-    float2 clampedUv = clamp(historyUv, float2(0.0), float2(1.0));
-    float stretchPixels = length((clampedUv - historyUv) * float2(renderExtent));
-    historyUv = clampedUv;
+    if (any(historyUv < float2(0.0)) || any(historyUv > float2(1.0))) {
+        return result;
+    }
 
     float expectedPrevViewZ = centerViewZ + UnpackViewZDelta(gt1.w);
     float frustumSize = abs(scene.ndcToViewMul.y) * abs(centerViewZ);
     // Flat plane-distance tolerance: the compared |dz|*NoV already projects out slant, and the NRD-style 1/lerp(0.05,1,NoV) expansion inflated the accepted raw mismatch to ~2x viewZ at grazing (ground history never rejected).
     float disocclusionThreshold = GI_GATHER_DISOCCLUSION_SENSITIVITY * frustumSize;
-
-    bool bStretched = stretchPixels > 0.0;
-    float3 planePosPrevView = float3(0.0);
-    float3 planeNormalPrevView = float3(0.0);
-    if (bStretched) {
-        float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, centerViewZ);
-        float3 worldPos = mul(scene.invView, float4(centerXv, 1.0)).xyz;
-        planePosPrevView = mul(scene.prevView, float4(worldPos, 1.0)).xyz;
-        planeNormalPrevView = mul(float3x3(scene.prevView), worldN);
-    }
 
     float2 prevPos = historyUv * float2(renderExtent) - 0.5;
     int2 origin = int2(floor(prevPos));
@@ -115,13 +105,7 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
             continue;
         }
         float prevViewZ = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-        if (bStretched) {
-            float2 tapUv = (float2(tap) + 0.5) / float2(renderExtent);
-            float3 tapXvPrev = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, prevViewZ);
-            if (abs(dot(planeNormalPrevView, tapXvPrev - planePosPrevView)) > disocclusionThreshold) {
-                continue;
-            }
-        } else if (abs(prevViewZ - expectedPrevViewZ) * NoV > disocclusionThreshold) {
+        if (abs(prevViewZ - expectedPrevViewZ) * NoV > disocclusionThreshold) {
             continue;
         }
         float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[gbufferOneHistoryIndex].Load(int3(tap, 0)).r)));
@@ -140,7 +124,7 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
     if (weightSum > 0.01) {
         float invW = 1.0 / weightSum;
         result.color = colorSum * invW;
-        result.count = min(countSum * invW, GI_GATHER_MAX_ACCUM / (1.0 + stretchPixels));
+        result.count = countSum * invW;
         result.quality = saturate(weightSum);
         if (weightSum > 0.999) {
             result.color = clamp(GIGatherSampleHistoryCatmullRom(historyIndex, prevPos + 0.5, 1.0 / float2(renderExtent)), colorMin, colorMax);

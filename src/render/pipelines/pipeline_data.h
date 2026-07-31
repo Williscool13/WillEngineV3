@@ -42,6 +42,8 @@ public:
     // If true, loadingEntry is managed by asset load thead, do not touch.
     bool bLoading{false};
     PipelineEntry loadingEntry{};
+    // Captured before shader read so that any write landing mid-load stays newer and re-triggers reload.
+    uint64_t loadingLastModified{0};
 
     PipelineEntry activeEntry{};
     uint64_t lastModified{0};

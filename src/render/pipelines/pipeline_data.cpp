@@ -14,6 +14,8 @@ namespace Render
 {
 bool ComputePipelineData::CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache)
 {
+    loadingLastModified = GetLatestShaderWriteTime();
+
     VkShaderModule shaderModule = VK_NULL_HANDLE;
     if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPath, context->device, &shaderModule)) {
         SPDLOG_ERROR("Failed to load shader: {}", shaderPath.c_str());
@@ -79,6 +81,8 @@ uint64_t ComputePipelineData::GetLatestShaderWriteTime() const
 
 bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache)
 {
+    loadingLastModified = GetLatestShaderWriteTime();
+
     Core::Array<VkShaderModule, MAX_SHADER_STAGES> shaderModules{};
     for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
         if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPaths[i], context->device, &shaderModules[i])) {

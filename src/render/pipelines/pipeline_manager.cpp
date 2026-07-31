@@ -283,7 +283,7 @@ void PipelineManager::HandlePipelineCompletion(PipelineData& pipeline, bool bSuc
             pipeline.activeEntry = pipeline.loadingEntry;
         }
         pipeline.loadingEntry = {};
-        pipeline.lastModified = pipeline.GetLatestShaderWriteTime();
+        pipeline.lastModified = pipeline.loadingLastModified;
         pipeline.bLoading = false;
     }
     else {
