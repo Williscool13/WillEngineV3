@@ -221,7 +221,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                     fixW += w;
                 }
             }
-            current = fixSum / fixW;
+
+            current = lerp(fixSum / fixW, current, nBlend / GI_UPSCALE_HISTORY_FIX_FRAMES);
         }
     }
 

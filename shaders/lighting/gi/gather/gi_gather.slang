@@ -23,6 +23,8 @@ import reflection_probe_common;
 
 static const float GI_GATHER_MAX_RADIANCE = 20.0;
 static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
+static const float GI_GATHER_SCREEN_CLAMP_MIN = 0.5;
+static const float GI_GATHER_SCREEN_CLAMP_MAX = 2.0;
 
 /** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
 static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
@@ -332,7 +334,16 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                     sumW += w;
                                 }
                                 if (sumW > 1e-3) {
-                                    radiance = sum / sumW;
+                                    float3 screenRadiance = sum / sumW;
+                                    uint fallbackTier;
+                                    float3 fallback = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, originCellKey, fallbackTier);
+                                    float screenLuma = Luma(screenRadiance);
+                                    float fallbackLuma = Luma(fallback);
+                                    radiance = screenRadiance;
+                                    if (screenLuma > 1e-6) {
+                                        float target = clamp(screenLuma, fallbackLuma * GI_GATHER_SCREEN_CLAMP_MIN, fallbackLuma * GI_GATHER_SCREEN_CLAMP_MAX + 1e-4);
+                                        radiance *= target / screenLuma;
+                                    }
                                     tier = GI_GATHER_TIER_SCREEN;
                                     bResolved = true;
                                 }
