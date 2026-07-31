@@ -29,6 +29,8 @@ public:
     virtual ~PipelineData() = default;
     virtual bool CreatePipeline(VulkanContext* ctx, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache) = 0;
 
+    virtual uint64_t GetLatestShaderWriteTime() const = 0;
+
     // Initialized once, never modified again
     StringID pipelineId{};
     PipelineCategory category{PipelineCategory::None};
@@ -53,6 +55,7 @@ class ComputePipelineData : public PipelineData
 public:
     ~ComputePipelineData() override = default;
     bool CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache) override;
+    uint64_t GetLatestShaderWriteTime() const override;
 
     Core::Path shaderPath{};
     Core::InlineString<64> entryPoint{"main"};
@@ -63,6 +66,7 @@ class GraphicsPipelineData : public PipelineData
 public:
     ~GraphicsPipelineData() override = default;
     bool CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache) override;
+    uint64_t GetLatestShaderWriteTime() const override;
 
     static constexpr uint32_t MAX_SHADER_STAGES = 5;
     static constexpr uint32_t MAX_VERTEX_BINDINGS = 8;

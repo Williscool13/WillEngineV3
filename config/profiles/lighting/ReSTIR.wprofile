@@ -80,7 +80,7 @@
       "sigmaLuminance": 2.0,
       "sigmaNormal": 128.0
     },
-    "bAdaptiveSpatial": true,
+    "bAdaptiveSpatial": false,
     "bCheckerboard": true,
     "bCheckerboardFullRateResolve": true,
     "bEmissiveTriangleLights": false,
@@ -221,7 +221,7 @@
     "restirWClamp": 0.0,
     "spatialMCap": 2000,
     "spatialNeighbors": 1,
-    "spatialPasses": 1,
+    "spatialPasses": 3,
     "spatialRadius": 20,
     "svgf": {
       "alphaMin": 0.10000000149011612,

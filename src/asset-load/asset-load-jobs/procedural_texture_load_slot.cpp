@@ -87,9 +87,9 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
         }
     };
 
-    const Render::PipelineEntry* entry = loadSlot->pipelineManager->GetPipelineEntry(loadSlot->pipelineId);
-    if (!entry) {
-        SPDLOG_ERROR("ProceduralTextureLoadSlot: pipeline {:x} not found", loadSlot->pipelineId.id);
+    const Render::PipelineEntry entry = loadSlot->pipelineManager->GetPipelineEntrySnapshot(loadSlot->pipelineId);
+    if (entry.pipeline == VK_NULL_HANDLE) {
+        SPDLOG_ERROR("ProceduralTextureLoadSlot: pipeline {:x} not ready", loadSlot->pipelineId.id);
         vkDestroyFence(loadSlot->context->device, fence, nullptr);
         vkDestroyCommandPool(loadSlot->context->device, commandPool, nullptr);
         loadSlot->_notifyCallback(false, loadSlot->slotHandle);
@@ -140,11 +140,11 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
     uint32_t bindingIndex = 0;
     VkDeviceSize bindingOffset = 0;
     vkCmdBindDescriptorBuffersEXT(cmd, 1, &binding);
-    vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, entry->layout, 0, 1, &bindingIndex, &bindingOffset);
+    vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, entry.layout, 0, 1, &bindingIndex, &bindingOffset);
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, entry->pipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, entry.pipeline);
     ProceduralTextureBasePushConstant pc{outputIndex};
-    vkCmdPushConstants(cmd, entry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ProceduralTextureBasePushConstant), &pc);
+    vkCmdPushConstants(cmd, entry.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ProceduralTextureBasePushConstant), &pc);
 
     uint32_t gx = (width + PROCEDURAL_TEXTURE_DISPATCH_X - 1) / PROCEDURAL_TEXTURE_DISPATCH_X;
     uint32_t gy = (height + PROCEDURAL_TEXTURE_DISPATCH_Y - 1) / PROCEDURAL_TEXTURE_DISPATCH_Y;

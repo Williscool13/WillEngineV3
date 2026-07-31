@@ -67,11 +67,14 @@ bool ComputePipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMan
         return false;
     }
 
-    lastModified = Platform::GetFileWriteTime(shaderPath.c_str());
-    retirementFrame = 0;
     vkDestroyShaderModule(context->device, shaderModule, nullptr);
 
     return true;
+}
+
+uint64_t ComputePipelineData::GetLatestShaderWriteTime() const
+{
+    return Platform::GetFileWriteTime(shaderPath.c_str());
 }
 
 bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache)
@@ -185,20 +188,22 @@ bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMa
         return false;
     }
 
-    lastModified = 0;
-    for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
-        uint64_t modTime = Platform::GetFileWriteTime(shaderPaths[i].c_str());
-        if (modTime > lastModified) {
-            lastModified = modTime;
-        }
-    }
-
-    retirementFrame = 0;
-
     for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
         vkDestroyShaderModule(context->device, shaderModules[i], nullptr);
     }
 
     return true;
+}
+
+uint64_t GraphicsPipelineData::GetLatestShaderWriteTime() const
+{
+    uint64_t latest = 0;
+    for (uint32_t i = 0; i < shaderPaths.Size(); ++i) {
+        uint64_t modTime = Platform::GetFileWriteTime(shaderPaths[i].c_str());
+        if (modTime > latest) {
+            latest = modTime;
+        }
+    }
+    return latest;
 }
 } // Render

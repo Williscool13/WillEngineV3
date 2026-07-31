@@ -278,14 +278,14 @@ void CreateBRDFLookupTable(
         VkDeviceSize bindingOffset{0};
         vkCmdBindDescriptorBuffersEXT(graphicsCmd, bindings.Size(), bindings.Data());
 
-        const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_brdf_lut"));
-        if (!pipelineEntry) {
-            LOG_ERROR(Asset, "\"ibl_brdf_lut\" pipeline doesn't exist");
+        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot(SID("ibl_brdf_lut"));
+        if (pipelineEntry.pipeline == VK_NULL_HANDLE) {
+            LOG_ERROR(Asset, "\"ibl_brdf_lut\" pipeline not ready");
             return;
         }
-        vkCmdBindPipeline(graphicsCmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(graphicsCmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdSetDescriptorBufferOffsetsEXT(graphicsCmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
+        vkCmdBindPipeline(graphicsCmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.pipeline);
+        vkCmdPushConstants(graphicsCmd, pipelineEntry.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdSetDescriptorBufferOffsetsEXT(graphicsCmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
         vkCmdDispatch(graphicsCmd,
                       (LUT_SIZE + BRDF_LUT_GENERATION_DISPATCH_X - 1) / BRDF_LUT_GENERATION_DISPATCH_X,
                       (LUT_SIZE + BRDF_LUT_GENERATION_DISPATCH_Y - 1) / BRDF_LUT_GENERATION_DISPATCH_Y,

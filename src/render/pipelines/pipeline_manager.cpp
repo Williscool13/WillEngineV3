@@ -138,6 +138,7 @@ void PipelineManager::RegisterComputePipeline(StringID pipelineId, Core::Path sh
     data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
     data.layoutCreateInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1 : 0;
 
+    data.bLoading = true;
     SubmitPipelineLoad(&data);
 
     registeredComputeCount++;
@@ -173,6 +174,7 @@ void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, C
     data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
     data.layoutCreateInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1 : 0;
 
+    data.bLoading = true;
     SubmitPipelineLoad(&data);
 
     registeredComputeCount++;
@@ -228,6 +230,7 @@ void PipelineManager::RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipe
     data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
     data.layoutCreateInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1 : 0;
 
+    data.bLoading = true;
     SubmitPipelineLoad(&data);
 
     registeredGraphicsCount++;
@@ -250,18 +253,37 @@ const PipelineEntry* PipelineManager::GetPipelineEntry(StringID pipelineId)
     return nullptr;
 }
 
+PipelineEntry PipelineManager::GetPipelineEntrySnapshot(StringID pipelineId)
+{
+    std::scoped_lock lock(activeEntryMutex);
+    if (const auto* data = computePipelines.Find(pipelineId)) {
+        return data->activeEntry;
+    }
+
+    if (const auto* data = graphicsPipelines.Find(pipelineId)) {
+        return data->activeEntry;
+    }
+
+    LOG_ERROR(Renderer, "Pipeline '{}' not found", pipelineId.ToString());
+    return {};
+}
+
 void PipelineManager::SubmitPipelineLoad(PipelineData* data) const
 {
     asyncAssetLoadManager->RequestPipelineLoad(data);
 }
 
-void PipelineManager::HandlePipelineCompletion(PipelineData& pipeline, bool bSuccess) const
+void PipelineManager::HandlePipelineCompletion(PipelineData& pipeline, bool bSuccess)
 {
     if (bSuccess) {
         pipeline.retiredEntry = pipeline.activeEntry;
         pipeline.retirementFrame = currentFrame + 3;
-        pipeline.activeEntry = pipeline.loadingEntry;
+        {
+            std::scoped_lock lock(activeEntryMutex);
+            pipeline.activeEntry = pipeline.loadingEntry;
+        }
         pipeline.loadingEntry = {};
+        pipeline.lastModified = pipeline.GetLatestShaderWriteTime();
         pipeline.bLoading = false;
     }
     else {

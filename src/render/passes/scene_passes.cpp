@@ -19,6 +19,9 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           const RenderTargets& targets,
                           uint32_t sceneIndex)
 {
+    const PipelineEntry* skyboxEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
+    if (!skyboxEntry || skyboxEntry->pipeline == VK_NULL_HANDLE) { return; }
+
     RenderPass& skyboxPass = graph.AddPass(
         SID("Skybox"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, RenderCategory::Scene);
     skyboxPass.ReadBuffer(SCENE_DATA_BUFFER);

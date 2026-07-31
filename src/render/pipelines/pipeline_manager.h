@@ -7,6 +7,7 @@
 
 
 #include <chrono>
+#include <mutex>
 #include <string>
 #include <volk.h>
 
@@ -35,6 +36,8 @@ class PipelineManager
 {
 public: // Thread-Safe
     void RequestReload() { bReloadRequested.store(true, std::memory_order_relaxed); }
+
+    PipelineEntry GetPipelineEntrySnapshot(StringID pipelineId);
 
 public:
     explicit PipelineManager(VulkanContext* context,
@@ -89,7 +92,7 @@ public:
 private:
     void SubmitPipelineLoad(PipelineData* data) const;
 
-    void HandlePipelineCompletion(PipelineData& pipeline, bool bSuccess) const;
+    void HandlePipelineCompletion(PipelineData& pipeline, bool bSuccess);
 
     template<typename PipelineMap>
     void CleanupRetiredPipelines(PipelineMap& pipelines)
@@ -132,6 +135,7 @@ private:
     VkPipelineCache pipelineCache{VK_NULL_HANDLE};
 
     std::atomic<bool> bReloadRequested{false};
+    std::mutex activeEntryMutex;
 
     int32_t registeredComputeCount{0};
     int32_t registeredGraphicsCount{0};
