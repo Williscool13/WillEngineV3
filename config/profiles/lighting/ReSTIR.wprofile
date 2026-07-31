@@ -220,9 +220,9 @@
     "remodulateOutput": 0,
     "restirWClamp": 0.0,
     "spatialMCap": 2000,
-    "spatialNeighbors": 3,
+    "spatialNeighbors": 1,
     "spatialPasses": 1,
-    "spatialRadius": 30,
+    "spatialRadius": 20,
     "svgf": {
       "alphaMin": 0.10000000149011612,
       "atrousIterations": 4,

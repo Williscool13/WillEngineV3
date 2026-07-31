@@ -170,34 +170,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         history = GIGatherFetchHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
     }
 
-    float neighborhoodMotionPixels = 0.0;
-    [unroll]
-    for (int oy = -1; oy <= 1; oy++) {
-        [unroll]
-        for (int ox = -1; ox <= 1; ox++) {
-            bool bCenterTap = ox == 0 && oy == 0;
-            int2 tap = clamp(int2(pixel) + int2(ox, oy) * 2, int2(0), int2(pc.renderExtent) - int2(1));
-            uint4 tapGt1 = bCenterTap ? gt1 : rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tap, 0));
-            if ((tapGt1.w & 1u) == 0u) {
-                continue;
-            }
-            float tapDepth = bCenterTap ? depth : rdgTexturesFloat[pc.depthIndex].Load(int3(tap, 0)).r;
-            if (tapDepth <= 0.0) {
-                continue;
-            }
-            float2 tapUv = (float2(tap) + 0.5) / float2(pc.renderExtent);
-            float tapViewZ = ScreenToViewSpaceDepth(tapDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-            float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
-            float4 tapPrevClip = mul(scene.prevViewProj, float4(mul(scene.invView, float4(tapXv, 1.0)).xyz, 1.0));
-            if (tapPrevClip.w <= 0.0) {
-                continue;
-            }
-
-            float2 tapStaticDeltaUv = ((tapPrevClip.xy / tapPrevClip.w) * 0.5 + 0.5) - tapUv - scene.jitter * 0.5 + scene.prevJitter * 0.5;
-            float2 tapMvUv = UnpackMotionVectors(tapGt1.g) * 0.5;
-            neighborhoodMotionPixels = max(neighborhoodMotionPixels, length((tapMvUv - tapStaticDeltaUv) * float2(pc.renderExtent)));
-        }
-    }
+    float2 tileMotion = rdgTexturesFloat2[pc.motionTileIndex].Load(int3(pixel / uint(GI_MOTION_TILE_SIZE), 0)).rg;
+    float neighborhoodMotionPixels = length(tileMotion * float2(pc.renderExtent));
 
     // Neighborhood object-motion reset: anything moving nearby caps history so indirect shadowing re-converges instead of trailing the mover
     float n = min(history.count, GI_GATHER_MAX_ACCUM - 1.0);
@@ -306,4 +280,50 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
 
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(result, accum);
+}
+
+groupshared float g_motionLenSq[GI_MOTION_TILE_SIZE * GI_MOTION_TILE_SIZE];
+groupshared float2 g_motion[GI_MOTION_TILE_SIZE * GI_MOTION_TILE_SIZE];
+
+// Per-tile max object motion (gbuffer MV minus camera-static reprojection, UV domain).Dilated by the motion blur neighbor-max pass, consumed by the upscale's history cap.
+[shader("compute")]
+[numthreads(GI_MOTION_TILE_SIZE, GI_MOTION_TILE_SIZE, 1)]
+void ComputeGIMotionTileMax(uniform GIMotionTileMaxPushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint groupIndex : SV_GroupIndex)
+{
+    uint2 pixel = gid.xy * uint(GI_MOTION_TILE_SIZE) + gtid.xy;
+    SceneData scene = pc.sceneData[pc.sceneDataIndex];
+
+    float2 objectMotion = float2(0.0);
+    if (all(pixel < pc.renderExtent)) {
+        float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
+        uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
+        if (depth > 0.0 && (gt1.w & 1u) != 0u) {
+            float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
+            float viewZ = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+            float3 xv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewZ);
+            float4 prevClip = mul(scene.prevViewProj, float4(mul(scene.invView, float4(xv, 1.0)).xyz, 1.0));
+            if (prevClip.w > 0.0) {
+                float2 staticDeltaUv = ((prevClip.xy / prevClip.w) * 0.5 + 0.5) - uv - scene.jitter * 0.5 + scene.prevJitter * 0.5;
+                objectMotion = UnpackMotionVectors(gt1.g) * 0.5 - staticDeltaUv;
+            }
+        }
+    }
+
+    g_motionLenSq[groupIndex] = dot(objectMotion, objectMotion);
+    g_motion[groupIndex] = objectMotion;
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint cutoff = uint(GI_MOTION_TILE_SIZE * GI_MOTION_TILE_SIZE) >> 1; cutoff > 0; cutoff >>= 1) {
+        if (groupIndex < cutoff) {
+            if (g_motionLenSq[groupIndex + cutoff] > g_motionLenSq[groupIndex]) {
+                g_motionLenSq[groupIndex] = g_motionLenSq[groupIndex + cutoff];
+                g_motion[groupIndex] = g_motion[groupIndex + cutoff];
+            }
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    if (groupIndex == 0) {
+        rdgStorageFloat2[pc.tileMaxIndex][gid.xy] = g_motion[0];
+    }
 }

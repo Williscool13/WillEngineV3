@@ -35,6 +35,8 @@ inline const StringID GI_GATHER_RESOLVED = SID("gi_gather_resolved");
 inline const StringID GI_GATHER_HISTORY = SID("gi_gather_history");
 inline const StringID GI_GATHER_MOMENTS = SID("gi_gather_moments");
 inline const StringID GI_GATHER_MOMENTS_HISTORY = SID("gi_gather_moments_history");
+inline const StringID GI_MOTION_TILED_MAX = SID("gi_motion_tiled_max");
+inline const StringID GI_MOTION_TILED_NEIGHBOR_MAX = SID("gi_motion_tiled_neighbor_max");
 inline const StringID GI_DECONSTRUCT_TARGET = SID("gi_deconstruct_target");
 
 inline constexpr uint32_t GI_GATHER_MAX_RAYS_PER_PIXEL = 8u;

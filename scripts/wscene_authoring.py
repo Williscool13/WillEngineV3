@@ -308,6 +308,25 @@ def add_text3d(entity, text, font_id, depth=0.2, flatness=0.0005, tracking=0.05,
                         "layerOverride": 65535, "enhancedInternalEdgeRemoval": False, "isSensor": False, "shapes": [shape]}
     return entity
 
+def add_static_mesh(entity, model_id, lighting_shader=0, shading_shader=0, material_overrides=None, primitive_blacklist=None):
+    """Whole imported model (.wsmesh) as ONE entity; model_id = asset_index.model(name).
+    lighting_shader/shading_shader = _fnv1a64 of a pipeline name (e.g. "default_pbr_restir"); 0 keeps
+    each imported material's own shader (imports default to default_pbr, NOT the restir one).
+    material_overrides = {slot: material_id} (cap 32); primitive_blacklist = [ordinal, ...] (cap 64).
+    No physics; add a PhysicsBodyDesc separately if the model needs collision."""
+    comp = {"modelId": model_id, "modelFlags": [1.0, 1.0, 0.0, 0.0],
+            "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
+    if lighting_shader:
+        comp["lightingShaderOverride"] = lighting_shader
+    if shading_shader:
+        comp["shadingShaderOverride"] = shading_shader
+    if material_overrides:
+        comp["materialOverrides"] = {str(slot): mid for slot, mid in material_overrides.items()}
+    if primitive_blacklist:
+        comp["primitiveBlacklist"] = list(primitive_blacklist)
+    entity[STATIC_MESH] = comp
+    return entity
+
 def spline_fields(spline_points, closed=False, mode=1, radius=0.5, roll_angle=0.0, sides=8, segments_per_span=8,
                    caps=True, cross_planks=False, profile_type=0, profile_w=0.4, profile_h=0.4, profile_corner_r=0.08,
                    profile_corner_seg=3, profile_thickness=0.05, railing_enabled=False, railing_lanes=None,

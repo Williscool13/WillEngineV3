@@ -487,6 +487,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(GIDenoisePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("gi_upscale"), src / "gi_upscale.spv", "ComputeGIUpscale",
                             sizeof(GIUpscalePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gi_motion_tile_max"), src / "gi_upscale.spv", "ComputeGIMotionTileMax",
+                            sizeof(GIMotionTileMaxPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("gpu_debug_build_indirect"), src / "gpu_debug_build_indirect.spv", "ComputeGPUDebugBuildIndirect",
                             sizeof(GPUDebugBuildIndirectPushConstant), PipelineCategory::Critical);

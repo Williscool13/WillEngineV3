@@ -201,6 +201,54 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateTexture(GI_GATHER_RESOLVED, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(GI_GATHER_MOMENTS, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
+    const Core::Array<uint32_t, 2> motionTileExtent = {(renderExtent[0] + GI_MOTION_TILE_SIZE - 1u) / GI_MOTION_TILE_SIZE, (renderExtent[1] + GI_MOTION_TILE_SIZE - 1u) / GI_MOTION_TILE_SIZE};
+    graph.CreateTexture(GI_MOTION_TILED_MAX, TextureInfo{VK_FORMAT_R16G16_SFLOAT, motionTileExtent[0], motionTileExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture(GI_MOTION_TILED_NEIGHBOR_MAX, TextureInfo{VK_FORMAT_R16G16_SFLOAT, motionTileExtent[0], motionTileExtent[1], 1}, {std::nullopt}, true);
+
+    RenderPass& motionTileMax = graph.AddPass(SID("GI Motion Tile Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
+    motionTileMax.ReadBuffer(SCENE_DATA_BUFFER);
+    motionTileMax.ReadSampledImage(targets.gbufferOne);
+    motionTileMax.ReadSampledImage(targets.depthCopy);
+    motionTileMax.WriteStorageImage(GI_MOTION_TILED_MAX);
+    motionTileMax.Execute([pipelineManager, sceneIndex, renderExtent, motionTileExtent, gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_motion_tile_max"));
+        if (!pipelineEntry) {
+            return;
+        }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        GIMotionTileMaxPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .sceneDataIndex = sceneIndex,
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+            .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex(GI_MOTION_TILED_MAX),
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, motionTileExtent[0], motionTileExtent[1], 1);
+    });
+
+    RenderPass& motionNeighborMax = graph.AddPass(SID("GI Motion Neighbor Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
+    motionNeighborMax.ReadSampledImage(GI_MOTION_TILED_MAX);
+    motionNeighborMax.WriteStorageImage(GI_MOTION_TILED_NEIGHBOR_MAX);
+    motionNeighborMax.Execute([pipelineManager, motionTileExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("motion_blur_neighbor_max"));
+        if (!pipelineEntry) {
+            return;
+        }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        MotionBlurNeighborMaxPushConstant pc{
+            .tileBufferSize = {motionTileExtent[0], motionTileExtent[1]},
+            .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex(GI_MOTION_TILED_MAX),
+            .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex(GI_MOTION_TILED_NEIGHBOR_MAX),
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (motionTileExtent[0] + POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X,
+                      (motionTileExtent[1] + POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_Y, 1);
+    });
+
     RenderPass& upscale = graph.AddPass(SID("GI Diffuse Upscale"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
     upscale.ReadBuffer(SCENE_DATA_BUFFER);
     upscale.ReadSampledImage(targets.gbufferOne);
@@ -211,6 +259,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     upscale.ReadSampledImage(GI_GATHER_SKY_VIS);
     upscale.ReadSampledImage(GI_GATHER_DATA);
     upscale.ReadSampledImage(GI_GATHER_GUIDE);
+    upscale.ReadSampledImage(GI_MOTION_TILED_NEIGHBOR_MAX);
     upscale.ReadBuffer(REFLECTION_PROBE_BUFFER);
     if (graph.HasBuffer(SID("world_grid_probe_grid"))) { upscale.ReadBuffer(SID("world_grid_probe_grid")); }
     if (bTemporal) {
@@ -272,6 +321,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .momentsIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_MOMENTS),
             .momentsHistoryIndex = bMoments ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_MOMENTS_HISTORY) : ~0x0u,
             .bMomentsValid = bMoments ? 1u : 0u,
+            .motionTileIndex = graph.GetSampledImageViewDescriptorIndex(GI_MOTION_TILED_NEIGHBOR_MAX),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);

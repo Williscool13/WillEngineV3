@@ -770,6 +770,17 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t momentsIndex;
     SHADER_PUBLIC uint32_t momentsHistoryIndex;
     SHADER_PUBLIC uint32_t bMomentsValid;
+    SHADER_PUBLIC uint32_t motionTileIndex;
+};
+
+SHADER_PUBLIC struct GIMotionTileMaxPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t tileMaxIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
