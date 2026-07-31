@@ -21,6 +21,7 @@ inline constexpr const char* GAME_LOGGER_CATEGORY_NAMES[] = {
 
 inline void RegisterLogCategories(Engine::EngineLogger* logger)
 {
+    if (!logger) { return; }
     for (int i = 0; i < static_cast<int>(LogCategory::Count); ++i) {
         logger->RegisterGameSubCategory(GAME_LOGGER_CATEGORY_NAMES[i]);
     }

@@ -180,11 +180,12 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::PhysicsBodyComponent, Component::DirtyTransformTag>();
     for (auto entity : view) {
-        if (state->registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) {
-            state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+        const auto* desc = state->registry.try_get<Component::PhysicsBodyDesc>(entity);
+        if (desc && desc->motionType == Component::PhysicsMotionType::Kinematic) {
+            state->registry.emplace_or_replace<Component::DirtyKinematicPhysicsTransformTag>(entity);
         }
         else {
-            state->registry.emplace_or_replace<Component::DirtyKinematicPhysicsTransformTag>(entity);
+            state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
         }
     }
 }

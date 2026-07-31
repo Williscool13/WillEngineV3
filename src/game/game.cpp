@@ -87,7 +87,9 @@ GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state
 GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
 #ifndef GAME_STATIC
-    ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
+    if (ctx->engineLogger) {
+        ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
+    }
 
     ImGui::SetCurrentContext(ctx->imguiContext);
     ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
@@ -188,7 +190,9 @@ GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState*
 GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
 #ifndef GAME_STATIC
-    ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
+    if (ctx->engineLogger) {
+        ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
+    }
 
     ImGui::SetCurrentContext(ctx->imguiContext);
     ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
