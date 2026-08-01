@@ -703,6 +703,83 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
     ImGui::PopID();
 }
 
+static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool bNrdMode = false)
+{
+    static const Core::ReBLURParams reblurDefaults{};
+    auto reblurF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.4f", const char* tip = nullptr) {
+        changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
+    };
+    auto reblurI = [&](const char* label, int* v, int def, int mn, int mx, const char* tip = nullptr) {
+        changed |= Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)});
+    };
+
+    if (ImGui::Checkbox("Prepass##reblur", &reblur.enablePrepass)) { changed = true; }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Anti-Firefly##reblur", &reblur.enableAntiFirefly)) { changed = true; }
+    if (ImGui::Checkbox("Temporal Stabilization##reblur", &reblur.enableTemporalStabilization)) { changed = true; }
+    ImGui::SameLine();
+    // No NRD counterpart (engine extension)
+    ImGui::BeginDisabled(bNrdMode);
+    if (ImGui::Checkbox("Stab. Firefly Cleanup##reblur", &reblur.enableStabilizationFireflyCleanup)) { changed = true; }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("NRD short-history luma cap. Eats sparse disoccluded-pixel energy (black band on fast camera motion); keep OFF."); }
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("General");
+    reblurF("Denoising Range", &reblur.denoisingRange, reblurDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through. Default 1000.");
+    reblurF("Disocclusion Threshold", &reblur.disocclusionThreshold, reblurDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Default 0.01.");
+    reblurF("Plane Distance Sensitivity", &reblur.planeDistanceSensitivity, reblurDefaults.planeDistanceSensitivity, 0.001f, 0.2f, "%.4f", "Max allowed deviation from the local tangent plane for spatial edge stopping. Default 0.02.");
+    reblurF("Lobe Angle Fraction", &reblur.lobeAngleFraction, reblurDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance as a fraction of the BRDF lobe angle. Default 0.15.");
+    reblurF("Roughness Fraction", &reblur.roughnessFraction, reblurDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Default 0.15.");
+    reblurF("Min Hit Distance Weight", &reblur.minHitDistanceWeight, reblurDefaults.minHitDistanceWeight, 0.f, 0.2f, "%.3f", "Sensitivity to hit distance in spatial passes; smaller for clean RTXDI-style hitT. Default 0.1.");
+
+    ImGui::SeparatorText("Hit Distance Normalization (A/B/C/D)");
+    reblurF("Hit Dist A", &reblur.hitDistA, reblurDefaults.hitDistA, 0.f, 50.f, "%.2f", "Constant term (units). Default 3.");
+    reblurF("Hit Dist B", &reblur.hitDistB, reblurDefaults.hitDistB, 0.f, 5.f, "%.3f", "viewZ-based linear scale. Default 0.1.");
+    reblurF("Hit Dist C", &reblur.hitDistC, reblurDefaults.hitDistC, 1.f, 100.f, "%.1f", "Roughness-based scale (>1 = larger hit distance for low roughness). Default 20.");
+
+    ImGui::BeginDisabled(bNrdMode);
+    reblurF("Hit Dist D", &reblur.hitDistD, reblurDefaults.hitDistD, -50.f, 0.f, "%.1f", "Roughness falloff exponent (<=0). Default -25.");
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Accumulation");
+    reblurF("Max Accum Frames", &reblur.maxAccumulatedFrameNum, reblurDefaults.maxAccumulatedFrameNum, 0.f, 63.f, "%.0f", "Max (stable) history length. Higher = cleaner but laggier. Default 30.");
+    reblurF("Max Fast Accum Frames", &reblur.maxFastAccumulatedFrameNum, reblurDefaults.maxFastAccumulatedFrameNum, 0.f, 32.f, "%.0f", "Fast (responsive) history length used for anti-lag clamping. Usually ~1/6 of max. Default 6.");
+    reblurF("Max Stabilized Frames", &reblur.maxStabilizedFrameNum, reblurDefaults.maxStabilizedFrameNum, 0.f, 63.f, "%.0f", "History length for the temporal stabilization pass. 0 disables stabilization. Default 30.");
+
+    ImGui::SeparatorText("Blur");
+    reblurF("Min Blur Radius", &reblur.minBlurRadius, reblurDefaults.minBlurRadius, 0.f, 10.f, "%.2f", "Min denoising radius (px) for the converged state. Default 1.");
+    reblurF("Max Blur Radius", &reblur.maxBlurRadius, reblurDefaults.maxBlurRadius, 0.f, 60.f, "%.1f", "Base (max) denoising radius (px); shrinks as history grows. Default 30.");
+    reblurF("Diffuse Prepass Blur Radius", &reblur.diffusePrepassBlurRadius, reblurDefaults.diffusePrepassBlurRadius, 0.f, 100.f, "%.1f", "Diffuse pre-blur radius (px). 0 disables. Default 30.");
+    reblurF("Specular Prepass Blur Radius", &reblur.specularPrepassBlurRadius, reblurDefaults.specularPrepassBlurRadius, 0.f, 100.f, "%.1f", "Specular pre-blur radius (px). 0 disables. Default 50.");
+
+    ImGui::BeginDisabled(bNrdMode);
+    if (ImGui::Checkbox("Chroma Widening##reblur", &reblur.bChromaAtrous)) { changed = true; }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on."); }
+    reblurI("Chroma Widening Passes", &reblur.chromaAtrousIterations, reblurDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
+    reblurF("Chroma Luma Ratio Power", &reblur.chromaLumaPower, reblurDefaults.chromaLumaPower, 0.f, 6.f, "%.2f",
+            "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off. Integer values compile to a multiply chain. Default 2.");
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("History Fix");
+    reblurF("Hist Fix Frame Num", &reblur.historyFixFrameNum, reblurDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill. Default 3.");
+    reblurF("Hist Fix Base Pixel Stride", &reblur.historyFixBasePixelStride, reblurDefaults.historyFixBasePixelStride, 0.f, 32.f, "%.1f", "Base sample spacing (px) for the history-fix fill; shrinks as history grows. Default 14.");
+    reblurF("Fast History Clamp Sigma", &reblur.fastHistoryClampingSigmaScale, reblurDefaults.fastHistoryClampingSigmaScale, 1.f, 3.f, "%.2f", "Width (sigmas) of the fast-history color box clamping the slow history. Default 2.");
+
+    ImGui::SeparatorText("Stabilization / Antilag");
+
+    ImGui::BeginDisabled(bNrdMode);
+    reblurF("Stabilization Strength", &reblur.stabilizationStrength, reblurDefaults.stabilizationStrength, 0.f, 1.f, "%.2f", "Blend toward the reprojected stabilized history. 0 = off. Default 1.");
+    ImGui::EndDisabled();
+    reblurF("Antilag Luminance Sigma", &reblur.antilagLuminanceSigmaScale, reblurDefaults.antilagLuminanceSigmaScale, 1.f, 5.f, "%.2f", "Color-box width (sigmas) used to clamp the stabilized history. Lower = tighter, less lag. Default 2.");
+    reblurF("Firefly Suppressor Min Scale", &reblur.fireflySuppressorMinRelativeScale, reblurDefaults.fireflySuppressorMinRelativeScale, 1.f, 3.f, "%.2f", "Outlier suppression strength (smaller = stronger). Default 2.");
+
+    ImGui::Spacing();
+    if (ImGui::Button("Reset ReBLUR")) {
+        reblur = Core::ReBLURParams{};
+        changed = true;
+    }
+}
+
 static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ImGui::Button("Bake All Probes##probebakeall")) {
@@ -1326,22 +1403,20 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::CollapsingHeader("Denoiser", ImGuiTreeNodeFlags_DefaultOpen)) {
                 Core::ReSTIRParams& restir = state->debug.restir;
 
-                const char* denoiserModes[] = {"None", "RELAX", "ReBLUR", "NRD (reference)"};
-                int denoiserIdx = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX
-                                      ? 1
-                                      : restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR
-                                            ? 2
-                                            : restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD
-                                                  ? 3
-                                                  : 0;
+                const char* denoiserModes[] = {"None", "RELAX", "ReBLUR", "NRD RELAX (reference)", "NRD ReBLUR (reference)"};
+                constexpr Core::ReSTIRParams::DenoiserMode DENOISER_MODE_ORDER[] = {
+                    Core::ReSTIRParams::DenoiserMode::None,
+                    Core::ReSTIRParams::DenoiserMode::RELAX,
+                    Core::ReSTIRParams::DenoiserMode::ReBLUR,
+                    Core::ReSTIRParams::DenoiserMode::NRD,
+                    Core::ReSTIRParams::DenoiserMode::NRDReBLUR,
+                };
+                int denoiserIdx = 0;
+                for (int i = 0; i < IM_ARRAYSIZE(denoiserModes); i++) {
+                    if (restir.denoiserMode == DENOISER_MODE_ORDER[i]) { denoiserIdx = i; }
+                }
                 if (ImGui::Combo("Mode##denoiser", &denoiserIdx, denoiserModes, IM_ARRAYSIZE(denoiserModes))) {
-                    restir.denoiserMode = denoiserIdx == 1
-                                              ? Core::ReSTIRParams::DenoiserMode::RELAX
-                                              : denoiserIdx == 2
-                                                    ? Core::ReSTIRParams::DenoiserMode::ReBLUR
-                                                    : denoiserIdx == 3
-                                                          ? Core::ReSTIRParams::DenoiserMode::NRD
-                                                          : Core::ReSTIRParams::DenoiserMode::None;
+                    restir.denoiserMode = DENOISER_MODE_ORDER[denoiserIdx];
                     changed = true;
                 }
 
@@ -1383,68 +1458,11 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 }
 
                 if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                    Core::ReBLURParams& reblur = restir.reblur;
-                    static const Core::ReBLURParams reblurDefaults{};
-                    auto reblurF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.4f", const char* tip = nullptr) {
-                        changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
-                    };
-                    auto reblurI = [&](const char* label, int* v, int def, int mn, int mx, const char* tip = nullptr) {
-                        changed |= Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)});
-                    };
+                    DrawReBLURParamsUI(changed, restir.reblur);
+                }
 
-                    if (ImGui::Checkbox("Prepass##reblur", &reblur.enablePrepass)) { changed = true; }
-                    ImGui::SameLine();
-                    if (ImGui::Checkbox("Anti-Firefly##reblur", &reblur.enableAntiFirefly)) { changed = true; }
-                    if (ImGui::Checkbox("Temporal Stabilization##reblur", &reblur.enableTemporalStabilization)) { changed = true; }
-                    ImGui::SameLine();
-                    if (ImGui::Checkbox("Stab. Firefly Cleanup##reblur", &reblur.enableStabilizationFireflyCleanup)) { changed = true; }
-                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("NRD short-history luma cap. Eats sparse disoccluded-pixel energy (black band on fast camera motion); keep OFF."); }
-
-                    ImGui::SeparatorText("General");
-                    reblurF("Denoising Range", &reblur.denoisingRange, reblurDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through. Default 1000.");
-                    reblurF("Disocclusion Threshold", &reblur.disocclusionThreshold, reblurDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Default 0.01.");
-                    reblurF("Plane Distance Sensitivity", &reblur.planeDistanceSensitivity, reblurDefaults.planeDistanceSensitivity, 0.001f, 0.2f, "%.4f", "Max allowed deviation from the local tangent plane for spatial edge stopping. Default 0.02.");
-                    reblurF("Lobe Angle Fraction", &reblur.lobeAngleFraction, reblurDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance as a fraction of the BRDF lobe angle. Default 0.15.");
-                    reblurF("Roughness Fraction", &reblur.roughnessFraction, reblurDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Default 0.15.");
-                    reblurF("Min Hit Distance Weight", &reblur.minHitDistanceWeight, reblurDefaults.minHitDistanceWeight, 0.f, 0.2f, "%.3f", "Sensitivity to hit distance in spatial passes; smaller for clean RTXDI-style hitT. Default 0.1.");
-
-                    ImGui::SeparatorText("Hit Distance Normalization (A/B/C/D)");
-                    reblurF("Hit Dist A", &reblur.hitDistA, reblurDefaults.hitDistA, 0.f, 50.f, "%.2f", "Constant term (units). Default 3.");
-                    reblurF("Hit Dist B", &reblur.hitDistB, reblurDefaults.hitDistB, 0.f, 5.f, "%.3f", "viewZ-based linear scale. Default 0.1.");
-                    reblurF("Hit Dist C", &reblur.hitDistC, reblurDefaults.hitDistC, 1.f, 100.f, "%.1f", "Roughness-based scale (>1 = larger hit distance for low roughness). Default 20.");
-                    reblurF("Hit Dist D", &reblur.hitDistD, reblurDefaults.hitDistD, -50.f, 0.f, "%.1f", "Roughness falloff exponent (<=0). Default -25.");
-
-                    ImGui::SeparatorText("Accumulation");
-                    reblurF("Max Accum Frames", &reblur.maxAccumulatedFrameNum, reblurDefaults.maxAccumulatedFrameNum, 0.f, 63.f, "%.0f", "Max (stable) history length. Higher = cleaner but laggier. Default 30.");
-                    reblurF("Max Fast Accum Frames", &reblur.maxFastAccumulatedFrameNum, reblurDefaults.maxFastAccumulatedFrameNum, 0.f, 32.f, "%.0f", "Fast (responsive) history length used for anti-lag clamping. Usually ~1/6 of max. Default 6.");
-                    reblurF("Max Stabilized Frames", &reblur.maxStabilizedFrameNum, reblurDefaults.maxStabilizedFrameNum, 0.f, 63.f, "%.0f", "History length for the temporal stabilization pass. 0 disables stabilization. Default 30.");
-
-                    ImGui::SeparatorText("Blur");
-                    reblurF("Min Blur Radius", &reblur.minBlurRadius, reblurDefaults.minBlurRadius, 0.f, 10.f, "%.2f", "Min denoising radius (px) for the converged state. Default 1.");
-                    reblurF("Max Blur Radius", &reblur.maxBlurRadius, reblurDefaults.maxBlurRadius, 0.f, 60.f, "%.1f", "Base (max) denoising radius (px); shrinks as history grows. Default 30.");
-                    reblurF("Diffuse Prepass Blur Radius", &reblur.diffusePrepassBlurRadius, reblurDefaults.diffusePrepassBlurRadius, 0.f, 100.f, "%.1f", "Diffuse pre-blur radius (px). 0 disables. Default 30.");
-                    reblurF("Specular Prepass Blur Radius", &reblur.specularPrepassBlurRadius, reblurDefaults.specularPrepassBlurRadius, 0.f, 100.f, "%.1f", "Specular pre-blur radius (px). 0 disables. Default 50.");
-                    if (ImGui::Checkbox("Chroma Widening##reblur", &reblur.bChromaAtrous)) { changed = true; }
-                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on."); }
-                    reblurI("Chroma Widening Passes", &reblur.chromaAtrousIterations, reblurDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
-                    reblurF("Chroma Luma Ratio Power", &reblur.chromaLumaPower, reblurDefaults.chromaLumaPower, 0.f, 6.f, "%.2f",
-                            "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off. Integer values compile to a multiply chain. Default 2.");
-
-                    ImGui::SeparatorText("History Fix");
-                    reblurF("Hist Fix Frame Num", &reblur.historyFixFrameNum, reblurDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill. Default 3.");
-                    reblurF("Hist Fix Base Pixel Stride", &reblur.historyFixBasePixelStride, reblurDefaults.historyFixBasePixelStride, 0.f, 32.f, "%.1f", "Base sample spacing (px) for the history-fix fill; shrinks as history grows. Default 14.");
-                    reblurF("Fast History Clamp Sigma", &reblur.fastHistoryClampingSigmaScale, reblurDefaults.fastHistoryClampingSigmaScale, 1.f, 3.f, "%.2f", "Width (sigmas) of the fast-history color box clamping the slow history. Default 2.");
-
-                    ImGui::SeparatorText("Stabilization / Antilag");
-                    reblurF("Stabilization Strength", &reblur.stabilizationStrength, reblurDefaults.stabilizationStrength, 0.f, 1.f, "%.2f", "Blend toward the reprojected stabilized history. 0 = off. Default 1.");
-                    reblurF("Antilag Luminance Sigma", &reblur.antilagLuminanceSigmaScale, reblurDefaults.antilagLuminanceSigmaScale, 1.f, 5.f, "%.2f", "Color-box width (sigmas) used to clamp the stabilized history. Lower = tighter, less lag. Default 2.");
-                    reblurF("Firefly Suppressor Min Scale", &reblur.fireflySuppressorMinRelativeScale, reblurDefaults.fireflySuppressorMinRelativeScale, 1.f, 3.f, "%.2f", "Outlier suppression strength (smaller = stronger). Default 2.");
-
-                    ImGui::Spacing();
-                    if (ImGui::Button("Reset ReBLUR")) {
-                        reblur = Core::ReBLURParams{};
-                        changed = true;
-                    }
+                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR) {
+                    DrawReBLURParamsUI(changed, restir.reblur, true);
                 }
             }
         }

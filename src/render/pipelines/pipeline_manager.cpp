@@ -612,6 +612,10 @@ void PipelineManager::RegisterPipelines()
                             sizeof(NrdPrepGuidesPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("nrd_radiance_copy"), src / "nrd_prep.spv", "NrdRadianceCopyMain",
                             sizeof(NrdRadianceCopyPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("nrd_reblur_radiance_pack"), src / "nrd_prep.spv", "NrdReblurRadiancePackMain",
+                            sizeof(NrdReblurRadiancePackPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("nrd_reblur_output_copy"), src / "nrd_prep.spv", "NrdReblurOutputCopyMain",
+                            sizeof(NrdRadianceCopyPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("reblur_pack"), src / "reblur_pack.spv", "ReblurPackMain",
                             sizeof(ReblurPackPushConstant), PipelineCategory::Critical);

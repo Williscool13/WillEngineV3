@@ -1577,6 +1577,18 @@ SHADER_PUBLIC struct NrdRadianceCopyPushConstant
     SHADER_PUBLIC uint32_t outSpecIndex;
 };
 
+SHADER_PUBLIC struct NrdReblurRadiancePackPushConstant
+{
+    SHADER_PUBLIC float4 hitDistParams; // xyz = A/B/C; NRD 4.17 has no D
+    SHADER_PUBLIC uint2 rectSize;
+    SHADER_PUBLIC uint32_t diffIndex;
+    SHADER_PUBLIC uint32_t specIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t viewZIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+};
+
 // =====================================================================
 // RELAX DiffuseSpecular denoiser push constants
 // This software contains source code provided by NVIDIA Corporation.

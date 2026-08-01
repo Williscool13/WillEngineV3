@@ -26,9 +26,12 @@ class ResourceManager;
 struct VulkanContext;
 
 inline constexpr uint32_t NRD_RELAX_IDENTIFIER = 1;
+inline constexpr uint32_t NRD_REBLUR_IDENTIFIER = 2;
+
+enum class NrdBackend : uint32_t { Relax = 0, Reblur = 1 };
 
 /**
- * Reference integration of the real NRD library (RELAX_DIFFUSE_SPECULAR) via its raw API.
+ * Reference integration of the real NRD library (RELAX_DIFFUSE_SPECULAR + REBLUR_DIFFUSE_SPECULAR) via its raw API.
  * Owns the nrd::Instance, all pool/IO textures, per-pipeline layouts/pipelines, samplers, per-frame descriptor pools and the constant ring buffer. Records all NRD dispatches inside a single RDG pass and issues manual barriers between dispatches (mirrors NRDIntegration).
  */
 class NrdDenoiser
@@ -50,13 +53,15 @@ public:
     bool Prepare(RenderGraph& graph,
                  const Core::ViewFamily& viewFamily,
                  Core::Array<uint32_t, 2> renderExtent,
-                 const Core::RELAXParams& params,
+                 NrdBackend backend,
+                 const Core::RELAXParams& relaxParams,
+                 const Core::ReBLURParams& reblurParams,
                  uint64_t frameNumber,
                  uint32_t frameInFlightIndex,
                  float renderFps);
 
     /**
-     * Adds the single "[NRD] RELAX Dispatch" pass; call between the prep passes and the output writeback.
+     * Adds the single NRD dispatch pass for the active backend; call between the prep passes and the output writeback.
      * Binding NRD's classic descriptor sets invalidates the engine's descriptor buffer bindings, so the pass rebinds them after the dispatches.
      */
     void AddDispatchPass(RenderGraph& graph, ResourceManager* resourceManager, PipelineManager* pipelineManager, uint32_t frameInFlightIndex);
@@ -107,7 +112,7 @@ private:
 
     void ReleaseRetired(uint64_t frameNumber, bool bForce);
 
-    void StageSettings(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const Core::RELAXParams& params, uint64_t frameNumber, float renderFps, bool bHistoryReset);
+    void StageSettings(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const Core::RELAXParams& relaxParams, const Core::ReBLURParams& reblurParams, uint64_t frameNumber, float renderFps, bool bHistoryReset);
 
     void RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourceManager, PipelineManager* pipelineManager, uint32_t frameInFlightIndex);
 
@@ -148,16 +153,19 @@ private:
     bool bInitialized{false};
     bool bInitFailed{false};
     bool bPendingHistoryClear{false};
+    NrdBackend activeBackend{NrdBackend::Relax};
+    NrdBackend lastBackend{NrdBackend::Relax};
 
     nrd::CommonSettings stagedCommon{};
     nrd::RelaxSettings stagedRelax{};
+    nrd::ReblurSettings stagedReblur{};
 };
 
-/** Fills IN_NORMAL_ROUGHNESS / IN_MV / IN_VIEWZ from gbuffer_one + depth, and IN_DIFF/IN_SPEC from the demodulated intermediates. */
-void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets);
+/** Fills IN_NORMAL_ROUGHNESS / IN_MV / IN_VIEWZ from gbuffer_one + depth, and IN_DIFF/IN_SPEC from the demodulated intermediates (ReBLUR backend: YCoCg + normalized hitT front-end packing). */
+void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams);
 
-/** Copies OUT_DIFF/OUT_SPEC back into the intermediates the engine remodulate pass consumes. */
-void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets);
+/** Copies OUT_DIFF/OUT_SPEC back into the intermediates the engine remodulate pass consumes (ReBLUR backend: YCoCg back to linear). */
+void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend);
 } // Render
 
 #endif //WILL_ENGINE_NRD_DENOISER_H

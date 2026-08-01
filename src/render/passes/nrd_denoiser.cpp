@@ -176,10 +176,13 @@ bool NrdDenoiser::EnsureInstance()
     if (bInitFailed) { return false; }
     if (bInitialized) { return true; }
 
-    const nrd::DenoiserDesc denoiserDesc{NRD_RELAX_IDENTIFIER, nrd::Denoiser::RELAX_DIFFUSE_SPECULAR};
+    const nrd::DenoiserDesc denoiserDescs[] = {
+        {NRD_RELAX_IDENTIFIER, nrd::Denoiser::RELAX_DIFFUSE_SPECULAR},
+        {NRD_REBLUR_IDENTIFIER, nrd::Denoiser::REBLUR_DIFFUSE_SPECULAR},
+    };
     nrd::InstanceCreationDesc createDesc{};
-    createDesc.denoisers = &denoiserDesc;
-    createDesc.denoisersNum = 1;
+    createDesc.denoisers = denoiserDescs;
+    createDesc.denoisersNum = 2;
 
     if (nrd::CreateInstance(createDesc, instance) != nrd::Result::SUCCESS) {
         LOG_ERROR(Renderer, "[NRD] CreateInstance failed");
@@ -445,8 +448,9 @@ void NrdDenoiser::EnsureResources(Core::Array<uint32_t, 2> renderExtent, uint64_
     bPendingHistoryClear = true;
 }
 
-void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const Core::RELAXParams& params, uint64_t frameNumber, float renderFps, bool bHistoryReset)
+void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const Core::RELAXParams& relaxParams, const Core::ReBLURParams& reblurParams, uint64_t frameNumber, float renderFps, bool bHistoryReset)
 {
+    const Core::RELAXParams& params = relaxParams;
     const glm::mat4& view = viewFamily.mainView.currentViewData.view;
     const glm::mat4& proj = viewFamily.mainView.currentViewData.proj;
     const glm::mat4& prevView = viewFamily.mainView.previousViewData.view;
@@ -493,8 +497,8 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
 
     // NRD's internal 16.66/timeDelta framerate scale then matches the engine's fps/60 clamp
     stagedCommon.timeDeltaBetweenFrames = renderFps > 0.0f ? 1000.0f / renderFps : 0.0f;
-    stagedCommon.denoisingRange = params.denoisingRange;
-    stagedCommon.disocclusionThreshold = params.disocclusionThreshold;
+    stagedCommon.denoisingRange = activeBackend == NrdBackend::Reblur ? reblurParams.denoisingRange : params.denoisingRange;
+    stagedCommon.disocclusionThreshold = activeBackend == NrdBackend::Reblur ? reblurParams.disocclusionThreshold : params.disocclusionThreshold;
     stagedCommon.frameIndex = static_cast<uint32_t>(frameNumber);
     stagedCommon.accumulationMode = bHistoryReset ? nrd::AccumulationMode::CLEAR_AND_RESTART : nrd::AccumulationMode::CONTINUE;
 
@@ -535,12 +539,45 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
     stagedRelax.roughnessEdgeStoppingRelaxation = params.roughnessEdgeStoppingRelaxation;
     stagedRelax.enableAntiFirefly = params.enableAntiFirefly;
     stagedRelax.enableRoughnessEdgeStopping = params.roughnessEdgeStoppingEnabled;
+
+    stagedReblur = nrd::ReblurSettings{};
+    // NRD 4.17 dropped hitDistD (magic-curve normalization); the D knob only affects the port
+    stagedReblur.hitDistanceParameters.A = reblurParams.hitDistA;
+    stagedReblur.hitDistanceParameters.B = reblurParams.hitDistB;
+    stagedReblur.hitDistanceParameters.C = reblurParams.hitDistC;
+    stagedReblur.antilagSettings.luminanceSigmaScale = reblurParams.antilagLuminanceSigmaScale;
+    stagedReblur.antilagSettings.luminanceSensitivity = reblurParams.antilagLuminanceSensitivity;
+    stagedReblur.convergenceSettings.s = reblurParams.convergenceS;
+    stagedReblur.convergenceSettings.b = reblurParams.convergenceB;
+    stagedReblur.convergenceSettings.p = reblurParams.convergenceP;
+    stagedReblur.maxAccumulatedFrameNum = static_cast<uint32_t>(reblurParams.maxAccumulatedFrameNum + 0.5f);
+    stagedReblur.maxFastAccumulatedFrameNum = static_cast<uint32_t>(reblurParams.maxFastAccumulatedFrameNum + 0.5f);
+    // NRD derives stabilizationStrength = N / (1 + N) from this; the stabilizationStrength knob is inert here
+    stagedReblur.maxStabilizedFrameNum = reblurParams.enableTemporalStabilization ? static_cast<uint32_t>(reblurParams.maxStabilizedFrameNum + 0.5f) : 0;
+    // Unlike RELAX, NRD uploads the REBLUR history-fix values directly (no +1)
+    stagedReblur.historyFixFrameNum = static_cast<uint32_t>(reblurParams.historyFixFrameNum + 0.5f);
+    stagedReblur.historyFixBasePixelStride = static_cast<uint32_t>(reblurParams.historyFixBasePixelStride + 0.5f);
+    stagedReblur.historyFixAlternatePixelStride = static_cast<uint32_t>(reblurParams.historyFixBasePixelStride + 0.5f);
+    stagedReblur.fastHistoryClampingSigmaScale = reblurParams.fastHistoryClampingSigmaScale;
+    stagedReblur.diffusePrepassBlurRadius = reblurParams.enablePrepass ? reblurParams.diffusePrepassBlurRadius : 0.0f;
+    stagedReblur.specularPrepassBlurRadius = reblurParams.enablePrepass ? reblurParams.specularPrepassBlurRadius : 0.0f;
+    stagedReblur.minHitDistanceWeight = reblurParams.minHitDistanceWeight;
+    stagedReblur.minBlurRadius = reblurParams.minBlurRadius;
+    stagedReblur.maxBlurRadius = reblurParams.maxBlurRadius;
+    stagedReblur.lobeAngleFraction = reblurParams.lobeAngleFraction;
+    stagedReblur.roughnessFraction = reblurParams.roughnessFraction;
+    stagedReblur.planeDistanceSensitivity = reblurParams.planeDistanceSensitivity;
+    stagedReblur.fireflySuppressorMinRelativeScale = reblurParams.fireflySuppressorMinRelativeScale;
+    stagedReblur.hitDistanceReconstructionMode = static_cast<nrd::HitDistanceReconstructionMode>(reblurParams.hitDistanceReconstructionMode);
+    stagedReblur.enableAntiFirefly = reblurParams.enableAntiFirefly;
 }
 
 bool NrdDenoiser::Prepare(RenderGraph& graph,
                           const Core::ViewFamily& viewFamily,
                           Core::Array<uint32_t, 2> renderExtent,
-                          const Core::RELAXParams& params,
+                          NrdBackend backend,
+                          const Core::RELAXParams& relaxParams,
+                          const Core::ReBLURParams& reblurParams,
                           uint64_t frameNumber,
                           uint32_t frameInFlightIndex,
                           float renderFps)
@@ -550,9 +587,11 @@ bool NrdDenoiser::Prepare(RenderGraph& graph,
     if (bInitFailed) { return false; }
     ReleaseRetired(frameNumber, false);
 
-    // Reset history after a gap (denoiser toggled off/on leaves stale pool content)
-    const bool bHistoryReset = bPendingHistoryClear || (lastRecordedFrame != UINT64_MAX && frameNumber != lastRecordedFrame + 1);
-    StageSettings(viewFamily, renderExtent, params, frameNumber, renderFps, bHistoryReset);
+    activeBackend = backend;
+    // Reset history after a gap (denoiser toggled off/on leaves stale pool content) or a backend switch (the inactive denoiser's history goes stale)
+    const bool bHistoryReset = bPendingHistoryClear || backend != lastBackend || (lastRecordedFrame != UINT64_MAX && frameNumber != lastRecordedFrame + 1);
+    lastBackend = backend;
+    StageSettings(viewFamily, renderExtent, relaxParams, reblurParams, frameNumber, renderFps, bHistoryReset);
     bPendingHistoryClear = false;
 
     // FIF fence already waited; this frame slot's sets are GPU-idle
@@ -579,8 +618,15 @@ bool NrdDenoiser::Prepare(RenderGraph& graph,
 
 void NrdDenoiser::AddDispatchPass(RenderGraph& graph, ResourceManager* resourceManager, PipelineManager* pipelineManager, uint32_t frameInFlightIndex)
 {
-    auto& pass = graph.AddPass(SID("[NRD] RELAX Dispatch"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
-    pass.ReadSampledImage(NRD_IN_MV_SID);
+    const bool bReblur = activeBackend == NrdBackend::Reblur;
+    auto& pass = graph.AddPass(bReblur ? SID("[NRD] ReBLUR Dispatch") : SID("[NRD] RELAX Dispatch"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
+    if (bReblur) {
+        // REBLUR's temporal stabilization writes modified motion back into IN_MV
+        pass.WriteStorageImage(NRD_IN_MV_SID);
+    }
+    else {
+        pass.ReadSampledImage(NRD_IN_MV_SID);
+    }
     pass.ReadSampledImage(NRD_IN_NORMAL_ROUGHNESS_SID);
     pass.ReadSampledImage(NRD_IN_VIEWZ_SID);
     pass.ReadSampledImage(NRD_IN_DIFF_SID);
@@ -627,16 +673,18 @@ NrdDenoiser::TrackedTexture* NrdDenoiser::ResolveResource(const nrd::ResourceDes
 
 void NrdDenoiser::RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourceManager, PipelineManager* pipelineManager, uint32_t frameInFlightIndex)
 {
+    const bool bReblur = activeBackend == NrdBackend::Reblur;
     if (nrd::SetCommonSettings(*instance, stagedCommon) != nrd::Result::SUCCESS) {
         LOG_ERROR(Renderer, "[NRD] SetCommonSettings failed");
         return;
     }
-    if (nrd::SetDenoiserSettings(*instance, NRD_RELAX_IDENTIFIER, &stagedRelax) != nrd::Result::SUCCESS) {
+    const void* settings = bReblur ? static_cast<const void*>(&stagedReblur) : static_cast<const void*>(&stagedRelax);
+    const nrd::Identifier identifier = bReblur ? NRD_REBLUR_IDENTIFIER : NRD_RELAX_IDENTIFIER;
+    if (nrd::SetDenoiserSettings(*instance, identifier, settings) != nrd::Result::SUCCESS) {
         LOG_ERROR(Renderer, "[NRD] SetDenoiserSettings failed");
         return;
     }
 
-    const nrd::Identifier identifier = NRD_RELAX_IDENTIFIER;
     const nrd::DispatchDesc* dispatches = nullptr;
     uint32_t dispatchNum = 0;
     if (nrd::GetComputeDispatches(*instance, &identifier, 1, dispatches, dispatchNum) != nrd::Result::SUCCESS) {
@@ -647,10 +695,11 @@ void NrdDenoiser::RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourc
     const nrd::InstanceDesc& desc = *nrd::GetInstanceDesc(*instance);
     const nrd::LibraryDesc& lib = *nrd::GetLibraryDesc();
 
-    // States established by the RDG barriers around this pass
+    // States established by the RDG barriers around this pass (ReBLUR declares IN_MV as a storage write)
     for (uint32_t i = IO_IN_MV; i <= IO_IN_SPEC_RADIANCE_HITDIST; i++) {
-        ioTextures[i].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        ioTextures[i].access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+        const bool bStorageEntry = bReblur && i == IO_IN_MV;
+        ioTextures[i].layout = bStorageEntry ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        ioTextures[i].access = bStorageEntry ? VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT : VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
     }
     for (uint32_t i = IO_OUT_DIFF_RADIANCE_HITDIST; i <= IO_OUT_SPEC_RADIANCE_HITDIST; i++) {
         ioTextures[i].layout = VK_IMAGE_LAYOUT_GENERAL;
@@ -762,7 +811,7 @@ void NrdDenoiser::RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourc
     Core::InlineVector<VkImageMemoryBarrier2, IO_COUNT> restoreBarriers{};
     for (uint32_t i = 0; i < IO_COUNT; i++) {
         TrackedTexture& tex = ioTextures[i];
-        const bool bOutput = i == IO_OUT_DIFF_RADIANCE_HITDIST || i == IO_OUT_SPEC_RADIANCE_HITDIST;
+        const bool bOutput = i == IO_OUT_DIFF_RADIANCE_HITDIST || i == IO_OUT_SPEC_RADIANCE_HITDIST || (bReblur && i == IO_IN_MV);
         const VkImageLayout expectedLayout = bOutput ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         if (tex.layout != expectedLayout) {
             const VkAccessFlags2 expectedAccess = bOutput ? VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT : VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
@@ -795,7 +844,7 @@ void NrdDenoiser::RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourc
     RebindEngineDescriptorBuffers(cmd, resourceManager, pipelineManager);
 }
 
-void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets)
+void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
@@ -830,7 +879,33 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
         });
     }
 
-    {
+    if (backend == NrdBackend::Reblur) {
+        const glm::vec4 hitDistParams{reblurParams.hitDistA, reblurParams.hitDistB, reblurParams.hitDistC, 0.0f};
+        auto& pass = graph.AddPass(SID("[NRD] Prep Radiance"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
+        pass.ReadSampledImage(diffInput);
+        pass.ReadSampledImage(specInput);
+        pass.ReadSampledImage(gbufferOne);
+        pass.ReadSampledImage(NRD_IN_VIEWZ_SID);
+        pass.WriteStorageImage(NRD_IN_DIFF_SID);
+        pass.WriteStorageImage(NRD_IN_SPEC_SID);
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, hitDistParams, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            NrdReblurRadiancePackPushConstant pc{
+                .hitDistParams = hitDistParams,
+                .rectSize = {width, height},
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(NRD_IN_VIEWZ_SID),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_DIFF_SID),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_SPEC_SID),
+            };
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("nrd_reblur_radiance_pack"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
+            vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+        });
+    }
+    else {
         auto& pass = graph.AddPass(SID("[NRD] Prep Radiance"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
@@ -852,7 +927,7 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
     }
 }
 
-void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets)
+void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend)
 {
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
@@ -860,13 +935,15 @@ void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Co
     const StringID specOutput = targets.intermediateTwo;
     const StringID srcDiff = NRD_OUT_DIFF_SID;
     const StringID srcSpec = NRD_OUT_SPEC_SID;
+    // REBLUR outputs YCoCg + normalized hitT; remodulate only consumes .rgb, so the writeback just converts color
+    const StringID copyPipeline = backend == NrdBackend::Reblur ? SID("nrd_reblur_output_copy") : SID("nrd_radiance_copy");
 
     auto& pass = graph.AddPass(SID("[NRD] Output Writeback"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
     pass.ReadSampledImage(srcDiff);
     pass.ReadSampledImage(srcSpec);
     pass.WriteStorageImage(diffOutput);
     pass.WriteStorageImage(specOutput);
-    pass.Execute([pipelineManager, srcDiff, srcSpec, diffOutput, specOutput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, copyPipeline, srcDiff, srcSpec, diffOutput, specOutput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         NrdRadianceCopyPushConstant pc{
             .rectSize = {width, height},
             .diffIndex = graph.GetSampledImageViewDescriptorIndex(srcDiff),
@@ -874,7 +951,7 @@ void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Co
             .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOutput),
             .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specOutput),
         };
-        const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("nrd_radiance_copy"));
+        const PipelineEntry* p = pipelineManager->GetPipelineEntry(copyPipeline);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
         vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);

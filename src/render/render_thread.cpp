@@ -724,13 +724,14 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                             SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection);
                             SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField, denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode);
                         }
-                        else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD) {
+                        else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR) {
                             SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection);
+                            const NrdBackend nrdBackend = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR ? NrdBackend::Reblur : NrdBackend::Relax;
                             // Declaration order defines the RDG read/write sequence: prep writes -> dispatch -> writeback
-                            if (nrdDenoiser->Prepare(*renderGraph, viewFamily, renderExtent, relax, frameNumber, frameIndex, renderFps)) {
-                                SetupNRDPrepPasses(*renderGraph, pipelineManager, renderExtent, targets);
+                            if (nrdDenoiser->Prepare(*renderGraph, viewFamily, renderExtent, nrdBackend, relax, reblur, frameNumber, frameIndex, renderFps)) {
+                                SetupNRDPrepPasses(*renderGraph, pipelineManager, renderExtent, targets, nrdBackend, reblur);
                                 nrdDenoiser->AddDispatchPass(*renderGraph, resourceManager, pipelineManager, frameIndex);
-                                SetupNRDOutputPass(*renderGraph, pipelineManager, renderExtent, targets);
+                                SetupNRDOutputPass(*renderGraph, pipelineManager, renderExtent, targets, nrdBackend);
                             }
                             SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode);
                         }
