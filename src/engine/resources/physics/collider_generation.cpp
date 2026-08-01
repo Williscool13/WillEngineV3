@@ -917,8 +917,15 @@ bool BuildText3DColliderPrimitives(const Font& font, const Text3DParams& params,
         const float y1 = (placements[p].penY + g.planeTop) * scale;
         const Vec3 he((x1 - x0) * 0.5f, (y1 - y0) * 0.5f, halfDepth);
         if (he.x > 1e-5f && he.y > 1e-5f && he.z > 1e-5f) {
-            const Vec3 center((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, 0.0f);
-            PushBoxPrim(center, he, Quat(1.0f, 0.0f, 0.0f, 0.0f), out);
+            Vec3 center((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, 0.0f);
+            Quat rotation(1.0f, 0.0f, 0.0f, 0.0f);
+            if (params.bendRadius != 0.0f) {
+                const float r = params.bendRadius;
+                const float theta = center.x / r;
+                center = Vec3(r * std::sin(theta), center.y, r * std::cos(theta) - r);
+                rotation = Quat(std::cos(theta * 0.5f), 0.0f, std::sin(theta * 0.5f), 0.0f);
+            }
+            PushBoxPrim(center, he, rotation, out);
         }
     }
 

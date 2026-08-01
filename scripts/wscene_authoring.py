@@ -57,7 +57,7 @@ PREFAB_INSTANCE = component_key("PrefabInstanceComponent")  # prefabId (matches 
 CHECKPOINT = component_key("CheckpointComponent")           # checkpointId, priority, spawnOffset[3], spawnRotation[3]
 PATH_MOVER = component_key("PathMoverComponent")            # spline{bClosed,mode,points}, pointSettings[]{easing,speed,waitTime,rotation[xyzw] NOT wxyz}, loopMode, + runtime state; see add_path_mover()
 DEATH_ZONE = component_key("DeathZoneComponent")            # tag, payload is null
-WORLD_TEXT = component_key("TextComponent")                 # text, fontId, textMaterialId, renderSizePx, color[4]
+WORLD_TEXT = component_key("TextComponent")                 # text, fontId, textMaterialId, renderSizePx, color[4], align, anchor, wrapWidthPx
 
 # Registered but unused by any authored scene so far; keys are still correct, schemas are not
 # documented here: FreeCameraComponent, CharacterPhysicsComponent, DrawPhysicsDebugTag,
@@ -312,18 +312,21 @@ ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT = 0, 1, 2
 ANCHOR_BASELINE, ANCHOR_TOP, ANCHOR_CENTER, ANCHOR_BOTTOM = 0, 1, 2, 3
 
 def add_text3d(entity, text, font_id, depth=0.2, flatness=0.0005, tracking=0.05, scale=1.0, smooth=True, precise=False, motion=0,
-               align=ALIGN_LEFT, anchor=ANCHOR_BASELINE):
+               align=ALIGN_LEFT, anchor=ANCHOR_BASELINE, wrap_width=0.0, bend_radius=0.0):
     """Physics shape for Text3D is a box-per-glyph Compound unless precise=True (concave
     TriangleMesh, Static/Kinematic only). font_id must come from an existing scene/asset.
-    text breaks lines on '\\n'; align/anchor place the block relative to the entity origin."""
+    text breaks lines on '\\n'; align/anchor place the block relative to the entity origin.
+    wrap_width word-wraps at that width in world units (0 = off). bend_radius wraps the block
+    around a vertical cylinder of that radius (positive bulges toward +Z, negative concave, 0 = off);
+    align=ALIGN_CENTER keeps the bend symmetric about the entity origin."""
     entity[TEXT3D] = {"depth": depth, "flatness": flatness, "fontId": font_id, **RENDER_DEFAULTS,
                        "scale": scale, "smoothNormals": smooth, "text": text, "tracking": tracking,
-                       "align": align, "anchor": anchor}
+                       "align": align, "anchor": anchor, "wrapWidth": wrap_width, "bendRadius": bend_radius}
     shape = {"type": 3, "offset": [0.0, 0.0, 0.0], "rotation": [1.0, 0.0, 0.0, 0.0],
              "bakedScaleX": 1.0, "bakedScaleY": 1.0, "bakedScaleZ": 1.0, "meshSourceModelId": 0, "proceduralType": 0,
              "text3DSource": {"fontId": font_id, "text": text, "depth": depth, "flatness": flatness,
                                "tracking": tracking, "scale": scale, "smoothNormals": smooth, "precise": precise,
-                               "align": align, "anchor": anchor}}
+                               "align": align, "anchor": anchor, "wrapWidth": wrap_width, "bendRadius": bend_radius}}
     entity[PHYSICS] = {"motionType": motion, "mass": 1.0, "friction": 0.5, "restitution": 0.0, "motionQuality": 0,
                         "layerOverride": 65535, "enhancedInternalEdgeRemoval": False, "isSensor": False, "shapes": [shape]}
     return entity
@@ -537,11 +540,15 @@ def add_path_mover(entity, points, speed=1.0, wait_time=0.0, easing=EASE_LINEAR,
     }
     return entity
 
-def add_world_text(entity, text, font_id, text_material_id=0, render_size_px=48.0, color=(1.0, 1.0, 1.0, 1.0)):
-    """Screen-facing text billboarded in the world. Distinct from add_text3d(), which extrudes real
-    geometry and carries a collider; this one is a camera-facing glyph quad with no physics."""
+def add_world_text(entity, text, font_id, text_material_id=0, render_size_px=48.0, color=(1.0, 1.0, 1.0, 1.0),
+                   align=ALIGN_LEFT, anchor=ANCHOR_BASELINE, wrap_width_px=0.0):
+    """Flat MSDF text in the entity's local XY plane (oriented by the entity transform, NOT billboarded).
+    Distinct from add_text3d(), which extrudes real geometry and carries a collider; this one has no physics.
+    Quad coordinates are in px (render_size_px tall per line); wrap_width_px word-wraps in that same px
+    space (0 = off). align/anchor use the ALIGN_*/ANCHOR_* constants, same semantics as add_text3d."""
     entity[WORLD_TEXT] = {"text": text, "fontId": font_id, "textMaterialId": text_material_id,
-                          "renderSizePx": render_size_px, "color": list(color)}
+                          "renderSizePx": render_size_px, "color": list(color),
+                          "align": align, "anchor": anchor, "wrapWidthPx": wrap_width_px}
     return entity
 
 # =============================================================================

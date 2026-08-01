@@ -540,6 +540,8 @@ enum class Text3DAnchor : uint8_t
  * Input for an extruded 3D-text model.
  * `depth`/`scale`/`flatness` are consumed at generation time; `flatness` is an EM-space tolerance.
  * `text` breaks lines on '\n'; line spacing comes from the font's lineHeight.
+ * `wrapWidth` is in world units (post-scale); 0 disables word wrapping.
+ * `bendRadius` wraps the laid-out text around a vertical cylinder of that radius (world units; positive bulges toward +Z, negative concave); 0 disables.
  */
 struct Text3DParams
 {
@@ -550,6 +552,8 @@ struct Text3DParams
     float flatness{0.005f};
     float tracking{0.0f};
     float scale{1.0f};
+    float wrapWidth{0.0f};
+    float bendRadius{0.0f};
     bool bSmoothNormals{true};
     Text3DAlign align{Text3DAlign::Left};
     Text3DAnchor anchor{Text3DAnchor::Baseline};

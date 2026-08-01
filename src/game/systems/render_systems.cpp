@@ -958,7 +958,7 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
 
         if (textComponent.text.Size() > 0) {
             auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
-            runtime.modelHandle = ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor);
+            runtime.modelHandle = ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor, textComponent.wrapWidth, textComponent.bendRadius);
             if (runtime.modelHandle.IsValid()) {
                 state->registry.emplace_or_replace<Component::Text3DLoadingTag>(entity);
                 state->bPendingModelResolve = true;
@@ -1403,6 +1403,73 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (!font) { continue; }
 
         const float scale = textComp.renderSizePx / font->header.emSize;
+        float lineHeightPx = font->header.lineHeight * scale;
+        if (lineHeightPx <= 0.0f) { lineHeightPx = (font->header.ascender - font->header.descender) * scale; }
+        if (lineHeightPx <= 0.0f) { lineHeightPx = textComp.renderSizePx; }
+
+        const char* str = textComp.text.c_str();
+        const size_t len = textComp.text.Size();
+        auto advanceOf = [&](char c) -> float {
+            const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(runtime.fontHandle, static_cast<unsigned char>(c));
+            return g ? g->advance * scale : textComp.renderSizePx * 0.25f;
+        };
+
+        struct TextLine
+        {
+            size_t start;
+            size_t end;
+            float width;
+        };
+        Core::InlineVector<TextLine, 257> lines;
+        size_t lineStart = 0;
+        while (lineStart <= len && !lines.IsFull()) {
+            size_t hardEnd = lineStart;
+            while (hardEnd < len && str[hardEnd] != '\n') { ++hardEnd; }
+
+            size_t segStart = lineStart;
+            if (textComp.wrapWidthPx > 0.0f) {
+                float width = 0.0f;
+                size_t lastSpace = SIZE_MAX;
+                for (size_t i = segStart; i < hardEnd && !lines.IsFull(); ++i) {
+                    if (str[i] == ' ') { lastSpace = i; }
+                    const float adv = advanceOf(str[i]);
+                    if (width + adv > textComp.wrapWidthPx && lastSpace != SIZE_MAX && lastSpace > segStart) {
+                        lines.PushBack({segStart, lastSpace, 0.0f});
+                        segStart = lastSpace + 1;
+                        i = segStart - 1;
+                        width = 0.0f;
+                        lastSpace = SIZE_MAX;
+                        continue;
+                    }
+                    width += adv;
+                }
+            }
+            if (!lines.IsFull()) { lines.PushBack({segStart, hardEnd, 0.0f}); }
+            lineStart = hardEnd + 1;
+        }
+
+        for (TextLine& line : lines) {
+            float w = 0.0f;
+            for (size_t i = line.start; i < line.end; ++i) { w += advanceOf(str[i]); }
+            line.width = w;
+        }
+
+        float alignFactor = 0.0f;
+        switch (textComp.align) {
+            case Engine::Text3DAlign::Center: alignFactor = 0.5f; break;
+            case Engine::Text3DAlign::Right: alignFactor = 1.0f; break;
+            case Engine::Text3DAlign::Left: break;
+        }
+
+        const float blockTop = font->header.ascender * scale;
+        const float blockBottom = font->header.descender * scale - static_cast<float>(lines.Size() - 1) * lineHeightPx;
+        float baseY = 0.0f;
+        switch (textComp.anchor) {
+            case Engine::Text3DAnchor::Top: baseY = -blockTop; break;
+            case Engine::Text3DAnchor::Center: baseY = -(blockTop + blockBottom) * 0.5f; break;
+            case Engine::Text3DAnchor::Bottom: baseY = -blockBottom; break;
+            case Engine::Text3DAnchor::Baseline: break;
+        }
 
         const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
         frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
@@ -1410,26 +1477,29 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         const auto drawCallIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.textInstances.Size());
         uint32_t quadCount = 0;
 
-        float cursorX = 0.0f;
-        for (size_t i = 0; i < textComp.text.Size(); ++i) {
-            const uint32_t codepoint = static_cast<unsigned char>(textComp.text.c_str()[i]);
-            const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(runtime.fontHandle, codepoint);
-            if (!g) {
-                cursorX += textComp.renderSizePx * 0.25f;
-                continue;
+        for (uint32_t li = 0; li < lines.Size(); ++li) {
+            float cursorX = -lines[li].width * alignFactor;
+            const float penY = baseY - static_cast<float>(li) * lineHeightPx;
+            for (size_t i = lines[li].start; i < lines[li].end; ++i) {
+                const uint32_t codepoint = static_cast<unsigned char>(str[i]);
+                const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(runtime.fontHandle, codepoint);
+                if (!g) {
+                    cursorX += textComp.renderSizePx * 0.25f;
+                    continue;
+                }
+
+                WorldGlyphQuad quad{};
+                quad.posMin = {cursorX + g->planeLeft * scale, penY + g->planeBottom * scale};
+                quad.posMax = {cursorX + g->planeRight * scale, penY + g->planeTop * scale};
+                quad.uvMin = {g->uvLeft, g->uvBottom};
+                quad.uvMax = {g->uvRight, g->uvTop};
+                quad.color = textComp.color;
+                quad.drawCallIndex = drawCallIndex;
+                frameBuffer->mainViewFamily.worldGlyphQuads.PushBack(quad);
+                ++quadCount;
+
+                cursorX += g->advance * scale;
             }
-
-            WorldGlyphQuad quad{};
-            quad.posMin = {cursorX + g->planeLeft * scale, g->planeBottom * scale};
-            quad.posMax = {cursorX + g->planeRight * scale, g->planeTop * scale};
-            quad.uvMin = {g->uvLeft, g->uvBottom};
-            quad.uvMax = {g->uvRight, g->uvTop};
-            quad.color = textComp.color;
-            quad.drawCallIndex = drawCallIndex;
-            frameBuffer->mainViewFamily.worldGlyphQuads.PushBack(quad);
-            ++quadCount;
-
-            cursorX += g->advance * scale;
         }
 
         if (quadCount == 0) { continue; }

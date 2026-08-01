@@ -106,6 +106,8 @@ void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, Physics
         shape.text3DSource.flatness = t3->flatness;
         shape.text3DSource.tracking = t3->tracking;
         shape.text3DSource.scale = t3->scale;
+        shape.text3DSource.wrapWidth = t3->wrapWidth;
+        shape.text3DSource.bendRadius = t3->bendRadius;
         shape.text3DSource.bSmoothNormals = t3->bSmoothNormals;
         shape.text3DSource.align = t3->align;
         shape.text3DSource.anchor = t3->anchor;

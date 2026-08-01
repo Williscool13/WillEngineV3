@@ -28,10 +28,49 @@ void LayoutText3D(const Font& font, const Text3DParams& params, Text3DGlyphPlace
     if (lineHeight <= 0.0f) { lineHeight = font.header.ascender - font.header.descender; }
     if (lineHeight <= 0.0f) { lineHeight = 1.0f; }
 
-    uint32_t lineCount = 1;
-    for (size_t i = 0; i < len; ++i) {
-        if (text[i] == '\n') { ++lineCount; }
+    // wrapWidth is world units; layout runs in EM space ahead of the scale multiply.
+    const float wrapLimit = (params.wrapWidth > 0.0f && params.scale > 0.0f) ? params.wrapWidth / params.scale : 0.0f;
+
+    struct LineRange
+    {
+        size_t start;
+        size_t end;
+    };
+    Core::InlineVector<LineRange, TEXT3D_MAX_GLYPHS + 1> lines;
+
+    size_t lineStart = 0;
+    while (lineStart <= len && !lines.IsFull()) {
+        size_t hardEnd = lineStart;
+        while (hardEnd < len && text[hardEnd] != '\n') { ++hardEnd; }
+
+        size_t segStart = lineStart;
+        if (wrapLimit > 0.0f) {
+            float width = 0.0f;
+            uint32_t glyphCount = 0;
+            size_t lastSpace = SIZE_MAX;
+            for (size_t i = segStart; i < hardEnd && !lines.IsFull(); ++i) {
+                if (text[i] == ' ') { lastSpace = i; }
+                const int32_t gi = FindGlyphIndex(font, static_cast<uint8_t>(text[i]));
+                if (gi < 0) { continue; }
+                const float adv = font.glyphs[gi].advance + (glyphCount > 0 ? params.tracking : 0.0f);
+                if (width + adv > wrapLimit && lastSpace != SIZE_MAX && lastSpace > segStart) {
+                    lines.PushBack({segStart, lastSpace});
+                    segStart = lastSpace + 1;
+                    i = segStart - 1;
+                    width = 0.0f;
+                    glyphCount = 0;
+                    lastSpace = SIZE_MAX;
+                    continue;
+                }
+                width += adv;
+                ++glyphCount;
+            }
+        }
+        if (!lines.IsFull()) { lines.PushBack({segStart, hardEnd}); }
+        lineStart = hardEnd + 1;
     }
+
+    const uint32_t lineCount = static_cast<uint32_t>(lines.Size());
 
     // Block extents measured from the first line's baseline, which is y=0 under Baseline anchoring.
     const float blockTop = font.header.ascender;
@@ -52,15 +91,10 @@ void LayoutText3D(const Font& font, const Text3DParams& params, Text3DGlyphPlace
         case Text3DAlign::Left: break;
     }
 
-    size_t lineStart = 0;
-    uint32_t lineIndex = 0;
-    while (lineStart <= len) {
-        size_t lineEnd = lineStart;
-        while (lineEnd < len && text[lineEnd] != '\n') { ++lineEnd; }
-
+    for (uint32_t li = 0; li < lineCount; ++li) {
         float lineWidth = 0.0f;
         uint32_t glyphCount = 0;
-        for (size_t i = lineStart; i < lineEnd; ++i) {
+        for (size_t i = lines[li].start; i < lines[li].end; ++i) {
             const int32_t gi = FindGlyphIndex(font, static_cast<uint8_t>(text[i]));
             if (gi < 0) { continue; }
             lineWidth += font.glyphs[gi].advance;
@@ -70,16 +104,13 @@ void LayoutText3D(const Font& font, const Text3DParams& params, Text3DGlyphPlace
         if (glyphCount > 1) { lineWidth += params.tracking * static_cast<float>(glyphCount - 1); }
 
         float penX = -lineWidth * alignFactor;
-        const float penY = baseY - static_cast<float>(lineIndex) * lineHeight;
-        for (size_t i = lineStart; i < lineEnd; ++i) {
+        const float penY = baseY - static_cast<float>(li) * lineHeight;
+        for (size_t i = lines[li].start; i < lines[li].end; ++i) {
             const int32_t gi = FindGlyphIndex(font, static_cast<uint8_t>(text[i]));
             if (gi < 0) { continue; }
             out.PushBack({static_cast<uint32_t>(gi), penX, penY});
             penX += font.glyphs[gi].advance + params.tracking;
         }
-
-        ++lineIndex;
-        lineStart = lineEnd + 1;
     }
 }
 } // Engine

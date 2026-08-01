@@ -486,7 +486,7 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
             else if (shapeDesc.text3DSource.IsValid()) {
                 const Component::Text3DShapeSource& t = shapeDesc.text3DSource;
                 if (ctx->assetManager->IsFontFrozen(t.fontId)) { allArmed = false; break; }
-                shapeDesc.colliderHandle = ctx->assetManager->LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.bPrecise);
+                shapeDesc.colliderHandle = ctx->assetManager->LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.wrapWidth, t.bendRadius, t.bPrecise);
             }
 
             if (!shapeDesc.colliderHandle.IsValid()) {

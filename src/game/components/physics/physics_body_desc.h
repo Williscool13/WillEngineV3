@@ -50,6 +50,8 @@ struct Text3DShapeSource
     float flatness{0.005f};
     float tracking{0.0f};
     float scale{1.0f};
+    float wrapWidth{0.0f};
+    float bendRadius{0.0f};
     bool bSmoothNormals{true};
     Engine::Text3DAlign align{Engine::Text3DAlign::Left};
     Engine::Text3DAnchor anchor{Engine::Text3DAnchor::Baseline};

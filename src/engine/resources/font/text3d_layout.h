@@ -30,7 +30,7 @@ using Text3DGlyphPlacements = Core::InlineVector<Text3DPlacedGlyph, TEXT3D_MAX_G
 int32_t FindGlyphIndex(const Font& font, uint32_t codepoint);
 
 /**
- * Resolves text into per-glyph pen positions, breaking lines on '\n' and applying `align` and `anchor`.
+ * Resolves text into per-glyph pen positions, breaking lines on '\n' (plus word wrap at `wrapWidth`) and applying `align` and `anchor`.
  * Shared by the render mesh and the collider so the two can never disagree on placement.
  * @param out appended to, not cleared. Characters with no glyph in @p font are skipped and consume no advance.
  */

@@ -227,6 +227,8 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     t3["flatness"] = shape.text3DSource.flatness;
                     t3["tracking"] = shape.text3DSource.tracking;
                     t3["scale"] = shape.text3DSource.scale;
+                    t3["wrapWidth"] = shape.text3DSource.wrapWidth;
+                    t3["bendRadius"] = shape.text3DSource.bendRadius;
                     t3["smoothNormals"] = shape.text3DSource.bSmoothNormals;
                     t3["align"] = static_cast<uint8_t>(shape.text3DSource.align);
                     t3["anchor"] = static_cast<uint8_t>(shape.text3DSource.anchor);
@@ -743,6 +745,8 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                     src.flatness = t3.value("flatness", 0.005f);
                     src.tracking = t3.value("tracking", 0.0f);
                     src.scale = t3.value("scale", 1.0f);
+                    src.wrapWidth = t3.value("wrapWidth", 0.0f);
+                    src.bendRadius = t3.value("bendRadius", 0.0f);
                     src.bSmoothNormals = t3.value("smoothNormals", true);
                     src.align = static_cast<Engine::Text3DAlign>(t3.value("align", static_cast<uint8_t>(Engine::Text3DAlign::Left)));
                     src.anchor = static_cast<Engine::Text3DAnchor>(t3.value("anchor", static_cast<uint8_t>(Engine::Text3DAnchor::Baseline)));

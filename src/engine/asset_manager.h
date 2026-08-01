@@ -95,7 +95,7 @@ public: // Models
      * Loads (or dedups) an extruded 3D-text model, resolving the font by id. Dedup key is the identity (font + text + depth + flatness + tracking + scale + smoothNormals).
      * The model holds a font ref until it finalizes so the generation worker can read the glyph contours.
      */
-    StaticModelHandle LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor);
+    StaticModelHandle LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, float wrapWidth, float bendRadius);
 
     StaticModel* GetModel(StaticModelHandle handle);
 
@@ -145,7 +145,7 @@ public: // Physics colliders (CPU-only, analytic)
     /**
      * Loads (or dedups) a collider for extruded 3D text: one Box per glyph from the glyph plane bounds (Compound), or with @p bPrecise, the exact extruded glyph mesh simplified into a concave TriangleMesh. Takes a generation-scoped font ref (released when the collider finalizes); freeze-gate on the FontID at the call site.
      */
-    PhysicsColliderHandle LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, bool bPrecise);
+    PhysicsColliderHandle LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, float wrapWidth, float bendRadius, bool bPrecise);
 
     PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle);
 

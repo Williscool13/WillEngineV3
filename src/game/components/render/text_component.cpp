@@ -68,6 +68,9 @@ void TextComponent::Serialize(const TextComponent& comp, nlohmann::json& json)
     json["text"] = comp.text.c_str();
     json["renderSizePx"] = comp.renderSizePx;
     json["color"] = {comp.color.r, comp.color.g, comp.color.b, comp.color.a};
+    json["align"] = static_cast<uint8_t>(comp.align);
+    json["anchor"] = static_cast<uint8_t>(comp.anchor);
+    json["wrapWidthPx"] = comp.wrapWidthPx;
 }
 
 void TextComponent::Deserialize(TextComponent& comp, const nlohmann::json& json)
@@ -81,6 +84,15 @@ void TextComponent::Deserialize(TextComponent& comp, const nlohmann::json& json)
     if (json.contains("color")) {
         const auto& c = json["color"];
         comp.color = glm::vec4(c[0].get<float>(), c[1].get<float>(), c[2].get<float>(), c[3].get<float>());
+    }
+    if (json.contains("align")) {
+        comp.align = static_cast<Engine::Text3DAlign>(json["align"].get<uint8_t>());
+    }
+    if (json.contains("anchor")) {
+        comp.anchor = static_cast<Engine::Text3DAnchor>(json["anchor"].get<uint8_t>());
+    }
+    if (json.contains("wrapWidthPx")) {
+        comp.wrapWidthPx = json["wrapWidthPx"].get<float>();
     }
 }
 
@@ -158,6 +170,20 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
 
     ImGui::DragFloat("Size (px)", &comp.renderSizePx, 1.0f, 1.0f, 2048.0f);
     ImGui::ColorEdit4("Color", glm::value_ptr(comp.color));
+
+    const char* alignLabels[] = {"Left", "Center", "Right"};
+    int alignIdx = static_cast<int>(comp.align);
+    if (ImGui::Combo("Align", &alignIdx, alignLabels, IM_ARRAYSIZE(alignLabels))) {
+        comp.align = static_cast<Engine::Text3DAlign>(alignIdx);
+    }
+
+    const char* anchorLabels[] = {"Baseline", "Top", "Center", "Bottom"};
+    int anchorIdx = static_cast<int>(comp.anchor);
+    if (ImGui::Combo("Anchor", &anchorIdx, anchorLabels, IM_ARRAYSIZE(anchorLabels))) {
+        comp.anchor = static_cast<Engine::Text3DAnchor>(anchorIdx);
+    }
+
+    ImGui::DragFloat("Wrap Width (px)", &comp.wrapWidthPx, 1.0f, 0.0f, 8192.0f);
 
     if (runtime.fontHandle.IsValid()) {
         Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);

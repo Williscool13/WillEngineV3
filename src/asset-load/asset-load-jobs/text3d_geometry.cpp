@@ -157,6 +157,7 @@ bool BuildText3DGeometry(const Engine::Font& font, const Engine::Text3DParams& p
     const float scale = params.scale;
     const float frontZ = params.depth * 0.5f;
     const float backZ = -params.depth * 0.5f;
+    const uint32_t bendStart = static_cast<uint32_t>(outVertices.Size());
 
     Core::Vector<EcPoint> tmpRing(&scratch, Core::AllocTag::AssetModel);
     Core::Vector<EcPoint> ringPts(&scratch, Core::AllocTag::AssetModel);
@@ -365,6 +366,24 @@ bool BuildText3DGeometry(const Engine::Font& font, const Engine::Text3DParams& p
                     }
                 }
             }
+        }
+    }
+
+    if (params.bendRadius != 0.0f) {
+        const float r = params.bendRadius;
+        for (uint32_t i = bendStart; i < outVertices.Size(); ++i) {
+            Engine::FullVertex& v = outVertices[i];
+            const float theta = v.position.x / r;
+            const float s = std::sin(theta);
+            const float c = std::cos(theta);
+            const float radial = r + v.position.z;
+            v.position = {radial * s, v.position.y, radial * c - r};
+            const float nx = v.normal.x;
+            const float nz = v.normal.z;
+            v.normal = {nx * c + nz * s, v.normal.y, -nx * s + nz * c};
+            const float tx = v.tangent.x;
+            const float tz = v.tangent.z;
+            v.tangent = {tx * c + tz * s, v.tangent.y, -tx * s + tz * c, v.tangent.w};
         }
     }
 

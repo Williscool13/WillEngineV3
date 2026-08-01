@@ -27,6 +27,9 @@ struct TextComponent
     Core::InlineString<256> text{};
     float renderSizePx{32.0f};
     glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+    Engine::Text3DAlign align{Engine::Text3DAlign::Left};
+    Engine::Text3DAnchor anchor{Engine::Text3DAnchor::Baseline};
+    float wrapWidthPx{0.0f};
 
     static void Serialize(const TextComponent& comp, nlohmann::json& json);
     static void Deserialize(TextComponent& comp, const nlohmann::json& json);
