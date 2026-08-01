@@ -22,10 +22,7 @@ enum class InputContext : uint8_t;
 namespace Game
 {
 /**
- * Automated capture run: activated by --shots, teleports the editor camera through the shot list,
- * resets temporal history, settles N frames per pose, and writes named PNGs via the screenshot path.
- * Modeled on ProbeBakeSystem; ticked from GamePrepareFrame before FunctionKeyRenderUpdate so the
- * screenshot request lands on the same FrameBuffer.
+ * Automated capture run: activated by --shots, teleports the editor camera through the shot list, resets temporal history, settles N frames per pose, and writes named PNGs via the screenshot path.
  */
 struct CaptureShotSystem
 {
@@ -63,15 +60,14 @@ struct CaptureShotSystem
     Core::InlineString<512> outputDir{};
     Engine::InputContext stashedInputContext{};
 
-    /** Advances the run one render frame; owns FrameBuffer::screenshotPath (cleared every tick, set on request frames). */
     void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 };
 
 /** Advances the capture run one render frame; call in GamePrepareFrame after ProbeBakeTick and before FunctionKeyRenderUpdate. */
 void CaptureShotTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 
-/** During an active run, empties debug draws, sprites, probe previews, selection outline, and GPU debug so none of it bakes into the PNGs. Call late in GamePrepareFrame after all debug producers. No-op otherwise. */
-void CaptureShotScrubFrame(Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+/** During an active run, empties debug draws, sprites, probe previews, selection outline, and GPU debug so none of it bakes into the PNGs. */
+void CaptureShotScrubFrame(Engine::EngineContext* ctx, Core::FrameBuffer* frameBuffer);
 } // Game
 
 #endif //WILL_ENGINE_CAPTURE_SHOT_SYSTEM_H

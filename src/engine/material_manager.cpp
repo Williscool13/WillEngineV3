@@ -450,13 +450,13 @@ void MaterialManager::CreateMaterial(std::string_view name)
     WriteWMaterialHeader(file, header);
     file << SerializeMaterial(mat).dump(4);
 
-    ctx->bShouldRescanMaterials.store(true, std::memory_order_release);
+    ctx->rescan.bMaterials.store(true, std::memory_order_release);
 }
 
 void MaterialManager::Scan()
 {
     bool expectedRescan = true;
-    if (ctx->bShouldRescanMaterials.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
+    if (ctx->rescan.bMaterials.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
         Core::Vector<Core::Path> paths(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
         Platform::RecursiveDirectoryIterator(Platform::GetAssetPath(), paths);
 
@@ -553,7 +553,7 @@ void MaterialManager::CreateTextMaterial(std::string_view name)
     textMaterials[mat.id] = mat;
     nameToTextMaterialMap[sid] = mat.id;
 
-    ctx->bShouldRescanMaterials.store(true, std::memory_order_release);
+    ctx->rescan.bMaterials.store(true, std::memory_order_release);
 }
 
 void MaterialManager::UpdateTextMaterial(TextMaterialID id, const TextMaterial& newMat, bool bSerialize)

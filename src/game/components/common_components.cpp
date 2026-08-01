@@ -8,7 +8,7 @@
 
 #include "imgui.h"
 
-#include "engine/engine_api.h"
+#include "engine/component_registry.h"
 #include "game/component-registry/component_editor.h"
 
 namespace Game::Component

@@ -111,7 +111,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
     if (bHasMeshShape) {
         registry.remove<PhysicsMeshLoadingTag>(entity);
         registry.emplace_or_replace<PendingPhysicsMeshTag>(entity);
-        state->bPendingModelResolve = true;
+        state->assetLoad.bPendingModelResolve = true;
     }
 
     registry.emplace_or_replace<PendingPhysicsShapeCreationTag>(entity);

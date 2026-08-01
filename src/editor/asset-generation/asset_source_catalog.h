@@ -46,7 +46,7 @@ struct AssetSourceEntry
  */
 struct AssetSourceCatalog
 {
-    Core::InlineVector<AssetSourceEntry, 192> entries;
+    Core::InlineVector<AssetSourceEntry, 1024> entries;
     uint32_t outdatedCount{0};
 
     void Scan(Core::MemoryManager& memoryManager);

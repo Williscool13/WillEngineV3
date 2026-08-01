@@ -31,9 +31,13 @@
 #include "project_config.h"
 #include "core/input/input_frame.h"
 #include "core/input/action_state.h"
+#include "engine/input/input_binding.h"
 #include "core/containers/arena_fixed_map.h"
 #include "engine/asset_manager.h"
 #include "engine/builtin_assets.h"
+#include "engine/component_registry.h"
+#include "engine/editor_state.h"
+#include "engine/editor_texture_residency.h"
 #include "engine/resources/model/mesh_primitive_store.h"
 
 struct ResolvedCollisionEvent
@@ -47,94 +51,6 @@ struct ResolvedCollisionEvent
 
 namespace Engine
 {
-struct TextureID;
-struct Texture;
-struct Sampler;
-
-struct EditorTextureResidency
-{
-    struct Entry
-    {
-        Texture* texture{nullptr};
-        uint64_t descSet{0};
-        uint64_t freeOnFrame{~0x0ULL};
-    };
-
-    Sampler* sampler{nullptr};
-    Core::Map<TextureID, Entry> entries{};
-    Core::Vector<Entry> pendingRemoval{};
-
-    EditorTextureResidency() = default;
-    explicit EditorTextureResidency(Core::TlsfAllocator* allocator);
-    ~EditorTextureResidency() = default;
-
-
-    void Tick(EngineContext* ctx);
-    void Acquire(TextureID id, EngineContext* ctx);
-    uint64_t GetDescSet(TextureID id, EngineContext* ctx);
-    void Release(TextureID id, EngineContext* ctx);
-    void ReleaseAll(EngineContext* ctx);
-};
-
-constexpr uint32_t MAX_LOADED_SCENES = 8;
-
-struct ComponentEditorResult {
-    bool requestRemoval{false};
-};
-
-using SerializeFn = void(*)(const entt::registry&, entt::entity, nlohmann::json&);
-using DeserializeFn = void(*)(entt::registry&, entt::entity, const nlohmann::json&);
-using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
-using CanAddComponentFn = bool(*)(const entt::registry&, entt::entity);
-using EmplaceDefaultFn = void(*)(entt::registry&, entt::entity);
-using RemoveComponentFn = void(*)(entt::registry&, entt::entity);
-using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::registry&, entt::entity);
-using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, entt::registry&, entt::entity, const char*);
-
-struct ComponentEntry
-{
-    StringID typeId;
-    const char* name;
-    SerializeFn serialize;
-    DeserializeFn deserialize;
-    CanAddComponentFn canAdd;
-
-    // Type erased fns
-    EmplaceDefaultFn emplaceDefault;
-    RemoveComponentFn remove;
-    CopyComponentFn copy;
-
-    DrawEditorFn drawEditor;
-    HasComponentFn has;
-
-    /** Engine-managed components hidden from user-facing component lists (Add Component, filters). */
-    bool hidden{false};
-
-    /** Hide in Details inspector unless "Expose all" is enabled. */
-    bool hideInInspector{false};
-};
-
-struct ComponentRegistry
-{
-    ComponentRegistry() = default;
-
-    explicit ComponentRegistry(Core::TlsfAllocator* allocator);
-
-    ~ComponentRegistry() = default;
-
-    Core::Vector<ComponentEntry> registry{};
-    Core::Map<StringID, size_t> registryMapping{};
-};
-
-enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On, Selected };
-enum class LightDebugDrawMode : uint8_t { None, Selected, All };
-enum class InputContext : uint8_t { Editor, Menu, Gameplay, Console, ProbeBake };
-
-struct RuntimeSceneMetadata
-{
-    StringID sceneId;
-};
-
 struct PhysicsState
 {
     PhysicsState() = default;
@@ -150,216 +66,12 @@ struct PhysicsState
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;
 };
 
-enum class BindingSourceType : uint8_t { Key, MouseButton, GamepadButton, GamepadAxis, MouseDeltaX, MouseDeltaY, MouseWheelX, MouseWheelY };
-
-struct BindingSource
-{
-    BindingSourceType type{BindingSourceType::Key};
-    union
-    {
-        Core::Key key;
-        Core::MouseButton mouseButton;
-        Core::GamepadButton gamepadButton;
-        Core::GamepadAxis gamepadAxis;
-    };
-
-    constexpr BindingSource();
-
-    static constexpr BindingSource FromKey(Core::Key k)
-    {
-        BindingSource b;
-        b.type = BindingSourceType::Key;
-        b.key = k;
-        return b;
-    }
-
-    static constexpr BindingSource FromMouse(Core::MouseButton m)
-    {
-        BindingSource b;
-        b.type = BindingSourceType::MouseButton;
-        b.mouseButton = m;
-        return b;
-    }
-
-    static constexpr BindingSource FromGamepadButton(Core::GamepadButton b_)
-    {
-        BindingSource b;
-        b.type = BindingSourceType::GamepadButton;
-        b.gamepadButton = b_;
-        return b;
-    }
-
-    static constexpr BindingSource FromGamepadAxis(Core::GamepadAxis a)
-    {
-        BindingSource b;
-        b.type = BindingSourceType::GamepadAxis;
-        b.gamepadAxis = a;
-        return b;
-    }
-
-    static constexpr BindingSource FromMouseDeltaX()
-    {
-        BindingSource b;
-        b.type = BindingSourceType::MouseDeltaX;
-        return b;
-    }
-
-    static constexpr BindingSource FromMouseDeltaY()
-    {
-        BindingSource b;
-        b.type = BindingSourceType::MouseDeltaY;
-        return b;
-    }
-
-    static constexpr BindingSource FromMouseWheelX()
-    {
-        BindingSource b;
-        b.type = BindingSourceType::MouseWheelX;
-        return b;
-    }
-
-    static constexpr BindingSource FromMouseWheelY()
-    {
-        BindingSource b;
-        b.type = BindingSourceType::MouseWheelY;
-        return b;
-    }
-
-    constexpr bool operator==(const BindingSource& other) const
-    {
-        if (type != other.type) { return false; }
-        switch (type) {
-            case BindingSourceType::Key: return key == other.key;
-            case BindingSourceType::MouseButton: return mouseButton == other.mouseButton;
-            case BindingSourceType::GamepadButton: return gamepadButton == other.gamepadButton;
-            case BindingSourceType::GamepadAxis: return gamepadAxis == other.gamepadAxis;
-            case BindingSourceType::MouseDeltaX:
-            case BindingSourceType::MouseDeltaY:
-            case BindingSourceType::MouseWheelX:
-            case BindingSourceType::MouseWheelY:
-                return true;
-        }
-        return false;
-    }
-};
-
-constexpr BindingSource::BindingSource(): key(Key::UNKNOWN) {}
-
-struct AxisComposite2D
-{
-    BindingSource up;
-    BindingSource down;
-    BindingSource left;
-    BindingSource right;
-};
-
-struct AnalogStick2D
-{
-    BindingSource x;
-    BindingSource y;
-};
-
-enum class BindingShape : uint8_t { Discrete, Axis2DComposite, AnalogStick2D };
-
-struct ActionBinding
-{
-    ActionHandle action;
-    InputContext context{InputContext::Gameplay};
-    BindingShape shape{BindingShape::Discrete};
-    union
-    {
-        BindingSource source;
-        AxisComposite2D composite;
-        AnalogStick2D stick;
-    };
-
-    constexpr ActionBinding() : source() {}
-
-    static constexpr ActionBinding Discrete(ActionHandle action, InputContext context, BindingSource source)
-    {
-        ActionBinding b;
-        b.action = action;
-        b.context = context;
-        b.shape = BindingShape::Discrete;
-        b.source = source;
-        return b;
-    }
-
-    static constexpr ActionBinding Composite(ActionHandle action, InputContext context, AxisComposite2D composite)
-    {
-        ActionBinding b;
-        b.action = action;
-        b.context = context;
-        b.shape = BindingShape::Axis2DComposite;
-        b.composite = composite;
-        return b;
-    }
-
-    static constexpr ActionBinding Stick(ActionHandle action, InputContext context, AnalogStick2D stick)
-    {
-        ActionBinding b;
-        b.action = action;
-        b.context = context;
-        b.shape = BindingShape::AnalogStick2D;
-        b.stick = stick;
-        return b;
-    }
-};
-
-struct TextInputState
-{
-    Core::InlineString<32> chars{};
-    bool submit{false};
-    bool backspace{false};
-    bool backspaceDown{false};
-    bool deleteForward{false};
-    bool deleteForwardDown{false};
-    bool left{false};
-    bool leftDown{false};
-    bool right{false};
-    bool rightDown{false};
-    bool home{false};
-    bool end{false};
-    bool up{false};
-    bool down{false};
-};
-
-struct InputState
-{
-    InputState() = default;
-    explicit InputState(Core::TlsfAllocator* allocator);
-    ~InputState() = default;
-
-    Core::Vector<ActionBinding> bindings{};
-    Core::Vector<ActionBinding> defaultBindings{};
-    Core::Map<ActionHandle, size_t> actionIndex{};
-    Core::Vector<Core::ActionState> actionStates{};
-
-    bool bCaptureActive{false};
-    size_t captureTargetBindingRow{~size_t{0}};
-    bool bBindingsDirty{false};
-
-    Vec2 mousePositionAbsolute{};
-    TextInputState textInput{};
-
-    // Just something to get clay to work with my decoupled game/render.
-    Vec2 uiScrollAccum{};
-
-    [[nodiscard]] const Core::ActionState& GetActionState(ActionHandle action) const
-    {
-        static constexpr Core::ActionState ACTION_STATE_EMPTY{};
-        const size_t* idx = actionIndex.Find(action);
-        return idx ? actionStates[*idx] : ACTION_STATE_EMPTY;
-    }
-};
-
 struct LightingState
 {
     Core::LightingMode lightingMode{Core::LightingMode::Default};
     Core::GroundTruthMode groundTruthMode{Core::GroundTruthMode::None};
     bool bResetGroundTruth{false};
 
-    Core::DirectionalLight directionalLight{};
     Core::GTAOConfiguration gtaoConfig{};
     Core::AntiAliasingConfiguration aaConfig{};
     Core::PostProcessConfiguration postProcess{};
@@ -373,103 +85,19 @@ struct LightingState
     int32_t skyboxLOD{0};
 };
 
-struct EditorState
-{
-    EditorState() = default;
-    explicit EditorState(Core::TlsfAllocator* allocator);
-    ~EditorState() = default;
-
-    // Gizmo
-    ImGuizmo::OPERATION currentGizmoOperation{ImGuizmo::TRANSLATE};
-    ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
-    bool bUniformScaleMode{true};
-    bool bSnapEnabled{true};
-    bool bSnapWorldGrid{true};
-    float snapTranslation{0.25f};
-    float snapRotation{15.0f};
-    float snapScale{0.1f};
-    bool bExclusiveGizmoActive{false};
-    bool bExclusiveGizmoActivePrev{false};
-    int32_t activeDotHandleId{-1};
-
-    PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
-    LightDebugDrawMode lightDebugDrawMode{LightDebugDrawMode::Selected};
-    bool bShowLightSprites{true};
-
-    // Scene management
-    Core::InlineVector<RuntimeSceneMetadata, 8> loadedScenes{};
-    Core::InlineVector<StringID, 8> modifiedScenes{};
-    bool bAutoSave{false};
-    float autoSaveInterval{60.0f};
-    float autoSaveTimer{0.0f};
-
-    // PIE
-    Core::InlineVector<Scene, 8> pieSnapshot{};
-    Core::InlineVector<Scene, 8> hotReloadSnapshot{};
-    Vec3 pieCameraTranslation{};
-    Quat pieCameraRotation{1.0f, 0.0f, 0.0f, 0.0f};
-
-    // Entity selection
-    Core::Vector<entt::entity> selectedEntities{};
-    Core::Vector<entt::entity> prevSelectedEntities{};
-
-    // Scene browser filter + selection
-    char sceneBrowserSearch[64]{};
-    StringID sceneBrowserComponentFilter{};
-    entt::entity sceneBrowserSelectionAnchor{entt::null};
-    bool sceneBrowserFilterWasActive{false};
-
-    // Inline hierarchy rename (F2)
-    entt::entity renamingEntity{entt::null};
-    char renameBuffer[256]{};
-    bool renameRequestFocus{false};
-    bool bExposeAllComponents{false};
-
-    // Folder selection
-    Core::Vector<entt::entity> selectedFolders{};
-
-    // ImGui textures
-    EditorTextureResidency texResidency{};
-
-    Core::ArenaFixedMap<TextureID, AssetManager::EditorTextureInfo>* textureInfoCache{nullptr};
-
-    void ResetFrameCache()
-    {
-        textureInfoCache = nullptr;
-    }
-};
-
 struct DebugState
 {
+    Core::DebugRenderParams render{};
+
+    /** Master GI freeze */
+    bool bGIFreeze{false};
+
     bool bEnableUI{false};
-    bool bWireframe{false};
     bool bEnablePortal{true};
-    bool bEnableShadeDispatchBucketingVisualization{false};
-    bool bEnableLightingBucketingVisualization{false};
-    bool bEnableGPUDebug{false};
-    bool bLockGPUDebug{false};
-    bool bDDGIProbeDebug{false};
     bool bProbePreview{false};
     bool bProbePreviewIrradiance{false};
     float probePreviewRoughness{0.0f};
-    bool bClusterGridDebug{false};
-    bool bWorldGridDebug{false};
-    int32_t worldGridDebugLevel{0};
-    bool bRadianceCacheDebug{false};
-    float radianceCacheDebugExposure{1.0f};
-    int32_t radianceCacheDebugBucket{-1};
-    bool bDDGIBounceOnly{false};
-    /** Master GI freeze; the bFreeze* components below choose which stages halt while it is on. */
-    bool bGIFreeze{false};
-    bool bFreezeGIField{true};
-    bool bFreezeScreenFeedback{true};
-    bool bFreezeGatherRay{false};
-    float ddgiProbeDebugExposure{1.0f};
-    int32_t ddgiProbeDebugCascade{-1};
-    bool bDDGIHideInactiveProbes{false};
-    int32_t ddgiProbeDebugMode{0};
-    int32_t giGatherDebugMode{0};
-    int32_t giDeconstructMode{0};
+
     Core::ReSTIRParams restir{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
@@ -490,6 +118,39 @@ struct DDGIConvergeBoost
     uint32_t stashedRadianceCacheAccumCap{0};
 };
 
+/** One-shot requests raised during the game tick and drained by the next render prepare. */
+struct FrameRequests
+{
+    bool bWantsScreenshot{false};
+    bool bViewportClickPending{false};
+    bool bRequestedQuit{false};
+    Core::RenderCacheReset pendingCacheReset{Core::RenderCacheReset::None};
+};
+
+/** Drained by the per-frame asset-resolve block. */
+struct AssetLoadState
+{
+    bool bPendingModelResolve{false};
+    Core::InlineVector<ModelID, 16> pendingHotReloadModelIds{};
+    Core::InlineVector<FontID, 16> pendingHotReloadFontIds{};
+    Core::InlineVector<TextureID, 16> pendingHotReloadTextureIds{};
+    Core::InlineVector<EnvironmentMapID, 16> pendingHotReloadEnvironmentMapIds{};
+
+    int32_t pendingModelWaitCount{0};
+    std::chrono::steady_clock::time_point modelWaitLastActivity{};
+
+    int32_t pendingProceduralWaitCount{0};
+    std::chrono::steady_clock::time_point proceduralWaitLastActivity{};
+};
+
+struct SceneState
+{
+    StringID currentSceneId{0};
+    Core::InlineString<128> currentSceneName{};
+    StringID currentCheckpointId{};
+    int32_t currentCheckpointPriority{INT32_MIN};
+};
+
 struct EngineState
 {
     EngineState() = default;
@@ -499,11 +160,7 @@ struct EngineState
     ~EngineState() = default;
 
     InputContext inputContext{InputContext::Editor};
-    // Gathered in GameUpdate, used in PrepareRenderFrame
-    bool bWantsScreenshot{false};
-    bool bViewportClickPending{false};
-    bool bRequestedQuit{false};
-    Core::RenderCacheReset pendingCacheReset{Core::RenderCacheReset::None};
+    FrameRequests requests{};
 
     const Core::TimeFrame* timeFrame{nullptr};
 
@@ -525,30 +182,14 @@ struct EngineState
 
     MeshPrimitiveStore meshPrimitiveStore{};
 
-    // Asset Loading
-    bool bPendingModelResolve{false};
-    Core::InlineVector<ModelID, 16> pendingHotReloadModelIds{};
-    Core::InlineVector<FontID, 16> pendingHotReloadFontIds{};
-    Core::InlineVector<TextureID, 16> pendingHotReloadTextureIds{};
-    Core::InlineVector<EnvironmentMapID, 16> pendingHotReloadEnvironmentMapIds{};
-
-    int32_t pendingModelWaitCount{0};
-    std::chrono::steady_clock::time_point modelWaitLastActivity{};
-
-    int32_t pendingProceduralWaitCount{0};
-    std::chrono::steady_clock::time_point proceduralWaitLastActivity{};
-    StaticModelHandle portalPlaneHandle{StaticModelHandle::INVALID};
-
+    AssetLoadState assetLoad{};
     BuiltinAssets builtinAssets{};
 
     // Engine Features
     InputState input;
 
     // Gameplay
-    StringID currentSceneId{0};
-    Core::InlineString<128> currentSceneName{};
-    StringID currentCheckpointId{};
-    int32_t currentCheckpointPriority{INT32_MIN};
+    SceneState scene{};
     Core::ScreenFadeState screenFade{};
 
     PhysicsState physics;

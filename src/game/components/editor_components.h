@@ -11,7 +11,7 @@
 
 #include "core/containers/inline_string.h"
 #include "core/string_id.h"
-#include "engine/engine_api.h"
+#include "engine/component_registry.h"
 
 namespace Core { struct ViewFamily; }
 

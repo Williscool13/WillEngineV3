@@ -44,7 +44,7 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.indirectIntensity);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), Engine::Profiles::CaptureLightingProfile(*state));
     }
     Engine::WriteProjectConfig(cfg);
 }
@@ -68,7 +68,10 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.indirectIntensity);
+                Engine::Profiles::LightingProfileBundle bundle = Engine::Profiles::CaptureLightingProfile(*state);
+                if (Engine::Profiles::LoadLightingProfile(names[i].c_str(), bundle)) {
+                    Engine::Profiles::ApplyLightingProfile(*state, bundle);
+                }
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -88,7 +91,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.indirectIntensity);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, Engine::Profiles::CaptureLightingProfile(*state));
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -276,33 +279,33 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (ImGui::Begin("Debug View")) {
         ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
         ImGui::SameLine();
-        ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
+        ImGui::Checkbox("Wireframe", &state->debug.render.bWireframe);
 
         ImGui::SeparatorText("Debug Visualizations");
 
-        ImGui::Checkbox("Enable GPU Debug Draw", &state->debug.bEnableGPUDebug);
+        ImGui::Checkbox("Enable GPU Debug Draw", &state->debug.render.bEnableGPUDebug);
         ImGui::SameLine();
-        ImGui::Checkbox("Lock##GPUDebug", &state->debug.bLockGPUDebug);
+        ImGui::Checkbox("Lock##GPUDebug", &state->debug.render.bLockGPUDebug);
 
-        if (ImGui::Checkbox("Cluster Grid##GPUDebug", &state->debug.bClusterGridDebug) && state->debug.bClusterGridDebug) {
-            state->debug.bWorldGridDebug = false;
+        if (ImGui::Checkbox("Cluster Grid##GPUDebug", &state->debug.render.bClusterGridDebug) && state->debug.render.bClusterGridDebug) {
+            state->debug.render.bWorldGridDebug = false;
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("FrustumBinning: screen-frustum-tied clusters. Only actually bound in ReSTIR mode (feeds the reflection pass); Default-mode shading uses World Grid instead.");
         }
         ImGui::SameLine();
-        if (ImGui::Checkbox("World Grid##GPUDebug", &state->debug.bWorldGridDebug) && state->debug.bWorldGridDebug) {
-            state->debug.bClusterGridDebug = false;
+        if (ImGui::Checkbox("World Grid##GPUDebug", &state->debug.render.bWorldGridDebug) && state->debug.render.bWorldGridDebug) {
+            state->debug.render.bClusterGridDebug = false;
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("WorldGridBinning: camera-centered cascaded world-space grid used by Default-mode shading.");
         } {
             const char* worldGridLevelLabels[] = {"All", "0", "1", "2", "3", "4", "5", "6", "7"};
-            int worldGridLevelChoice = state->debug.worldGridDebugLevel + 1;
+            int worldGridLevelChoice = state->debug.render.worldGridDebugLevel + 1;
             ImGui::SameLine();
             ImGui::SetNextItemWidth(80.0f);
             if (ImGui::Combo("Level##WorldGridDebug", &worldGridLevelChoice, worldGridLevelLabels, static_cast<int>(std::size(worldGridLevelLabels)))) {
-                state->debug.worldGridDebugLevel = worldGridLevelChoice - 1;
+                state->debug.render.worldGridDebugLevel = worldGridLevelChoice - 1;
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("All draws every cascade with an identification tint; picking one cascade draws only it, untinted. 0 is the finest (32m) cascade, doubling per level.");
@@ -321,19 +324,19 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         Widgets::SliderFloat("Roughness##ProbePreview", &state->debug.probePreviewRoughness, 0.0f, 1.0f, {.format = "%.2f", .tooltip = "Roughness whose prefilter mip the preview sphere displays; matches the mapping shading uses.", .reset = true, .resetTo = 0.0});
         ImGui::EndDisabled();
 
-        ImGui::Checkbox("Radiance Cache##GPUDebug", &state->debug.bRadianceCacheDebug);
+        ImGui::Checkbox("Radiance Cache##GPUDebug", &state->debug.render.bRadianceCacheDebug);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Radiance cache: one solid cube per occupied hash-table cell, colored by decoded radiance (black = occupied but not yet shaded). Cube size follows the cell's LOD; shrunk slightly so neighbors don't merge.");
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(200.0f);
-        Widgets::SliderFloat("Cache Exposure##GPUDebug", &state->debug.radianceCacheDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the radiance cache debug cubes so bright cells do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0}); {
+        Widgets::SliderFloat("Cache Exposure##GPUDebug", &state->debug.render.radianceCacheDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the radiance cache debug cubes so bright cells do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0}); {
             const char* bucketLabels[] = {"All", "+X", "-X", "+Y", "-Y", "+Z", "-Z"};
-            int bucketChoice = state->debug.radianceCacheDebugBucket + 1;
+            int bucketChoice = state->debug.render.radianceCacheDebugBucket + 1;
             ImGui::SameLine();
             ImGui::SetNextItemWidth(80.0f);
             if (ImGui::Combo("Direction##RadianceCacheDebug", &bucketChoice, bucketLabels, static_cast<int>(std::size(bucketLabels)))) {
-                state->debug.radianceCacheDebugBucket = bucketChoice - 1;
+                state->debug.render.radianceCacheDebugBucket = bucketChoice - 1;
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("All draws every normal bucket; picking one draws only cells whose normal bucket matches (front/back separation only, not fine direction).");
@@ -341,14 +344,14 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
 
         ImGui::SeparatorText("DDGI Probes");
-        ImGui::Checkbox("Draw Probes##DDGIDebug", &state->debug.bDDGIProbeDebug);
+        ImGui::Checkbox("Draw Probes##DDGIDebug", &state->debug.render.bDDGIProbeDebug);
         ImGui::SameLine();
-        ImGui::Checkbox("Bounce Only##DDGIDebug", &state->debug.bDDGIBounceOnly);
+        ImGui::Checkbox("Bounce Only##DDGIDebug", &state->debug.render.bDDGIBounceOnly);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Zero skybox radiance in the DDGI trace (feedback also disabled); anything left in the probes is one-bounce surface shading (sun + emissive + light-proxy emission at hits)");
         }
         ImGui::SameLine();
-        ImGui::Checkbox("Hide Inactive##DDGIDebug", &state->debug.bDDGIHideInactiveProbes);
+        ImGui::Checkbox("Hide Inactive##DDGIDebug", &state->debug.render.bDDGIHideInactiveProbes);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Skip classification-inactive probes in the debug view instead of drawing them flat blue.");
         }
@@ -356,23 +359,23 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         int cascadeOptionCount = static_cast<int>(state->lighting.ddgi.cascadeCount) + 1;
         if (cascadeOptionCount < 2) { cascadeOptionCount = 2; }
         if (cascadeOptionCount > 5) { cascadeOptionCount = 5; }
-        if (state->debug.ddgiProbeDebugCascade + 1 >= cascadeOptionCount) {
-            state->debug.ddgiProbeDebugCascade = -1;
+        if (state->debug.render.ddgiProbeDebugCascade + 1 >= cascadeOptionCount) {
+            state->debug.render.ddgiProbeDebugCascade = -1;
         }
-        int cascadeChoice = state->debug.ddgiProbeDebugCascade + 1;
+        int cascadeChoice = state->debug.render.ddgiProbeDebugCascade + 1;
         ImGui::SetNextItemWidth(80.0f);
         if (ImGui::Combo("Cascade##DDGIDebug", &cascadeChoice, cascadeLabels, cascadeOptionCount)) {
-            state->debug.ddgiProbeDebugCascade = cascadeChoice - 1;
+            state->debug.render.ddgiProbeDebugCascade = cascadeChoice - 1;
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("All draws every cascade with an identification tint (0 white, 1 red, 2 green, 3 blue); picking one cascade draws only it, untinted.");
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(240.0f);
-        Widgets::SliderFloat("Probe Exposure##GPUDebug", &state->debug.ddgiProbeDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0}); {
+        Widgets::SliderFloat("Probe Exposure##GPUDebug", &state->debug.render.ddgiProbeDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0}); {
             const char* probeDisplayLabels[] = {"Irradiance", "Visibility"};
             ImGui::SetNextItemWidth(120.0f);
-            ImGui::Combo("Display##DDGIDebug", &state->debug.ddgiProbeDebugMode, probeDisplayLabels, static_cast<int>(std::size(probeDisplayLabels)));
+            ImGui::Combo("Display##DDGIDebug", &state->debug.render.ddgiProbeDebugMode, probeDisplayLabels, static_cast<int>(std::size(probeDisplayLabels)));
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Visibility shows the probe's distance atlas as L1 lobes: red = mean distance relative to the miss clamp per direction, green = std/mean. A red-hot lobe pointing into the room from an exterior probe is a miss-inflated mean, which bypasses the Chebyshev occlusion test at sampling.");
             }
@@ -381,7 +384,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SeparatorText("GI Diffuse Gather"); {
             const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation"};
             ImGui::SetNextItemWidth(120.0f);
-            ImGui::Combo("View##GIGatherDebug", &state->debug.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)));
+            ImGui::Combo("View##GIGatherDebug", &state->debug.render.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)));
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Fullscreen final-gather view; runs the gather even when it is not applied to lighting. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where each ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface, magenta baked probe. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history).");
             }
@@ -390,8 +393,8 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SeparatorText("GI Deconstruct"); {
             const char* giDeconstructLabels[] = {"Off", "Cache Cell ID", "Cache Radiance", "DDGI Cheb Gate", "DDGI Mean vs Dist", "DDGI Coverage", "DDGI Irradiance"};
             ImGui::SetNextItemWidth(160.0f);
-            if (ImGui::Combo("View##GIDeconstruct", &state->debug.giDeconstructMode, giDeconstructLabels, static_cast<int>(std::size(giDeconstructLabels)))) {
-                if (state->debug.giDeconstructMode != 0) {
+            if (ImGui::Combo("View##GIDeconstruct", &state->debug.render.giDeconstructMode, giDeconstructLabels, static_cast<int>(std::size(giDeconstructLabels)))) {
+                if (state->debug.render.giDeconstructMode != 0) {
                     state->debug.resourceName = Core::InlineString("gi_deconstruct_target");
                     state->debug.transformationType = DebugTransformationType::None;
                     state->debug.viewAspect = Core::DebugViewAspect::None;
@@ -413,9 +416,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (ImGui::Button("Disable Debug View")) {
             state->debug.resourceName.Clear();
         }
-        ImGui::Checkbox("V-Buffer Shade Dispatch Bucketing##DebugView", &state->debug.bEnableShadeDispatchBucketingVisualization);
+        ImGui::Checkbox("V-Buffer Shade Dispatch Bucketing##DebugView", &state->debug.render.bEnableShadeDispatchBucketingVisualization);
         ImGui::SameLine();
-        ImGui::Checkbox("V-Buffer Lighting Bucketing##DebugView", &state->debug.bEnableLightingBucketingVisualization);
+        ImGui::Checkbox("V-Buffer Lighting Bucketing##DebugView", &state->debug.render.bEnableLightingBucketingVisualization);
 
         if (ImGui::CollapsingHeader("Hotkeys")) {
             const char* keyNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
@@ -783,16 +786,16 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
 static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ImGui::Button("Bake All Probes##probebakeall")) {
-        ProbeBakeGetOrCreate(state).EnqueueAllProbes(state);
+        ProbeBakeGet(ctx).EnqueueAllProbes(state);
     }
     ImGui::SameLine();
     if (ImGui::Button("Bake All (2-Pass Interbounce)##probebakeall2")) {
-        ProbeBakeGetOrCreate(state).EnqueueAllProbesInterbounce(state);
+        ProbeBakeGet(ctx).EnqueueAllProbesInterbounce(state);
     }
 
-    ProbeBakeSystem* bake = ProbeBakeFind(state);
-    const bool bakeActive = bake && bake->bBakeActive;
-    if (bake && (bakeActive || !bake->bakeQueue.IsEmpty() || bake->bInterbounceBatch)) {
+    ProbeBakeSystem* bake = &ProbeBakeGet(ctx);
+    const bool bakeActive = bake->bBakeActive;
+    if (bakeActive || !bake->bakeQueue.IsEmpty() || bake->bInterbounceBatch) {
         if (bake->bInterbounceBatch) {
             ImGui::Text("Pass %d/2", bake->bakePass);
         }
@@ -835,17 +838,17 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
         ImGui::SetTooltip("Manually halts the checked GI stages and carries their state unchanged; sampling keeps reading the frozen data. Converge Now unfreezes. The bake engages this automatically per probe when Freeze During Capture is on.");
     }
     ImGui::SameLine();
-    ImGui::Checkbox("Probes & Cache##freeze", &state->debug.bFreezeGIField);
+    ImGui::Checkbox("Probes & Cache##freeze", &state->debug.render.bFreezeGIField);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Stops probe trace/blend/relocation and radiance-cache shading; carry-forward suspends eviction and pins cell ages so unfreezing does not mass-evict the table.");
     }
     ImGui::SameLine();
-    ImGui::Checkbox("Screen Feedback##freeze", &state->debug.bFreezeScreenFeedback);
+    ImGui::Checkbox("Screen Feedback##freeze", &state->debug.render.bFreezeScreenFeedback);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Disables the gather screen tier and reflection screen-space hit lighting. Lit history is view-dependent and keeps evolving, which breaks frozen determinism and face-seams probe bakes.");
     }
     ImGui::SameLine();
-    ImGui::Checkbox("Gather Ray##freeze", &state->debug.bFreezeGatherRay);
+    ImGui::Checkbox("Gather Ray##freeze", &state->debug.render.bFreezeGatherRay);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Forces the gather onto its skip-ray path (radiance cache at the pixel surface, probes as fallback) while frozen, removing the 1spp cosine ray entirely.");
     }
@@ -967,11 +970,11 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::SeparatorText("Render Cache Reset"); {
             if (ImGui::Button("Full Renderer Clear")) {
-                state->pendingCacheReset = Core::RenderCacheReset::All;
+                state->requests.pendingCacheReset = Core::RenderCacheReset::All;
             }
             ImGui::SameLine();
             if (ImGui::Button("Reset Screen History")) {
-                state->pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
+                state->requests.pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
             }
         }
 

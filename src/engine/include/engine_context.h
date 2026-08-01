@@ -97,6 +97,24 @@ struct ProbeAssembleStaging
     std::atomic<bool> bPending{false};
 };
 
+/** Written by engine, consumed by game.  */
+struct EngineFrameStatus
+{
+    // Set when any model/font finished loading or a model/font was reclaimed this frame; gates the per-frame asset-resolve block.
+    bool bAssetsChangedThisFrame{false};
+
+    bool bScreenshotInFlight{false};
+    bool bAssetGenerationPending{false};
+};
+
+/** Deferred rescan requests, consumed by the owning manager. */
+struct RescanRequests
+{
+    bool bResources{false};
+    /** Atomic because asset worker threads raise it */
+    std::atomic<bool> bMaterials{false};
+};
+
 struct EngineContext
 {
     WindowContext windowContext{};
@@ -133,10 +151,7 @@ struct EngineContext
     Clay_Context* clayContext{nullptr};
 
     uint64_t currentRenderFrame{0};
-    /** Set when any model/font finished loading or a model/font was reclaimed this frame; gates the per-frame asset-resolve block. */
-    bool bAssetsChangedThisFrame{false};
-    bool bScreenshotInFlight{false};
-    bool bAssetGenerationPending{false};
+    EngineFrameStatus frameStatus{};
 
     RadianceCacheStatsSnapshot radianceCacheStats{};
 
@@ -170,8 +185,7 @@ struct EngineContext
     Core::InlineFunction<uint64_t(uint64_t, uint64_t)> addImguiTextureFn;
     Core::InlineFunction<void(uint64_t)> removeImguiTextureFn;
 
-    bool bShouldRescanResources{false};
-    std::atomic<bool> bShouldRescanMaterials{false};
+    RescanRequests rescan{};
 
     /**
      * Opaque, engine-allocated (persistent, sized via GameGetStateSize) storage for game-defined persistent state -

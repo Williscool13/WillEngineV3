@@ -41,7 +41,7 @@ void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, en
     registry.remove<StaticMeshLoadingTag>(entity);
     if (component.modelId.IsValid()) {
         registry.emplace_or_replace<StaticMeshLoadPendingTag>(entity);
-        state->bPendingModelResolve |= true;
+        state->assetLoad.bPendingModelResolve |= true;
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
@@ -242,7 +242,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             if (ImGui::SmallButton("Restore##hidden")) {
                 component.primitiveBlacklist.Clear();
                 registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
-                state->bPendingModelResolve |= true;
+                state->assetLoad.bPendingModelResolve |= true;
                 return {.requestRemoval = remove};
             }
         }
@@ -339,7 +339,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 if (pendingChangeIdx >= 0) {
                     component.SetMaterialOverride(static_cast<uint32_t>(pendingChangeIdx), pendingChangeMat);
                     registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
-                    state->bPendingModelResolve |= true;
+                    state->assetLoad.bPendingModelResolve |= true;
                 }
 
                 ImGui::TreePop();
@@ -391,7 +391,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
             if (shaderChanged) {
                 registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
-                state->bPendingModelResolve |= true;
+                state->assetLoad.bPendingModelResolve |= true;
             }
         }
 

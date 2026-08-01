@@ -46,26 +46,26 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
     if (ImGui::Begin("Scene Browser")) {
         const auto& sceneCache = ctx->assetManager->GetSceneCache();
 
-        if (!sceneCache.IsEmpty() && !sceneCache.Contains(state->currentSceneId)) {
+        if (!sceneCache.IsEmpty() && !sceneCache.Contains(state->scene.currentSceneId)) {
             for (const auto& [id, meta] : sceneCache) {
-                state->currentSceneId = id;
-                state->currentSceneName = meta.sceneName;
+                state->scene.currentSceneId = id;
+                state->scene.currentSceneName = meta.sceneName;
                 break;
             }
         }
         if (sceneCache.IsEmpty()) {
-            state->currentSceneId = {};
-            state->currentSceneName.Clear();
+            state->scene.currentSceneId = {};
+            state->scene.currentSceneName.Clear();
         }
 
-        const bool bIsLoaded = std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
-        const bool bIsModified = std::ranges::find(state->editor.modifiedScenes, state->currentSceneId) != state->editor.modifiedScenes.end();
+        const bool bIsLoaded = std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == state->scene.currentSceneId; });
+        const bool bIsModified = std::ranges::find(state->editor.modifiedScenes, state->scene.currentSceneId) != state->editor.modifiedScenes.end();
         const bool bIsMaxLoaded = state->editor.loadedScenes.Size() > Engine::MAX_LOADED_SCENES;
-        const bool hasScene = sceneCache.Contains(state->currentSceneId);
+        const bool hasScene = sceneCache.Contains(state->scene.currentSceneId);
 
         // Scene dropdown
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##scene_list", state->currentSceneName.c_str())) {
+        if (ImGui::BeginCombo("##scene_list", state->scene.currentSceneName.c_str())) {
             struct ScenePair
             {
                 StringID sceneId;
@@ -78,10 +78,10 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             std::ranges::sort(sceneList, {}, &ScenePair::name);
 
             for (auto& [id, name] : sceneList) {
-                const bool selected = (id == state->currentSceneId);
+                const bool selected = (id == state->scene.currentSceneId);
                 if (ImGui::Selectable(name.c_str(), selected)) {
-                    state->currentSceneId = id;
-                    state->currentSceneName = name;
+                    state->scene.currentSceneId = id;
+                    state->scene.currentSceneName = name;
                 }
                 if (std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == id; })) {
                     ImGui::SameLine();
@@ -93,21 +93,21 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
 
         ImGui::BeginDisabled(!hasScene || bIsLoaded || bIsMaxLoaded);
         if (ImGui::Button("Load")) {
-            LoadSceneFromFile(state, ctx->assetManager, state->currentSceneId);
+            LoadSceneFromFile(state, ctx->assetManager, state->scene.currentSceneId);
         }
         ImGui::EndDisabled();
 
         ImGui::SameLine();
         ImGui::BeginDisabled(!bIsLoaded);
-        if (ImGui::Button("Unload")) { UnloadScene(state, state->currentSceneId); }
+        if (ImGui::Button("Unload")) { UnloadScene(state, state->scene.currentSceneId); }
         ImGui::EndDisabled();
 
         ImGui::SameLine();
         ImGui::BeginDisabled(!bIsLoaded);
         if (bIsModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
         if (ImGui::Button(bIsModified ? "Save*" : "Save")) {
-            SaveSceneToFile(state->currentSceneId, state->currentSceneName.View(), state, ctx->assetManager, ctx);
-            state->editor.modifiedScenes.RemoveFirst(state->currentSceneId);
+            SaveSceneToFile(state->scene.currentSceneId, state->scene.currentSceneName.View(), state, ctx->assetManager, ctx);
+            state->editor.modifiedScenes.RemoveFirst(state->scene.currentSceneId);
         }
         if (bIsModified) { ImGui::PopStyleColor(); }
         ImGui::EndDisabled();
@@ -123,25 +123,25 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         ImGui::SameLine();
         ImGui::BeginDisabled(!hasScene || bIsLoaded);
         if (ImGui::Button("Delete")) {
-            ctx->assetManager->DeleteScene(state->currentSceneId);
-            state->currentSceneId = {};
-            state->currentSceneName.Clear();
+            ctx->assetManager->DeleteScene(state->scene.currentSceneId);
+            state->scene.currentSceneId = {};
+            state->scene.currentSceneName.Clear();
         }
         ImGui::EndDisabled();
         if (bIsLoaded && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
             ImGui::SetTooltip("Unload scene before deleting");
         }
 
-        ImGui::TextDisabled("ID: %llu", state->currentSceneId.id);
+        ImGui::TextDisabled("ID: %llu", state->scene.currentSceneId.id);
 
         ImGui::BeginDisabled(!hasScene);
         if (ImGui::Button("Set Default")) {
-            state->projectConfig.defaultScene = Core::InlineString<256>(state->currentSceneName.View());
+            state->projectConfig.defaultScene = Core::InlineString<256>(state->scene.currentSceneName.View());
             Engine::WriteProjectConfig(state->projectConfig);
         }
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && hasScene) {
-            ImGui::SetTooltip("Set '%s' as the scene loaded on startup (non-editor)", state->currentSceneName.c_str());
+            ImGui::SetTooltip("Set '%s' as the scene loaded on startup (non-editor)", state->scene.currentSceneName.c_str());
         }
 
         ImGui::SeparatorText("New Scene");
@@ -162,8 +162,8 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         if (ImGui::Button("Create")) {
             StringID newId{state->rng()};
             ctx->assetManager->RegisterScene(newId, newSceneName);
-            state->currentSceneId = newId;
-            state->currentSceneName = Core::InlineString<128>(newSceneName);
+            state->scene.currentSceneId = newId;
+            state->scene.currentSceneName = Core::InlineString<128>(newSceneName);
             state->editor.loadedScenes.PushBack({newId});
             state->editor.modifiedScenes.PushBack(newId);
             newSceneName[0] = '\0';
@@ -218,7 +218,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                 for (auto entity : spawned) {
                     state->editor.selectedEntities.PushBack(entity);
                 }
-                MarkSceneModified(state, state->currentSceneId);
+                MarkSceneModified(state, state->scene.currentSceneId);
             }
         }
         ImGui::EndDisabled();
@@ -290,7 +290,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                 state->editor.selectedFolders.Clear();
                 state->editor.selectedEntities.Clear();
                 state->editor.selectedEntities.PushBack(spawned);
-                MarkSceneModified(state, state->currentSceneId);
+                MarkSceneModified(state, state->scene.currentSceneId);
             }
         }
         ImGui::SameLine(); {
@@ -327,17 +327,17 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             state->editor.selectedFolders.Clear();
             state->editor.selectedEntities.Clear();
             state->editor.selectedEntities.PushBack(newEntity);
-            MarkSceneModified(state, state->currentSceneId);
+            MarkSceneModified(state, state->scene.currentSceneId);
         }
         ImGui::SameLine();
         if (ImGui::Button("New Folder")) {
             entt::entity f = state->registry.create();
-            state->registry.emplace<Component::SceneComponent>(f, state->currentSceneId);
+            state->registry.emplace<Component::SceneComponent>(f, state->scene.currentSceneId);
             Component::SceneFolderComponent folder{};
             folder.folderId = StringID{state->rng()};
             folder.name = Core::ShortString("New Folder");
             state->registry.emplace<Component::SceneFolderComponent>(f, std::move(folder));
-            MarkSceneModified(state, state->currentSceneId);
+            MarkSceneModified(state, state->scene.currentSceneId);
         }
         char* search = state->editor.sceneBrowserSearch;
         ImGui::SetNextItemWidth(-1);
@@ -387,7 +387,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         auto view2 = state->registry.view<Component::SceneComponent>();
         for (auto entity : view2) {
             auto& scene = view2.get<Component::SceneComponent>(entity);
-            if (scene.sceneId != state->currentSceneId) continue;
+            if (scene.sceneId != state->scene.currentSceneId) continue;
             if (state->registry.all_of<Component::SceneFolderComponent>(entity)) continue;
             ++totalInScene;
 
@@ -416,7 +416,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             uint16_t depth = 0;
             if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
                 const auto* ps = state->registry.try_get<Component::SceneComponent>(h->parent);
-                if (ps && ps->sceneId == state->currentSceneId) {
+                if (ps && ps->sceneId == state->scene.currentSceneId) {
                     parentEntity = h->parent;
                     depth = h->depth;
                 }
@@ -467,7 +467,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             if (ImGui::SmallButton("^")) {
                 std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
                           state->registry.get<Component::StableIdComponent>(prev->entity).sortOrder);
-                MarkSceneModified(state, state->currentSceneId);
+                MarkSceneModified(state, state->scene.currentSceneId);
             }
             ImGui::EndDisabled();
             ImGui::SameLine();
@@ -475,7 +475,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             if (ImGui::SmallButton("v")) {
                 std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
                           state->registry.get<Component::StableIdComponent>(next->entity).sortOrder);
-                MarkSceneModified(state, state->currentSceneId);
+                MarkSceneModified(state, state->scene.currentSceneId);
             }
             ImGui::EndDisabled();
             ImGui::SameLine();
@@ -514,7 +514,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                     auto& nc = state->registry.get_or_emplace<Component::NameComponent>(e.entity);
                     if (strcmp(nc.name.c_str(), state->editor.renameBuffer) != 0) {
                         nc.name = Core::InlineString<256>(state->editor.renameBuffer);
-                        MarkSceneModified(state, state->currentSceneId);
+                        MarkSceneModified(state, state->scene.currentSceneId);
                     }
                     state->editor.renamingEntity = entt::null;
                 }
@@ -656,7 +656,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         Core::ArenaVector<AnchorInfo> anchors{&ctx->editorArena.Get(), 64}; {
             auto av = state->registry.view<Component::SceneFolderComponent, Component::SceneComponent>();
             for (auto a : av) {
-                if (av.get<Component::SceneComponent>(a).sceneId != state->currentSceneId) { continue; }
+                if (av.get<Component::SceneComponent>(a).sceneId != state->scene.currentSceneId) { continue; }
                 const auto& fc = av.get<Component::SceneFolderComponent>(a);
                 anchors.PushBack({a, fc.folderId, fc.parentFolder, fc.name.c_str()});
             }
@@ -669,7 +669,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         auto folderHasMembers = [&](StringID folderId) {
             auto fv = state->registry.view<Component::EntityFolderComponent, Component::SceneComponent>();
             for (auto en : fv) {
-                if (fv.get<Component::SceneComponent>(en).sceneId != state->currentSceneId) { continue; }
+                if (fv.get<Component::SceneComponent>(en).sceneId != state->scene.currentSceneId) { continue; }
                 if (fv.get<Component::EntityFolderComponent>(en).folderId == folderId) { return true; }
             }
             return false;
@@ -742,7 +742,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                     if (auto* fc = state->registry.try_get<Component::SceneFolderComponent>(a.entity)) {
                         if (strcmp(fc->name.c_str(), state->editor.renameBuffer) != 0) {
                             fc->name = Core::ShortString(state->editor.renameBuffer);
-                            MarkSceneModified(state, state->currentSceneId);
+                            MarkSceneModified(state, state->scene.currentSceneId);
                         }
                     }
                     state->editor.renamingEntity = entt::null;
@@ -791,7 +791,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                 ImGui::SetNextItemWidth(160.0f);
                 if (ImGui::InputText("##foldername", nameBuf, sizeof(nameBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
                     state->registry.get<Component::SceneFolderComponent>(a.entity).name = Core::ShortString(nameBuf);
-                    MarkSceneModified(state, state->currentSceneId);
+                    MarkSceneModified(state, state->scene.currentSceneId);
                     ImGui::CloseCurrentPopup();
                 }
                 if (!a.parent.IsValid() && ImGui::MenuItem("New Subfolder")) {
@@ -904,7 +904,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                 const auto* sb = state->registry.try_get<Component::StableIdComponent>(b);
                 return (sa ? sa->sortOrder : 0) < (sb ? sb->sortOrder : 0);
             });
-            uint64_t order = HighestSortOrderInScene(state->registry, state->currentSceneId);
+            uint64_t order = HighestSortOrderInScene(state->registry, state->scene.currentSceneId);
             for (entt::entity e : toMove) {
                 ClearParent(state, e);
                 state->registry.get_or_emplace<Component::EntityFolderComponent>(e).folderId = moveToFolderId;
@@ -912,13 +912,13 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                     st->sortOrder = ++order;
                 }
             }
-            MarkSceneModified(state, state->currentSceneId);
+            MarkSceneModified(state, state->scene.currentSceneId);
         }
         if (reparentFolderEntity != entt::null) {
             if (auto* fc = state->registry.try_get<Component::SceneFolderComponent>(reparentFolderEntity)) {
                 if (fc->parentFolder != reparentFolderTo && fc->folderId != reparentFolderTo) {
                     fc->parentFolder = reparentFolderTo;
-                    MarkSceneModified(state, state->currentSceneId);
+                    MarkSceneModified(state, state->scene.currentSceneId);
                 }
             }
         }
@@ -957,7 +957,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             Core::ArenaVector<entt::entity> order{&ctx->editorArena.Get(), totalInScene + 1};
             auto rv = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
             for (auto en : rv) {
-                if (rv.get<Component::SceneComponent>(en).sceneId == state->currentSceneId) { order.PushBack(en); }
+                if (rv.get<Component::SceneComponent>(en).sceneId == state->scene.currentSceneId) { order.PushBack(en); }
             }
             std::ranges::sort(order, [&](entt::entity a, entt::entity b) {
                 return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
@@ -979,7 +979,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             }
             uint64_t n = 1;
             for (entt::entity en : finalOrder) { state->registry.get<Component::StableIdComponent>(en).sortOrder = n++; }
-            MarkSceneModified(state, state->currentSceneId);
+            MarkSceneModified(state, state->scene.currentSceneId);
         }
         if (parentDragged != entt::null && parentTarget != entt::null) {
             Core::ArenaVector<entt::entity> moved{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
@@ -995,21 +995,21 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             for (entt::entity m : moved) {
                 SetParent(state, m, parentTarget); // keeps world pose, rejects cycles
             }
-            MarkSceneModified(state, state->currentSceneId);
+            MarkSceneModified(state, state->scene.currentSceneId);
         }
         if (newSubfolderParent.IsValid()) {
             entt::entity f = state->registry.create();
-            state->registry.emplace<Component::SceneComponent>(f, state->currentSceneId);
+            state->registry.emplace<Component::SceneComponent>(f, state->scene.currentSceneId);
             Component::SceneFolderComponent folder{};
             folder.folderId = StringID{state->rng()};
             folder.parentFolder = newSubfolderParent;
             folder.name = Core::ShortString("New Subfolder");
             state->registry.emplace<Component::SceneFolderComponent>(f, std::move(folder));
-            MarkSceneModified(state, state->currentSceneId);
+            MarkSceneModified(state, state->scene.currentSceneId);
         }
         if (folderToDelete != entt::null) {
             state->registry.destroy(folderToDelete);
-            MarkSceneModified(state, state->currentSceneId);
+            MarkSceneModified(state, state->scene.currentSceneId);
         }
 
         ImGui::Separator();
@@ -1017,7 +1017,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             Core::ArenaVector<entt::entity> ordered{&ctx->editorArena.Get(), totalInScene + 1};
             auto compactView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
             for (auto entity : compactView) {
-                if (compactView.get<Component::SceneComponent>(entity).sceneId == state->currentSceneId) { ordered.PushBack(entity); }
+                if (compactView.get<Component::SceneComponent>(entity).sceneId == state->scene.currentSceneId) { ordered.PushBack(entity); }
             }
             std::ranges::sort(ordered, [&](entt::entity a, entt::entity b) {
                 return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
@@ -1026,7 +1026,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             for (entt::entity e : ordered) {
                 state->registry.get<Component::StableIdComponent>(e).sortOrder = next++;
             }
-            if (next > 1) { MarkSceneModified(state, state->currentSceneId); }
+            if (next > 1) { MarkSceneModified(state, state->scene.currentSceneId); }
         }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reassign gap-free 1..N sort order to all entities in this scene, preserving current order"); }
         ImGui::SameLine();
@@ -1056,7 +1056,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                 else {
                     auto sv = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
                     for (auto e : sv) {
-                        if (sv.get<Component::SceneComponent>(e).sceneId == state->currentSceneId) { target.PushBack(e); }
+                        if (sv.get<Component::SceneComponent>(e).sceneId == state->scene.currentSceneId) { target.PushBack(e); }
                     }
                 }
 
@@ -1078,7 +1078,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                         state->editor.selectedEntities.Clear();
                         for (entt::entity e : target) { state->editor.selectedEntities.PushBack(e); }
                     }
-                    MarkSceneModified(state, state->currentSceneId);
+                    MarkSceneModified(state, state->scene.currentSceneId);
                 };
                 if (ImGui::MenuItem("Name (A-Z)")) {
                     std::ranges::sort(target, [&](entt::entity a, entt::entity b) { return strcmp(nameOf(a), nameOf(b)) < 0; });

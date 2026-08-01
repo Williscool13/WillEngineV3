@@ -43,7 +43,7 @@ void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& 
     registry.remove<ProceduralMeshLoadingTag>(entity);
     if (!std::holds_alternative<std::monostate>(component.params)) {
         registry.emplace_or_replace<ProceduralMeshLoadPendingTag>(entity);
-        state->bPendingModelResolve |= true;
+        state->assetLoad.bPendingModelResolve |= true;
     }
     else {
         registry.remove<ProceduralMeshLoadPendingTag>(entity);
@@ -577,7 +577,7 @@ static void CreateSpiralRailingEntity(Engine::EngineState* state, entt::registry
     rc.railing.postInterval = rc.segmentsPerSpan;
     registry.emplace<Component::SplineMeshComponent>(child, std::move(rc));
 
-    MarkSceneModified(state, state->currentSceneId);
+    MarkSceneModified(state, state->scene.currentSceneId);
 }
 
 Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
@@ -1125,7 +1125,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     if (component.material.IsValid()) {
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
-                        state->bPendingModelResolve |= true;
+                        state->assetLoad.bPendingModelResolve |= true;
                     }
                 }
                 for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
@@ -1134,7 +1134,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                         if (matId != component.material) {
                             component.material = matId;
                             registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
-                            state->bPendingModelResolve |= true;
+                            state->assetLoad.bPendingModelResolve |= true;
                         }
                     }
                 }

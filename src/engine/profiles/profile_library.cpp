@@ -11,6 +11,7 @@
 
 #include "platform/paths.h"
 #include "platform/file_utils.h"
+#include "engine/engine_api.h"
 #include "engine/serialization/config_serialization.h"
 #include "render/interface/render_interface.h"
 
@@ -56,58 +57,58 @@ static bool WriteProfileJson(const char* subdir, const char* name, const nlohman
     return Platform::WriteFile(ProfilePath(subdir, name), std::string_view(dump));
 }
 
-static bool ApplyLightingBundle(const nlohmann::json& j, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::ReflectionConfiguration& reflection, Core::ReflectionProbeConfiguration& reflectionProbe, Core::GTAOConfiguration& gtao, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity, float& indirectIntensity)
+static bool ApplyLightingBundle(const nlohmann::json& j, LightingProfileBundle& bundle)
 {
     if (!j.is_object()) {
         return false;
     }
     if (j.contains("lightingMode") && j["lightingMode"].is_number_integer()) {
         uint32_t storedMode = j["lightingMode"].get<uint32_t>();
-        lightingMode = static_cast<Core::LightingMode>(storedMode);
+        bundle.lightingMode = static_cast<Core::LightingMode>(storedMode);
     }
     if (j.contains("restir") && j["restir"].is_object()) {
-        ConfigSerialization::FromJson(j["restir"], restir);
+        ConfigSerialization::FromJson(j["restir"], bundle.restir);
     }
     if (j.contains("ddgi") && j["ddgi"].is_object()) {
-        ConfigSerialization::FromJson(j["ddgi"], ddgi);
+        ConfigSerialization::FromJson(j["ddgi"], bundle.ddgi);
     }
     if (j.contains("reflection") && j["reflection"].is_object()) {
-        ConfigSerialization::FromJson(j["reflection"], reflection);
+        ConfigSerialization::FromJson(j["reflection"], bundle.reflection);
     }
     if (j.contains("reflectionProbe") && j["reflectionProbe"].is_object()) {
-        ConfigSerialization::FromJson(j["reflectionProbe"], reflectionProbe);
+        ConfigSerialization::FromJson(j["reflectionProbe"], bundle.reflectionProbe);
     }
     if (j.contains("gtao") && j["gtao"].is_object()) {
-        ConfigSerialization::FromJson(j["gtao"], gtao);
+        ConfigSerialization::FromJson(j["gtao"], bundle.gtao);
     }
     // Migration: iblIntensity used to live inside the restir blob.
     if (j.contains("iblIntensity") && j["iblIntensity"].is_number()) {
-        iblIntensity = j["iblIntensity"].get<float>();
+        bundle.iblIntensity = j["iblIntensity"].get<float>();
     }
     else if (j.contains("restir") && j["restir"].is_object() && j["restir"].contains("iblIntensity") && j["restir"]["iblIntensity"].is_number()) {
-        iblIntensity = j["restir"]["iblIntensity"].get<float>();
+        bundle.iblIntensity = j["restir"]["iblIntensity"].get<float>();
     }
     if (j.contains("indirectIntensity") && j["indirectIntensity"].is_number()) {
-        indirectIntensity = j["indirectIntensity"].get<float>();
+        bundle.indirectIntensity = j["indirectIntensity"].get<float>();
     }
-    shadingOverride = j.contains("shadingShaderOverride") ? StringID(j["shadingShaderOverride"].get<uint64_t>()) : StringID{};
-    lightingOverride = j.contains("lightingShaderOverride") ? StringID(j["lightingShaderOverride"].get<uint64_t>()) : StringID{};
+    bundle.shadingOverride = j.contains("shadingShaderOverride") ? StringID(j["shadingShaderOverride"].get<uint64_t>()) : StringID{};
+    bundle.lightingOverride = j.contains("lightingShaderOverride") ? StringID(j["lightingShaderOverride"].get<uint64_t>()) : StringID{};
     return true;
 }
 
-static nlohmann::json BuildLightingBundle(Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::ReflectionConfiguration& reflection, const Core::ReflectionProbeConfiguration& reflectionProbe, const Core::GTAOConfiguration& gtao, StringID shadingOverride, StringID lightingOverride, float iblIntensity, float indirectIntensity)
+static nlohmann::json BuildLightingBundle(const LightingProfileBundle& bundle)
 {
     nlohmann::json j;
-    j["lightingMode"] = static_cast<uint32_t>(lightingMode);
-    j["restir"] = ConfigSerialization::ToJson(restir);
-    j["ddgi"] = ConfigSerialization::ToJson(ddgi);
-    j["reflection"] = ConfigSerialization::ToJson(reflection);
-    j["reflectionProbe"] = ConfigSerialization::ToJson(reflectionProbe);
-    j["gtao"] = ConfigSerialization::ToJson(gtao);
-    j["iblIntensity"] = iblIntensity;
-    j["indirectIntensity"] = indirectIntensity;
-    if (shadingOverride) { j["shadingShaderOverride"] = shadingOverride.id; }
-    if (lightingOverride) { j["lightingShaderOverride"] = lightingOverride.id; }
+    j["lightingMode"] = static_cast<uint32_t>(bundle.lightingMode);
+    j["restir"] = ConfigSerialization::ToJson(bundle.restir);
+    j["ddgi"] = ConfigSerialization::ToJson(bundle.ddgi);
+    j["reflection"] = ConfigSerialization::ToJson(bundle.reflection);
+    j["reflectionProbe"] = ConfigSerialization::ToJson(bundle.reflectionProbe);
+    j["gtao"] = ConfigSerialization::ToJson(bundle.gtao);
+    j["iblIntensity"] = bundle.iblIntensity;
+    j["indirectIntensity"] = bundle.indirectIntensity;
+    if (bundle.shadingOverride) { j["shadingShaderOverride"] = bundle.shadingOverride.id; }
+    if (bundle.lightingOverride) { j["lightingShaderOverride"] = bundle.lightingOverride.id; }
     return j;
 }
 
@@ -116,14 +117,44 @@ uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames)
     return ListProfiles("lighting", outNames, maxNames);
 }
 
-bool LoadLightingProfile(const char* name, Core::LightingMode& lightingMode, Core::ReSTIRParams& restir, Core::DDGIParams& ddgi, Core::ReflectionConfiguration& reflection, Core::ReflectionProbeConfiguration& reflectionProbe, Core::GTAOConfiguration& gtao, StringID& shadingOverride, StringID& lightingOverride, float& iblIntensity, float& indirectIntensity)
+LightingProfileBundle CaptureLightingProfile(const EngineState& state)
 {
-    return ApplyLightingBundle(ReadProfileJson("lighting", name), lightingMode, restir, ddgi, reflection, reflectionProbe, gtao, shadingOverride, lightingOverride, iblIntensity, indirectIntensity);
+    LightingProfileBundle bundle;
+    bundle.lightingMode = state.lighting.lightingMode;
+    bundle.restir = state.debug.restir;
+    bundle.ddgi = state.lighting.ddgi;
+    bundle.reflection = state.lighting.reflection;
+    bundle.reflectionProbe = state.lighting.reflectionProbe;
+    bundle.gtao = state.lighting.gtaoConfig;
+    bundle.shadingOverride = state.debug.shadingShaderOverride;
+    bundle.lightingOverride = state.debug.lightingShaderOverride;
+    bundle.iblIntensity = state.lighting.iblIntensity;
+    bundle.indirectIntensity = state.lighting.indirectIntensity;
+    return bundle;
 }
 
-bool SaveLightingProfile(const char* name, Core::LightingMode lightingMode, const Core::ReSTIRParams& restir, const Core::DDGIParams& ddgi, const Core::ReflectionConfiguration& reflection, const Core::ReflectionProbeConfiguration& reflectionProbe, const Core::GTAOConfiguration& gtao, StringID shadingOverride, StringID lightingOverride, float iblIntensity, float indirectIntensity)
+void ApplyLightingProfile(EngineState& state, const LightingProfileBundle& bundle)
 {
-    return WriteProfileJson("lighting", name, BuildLightingBundle(lightingMode, restir, ddgi, reflection, reflectionProbe, gtao, shadingOverride, lightingOverride, iblIntensity, indirectIntensity));
+    state.lighting.lightingMode = bundle.lightingMode;
+    state.debug.restir = bundle.restir;
+    state.lighting.ddgi = bundle.ddgi;
+    state.lighting.reflection = bundle.reflection;
+    state.lighting.reflectionProbe = bundle.reflectionProbe;
+    state.lighting.gtaoConfig = bundle.gtao;
+    state.debug.shadingShaderOverride = bundle.shadingOverride;
+    state.debug.lightingShaderOverride = bundle.lightingOverride;
+    state.lighting.iblIntensity = bundle.iblIntensity;
+    state.lighting.indirectIntensity = bundle.indirectIntensity;
+}
+
+bool LoadLightingProfile(const char* name, LightingProfileBundle& bundle)
+{
+    return ApplyLightingBundle(ReadProfileJson("lighting", name), bundle);
+}
+
+bool SaveLightingProfile(const char* name, const LightingProfileBundle& bundle)
+{
+    return WriteProfileJson("lighting", name, BuildLightingBundle(bundle));
 }
 
 bool DeleteLightingProfile(const char* name)

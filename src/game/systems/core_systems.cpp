@@ -14,9 +14,9 @@ namespace Game
 {
 static void LoadLightingProfile(Engine::EngineState* state, const char* name)
 {
-    const bool loaded = Engine::Profiles::LoadLightingProfile(name, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection,
-        state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.indirectIntensity);
-    if (loaded) {
+    Engine::Profiles::LightingProfileBundle bundle = Engine::Profiles::CaptureLightingProfile(*state);
+    if (Engine::Profiles::LoadLightingProfile(name, bundle)) {
+        Engine::Profiles::ApplyLightingProfile(*state, bundle);
         state->projectConfig.activeLightingProfile = Core::InlineString<64>(name);
         Engine::WriteProjectConfig(state->projectConfig);
     }
@@ -25,7 +25,7 @@ static void LoadLightingProfile(Engine::EngineState* state, const char* name)
 void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (state->input.GetActionState(Actions::ACTION_SCREENSHOT).pressed) {
-        state->bWantsScreenshot |= true;
+        state->requests.bWantsScreenshot |= true;
     }
     if (state->input.GetActionState(Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR).pressed) {
         LoadLightingProfile(state, "ReSTIR");
@@ -37,7 +37,7 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
-    frameBuffer->bTakeScreenshot = state->bWantsScreenshot;
-    state->bWantsScreenshot = false;
+    frameBuffer->bTakeScreenshot = state->requests.bWantsScreenshot;
+    state->requests.bWantsScreenshot = false;
 }
 } // Game

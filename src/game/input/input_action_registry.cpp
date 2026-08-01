@@ -5,7 +5,7 @@
 #include "input_action_registry.h"
 
 #include "game_actions.h"
-#include "engine/engine_api.h"
+#include "engine/input/input_binding.h"
 #include "engine/input/input_rebinding.h"
 
 namespace Game

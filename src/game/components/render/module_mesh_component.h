@@ -10,7 +10,7 @@
 
 #include "engine/core/material_id.h"
 #include "engine/resources/model/model_types.h"
-#include "engine/engine_api.h"
+#include "engine/component_registry.h"
 #include "game/components/component_types.h"
 #include "core/containers/array.h"
 

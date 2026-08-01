@@ -6,7 +6,7 @@
 #define WILL_ENGINE_INPUT_CONFIG_H
 
 #include "core/containers/inline_vector.h"
-#include "engine/engine_api.h"
+#include "engine/input/input_binding.h"
 #include "engine/project_config.h"
 #include "engine/profiles/profile_library.h"
 

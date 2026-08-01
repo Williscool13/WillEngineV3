@@ -30,7 +30,7 @@ static void RequestReflectionProbeLoad(entt::registry& registry, entt::entity en
     const bool bHasBaked = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId}) != nullptr;
     if (bHasBaked || comp.standInEnvMap.IsValid()) {
         registry.emplace_or_replace<ReflectionProbeLoadPendingTag>(entity);
-        state->bPendingModelResolve |= true;
+        state->assetLoad.bPendingModelResolve |= true;
     }
 }
 
@@ -128,7 +128,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
             ImGui::EndCombo();
         }
 
-        ProbeBakeSystem& bake = ProbeBakeGetOrCreate(state);
+        ProbeBakeSystem& bake = ProbeBakeGet(registry.ctx().get<Engine::EngineContext*>());
         const bool bBakeInFlight = bake.bBakeActive && bake.probeEntity == entity;
 
         ImGui::BeginDisabled(comp.bBakeRequested || bBakeInFlight);

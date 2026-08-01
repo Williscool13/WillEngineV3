@@ -271,7 +271,7 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 void EditorTickInput(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (!ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->input.GetActionState(Actions::ACTION_VIEWPORT_SELECT).pressed) {
-        state->bViewportClickPending = true;
+        state->requests.bViewportClickPending = true;
     }
     HandleEditorHotkeys(ctx, state);
 }
@@ -340,8 +340,8 @@ static bool HandleViewportSelection(Engine::EngineContext* ctx, Engine::EngineSt
     bool bJustSelected = false;
 
     const bool ctrlHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_CTRL).down;
-    if (state->bViewportClickPending) {
-        state->bViewportClickPending = false;
+    if (state->requests.bViewportClickPending) {
+        state->requests.bViewportClickPending = false;
 
         if (state->inputContext != Engine::InputContext::Gameplay && !ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev) {
             auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
@@ -414,16 +414,16 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), state->editor.selectedEntities.Size());
                 for (entt::entity entity : state->editor.selectedEntities) {
                     if (!state->registry.valid(entity)) continue;
-                    entt::entity copy = CopySceneEntity(state, entity, state->currentSceneId);
+                    entt::entity copy = CopySceneEntity(state, entity, state->scene.currentSceneId);
                     if (auto* nameComp = state->registry.try_get<Component::NameComponent>(copy)) {
-                        nameComp->name = GenerateIncrementedName(state->registry, state->currentSceneId, nameComp->name);
+                        nameComp->name = GenerateIncrementedName(state->registry, state->scene.currentSceneId, nameComp->name);
                     }
-                    state->registry.get<Component::StableIdComponent>(copy).sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
+                    state->registry.get<Component::StableIdComponent>(copy).sortOrder = HighestSortOrderInScene(state->registry, state->scene.currentSceneId) + 1;
                     copies.PushBack(copy);
                 }
                 state->editor.selectedEntities.Clear();
                 for (auto copy : copies) { state->editor.selectedEntities.PushBack(copy); }
-                if (!copies.IsEmpty()) { MarkSceneModified(state, state->currentSceneId); }
+                if (!copies.IsEmpty()) { MarkSceneModified(state, state->scene.currentSceneId); }
             }
 
             if (!popupOpen && state->input.GetActionState(Actions::ACTION_DELETE_SELECTED).pressed) {
@@ -433,7 +433,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                     state->registry.destroy(entity);
                 }
                 state->editor.selectedEntities.Clear();
-                if (hadSelection) { MarkSceneModified(state, state->currentSceneId); }
+                if (hadSelection) { MarkSceneModified(state, state->scene.currentSceneId); }
             }
 
             if (!popupOpen && !state->editor.bExclusiveGizmoActivePrev && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
@@ -538,8 +538,8 @@ static void DrawGameplayWindow(Engine::EngineState* state)
 {
     if (ImGui::Begin("Gameplay")) {
         if (IsPlaying(state)) {
-            ImGui::Text("Checkpoint ID:       %llu", state->currentCheckpointId.id);
-            ImGui::Text("Checkpoint Priority: %d", state->currentCheckpointPriority);
+            ImGui::Text("Checkpoint ID:       %llu", state->scene.currentCheckpointId.id);
+            ImGui::Text("Checkpoint Priority: %d", state->scene.currentCheckpointPriority);
         }
         else {
             ImGui::TextDisabled("Not playing");
@@ -806,7 +806,7 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
                     else {
                         if (ImGui::MenuItem(entry.name)) {
                             CreateComponent(state, entity, entry.typeId);
-                            MarkSceneModified(state, state->currentSceneId);
+                            MarkSceneModified(state, state->scene.currentSceneId);
                         }
                     }
                 }

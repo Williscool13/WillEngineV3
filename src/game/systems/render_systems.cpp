@@ -126,19 +126,19 @@ void DisconnectRenderObservers(entt::registry& registry)
 
 void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->pendingHotReloadModelIds.IsEmpty()) { return; }
+    if (state->assetLoad.pendingHotReloadModelIds.IsEmpty()) { return; }
 
     // Freeze + release refs so the model drains, then re-arm; the load resolves re-acquire the fresh version after ResolveUnloads unfreezes on reclaim.
     auto isHot = [&](Engine::ModelID id) {
         if (!ctx->assetManager->IsModelFrozen(id)) { return false; }
-        for (const Engine::ModelID& hotId : state->pendingHotReloadModelIds) {
+        for (const Engine::ModelID& hotId : state->assetLoad.pendingHotReloadModelIds) {
             if (id == hotId) { return true; }
         }
         return false;
     };
 
     // Only resident models need freezing; a non-resident one's fresh load already reads the regenerated file.
-    for (const Engine::ModelID& hotId : state->pendingHotReloadModelIds) {
+    for (const Engine::ModelID& hotId : state->assetLoad.pendingHotReloadModelIds) {
         if (ctx->assetManager->IsModelResident(hotId)) {
             ctx->assetManager->FreezeModel(hotId);
         }
@@ -178,13 +178,13 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
-        state->bPendingModelResolve = true;
+        state->assetLoad.bPendingModelResolve = true;
     }
 }
 
 void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->pendingHotReloadFontIds.IsEmpty()) { return; }
+    if (state->assetLoad.pendingHotReloadFontIds.IsEmpty()) { return; }
 
     // The UI font is engine-held (no component owns it) so it can never drain; reject its hot-reload and require a restart.
     Engine::FontID uiFontId{};
@@ -193,13 +193,13 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
     // Freeze + release refs so the font drains, then re-arm; the resolve systems re-acquire the fresh version after ResolveUnloads unfreezes on reclaim.
     auto isHot = [&](Engine::FontID id) {
         if (!ctx->assetManager->IsFontFrozen(id)) { return false; }
-        for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
+        for (const Engine::FontID& hotId : state->assetLoad.pendingHotReloadFontIds) {
             if (id == hotId) { return true; }
         }
         return false;
     };
 
-    for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
+    for (const Engine::FontID& hotId : state->assetLoad.pendingHotReloadFontIds) {
         if (uiFontId.IsValid() && hotId == uiFontId) {
             LOG_WARN(Game, "UI font hot-reload ignored; restart required to apply changes to the UI font.");
             continue;
@@ -254,15 +254,15 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
-        state->bPendingModelResolve = true;
+        state->assetLoad.bPendingModelResolve = true;
     }
 }
 
 void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->pendingHotReloadTextureIds.IsEmpty()) { return; }
+    if (state->assetLoad.pendingHotReloadTextureIds.IsEmpty()) { return; }
 
-    for (auto hotId : state->pendingHotReloadTextureIds) {
+    for (auto hotId : state->assetLoad.pendingHotReloadTextureIds) {
         if (ctx->assetManager->IsTextureLoaded(hotId)) {
             ctx->assetManager->ReloadTexture(hotId);
         }
@@ -271,9 +271,9 @@ void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->pendingHotReloadEnvironmentMapIds.IsEmpty()) { return; }
+    if (state->assetLoad.pendingHotReloadEnvironmentMapIds.IsEmpty()) { return; }
 
-    for (auto hotId : state->pendingHotReloadEnvironmentMapIds) {
+    for (auto hotId : state->assetLoad.pendingHotReloadEnvironmentMapIds) {
         if (ctx->assetManager->IsCubemapLoaded(hotId)) {
             ctx->assetManager->ReloadCubemap(hotId);
         }
@@ -374,7 +374,7 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
             probe.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
             state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
             state->registry.emplace_or_replace<Component::ReflectionProbeLoadPendingTag>(entity);
-            state->bPendingModelResolve |= true;
+            state->assetLoad.bPendingModelResolve |= true;
         }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
@@ -395,7 +395,7 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         }
         state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
         state->registry.emplace_or_replace<Component::ReflectionProbeLoadPendingTag>(entity);
-        state->bPendingModelResolve |= true;
+        state->assetLoad.bPendingModelResolve |= true;
     }
 }
 
@@ -609,12 +609,12 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 
     if (modelsWaitingThisTick > 0) {
-        state->pendingModelWaitCount += modelsWaitingThisTick;
-        state->modelWaitLastActivity = std::chrono::steady_clock::now();
+        state->assetLoad.pendingModelWaitCount += modelsWaitingThisTick;
+        state->assetLoad.modelWaitLastActivity = std::chrono::steady_clock::now();
     }
-    if (state->pendingModelWaitCount > 0 && modelsWaitingThisTick == 0 && (std::chrono::steady_clock::now() - state->modelWaitLastActivity) >= std::chrono::seconds(1)) {
-        LOG_TRACE(Game, "{} model(s) not yet done loading", state->pendingModelWaitCount);
-        state->pendingModelWaitCount = 0;
+    if (state->assetLoad.pendingModelWaitCount > 0 && modelsWaitingThisTick == 0 && (std::chrono::steady_clock::now() - state->assetLoad.modelWaitLastActivity) >= std::chrono::seconds(1)) {
+        LOG_TRACE(Game, "{} model(s) not yet done loading", state->assetLoad.pendingModelWaitCount);
+        state->assetLoad.pendingModelWaitCount = 0;
     }
 
     for (const auto entity : resolved) {
@@ -786,12 +786,12 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 
     if (proceduralWaitingThisTick > 0) {
-        state->pendingProceduralWaitCount += proceduralWaitingThisTick;
-        state->proceduralWaitLastActivity = std::chrono::steady_clock::now();
+        state->assetLoad.pendingProceduralWaitCount += proceduralWaitingThisTick;
+        state->assetLoad.proceduralWaitLastActivity = std::chrono::steady_clock::now();
     }
-    if (state->pendingProceduralWaitCount > 0 && proceduralWaitingThisTick == 0 && (std::chrono::steady_clock::now() - state->proceduralWaitLastActivity) >= std::chrono::seconds(1)) {
-        LOG_TRACE(Game, "{} procedural model(s) not yet done loading", state->pendingProceduralWaitCount);
-        state->pendingProceduralWaitCount = 0;
+    if (state->assetLoad.pendingProceduralWaitCount > 0 && proceduralWaitingThisTick == 0 && (std::chrono::steady_clock::now() - state->assetLoad.proceduralWaitLastActivity) >= std::chrono::seconds(1)) {
+        LOG_TRACE(Game, "{} procedural model(s) not yet done loading", state->assetLoad.pendingProceduralWaitCount);
+        state->assetLoad.pendingProceduralWaitCount = 0;
     }
 
     for (const auto entity : resolved) {
@@ -961,7 +961,7 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
             runtime.modelHandle = ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor, textComponent.wrapWidth, textComponent.bendRadius);
             if (runtime.modelHandle.IsValid()) {
                 state->registry.emplace_or_replace<Component::Text3DLoadingTag>(entity);
-                state->bPendingModelResolve = true;
+                state->assetLoad.bPendingModelResolve = true;
             }
         }
         done.PushBack(entity);

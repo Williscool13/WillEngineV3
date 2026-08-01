@@ -153,7 +153,7 @@ void RegisterBuiltinCommands()
     });
 
     Register("render_reset", "Full renderer cache clear", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
-        state->pendingCacheReset = Core::RenderCacheReset::All;
+        state->requests.pendingCacheReset = Core::RenderCacheReset::All;
     });
 }
 

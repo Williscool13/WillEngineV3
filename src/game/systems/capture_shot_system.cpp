@@ -11,6 +11,7 @@
 #include "ddgi_converge_boost.h"
 #include "probe_bake_system.h"
 #include "core/math/constants.h"
+#include "game/game_state.h"
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
@@ -46,13 +47,6 @@ static size_t CountLoadingEntities(Engine::EngineState* state)
            state->registry.view<Component::PhysicsMeshLoadingTag>().size();
 }
 
-static CaptureShotSystem& CaptureShotGetOrCreate(Engine::EngineState* state)
-{
-    if (auto* existing = state->registry.ctx().find<CaptureShotSystem>()) {
-        return *existing;
-    }
-    return state->registry.ctx().emplace<CaptureShotSystem>();
-}
 
 static bool LoadShotList(const char* path, Core::InlineVector<CaptureShotSystem::Shot, 64>& outShots)
 {
@@ -106,18 +100,18 @@ void CaptureShotSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* st
         bDone = true;
         phase = Phase::Idle;
         if (state->automation.bExitWhenDone) {
-            state->bRequestedQuit = true;
+            state->requests.bRequestedQuit = true;
         }
     };
 
     if (!bActive) {
-        if (ProbeBakeActive(state)) {
+        if (ProbeBakeActive(ctx)) {
             return;
         }
         if (!LoadShotList(state->automation.shotsPath.c_str(), shots) || shots.IsEmpty()) {
             bDone = true;
             if (state->automation.bExitWhenDone) {
-                state->bRequestedQuit = true;
+                state->requests.bRequestedQuit = true;
             }
             return;
         }
@@ -146,8 +140,8 @@ void CaptureShotSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* st
         case Phase::WaitReady:
         {
             const size_t loadingEntities = CountLoadingEntities(state);
-            const bool bQuiet = !state->bPendingModelResolve && loadingEntities == 0 &&
-                                !ctx->bShouldRescanResources && !ctx->bAssetGenerationPending && !ctx->assetManager->HasPendingLoads();
+            const bool bQuiet = !state->assetLoad.bPendingModelResolve && loadingEntities == 0 &&
+                                !ctx->rescan.bResources && !ctx->frameStatus.bAssetGenerationPending && !ctx->assetManager->HasPendingLoads();
             readyQuietCounter = bQuiet ? readyQuietCounter + 1 : 0;
             ++readyWaitedFrames;
             if (readyQuietCounter >= READY_QUIET_FRAMES) {
@@ -155,8 +149,8 @@ void CaptureShotSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* st
             }
             else if (readyWaitedFrames >= READY_TIMEOUT_FRAMES) {
                 LOG_WARN(Game, "Capture run: asset readiness timed out after {} frames; capturing anyway. Gates: pendingModelResolve={} loadingEntities={} rescan={} generation={} pendingLoads={}",
-                         readyWaitedFrames, state->bPendingModelResolve, loadingEntities,
-                         ctx->bShouldRescanResources, ctx->bAssetGenerationPending, ctx->assetManager->HasPendingLoads());
+                         readyWaitedFrames, state->assetLoad.bPendingModelResolve, loadingEntities,
+                         ctx->rescan.bResources, ctx->frameStatus.bAssetGenerationPending, ctx->assetManager->HasPendingLoads());
                 ctx->assetManager->LogPendingLoads();
                 phase = Phase::ShotSetup;
             }
@@ -180,8 +174,8 @@ void CaptureShotSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* st
                                                                   glm::radians(state->projectConfig.editorCameraFovDegrees), state->projectConfig.editorCameraNearPlane);
             camera.previousViewData = camera.currentViewData;
 
-            if (state->pendingCacheReset == Core::RenderCacheReset::None) {
-                state->pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
+            if (state->requests.pendingCacheReset == Core::RenderCacheReset::None) {
+                state->requests.pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
             }
             if (currentShot == 0 && state->projectConfig.probeBake.bAutoConverge) {
                 DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, state->lighting.ddgi);
@@ -204,12 +198,12 @@ void CaptureShotSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* st
         }
         case Phase::CaptureRequested:
         {
-            if (ctx->bScreenshotInFlight) {
+            if (ctx->frameStatus.bScreenshotInFlight) {
                 return;
             }
             const Core::Path savePath = Core::Path(outputDir.c_str()) / Core::InlineString<128>::Format("%s.png", shots[currentShot].name.c_str()).c_str();
             frameBuffer->screenshotPath = Core::InlineString<512>(savePath.c_str());
-            state->bWantsScreenshot = true;
+            state->requests.bWantsScreenshot = true;
             bSawInFlight = false;
             awaitFrames = 0;
             phase = Phase::AwaitSaved;
@@ -217,9 +211,9 @@ void CaptureShotSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* st
         }
         case Phase::AwaitSaved:
         {
-            bSawInFlight = bSawInFlight || ctx->bScreenshotInFlight;
+            bSawInFlight = bSawInFlight || ctx->frameStatus.bScreenshotInFlight;
             ++awaitFrames;
-            const bool bSaved = bSawInFlight && !ctx->bScreenshotInFlight;
+            const bool bSaved = bSawInFlight && !ctx->frameStatus.bScreenshotInFlight;
             if (!bSaved && awaitFrames < SAVE_TIMEOUT_FRAMES) {
                 return;
             }
@@ -240,13 +234,12 @@ void CaptureShotSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* st
 
 void CaptureShotTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
-    CaptureShotGetOrCreate(state).Tick(ctx, state, frameBuffer);
+    ctx->GetGameState<GameState>()->captureShot.Tick(ctx, state, frameBuffer);
 }
 
-void CaptureShotScrubFrame(Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void CaptureShotScrubFrame(Engine::EngineContext* ctx, Core::FrameBuffer* frameBuffer)
 {
-    const auto* system = state->registry.ctx().find<CaptureShotSystem>();
-    if (system == nullptr || !system->bActive) { return; }
+    if (!ctx->GetGameState<GameState>()->captureShot.bActive) { return; }
 
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
     viewFamily.debugLines.Clear();
@@ -260,6 +253,6 @@ void CaptureShotScrubFrame(Engine::EngineState* state, Core::FrameBuffer* frameB
     viewFamily.probePreviews.Clear();
 
     frameBuffer->selectedStableId = 0;
-    frameBuffer->bEnableGPUDebug = false;
+    frameBuffer->debug.bEnableGPUDebug = false;
 }
 } // Game
