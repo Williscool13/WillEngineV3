@@ -31,7 +31,7 @@
     "stepsPerSlice": 3.0,
     "thinOccluderCompensation": 0.0
   },
-  "iblIntensity": 0.0,
+  "iblIntensity": 1.0,
   "lightingMode": 2,
   "restir": {
     "adaptiveSpatialBoost": 3.0,

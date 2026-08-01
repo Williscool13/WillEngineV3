@@ -1192,6 +1192,31 @@ void AssetManager::KickOffRetires()
     }
 }
 
+bool AssetManager::HasPendingLoads() const
+{
+    for (const auto& texture : textures) {
+        if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
+        if (texture.loadState == Texture::LoadState::Loading) { return true; }
+    }
+    for (const auto& model : models) {
+        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
+        if (model.modelLoadState == StaticModel::ModelLoadState::NotLoaded) { return true; }
+    }
+    for (const auto& font : fonts) {
+        if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
+        if (font.loadState == Font::LoadState::Loading) { return true; }
+    }
+    for (const auto& collider : colliders) {
+        if (!colliderAllocator.IsValid(collider.selfHandle)) { continue; }
+        if (collider.loadState == PhysicsColliderAsset::LoadState::NotLoaded) { return true; }
+    }
+    for (const auto& cubemap : cubemaps) {
+        if (!cubemapAllocator.IsValid(cubemap.selfHandle)) { continue; }
+        if (cubemap.loadState == Render::Cubemap::LoadState::Loading) { return true; }
+    }
+    return false;
+}
+
 bool AssetManager::ResolveUnloads()
 {
     const uint64_t currentFrame = ctx->currentRenderFrame;

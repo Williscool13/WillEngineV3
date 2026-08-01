@@ -44,7 +44,7 @@ static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.indirectIntensity);
     }
     Engine::WriteProjectConfig(cfg);
 }
@@ -68,7 +68,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
-                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+                Engine::Profiles::LoadLightingProfile(names[i].c_str(), state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.indirectIntensity);
                 Engine::WriteProjectConfig(cfg);
             }
         }
@@ -88,7 +88,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity);
+        Engine::Profiles::SaveLightingProfile(lightingNewName, state->lighting.lightingMode, state->debug.restir, state->lighting.ddgi, state->lighting.reflection, state->lighting.reflectionProbe, state->lighting.gtaoConfig, state->debug.shadingShaderOverride, state->debug.lightingShaderOverride, state->lighting.iblIntensity, state->lighting.indirectIntensity);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
         Engine::WriteProjectConfig(cfg);
         lightingNewName[0] = '\0';
@@ -984,6 +984,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (ImGui::CollapsingHeader("Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
             if (Widgets::SliderFloat("IBL Intensity##env", &state->lighting.iblIntensity, 0.0f, 2.0f)) {
+                changed = true;
+            }
+            if (Widgets::SliderFloat("Indirect Intensity##env", &state->lighting.indirectIntensity, 0.0f, 1.0f, {.tooltip = "Scales the indirect diffuse term at the final composite only (gather/probe/sky fill). Lower = darker shadows. Does not feed back into probe or cache convergence. Default 1.", .reset = true, .resetTo = 1.0})) {
                 changed = true;
             }
         }

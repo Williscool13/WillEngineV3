@@ -16,3 +16,9 @@ assets/**
 !assets/textures/prototype_texture_dark_license.txt
 # Claude working files (plans, backups, settings)
 .claude/
+
+# Byte cache from running the scene generators in scripts/
+__pycache__/
+
+# Capture-run PNG output (scripts/capture_run.ps1)
+captures/

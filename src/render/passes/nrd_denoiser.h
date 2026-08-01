@@ -66,6 +66,8 @@ public:
      */
     void AddDispatchPass(RenderGraph& graph, ResourceManager* resourceManager, PipelineManager* pipelineManager, uint32_t frameInFlightIndex);
 
+    void RequestHistoryClear() { bPendingHistoryClear = true; }
+
 private:
     enum IoTexture : uint32_t
     {

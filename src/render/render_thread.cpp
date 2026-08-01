@@ -379,6 +379,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     if (frameBuffer.cacheReset != Core::RenderCacheReset::None) {
         vkQueueWaitIdle(context->graphicsQueue);
+        nrdDenoiser->RequestHistoryClear();
     }
     if (frameBuffer.cacheReset == Core::RenderCacheReset::ScreenHistory) {
         renderGraph->InvalidateAllViewportAssociated();
@@ -1178,12 +1179,18 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             vkCmdCopyImageToBuffer2(_cmd, &copyInfo);
         });
 
-        Core::Path screenshotDir = Platform::GetUserDataPath() / "screenshots";
-        Platform::CreateDirectories(screenshotDir.c_str());
+        if (frameBuffer.screenshotPath.IsEmpty()) {
+            Core::Path screenshotDir = Platform::GetUserDataPath() / "screenshots";
+            Platform::CreateDirectories(screenshotDir.c_str());
 
-        Core::InlineString<> filename;
-        filename.len = snprintf(filename.buf, 64, "screenshot_%llu.png", static_cast<unsigned long long>(frameNumber));
-        screenCapture->screenshotSavePath = screenshotDir / filename.c_str();
+            Core::InlineString<> filename;
+            filename.len = snprintf(filename.buf, 64, "screenshot_%llu.png", static_cast<unsigned long long>(frameNumber));
+            screenCapture->screenshotSavePath = screenshotDir / filename.c_str();
+        }
+        else {
+            screenCapture->screenshotSavePath = Core::Path(frameBuffer.screenshotPath.c_str());
+            Platform::CreateDirectories(screenCapture->screenshotSavePath.Parent().c_str());
+        }
         screenCapture->screenshotPendingSlot = frameIndex;
         screenCapture->StartScreenshot();
     }

@@ -357,6 +357,8 @@ public: // Per-Tick calls
     /** Reclaims drained assets. Returns true if a model/font was reclaimed (which may have lifted a hot-reload freeze). */
     bool ResolveUnloads();
 
+    [[nodiscard]] bool HasPendingLoads() const;
+
     /**
      * Scan for assets. Done once in constructor, but editor calls this frequently to gather generated assets.
      */

@@ -757,7 +757,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
     const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -776,6 +776,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .outputMode = outputMode,
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,
+                .indirectIntensity = indirectIntensity,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,

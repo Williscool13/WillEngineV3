@@ -5,6 +5,8 @@ set(GAME_SOURCES
 
         systems/camera_system.cpp
         systems/camera_system.h
+        systems/capture_shot_system.cpp
+        systems/capture_shot_system.h
         systems/debug_system.cpp
         systems/debug_system.h
         systems/physics_system.cpp

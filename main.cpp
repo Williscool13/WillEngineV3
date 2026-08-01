@@ -1,5 +1,8 @@
 #include "src/engine/will_engine.h"
 
+#include <cstring>
+#include <cstdlib>
+
 #include <spdlog/spdlog.h>
 
 #include "platform/crash_handler.h"
@@ -7,6 +10,41 @@
 #include "utils/logging/logging.h"
 
 #include <SDL3/SDL_main.h>
+
+/**
+ * --scene <name>   load this scene (by .wscene header name) instead of projectConfig.defaultScene
+ * --shots <file>   shot-list JSON; activates the capture run
+ * --out <dir>      capture PNG output directory
+ * --settle <n>     per-shot convergence frames (default probeBake.settleFrames)
+ * --exit           quit after the last shot is saved
+ */
+static Engine::AutomationConfig ParseLaunchArgs(int argc, char* argv[])
+{
+    Engine::AutomationConfig automation{};
+    for (int i = 1; i < argc; i++) {
+        const char* value = i + 1 < argc ? argv[i + 1] : "";
+        if (strcmp(argv[i], "--scene") == 0) {
+            automation.sceneOverride = Core::InlineString<256>(value);
+            i++;
+        }
+        else if (strcmp(argv[i], "--shots") == 0) {
+            automation.shotsPath = Core::InlineString<512>(value);
+            i++;
+        }
+        else if (strcmp(argv[i], "--out") == 0) {
+            automation.outputDir = Core::InlineString<512>(value);
+            i++;
+        }
+        else if (strcmp(argv[i], "--settle") == 0) {
+            automation.settleFrames = atoi(value);
+            i++;
+        }
+        else if (strcmp(argv[i], "--exit") == 0) {
+            automation.bExitWhenDone = true;
+        }
+    }
+    return automation;
+}
 
 int main(int argc, char* argv[])
 {
@@ -24,7 +62,7 @@ int main(int argc, char* argv[])
 
     {
         Engine::WillEngine we{&crashHandler};
-        we.Initialize(_logger);
+        we.Initialize(_logger, ParseLaunchArgs(argc, argv));
         we.Run();
         we.Cleanup();
     }

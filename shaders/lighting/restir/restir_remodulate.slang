@@ -158,7 +158,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
         if (pc.shadowsIndex != ~0x0u) {
             gtao = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(pixel, 0)).y;
         }
-        ibl = kD_ibl * indirectDiffuse * albedo * gtao + reflectionSpecular;
+        ibl = kD_ibl * indirectDiffuse * pc.indirectIntensity * albedo * gtao + reflectionSpecular;
     }
 
     float3 finalColor;

@@ -800,6 +800,7 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t outputMode;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC float indirectIntensity;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t bDDGIApply;
     SHADER_PUBLIC uint32_t shadowsIndex;

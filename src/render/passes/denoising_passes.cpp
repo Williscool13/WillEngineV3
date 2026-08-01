@@ -633,7 +633,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
         const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
         const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
@@ -649,6 +649,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outputMode = remodulateOutputMode,
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,
+                .indirectIntensity = indirectIntensity,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
@@ -1257,7 +1258,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
         const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
         const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, shadows, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
@@ -1273,6 +1274,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .outputMode = remodulateOutputMode,
                 .skyboxIndex = skyboxIndex,
                 .iblIntensity = iblIntensity,
+                .indirectIntensity = indirectIntensity,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,

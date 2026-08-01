@@ -932,6 +932,7 @@ struct ViewFamily
     ScreenFadeState screenFade{};
     SIGMAParams sigmaParams{};
     float iblIntensity{1.0f};
+    float indirectIntensity{1.0f};
     float bakedDiffuseClampK{4.0f};
     bool bReflectionProbeBruteForce{false};
     float resolutionScale{1.0f};
@@ -1048,6 +1049,7 @@ struct FrameBuffer
     ReflectionProbeConfiguration reflectionProbe{};
 
     bool bTakeScreenshot{false};
+    InlineString<512> screenshotPath{};
     bool bCaptureProbeFace{false};
 
     uint32_t probeCaptureCropSize{0};

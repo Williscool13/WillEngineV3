@@ -135,6 +135,8 @@ struct EngineContext
     uint64_t currentRenderFrame{0};
     /** Set when any model/font finished loading or a model/font was reclaimed this frame; gates the per-frame asset-resolve block. */
     bool bAssetsChangedThisFrame{false};
+    bool bScreenshotInFlight{false};
+    bool bAssetGenerationPending{false};
 
     RadianceCacheStatsSnapshot radianceCacheStats{};
 

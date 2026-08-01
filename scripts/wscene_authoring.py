@@ -705,6 +705,40 @@ def write_material(name, base_color=(1.0, 1.0, 1.0, 1.0), metallic=0.0, roughnes
     return mid
 
 # =============================================================================
+# camera / capture shots
+# =============================================================================
+def camera_look_quat(dx, dy, dz):
+    """[w,x,y,z] rotating the CAMERA's forward axis (-Z, camera_system.cpp:61 WORLD_FORWARD)
+    onto (dx,dy,dz), Y-up, no roll. This is NOT face_dir(): face_dir aims local +Z (lights,
+    cones); a camera given face_dir looks the opposite way."""
+    n = math.sqrt(dx * dx + dy * dy + dz * dz)
+    dx, dy, dz = dx / n, dy / n, dz / n
+    pitch = math.asin(max(-1.0, min(1.0, dy)))
+    yaw = math.atan2(-dx, -dz)
+    cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
+    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
+    # yawQuat(Y) * pitchQuat(X), same composition UpdateEditorCamera maintains
+    return (cy * cp, cy * sp, cp * sy, -sy * sp)
+
+
+def shot(name, pos, target, settle_frames=None):
+    """One capture-run shot: camera at `pos` looking at `target`. Names become <name>.png."""
+    d = (target[0] - pos[0], target[1] - pos[1], target[2] - pos[2])
+    entry = {"name": name, "translation": list(pos), "rotation": list(camera_look_quat(*d))}
+    if settle_frames is not None:
+        entry["settleFrames"] = settle_frames
+    return entry
+
+
+def write_shots(path, shots):
+    """Shot-list JSON for `will-engine.exe --shots <path>` (capture_shot_system.cpp). Rotation
+    is [w,x,y,z] like everything else in this file; build entries with shot()."""
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump({"shots": list(shots)}, f, indent=2)
+    return path
+
+
+# =============================================================================
 # top-level write
 # =============================================================================
 def write_scene(path, entities, scene_id, scene_name, editor_camera=None):

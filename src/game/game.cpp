@@ -27,6 +27,7 @@
 #include "render/vulkan/vk_context.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
+#include "systems/capture_shot_system.h"
 #include "systems/probe_bake_system.h"
 #include "systems/ddgi_converge_boost.h"
 #include "editor/editor_systems.h"
@@ -135,17 +136,23 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     gResolveStringIdFn = ctx->resolveStringIdFn;
 #endif
 
-    if (!state->projectConfig.defaultScene.IsEmpty()) {
+    const char* startupScene = !state->automation.sceneOverride.IsEmpty() ? state->automation.sceneOverride.c_str() : state->projectConfig.defaultScene.c_str();
+    if (startupScene[0] != '\0') {
+        bool bFound = false;
         const auto& sceneCache = ctx->assetManager->GetSceneCache();
         for (const auto& pair : sceneCache) {
-            if (pair.value.sceneName == state->projectConfig.defaultScene.c_str()) {
+            if (pair.value.sceneName == startupScene) {
                 auto res = Game::LoadSceneFromFile(state, ctx->assetManager, pair.key);
                 if (res.bSuccess) {
                     state->currentSceneId = res.sceneId;
                     state->currentSceneName = res.sceneName;
                 }
+                bFound = true;
                 break;
             }
+        }
+        if (!bFound && !state->automation.sceneOverride.IsEmpty()) {
+            LOG_ERROR(Game, "--scene '{}' not found in the scene cache", startupScene);
         }
     }
 }
@@ -338,6 +345,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 {
     Game::ProbeBakeTick(ctx, state, frameBuffer);
     Game::DDGIConvergeBoostTick(state->ddgiConvergeBoost, state->lighting.ddgi);
+    Game::CaptureShotTick(ctx, state, frameBuffer);
 
     Game::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
 
@@ -403,6 +411,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
     frameBuffer->mainViewFamily.sigmaParams = state->lighting.sigmaParams;
     frameBuffer->mainViewFamily.iblIntensity = state->lighting.iblIntensity;
+    frameBuffer->mainViewFamily.indirectIntensity = state->lighting.indirectIntensity;
     frameBuffer->mainViewFamily.resolutionScale = state->projectConfig.resolutionScale;
     if (state->debug.bEnablePortal) {
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
@@ -428,6 +437,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 #endif
 
     Game::ProbeBakeScrubFrame(ctx, state, frameBuffer);
+    Game::CaptureShotScrubFrame(state, frameBuffer);
 }
 
 GAME_API void GameEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state)

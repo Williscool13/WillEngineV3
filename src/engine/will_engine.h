@@ -9,6 +9,7 @@
 #include <SDL3/SDL.h>
 #include <enkiTS/src/TaskScheduler.h>
 
+#include "engine/include/automation_config.h"
 #include "engine/include/frame_sync.h"
 #include "engine/include/game_interface.h"
 #include "render/interface/render_interface.h"
@@ -96,7 +97,7 @@ public:
 
     ~WillEngine();
 
-    void Initialize(Utils::Logger* logger);
+    void Initialize(Utils::Logger* logger, const AutomationConfig& automation = {});
 
     void Run();
 

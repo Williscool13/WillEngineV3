@@ -133,6 +133,7 @@ public:
         return snapshot;
     }
 
+    bool IsScreenshotInFlight() const { return !screenCapture->CanScreenshot(); }
     bool IsProbeCaptureReady() const { return screenCapture->IsProbeCaptureReady(); }
     const uint16_t* GetProbeCapturePixels() const { return screenCapture->GetProbeCapturePixels(); }
     uint32_t GetProbeCaptureSize() const { return screenCapture->GetProbeCaptureCaptureSize(); }

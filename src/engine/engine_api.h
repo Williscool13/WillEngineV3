@@ -27,6 +27,7 @@
 #include "render/interface/render_interface.h"
 #include "physics/physics_config.h"
 #include "resources/scene/scene.h"
+#include "include/automation_config.h"
 #include "project_config.h"
 #include "core/input/input_frame.h"
 #include "core/input/action_state.h"
@@ -368,6 +369,7 @@ struct LightingState
     Core::ReflectionConfiguration reflection{};
     Core::ReflectionProbeConfiguration reflectionProbe{};
     float iblIntensity{1.0f};
+    float indirectIntensity{1.0f};
     int32_t skyboxLOD{0};
 };
 
@@ -500,6 +502,7 @@ struct EngineState
     // Gathered in GameUpdate, used in PrepareRenderFrame
     bool bWantsScreenshot{false};
     bool bViewportClickPending{false};
+    bool bRequestedQuit{false};
     Core::RenderCacheReset pendingCacheReset{Core::RenderCacheReset::None};
 
     const Core::TimeFrame* timeFrame{nullptr};
@@ -554,6 +557,7 @@ struct EngineState
     DebugState debug;
     DDGIConvergeBoost ddgiConvergeBoost;
     ProjectConfig projectConfig{};
+    AutomationConfig automation{};
 };
 
 class EngineAPI

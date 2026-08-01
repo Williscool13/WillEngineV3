@@ -100,7 +100,7 @@ WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
 
 WillEngine::~WillEngine() = default;
 
-void WillEngine::Initialize(Utils::Logger* logger)
+void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& automation)
 {
     ZoneScoped;
 
@@ -285,9 +285,10 @@ void WillEngine::Initialize(Utils::Logger* logger)
 
         engineState = new(memoryManager.PersistentAllocRaw(sizeof(EngineState), Core::AllocTag::AssetGenerator)) EngineState(&memoryManager.General());
         engineState->projectConfig = ReadProjectConfig();
+        engineState->automation = automation;
         engineState->lighting.aaConfig = engineState->projectConfig.aaConfig;
         if (!engineState->projectConfig.activeLightingProfile.IsEmpty()) {
-            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.ddgi, engineState->lighting.reflection, engineState->lighting.reflectionProbe, engineState->lighting.gtaoConfig, engineState->debug.shadingShaderOverride, engineState->debug.lightingShaderOverride, engineState->lighting.iblIntensity);
+            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.ddgi, engineState->lighting.reflection, engineState->lighting.reflectionProbe, engineState->lighting.gtaoConfig, engineState->debug.shadingShaderOverride, engineState->debug.lightingShaderOverride, engineState->lighting.iblIntensity, engineState->lighting.indirectIntensity);
         }
         if (!engineState->projectConfig.activePostProcessProfile.IsEmpty()) {
             Profiles::LoadPostProcessProfile(engineState->projectConfig.activePostProcessProfile.c_str(), engineState->lighting.postProcess);
@@ -1245,7 +1246,7 @@ void WillEngine::Run()
             inputManager->ProcessEvent(e);
         }
 
-        if (inputManager->IsQuitRequested() || renderThread->IsShutdownRequestedByRender()) {
+        if (inputManager->IsQuitRequested() || renderThread->IsShutdownRequestedByRender() || engineState->bRequestedQuit) {
             renderThread->RequestShutdown();
             break;
         }
@@ -1319,6 +1320,10 @@ void WillEngine::Run()
         engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;
         engineContext->bImGuiWantsTextInput = ImGui::GetIO().WantTextInput;
         engineContext->bAssetsChangedThisFrame = loadCounts.modelLoadedCount > 0 || loadCounts.fontLoadedCount > 0 || assetsReclaimed;
+        engineContext->bScreenshotInFlight = renderThread->IsScreenshotInFlight();
+#if WILL_EDITOR
+        engineContext->bAssetGenerationPending = assetGenerator->GetTotalTextureGenerateCount() + assetGenerator->GetTotalModelGenerateCount() > 0;
+#endif
 
         //
         {
