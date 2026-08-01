@@ -1,6 +1,7 @@
 /*
  * ReBLUR: PrePass. Pre-accumulation spatial reuse (Poisson-8) using hit-distance / normal / plane
  * edge-stopping weights. Radiance is YCoCg (blended linearly); hit distance is normalized [0,1].
+ * This software contains source code provided by NVIDIA Corporation.
  * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
  * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */

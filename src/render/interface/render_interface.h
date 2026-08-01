@@ -758,7 +758,7 @@ struct ReSTIRParams
     uint32_t confidenceBlurRadius{2u};
 
     // todo: Disabled atrous and asvgf. Readd as needed
-    enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3, ReBLUR = 4 };
+    enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3, ReBLUR = 4, NRD = 5 };
 
     DenoiserMode denoiserMode{DenoiserMode::None};
 

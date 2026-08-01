@@ -5,6 +5,7 @@
  * the carried packed accum speeds so a lighting change cuts next frame's accumulation.
  * Engine deviation: NRD's spec-MV upscaler modification not ported (engine MVs are packed in the gbuffer
  * and TAA reads them directly).
+ * This software contains source code provided by NVIDIA Corporation.
  * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
  * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */

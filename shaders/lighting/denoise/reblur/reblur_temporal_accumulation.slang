@@ -6,6 +6,7 @@
  * virtualHistoryAmount, catrom flag). Slow history blends in YCoCg with a hit-distance floor, a firefly
  * suppressor clamps slow + fast luma, and the responsive ("fast") history is single-channel luma. Signal is
  * YCoCg radiance in .xyz + normalized hit distance in .w; reprojection/curvature math works in world hit distance.
+ * This software contains source code provided by NVIDIA Corporation.
  * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
  * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */

@@ -85,6 +85,8 @@ add_library(render STATIC
         passes/reflection_denoise_passes.h
         passes/denoising_passes.cpp
         passes/denoising_passes.h
+        passes/nrd_denoiser.cpp
+        passes/nrd_denoiser.h
         passes/ambient_occlusion_passes.cpp
         passes/ambient_occlusion_passes.h
         passes/shadow_passes.cpp
@@ -142,6 +144,7 @@ target_link_libraries(render PUBLIC
         tracy_interface
         bc7enc_rdo
         clay
+        NRD
 )
 
 if(WILL_ENGINE_BUILD_EDITOR)

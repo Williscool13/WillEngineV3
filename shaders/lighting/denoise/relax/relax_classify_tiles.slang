@@ -1,5 +1,6 @@
 /*
  * RELAX: ClassifyTiles pass. Marks 16x16 tiles as sky (all pixels beyond denoising range).
+ * This software contains source code provided by NVIDIA Corporation.
  * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
  * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */

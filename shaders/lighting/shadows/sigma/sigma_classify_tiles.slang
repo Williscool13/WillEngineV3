@@ -3,6 +3,9 @@
  * Reduces each 16x16 tile to (needsFilter, maxBlurRadius/16, isSky). "needsFilter" is 0 for tiles that
  * are uniformly lit or uniformly umbra/sky/hard-shadow (nothing to soften) and 1 for tiles containing a
  * soft penumbra. maxBlurRadius drives the dilation width in the smooth pass. Output RGBA8.
+ * This software contains source code provided by NVIDIA Corporation.
+ * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+ * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */
 import common_interop;
 import push_constant_interop;

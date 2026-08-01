@@ -11,6 +11,7 @@
 #include "render/passes/reflection_passes.h"
 #include "render/passes/reflection_denoise_passes.h"
 #include "render/passes/denoising_passes.h"
+#include "render/passes/nrd_denoiser.h"
 #include "render/passes/ambient_occlusion_passes.h"
 #include "render/passes/shadow_passes.h"
 #include "render/passes/scene_passes.h"

@@ -4,6 +4,9 @@
  * plane-distance test against the per-pixel (viewZ, accumFrames) packed into the history-length texture,
  * clamps it to the local 5x5 mean +/- variance (sigma scaled by history length), and blends with an
  * antilag-modulated, history-length-driven weight. All math in linear shadow; storage is sqrt-encoded.
+ * This software contains source code provided by NVIDIA Corporation.
+ * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+ * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */
 import common_interop;
 import push_constant_interop;

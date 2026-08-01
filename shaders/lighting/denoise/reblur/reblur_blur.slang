@@ -6,6 +6,7 @@
  * exponential hit-distance weight, plus the Poisson Gaussian. One pipeline serves both passes: pc.isPostBlur
  * widens the radius (REBLUR_POST_BLUR_RADIUS_SCALE = 2) and tightens the weight fractions (fractionScale 0.5).
  * Signal is YCoCg radiance in .xyz with a normalized hit distance in .w. Sky / out-of-range pass through.
+ * This software contains source code provided by NVIDIA Corporation.
  * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
  * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */

@@ -7,6 +7,9 @@
  * Dense 5x5 keeps small penumbrae crisp (center-tap fallback); sparse 8-tap (g_Special8) covers wide
  * penumbrae with a screen-space anisotropic kernel. All math is in linear shadow; storage is sqrt-encoded.
  * Output R16G16: .r = sqrt(visibility), .g = estimated penumbra (world).
+ * This software contains source code provided by NVIDIA Corporation.
+ * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+ * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */
 import common_interop;
 import push_constant_interop;

@@ -608,6 +608,11 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("relax_antifirefly"), src / "relax_antifirefly.spv", "RelaxAntiFireflyMain",
                             sizeof(RelaxAntiFireflyPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("nrd_prep_guides"), src / "nrd_prep.spv", "NrdPrepGuidesMain",
+                            sizeof(NrdPrepGuidesPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("nrd_radiance_copy"), src / "nrd_prep.spv", "NrdRadianceCopyMain",
+                            sizeof(NrdRadianceCopyPushConstant), PipelineCategory::Critical);
+
     RegisterComputePipeline(SID("reblur_pack"), src / "reblur_pack.spv", "ReblurPackMain",
                             sizeof(ReblurPackPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("reblur_generate_viewz"), src / "reblur_generate_viewz.spv", "ReblurGenerateViewZMain",

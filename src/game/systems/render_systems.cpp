@@ -2029,6 +2029,7 @@ static const char* DenoiserModeName(Core::ReSTIRParams::DenoiserMode mode)
         case Core::ReSTIRParams::DenoiserMode::ASVGF: return "ASVGF";
         case Core::ReSTIRParams::DenoiserMode::RELAX: return "RELAX";
         case Core::ReSTIRParams::DenoiserMode::ReBLUR: return "ReBLUR";
+        case Core::ReSTIRParams::DenoiserMode::NRD: return "NRD";
     }
     return "None";
 }

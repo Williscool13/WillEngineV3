@@ -1773,6 +1773,8 @@ void RenderGraph::ImportTexture(StringID textureId,
     phys.event.stages = initialStage;
     phys.event.access = VK_ACCESS_2_NONE;
 
+    // Imported textures never go through the accumulated-usage compile path
+    phys.dimensions.imageUsage |= usage;
     phys.aspect = VkHelpers::GetImageAspect(info.format);
     phys.dimensions.resourceId = textureId;
     phys.usageChain.Clear();

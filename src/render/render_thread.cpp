@@ -83,6 +83,8 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
     renderArena = Core::ManagedArena(memoryManager.ArenaPool(), 1ull * 1024 * 1024, Core::AllocTag::Render);
     renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, renderArena.Get());
     screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler, memoryManager.AssetsScratch());
+    // Vulkan-side NRD init is deferred to the first Record when DenoiserMode::NRD is selected
+    nrdDenoiser = new(memoryManager.RenderAllocRaw(sizeof(NrdDenoiser))) NrdDenoiser(context, renderAlloc);
     pipelineStatsQuery.Init(context);
 #if WILL_EDITOR
     RegisterDebugReadbacks();
@@ -100,6 +102,7 @@ RenderThread::~RenderThread()
         sync = RenderSynchronization{};
     }
 
+    nrdDenoiser->~NrdDenoiser();
     pipelineManager->~PipelineManager();
     renderGraph->~RenderGraph();
     resourceManager->~ResourceManager();
@@ -720,6 +723,16 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
                             SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection);
                             SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField, denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode);
+                        }
+                        else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD) {
+                            SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection);
+                            // Declaration order defines the RDG read/write sequence: prep writes -> dispatch -> writeback
+                            if (nrdDenoiser->Prepare(*renderGraph, viewFamily, renderExtent, relax, frameNumber, frameIndex, renderFps)) {
+                                SetupNRDPrepPasses(*renderGraph, pipelineManager, renderExtent, targets);
+                                nrdDenoiser->AddDispatchPass(*renderGraph, resourceManager, pipelineManager, frameIndex);
+                                SetupNRDOutputPass(*renderGraph, pipelineManager, renderExtent, targets);
+                            }
+                            SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode);
                         }
                         else {
                             SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode);

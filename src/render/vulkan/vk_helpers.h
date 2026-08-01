@@ -57,6 +57,15 @@ VkImageViewCreateInfo ImageViewCreateInfo(VkImage image, VkFormat format, VkFlag
 
 bool LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::Path& filePath, VkDevice device, VkShaderModule* outShaderModule);
 
+/**
+ * Creates a shader module from an in-memory SPIR-V blob (e.g. NRD embedded shaders).
+ * @param spirvData
+ * @param spirvSize size in bytes, must be a multiple of 4
+ * @param device
+ * @param outShaderModule
+ */
+bool LoadShaderModuleFromBlob(const void* spirvData, size_t spirvSize, VkDevice device, VkShaderModule* outShaderModule);
+
 VkPipelineShaderStageCreateInfo PipelineShaderStageCreateInfo(VkShaderModule shader, VkShaderStageFlagBits shaderStage, const char* entryPoint = "main");
 
 VkComputePipelineCreateInfo ComputePipelineCreateInfo(VkPipelineLayout pipelineLayout, const VkPipelineShaderStageCreateInfo& pipelineStageCreateInfo);

@@ -35,6 +35,7 @@ class GpuAssetUploadThread;
 
 namespace Render
 {
+class NrdDenoiser;
 class PipelineManager;
 class RenderGraph;
 }
@@ -183,6 +184,7 @@ private:
     RenderExtents* renderExtents{};
     float lastResolutionScale{1.0f};
     PipelineManager* pipelineManager{};
+    NrdDenoiser* nrdDenoiser{};
 
     Core::ManagedArena renderArena{};
     RenderGraph* renderGraph{};

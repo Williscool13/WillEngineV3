@@ -149,6 +149,21 @@ set(MSDFGEN_USE_VCPKG OFF CACHE BOOL "" FORCE)
 set(MSDFGEN_DISABLE_SVG ON CACHE BOOL "" FORCE)
 set(MSDFGEN_DISABLE_PNG ON CACHE BOOL "" FORCE)
 add_subdirectory(extern/msdf-atlas-gen)
+
+# NRD (reference denoiser). Source tree at tag v4.17.4 is provided out-of-band into extern/NRD;
+# MathLib/ShaderMake are consumed from extern/NRD/External via FetchContent source-dir overrides (no network at configure).
+set(NRD_STATIC_LIBRARY ON CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_SPIRV_SHADERS ON CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_DXIL_SHADERS OFF CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_DXBC_SHADERS OFF CACHE BOOL "" FORCE)
+# Engine does not enable VK_KHR_compute_shader_derivatives
+set(NRD_SUPPORTS_QUAD_INTRINSICS OFF CACHE BOOL "" FORCE)
+set(NRD_NORMAL_ENCODING "2" CACHE STRING "" FORCE)
+set(NRD_ROUGHNESS_ENCODING "1" CACHE STRING "" FORCE)
+set(FETCHCONTENT_SOURCE_DIR_SHADERMAKE "${CMAKE_SOURCE_DIR}/extern/NRD/External/ShaderMake" CACHE PATH "" FORCE)
+set(FETCHCONTENT_SOURCE_DIR_MATHLIB "${CMAKE_SOURCE_DIR}/extern/NRD/External/MathLib" CACHE PATH "" FORCE)
+add_subdirectory(extern/NRD)
+
 add_subdirectory(src/engine)
 add_subdirectory(src/core)
 add_subdirectory(src/game)

@@ -303,6 +303,26 @@ bool VkHelpers::LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::
     return true;
 }
 
+bool VkHelpers::LoadShaderModuleFromBlob(const void* spirvData, size_t spirvSize, VkDevice device, VkShaderModule* outShaderModule)
+{
+    if (spirvData == nullptr || spirvSize == 0 || (spirvSize % sizeof(uint32_t)) != 0) {
+        return false;
+    }
+
+    VkShaderModuleCreateInfo createInfo{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = spirvSize,
+        .pCode = static_cast<const uint32_t*>(spirvData),
+    };
+
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+        return false;
+    }
+    *outShaderModule = shaderModule;
+    return true;
+}
+
 VkPipelineShaderStageCreateInfo VkHelpers::PipelineShaderStageCreateInfo(VkShaderModule shader, VkShaderStageFlagBits shaderStage, const char* entryPoint)
 {
     return {

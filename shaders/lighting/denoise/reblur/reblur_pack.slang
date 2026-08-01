@@ -1,6 +1,7 @@
 /*
  * ReBLUR: Front-end pack. Converts the resolve output (raw demodulated RGB + raw hitDist in .w)
  * into the ReBLUR working signal (YCoCg radiance + raw world hit distance in .w).
+ * This software contains source code provided by NVIDIA Corporation.
  * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
  * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */

@@ -1553,7 +1553,33 @@ SHADER_PUBLIC struct SpritePushConstant
 };
 
 // =====================================================================
+// NRD input/output adaptation push constants
+// =====================================================================
+
+SHADER_PUBLIC struct NrdPrepGuidesPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outNormalRoughnessIndex;
+    SHADER_PUBLIC uint32_t outMvIndex;
+    SHADER_PUBLIC uint32_t outViewZIndex;
+    SHADER_PUBLIC uint2 rectSize;
+};
+
+SHADER_PUBLIC struct NrdRadianceCopyPushConstant
+{
+    SHADER_PUBLIC uint2 rectSize;
+    SHADER_PUBLIC uint32_t diffIndex;
+    SHADER_PUBLIC uint32_t specIndex;
+    SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t outSpecIndex;
+};
+
+// =====================================================================
 // RELAX DiffuseSpecular denoiser push constants
+// This software contains source code provided by NVIDIA Corporation.
 // Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
 // https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
 // =====================================================================

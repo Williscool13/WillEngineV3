@@ -159,9 +159,7 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             ImGui::SameLine();
             ImGui::SetNextItemWidth(120.0f);
             if (ImGui::InputFloat2("##game_aspect", &state->projectConfig.gameCameraAspect.x, "%.2f")) { changed = true; }
-        }
-
-        {
+        } {
             auto editorCamView = state->registry.view<Component::TransformComponent, Component::EditorCameraTag>();
             const entt::entity editorCam = editorCamView.front();
             ImGui::Text("Presets:");
@@ -182,7 +180,8 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
                         preset.rotation = tf.rotation;
                         preset.bSet = true;
                         changed = true;
-                    } else if (preset.bSet) {
+                    }
+                    else if (preset.bSet) {
                         tf.translation = preset.translation;
                         tf.rotation = preset.rotation;
                     }
@@ -297,8 +296,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("WorldGridBinning: camera-centered cascaded world-space grid used by Default-mode shading.");
-        }
-        {
+        } {
             const char* worldGridLevelLabels[] = {"All", "0", "1", "2", "3", "4", "5", "6", "7"};
             int worldGridLevelChoice = state->debug.worldGridDebugLevel + 1;
             ImGui::SameLine();
@@ -329,8 +327,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(200.0f);
-        Widgets::SliderFloat("Cache Exposure##GPUDebug", &state->debug.radianceCacheDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the radiance cache debug cubes so bright cells do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
-        {
+        Widgets::SliderFloat("Cache Exposure##GPUDebug", &state->debug.radianceCacheDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the radiance cache debug cubes so bright cells do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0}); {
             const char* bucketLabels[] = {"All", "+X", "-X", "+Y", "-Y", "+Z", "-Z"};
             int bucketChoice = state->debug.radianceCacheDebugBucket + 1;
             ImGui::SameLine();
@@ -372,8 +369,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(240.0f);
-        Widgets::SliderFloat("Probe Exposure##GPUDebug", &state->debug.ddgiProbeDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
-        {
+        Widgets::SliderFloat("Probe Exposure##GPUDebug", &state->debug.ddgiProbeDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0}); {
             const char* probeDisplayLabels[] = {"Irradiance", "Visibility"};
             ImGui::SetNextItemWidth(120.0f);
             ImGui::Combo("Display##DDGIDebug", &state->debug.ddgiProbeDebugMode, probeDisplayLabels, static_cast<int>(std::size(probeDisplayLabels)));
@@ -382,8 +378,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
-        ImGui::SeparatorText("GI Diffuse Gather");
-        {
+        ImGui::SeparatorText("GI Diffuse Gather"); {
             const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation"};
             ImGui::SetNextItemWidth(120.0f);
             ImGui::Combo("View##GIGatherDebug", &state->debug.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)));
@@ -392,8 +387,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
-        ImGui::SeparatorText("GI Deconstruct");
-        {
+        ImGui::SeparatorText("GI Deconstruct"); {
             const char* giDeconstructLabels[] = {"Off", "Cache Cell ID", "Cache Radiance", "DDGI Cheb Gate", "DDGI Mean vs Dist", "DDGI Coverage", "DDGI Irradiance"};
             ImGui::SetNextItemWidth(160.0f);
             if (ImGui::Combo("View##GIDeconstruct", &state->debug.giDeconstructMode, giDeconstructLabels, static_cast<int>(std::size(giDeconstructLabels)))) {
@@ -401,12 +395,14 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     state->debug.resourceName = Core::InlineString("gi_deconstruct_target");
                     state->debug.transformationType = DebugTransformationType::None;
                     state->debug.viewAspect = Core::DebugViewAspect::None;
-                } else if (state->debug.resourceName == "gi_deconstruct_target") {
+                }
+                else if (state->debug.resourceName == "gi_deconstruct_target") {
                     state->debug.resourceName.Clear();
                 }
             }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Per-pixel GI leak deconstruction at the primary surface. Cache Cell ID = hash color of the resolved radiance-cache cell; the same color on both sides of a wall means interior and exterior share one cell. Cache Radiance = what gather tier 1 would return (magenta = found but not servable). DDGI Cheb Gate = weight fractions: red = occlusion test bypassed with a miss-inflated mean, green = bypassed with a plausible mean, blue = test ran. Mean vs Dist = dominant probe's (mean - distance)/spacing: red = bypassed, green = tested; blue overlays std/mean. Coverage = R coverage, G confidence, B serving cascade. Irradiance = raw DDGI injection at the pixel.");
+                ImGui::SetTooltip(
+                    "Per-pixel GI leak deconstruction at the primary surface. Cache Cell ID = hash color of the resolved radiance-cache cell; the same color on both sides of a wall means interior and exterior share one cell. Cache Radiance = what gather tier 1 would return (magenta = found but not servable). DDGI Cheb Gate = weight fractions: red = occlusion test bypassed with a miss-inflated mean, green = bypassed with a plausible mean, blue = test ran. Mean vs Dist = dominant probe's (mean - distance)/spacing: red = bypassed, green = tested; blue overlays std/mean. Coverage = R coverage, G confidence, B serving cascade. Irradiance = raw DDGI injection at the pixel.");
             }
         }
 
@@ -619,7 +615,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     ImGui::End();
 }
 
-static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const char* idScope, bool bShowChromaAtrous)
+static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const char* idScope, bool bShowChromaAtrous, bool bNrdMode = false)
 {
     ImGui::PushID(idScope);
 
@@ -664,10 +660,13 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
     ImGui::SeparatorText("A-Trous / Edge Stopping");
     relaxI("ATrous Iterations", &relax.atrousIterations, relaxDefaults.atrousIterations, 2, 8, "Number of A-trous wavelet (spatial) passes; step doubles each pass (reach ~2^n px). More = wider denoising, costlier. NRD default 5. Default 5.");
     if (bShowChromaAtrous) {
+        ImGui::BeginDisabled(bNrdMode);
         if (ImGui::Checkbox("Chroma Widening##relax", &relax.bChromaAtrous)) { changed = true; }
         relaxTip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on.");
         relaxI("Chroma Widening Passes", &relax.chromaAtrousIterations, relaxDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
-        relaxF("Chroma Luma Ratio Power", &relax.chromaLumaPower, relaxDefaults.chromaLumaPower, 0.f, 6.f, "%.2f", "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.");
+        relaxF("Chroma Luma Ratio Power", &relax.chromaLumaPower, relaxDefaults.chromaLumaPower, 0.f, 6.f, "%.2f",
+               "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.");
+        ImGui::EndDisabled();
     }
     relaxF("Lobe Angle Fraction", &relax.lobeAngleFraction, relaxDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance, as a fraction of the BRDF lobe angle. Lower preserves sharper normal detail; higher blurs across normals. Default 0.15.");
     relaxF("Roughness Fraction", &relax.roughnessFraction, relaxDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Higher blends across differing roughness; lower keeps roughness boundaries crisp. Default 0.15.");
@@ -676,7 +675,10 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
     relaxF("Diff Phi Luminance", &relax.diffPhiLuminance, relaxDefaults.diffPhiLuminance, 0.f, 10.f, "%.2f", "Diffuse luminance edge-stopping sensitivity (sigma scale). Higher = more blur; lower keeps luminance edges. Default 2.0; common 1-2.");
     relaxF("Diff Max Lum Rel Diff", &relax.diffMaxLuminanceRelativeDifference, relaxDefaults.diffMaxLuminanceRelativeDifference, 0.f, 100.f, "%.2f", "Caps how strongly a luminance difference can reject a diffuse sample (in sigmas). Lower = firmer edge stopping (blotchier fireflies); NRD default is uncapped. Default 100.");
     relaxF("Spec Max Lum Rel Diff", &relax.specMaxLuminanceRelativeDifference, relaxDefaults.specMaxLuminanceRelativeDifference, 0.f, 100.f, "%.2f", "Caps how strongly a luminance difference can reject a specular sample (in sigmas). NRD default is uncapped. Default 100.");
+    // NRD 4.17.4 uploads roughnessEdgeStoppingRelaxation in this field's place (upstream bug), so the knob is inert there
+    ImGui::BeginDisabled(bNrdMode);
     relaxF("Luminance Edge Stop Relax", &relax.luminanceEdgeStoppingRelaxation, relaxDefaults.luminanceEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "On early A-trous passes, relaxes specular luminance edge stopping where reprojection confidence is low (helps fresh/disoccluded pixels). 1 = full NRD fill at zero confidence. Default 1.0.");
+    ImGui::EndDisabled();
     relaxF("Normal Edge Stop Relax", &relax.normalEdgeStoppingRelaxation, relaxDefaults.normalEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "Relaxes specular normal edge stopping based on reprojection confidence, cutting noise on low-confidence pixels. 0-1. Default 0.3.");
     relaxF("Roughness Edge Stop Relax", &relax.roughnessEdgeStoppingRelaxation, relaxDefaults.roughnessEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "Relaxes the view vector used in specular weighting, loosening rejection on curved/rough surfaces. NRD effective default 1.0. Default 1.0.");
     relaxF("Spec Variance Boost", &relax.specVarianceBoost, relaxDefaults.specVarianceBoost, 0.f, 8.f, "%.2f", "Boosts specular variance while history is short so fresh pixels filter more aggressively. 0 = no boost (NRD default). Default 0.0.");
@@ -954,7 +956,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             };
 
             reflF("Traced Roughness Max##reflection", &reflection.tracedRoughnessMax, reflectionDefaults.tracedRoughnessMax, 0.0f, 1.0f, "%.2f", "Surfaces rougher than this fall back to the prefiltered skybox reflection instead of being ray traced. Lower = only near-mirror surfaces get traced reflections, cheaper. Default 0.3.");
-            reflF("Light Specular From Reflections Max##reflection", &reflection.lightSpecularFromReflectionsMax, reflectionDefaults.lightSpecularFromReflectionsMax, 0.0f, 1.0f, "%.2f", "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular; low = only near-mirror deferred. Default 0.3 (= traced max; DI owns rough spec, probe bakes hide light proxies to avoid double count).");
+            reflF("Light Specular From Reflections Max##reflection", &reflection.lightSpecularFromReflectionsMax, reflectionDefaults.lightSpecularFromReflectionsMax, 0.0f, 1.0f, "%.2f",
+                  "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular; low = only near-mirror deferred. Default 0.3 (= traced max; DI owns rough spec, probe bakes hide light proxies to avoid double count).");
             reflF("Intensity##reflection", &reflection.intensity, reflectionDefaults.intensity, 0.0f, 2.0f, "%.2f", "Multiplier on the traced reflection radiance before compositing. Default 1.0.");
             reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "Screen-space trace only: view-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
             if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Screen-space trace only: maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
@@ -1027,7 +1030,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ImGui::SetTooltip("Counter accumulation of the resolved gather across frames (up to 32). Off = this frame's result only; with Denoise also off the composite shows the raw gather.");
             }
             int gatherRaysPerPixel = static_cast<int>(ddgi.gatherRaysPerPixel);
-            if (Widgets::SliderInt("Rays Per Pixel##gigather", &gatherRaysPerPixel, 1, static_cast<int>(Render::GI_GATHER_MAX_RAYS_PER_PIXEL), {.tooltip = "Gather rays per half-res pixel, uniform across the frame so cost stays flat and rays stay coherent. Relative noise falls as 1/sqrt(n), which is the only lever that reaches the bright-to-dark gradients near small light slits, where one ray finds the aperture too rarely for any reweighting to help. Trace cost is linear.", .reset = true, .resetTo = 1.0})) {
+            if (Widgets::SliderInt("Rays Per Pixel##gigather", &gatherRaysPerPixel, 1, static_cast<int>(Render::GI_GATHER_MAX_RAYS_PER_PIXEL), {
+                                       .tooltip = "Gather rays per half-res pixel, uniform across the frame so cost stays flat and rays stay coherent. Relative noise falls as 1/sqrt(n), which is the only lever that reaches the bright-to-dark gradients near small light slits, where one ray finds the aperture too rarely for any reweighting to help. Trace cost is linear.", .reset = true,
+                                       .resetTo = 1.0
+                                   })) {
                 ddgi.gatherRaysPerPixel = static_cast<uint32_t>(gatherRaysPerPixel);
                 changed = true;
             }
@@ -1036,12 +1042,16 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ddgi.gatherChromaDenoisePasses = static_cast<uint32_t>(gatherChromaPasses);
                 changed = true;
             }
-            if (Widgets::SliderFloat("Chroma Luma Ratio Power##gigather", &ddgi.gatherChromaLumaPower, 0.0f, 6.0f, {.tooltip = "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight in these passes is geometric, so without this a cast shadow (same plane, same normal, same AO) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.", .reset = true, .resetTo = 2.0})) {
+            if (Widgets::SliderFloat("Chroma Luma Ratio Power##gigather", &ddgi.gatherChromaLumaPower, 0.0f, 6.0f, {
+                                         .tooltip = "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight in these passes is geometric, so without this a cast shadow (same plane, same normal, same AO) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.", .reset = true,
+                                         .resetTo = 2.0
+                                     })) {
                 changed = true;
             }
             if (ImGui::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay)) { changed = true; }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Skips the per-pixel cosine ray entirely: samples the radiance cache at the pixel's own surface point (probes as fallback, skybox on miss) instead of tracing. No ray noise, but resolution is capped by the cache's cell size (blockier); still runs through the same denoise/upscale/temporal pipeline. Best for clean/simply-textured scenes where the ray's 1spp noise isn't worth it.");
+                ImGui::SetTooltip(
+                    "Skips the per-pixel cosine ray entirely: samples the radiance cache at the pixel's own surface point (probes as fallback, skybox on miss) instead of tracing. No ray noise, but resolution is capped by the cache's cell size (blockier); still runs through the same denoise/upscale/temporal pipeline. Best for clean/simply-textured scenes where the ray's 1spp noise isn't worth it.");
             }
 
             ImGui::SeparatorText("Volume");
@@ -1050,7 +1060,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ddgiI("Probe Count Z##ddgi", &ddgi.probeCountZ, ddgiDefaults.probeCountZ, 2, 32, "Probes along Z.");
             ddgiF("Probe Spacing##ddgi", &ddgi.probeSpacing, ddgiDefaults.probeSpacing, 0.25f, 8.0f, "%.2f", "World-space distance between probes (meters); coverage = count * spacing per axis. Changing it restarts probe history.");
             int cascadeCount = static_cast<int>(ddgi.cascadeCount);
-            if (Widgets::SliderInt("Cascade Count##ddgi", &cascadeCount, 1, static_cast<int>(DDGI_MAX_CASCADES), {.tooltip = "Concentric volumes with identical counts; each doubles the previous spacing, so range doubles per cascade for linear memory. Cascade 0 updates every frame, outer cascades round-robin one per frame (flat trace cost).", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.cascadeCount)})) {
+            if (Widgets::SliderInt("Cascade Count##ddgi", &cascadeCount, 1, static_cast<int>(DDGI_MAX_CASCADES), {
+                                       .tooltip = "Concentric volumes with identical counts; each doubles the previous spacing, so range doubles per cascade for linear memory. Cascade 0 updates every frame, outer cascades round-robin one per frame (flat trace cost).", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.cascadeCount)
+                                   })) {
                 ddgi.cascadeCount = static_cast<uint32_t>(cascadeCount);
                 changed = true;
             }
@@ -1079,7 +1091,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Ray hits also sample last frame's probe atlas, so light keeps bouncing (one extra bounce lands per frame, damped by hysteresis). Also gives area/sphere lights indirect, since probes see their proxies directly.");
             }
-            ddgiF("Bounce Intensity##ddgi", &ddgi.bounceIntensity, ddgiDefaults.bounceIntensity, 0.0f, 1.0f, "%.2f", "Scales the DDGI feedback term fed back into the radiance cache / probes. This is the cache<->DDGI feedback loop, so <1 bounds the loop gain: keeps enclosed high-albedo scenes from saturating and self-lighting. 1 = physically full multi-bounce (can run away in red/boxed geometry). Default 0.75.");
+            ddgiF("Bounce Intensity##ddgi", &ddgi.bounceIntensity, ddgiDefaults.bounceIntensity, 0.0f, 1.0f, "%.2f",
+                  "Scales the DDGI feedback term fed back into the radiance cache / probes. This is the cache<->DDGI feedback loop, so <1 bounds the loop gain: keeps enclosed high-albedo scenes from saturating and self-lighting. 1 = physically full multi-bounce (can run away in red/boxed geometry). Default 0.75.");
             ddgiF("Max Ray Radiance##ddgi", &ddgi.maxRayRadiance, ddgiDefaults.maxRayRadiance, 0.0f, 100.0f, "%.1f", "Firefly clamp: hit radiance above this (max channel) is scaled down before blending, taming NEE light-selection spikes and rare bright emissive hits. Dims indirect from very bright small sources. 0 = off. Default 20.");
 
             ImGui::SeparatorText("Blend");
@@ -1097,12 +1110,17 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ddgiF("Hysteresis##ddgi", &ddgi.hysteresis, ddgiDefaults.hysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for irradiance (RTXGI parity). Probe updates are 1spp Monte Carlo, so the EMA carries most of the smoothing; the darkening fast path plus the min darkening step keep lights-off response quick. Higher = smoother but laggier; 0 = no history. Default 0.97.");
             ddgiF("Visibility Hysteresis##ddgi", &ddgi.visibilityHysteresis, ddgiDefaults.visibilityHysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for the distance/Chebyshev atlas. The radiance cache stabilizes radiance only; the visibility integrand still changes every frame with ray rotation, so this stays high. Default 0.97.");
             int cacheShadeInterval = static_cast<int>(ddgi.radianceCacheShadeInterval);
-            if (Widgets::SliderInt("Cache Shade Interval##ddgi", &cacheShadeInterval, 1, 32, {.tooltip = "Frames between radiance-cache cell re-shades (plus a 0-3 per-slot stagger). Lower = the cache tracks lighting changes faster, at more shade dispatch cost. Interbounce light propagates one cache shade + one probe blend per generation, so this bounds multi-bounce convergence speed. Default 8.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheShadeInterval)})) {
+            if (Widgets::SliderInt("Cache Shade Interval##ddgi", &cacheShadeInterval, 1, 32, {
+                                       .tooltip = "Frames between radiance-cache cell re-shades (plus a 0-3 per-slot stagger). Lower = the cache tracks lighting changes faster, at more shade dispatch cost. Interbounce light propagates one cache shade + one probe blend per generation, so this bounds multi-bounce convergence speed. Default 8.", .reset = true,
+                                       .resetTo = static_cast<double>(ddgiDefaults.radianceCacheShadeInterval)
+                                   })) {
                 ddgi.radianceCacheShadeInterval = static_cast<uint32_t>(cacheShadeInterval);
                 changed = true;
             }
             int cacheAccumCap = static_cast<int>(ddgi.radianceCacheAccumCap);
-            if (Widgets::SliderInt("Cache Accum Frames##ddgi", &cacheAccumCap, 1, 64, {.tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance; the change-streak dump already cuts history on sustained changes. Default 16.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheAccumCap)})) {
+            if (Widgets::SliderInt("Cache Accum Frames##ddgi", &cacheAccumCap, 1, 64, {
+                                       .tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance; the change-streak dump already cuts history on sustained changes. Default 16.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheAccumCap)
+                                   })) {
                 ddgi.radianceCacheAccumCap = static_cast<uint32_t>(cacheAccumCap);
                 changed = true;
             }
@@ -1122,8 +1140,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             ddgiF("Min Frontface Distance##ddgi", &ddgi.minFrontfaceDistance, ddgiDefaults.minFrontfaceDistance, 0.0f, 1.0f, "%.2f", "Meters of clearance relocation keeps between a probe and nearby geometry; probes closer than this to a wall get nudged away from it. Default 0.30.");
 
-            ImGui::SeparatorText("Radiance Cache Occupancy");
-            {
+            ImGui::SeparatorText("Radiance Cache Occupancy"); {
                 // Read-only; multi-frame readback latency, so values trail the live cache by 2-3 frames.
                 const Engine::RadianceCacheStatsSnapshot& wc = ctx->radianceCacheStats;
                 const float occupancyPct = 100.0f * static_cast<float>(wc.occupiedSlots) / static_cast<float>(RADIANCE_CACHE_HASH_CAPACITY);
@@ -1309,18 +1326,22 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::CollapsingHeader("Denoiser", ImGuiTreeNodeFlags_DefaultOpen)) {
                 Core::ReSTIRParams& restir = state->debug.restir;
 
-                const char* denoiserModes[] = {"None", "RELAX", "ReBLUR"};
+                const char* denoiserModes[] = {"None", "RELAX", "ReBLUR", "NRD (reference)"};
                 int denoiserIdx = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX
                                       ? 1
                                       : restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR
                                             ? 2
-                                            : 0;
+                                            : restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD
+                                                  ? 3
+                                                  : 0;
                 if (ImGui::Combo("Mode##denoiser", &denoiserIdx, denoiserModes, IM_ARRAYSIZE(denoiserModes))) {
                     restir.denoiserMode = denoiserIdx == 1
                                               ? Core::ReSTIRParams::DenoiserMode::RELAX
                                               : denoiserIdx == 2
                                                     ? Core::ReSTIRParams::DenoiserMode::ReBLUR
-                                                    : Core::ReSTIRParams::DenoiserMode::None;
+                                                    : denoiserIdx == 3
+                                                          ? Core::ReSTIRParams::DenoiserMode::NRD
+                                                          : Core::ReSTIRParams::DenoiserMode::None;
                     changed = true;
                 }
 
@@ -1355,6 +1376,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     ImGui::EndDisabled();
 
                     DrawRELAXParamsUI(changed, relax, "main_relax", true);
+                }
+
+                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD) {
+                    DrawRELAXParamsUI(changed, restir.relax, "main_relax", true, true);
                 }
 
                 if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
@@ -1402,7 +1427,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     if (ImGui::Checkbox("Chroma Widening##reblur", &reblur.bChromaAtrous)) { changed = true; }
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on."); }
                     reblurI("Chroma Widening Passes", &reblur.chromaAtrousIterations, reblurDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
-                    reblurF("Chroma Luma Ratio Power", &reblur.chromaLumaPower, reblurDefaults.chromaLumaPower, 0.f, 6.f, "%.2f", "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off. Integer values compile to a multiply chain. Default 2.");
+                    reblurF("Chroma Luma Ratio Power", &reblur.chromaLumaPower, reblurDefaults.chromaLumaPower, 0.f, 6.f, "%.2f",
+                            "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off. Integer values compile to a multiply chain. Default 2.");
 
                     ImGui::SeparatorText("History Fix");
                     reblurF("Hist Fix Frame Num", &reblur.historyFixFrameNum, reblurDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill. Default 3.");

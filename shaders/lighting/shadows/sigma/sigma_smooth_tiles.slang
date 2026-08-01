@@ -3,6 +3,9 @@
  * Gaussian-dilates the per-tile "needsFilter" flag over a 5x5 tile window, with the gaussian width keyed
  * by the tile's max blur radius (bigger penumbra -> wider dilation), so the filter fades in smoothly at
  * penumbra-region borders instead of banding at tile edges. Output RG8: .x = isSky, .y = dilated flag.
+ * This software contains source code provided by NVIDIA Corporation.
+ * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
+ * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */
 import common_interop;
 import push_constant_interop;

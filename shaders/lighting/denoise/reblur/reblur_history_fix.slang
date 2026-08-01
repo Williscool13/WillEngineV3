@@ -4,6 +4,7 @@
  * grows for shorter history, then reconciles the slow history against the responsive "fast" (luma)
  * history by clamping the slow-history luma to the fast-history box. Signal is YCoCg radiance in .xyz
  * with a normalized hit distance in .w.
+ * This software contains source code provided by NVIDIA Corporation.
  * Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
  * https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
  */

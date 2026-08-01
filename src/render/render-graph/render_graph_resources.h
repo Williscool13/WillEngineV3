@@ -53,9 +53,10 @@ enum class RenderCategory : uint64_t
     Scene               = 1ull << 18,
     UI                  = 1ull << 19,
     Debug               = 1ull << 20,
+    NRD                 = 1ull << 21,
 };
 
-inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 21;
+inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 22;
 inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = {
     "Geometry",
     "WorldGridBinning",
@@ -78,6 +79,7 @@ inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = 
     "Scene",
     "UI",
     "Debug",
+    "NRD",
 };
 
 inline RenderCategory operator|(RenderCategory a, RenderCategory b)
@@ -146,6 +148,7 @@ inline constexpr RenderCategoryGroup RENDER_CATEGORY_GROUP_OF[RENDER_CATEGORY_BI
     /*Scene*/ RenderCategoryGroup::Scene,
     /*UI*/ RenderCategoryGroup::UI,
     /*Debug*/ RenderCategoryGroup::Debug,
+    /*NRD*/ RenderCategoryGroup::ReSTIR,
 };
 
 struct VRAMReport
@@ -226,6 +229,7 @@ inline ImageChannelType GetImageChannelType(VkFormat format, VkImageAspectFlags 
         case VK_FORMAT_B8G8R8A8_UNORM:
         case VK_FORMAT_B8G8R8A8_SRGB:
         case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
             return ImageChannelType::Float4;
         case VK_FORMAT_R32G32_SFLOAT:
         case VK_FORMAT_R16G16_SFLOAT:
