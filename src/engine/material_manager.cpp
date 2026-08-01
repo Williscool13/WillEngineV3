@@ -303,6 +303,38 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
     if (bSerialize) { serialize(); }
 }
 
+void MaterialManager::ResolveMissingTextures()
+{
+    int32_t resolvedCount = 0;
+    for (auto pair : materials) {
+        Material& mat = pair.value;
+        if (!mat.bIsRuntimeLoaded) { continue; }
+
+        auto texIdxRef = [&](int32_t slot) -> int32_t& {
+            switch (slot) {
+                case 0: return mat.props.textureImageIndices.x;
+                case 1: return mat.props.textureImageIndices.y;
+                case 2: return mat.props.textureImageIndices.z;
+                case 3: return mat.props.textureImageIndices.w;
+                case 4: return mat.props.textureImageIndices2.x;
+                default: return mat.props.textureImageIndices2.y;
+            }
+        };
+
+        for (int32_t i = 0; i < 6; ++i) {
+            if (!mat.textureRefs[i].IsValid() || texIdxRef(i) != -1) { continue; }
+            Texture* tex = assetManager->LoadTexture(mat.textureRefs[i]);
+            if (tex) {
+                texIdxRef(i) = static_cast<int32_t>(tex->bindlessHandle.index);
+                resolvedCount++;
+            }
+        }
+    }
+    if (resolvedCount > 0) {
+        LOG_INFO(Engine, "Resolved {} previously missing material texture slot(s)", resolvedCount);
+    }
+}
+
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const
 {
     const MaterialID* mat = nameToMaterialMap.Find(name);;

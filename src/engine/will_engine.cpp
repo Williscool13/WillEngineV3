@@ -382,7 +382,9 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             gameFunctions.gameHotReloadLoad = gameDll.GetFunction<Core::GameHotReloadLoadFunc>("GameHotReloadLoad");
         }
         else {
+            LOG_CRITICAL(Engine, "game.dll failed to load; requesting shutdown");
             gameFunctions.Stub();
+            engineState->bRequestedQuit = true;
         }
 #endif
 
@@ -1267,6 +1269,7 @@ void WillEngine::Run()
         const bool assetsReclaimed = assetManager->ResolveUnloads();
         memoryManager.AssetsScratch().ReleaseEmptyChunks();
 #if WILL_EDITOR
+        bool bTextureGenerated = false;
         {
             engineState->pendingHotReloadModelIds.Clear();
             Editor::ModelGenerateComplete modelComplete{};
@@ -1282,6 +1285,7 @@ void WillEngine::Run()
             Editor::TextureGenerateComplete textureComplete{};
             while (assetGenerator->TryDequeueTextureGenerateComplete(textureComplete)) {
                 engineContext->bShouldRescanResources = true;
+                bTextureGenerated = true;
             }
             engineState->pendingHotReloadEnvironmentMapIds.Clear();
             Editor::EnvironmentMapGenerateComplete envMapComplete{};
@@ -1297,6 +1301,9 @@ void WillEngine::Run()
         }
         materialManager->Scan();
         assetManager->Scan();
+        if (bTextureGenerated) {
+            materialManager->ResolveMissingTextures();
+        }
 
         for (const Engine::ModelID& id : assetManager->GetChangedModelIds()) {
             if (engineState->pendingHotReloadModelIds.IsFull()) { break; }

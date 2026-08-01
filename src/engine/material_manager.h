@@ -58,6 +58,9 @@ public:
 
     void Scan();
 
+    /** Retries texture resolve for runtime-loaded materials with unresolved slots; call after a rescan makes new textures loadable (e.g. freshly generated stubs). */
+    void ResolveMissingTextures();
+
     void LoadMutableMaterials();
 
     // TextMaterial management

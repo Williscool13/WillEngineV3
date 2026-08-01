@@ -1217,6 +1217,40 @@ bool AssetManager::HasPendingLoads() const
     return false;
 }
 
+void AssetManager::LogPendingLoads() const
+{
+    for (const auto& texture : textures) {
+        if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
+        if (texture.loadState == Texture::LoadState::Loading) {
+            LOG_WARN(Asset, "Pending load: texture '{}' (refCount {})", texture.name.c_str(), texture.refCount);
+        }
+    }
+    for (const auto& model : models) {
+        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
+        if (model.modelLoadState == StaticModel::ModelLoadState::NotLoaded) {
+            LOG_WARN(Asset, "Pending load: model '{}' (refCount {})", model.name.c_str(), model.refCount);
+        }
+    }
+    for (const auto& font : fonts) {
+        if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
+        if (font.loadState == Font::LoadState::Loading) {
+            LOG_WARN(Asset, "Pending load: font '{}' (refCount {})", font.name.c_str(), font.refCount);
+        }
+    }
+    for (const auto& collider : colliders) {
+        if (!colliderAllocator.IsValid(collider.selfHandle)) { continue; }
+        if (collider.loadState == PhysicsColliderAsset::LoadState::NotLoaded) {
+            LOG_WARN(Asset, "Pending load: collider '{}' (refCount {})", collider.name.c_str(), collider.refCount);
+        }
+    }
+    for (const auto& cubemap : cubemaps) {
+        if (!cubemapAllocator.IsValid(cubemap.selfHandle)) { continue; }
+        if (cubemap.loadState == Render::Cubemap::LoadState::Loading) {
+            LOG_WARN(Asset, "Pending load: cubemap '{}' (refCount {})", cubemap.name.c_str(), cubemap.refCount);
+        }
+    }
+}
+
 bool AssetManager::ResolveUnloads()
 {
     const uint64_t currentFrame = ctx->currentRenderFrame;
@@ -1675,6 +1709,7 @@ Texture* AssetManager::LoadDiskTexture(TextureID textureId)
     texture.compressionType = meta.compressionType;
     texture.loadState = Texture::LoadState::Loading;
     texture.refCount = 1;
+    texture.loadedContentVersion = meta.contentVersion;
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
 
     textureIdToHandle[textureId] = handle;
@@ -1774,6 +1809,13 @@ bool AssetManager::ReloadTexture(TextureID textureId)
     const DiskTextureDesc& meta = textureRegistry[textureId];
 
     Texture& texture = textures[existingPtr->index];
+    if (texture.loadedContentVersion == meta.contentVersion) {
+        return false;
+    }
+    if (texture.loadState == Texture::LoadState::Loading) {
+        LOG_WARN(Asset, "Texture '{}' reload requested while still loading; skipping", texture.name.c_str());
+        return false;
+    }
     texture.selfHandle = *existingPtr;
     texture.source = meta.source;
     texture.textureId = textureId;
@@ -1787,6 +1829,7 @@ bool AssetManager::ReloadTexture(TextureID textureId)
     texture.compressionType = meta.compressionType;
     texture.loadState = Texture::LoadState::Loading;
     texture.refCount = 1;
+    texture.loadedContentVersion = meta.contentVersion;
     deferredTextureBindingReleases.PushBack({texture.bindlessHandle, ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4});
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
 

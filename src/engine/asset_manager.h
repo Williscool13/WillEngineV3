@@ -359,6 +359,8 @@ public: // Per-Tick calls
 
     [[nodiscard]] bool HasPendingLoads() const;
 
+    void LogPendingLoads() const;
+
     /**
      * Scan for assets. Done once in constructor, but editor calls this frequently to gather generated assets.
      */

@@ -121,7 +121,8 @@ T_SAND = pbr_set("gravelly_sand")
 T_CONCRETE = pbr_set("concrete")
 T_PAINTED = pbr_set("concrete_floor_painted")
 T_ASPHALT = pbr_set("asphalt_02")
-T_PLATE = pbr_set("metal_plate")
+T_SHEET = pbr_set("rusty_metal_sheet")          # flat worn sheet: bare steel/alu and the painted-plate tints
+T_CLADDING = pbr_set("box_profile_metal_sheet")  # profiled cladding: hangar roof/door wall, masts
 # Pre-existing set from build_pbr_materials.py: plain rough grayscale in the MR slot
 # instead of arm (metallic 0, so the stray B channel never contributes).
 T_BLUE = (write_texture_stub("blue_plaster_wall_diff", "src/blue_plaster_wall/blue_plaster_wall_diff_1k.png", DXGI_BC7_UNORM_SRGB),
@@ -158,17 +159,21 @@ M["concrete"] = textured("mil_concrete", T_CONCRETE, uv=0.5)
 M["concrete_dark"] = textured("mil_concrete_dark", T_CONCRETE, uv=0.5, tint=(0.5, 0.5, 0.49))
 M["asphalt"] = textured("mil_asphalt", T_ASPHALT, uv=0.35)
 M["white"] = textured("mil_white", T_PAINTED, uv=0.5)
+M["floor"] = textured("mil_floor", T_PAINTED, uv=0.4, tint=(0.72, 0.72, 0.70))
+# flat bright paint for markings (helipad ring/H); a photo texture there reads as dirt
+M["marking"] = flat("mil_marking", (0.85, 0.85, 0.82), roughness=0.6)
 # the three bleed drivers -- saturated tints, so indirect colour is unmistakable
 M["red"] = textured("mil_red_oxide", T_CONCRETE, uv=0.5, tint=(1.0, 0.20, 0.13))
 M["blue"] = textured("mil_blue", T_BLUE, uv=0.5, tint=(0.5, 0.6, 1.0))
-M["olive"] = textured("mil_olive", T_PLATE, uv=0.5, tint=(0.35, 0.41, 0.20))
-M["od_light"] = textured("mil_od_light", T_PLATE, uv=0.5, tint=(0.62, 0.64, 0.42))
-M["hazard"] = textured("mil_hazard", T_PLATE, uv=0.5, tint=(1.0, 0.72, 0.06))
+M["olive"] = textured("mil_olive", T_SHEET, uv=0.5, tint=(0.35, 0.41, 0.20))
+M["od_light"] = textured("mil_od_light", T_SHEET, uv=0.5, tint=(0.62, 0.64, 0.42))
+M["navy"] = textured("mil_navy", T_SHEET, uv=0.5, tint=(0.14, 0.20, 0.45))
+M["hazard"] = textured("mil_hazard", T_SHEET, uv=0.5, tint=(1.0, 0.72, 0.06))
 M["rubber"] = flat("mil_rubber", (0.045, 0.045, 0.05), roughness=0.95)
-# bare metals -- the specular / probe story (the tinted plates above are painted, so dielectric)
-M["steel"] = textured("mil_steel", T_PLATE, uv=0.5, metallic=1.0)
-M["steel_rough"] = textured("mil_steel_rough", T_PLATE, uv=0.5, tint=(0.8, 0.8, 0.81), metallic=1.0, roughness=1.4)
-M["alu"] = textured("mil_alu", T_PLATE, uv=0.5, metallic=1.0, roughness=0.55)
+# bare metals -- the specular / probe story (the tinted sheets above are painted, so dielectric)
+M["steel"] = textured("mil_steel", T_SHEET, uv=0.5, metallic=1.0)
+M["steel_rough"] = textured("mil_steel_rough", T_CLADDING, uv=0.5, tint=(0.8, 0.8, 0.81), metallic=1.0, roughness=1.4)
+M["alu"] = textured("mil_alu", T_SHEET, uv=0.5, tint=(1.0, 1.0, 1.02), metallic=1.0, roughness=0.5)
 # curved-primitive variants: normalized 0..1 UVs, per-axis scale sized to the surface
 M["concrete_pipe"] = textured("mil_concrete_pipe", T_CONCRETE, uv=(6.0, 5.5))   # u = angle over the ~12.6m bore, v = 11m segment length
 M["asphalt_pad"] = textured("mil_asphalt_pad", T_ASPHALT, uv=(12.0, 12.0))      # deck cap disc spans 0..1 across 24m
@@ -225,6 +230,24 @@ def run_quat(dx, dz):
     n = math.hypot(dx, dz)
     ux, uz = dx / n, dz / n
     return mat_to_quat((ux, 0.0, uz), (0.0, 1.0, 0.0), (-uz, 0.0, ux))
+
+
+def qmul(a, b):
+    """Hamilton product a*b, [w,x,y,z]: b applied first, then a."""
+    aw, ax, ay, az = a
+    bw, bx, by, bz = b
+    return (aw * bw - ax * bx - ay * by - az * bz,
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw)
+
+
+def yaw_offset(px, pz, deg, dx, dz):
+    """World XZ of a corner-pivot local offset (dx, dz) under yaw(deg) about (px, pz).
+    Attachments computed in unrotated coords come apart when each part then yaw-rotates
+    about its OWN corner; route every sub-part position through this instead."""
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return px + dx * c + dz * s, pz - dx * s + dz * c
 
 
 entities = []
@@ -409,7 +432,7 @@ HH = 10.0                                  # interior ceiling level
 DOOR_W, DOOR_H = 14.0, 7.0
 
 box(entities, "Hangar Floor", (HXO0, GRADE, HZO0), (HXO1 - HXO0, 0.2, HZO1 - HZO0),
-    M["concrete"], folder=F_HANGAR, friction=0.7)
+    M["floor"], folder=F_HANGAR, friction=0.7)
 box(entities, "Hangar Roof", (HXO0, HH, HZO0), (HXO1 - HXO0, HT, HZO1 - HZO0),
     M["steel_rough"], folder=F_HANGAR)
 # West (back) and east (door) walls take the full Z run; south and north fill the gap.
@@ -455,8 +478,9 @@ shape(entities, "Hangar Nose", (FUS_X0, FUS_Y0 + 1.2, FUS_CZ), cone_params(1.3, 
 for side, z0 in (("Port", FUS_CZ - 9.0), ("Starboard", FUS_CZ + 1.4)):
     box(entities, f"Hangar Wing {side}", (HX0 + 9.0, FUS_Y0 + 0.4, z0), (5.0, 0.28, 7.6),
         M["alu"], folder=F_HANGAR)
-shape(entities, "Hangar Tail Fin", (HX0 + 15.5, FUS_Y0 + 2.4, FUS_CZ - 0.15),
-      wedge_params(3.2, 3.4, 0.3), M["alu"], folder=F_HANGAR)
+# yaw(180) puts the fin's vertical trailing edge at the rear (east); pivot shifts to the opposite corner
+shape(entities, "Hangar Tail Fin", (HX0 + 15.5 + 3.2, FUS_Y0 + 2.4, FUS_CZ - 0.15 + 0.3),
+      wedge_params(3.2, 3.4, 0.3), M["alu"], rot=yaw(180.0), folder=F_HANGAR)
 for i in range(3):
     shape(entities, f"Hangar Gear {i}", (HX0 + 6.0 + i * 5.5, HFY + 0.55, FUS_CZ + (i % 2) * 2.0 - 1.0),
           cylinder_params(0.55, 0.4, 18), M["rubber"], rot=roll(90.0), folder=F_HANGAR)
@@ -499,7 +523,7 @@ BCY = BFY + BH                   # underside of the roof slab
 DOOR_U, BDOOR_W, BDOOR_H = 8.5, 2.0, 2.4
 
 box(entities, "Bunker Floor", (BXO0, GRADE, BZO0), (BXO1 - BXO0, 0.2, BZO1 - BZO0),
-    M["concrete"], folder=F_BUNKER, friction=0.7)
+    M["floor"], folder=F_BUNKER, friction=0.7)
 box(entities, "Bunker Roof", (BXO0, BCY, BZO0), (BXO1 - BXO0, 1.4, BZO1 - BZO0),
     M["concrete_dark"], folder=F_BUNKER)
 # Side walls carry the colour: white one side, blue the other, so the green console and
@@ -619,15 +643,15 @@ PAD_TOP = GRADE + 0.32
 shape(entities, "Helipad Deck", (PAD_X, GRADE + 0.16, PAD_Z), cylinder_params(PAD_R, 0.32, 48),
       M["asphalt_pad"], folder=F_PAD, friction=0.9)
 visual(entities, "Helipad Ring", (PAD_X, PAD_TOP + 0.01, PAD_Z),
-       ring_params(PAD_R - 0.6, PAD_R - 1.3, 48), M["white"], folder=F_PAD)
+       ring_params(PAD_R - 0.6, PAD_R - 1.3, 48), M["marking"], folder=F_PAD)
 vbox(entities, "Helipad H Left", (PAD_X - 2.6, PAD_TOP + 0.01, PAD_Z - 3.2), (0.7, 0.02, 6.4),
-     M["white"], folder=F_PAD)
+     M["marking"], folder=F_PAD)
 vbox(entities, "Helipad H Right", (PAD_X + 1.9, PAD_TOP + 0.01, PAD_Z - 3.2), (0.7, 0.02, 6.4),
-     M["white"], folder=F_PAD)
+     M["marking"], folder=F_PAD)
 # Crossbar spans only the gap between the uprights -- overlapping them would put two
 # coplanar top faces at the same height.
 vbox(entities, "Helipad H Bar", (PAD_X - 1.9, PAD_TOP + 0.01, PAD_Z - 0.45), (3.8, 0.02, 0.9),
-     M["white"], folder=F_PAD)
+     M["marking"], folder=F_PAD)
 
 for i in range(12):
     a = i / 12.0 * math.tau
@@ -754,7 +778,7 @@ box(entities, "Mast Head", (MX - 1.0, MAST_Y0 + MAST_H, MZ - 1.0), (2.0, 0.6, 2.
 shape(entities, "Mast Dish Pylon", (MX, (HEAD_TOP + DISH_Y) * 0.5, MZ),
       cylinder_params(0.3, DISH_Y - HEAD_TOP, 12), M["steel"], folder=F_MAST)
 shape(entities, "Mast Dish", (MX, DISH_Y, MZ + 1.2),
-      bowl_params(2.4, 1.2, 1.2, 1.0, 12, 32, 0.05), M["white"], rot=pitch(-62.0), folder=F_MAST)
+      bowl_params(2.4, 1.2, 1.2, 1.0, 12, 32, 0.05), M["marking"], rot=pitch(-62.0), folder=F_MAST)
 
 for i, by in enumerate((MAST_Y0 + 5.0, MAST_Y0 + 10.5, DISH_Y + 3.1)):
     e = light(entities, f"Mast Beacon {i}", (MX, by, MZ), folder=F_MAST)
@@ -826,10 +850,11 @@ for s, (bx, bz, ang) in enumerate(((-14.0, -30.0, 0.0), (-14.0, -25.0, 0.0),
     for lvl in range(2 if s % 2 == 0 else 1):
         by = GRADE + lvl * (CONT[1] + 0.06)
         box(entities, f"Container {s}-{lvl}", (bx, by, bz), CONT,
-            [M["olive"], M["red"], M["blue"], M["od_light"]][(s + lvl) % 4], rot=yaw(ang), folder=F_POOL)
+            [M["olive"], M["red"], M["navy"], M["od_light"]][(s + lvl) % 4], rot=yaw(ang), folder=F_POOL)
         # Corrugation ribs -- shallow, but enough to break the sun's specular sweep.
         for r in range(7):
-            vbox(entities, f"Container Rib {s}-{lvl}-{r}", (bx + 0.3 + r * 0.8, by + 0.15, bz - 0.05),
+            rx, rz = yaw_offset(bx, bz, ang, 0.3 + r * 0.8, -0.05)
+            vbox(entities, f"Container Rib {s}-{lvl}-{r}", (rx, by + 0.15, rz),
                  (0.12, CONT[1] - 0.3, 0.06), M["concrete_dark"], rot=yaw(ang), folder=F_POOL)
 
 # Jersey barriers staggered into a chicane behind the gate.
@@ -849,27 +874,30 @@ for i in range(3):
         box(entities, f"Fuel Cradle {i}-{c}", (-19.0 + c * 5.2, GRADE, tz - 1.6), (1.0, 1.2, 3.2),
             M["concrete_dark"], folder=F_POOL)
     shape(entities, f"Fuel Pipe {i}", (-16.0, GRADE + 0.9, tz - 2.6), cylinder_params(0.12, 3.4, 10),
-          M["steel_rough"], folder=F_POOL)
+          M["steel"], folder=F_POOL)
 
 
 def vehicle(tag, vx, vz, ang, hull=(6.4, 1.5, 3.0), turret=True):
     """Blocky mock-up. The turret overhang and wheel gaps are what make the sun shadow
-    read as a vehicle rather than a crate."""
+    read as a vehicle rather than a crate. Every part's position routes through
+    yaw_offset with the hull's pivot, so rotated vehicles stay assembled."""
     box(entities, f"{tag} Hull", (vx, GRADE + 0.72, vz), hull, M["olive"], rot=yaw(ang), folder=F_POOL)
     # Glacis butts the hull exactly rather than overlapping it: a 0.1 overlap would put
     # two coplanar top faces at the same height.
-    box(entities, f"{tag} Glacis", (vx - 1.1, GRADE + 0.72, vz), (1.1, 1.5, hull[2]), M["olive"],
+    gx, gz = yaw_offset(vx, vz, ang, -1.1, 0.0)
+    box(entities, f"{tag} Glacis", (gx, GRADE + 0.72, gz), (1.1, 1.5, hull[2]), M["olive"],
         rot=yaw(ang), folder=F_POOL)
     if turret:
-        shape(entities, f"{tag} Turret", (vx + hull[0] * 0.45, GRADE + 2.64, vz + hull[2] * 0.5),
+        tx, tz = yaw_offset(vx, vz, ang, hull[0] * 0.45, hull[2] * 0.5)
+        shape(entities, f"{tag} Turret", (tx, GRADE + 2.64, tz),
               cylinder_params(1.25, 0.85, 18), M["olive"], rot=yaw(ang), folder=F_POOL)
-        box(entities, f"{tag} Barrel", (vx + hull[0] * 0.45, GRADE + 2.5, vz + hull[2] * 0.5),
-            (5.0, 0.19, 0.19), M["steel_rough"], rot=yaw(ang), folder=F_POOL)
+        box(entities, f"{tag} Barrel", (tx, GRADE + 2.5, tz),
+            (5.0, 0.19, 0.19), M["steel"], rot=yaw(ang), folder=F_POOL)
+    # Wheel axles run lateral (local +Z): pitch(90) stands the cylinder's axis sideways, then the hull yaw
     for w in range(4):
-        wx = vx + 0.9 + (w % 2) * (hull[0] - 2.0)
-        wz = vz + (0.15 if w < 2 else hull[2] - 0.15)
+        wx, wz = yaw_offset(vx, vz, ang, 0.9 + (w % 2) * (hull[0] - 2.0), 0.15 if w < 2 else hull[2] - 0.15)
         shape(entities, f"{tag} Wheel {w}", (wx, GRADE + 0.72, wz), cylinder_params(0.72, 0.5, 16),
-              M["rubber"], rot=roll(90.0), folder=F_POOL)
+              M["rubber"], rot=qmul(yaw(ang), pitch(90.0)), folder=F_POOL)
 
 
 vehicle("Vehicle A", -30.0, -34.0, 0.0)
@@ -885,7 +913,7 @@ for s, (tx, tz) in enumerate(((-6.0, -18.0), (-3.0, -19.5), (16.0, -28.0))):
 # Razor-wire spools along the inside of the south wall.
 for i in range(7):
     shape(entities, f"Wire Spool {i}", (-40.0 + i * 12.0, GRADE + 0.96, -46.5),
-          torus_params(0.8, 0.16, 18, 10), M["steel_rough"], rot=yaw(90.0), folder=F_POOL)
+          torus_params(0.8, 0.16, 18, 10), M["steel"], rot=yaw(90.0), folder=F_POOL)
 
 # Sandbag emplacement: two courses of capsules laid tangentially around a firing position.
 SB_X, SB_Z, SB_R = 26.0, 12.0, 4.2

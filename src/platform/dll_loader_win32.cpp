@@ -4,8 +4,11 @@
 
 #include <Windows.h>
 
+#include <cstring>
+
 #include "dll_loader.h"
 #include "file_utils.h"
+#include "core/containers/inline_string.h"
 #include "spdlog/spdlog.h"
 
 namespace Platform
@@ -23,7 +26,18 @@ bool DllLoader::Load(const char* dllPath, const char* tempCopyName)
         Core::Path tempDir = originalPath.Parent() / "gamedlls";
         CreateDirectories(tempDir.c_str());
 
-        Core::Path dstPath = tempDir / tempCopyName;
+        // A second instance must not contend for a temp file the first has locked
+        const Core::InlineString<128> instanceName = Core::InlineString<128>::Format("%lu_%s", static_cast<unsigned long>(GetCurrentProcessId()), tempCopyName);
+        Core::Path dstPath = tempDir / instanceName.c_str();
+
+        // Copies left by dead instances
+        Core::Path stale[16];
+        const uint32_t staleCount = FindFilesByExtension(tempDir, ".dll", stale, 16);
+        for (uint32_t i = 0; i < staleCount; i++) {
+            if (strcmp(stale[i].c_str(), dstPath.c_str()) != 0) {
+                DeleteSingleFile(stale[i]);
+            }
+        }
 
         if (!FileCopy(dllPath, dstPath.c_str())) {
             SPDLOG_ERROR("Failed to copy DLL: {} -> {}", dllPath, dstPath.c_str());

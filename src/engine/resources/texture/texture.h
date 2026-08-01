@@ -43,6 +43,7 @@ struct Texture
     uint32_t refCount = 0;
     uint64_t retireFrame = 0;
     Origin origin{Origin::Disk};
+    uint64_t loadedContentVersion{0};
 
     uint32_t width{0};
     uint32_t height{0};
