@@ -298,8 +298,9 @@ def add_reflection_probe(entity, probe_id, shape=PROBE_BOX, fade_margin=0.0, cap
     """Box probe bounds = transform.scale as HALF-EXTENTS (sphere: max component = radius), rotated by
     transform.rotation. The capture is taken at translation + rotation*capture_offset -- keep that point
     out of any mesh or emissive light rep, or the cubemap bakes the inside of that object.
-    fade_margin is a world-space fade band at the boundary (0 = hard edge, right for a sealed room whose
-    walls sit on the boundary). Shading picks the SMALLEST-volume probe containing the pixel, so a nested
+    fade_margin is a world-space fade band at the boundary (0 = hard edge). Size the box to the OUTER
+    shell, not the inner faces: wall pixels exactly on the boundary flicker between probe and skybox
+    under jitter (seen in gi_sunbounce). Shading picks the SMALLEST-volume probe containing the pixel, so a nested
     room can simply get its own smaller probe. `probe_id` must be non-zero and stable across runs --
     it names the baked assets/probes/probe_<id>.wprobe; use name_id("..."). stand_in_env_map 0 = none
     (probe contributes nothing until baked)."""

@@ -1339,7 +1339,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
 
     {
         int32_t bestPriority = INT32_MIN;
-        Engine::CubemapHandle bestHandle{Engine::CubemapHandle::INVALID};
+        Render::Cubemap* bestCubemap = nullptr;
         float bestIntensity = 1.0f;
         for (auto&& [entity, sky] : state->registry.view<Component::SkyboxComponent>().each()) {
             if (!sky.envMap.IsValid() || ctx->assetManager->GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
@@ -1349,12 +1349,12 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(sky.handle);
             if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded && sky.priority > bestPriority) {
                 bestPriority = sky.priority;
-                bestHandle = sky.handle;
+                bestCubemap = cubemap;
                 bestIntensity = sky.intensity;
             }
         }
-        if (bestHandle.IsValid()) {
-            frameBuffer->mainViewFamily.skyboxIndex = bestHandle.index;
+        if (bestCubemap) {
+            frameBuffer->mainViewFamily.skyboxIndex = static_cast<int32_t>(bestCubemap->bindlessHandle.index);
             frameBuffer->mainViewFamily.skyboxLOD = state->lighting.skyboxLOD;
             frameBuffer->mainViewFamily.iblIntensity *= bestIntensity;
         }
