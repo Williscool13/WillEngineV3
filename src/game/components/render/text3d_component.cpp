@@ -36,7 +36,7 @@ void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::
     registry.remove<Text3DLoadingTag>(entity);
     if (component.fontId.IsValid()) {
         registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
-        state->bPendingModelResolve = true;
+        state->assetLoad.bPendingModelResolve = true;
     }
     else {
         registry.remove<Text3DGeneratePendingTag>(entity);
@@ -213,7 +213,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
 
     if (dirty) {
         registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
-        state->bPendingModelResolve |= true;
+        state->assetLoad.bPendingModelResolve |= true;
     }
 
     ImGui::EndDisabled();
@@ -230,14 +230,14 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
             if (ImGui::Selectable("(none)", !comp.material.IsValid()) && comp.material.IsValid()) {
                 comp.material = Engine::MaterialID{};
                 registry.emplace_or_replace<Text3DLoadingTag>(entity);
-                state->bPendingModelResolve |= true;
+                state->assetLoad.bPendingModelResolve |= true;
             }
             for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
                 if (mat.immutable) { continue; }
                 if (ImGui::Selectable(mat.name.c_str(), matId == comp.material) && matId != comp.material) {
                     comp.material = matId;
                     registry.emplace_or_replace<Text3DLoadingTag>(entity);
-                    state->bPendingModelResolve |= true;
+                    state->assetLoad.bPendingModelResolve |= true;
                 }
             }
             ImGui::EndCombo();

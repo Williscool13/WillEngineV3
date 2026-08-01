@@ -16,6 +16,7 @@
 #include "game/components/gameplay/rotate_in_place_component.h"
 #include "game/components/physics/physics_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
+#include "game/game_state.h"
 
 namespace Game
 {
@@ -142,9 +143,9 @@ void CheckpointUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (checkpointEntity != entt::null) {
             const auto& checkpoint = state->registry.get<Component::CheckpointComponent>(checkpointEntity);
-            if (checkpoint.priority > state->currentCheckpointPriority) {
-                state->currentCheckpointId = checkpoint.checkpointId;
-                state->currentCheckpointPriority = checkpoint.priority;
+            if (checkpoint.priority > state->scene.currentCheckpointPriority) {
+                state->scene.currentCheckpointId = checkpoint.checkpointId;
+                state->scene.currentCheckpointPriority = checkpoint.priority;
             }
         }
     }
@@ -152,10 +153,7 @@ void CheckpointUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto* playerController = state->registry.ctx().find<PhysicsPlayerController>();
-    if (!playerController) { return; }
-
-    PhysicsCharacter* character = playerController->GetCharacter();
+    PhysicsCharacter* character = ctx->GetGameState<GameState>()->playerController.GetCharacter();
     if (!character) { return; }
 
     const entt::entity playerEntity = character->GetEntity();
@@ -174,7 +172,7 @@ void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         auto checkpointView = state->registry.view<Component::CheckpointComponent, Component::TransformComponent>();
         for (auto entity : checkpointView) {
             const auto& cp = checkpointView.get<Component::CheckpointComponent>(entity);
-            if (cp.checkpointId == state->currentCheckpointId) {
+            if (cp.checkpointId == state->scene.currentCheckpointId) {
                 checkpointEntity = entity;
                 break;
             }

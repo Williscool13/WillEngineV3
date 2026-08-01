@@ -11,7 +11,7 @@
 #include <json/nlohmann/json_fwd.hpp>
 
 #include "core/string_id.h"
-#include "engine/engine_api.h"
+#include "engine/component_registry.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }

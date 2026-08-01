@@ -89,7 +89,7 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily)
+void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily)
 {
     ZoneScoped;
     entt::entity mainCamera;
@@ -107,7 +107,7 @@ void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamil
     mainViewFamily.mainView.previousViewData = cam.previousViewData;
     cam.previousViewData = cam.currentViewData;
 
-    ProbeBakeOverrideView(state, mainViewFamily);
+    ProbeBakeOverrideView(ctx, mainViewFamily);
 }
 
 void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily)

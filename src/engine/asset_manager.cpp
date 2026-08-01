@@ -55,7 +55,7 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
     Editor::CreateCriticalEngineResources(&memoryManager);
 #endif
 
-    ctx->bShouldRescanResources = true;
+    ctx->rescan.bResources = true;
 
     Scan();
 
@@ -1417,7 +1417,7 @@ void AssetManager::Scan()
     changedFontIds.Clear();
     changedEnvironmentMapIds.Clear();
 
-    if (ctx->bShouldRescanResources) {
+    if (ctx->rescan.bResources) {
         const Core::Path& assetPath = Platform::GetAssetPath();
         if (assetPath.Exists()) {
             Core::Vector<Core::Path> paths;
@@ -1628,7 +1628,7 @@ void AssetManager::Scan()
         }
     }
 
-    ctx->bShouldRescanResources = false;
+    ctx->rescan.bResources = false;
 }
 
 void AssetManager::RegisterProceduralTextures()

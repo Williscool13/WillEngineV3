@@ -31,6 +31,7 @@
 #include "game/components/scene_components.h"
 #include "game/components/physics/physics_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
+#include "game/game_state.h"
 #include "game/systems/physics_system.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
@@ -398,7 +399,7 @@ entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity pare
 
     if (!parentComp.primitiveBlacklist.Contains(primitiveOrdinal)) { parentComp.primitiveBlacklist.PushBack(primitiveOrdinal); }
     registry.emplace_or_replace<Component::StaticMeshLoadingTag>(parent);
-    state->bPendingModelResolve = true;
+    state->assetLoad.bPendingModelResolve = true;
 
     state->bHierarchyOrderDirty = true;
     return child;
@@ -458,9 +459,9 @@ entt::entity CreateSceneEntity(Engine::EngineState* state)
 {
     entt::entity newEntity = state->registry.create();
     state->registry.emplace<Component::TransformComponent>(newEntity);
-    state->registry.emplace<Component::SceneComponent>(newEntity, state->currentSceneId);
+    state->registry.emplace<Component::SceneComponent>(newEntity, state->scene.currentSceneId);
     state->registry.emplace<Component::StableIdComponent>(newEntity);
-    state->registry.get<Component::StableIdComponent>(newEntity).sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
+    state->registry.get<Component::StableIdComponent>(newEntity).sortOrder = HighestSortOrderInScene(state->registry, state->scene.currentSceneId) + 1;
     state->registry.emplace<Component::EntityFolderComponent>(newEntity);
     static int32_t runningNameTally = 0;
     auto newName = fmt::format("New Entity {}", runningNameTally++);
@@ -640,7 +641,7 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
     state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, StringID{prefabId});
 
     if (isNewPrefab) {
-        ctx->bShouldRescanResources = true;
+        ctx->rescan.bResources = true;
     }
     LOG_INFO(Game, "Saved prefab '{}' to '{}'", prefabName, path.c_str());
 }
@@ -679,11 +680,11 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
         transform->translation = spawnPosition;
     }
 
-    state->registry.emplace<Component::SceneComponent>(entity, state->currentSceneId);
+    state->registry.emplace<Component::SceneComponent>(entity, state->scene.currentSceneId);
     state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, prefabId);
 
     if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-        stable->sortOrder = HighestSortOrderInScene(state->registry, state->currentSceneId) + 1;
+        stable->sortOrder = HighestSortOrderInScene(state->registry, state->scene.currentSceneId) + 1;
     }
 
     LOG_INFO(Game, "Spawned prefab '{}' as entity {}", meta->prefabName.c_str(), entt::to_integral(entity));
@@ -776,15 +777,14 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    auto& playerController = state->registry.ctx().emplace<PhysicsPlayerController>();
-    playerController.Initialize(state, ctx, spawnPosition);
+    ctx->GetGameState<GameState>()->playerController.Initialize(state, ctx, spawnPosition);
 }
 
 void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (auto* playerController = state->registry.ctx().find<PhysicsPlayerController>()) {
-        playerController->Shutdown(ctx->physicsSystem);
-        state->registry.ctx().erase<PhysicsPlayerController>();
+    PhysicsPlayerController& playerController = ctx->GetGameState<GameState>()->playerController;
+    if (playerController.GetCharacter()) {
+        playerController.Shutdown(ctx->physicsSystem);
     }
 
     Core::InlineVector<StringID, 8> scenesToUnload;

@@ -20,7 +20,7 @@ namespace Game
 {
 void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily);
+void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily);
 void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily);
 } // Game
 

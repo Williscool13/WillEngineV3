@@ -35,7 +35,7 @@ void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, entt::regi
     registry.remove<StaticMeshPrimitiveLoadingTag>(entity);
     if (component.modelId.IsValid() && component.primitiveOrdinal != ~0u) {
         registry.emplace_or_replace<StaticMeshPrimitiveLoadPendingTag>(entity);
-        state->bPendingModelResolve |= true;
+        state->assetLoad.bPendingModelResolve |= true;
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
@@ -174,7 +174,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                 if (pendingOrdinal != ~0u) {
                     component.primitiveOrdinal = pendingOrdinal;
                     registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-                    state->bPendingModelResolve |= true;
+                    state->assetLoad.bPendingModelResolve |= true;
                 }
             }
         }
@@ -204,7 +204,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         if (changed || clear) {
             component.materialOverride = clear ? Engine::MaterialID::INVALID : pendingMat;
             registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-            state->bPendingModelResolve |= true;
+            state->assetLoad.bPendingModelResolve |= true;
         }
 
         ImGui::SeparatorText("Shader Overrides");
@@ -245,7 +245,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             }
             if (shaderChanged) {
                 registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-                state->bPendingModelResolve |= true;
+                state->assetLoad.bPendingModelResolve |= true;
             }
         }
 

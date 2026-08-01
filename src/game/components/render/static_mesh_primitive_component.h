@@ -10,7 +10,7 @@
 
 #include "engine/core/model_id.h"
 #include "engine/material_manager.h"
-#include "engine/engine_api.h"
+#include "engine/component_registry.h"
 #include "game/components/render_components.h"
 
 namespace Core { struct ViewFamily; }

@@ -7,6 +7,7 @@
 #include <variant>
 #include <type_traits>
 
+#include "engine/resources/model/static_model.h"
 #include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/render/text3d_component.h"

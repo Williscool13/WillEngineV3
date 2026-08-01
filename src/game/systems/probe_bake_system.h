@@ -122,20 +122,16 @@ struct ProbeBakeSystem
     void Cancel(Engine::EngineContext* ctx, Engine::EngineState* state);
 };
 
-/** Returns the bake system stored in the registry context, creating it on first use. */
-ProbeBakeSystem& ProbeBakeGetOrCreate(Engine::EngineState* state);
-
-/** Returns the bake system if it already exists in the registry context, else nullptr. */
-ProbeBakeSystem* ProbeBakeFind(Engine::EngineState* state);
+ProbeBakeSystem& ProbeBakeGet(Engine::EngineContext* ctx);
 
 /** True while a bake is walking its faces. */
-bool ProbeBakeActive(Engine::EngineState* state);
+bool ProbeBakeActive(Engine::EngineContext* ctx);
 
 /** Advances the bake state machine one render frame; call before BuildViewFamily so the override lands this frame. */
 void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 
 /** Applies the active bake face's view override onto the main view; call as the last statement of BuildViewFamily so the override lands this frame. No-op when no override is active. */
-void ProbeBakeOverrideView(Engine::EngineState* state, Core::ViewFamily& viewFamily);
+void ProbeBakeOverrideView(Engine::EngineContext* ctx, Core::ViewFamily& viewFamily);
 
 /** During an active bake, empties every main-view debug-draw array and suppresses the selection outline and GPU debug so nothing bakes into the capture. Call late in GamePrepareFrame after all debug producers. No-op otherwise. */
 void ProbeBakeScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);

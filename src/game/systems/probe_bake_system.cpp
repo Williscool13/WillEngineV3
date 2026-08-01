@@ -10,6 +10,7 @@
 #include "camera_system.h"
 #include "ddgi_converge_boost.h"
 #include "render_systems.h"
+#include "game/game_state.h"
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
@@ -45,43 +46,33 @@ static const ProbeFaceOrientation kProbeFaceOrientations[6] = {
     {{ 0.0f,  0.0f, -1.0f}, { 0.0f, -1.0f,  0.0f}},
 };
 
-ProbeBakeSystem& ProbeBakeGetOrCreate(Engine::EngineState* state)
+ProbeBakeSystem& ProbeBakeGet(Engine::EngineContext* ctx)
 {
-    if (auto* existing = state->registry.ctx().find<ProbeBakeSystem>()) {
-        return *existing;
-    }
-    return state->registry.ctx().emplace<ProbeBakeSystem>();
+    return ctx->GetGameState<GameState>()->probeBake;
 }
 
-ProbeBakeSystem* ProbeBakeFind(Engine::EngineState* state)
+bool ProbeBakeActive(Engine::EngineContext* ctx)
 {
-    return state->registry.ctx().find<ProbeBakeSystem>();
-}
-
-bool ProbeBakeActive(Engine::EngineState* state)
-{
-    const ProbeBakeSystem* bake = state->registry.ctx().find<ProbeBakeSystem>();
-    return bake && bake->bBakeActive;
+    return ProbeBakeGet(ctx).bBakeActive;
 }
 
 void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
-    if (auto* bake = state->registry.ctx().find<ProbeBakeSystem>()) {
-        bake->Tick(ctx, state, frameBuffer);
-    }
+    ProbeBakeGet(ctx).Tick(ctx, state, frameBuffer);
 }
 
-void ProbeBakeOverrideView(Engine::EngineState* state, Core::ViewFamily& viewFamily)
+void ProbeBakeOverrideView(Engine::EngineContext* ctx, Core::ViewFamily& viewFamily)
 {
-    if (const ProbeBakeSystem* bake = ProbeBakeFind(state); bake && bake->bViewOverrideActive) {
-        viewFamily.mainView.currentViewData = bake->overrideView;
-        viewFamily.mainView.previousViewData = bake->overrideView;
+    const ProbeBakeSystem& bake = ProbeBakeGet(ctx);
+    if (bake.bViewOverrideActive) {
+        viewFamily.mainView.currentViewData = bake.overrideView;
+        viewFamily.mainView.previousViewData = bake.overrideView;
     }
 }
 
 void ProbeBakeScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
-    if (!ProbeBakeActive(state)) { return; }
+    if (!ProbeBakeActive(ctx)) { return; }
 
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
     viewFamily.debugLines.Clear();
@@ -93,7 +84,7 @@ void ProbeBakeScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state,
     viewFamily.debugCylinders.Clear();
 
     frameBuffer->selectedStableId = 0;
-    frameBuffer->bEnableGPUDebug = false;
+    frameBuffer->debug.bEnableGPUDebug = false;
 }
 
 void ProbeBakeSystem::Start(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity probe)
@@ -320,7 +311,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             overrideView = Camera::BuildPerspectiveView(capturePosition, face.forward, face.up, aspect, fovY, state->projectConfig.editorCameraNearPlane);
             bViewOverrideActive = true;
 
-            state->pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
+            state->requests.pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
             settleCounter = 0;
             phase = Phase::Settling;
             return;

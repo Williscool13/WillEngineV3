@@ -424,7 +424,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);
     RenderFamilyProperties renderFamilyProperties = PrepareRenderFamilyProperties(viewFamily, readbackData, pipelineManager, frameResourceLimits);
-    renderFamilyProperties.bWireframe = frameBuffer.bWireframe;
+    renderFamilyProperties.bWireframe = frameBuffer.debug.bWireframe;
 
     //
     {
@@ -525,8 +525,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     if (renderFamilyProperties.bCanRender) {
         ZoneScopedN("SetupRenderGraph");
 
-        if (frameBuffer.bEnableGPUDebug) {
-            SetupGPUDebugBegin(*renderGraph, frameBuffer.bLockGPUDebug);
+        if (frameBuffer.debug.bEnableGPUDebug) {
+            SetupGPUDebugBegin(*renderGraph, frameBuffer.debug.bLockGPUDebug);
         }
 
         // Geometry
@@ -539,11 +539,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get());
 
-            if (frameBuffer.bEnableShadeDispatchBucketingVisualization) {
+            if (frameBuffer.debug.bEnableShadeDispatchBucketingVisualization) {
                 SetupVisibilityBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get());
             }
 
-            if (frameBuffer.bEnableLightingBucketingVisualization) {
+            if (frameBuffer.debug.bEnableLightingBucketingVisualization) {
                 SetupLightingBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
             }
 
@@ -557,18 +557,18 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                          || viewFamily.reflectionProbes.Size() > 0u;
             if (bNeedsWorldGrid) {
                 SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0);
-                if (frameBuffer.bEnableGPUDebug && frameBuffer.bWorldGridDebug && !frameBuffer.bLockGPUDebug) {
-                    SetupWorldGridDebug(*renderGraph, pipelineManager, 0, frameBuffer.worldGridDebugLevel);
+                if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bWorldGridDebug && !frameBuffer.debug.bLockGPUDebug) {
+                    SetupWorldGridDebug(*renderGraph, pipelineManager, 0, frameBuffer.debug.worldGridDebugLevel);
                 }
             }
 
-            const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber, frameBuffer.bFreezeGIField);
+            const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber, frameBuffer.debug.bFreezeGIField);
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
-                const RadianceCacheFrame radianceCache = SetupRadianceCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.bFreezeGIField);
-                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
+                const RadianceCacheFrame radianceCache = SetupRadianceCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.debug.bFreezeGIField);
+                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.debug.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
                 ddgiPreviousCascades = ddgiCascades;
-                const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.bDDGIBounceOnly;
+                const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.debug.bDDGIBounceOnly;
                 SetupRadianceCacheShade(*renderGraph, pipelineManager, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.radianceCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
                 SetupRadianceCacheEnd(*renderGraph, radianceCache);
                 if (radianceCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
@@ -584,11 +584,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         vkCmdCopyBuffer(cmd, graph.GetBufferHandle(RADIANCE_CACHE_ACTIVE_COUNT), dst, 1, &shadedCopy);
                     });
                 }
-                if (frameBuffer.bEnableGPUDebug && frameBuffer.bDDGIProbeDebug && !frameBuffer.bLockGPUDebug) {
-                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.ddgiProbeDebugExposure, frameBuffer.ddgiProbeDebugCascade, frameBuffer.bDDGIHideInactiveProbes, frameBuffer.ddgiProbeDebugMode);
+                if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bDDGIProbeDebug && !frameBuffer.debug.bLockGPUDebug) {
+                    SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.debug.ddgiProbeDebugExposure, frameBuffer.debug.ddgiProbeDebugCascade, frameBuffer.debug.bDDGIHideInactiveProbes, frameBuffer.debug.ddgiProbeDebugMode);
                 }
-                if (frameBuffer.bEnableGPUDebug && frameBuffer.bRadianceCacheDebug && !frameBuffer.bLockGPUDebug) {
-                    SetupRadianceCacheDebug(*renderGraph, pipelineManager, radianceCache, frameBuffer.radianceCacheDebugExposure, frameBuffer.radianceCacheDebugBucket);
+                if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bRadianceCacheDebug && !frameBuffer.debug.bLockGPUDebug) {
+                    SetupRadianceCacheDebug(*renderGraph, pipelineManager, radianceCache, frameBuffer.debug.radianceCacheDebugExposure, frameBuffer.debug.radianceCacheDebugBucket);
                 }
             }
 
@@ -611,8 +611,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     });
             }
 
-            if (frameBuffer.ddgi.bEnabled && frameBuffer.giDeconstructMode != 0) {
-                SetupGIDeconstruct(*renderGraph, pipelineManager, renderExtent, targets, 0, frameBuffer.giDeconstructMode);
+            if (frameBuffer.ddgi.bEnabled && frameBuffer.debug.giDeconstructMode != 0) {
+                SetupGIDeconstruct(*renderGraph, pipelineManager, renderExtent, targets, 0, frameBuffer.debug.giDeconstructMode);
             }
 
             if (viewFamily.gtaoConfig.bEnabled) {
@@ -663,9 +663,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
             else {
                 uint32_t giGatherMode = 0u;
-                const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.giGatherDebugMode);
+                const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.debug.giGatherDebugMode);
                 if (frameBuffer.ddgi.bEnabled && ((frameBuffer.ddgi.bFinalGather && bDDGIApply) || giGatherDebug != 0u)) {
-                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherChromaDenoise ? frameBuffer.ddgi.gatherChromaDenoisePasses : 0u, frameBuffer.ddgi.gatherChromaLumaPower, frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.bGatherSkipRay || frameBuffer.bFreezeGatherRay, frameBuffer.ddgi.gatherRaysPerPixel, giGatherDebug != 0u, frameBuffer.bFreezeScreenFeedback);
+                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherChromaDenoise ? frameBuffer.ddgi.gatherChromaDenoisePasses : 0u, frameBuffer.ddgi.gatherChromaLumaPower, frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.bGatherSkipRay || frameBuffer.debug.bFreezeGatherRay, frameBuffer.ddgi.gatherRaysPerPixel, giGatherDebug != 0u, frameBuffer.debug.bFreezeScreenFeedback);
                     if (giGather.bValid) {
                         giGatherMode = giGatherDebug != 0u ? giGatherDebug + 1u : 1u;
                     }
@@ -674,7 +674,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 switch (viewFamily.lightingMode) {
                     case Core::LightingMode::Default:
                     {
-                        if (frameBuffer.bEnableGPUDebug && frameBuffer.bClusterGridDebug && !frameBuffer.bLockGPUDebug) {
+                        if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bClusterGridDebug && !frameBuffer.debug.bLockGPUDebug) {
                             constexpr float kDebugClusterZFar = 500.0f;
                             SetupClusterGridDebug(*renderGraph, pipelineManager, 0, viewFamily.mainView.currentViewData.nearPlane, kDebugClusterZFar);
                         }
@@ -685,7 +685,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         else {
                             SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, frameBuffer.reflection);
                         }
-                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, bDDGIApply, false, frameBuffer.bFreezeScreenFeedback);
+                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, bDDGIApply, false, frameBuffer.debug.bFreezeScreenFeedback);
                         if (frameBuffer.reflection.bDenoiserEnabled) {
                             SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, 0u, 1.0f, frameBuffer.reflection);
                         }
@@ -714,7 +714,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked, bRestirFullRateResolve ? 1u : 0u, frameBuffer.reflection);
 
                         const bool bReflectionCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) && frameBuffer.reflection.bDenoiserEnabled;
-                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, frameBuffer.bFreezeScreenFeedback);
+                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, frameBuffer.debug.bFreezeScreenFeedback);
                         const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                         if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
@@ -789,7 +789,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         // Snapshot the lit HDR composite BEFORE any overlay/debug/text/sprite pass so the gather's screen tier reads GI, not UI glyphs or debug lines carried into lit_color_history.
         const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
         const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bFinalGather;
-        const bool bLitColorIsScene = frameBuffer.giGatherDebugMode == 0 && frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
+        const bool bLitColorIsScene = frameBuffer.debug.giGatherDebugMode == 0 && frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
         const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace);
         if (bSnapshotLitColor) {
             renderGraph->CreateTexture(SID("lit_color_preoverlay"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
@@ -825,8 +825,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         SetupProbePreviewSpheres(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, viewFamily);
 
-        if (frameBuffer.bEnableGPUDebug) {
-            SetupGPUDebugDraw(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, frameBuffer.bLockGPUDebug);
+        if (frameBuffer.debug.bEnableGPUDebug) {
+            SetupGPUDebugDraw(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, frameBuffer.debug.bLockGPUDebug);
         }
 
         if (bSnapshotLitColor) {

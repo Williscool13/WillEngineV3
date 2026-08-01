@@ -288,7 +288,10 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         engineState->automation = automation;
         engineState->lighting.aaConfig = engineState->projectConfig.aaConfig;
         if (!engineState->projectConfig.activeLightingProfile.IsEmpty()) {
-            Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), engineState->lighting.lightingMode, engineState->debug.restir, engineState->lighting.ddgi, engineState->lighting.reflection, engineState->lighting.reflectionProbe, engineState->lighting.gtaoConfig, engineState->debug.shadingShaderOverride, engineState->debug.lightingShaderOverride, engineState->lighting.iblIntensity, engineState->lighting.indirectIntensity);
+            Profiles::LightingProfileBundle bundle = Profiles::CaptureLightingProfile(*engineState);
+            if (Profiles::LoadLightingProfile(engineState->projectConfig.activeLightingProfile.c_str(), bundle)) {
+                Profiles::ApplyLightingProfile(*engineState, bundle);
+            }
         }
         if (!engineState->projectConfig.activePostProcessProfile.IsEmpty()) {
             Profiles::LoadPostProcessProfile(engineState->projectConfig.activePostProcessProfile.c_str(), engineState->lighting.postProcess);
@@ -384,7 +387,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         else {
             LOG_CRITICAL(Engine, "game.dll failed to load; requesting shutdown");
             gameFunctions.Stub();
-            engineState->bRequestedQuit = true;
+            engineState->requests.bRequestedQuit = true;
         }
 #endif
 
@@ -987,7 +990,6 @@ void WillEngine::EditorImgui()
             }
         }
 
-        ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
         if (ImGui::Button("Log RDG")) {
             bLogRDG = true;
         }
@@ -1248,7 +1250,7 @@ void WillEngine::Run()
             inputManager->ProcessEvent(e);
         }
 
-        if (inputManager->IsQuitRequested() || renderThread->IsShutdownRequestedByRender() || engineState->bRequestedQuit) {
+        if (inputManager->IsQuitRequested() || renderThread->IsShutdownRequestedByRender() || engineState->requests.bRequestedQuit) {
             renderThread->RequestShutdown();
             break;
         }
@@ -1271,26 +1273,26 @@ void WillEngine::Run()
 #if WILL_EDITOR
         bool bTextureGenerated = false;
         {
-            engineState->pendingHotReloadModelIds.Clear();
+            engineState->assetLoad.pendingHotReloadModelIds.Clear();
             Editor::ModelGenerateComplete modelComplete{};
             while (assetGenerator->TryDequeueModelGenerateComplete(modelComplete)) {
-                engineContext->bShouldRescanResources = true;
+                engineContext->rescan.bResources = true;
             }
-            engineState->pendingHotReloadFontIds.Clear();
+            engineState->assetLoad.pendingHotReloadFontIds.Clear();
             Editor::FontGenerateComplete fontComplete{};
             while (assetGenerator->TryDequeueFontGenerateComplete(fontComplete)) {
-                engineContext->bShouldRescanResources = true;
+                engineContext->rescan.bResources = true;
             }
-            engineState->pendingHotReloadTextureIds.Clear();
+            engineState->assetLoad.pendingHotReloadTextureIds.Clear();
             Editor::TextureGenerateComplete textureComplete{};
             while (assetGenerator->TryDequeueTextureGenerateComplete(textureComplete)) {
-                engineContext->bShouldRescanResources = true;
+                engineContext->rescan.bResources = true;
                 bTextureGenerated = true;
             }
-            engineState->pendingHotReloadEnvironmentMapIds.Clear();
+            engineState->assetLoad.pendingHotReloadEnvironmentMapIds.Clear();
             Editor::EnvironmentMapGenerateComplete envMapComplete{};
             while (assetGenerator->TryDequeueCubemapGenerateComplete(envMapComplete)) {
-                engineContext->bShouldRescanResources = true;
+                engineContext->rescan.bResources = true;
             }
 
             if (engineContext->IsProbeAssemblePending()) {
@@ -1306,30 +1308,30 @@ void WillEngine::Run()
         }
 
         for (const Engine::ModelID& id : assetManager->GetChangedModelIds()) {
-            if (engineState->pendingHotReloadModelIds.IsFull()) { break; }
-            engineState->pendingHotReloadModelIds.PushBack(id);
+            if (engineState->assetLoad.pendingHotReloadModelIds.IsFull()) { break; }
+            engineState->assetLoad.pendingHotReloadModelIds.PushBack(id);
         }
         for (const Engine::FontID& id : assetManager->GetChangedFontIds()) {
-            if (engineState->pendingHotReloadFontIds.IsFull()) { break; }
-            engineState->pendingHotReloadFontIds.PushBack(id);
+            if (engineState->assetLoad.pendingHotReloadFontIds.IsFull()) { break; }
+            engineState->assetLoad.pendingHotReloadFontIds.PushBack(id);
         }
         for (const Engine::TextureID& id : assetManager->GetChangedTextureIds()) {
-            if (engineState->pendingHotReloadTextureIds.IsFull()) { break; }
-            engineState->pendingHotReloadTextureIds.PushBack(id);
+            if (engineState->assetLoad.pendingHotReloadTextureIds.IsFull()) { break; }
+            engineState->assetLoad.pendingHotReloadTextureIds.PushBack(id);
         }
         for (const Engine::EnvironmentMapID& id : assetManager->GetChangedEnvironmentMapIds()) {
-            if (engineState->pendingHotReloadEnvironmentMapIds.IsFull()) { break; }
-            engineState->pendingHotReloadEnvironmentMapIds.PushBack(id);
+            if (engineState->assetLoad.pendingHotReloadEnvironmentMapIds.IsFull()) { break; }
+            engineState->assetLoad.pendingHotReloadEnvironmentMapIds.PushBack(id);
         }
 #endif
 
         engineContext->bImguiKeyboardCaptured = ImGui::GetIO().WantCaptureKeyboard;
         engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;
         engineContext->bImGuiWantsTextInput = ImGui::GetIO().WantTextInput;
-        engineContext->bAssetsChangedThisFrame = loadCounts.modelLoadedCount > 0 || loadCounts.fontLoadedCount > 0 || assetsReclaimed;
-        engineContext->bScreenshotInFlight = renderThread->IsScreenshotInFlight();
+        engineContext->frameStatus.bAssetsChangedThisFrame = loadCounts.modelLoadedCount > 0 || loadCounts.fontLoadedCount > 0 || assetsReclaimed;
+        engineContext->frameStatus.bScreenshotInFlight = renderThread->IsScreenshotInFlight();
 #if WILL_EDITOR
-        engineContext->bAssetGenerationPending = assetGenerator->GetTotalTextureGenerateCount() + assetGenerator->GetTotalModelGenerateCount() > 0;
+        engineContext->frameStatus.bAssetGenerationPending = assetGenerator->GetTotalTextureGenerateCount() + assetGenerator->GetTotalModelGenerateCount() > 0;
 #endif
 
         //
@@ -1394,7 +1396,6 @@ void WillEngine::Run()
                 Core::FrameBuffer* currentFrameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
                 ImDrawDataSnapshot* currentImguiSnapshot = engineRenderSynchronization->GetCurrentImguiSnapshot();
                 currentFrameBuffer->currentFrameBuffer = engineRenderSynchronization->currentRenderFrame;
-                currentFrameBuffer->bFreezeVisibility = bFreezeVisibility;
                 currentFrameBuffer->bLogRDG = bLogRDG;
                 currentFrameBuffer->bDrawImgui = bDrawImgui;
 

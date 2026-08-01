@@ -59,7 +59,7 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
     }
 
     registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
-    state->bPendingModelResolve = true;
+    state->assetLoad.bPendingModelResolve = true;
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
@@ -531,7 +531,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                     if (component.material.IsValid()) {
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
-                        state->bPendingModelResolve = true;
+                        state->assetLoad.bPendingModelResolve = true;
                     }
                 }
                 for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
@@ -540,7 +540,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                         if (matId != component.material) {
                             component.material = matId;
                             registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
-                            state->bPendingModelResolve = true;
+                            state->assetLoad.bPendingModelResolve = true;
                         }
                     }
                 }
@@ -552,7 +552,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             registry.remove<MeshRuntime>(entity);
             registry.remove<SplineMeshLoadingTag>(entity);
             registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
-            state->bPendingModelResolve = true;
+            state->assetLoad.bPendingModelResolve = true;
         }
     }
 

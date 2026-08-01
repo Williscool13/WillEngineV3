@@ -11,7 +11,7 @@
 #include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/spline/spline.h"
-#include "engine/engine_api.h"
+#include "engine/component_registry.h"
 #include "game/components/component_types.h"
 #include "core/containers/inline_vector.h"
 

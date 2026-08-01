@@ -144,8 +144,8 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (pair.value.sceneName == startupScene) {
                 auto res = Game::LoadSceneFromFile(state, ctx->assetManager, pair.key);
                 if (res.bSuccess) {
-                    state->currentSceneId = res.sceneId;
-                    state->currentSceneName = res.sceneName;
+                    state->scene.currentSceneId = res.sceneId;
+                    state->scene.currentSceneName = res.sceneName;
                 }
                 bFound = true;
                 break;
@@ -267,8 +267,9 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         Game::CheckpointUpdate(ctx, state);
         Game::DeathZoneUpdate(ctx, state);
 
-        if (auto* playerController = state->registry.ctx().find<Game::PhysicsPlayerController>()) {
-            playerController->Update(ctx, state);
+        Game::PhysicsPlayerController& playerController = ctx->GetGameState<Game::GameState>()->playerController;
+        if (playerController.GetCharacter()) {
+            playerController.Update(ctx, state);
         }
     }
 #if WILL_EDITOR
@@ -305,8 +306,8 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::Text3DGeneratePendingKickoff(ctx, state);
     Game::PhysicsMeshPendingKickoff(ctx, state);
 
-    if (ctx->bAssetsChangedThisFrame || state->bPendingModelResolve) {
-        state->bPendingModelResolve = false;
+    if (ctx->frameStatus.bAssetsChangedThisFrame || state->assetLoad.bPendingModelResolve) {
+        state->assetLoad.bPendingModelResolve = false;
         Game::StaticMeshLoadResolve(ctx, state);
         Game::ReflectionProbeLoadResolve(ctx, state);
         Game::StaticMeshPrimitiveLoadResolve(ctx, state);
@@ -349,7 +350,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 
     Game::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
 
-    Game::BuildViewFamily(state, frameBuffer->mainViewFamily);
+    Game::BuildViewFamily(ctx, state, frameBuffer->mainViewFamily);
 
 #if WILL_EDITOR
     {
@@ -363,28 +364,12 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 #endif
 
-    frameBuffer->bWireframe = state->debug.bWireframe;
-    frameBuffer->bEnableShadeDispatchBucketingVisualization = state->debug.bEnableShadeDispatchBucketingVisualization;
-    frameBuffer->bEnableLightingBucketingVisualization = state->debug.bEnableLightingBucketingVisualization;
-    frameBuffer->bEnableGPUDebug = state->debug.bEnableGPUDebug;
-    frameBuffer->bLockGPUDebug = state->debug.bLockGPUDebug;
-    frameBuffer->bDDGIProbeDebug = state->debug.bDDGIProbeDebug;
-    frameBuffer->bClusterGridDebug = state->debug.bClusterGridDebug;
-    frameBuffer->bWorldGridDebug = state->debug.bWorldGridDebug;
-    frameBuffer->worldGridDebugLevel = state->debug.worldGridDebugLevel;
-    frameBuffer->bRadianceCacheDebug = state->debug.bRadianceCacheDebug;
-    frameBuffer->radianceCacheDebugExposure = state->debug.radianceCacheDebugExposure;
-    frameBuffer->radianceCacheDebugBucket = state->debug.radianceCacheDebugBucket;
-    frameBuffer->bDDGIBounceOnly = state->debug.bDDGIBounceOnly;
-    frameBuffer->bFreezeGIField = state->debug.bGIFreeze && state->debug.bFreezeGIField;
-    frameBuffer->bFreezeScreenFeedback = state->debug.bGIFreeze && state->debug.bFreezeScreenFeedback;
-    frameBuffer->bFreezeGatherRay = state->debug.bGIFreeze && state->debug.bFreezeGatherRay;
-    frameBuffer->ddgiProbeDebugExposure = state->debug.ddgiProbeDebugExposure;
-    frameBuffer->ddgiProbeDebugCascade = state->debug.ddgiProbeDebugCascade;
-    frameBuffer->bDDGIHideInactiveProbes = state->debug.bDDGIHideInactiveProbes;
-    frameBuffer->ddgiProbeDebugMode = state->debug.ddgiProbeDebugMode;
-    frameBuffer->giGatherDebugMode = state->debug.giGatherDebugMode;
-    frameBuffer->giDeconstructMode = state->debug.giDeconstructMode;
+    frameBuffer->debug = state->debug.render;
+    if (!state->debug.bGIFreeze) {
+        frameBuffer->debug.bFreezeGIField = false;
+        frameBuffer->debug.bFreezeScreenFeedback = false;
+        frameBuffer->debug.bFreezeGatherRay = false;
+    }
     frameBuffer->restir = state->debug.restir;
     frameBuffer->ddgi = state->lighting.ddgi;
     frameBuffer->reflection = state->lighting.reflection;
@@ -401,8 +386,8 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 
     state->lighting.bResetGroundTruth = false;
-    frameBuffer->cacheReset = state->pendingCacheReset;
-    state->pendingCacheReset = Core::RenderCacheReset::None;
+    frameBuffer->cacheReset = state->requests.pendingCacheReset;
+    state->requests.pendingCacheReset = Core::RenderCacheReset::None;
     frameBuffer->mainViewFamily.shadingShaderOverride = state->debug.shadingShaderOverride;
     frameBuffer->mainViewFamily.lightingShaderOverride = state->debug.lightingShaderOverride;
     frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
@@ -437,7 +422,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 #endif
 
     Game::ProbeBakeScrubFrame(ctx, state, frameBuffer);
-    Game::CaptureShotScrubFrame(state, frameBuffer);
+    Game::CaptureShotScrubFrame(ctx, frameBuffer);
 }
 
 GAME_API void GameEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state)

@@ -157,7 +157,6 @@ private: // Debugging
 #else
     bool bDrawImgui = false;
 #endif
-    bool bFreezeVisibility = false;
     bool bLogRDG = false;
 
     // Cached tag stats, auto-refreshed every second when the Memory panel is open.

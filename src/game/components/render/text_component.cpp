@@ -37,7 +37,7 @@ void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::enti
     registry.get_or_emplace<TextRuntime>(entity);
     if (comp.fontId.IsValid()) {
         registry.emplace_or_replace<TextFontPendingTag>(entity);
-        registry.ctx().get<Engine::EngineState*>()->bPendingModelResolve = true;
+        registry.ctx().get<Engine::EngineState*>()->assetLoad.bPendingModelResolve = true;
     }
 }
 
