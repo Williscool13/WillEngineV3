@@ -191,11 +191,11 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
 {
     ZoneScopedN("GenerateGeometry");
 
-    if (outputModel->text3DParams.has_value()) {
+    if (outputModel->text3DParams != nullptr) {
         return GenerateText3D(*outputModel->text3DParams);
     }
 
-    if (outputModel->splineParams.has_value()) {
+    if (outputModel->splineParams != nullptr) {
         return GenerateSpline(*outputModel->splineParams);
     }
 

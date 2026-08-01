@@ -394,6 +394,10 @@ private:
 
     Core::Array<ModuleParams, MAX_LOADED_MODULE_MODELS> moduleParamsPool;
     Core::InlineVector<uint32_t, MAX_LOADED_MODULE_MODELS> moduleParamsFreeList;
+    Core::Array<SplineParams, MAX_POOLED_SPLINE_PARAMS> splineParamsPool;
+    Core::InlineVector<uint32_t, MAX_POOLED_SPLINE_PARAMS> splineParamsFreeList;
+    Core::Array<Text3DParams, MAX_POOLED_TEXT3D_PARAMS> text3DParamsPool;
+    Core::InlineVector<uint32_t, MAX_POOLED_TEXT3D_PARAMS> text3DParamsFreeList;
 
     Core::InlineMap<PhysicsColliderID, PhysicsColliderHandle, 4096> colliderIdToHandle;
     Core::HandleAllocator<PhysicsColliderAsset, MAX_LOADED_COLLIDERS> colliderAllocator;

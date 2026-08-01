@@ -163,8 +163,8 @@ bool PhysicsColliderLoadSlot::Build()
 
     Engine::PhysicsColliderAsset* c = collider;
 
-    if (c->splineParams.has_value()) {
-        const Engine::SplineParams& sp = c->splineParams.value();
+    if (c->splineParams != nullptr) {
+        const Engine::SplineParams& sp = *c->splineParams;
 
         Core::Vector<Engine::SplineFrame> frames(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
         if (!Engine::SampleSplineFrames(sp.spline, sp.segmentsPerSpan, sp.rollAngle, frames)) { return false; }
@@ -271,8 +271,8 @@ bool PhysicsColliderLoadSlot::Build()
         return true;
     }
 
-    if (c->text3DParams.has_value()) {
-        const Engine::Text3DParams& tp = c->text3DParams.value();
+    if (c->text3DParams != nullptr) {
+        const Engine::Text3DParams& tp = *c->text3DParams;
         if (tp.font == nullptr) { return false; }
 
         if (c->bPreciseText3D) {

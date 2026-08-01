@@ -43,6 +43,12 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
     for (uint32_t i = MAX_LOADED_MODULE_MODELS; i > 0; i--) {
         moduleParamsFreeList.PushBack(i - 1);
     }
+    for (uint32_t i = MAX_POOLED_SPLINE_PARAMS; i > 0; i--) {
+        splineParamsFreeList.PushBack(i - 1);
+    }
+    for (uint32_t i = MAX_POOLED_TEXT3D_PARAMS; i > 0; i--) {
+        text3DParamsFreeList.PushBack(i - 1);
+    }
 
 #if WILL_EDITOR
     // Creates white/error if they don't exist. Also creates BRDF LUT
@@ -374,18 +380,27 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
         modelIdToHandle.Remove(splineModelId);
     }
 
+    if (splineParamsFreeList.IsEmpty()) {
+        LOG_ERROR(Asset, "Spline params pool exhausted ({} live spline models/colliders)", MAX_POOLED_SPLINE_PARAMS);
+        return StaticModelHandle::INVALID;
+    }
+
     StaticModelHandle handle = modelAllocator.Add();
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate model slot for spline");
         return StaticModelHandle::INVALID;
     }
 
+    const uint32_t paramsSlot = splineParamsFreeList.Back();
+    splineParamsFreeList.PopBack();
+    splineParamsPool[paramsSlot] = params;
+
     static int32_t splineCounter = 0;
     StaticModel& model = models[handle.index];
     model.selfHandle = handle;
     model.name = Core::InlineString<128>::Format("Spline Mesh %d", splineCounter++);
     model.modelId = splineModelId;
-    model.splineParams = params;
+    model.splineParams = &splineParamsPool[paramsSlot];
     model.refCount = 1;
     model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
 
@@ -508,6 +523,11 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
         modelIdToHandle.Remove(textModelId);
     }
 
+    if (text3DParamsFreeList.IsEmpty()) {
+        LOG_ERROR(Asset, "Text3D params pool exhausted ({} live text3D models/colliders)", MAX_POOLED_TEXT3D_PARAMS);
+        return StaticModelHandle::INVALID;
+    }
+
     FontHandle fontHandle = LoadFont(fontId);
     if (!fontHandle.IsValid()) {
         LOG_ERROR(Asset, "LoadText3DModel: font {} could not be loaded", fontId.id);
@@ -521,7 +541,10 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
         return StaticModelHandle::INVALID;
     }
 
-    Text3DParams params{};
+    const uint32_t paramsSlot = text3DParamsFreeList.Back();
+    text3DParamsFreeList.PopBack();
+    Text3DParams& params = text3DParamsPool[paramsSlot];
+    params = {};
     params.fontId = fontIdValue;
     params.text = text;
     params.depth = depth;
@@ -540,7 +563,7 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
     model.selfHandle = handle;
     model.name = Core::InlineString<128>::Format("Text3D Mesh %d", text3DCounter++);
     model.modelId = textModelId;
-    model.text3DParams = params;
+    model.text3DParams = &params;
     // Generation-scoped font ref: hand the model the ref we took so the worker can read the glyph contours; it keeps the font resident until the model finalizes (released in ResolveLoads).
     model.text3DFontHandle = fontHandle;
     model.refCount = 1;
@@ -654,11 +677,20 @@ PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& param
         colliderIdToHandle.Remove(colliderId);
     }
 
+    if (splineParamsFreeList.IsEmpty()) {
+        LOG_ERROR(Asset, "Spline params pool exhausted ({} live spline models/colliders)", MAX_POOLED_SPLINE_PARAMS);
+        return PhysicsColliderHandle::INVALID;
+    }
+
     PhysicsColliderHandle handle = colliderAllocator.Add();
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate collider slot for spline");
         return PhysicsColliderHandle::INVALID;
     }
+
+    const uint32_t paramsSlot = splineParamsFreeList.Back();
+    splineParamsFreeList.PopBack();
+    splineParamsPool[paramsSlot] = params;
 
     static int32_t splineColliderCounter = 0;
     PhysicsColliderAsset& collider = colliders[handle.index];
@@ -666,7 +698,7 @@ PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& param
     collider.name = Core::InlineString<128>::Format("Spline Collider %d", splineColliderCounter++);
     collider.colliderId = colliderId;
     collider.kind = PhysicsColliderKind::Compound;
-    collider.splineParams = params;
+    collider.splineParams = &splineParamsPool[paramsSlot];
     collider.refCount = 1;
     collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
 
@@ -820,6 +852,11 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
         colliderIdToHandle.Remove(colliderId);
     }
 
+    if (text3DParamsFreeList.IsEmpty()) {
+        LOG_ERROR(Asset, "Text3D params pool exhausted ({} live text3D models/colliders)", MAX_POOLED_TEXT3D_PARAMS);
+        return PhysicsColliderHandle::INVALID;
+    }
+
     FontHandle fontHandle = LoadFont(fontId);
     if (!fontHandle.IsValid()) {
         LOG_ERROR(Asset, "LoadText3DCollider: font {} could not be loaded", fontId.id);
@@ -833,7 +870,10 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
         return PhysicsColliderHandle::INVALID;
     }
 
-    Text3DParams params{};
+    const uint32_t paramsSlot = text3DParamsFreeList.Back();
+    text3DParamsFreeList.PopBack();
+    Text3DParams& params = text3DParamsPool[paramsSlot];
+    params = {};
     params.fontId = fontIdValue;
     params.text = text;
     params.depth = depth;
@@ -853,7 +893,7 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
     collider.name = Core::InlineString<128>::Format("Text3D Collider %d", text3DColliderCounter++);
     collider.colliderId = colliderId;
     collider.kind = kind;
-    collider.text3DParams = std::move(params);
+    collider.text3DParams = &params;
     collider.bPreciseText3D = bPrecise;
     // Generation-scoped font ref: the worker reads glyph plane bounds; released when the collider finalizes (ResolveLoads).
     collider.text3DFontHandle = fontHandle;
@@ -1189,6 +1229,12 @@ bool AssetManager::ResolveUnloads()
         if (model.moduleParams != nullptr) {
             moduleParamsFreeList.PushBack(static_cast<uint32_t>(model.moduleParams - moduleParamsPool.Data()));
         }
+        if (model.splineParams != nullptr) {
+            splineParamsFreeList.PushBack(static_cast<uint32_t>(model.splineParams - splineParamsPool.Data()));
+        }
+        if (model.text3DParams != nullptr) {
+            text3DParamsFreeList.PushBack(static_cast<uint32_t>(model.text3DParams - text3DParamsPool.Data()));
+        }
         modelAllocator.Remove(model.selfHandle);
         model = {};
         modelsUnloadedThisTick++;
@@ -1211,6 +1257,12 @@ bool AssetManager::ResolveUnloads()
         PhysicsColliderHandle* stored = colliderIdToHandle.Find(collider.colliderId);
         if (stored && *stored == collider.selfHandle) {
             colliderIdToHandle.Remove(collider.colliderId);
+        }
+        if (collider.splineParams != nullptr) {
+            splineParamsFreeList.PushBack(static_cast<uint32_t>(collider.splineParams - splineParamsPool.Data()));
+        }
+        if (collider.text3DParams != nullptr) {
+            text3DParamsFreeList.PushBack(static_cast<uint32_t>(collider.text3DParams - text3DParamsPool.Data()));
         }
         colliderAllocator.Remove(collider.selfHandle);
         collider = {};

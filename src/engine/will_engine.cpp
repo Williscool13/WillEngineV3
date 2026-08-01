@@ -64,24 +64,24 @@ static Core::MemoryManager* gMemory = nullptr;
 
 static void* SdlMalloc(size_t size)
 {
-    return gMemory->PersistentAllocRaw(size, Core::AllocTag::SDL);
+    return gMemory->GeneralAllocRaw(size, Core::AllocTag::SDL);
 }
 
 static void* SdlCalloc(size_t nmemb, size_t size)
 {
-    void* ptr = gMemory->PersistentAllocRaw(nmemb * size, Core::AllocTag::SDL);
+    void* ptr = gMemory->GeneralAllocRaw(nmemb * size, Core::AllocTag::SDL);
     memset(ptr, 0, nmemb * size);
     return ptr;
 }
 
 static void* SdlRealloc(void* mem, size_t size)
 {
-    return gMemory->PersistentRealloc(mem, size, Core::AllocTag::SDL);
+    return gMemory->GeneralRealloc(mem, size, Core::AllocTag::SDL);
 }
 
 static void SdlFree(void* mem)
 {
-    gMemory->PersistentFree(mem);
+    gMemory->GeneralFree(mem);
 }
 
 static void* ImGuiAlloc(size_t size, void* userData)

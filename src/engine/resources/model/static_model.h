@@ -111,13 +111,13 @@ public:
     Core::InlineVector<Core::ImageAcquireOperation, 4> imageAcquireOps{};
 
     // Populated by AssetManager, Only for spline models
-    std::optional<SplineParams> splineParams{};
+    const SplineParams* splineParams{nullptr};
 
     // Populated by AssetManager, Only for module models
     const ModuleParams* moduleParams{nullptr};
 
     // Populated by AssetManager, Only for 3D text models
-    std::optional<Text3DParams> text3DParams{};
+    const Text3DParams* text3DParams{nullptr};
     // Generation-scoped font ref: held while the worker reads the font, released when the model finalizes.
     FontHandle text3DFontHandle{};
 
