@@ -25,7 +25,7 @@ void MemoryManager::Init(const Layout& layout)
     const size_t renderSz = AlignUp(layout.renderPoolSize, kAlign);
     const size_t arenaPoolSz = AlignUp(layout.arenaPoolSize, kAlign);
 
-    totalSize = persistentSz + generalSz + assetsScratchSz + assetsSz + physicsAlignedSz + renderSz + arenaPoolSz;
+    totalSize = persistentSz + generalSz + assetsSz + physicsAlignedSz + renderSz + arenaPoolSz;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
@@ -38,8 +38,7 @@ void MemoryManager::Init(const Layout& layout)
     cursor += generalSz;
     tlsfAssets.Init(cursor, assetsSz, true);
     cursor += assetsSz;
-    tlsfAssetsScratch.Init(cursor, assetsScratchSz, true);
-    cursor += assetsScratchSz;
+    tlsfAssetsScratch.InitGrowable(assetsScratchSz, layout.assetsScratchBudget, true);
     tlsfPhysicsAligned.Init(cursor, physicsAlignedSz, true);
     cursor += physicsAlignedSz;
     tlsfRender.Init(cursor, renderSz, false);
@@ -49,6 +48,7 @@ void MemoryManager::Init(const Layout& layout)
 
 MemoryManager::~MemoryManager()
 {
+    tlsfAssetsScratch.Shutdown();
     free(megaBuffer);
     megaBuffer = nullptr;
 }

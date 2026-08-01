@@ -41,11 +41,14 @@ public:
     {
         size_t persistentSize;
         size_t generalPoolSize;
-        size_t assetsScratchPoolSize;
         size_t assetsPoolSize;
         size_t physicsAlignedPoolSize;
         size_t renderPoolSize;
         size_t arenaPoolSize;
+
+        // Growables (heap allocated)
+        size_t assetsScratchPoolSize;
+        size_t assetsScratchBudget;
     };
 
     struct Stats

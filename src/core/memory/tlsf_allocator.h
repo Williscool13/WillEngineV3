@@ -79,6 +79,13 @@ public:
 
     void Init(void* pool, size_t bytes, bool bUseMutex);
 
+    // Growable fns
+    void InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex);
+
+    void ReleaseEmptyChunks();
+
+    void Shutdown();
+
     void* Alloc(size_t size, AllocTag tag = AllocTag::Unknown);
 
     void* Realloc(void* ptr, size_t newSize, AllocTag tag = AllocTag::Unknown);
@@ -97,6 +104,8 @@ public:
         size_t usedBytes; // headers + user data for live allocations
         size_t freeBytes;
         size_t allocCount;
+        size_t highWaterBytes;
+        size_t budgetBytes; // growable only
     };
 
     struct TagStats
@@ -129,10 +138,27 @@ private:
 
     static void TagWalker(void* ptr, size_t size, int used, void* user);
 
+    struct Chunk
+    {
+        void* mem;
+        void* pool;
+        size_t bytes;
+    };
+
+    static constexpr size_t MAX_CHUNKS = 64;
+
+    bool Grow(size_t minBytes);
+
     void* tlsf{};
     size_t poolBytes{};
     size_t usedBytes_{};
+    size_t highWaterBytes_{};
     size_t allocCount_{};
+
+    Chunk chunks_[MAX_CHUNKS]{};
+    size_t chunkCount_{0};
+    size_t budgetBytes_{0};
+    bool bGrowable_{false};
     std::mutex mutex_;
     bool bUseMutex_{false};
 };

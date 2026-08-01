@@ -107,11 +107,12 @@ void WillEngine::Initialize(Utils::Logger* logger)
     memoryManager.Init({
         .persistentSize = 48ull * 1024 * 1024, // 64 MB
         .generalPoolSize = 64ull * 1024 * 1024, // 16 MB
-        .assetsScratchPoolSize = 4096ull * 1024 * 1024,
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
         .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 64 MB
         .renderPoolSize = 8ull * 1024 * 1024, // 4 MB
         .arenaPoolSize = 256ull * 1024 * 1024, // 256 MB
+        .assetsScratchPoolSize = 128ull * 1024 * 1024,
+        .assetsScratchBudget = 4096ull * 1024 * 1024,
     });
 
 #if LOGGING_ENABLED
@@ -638,6 +639,32 @@ void WillEngine::EditorImgui()
                     }
                 };
 
+                // Growable pool bar: fill/gradient against the BUDGET (committed shrinks per frame, so used/committed would jump around); overlay shows used / committed / budget
+                auto drawGrowableBar = [&](const char* label, const Core::TlsfAllocator::Stats& s) {
+                    const float fraction = s.budgetBytes > 0 ? static_cast<float>(s.usedBytes) / static_cast<float>(s.budgetBytes) : 0.0f;
+                    const float r = fraction < 0.5f ? fraction * 2.0f : 1.0f;
+                    const float g = fraction < 0.5f ? 1.0f : (1.0f - (fraction - 0.5f) * 2.0f);
+                    const auto overlay = Core::InlineString<64>::Format("%.2f / %.0f cmt / %.0f MB",
+                                                                        static_cast<float>(s.usedBytes) * kToMB,
+                                                                        static_cast<float>(s.totalBytes) * kToMB,
+                                                                        static_cast<float>(s.budgetBytes) * kToMB);
+
+                    ImGui::TextUnformatted(label);
+                    ImGui::SameLine(kLabelX);
+                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(r, g, 0.0f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
+                    ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), overlay.c_str());
+                    ImGui::PopStyleColor(2);
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("used %.3f MB, committed %.0f MB, budget %.0f MB\npeak %.2f MB  (%zu allocs)",
+                                          static_cast<float>(s.usedBytes) * kToMB,
+                                          static_cast<float>(s.totalBytes) * kToMB,
+                                          static_cast<float>(s.budgetBytes) * kToMB,
+                                          static_cast<float>(s.highWaterBytes) * kToMB,
+                                          s.allocCount);
+                    }
+                };
+
                 // Arena bar: bar driven by peak (stable); overlay shows "cur / peak MB"; tooltip shows capacity
                 auto drawArenaBar = [&](const char* label, const Core::Arena::Stats& s) {
                     const float peakFraction = s.totalBytes > 0 ? static_cast<float>(s.peakBytes) / static_cast<float>(s.totalBytes) : 0.0f;
@@ -670,7 +697,7 @@ void WillEngine::EditorImgui()
 
                 ImGui::SeparatorText("General");
                 drawMemBar("General", ms.general.usedBytes, ms.general.totalBytes, ms.general.allocCount);
-                drawMemBar("Assets Scratch", ms.assetsScratch.usedBytes, ms.assetsScratch.totalBytes, ms.assetsScratch.allocCount);
+                drawGrowableBar("Assets Scratch", ms.assetsScratch);
                 drawMemBar("Assets", ms.assets.usedBytes, ms.assets.totalBytes, ms.assets.allocCount);
 
                 ImGui::SeparatorText("Physics");
@@ -1237,6 +1264,7 @@ void WillEngine::Run()
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(*engineRenderSynchronization->GetCurrentFrameBuffer());
         assetManager->KickOffRetires();
         const bool assetsReclaimed = assetManager->ResolveUnloads();
+        memoryManager.AssetsScratch().ReleaseEmptyChunks();
 #if WILL_EDITOR
         {
             engineState->pendingHotReloadModelIds.Clear();

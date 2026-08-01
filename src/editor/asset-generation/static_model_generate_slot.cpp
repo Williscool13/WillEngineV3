@@ -21,6 +21,7 @@
 #include "asset-load/asset_load_utils.h"
 #include "render/render_utils.h"
 #include "render/shaders/constants_interop.h"
+#include "platform/file_utils.h"
 #include "tracy/Tracy.hpp"
 
 namespace Editor
@@ -160,6 +161,8 @@ bool StaticModelGenerateSlot::LoadGltf()
 
         // MEM: stbi does allocs with malloc/free. I cba to use its custom macro overrides
         unsigned char* stbiData = nullptr;
+        const uint8_t* embeddedBlob = nullptr;
+        size_t embeddedBlobSize = 0;
         int32_t width;
         int32_t height;
         int32_t nrChannels;
@@ -212,7 +215,8 @@ bool StaticModelGenerateSlot::LoadGltf()
                                 return;
                             }
                         }
-                        stbiData = stbi_load_from_memory(reinterpret_cast<const unsigned char*>(vector.bytes.data()), static_cast<int>(vector.bytes.size()), &width, &height, &nrChannels, 4);
+                        embeddedBlob = reinterpret_cast<const uint8_t*>(vector.bytes.data());
+                        embeddedBlobSize = vector.bytes.size();
                     },
                     [&](const fastgltf::sources::BufferView& view) {
                         const fastgltf::BufferView& bufferView = gltf.bufferViews[view.bufferViewIndex];
@@ -220,14 +224,34 @@ bool StaticModelGenerateSlot::LoadGltf()
                         std::visit(fastgltf::visitor{
                                        [](auto&) {},
                                        [&](const fastgltf::sources::Array& vector) {
-                                           stbiData = stbi_load_from_memory(
-                                               reinterpret_cast<const stbi_uc*>(vector.bytes.data() + bufferView.byteOffset),
-                                               static_cast<int>(bufferView.byteLength),
-                                               &width, &height, &nrChannels, 4);
+                                           embeddedBlob = reinterpret_cast<const uint8_t*>(vector.bytes.data()) + bufferView.byteOffset;
+                                           embeddedBlobSize = bufferView.byteLength;
                                        }
                                    }, buffer.data);
                     }
                 }, gltfImage.data);
+
+            if (embeddedBlob != nullptr) {
+                const bool bPng = embeddedBlobSize > 8 && embeddedBlob[0] == 0x89 && embeddedBlob[1] == 'P' && embeddedBlob[2] == 'N' && embeddedBlob[3] == 'G';
+                const bool bJpg = embeddedBlobSize > 3 && embeddedBlob[0] == 0xFF && embeddedBlob[1] == 0xD8 && embeddedBlob[2] == 0xFF;
+                if (bPng || bJpg) {
+                    char indexBuf[16];
+                    *std::to_chars(indexBuf, indexBuf + sizeof(indexBuf), i).ptr = '\0';
+                    Core::InlineString<300> relName("textures/");
+                    relName.Append(gltfPath.Stem());
+                    relName.Append("_texture_");
+                    relName.Append(indexBuf);
+                    relName.Append(bPng ? ".png" : ".jpg");
+                    if (Platform::WriteFile(parentPath / relName.c_str(), embeddedBlob, embeddedBlobSize)) {
+                        rawModel.images[i].sourcePath = Core::InlinePath<256>{relName.View()};
+                    }
+                }
+                if (rawModel.images[i].sourcePath.IsEmpty()) {
+                    stbiData = stbi_load_from_memory(embeddedBlob, static_cast<int>(embeddedBlobSize), &width, &height, &nrChannels, 4);
+                }
+                embeddedBlob = nullptr;
+                embeddedBlobSize = 0;
+            }
 
             if (stbiData) {
                 rawModel.images[i].w = width;

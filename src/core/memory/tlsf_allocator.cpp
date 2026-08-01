@@ -5,11 +5,19 @@
 #include "tlsf_allocator.h"
 
 #include <cassert>
+#include <cstdlib>
 
 #include "tlsf.h"
 
 namespace Core
 {
+static constexpr size_t GROW_CHUNK_BYTES = 256ull * 1024 * 1024;
+
+static void UsedBlockWalker(void* /*ptr*/, size_t /*size*/, int used, void* user)
+{
+    if (used) { *static_cast<bool*>(user) = true; }
+}
+
 const char* AllocTagName(AllocTag tag)
 {
     switch (tag) {
@@ -55,6 +63,71 @@ void TlsfAllocator::Init(void* pool, size_t bytes, bool bUseMutex)
     bUseMutex_ = bUseMutex;
 }
 
+void TlsfAllocator::InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex)
+{
+    assert(baselineBytes > tlsf_size() && "baseline too small for TLSF control structure");
+    void* mem = malloc(baselineBytes);
+    assert(mem != nullptr && "growable TLSF baseline allocation failed");
+    tlsf = tlsf_create_with_pool(mem, baselineBytes);
+    chunks_[0] = {mem, tlsf_get_pool(tlsf), baselineBytes};
+    chunkCount_ = 1;
+    poolBytes = baselineBytes;
+    budgetBytes_ = budgetBytes;
+    bGrowable_ = true;
+    bUseMutex_ = bUseMutex;
+}
+
+bool TlsfAllocator::Grow(size_t minBytes)
+{
+    if (!bGrowable_ || chunkCount_ >= MAX_CHUNKS) { return false; }
+    // TLSF's good-fit search rounds requests up by up to size/32 to stay O(1); a chunk sized to the bytes alone can fail the class lookup right after being added.
+    const size_t need = minBytes + (minBytes >> 4) + tlsf_pool_overhead() + 4096;
+    size_t chunkBytes = need > GROW_CHUNK_BYTES ? need : GROW_CHUNK_BYTES;
+    if (budgetBytes_ != 0 && poolBytes + chunkBytes > budgetBytes_) {
+        if (poolBytes + need > budgetBytes_) { return false; }
+        chunkBytes = need;
+    }
+    void* mem = malloc(chunkBytes);
+    if (mem == nullptr) { return false; }
+    void* pool = tlsf_add_pool(tlsf, mem, chunkBytes);
+    if (pool == nullptr) {
+        free(mem);
+        return false;
+    }
+    chunks_[chunkCount_] = {mem, pool, chunkBytes};
+    chunkCount_ += 1;
+    poolBytes += chunkBytes;
+    return true;
+}
+
+void TlsfAllocator::ReleaseEmptyChunks()
+{
+    if (!bGrowable_ || chunkCount_ <= 1) { return; }
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (bUseMutex_) { lock.lock(); }
+    for (size_t i = chunkCount_; i-- > 1;) {
+        bool bUsed = false;
+        tlsf_walk_pool(chunks_[i].pool, UsedBlockWalker, &bUsed);
+        if (!bUsed) {
+            tlsf_remove_pool(tlsf, chunks_[i].pool);
+            poolBytes -= chunks_[i].bytes;
+            free(chunks_[i].mem);
+            chunkCount_ -= 1;
+            chunks_[i] = chunks_[chunkCount_];
+        }
+    }
+}
+
+void TlsfAllocator::Shutdown()
+{
+    if (!bGrowable_) { return; }
+    for (size_t i = 0; i < chunkCount_; ++i) { free(chunks_[i].mem); }
+    chunkCount_ = 0;
+    poolBytes = 0;
+    tlsf = nullptr;
+    bGrowable_ = false;
+}
+
 void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
 {
     if (size == 0) { return nullptr; }
@@ -62,6 +135,9 @@ void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
     if (bUseMutex_) { lock.lock(); }
 
     void* raw = tlsf_malloc(tlsf, kHeaderSize + size);
+    if (raw == nullptr && Grow(kHeaderSize + size)) {
+        raw = tlsf_malloc(tlsf, kHeaderSize + size);
+    }
     assert(raw != nullptr && "OOM: TLSF pool exhausted");
 
     auto* header = static_cast<AllocHeader*>(raw);
@@ -70,6 +146,7 @@ void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
     header->_pad = 0;
 
     usedBytes_ += kHeaderSize + size;
+    if (usedBytes_ > highWaterBytes_) { highWaterBytes_ = usedBytes_; }
     allocCount_ += 1;
 
     return header + 1;
@@ -91,6 +168,9 @@ void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag tag)
     const uint32_t oldSize = header->size;
 
     void* raw = tlsf_realloc(tlsf, header, kHeaderSize + newSize);
+    if (raw == nullptr && Grow(kHeaderSize + newSize)) {
+        raw = tlsf_realloc(tlsf, header, kHeaderSize + newSize);
+    }
     assert(raw != nullptr && "OOM: TLSF pool exhausted");
 
     header = static_cast<AllocHeader*>(raw);
@@ -99,6 +179,7 @@ void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag tag)
 
     usedBytes_ -= kHeaderSize + oldSize;
     usedBytes_ += kHeaderSize + newSize;
+    if (usedBytes_ > highWaterBytes_) { highWaterBytes_ = usedBytes_; }
 
     return header + 1;
 }
@@ -123,9 +204,13 @@ void* TlsfAllocator::AlignedAlloc(size_t size, size_t alignment, AllocTag tag)
     if (bUseMutex_) { lock.lock(); }
 
     void* ptr = tlsf_memalign(tlsf, alignment, size);
+    if (ptr == nullptr && Grow(size + alignment)) {
+        ptr = tlsf_memalign(tlsf, alignment, size);
+    }
     assert(ptr != nullptr && "OOM: TLSF pool exhausted");
 
     usedBytes_ += tlsf_block_size(ptr);
+    if (usedBytes_ > highWaterBytes_) { highWaterBytes_ = usedBytes_; }
     allocCount_ += 1;
 
     return ptr;
@@ -145,7 +230,7 @@ void TlsfAllocator::AlignedFree(void* ptr)
 
 TlsfAllocator::Stats TlsfAllocator::GetStats() const
 {
-    return {poolBytes, usedBytes_, poolBytes - usedBytes_, allocCount_};
+    return {poolBytes, usedBytes_, poolBytes - usedBytes_, allocCount_, highWaterBytes_, budgetBytes_};
 }
 
 void TlsfAllocator::TagWalker(void* ptr, size_t /*size*/, int used, void* user)
@@ -174,6 +259,13 @@ void TlsfAllocator::GetTagStats(TagStats out[static_cast<size_t>(AllocTag::Count
     std::unique_lock lock(mutex_, std::defer_lock);
     if (bUseMutex_) { lock.lock(); }
     TagWalkCtx ctx{out};
-    tlsf_walk_pool(tlsf_get_pool(tlsf), TagWalker, &ctx);
+    if (bGrowable_) {
+        for (size_t i = 0; i < chunkCount_; ++i) {
+            tlsf_walk_pool(chunks_[i].pool, TagWalker, &ctx);
+        }
+    }
+    else {
+        tlsf_walk_pool(tlsf_get_pool(tlsf), TagWalker, &ctx);
+    }
 }
 } // Core
