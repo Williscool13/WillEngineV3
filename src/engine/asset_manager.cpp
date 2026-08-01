@@ -1307,7 +1307,10 @@ void AssetManager::Scan()
                     const Core::InlineString<128> name{header->name};
                     const StringID nameSid{name.c_str(), name.Size()};
                     if (textureNameToId.Contains(nameSid) && *textureNameToId.Find(nameSid) != id) {
-                        LOG_CRITICAL(Asset, "2 Textures were mounted that contain the same name. This will cause issues for texture lookups by name. ({})", path.c_str());
+                        if (!ambiguousTextureNames.Contains(nameSid)) {
+                            if (!ambiguousTextureNames.IsFull()) { ambiguousTextureNames.PushBack(nameSid); }
+                            LOG_WARN(Asset, "Texture name '{}' is shared by multiple mounted files (e.g. {}); by-name lookups will pick one arbitrarily", name.c_str(), path.c_str());
+                        }
                     }
                     const DiskTextureDesc* prev = textureRegistry.Find(id);
                     const bool bExisted = prev != nullptr;
@@ -1323,6 +1326,8 @@ void AssetManager::Scan()
                     cached.uncompressedSize = header->uncompressedSize;
                     cached.compressionType = header->compressionType;
                     cached.contentVersion = header->contentVersion;
+                    cached.bUngenerated = header->bUngenerated;
+                    cached.bModelOwned = header->bModelOwned;
                     textureNameToId[nameSid] = id;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Texture '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, header->contentVersion);
@@ -1551,13 +1556,17 @@ Texture* AssetManager::LoadDiskTexture(TextureID textureId)
         textureIdToHandle.Remove(textureId);
     }
 
+    const DiskTextureDesc& meta = textureRegistry[textureId];
+    if (meta.bUngenerated) {
+        LOG_WARN(Asset, "Texture '{}' is declared but not generated yet", meta.name.c_str());
+        return nullptr;
+    }
+
     TextureHandle handle = textureAllocator.Add();
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate texture slot for {:x}", textureId.id);
         return nullptr;
     }
-
-    const DiskTextureDesc& meta = textureRegistry[textureId];
 
     Texture& texture = textures[handle.index];
     texture.selfHandle = handle;
@@ -1638,7 +1647,7 @@ Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width
 void AssetManager::GetAllTextureInfos(Core::ArenaFixedMap<TextureID, EditorTextureInfo>& out) const
 {
     for (const auto& [texId, desc] : textureRegistry) {
-        out[texId] = {texId, desc.name, desc.width, desc.height, desc.mipCount};
+        out[texId] = {texId, desc.name, desc.width, desc.height, desc.mipCount, desc.bModelOwned};
     }
     for (const auto& [texId, desc] : staticProceduralRegistry) {
         uint32_t mipCount = desc.mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(desc.width, desc.height))))) + 1u : 1u;

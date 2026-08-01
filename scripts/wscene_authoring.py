@@ -14,6 +14,8 @@ for the narrative version of everything below.
 """
 import json
 import math
+import os
+import re
 
 def _fnv1a64(text):
     h = 0xCBF29CE484222325
@@ -596,6 +598,103 @@ def floor_levels(count, storey_height, origin_y=0.0):
     """Y offsets for stacked storeys. storey_height must already include the slab thickness,
     or successive floors interpenetrate: interior height + wall_t is the usual value."""
     return [origin_y + i * storey_height for i in range(count)]
+
+# =============================================================================
+# asset writers: texture stubs + materials
+# =============================================================================
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# DXGI_FORMAT values accepted by the texture generator
+DXGI_R8G8B8A8_UNORM = 28
+DXGI_BC4_UNORM = 80      # grayscale (roughness/AO/height)
+DXGI_BC5_UNORM = 83      # normal maps
+DXGI_BC6H_UF16 = 95      # HDR
+DXGI_BC7_UNORM = 98      # linear color data
+DXGI_BC7_UNORM_SRGB = 99 # albedo
+
+def _wtexture_version():
+    """Parsed LIVE from texture_format.h; a stale major here means the engine silently rejects the stub."""
+    hdr = open(os.path.join(_REPO_ROOT, "src", "engine", "resources", "texture", "texture_format.h"), encoding="utf-8").read()
+    major = int(re.search(r"TEXTURE_MAJOR_VERSION\s*=\s*(\d+)", hdr).group(1))
+    minor = int(re.search(r"TEXTURE_MINOR_VERSION\s*=\s*(\d+)", hdr).group(1))
+    return major, minor
+
+def write_texture_stub(name, source, dxgi_format, mips=True, flip_y=True, out_dir=None):
+    """Declares a texture as a header-only .wtexture stub carrying its generation recipe; the engine
+    generates it in place at startup (editor builds), preserving this id and name (temp+rename, so a
+    crash mid-generate just retries next run). `source` is an image path RELATIVE TO THE STUB's
+    directory. Never overwrites an existing generated .wtexture (returns its id instead), so
+    generated content is safe to regenerate scripts over. Returns the texture id."""
+    if out_dir is None:
+        out_dir = os.path.join(_REPO_ROOT, "assets", "textures")
+    path = os.path.join(out_dir, name + ".wtexture")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if line == "end_header":
+                    break
+                if line.startswith("id "):
+                    return int(line[3:])
+        raise ValueError(f"write_texture_stub: existing {path} has no id line")
+    tid = name_id(name)
+    major, minor = _wtexture_version()
+    stub = (f"wtexture\nversion {major} {minor}\nid {tid}\ncontent_version 0\nname {name}\n"
+            f"width 0\nheight 0\nmips 0\ndata_size 0\nuncompressed_size 0\ncompression 0\n"
+            f"ungenerated 1\ngen_source {source}\ngen_format {dxgi_format}\n"
+            f"gen_mips {1 if mips else 0}\ngen_flip_y {1 if flip_y else 0}\nend_header\n")
+    os.makedirs(out_dir, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(stub)
+    return tid
+
+_MAT_SAMPLER = {"addressModeU": 0, "addressModeV": 0, "addressModeW": 0, "anisotropyEnable": 0,
+                "magFilter": 1, "maxAnisotropy": 1.0, "maxLod": 1000.0, "minFilter": 1,
+                "minLod": 0.0, "mipLodBias": 0.0, "mipmapMode": 1}
+
+def write_material(name, base_color=(1.0, 1.0, 1.0, 1.0), metallic=0.0, roughness=1.0,
+                   emissive=(0.0, 0.0, 0.0, 0.0),
+                   albedo_tex=0, metal_rough_tex=0, normal_tex=0, emissive_tex=0, occlusion_tex=0,
+                   lighting_shader="default_pbr_restir", fragment_shader="default_lit",
+                   uv_scale=(1.0, 1.0), out_dir=None):
+    """Canonical .wmaterial writer (schema pinned from textured.wmaterial + material.cpp Serialize).
+    textureRefs slots: 0=albedo, 1=metal-rough, 2=normal, 3=emissive, 4=occlusion, 5=packed NRM
+    (material_manager.cpp:129, model_interop.h:155). Texture args take .wtexture ids; stub ids are
+    fine, generation preserves the declared id. Serialized textureImageIndices are stale runtime
+    caches: -1 here, the live resolve rebuilds them from textureRefs. emissive = [r, g, b, strength].
+    Id is name_id(name) so two generators can never collide. Returns the material id."""
+    if out_dir is None:
+        out_dir = os.path.join(_REPO_ROOT, "assets", "materials")
+    mid = name_id(name)
+    uv = [uv_scale[0], uv_scale[1], 0.0, 0.0]
+    body = {
+        "alphaProperties": [0.5, 0.0, 0.0, 0.0],
+        "colorFactor": list(base_color),
+        "colorUvTransform": list(uv),
+        "emissiveFactor": list(emissive),
+        "emissiveUvTransform": list(uv),
+        "fragmentShader": _fnv1a64(fragment_shader),
+        "id": mid,
+        "lightingShader": _fnv1a64(lighting_shader),
+        "metalRoughFactors": [metallic, roughness, 0.0, 0.0],
+        "metalRoughUvTransform": list(uv),
+        "name": name,
+        "normalUvTransform": list(uv),
+        "occlusionUvTransform": list(uv),
+        "physicalProperties": [1.5, 0.0, 1.0, 1.0],
+        "samplerDesc": [dict(_MAT_SAMPLER) for _ in range(6)],
+        "textureImageIndices": [-1, -1, -1, -1],
+        "textureImageIndices2": [-1, -1, -1, -1],
+        "textureRefs": [albedo_tex, metal_rough_tex, normal_tex, emissive_tex, occlusion_tex, 0],
+        "textureSamplerIndices": [2, 2, 2, 2],
+        "textureSamplerIndices2": [2, 2, -1, -1],
+    }
+    header = f"wmaterial\nversion 1 0\nid {mid}\nname {name}\nend_header\n"
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, name + ".wmaterial"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(header)
+        f.write(json.dumps(body, indent=4))
+    return mid
 
 # =============================================================================
 # top-level write

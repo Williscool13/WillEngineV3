@@ -27,6 +27,15 @@ bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header)
     out << "data_size " << header.dataSize << "\n";
     out << "uncompressed_size " << header.uncompressedSize << "\n";
     out << "compression " << static_cast<uint32_t>(header.compressionType) << "\n";
+    if (header.bModelOwned) {
+        out << "model_owned 1\n";
+    }
+    if (header.genSource[0] != '\0') {
+        out << "gen_source " << header.genSource << "\n";
+        out << "gen_format " << header.genFormat << "\n";
+        out << "gen_mips " << (header.bGenMips ? 1 : 0) << "\n";
+        out << "gen_flip_y " << (header.bGenFlipY ? 1 : 0) << "\n";
+    }
     out << "end_header\n";
     return out.good();
 }
@@ -81,6 +90,33 @@ std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
             std::from_chars(line + 12, line + LINE_BUF, v);
             header.compressionType = static_cast<CompressionType>(v);
             bCompressionSeen = true;
+        }
+        else if (strncmp(line, "model_owned ", 12) == 0) {
+            uint32_t v = 0;
+            std::from_chars(line + 12, line + LINE_BUF, v);
+            header.bModelOwned = v != 0;
+        }
+        else if (strncmp(line, "ungenerated ", 12) == 0) {
+            uint32_t v = 0;
+            std::from_chars(line + 12, line + LINE_BUF, v);
+            header.bUngenerated = v != 0;
+        }
+        else if (strncmp(line, "gen_source ", 11) == 0) {
+            const char* src = line + 11;
+            const size_t copyLen = std::min(strlen(src), WTEXTURE_GEN_SOURCE_LENGTH - 1);
+            memcpy(header.genSource, src, copyLen);
+            header.genSource[copyLen] = '\0';
+        }
+        else if (strncmp(line, "gen_format ", 11) == 0) { std::from_chars(line + 11, line + LINE_BUF, header.genFormat); }
+        else if (strncmp(line, "gen_mips ", 9) == 0) {
+            uint32_t v = 0;
+            std::from_chars(line + 9, line + LINE_BUF, v);
+            header.bGenMips = v != 0;
+        }
+        else if (strncmp(line, "gen_flip_y ", 11) == 0) {
+            uint32_t v = 0;
+            std::from_chars(line + 11, line + LINE_BUF, v);
+            header.bGenFlipY = v != 0;
         }
     }
     return std::nullopt;

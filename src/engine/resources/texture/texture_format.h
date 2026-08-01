@@ -15,9 +15,13 @@
 namespace Engine
 {
 constexpr uint32_t TEXTURE_MAJOR_VERSION = 0;
-constexpr uint32_t TEXTURE_MINOR_VERSION = 5;
+constexpr uint32_t TEXTURE_MINOR_VERSION = 6;
 constexpr size_t WTEXTURE_NAME_LENGTH = 128;
+constexpr size_t WTEXTURE_GEN_SOURCE_LENGTH = 256;
 
+/**
+ * bUngenerated marks a script-declared stub: header only with no body, carrying its generation recipe.
+ */
 struct WTextureHeader
 {
     uint64_t textureId{0};
@@ -35,6 +39,15 @@ struct WTextureHeader
     uint64_t dataSize{0};
     uint64_t uncompressedSize{0};
     CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
+
+    bool bUngenerated{false};
+    char genSource[WTEXTURE_GEN_SOURCE_LENGTH]{};
+    uint32_t genFormat{0};
+    bool bGenMips{true};
+    bool bGenFlipY{false};
+
+    // Extracted from an imported model's images
+    bool bModelOwned{false};
 };
 
 bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header);

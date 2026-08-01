@@ -32,6 +32,7 @@
 #include "engine/resources/model/static_model.h"
 #include "engine/resources/physics/physics_collider_asset.h"
 #include "game/components/render_components.h"
+#include "logging/engine_log.h"
 
 namespace AssetLoad
 {
@@ -170,7 +171,11 @@ public: // Textures
         uint64_t uncompressedSize{};
         CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
         uint64_t contentVersion{0};
+        bool bUngenerated{false};
+        bool bModelOwned{false};
     };
+
+    const Core::FixedMap<TextureID, DiskTextureDesc>& GetTextureRegistry() const { return textureRegistry; }
 
     struct StaticProceduralDesc
     {
@@ -189,6 +194,7 @@ public: // Textures
         uint32_t width;
         uint32_t height;
         uint32_t mipCount;
+        bool bModelOwned{false};
     };
 
     bool IsTextureLoaded(const TextureID textureId) const
@@ -199,6 +205,9 @@ public: // Textures
     [[nodiscard]] TextureID FindTextureByName(std::string_view name) const
     {
         const StringID sid{name.data(), name.size()};
+        if (ambiguousTextureNames.Contains(sid)) {
+            LOG_WARN(Asset, "FindTextureByName('{}'): name is shared by multiple mounted textures; returning an arbitrary one", name);
+        }
         const TextureID* found = textureNameToId.Find(sid);
         return found ? *found : TextureID::INVALID;
     }
@@ -484,6 +493,7 @@ private: // Asset Registry
     Core::FixedMap<FontID, CachedFontMetadata> fontCache;
 
     Core::FixedMap<StringID, TextureID> textureNameToId;
+    Core::InlineVector<StringID, 64> ambiguousTextureNames;
     Core::FixedMap<TextureID, DiskTextureDesc> textureRegistry;
     Core::FixedMap<TextureID, StaticProceduralDesc> staticProceduralRegistry;
 

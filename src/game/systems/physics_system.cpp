@@ -276,7 +276,7 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
         layer = desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
     }
 
-    JPH::BodyCreationSettings settings(desc.shapeRef, position, rotation, motionType, layer);
+    JPH::BodyCreationSettings settings(desc.shapeRef, position, rotation.Normalized(), motionType, layer);
     if (desc.motionType != Component::PhysicsMotionType::Static) {
         settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
         settings.mMassPropertiesOverride.mMass = desc.mass;

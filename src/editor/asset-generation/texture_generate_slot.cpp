@@ -49,7 +49,8 @@ void TextureGenerateSlot::Initialize(
 }
 
 void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId,
-                                 bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _flipY)
+                                 bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _flipY,
+                                 const Core::InlineString<128>& _declaredName, const Core::InlineString<256>& _recipeSource, bool _modelOwned)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
@@ -59,6 +60,9 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Co
     mipmapped = _mipmapped;
     flipY = _flipY;
     targetFormat = _targetFormat;
+    declaredName = _declaredName;
+    recipeSource = _recipeSource;
+    modelOwned = _modelOwned;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -69,7 +73,7 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Co
 }
 
 void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel,
-                                           const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion)
+                                           const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _modelOwned)
 {
     slotHandle = _slotHandle;
     outputPath = _outputPath;
@@ -82,6 +86,9 @@ void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle
     preloadedHeight = h;
     preloadedBytesPerPixel = bytesPerPixel;
     imagePath = Core::Path{};
+    declaredName = {};
+    recipeSource = {};
+    modelOwned = _modelOwned;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -468,23 +475,48 @@ bool TextureGenerateSlot::WriteWTextureFile()
     header.uncompressedSize = ktxSize;
     header.dataSize = realCompressedSize;
 
-    Core::InlineString stem = imagePath.IsEmpty() ? Core::InlineString(outputPath.Stem()) : Core::InlineString(imagePath.Stem());
+    Core::InlineString<128> stem = declaredName;
+    if (stem.Size() == 0) {
+        stem = Core::InlineString<128>(imagePath.IsEmpty() ? outputPath.Stem() : imagePath.Stem());
+    }
     const size_t copyLen = std::min(stem.Size(), Engine::WTEXTURE_NAME_LENGTH - 1);
     memcpy(header.name, stem.c_str(), copyLen);
     header.name[copyLen] = '\0';
 
-    Platform::CreateDirectories(outputPath.Parent().c_str());
-    std::ofstream f(outputPath.c_str(), std::ios::binary);
-    if (!f) {
-        LOG_ERROR(Asset, "Failed to open output file: {}", outputPath.c_str());
-        return false;
+    if (recipeSource.Size() > 0) {
+        const size_t srcLen = std::min(recipeSource.Size(), Engine::WTEXTURE_GEN_SOURCE_LENGTH - 1);
+        memcpy(header.genSource, recipeSource.c_str(), srcLen);
+        header.genSource[srcLen] = '\0';
+        header.genFormat = static_cast<uint32_t>(targetFormat);
+        header.bGenMips = mipmapped;
+        header.bGenFlipY = flipY;
     }
+    header.bModelOwned = modelOwned;
 
-    if (!Engine::WriteWTextureHeader(f, header)) {
-        LOG_ERROR(Asset, "Failed to write header: {}", outputPath.c_str());
+    Platform::CreateDirectories(outputPath.Parent().c_str());
+    // Temp + rename so a crash mid-write never leaves a truncated .wtexture (an ungenerated stub survives and retries next run)
+    const Core::Path tmpPath(Core::InlineString<512>::Format("%s.tmp", outputPath.c_str()).c_str());
+    {
+        std::ofstream f(tmpPath.c_str(), std::ios::binary);
+        if (!f) {
+            LOG_ERROR(Asset, "Failed to open output file: {}", tmpPath.c_str());
+            return false;
+        }
+
+        if (!Engine::WriteWTextureHeader(f, header)) {
+            LOG_ERROR(Asset, "Failed to write header: {}", tmpPath.c_str());
+            return false;
+        }
+        f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realCompressedSize));
+        if (!f.good()) {
+            LOG_ERROR(Asset, "Failed to write body: {}", tmpPath.c_str());
+            return false;
+        }
+    }
+    if (!Platform::RenameFile(tmpPath, outputPath)) {
+        LOG_ERROR(Asset, "Failed to move {} into place", tmpPath.c_str());
         return false;
     }
-    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realCompressedSize));
 
     LOG_INFO(Asset, "Wrote {}", outputPath.c_str());
     return true;

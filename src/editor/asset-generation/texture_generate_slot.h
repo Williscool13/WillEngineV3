@@ -52,10 +52,11 @@ struct TextureGenerateSlot
         Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _flipY = true);
+    void Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _flipY = true,
+                const Core::InlineString<128>& _declaredName = {}, const Core::InlineString<256>& _recipeSource = {}, bool _modelOwned = false);
 
     void LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& _outputPath,
-                          Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion);
+                          Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _modelOwned = false);
 
     void Clear();
 
@@ -92,6 +93,9 @@ private:
     bool mipmapped = true;
     bool flipY = true;
     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM;
+    Core::InlineString<128> declaredName{};
+    Core::InlineString<256> recipeSource{};
+    bool modelOwned{false};
 
     Core::HeapArray<uint8_t> preloadedPixels;
     uint32_t preloadedWidth{0};

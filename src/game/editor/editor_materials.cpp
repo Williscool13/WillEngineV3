@@ -22,6 +22,8 @@
 
 namespace Game
 {
+static bool INCLUDE_MODEL_TEXTURES = false;
+
 void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ImGui::Begin("Materials")) {
@@ -292,6 +294,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                                 ImGui::Separator();
 
                                 if (ImGui::BeginChild("##texlist", {400.0f, 300.0f}, ImGuiChildFlags_Borders)) {
+                                    ImGui::Checkbox("Include Model Textures", &INCLUDE_MODEL_TEXTURES);
                                     bool noneSelected = !texEditPending.IsValid();
                                     if (ImGui::Selectable("(None)", noneSelected)) {
                                         texEditPending = Engine::TextureID::INVALID;
@@ -304,6 +307,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                                     const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
                                     auto sorted = Core::ArenaFixedVector<Engine::AssetManager::EditorTextureInfo>(&ctx->editorArena.Get(), texCount);
                                     for (const auto& [id2, info] : *state->editor.textureInfoCache) {
+                                        if (!INCLUDE_MODEL_TEXTURES && info.bModelOwned) { continue; }
                                         sorted.EmplaceBack(info);
                                     }
                                     std::ranges::sort(sorted, {}, &Engine::AssetManager::EditorTextureInfo::name);
@@ -539,9 +543,11 @@ void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(&ctx->editorArena.Get(), count);
             ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
         }
+        ImGui::Checkbox("Include Model Textures", &INCLUDE_MODEL_TEXTURES);
         const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
         auto sorted = Core::ArenaFixedVector<Engine::AssetManager::EditorTextureInfo>(&ctx->editorArena.Get(), texCount);
         for (const auto& [texId, info] : *state->editor.textureInfoCache) {
+            if (!INCLUDE_MODEL_TEXTURES && info.bModelOwned) { continue; }
             sorted.EmplaceBack(info);
         }
         std::ranges::sort(sorted, {}, &Engine::AssetManager::EditorTextureInfo::name);

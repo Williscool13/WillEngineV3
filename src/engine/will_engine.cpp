@@ -242,6 +242,26 @@ void WillEngine::Initialize(Utils::Logger* logger)
             memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager, scheduler);
     }
 
+    // Script-declared texture stub generate on startup with their declared id/name
+    {
+        ZoneScopedN("GenerateDeclaredTextures");
+        for (const auto& pair : assetManager->GetTextureRegistry()) {
+            const AssetManager::DiskTextureDesc& desc = pair.value;
+            if (!desc.bUngenerated) { continue; }
+            auto header = ReadWTextureHeader(desc.source);
+            if (!header || header->genSource[0] == '\0') {
+                LOG_WARN(Asset, "Ungenerated texture '{}' has no gen_source; skipping", desc.name.c_str());
+                continue;
+            }
+            const Core::Path sourcePath(Core::InlineString<512>::Format("%s/%s", desc.source.Parent().c_str(), header->genSource).c_str());
+            if (!sourcePath.Exists()) {
+                LOG_WARN(Asset, "Ungenerated texture '{}' source missing: {}", desc.name.c_str(), sourcePath.c_str());
+                continue;
+            }
+            assetGenerator->RequestTextureGenerateFromFile(sourcePath, desc.source, header->bGenMips, static_cast<DXGI_FORMAT>(header->genFormat), header->bGenFlipY);
+            LOG_INFO(Asset, "Generating declared texture '{}' from {}", desc.name.c_str(), header->genSource);
+        }
+    }
 #endif
 
     //
@@ -982,7 +1002,15 @@ void WillEngine::EditorImgui()
                     break;
                 }
                 case Editor::AssetSourceKind::Texture: {
-                    assetGenerator->RequestTextureGenerateFromFile(entry.sourcePath, output, true, DXGI_FORMAT_BC7_UNORM_SRGB);
+                    bool mips = true;
+                    bool flipY = true;
+                    DXGI_FORMAT format = DXGI_FORMAT_BC7_UNORM_SRGB;
+                    if (auto header = ReadWTextureHeader(output); header && header->genSource[0] != '\0') {
+                        format = static_cast<DXGI_FORMAT>(header->genFormat);
+                        mips = header->bGenMips;
+                        flipY = header->bGenFlipY;
+                    }
+                    assetGenerator->RequestTextureGenerateFromFile(entry.sourcePath, output, mips, format, flipY);
                     break;
                 }
                 case Editor::AssetSourceKind::EnvironmentMap: {

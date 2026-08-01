@@ -7,6 +7,7 @@
 #include "core/containers/vector.h"
 #include "core/memory/memory_manager.h"
 #include "engine/logging/engine_log.h"
+#include "engine/resources/texture/texture_format.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 
@@ -27,6 +28,18 @@ static constexpr uint8_t EXTERNAL_MODEL_SOURCE_COUNT = std::size(EXTERNAL_MODEL_
 static bool IsUnderDirectory(std::string_view path, std::string_view dir)
 {
     return path.size() > dir.size() + 1 && path.substr(0, dir.size()) == dir && (path[dir.size()] == '/' || path[dir.size()] == '\\');
+}
+
+static Core::InlineString<300> NormalizePathKey(std::string_view path)
+{
+    char buf[300];
+    const size_t len = std::min(path.size(), sizeof(buf) - 1);
+    for (size_t i = 0; i < len; i++) {
+        const char c = path[i];
+        buf[i] = c == '\\' ? '/' : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    buf[len] = '\0';
+    return Core::InlineString<300>(buf);
 }
 
 static Core::Path SiblingOutput(const Core::Path& source, const char* wExt)
@@ -52,6 +65,9 @@ Core::Path AssetSourceCatalog::OutputPathFor(const AssetSourceEntry& entry)
 {
     if (entry.externalIndex != UINT8_MAX) {
         return Platform::GetAssetPath() / EXTERNAL_MODEL_SOURCES[entry.externalIndex].outputRelative;
+    }
+    if (!entry.outputOverride.IsEmpty()) {
+        return entry.outputOverride;
     }
     switch (entry.kind) {
         case AssetSourceKind::Model: {
@@ -114,12 +130,30 @@ void AssetSourceCatalog::Scan(Core::MemoryManager& memoryManager)
         modelDirs.PushBack(parent);
     }
 
-    auto push = [this](AssetSourceKind kind, const Core::Path& source, uint8_t externalIndex) {
+    struct ClaimedSource
+    {
+        Core::InlineString<300> sourceKey;
+        Core::Path output;
+    };
+    Core::Vector<ClaimedSource> claimed(&memoryManager.AssetsScratch(), Core::AllocTag::AssetGenerator);
+    for (const Core::Path& path : paths) {
+        if (path.Extension() != ".wtexture") {
+            continue;
+        }
+        auto header = Engine::ReadWTextureHeader(path);
+        if (!header || header->genSource[0] == '\0') {
+            continue;
+        }
+        const Core::Path resolved = path.Parent() / header->genSource;
+        claimed.PushBack({NormalizePathKey(resolved.View()), Core::Path(path)});
+    }
+
+    auto push = [this](AssetSourceKind kind, const Core::Path& source, uint8_t externalIndex, const Core::Path& outputOverride = {}) {
         if (entries.IsFull()) {
             LOG_WARN(Asset, "Asset source catalog is full ({} entries); {} skipped", entries.Size(), source.c_str());
             return;
         }
-        AssetSourceEntry entry{kind, AssetOutputState::Missing, externalIndex, source};
+        AssetSourceEntry entry{kind, AssetOutputState::Missing, externalIndex, source, outputOverride};
         entry.state = ComputeOutputState(source, OutputPathFor(entry));
         if (entry.state == AssetOutputState::Outdated && kind != AssetSourceKind::Font) {
             outdatedCount++;
@@ -153,7 +187,15 @@ void AssetSourceCatalog::Scan(Core::MemoryManager& memoryManager)
                 }
             }
             if (!bModelOwned) {
-                push(AssetSourceKind::Texture, path, UINT8_MAX);
+                Core::Path outputOverride{};
+                const Core::InlineString<300> key = NormalizePathKey(path.View());
+                for (const ClaimedSource& c : claimed) {
+                    if (c.sourceKey == key) {
+                        outputOverride = c.output;
+                        break;
+                    }
+                }
+                push(AssetSourceKind::Texture, path, UINT8_MAX, outputOverride);
             }
         }
         else if (ext == ".hdr") {

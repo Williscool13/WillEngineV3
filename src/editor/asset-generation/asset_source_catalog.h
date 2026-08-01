@@ -37,6 +37,8 @@ struct AssetSourceEntry
     AssetOutputState state{};
     uint8_t externalIndex{};
     Core::Path sourcePath{};
+    // Different from the [texturename].wtexture the generator automatically creates it as
+    Core::Path outputOverride{};
 };
 
 /**
