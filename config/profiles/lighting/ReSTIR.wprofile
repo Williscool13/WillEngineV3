@@ -51,6 +51,7 @@
     "thinOccluderCompensation": 0.0
   },
   "iblIntensity": 1.0,
+  "indirectIntensity": 0.699999988079071,
   "lightingMode": 1,
   "lightingShaderOverride": 7554520945661456859,
   "reflection": {

@@ -169,15 +169,38 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         }
 
 
-        SDL_DisplayID mainDisplay = SDL_GetPrimaryDisplay();
+        SDL_DisplayID targetDisplay = SDL_GetPrimaryDisplay();
+        SDL_WindowFlags extraFlags = SDL_WINDOW_MAXIMIZED;
+        if (automation.IsCaptureRun()) {
+            // 1. Capture runs render unattended
+            // 2. Don't yank focus from the user
+            // 3. Prefer a secondary monitor
+            SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0");
+            SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "0");
+            extraFlags = 0;
+            int32_t displayCount = 0;
+            SDL_DisplayID* displays = SDL_GetDisplays(&displayCount);
+            if (displays != nullptr) {
+                for (int32_t i = 0; i < displayCount; ++i) {
+                    if (displays[i] != targetDisplay) {
+                        targetDisplay = displays[i];
+                        break;
+                    }
+                }
+                SDL_free(displays);
+            }
+        }
         SDL_Rect rect;
-        SDL_GetDisplayUsableBounds(mainDisplay, &rect);
+        SDL_GetDisplayUsableBounds(targetDisplay, &rect);
 
         window = SDL_CreateWindow(
             "Will Engine",
             rect.w, rect.h,
-            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
+            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | extraFlags);
 
+        if (automation.IsCaptureRun()) {
+            SDL_SetWindowPosition(window, rect.x, rect.y);
+        }
         SDL_ShowWindow(window);
         w = rect.w;
         h = rect.h;

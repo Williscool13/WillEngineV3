@@ -212,7 +212,6 @@ private:
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
-    bool bFrozenVisibility{false};
 
 #if WILL_EDITOR
     struct DebugCursorReadback
