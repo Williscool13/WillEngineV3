@@ -1,0 +1,55 @@
+WillEngineV3 is licensed under the MIT License, with the exclusions noted below.
+
+SCOPE AND EXCLUSIONS
+--------------------
+
+The MIT License below applies to the original work in this repository. It does
+NOT apply to the following, which remain governed by their own licenses:
+
+1. Third-party dependencies under `extern/`.
+   Each dependency carries its own license file within its directory. See
+   NOTICES.txt for the aggregated license text.
+
+2. Denoiser sources derived from NVIDIA Real-Time Denoisers (NRD).
+   These are derivative works of NRD source code and remain governed by the
+   NVIDIA RTX SDKs License (`extern/NRD/LICENSE.txt`). They are NOT MIT
+   licensed and may NOT be redistributed under the terms below:
+
+     shaders/lighting/denoise/relax/
+     shaders/lighting/denoise/reblur/
+     shaders/lighting/denoise/nrd/
+     shaders/lighting/denoise/denoiser_common.slang
+     shaders/lighting/shadows/sigma/
+     src/render/shaders/relax_interop.h
+     src/render/shaders/reblur_interop.h
+     src/render/shaders/push_constant_interop.h (only the sections marked with
+       an NVIDIA attribution notice; the remainder of the file is MIT)
+
+   This software contains source code provided by NVIDIA Corporation.
+
+   The NRD SDK itself is not distributed with this repository and must be
+   obtained separately from https://github.com/NVIDIA-RTX/NRD.
+
+
+MIT LICENSE
+-----------
+
+Copyright (c) 2025-2026 Williscool13
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
