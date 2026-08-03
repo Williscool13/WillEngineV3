@@ -157,8 +157,11 @@ M = {}
 M["sand"] = textured("mil_sand", T_SAND, uv=0.3, tint=(1.0, 0.94, 0.80))
 M["concrete"] = textured("mil_concrete", T_CONCRETE, uv=0.5)
 M["concrete_dark"] = textured("mil_concrete_dark", T_CONCRETE, uv=0.5, tint=(0.5, 0.5, 0.49))
-M["asphalt"] = textured("mil_asphalt", T_ASPHALT, uv=0.35)
+M["asphalt"] = textured("mil_asphalt", T_ASPHALT, uv=0.35, tint=(0.85, 0.84, 0.82), roughness=1.15)
 M["white"] = textured("mil_white", T_PAINTED, uv=0.5)
+# Prefab panel for the huts and gatehouse; the bunker's white bleed wall stays T_PAINTED,
+# which is genuinely light once lit (the hangar floor is the same map).
+M["panel"] = textured("mil_panel", T_SHEET, uv=0.5, tint=(0.86, 0.87, 0.84))
 M["floor"] = textured("mil_floor", T_PAINTED, uv=0.4, tint=(0.72, 0.72, 0.70))
 # flat bright paint for markings (helipad ring/H); a photo texture there reads as dirt
 M["marking"] = flat("mil_marking", (0.85, 0.85, 0.82), roughness=0.6)
@@ -168,12 +171,18 @@ M["blue"] = textured("mil_blue", T_BLUE, uv=0.5, tint=(0.5, 0.6, 1.0))
 M["olive"] = textured("mil_olive", T_SHEET, uv=0.5, tint=(0.35, 0.41, 0.20))
 M["od_light"] = textured("mil_od_light", T_SHEET, uv=0.5, tint=(0.62, 0.64, 0.42))
 M["navy"] = textured("mil_navy", T_SHEET, uv=0.5, tint=(0.14, 0.20, 0.45))
+# container red is sheet-based: the concrete-based mil_red_oxide reads as wood planks on a box
+M["container_red"] = textured("mil_container_red", T_SHEET, uv=0.5, tint=(0.62, 0.14, 0.10))
 M["hazard"] = textured("mil_hazard", T_SHEET, uv=0.5, tint=(1.0, 0.72, 0.06))
 M["rubber"] = flat("mil_rubber", (0.045, 0.045, 0.05), roughness=0.95)
+# uniform fill for HESCO courses; the old per-cube colour alternation read as checkerboard once textured
+M["hesco"] = textured("mil_hesco", T_SAND, uv=0.45, tint=(0.95, 0.88, 0.74))
 # bare metals -- the specular / probe story (the tinted sheets above are painted, so dielectric)
 M["steel"] = textured("mil_steel", T_SHEET, uv=0.5, metallic=1.0)
 M["steel_rough"] = textured("mil_steel_rough", T_CLADDING, uv=0.5, tint=(0.8, 0.8, 0.81), metallic=1.0, roughness=1.4)
 M["alu"] = textured("mil_alu", T_SHEET, uv=0.5, tint=(1.0, 1.0, 1.02), metallic=1.0, roughness=0.5)
+# grey galvanized for structural steel: T_CLADDING's rust hue made every mast and leg read painted-red
+M["galv"] = textured("mil_galv", T_SHEET, uv=0.5, tint=(0.60, 0.63, 0.66), metallic=1.0, roughness=0.75)
 # curved-primitive variants: normalized 0..1 UVs, per-axis scale sized to the surface
 M["concrete_pipe"] = textured("mil_concrete_pipe", T_CONCRETE, uv=(6.0, 5.5))   # u = angle over the ~12.6m bore, v = 11m segment length
 M["asphalt_pad"] = textured("mil_asphalt_pad", T_ASPHALT, uv=(12.0, 12.0))      # deck cap disc spans 0..1 across 24m
@@ -368,18 +377,20 @@ box(entities, "Ground", (GX0 - 14.0, GRADE - 2.0, GZ0 - 14.0),
 # Four wall_params slabs, each ONE entity carrying its own openings. Runs are ordered so
 # thickness always falls inboard; the E/W runs stop short of the N/S runs, so the only
 # faces that ever touch are back-to-back at the corners.
-wall_run(entities, "Perimeter South", (GX0, GZ0), (GX1, GZ0), PERIM_H, PERIM_T, M["concrete_dark"],
+# Untinted concrete: the 0.5 tint went near-black on every shaded run and the perimeter
+# read as two different walls depending on sun facing.
+wall_run(entities, "Perimeter South", (GX0, GZ0), (GX1, GZ0), PERIM_H, PERIM_T, M["concrete"],
          openings=[(GATE_X0 - GX0, 0.0, GATE_W, GATE_H),
                    (18.0, 0.0, 0.9, 2.2),         # personnel door
                    (34.0, 2.6, 1.4, 0.5),         # observation slits: thin and high-contrast
                    (86.0, 2.6, 1.4, 0.5)],
          folder=F_SITE)
-wall_run(entities, "Perimeter North", (GX1, GZ1), (GX0, GZ1), PERIM_H, PERIM_T, M["concrete_dark"],
+wall_run(entities, "Perimeter North", (GX1, GZ1), (GX0, GZ1), PERIM_H, PERIM_T, M["concrete"],
          openings=[(52.0, 0.0, 6.0, 3.6)], folder=F_SITE)
 wall_run(entities, "Perimeter East", (GX1, GZ0 + PERIM_T), (GX1, GZ1 - PERIM_T), PERIM_H, PERIM_T,
-         M["concrete_dark"], openings=[(30.0, 2.6, 1.4, 0.5), (62.0, 2.6, 1.4, 0.5)], folder=F_SITE)
+         M["concrete"], openings=[(30.0, 2.6, 1.4, 0.5), (62.0, 2.6, 1.4, 0.5)], folder=F_SITE)
 wall_run(entities, "Perimeter West", (GX0, GZ1 - PERIM_T), (GX0, GZ0 + PERIM_T), PERIM_H, PERIM_T,
-         M["concrete_dark"], openings=[(46.0, 2.6, 1.4, 0.5)], folder=F_SITE)
+         M["concrete"], openings=[(46.0, 2.6, 1.4, 0.5)], folder=F_SITE)
 
 # Buttresses: silhouette break-up, and each throws its own long sun shadow. They embed
 # 0.2m into the wall rather than butting against it -- overlapping volumes are fine,
@@ -389,10 +400,10 @@ for i in range(13):
     bx = GX0 + 2.0 + i * 9.5
     if bx + 1.2 < GATE_X0 - 0.5 or bx > GATE_X1 + 0.5:
         box(entities, f"Buttress S {i}", (bx, GRADE, GZ0 + PERIM_T - 0.2), (1.2, 3.2, 1.1),
-            M["concrete_dark"], folder=F_SITE)
+            M["concrete"], folder=F_SITE)
     if bx + 1.2 < NORTH_GATE_X0 - 0.5 or bx > NORTH_GATE_X1 + 0.5:
         box(entities, f"Buttress N {i}", (bx, GRADE, GZ1 - PERIM_T - 0.9), (1.2, 3.2, 1.1),
-            M["concrete_dark"], folder=F_SITE)
+            M["concrete"], folder=F_SITE)
 
 # Gate furniture, all inboard of the wall so nothing intersects the jambs.
 box(entities, "Gate Post L", (GATE_X0 - 1.1, GRADE, GZ0 + PERIM_T + 0.05), (0.9, 5.2, 1.0),
@@ -401,6 +412,40 @@ box(entities, "Gate Post R", (GATE_X1 + 0.2, GRADE, GZ0 + PERIM_T + 0.05), (0.9,
     M["concrete"], folder=F_SITE)
 box(entities, "Gate Boom", (GATE_X0 + 0.1, 3.1, GZ0 + PERIM_T + 0.2), (6.8, 0.35, 0.35),
     M["hazard"], folder=F_SITE)
+
+# Guard house just inside the gate, door and window facing the road. Shell follows the
+# room_boxes tiling rule; the front is a wall_run so the openings punch one welded slab.
+GH_X0, GH_Z0, GH_W, GH_D, GH_H = 4.2, -47.0, 3.4, 3.0, 2.6
+box(entities, "Gatehouse Floor", (GH_X0, GRADE, GH_Z0), (GH_W, 0.15, GH_D), M["floor"], folder=F_SITE)
+box(entities, "Gatehouse Wall East", (GH_X0 + GH_W - 0.15, GRADE + 0.15, GH_Z0), (0.15, GH_H, GH_D),
+    M["panel"], folder=F_SITE)
+box(entities, "Gatehouse Wall South", (GH_X0 + 0.15, GRADE + 0.15, GH_Z0), (GH_W - 0.3, GH_H, 0.15),
+    M["panel"], folder=F_SITE)
+box(entities, "Gatehouse Wall North", (GH_X0 + 0.15, GRADE + 0.15, GH_Z0 + GH_D - 0.15), (GH_W - 0.3, GH_H, 0.15),
+    M["panel"], folder=F_SITE)
+wall_run(entities, "Gatehouse Wall West", (GH_X0, GH_Z0 + GH_D - 0.15), (GH_X0, GH_Z0), GH_H, 0.15,
+         M["panel"], openings=[(0.35, 0.0, 0.9, 2.1), (1.6, 1.0, 1.0, 0.9)],
+         base_y=GRADE + 0.15, folder=F_SITE)
+box(entities, "Gatehouse Roof", (GH_X0 - 0.3, GRADE + 0.15 + GH_H, GH_Z0 - 0.3),
+    (GH_W + 0.6, 0.18, GH_D + 0.6), M["galv"], folder=F_SITE)
+e = light(entities, "Gatehouse Light", (GH_X0 + GH_W * 0.5, GRADE + GH_H - 0.15, GH_Z0 + GH_D * 0.5),
+          folder=F_SITE)
+add_sphere_light(e, color=(1.0, 0.93, 0.80), intensity=14.0, radius=0.09, draw_range=9.0,
+                 draw_emissive=True)
+
+# Road network: thin asphalt slabs sunk 0.02 into the ground slab so the top sits 0.06
+# proud and no coincident co-facing planes exist. Spine runs gate -> yard centre, one
+# branch west to the motor pool, one east toward the helipad.
+ROAD_Y, ROAD_H = GRADE - 0.02, 0.08
+# Runs out past the gate onto the approach: stopping dead at the wall read as a slab edge.
+box(entities, "Road Spine", (-3.0, ROAD_Y, GZ0 - 14.0), (6.0, ROAD_H, 84.0), M["asphalt"], folder=F_SITE, friction=0.9)
+box(entities, "Road West Branch", (-22.0, ROAD_Y, -26.0), (19.0, ROAD_H, 6.0), M["asphalt"], folder=F_SITE, friction=0.9)
+box(entities, "Road East Branch", (3.0, ROAD_Y, 16.5), (27.0, ROAD_H, 6.0), M["asphalt"], folder=F_SITE, friction=0.9)
+for i in range(14):
+    vbox(entities, f"Road Dash {i}", (-0.08, GRADE + 0.061, GZ0 - 11.0 + i * 6.0), (0.16, 0.015, 2.6),
+         M["marking"], folder=F_SITE)
+# Concrete apron in front of the hangar door.
+box(entities, "Hangar Apron", (-23.4, ROAD_Y, -10.0), (13.4, ROAD_H, 16.0), M["concrete"], folder=F_SITE, friction=0.9)
 
 
 # =============================================================================
@@ -466,30 +511,65 @@ for i in range(4):
     vbox(entities, f"Hangar Work Light Housing {i}", (lx - 2.4, HH - 1.75, cz - 1.3),
          (4.8, 0.25, 2.6), M["steel_rough"], folder=F_HANGAR)
 
-# Contents: a stripped airframe, a gantry and crates -- all of it occludes both the work
-# lights and the door shaft.
-FUS_X0, FUS_Y0, FUS_CZ = HX0 + 5.0, 1.6, -2.1
-box(entities, "Hangar Fuselage", (FUS_X0, FUS_Y0, FUS_CZ - 1.3), (14.0, 2.4, 2.6),
-    M["alu"], folder=F_HANGAR)
-# Cone is base-at-y=0 along local +Y; roll(+90) swings local +Y onto world -X, so the
-# apex points forward off the nose.
-shape(entities, "Hangar Nose", (FUS_X0, FUS_Y0 + 1.2, FUS_CZ), cone_params(1.3, 2.6, 20),
-      M["alu"], rot=roll(90.0), folder=F_HANGAR)
-for side, z0 in (("Port", FUS_CZ - 9.0), ("Starboard", FUS_CZ + 1.4)):
-    box(entities, f"Hangar Wing {side}", (HX0 + 9.0, FUS_Y0 + 0.4, z0), (5.0, 0.28, 7.6),
-        M["alu"], folder=F_HANGAR)
-# yaw(180) puts the fin's vertical trailing edge at the rear (east); pivot shifts to the opposite corner
-shape(entities, "Hangar Tail Fin", (HX0 + 15.5 + 3.2, FUS_Y0 + 2.4, FUS_CZ - 0.15 + 0.3),
-      wedge_params(3.2, 3.4, 0.3), M["alu"], rot=yaw(180.0), folder=F_HANGAR)
-for i in range(3):
-    shape(entities, f"Hangar Gear {i}", (HX0 + 6.0 + i * 5.5, HFY + 0.55, FUS_CZ + (i % 2) * 2.0 - 1.0),
-          cylinder_params(0.55, 0.4, 18), M["rubber"], rot=roll(90.0), folder=F_HANGAR)
+# Contents: a helicopter mock-up, a gantry and crates -- all of it occludes both the work
+# lights and the door shaft. The old fixed-wing read as floor-height slabs and a spike fin.
+HELI_X, HELI_Z = HX0 + 14.0, -2.0
+HELI_FY = HFY + 0.62                       # fuselage underside, riding on the skids
+for side, sz in (("L", -1.1), ("R", 0.9)):
+    # roll(90) swings the cylinder's local +Y onto world -X: skid tubes run fore-aft.
+    shape(entities, f"Heli Skid {side}", (HELI_X, HFY + 0.15, HELI_Z + sz + 0.1),
+          cylinder_params(0.10, 4.2, 16), M["galv"], rot=roll(90.0), folder=F_HANGAR)
+    for st in (0, 1):
+        box(entities, f"Heli Skid Strut {side}{st}", (HELI_X - 1.4 + st * 2.6, HFY + 0.2, HELI_Z + sz),
+            (0.13, 0.5, 0.13), M["galv"], folder=F_HANGAR)
+box(entities, "Heli Fuselage", (HELI_X - 2.3, HELI_FY, HELI_Z - 1.1), (4.6, 1.9, 2.2),
+    M["olive"], folder=F_HANGAR)
+box(entities, "Heli Nose", (HELI_X - 3.5, HELI_FY, HELI_Z - 0.9), (1.2, 1.3, 1.8),
+    M["olive"], folder=F_HANGAR)
+# Windshield leans back from the nose top toward the cabin roof.
+visual(entities, "Heli Windshield", (HELI_X - 3.5, HELI_FY + 1.3, HELI_Z - 0.9),
+       box_params(0.08, 1.2, 1.8), M["navy"], rot=roll(-50.0), folder=F_HANGAR)
+box(entities, "Heli Engine", (HELI_X - 1.4, HELI_FY + 1.9, HELI_Z - 0.7), (2.6, 0.55, 1.4),
+    M["od_light"], folder=F_HANGAR)
+shape(entities, "Heli Tail Boom", (HELI_X + 4.4, HELI_FY + 1.45, HELI_Z),
+      cylinder_params(0.30, 4.2, 24), M["olive"], rot=roll(90.0), folder=F_HANGAR)
+box(entities, "Heli Tail Fin", (HELI_X + 6.1, HELI_FY + 1.5, HELI_Z - 0.07), (0.7, 1.6, 0.14),
+    M["olive"], folder=F_HANGAR)
+box(entities, "Heli Stabilizer", (HELI_X + 5.9, HELI_FY + 1.35, HELI_Z - 0.7), (0.7, 0.10, 1.4),
+    M["olive"], folder=F_HANGAR)
+# Tail rotor as two crossed thin blades -- a solid disc read as a giant black dish.
+box(entities, "Heli Tail Blade A", (HELI_X + 6.38, HELI_FY + 1.75, HELI_Z + 0.14), (0.14, 1.5, 0.05),
+    M["rubber"], folder=F_HANGAR)
+box(entities, "Heli Tail Blade B", (HELI_X + 5.7, HELI_FY + 2.43, HELI_Z + 0.20), (1.5, 0.14, 0.05),
+    M["rubber"], folder=F_HANGAR)
+shape(entities, "Heli Tail Hub", (HELI_X + 6.45, HELI_FY + 2.5, HELI_Z + 0.18),
+      cylinder_params(0.12, 0.14, 14), M["steel"], rot=pitch(90.0), folder=F_HANGAR)
+shape(entities, "Heli Rotor Hub", (HELI_X, HELI_FY + 2.45, HELI_Z),
+      cylinder_params(0.22, 0.5, 20), M["steel"], folder=F_HANGAR)
+# Two crossed blade slabs at slightly different heights so they overlap without touching.
+box(entities, "Heli Blade A", (HELI_X - 5.4, HELI_FY + 2.72, HELI_Z - 0.20), (10.8, 0.06, 0.40),
+    M["rubber"], folder=F_HANGAR)
+box(entities, "Heli Blade B", (HELI_X - 0.20, HELI_FY + 2.80, HELI_Z - 5.4), (0.40, 0.06, 10.8),
+    M["rubber"], folder=F_HANGAR)
 
 # Rail is inset inside the legs on both x and z: flush faces would be coplanar and
 # co-facing with the legs' own, which z-fights.
-box(entities, "Hangar Gantry Leg A", (HX0 + 2.0, HFY, 5.4), (0.4, 6.2, 0.4), M["steel"], folder=F_HANGAR)
-box(entities, "Hangar Gantry Leg B", (HX0 + 25.6, HFY, 5.4), (0.4, 6.2, 0.4), M["steel"], folder=F_HANGAR)
-box(entities, "Hangar Gantry Rail", (HX0 + 2.05, 6.2, 5.45), (23.9, 0.4, 0.3), M["steel"], folder=F_HANGAR)
+box(entities, "Hangar Gantry Leg A", (HX0 + 2.0, HFY, 5.4), (0.4, 6.2, 0.4), M["galv"], folder=F_HANGAR)
+box(entities, "Hangar Gantry Leg B", (HX0 + 25.6, HFY, 5.4), (0.4, 6.2, 0.4), M["galv"], folder=F_HANGAR)
+box(entities, "Hangar Gantry Rail", (HX0 + 2.05, 6.2, 5.45), (23.9, 0.4, 0.3), M["galv"], folder=F_HANGAR)
+
+# Wall-side workshop clutter: bench, tool lockers, gas bottles, drums on a pallet.
+box(entities, "Hangar Bench", (HX0 + 0.7, HFY, -12.6), (5.2, 0.95, 1.1), M["galv"], folder=F_HANGAR)
+for i in range(3):
+    box(entities, f"Hangar Locker {i}", (HX0 + 6.6 + i * 0.85, HFY, -13.2), (0.75, 1.9, 0.7),
+        M["navy"], folder=F_HANGAR)
+for i in range(4):
+    shape(entities, f"Hangar Gas Bottle {i}", (HX0 + 10.4 + i * 0.5, HFY + 0.75, -13.1),
+          capsule_params(0.18, 1.1, 20, 10), M["hazard" if i % 2 else "steel"], folder=F_HANGAR)
+vbox(entities, "Hangar Pallet", (HX0 + 13.0, HFY, -13.4), (1.6, 0.14, 1.3), M["od_light"], folder=F_HANGAR)
+for i in range(3):
+    shape(entities, f"Hangar Drum {i}", (HX0 + 13.4 + (i % 2) * 0.8, HFY + 0.14 + 0.45, -13.1 + (i // 2) * 0.7),
+          cylinder_params(0.4, 0.9, 26), M["container_red" if i == 1 else "olive"], folder=F_HANGAR)
 
 for i in range(9):
     # Back row ends at z=9.7, clear of the north wall's inner face at z=10; the near
@@ -575,7 +655,7 @@ for i in range(4):
         M["olive"], folder=F_BUNKER)
 for i in range(3):
     shape(entities, f"Bunker Pillar {i}", (BX0 + 4.5 + i * 4.5, BFY + BH * 0.5, (BZ0 + BZ1) * 0.5),
-          cylinder_params(0.45, BH, 16), M["concrete"], folder=F_BUNKER)
+          cylinder_params(0.45, BH, 26), M["concrete"], folder=F_BUNKER)
 
 # Mid-shell again (0.3 overshoot into a 0.6 wall). Capture biased south toward the embrasure
 # slits -- the brightest thing in the room -- while clearing the pillars, map table and
@@ -594,28 +674,30 @@ F_CULVERT = folder_entity(folders, "Culvert")
 # axis onto world +Z. Centre height = outer radius, so the pipe rests on grade and its bore
 # floor sits one wall-thickness up -- a short ramp at each mouth makes it enterable.
 CULV_X, CULV_RO, CULV_RI, CULV_LEN = 8.0, 2.3, 2.0, 11.0
-CULV_Y = GRADE + CULV_RO
+CULV_Y = GRADE + CULV_RO - 0.15            # seated 0.15 into grade so it doesn't perch on a tangent line
 CULV_Z0 = -2.0
 for i in range(3):
     cz = CULV_Z0 + CULV_LEN * (i + 0.5)
     shape(entities, f"Culvert Pipe {i}", (CULV_X, CULV_Y, cz),
-          pipe_params(CULV_RO, CULV_RI, CULV_LEN, 28), M["concrete_pipe"], rot=pitch(90.0), folder=F_CULVERT)
+          pipe_params(CULV_RO, CULV_RI, CULV_LEN, 48), M["concrete_pipe"], rot=pitch(90.0), folder=F_CULVERT)
 # Ring collars at the two mouths. Ring is a thin annular slab in local XZ with local +Y as
 # its normal; pitch(90) stands it up facing +Z, so it frames the bore instead of blocking it.
 for i, cz in enumerate((CULV_Z0 + 0.12, CULV_Z0 + 3 * CULV_LEN - 0.12)):
     shape(entities, f"Culvert Collar {i}", (CULV_X, CULV_Y, cz),
-          ring_params(CULV_RO + 0.35, CULV_RI, 32), M["concrete_dark"], rot=pitch(90.0), folder=F_CULVERT)
-platform(entities, "Culvert Ramp South", (CULV_X, GRADE, CULV_Z0 - 2.4), (CULV_X, GRADE + 0.3, CULV_Z0),
+          ring_params(CULV_RO + 0.35, CULV_RI, 48), M["concrete_pipe"], rot=pitch(90.0), folder=F_CULVERT)
+platform(entities, "Culvert Ramp South", (CULV_X, GRADE, CULV_Z0 - 2.4), (CULV_X, GRADE + 0.18, CULV_Z0),
          3.2, M["concrete"], thickness=0.3, friction=0.75, folder=F_CULVERT)
 platform(entities, "Culvert Ramp North", (CULV_X, GRADE, CULV_Z0 + 3 * CULV_LEN + 2.4),
-         (CULV_X, GRADE + 0.3, CULV_Z0 + 3 * CULV_LEN), 3.2, M["concrete"], thickness=0.3,
+         (CULV_X, GRADE + 0.18, CULV_Z0 + 3 * CULV_LEN), 3.2, M["concrete"], thickness=0.3,
          friction=0.75, folder=F_CULVERT)
 # One weak lamp a third of the way in, so bounce-from-the-mouths is separable from
 # direct falloff.
 LAMP_Z = CULV_Z0 + CULV_LEN * 1.1
 e = light(entities, "Culvert Lamp", (CULV_X, CULV_Y + 1.4, LAMP_Z), face_dir(0.0, -1.0, 0.0),
           folder=F_CULVERT)
-add_sphere_light(e, color=(0.95, 0.92, 0.85), intensity=9.0, radius=0.09, draw_range=13.0,
+# Weak relative to the yard, but 9 crushed the whole bore to black, which shows the falloff
+# gradient nothing: the point is to read banding along it, not to prove it goes dark.
+add_sphere_light(e, color=(0.95, 0.92, 0.85), intensity=38.0, radius=0.1, draw_range=18.0,
                  draw_emissive=True)
 
 # One probe PER SEGMENT rather than one for the whole run: the whole point of the culvert is
@@ -640,10 +722,10 @@ F_PAD = folder_entity(folders, "Helipad")
 
 PAD_X, PAD_Z, PAD_R = 40.0, 28.0, 12.0
 PAD_TOP = GRADE + 0.32
-shape(entities, "Helipad Deck", (PAD_X, GRADE + 0.16, PAD_Z), cylinder_params(PAD_R, 0.32, 48),
+shape(entities, "Helipad Deck", (PAD_X, GRADE + 0.16, PAD_Z), cylinder_params(PAD_R, 0.32, 80),
       M["asphalt_pad"], folder=F_PAD, friction=0.9)
 visual(entities, "Helipad Ring", (PAD_X, PAD_TOP + 0.01, PAD_Z),
-       ring_params(PAD_R - 0.6, PAD_R - 1.3, 48), M["marking"], folder=F_PAD)
+       ring_params(PAD_R - 0.6, PAD_R - 1.3, 80), M["marking"], folder=F_PAD)
 vbox(entities, "Helipad H Left", (PAD_X - 2.6, PAD_TOP + 0.01, PAD_Z - 3.2), (0.7, 0.02, 6.4),
      M["marking"], folder=F_PAD)
 vbox(entities, "Helipad H Right", (PAD_X + 1.9, PAD_TOP + 0.01, PAD_Z - 3.2), (0.7, 0.02, 6.4),
@@ -656,23 +738,26 @@ vbox(entities, "Helipad H Bar", (PAD_X - 1.9, PAD_TOP + 0.01, PAD_Z - 0.45), (3.
 for i in range(12):
     a = i / 12.0 * math.tau
     lx, lz = PAD_X + math.cos(a) * (PAD_R + 0.9), PAD_Z + math.sin(a) * (PAD_R + 0.9)
-    box(entities, f"Helipad Light Post {i}", (lx - 0.09, GRADE, lz - 0.09), (0.18, 0.34, 0.18),
-        M["steel_rough"], folder=F_PAD)
-    e = light(entities, f"Helipad Light {i}", (lx, GRADE + 0.46, lz), folder=F_PAD)
+    box(entities, f"Helipad Light Post {i}", (lx - 0.09, GRADE, lz - 0.09), (0.18, 0.42, 0.18),
+        M["galv"], folder=F_PAD)
+    # Sphere bottom overlaps the post top so the fixture reads as mounted, not floating.
+    e = light(entities, f"Helipad Light {i}", (lx, GRADE + 0.5, lz), folder=F_PAD)
     add_sphere_light(e, color=(0.62, 0.84, 1.0), intensity=12.0, radius=0.13, draw_range=11.0,
                      draw_emissive=True)
 
 box(entities, "Helipad Windsock Mast", (PAD_X - PAD_R - 3.0, GRADE, PAD_Z + 6.0), (0.22, 6.0, 0.22),
-    M["steel_rough"], folder=F_PAD)
+    M["galv"], folder=F_PAD)
 # roll(-90) swings the cone's local +Y onto world +X, so it streams away from the mast.
 shape(entities, "Helipad Windsock", (PAD_X - PAD_R - 2.8, GRADE + 5.6, PAD_Z + 6.11),
-      cone_params(0.55, 2.2, 14), M["hazard"], rot=roll(-90.0), folder=F_PAD)
+      cone_params(0.55, 2.2, 22), M["hazard"], rot=roll(-90.0), folder=F_PAD)
 # West of the pad centreline, so the tank's 6.2m body stays clear of the NE tower's apron.
 BOWSER_X, BOWSER_Z = PAD_X - 2.0, PAD_Z + PAD_R + 4.0
+box(entities, "Helipad Bowser Pad", (BOWSER_X - 4.6, GRADE - 0.02, BOWSER_Z - 2.4), (9.2, 0.1, 4.8),
+    M["concrete"], folder=F_PAD, friction=0.9)
 shape(entities, "Helipad Fuel Bowser", (BOWSER_X, GRADE + 1.5, BOWSER_Z),
-      capsule_params(1.5, 6.2, 20, 10), M["steel"], rot=roll(90.0), folder=F_PAD)
+      capsule_params(1.5, 6.2, 32, 16), M["steel"], rot=roll(90.0), folder=F_PAD)
 for i in (0, 1):
-    box(entities, f"Helipad Bowser Cradle {i}", (BOWSER_X - 2.4 + i * 4.0, GRADE, BOWSER_Z - 1.1),
+    box(entities, f"Helipad Bowser Cradle {i}", (BOWSER_X - 2.4 + i * 4.0, GRADE + 0.08, BOWSER_Z - 1.1),
         (0.8, 0.9, 2.2), M["concrete_dark"], folder=F_PAD)
 
 # Open-air apron, so there is no wall to bury a fade band in -- instead it fades over its
@@ -693,16 +778,32 @@ REV_X, REV_Z, HESCO = -34.0, 30.0, 2.2
 
 
 def hesco_run(name, start, end, courses=2):
-    """Stacked 2.2m HESCO cubes along a straight run, alternating shade per course so the
-    stacking reads without textures."""
+    """Stacked 2.2m HESCO cells along a straight run. One shared fill material -- per-cube
+    shade alternation read as a checkerboard once real textures landed -- but a bare run of
+    butted cubes then read as one smooth panel, so each cell gets a dark gabion frame: a
+    post at its leading edge and a band at its top. That is what makes the cells legible."""
     (sx, sz), (ex, ez) = start, end
     dx, dz = ex - sx, ez - sz
-    n = max(1, int(round(math.hypot(dx, dz) / HESCO)))
+    length = math.hypot(dx, dz)
+    n = max(1, int(round(length / HESCO)))
+    # Every run in this level is axis-aligned, so the frames stay unrotated: they are thin
+    # along the run and span the cell's full thickness, standing 0.04 proud on both faces.
+    along_z = abs(dz) > abs(dx)
+    span = HESCO + 0.08
     for c in range(courses):
+        y = GRADE + c * HESCO
         for i in range(n):
             t = i / n
-            box(entities, f"{name} {c}-{i}", (sx + dx * t, GRADE + c * HESCO, sz + dz * t),
-                (HESCO, HESCO, HESCO), M["sand"] if (i + c) % 2 else M["od_light"], folder=F_REV)
+            cx0, cz0 = sx + dx * t, sz + dz * t
+            box(entities, f"{name} {c}-{i}", (cx0, y, cz0), (HESCO, HESCO, HESCO),
+                M["hesco"], folder=F_REV)
+            post = (span, HESCO, 0.09) if along_z else (0.09, HESCO, span)
+            vbox(entities, f"{name} Post {c}-{i}", (cx0 - 0.04, y, cz0 - 0.04), post,
+                 M["concrete_dark"], folder=F_REV)
+        # One band per course at the cell tops, spanning the whole run.
+        band = (span, 0.11, length) if along_z else (length, 0.11, span)
+        vbox(entities, f"{name} Band {c}", (min(sx, ex) - 0.04, y + HESCO - 0.11, min(sz, ez) - 0.04),
+             band, M["concrete_dark"], folder=F_REV)
 
 
 # Pad oversails the HESCO footprint by 0.6 all round; flush edges would be coplanar
@@ -716,20 +817,27 @@ hesco_run("Revetment Back", (REV_X - 6.6, REV_Z + 6.6), (REV_X + 6.6, REV_Z + 6.
 # Interior clear span is x in [-40.6, -27.4], z in [23.4, 36.6]; the stack, the drums and
 # the lamp mast each keep to their own slice of it so nothing grows through a barrier.
 REV_TOP = GRADE + 0.12
-for lvl in range(2):
-    for col in range(5):
-        for row in range(2):
-            i = lvl * 10 + col * 2 + row
+# Per-column stack heights rather than a flat 2-course block: a level top edge read as one
+# extruded slab from the shot angle, and the varied skyline is what sells hand-packed.
+CRATE_H = ((2, 1), (3, 2), (1, 2), (2, 1), (3, 2))
+CRATE_MATS = (M["olive"], M["od_light"], M["container_red"], M["olive"], M["navy"])
+for col, heights in enumerate(CRATE_H):
+    for row, h in enumerate(heights):
+        for lvl in range(h):
+            i = col * 6 + row * 3 + lvl
+            jitter = ((i * 53) % 100) / 100.0 * 7.0 - 3.5
             box(entities, f"Revetment Crate {i}",
                 (REV_X - 5.5 + col * 2.3, REV_TOP + lvl * 0.85, REV_Z - 4.0 + row * 1.5),
-                (2.0, 0.8, 1.2), M["olive"] if i % 3 else M["od_light"], folder=F_REV)
-for i in range(5):
-    shape(entities, f"Revetment Drum {i}", (REV_X - 4.0, REV_TOP + 0.5, REV_Z + 1.8 + i * 1.05),
-          cylinder_params(0.42, 1.0, 18), M["hazard"], folder=F_REV)
+                (2.0, 0.8, 1.2), CRATE_MATS[(col + row + lvl) % 5],
+                rot=yaw(jitter * (0.4 + 0.3 * lvl)), folder=F_REV)
+# Drums on the open south side of the pocket, where they are not buried behind the stack.
+for i in range(6):
+    shape(entities, f"Revetment Drum {i}", (REV_X - 7.4 + (i % 3) * 1.0, REV_TOP + 0.5, REV_Z - 6.0 + (i // 3) * 1.0),
+          cylinder_params(0.42, 1.0, 26), M["hazard"] if i % 2 else M["container_red"], folder=F_REV)
 
 # One lamp inside the U -- the only direct light reaching a three-sided pocket.
 box(entities, "Revetment Lamp Mast", (REV_X - 0.12, REV_TOP, REV_Z + 3.38), (0.24, 4.5, 0.24),
-    M["steel_rough"], folder=F_REV)
+    M["galv"], folder=F_REV)
 e = light(entities, "Revetment Lamp", (REV_X, REV_TOP + 4.6, REV_Z + 3.5),
           face_dir(0.0, -1.0, 0.0), folder=F_REV)
 add_sphere_light(e, color=(1.0, 0.88, 0.70), intensity=95.0, radius=0.16, draw_range=18.0,
@@ -756,7 +864,7 @@ MAST_Y0 = GRADE + 0.9
 box(entities, "Mast Base", (MX - 2.4, GRADE, MZ - 2.4), (4.8, 0.9, 4.8), M["concrete"], folder=F_MAST)
 for i, (ox, oz) in enumerate(((-LEG, -LEG), (LEG, -LEG), (LEG, LEG), (-LEG, LEG))):
     shape(entities, f"Mast Leg {i}", (MX + ox, MAST_Y0 + MAST_H * 0.5, MZ + oz),
-          cylinder_params(0.16, MAST_H, 12), M["steel_rough"], folder=F_MAST)
+          cylinder_params(0.16, MAST_H, 16), M["galv"], folder=F_MAST)
 CORNERS = ((-LEG, -LEG), (LEG, -LEG), (LEG, LEG), (-LEG, LEG))
 for level in range(6):
     ly = MAST_Y0 + 1.0 + level * 2.8
@@ -764,9 +872,9 @@ for level in range(6):
         ax, az = CORNERS[i]
         bx, bz = CORNERS[(i + 1) % 4]
         platform(entities, f"Mast Brace {level}-{i}", (MX + ax, ly, MZ + az), (MX + bx, ly, MZ + bz),
-                 0.14, M["steel_rough"], thickness=0.12, folder=F_MAST)
+                 0.14, M["galv"], thickness=0.12, folder=F_MAST)
         platform(entities, f"Mast Diagonal {level}-{i}", (MX + ax, ly, MZ + az),
-                 (MX + bx, ly + 2.8, MZ + bz), 0.11, M["steel_rough"], thickness=0.10, folder=F_MAST)
+                 (MX + bx, ly + 2.8, MZ + bz), 0.11, M["galv"], thickness=0.10, folder=F_MAST)
 
 # Bowl opens along local +Y with its base at y=0, so pitch it back to aim at the horizon.
 # Its effective outer radius is flatRadius + curveRadius (2.2 here), NOT the `radius` arg,
@@ -776,9 +884,9 @@ HEAD_TOP = MAST_Y0 + MAST_H + 0.6
 DISH_Y = MAST_Y0 + MAST_H + 3.0
 box(entities, "Mast Head", (MX - 1.0, MAST_Y0 + MAST_H, MZ - 1.0), (2.0, 0.6, 2.0), M["steel"], folder=F_MAST)
 shape(entities, "Mast Dish Pylon", (MX, (HEAD_TOP + DISH_Y) * 0.5, MZ),
-      cylinder_params(0.3, DISH_Y - HEAD_TOP, 12), M["steel"], folder=F_MAST)
+      cylinder_params(0.3, DISH_Y - HEAD_TOP, 18), M["steel"], folder=F_MAST)
 shape(entities, "Mast Dish", (MX, DISH_Y, MZ + 1.2),
-      bowl_params(2.4, 1.2, 1.2, 1.0, 12, 32, 0.05), M["marking"], rot=pitch(-62.0), folder=F_MAST)
+      bowl_params(2.4, 1.2, 1.2, 1.0, 20, 48, 0.05), M["marking"], rot=pitch(-62.0), folder=F_MAST)
 
 for i, by in enumerate((MAST_Y0 + 5.0, MAST_Y0 + 10.5, DISH_Y + 3.1)):
     e = light(entities, f"Mast Beacon {i}", (MX, by, MZ), folder=F_MAST)
@@ -789,7 +897,7 @@ for i, by in enumerate((MAST_Y0 + 5.0, MAST_Y0 + 10.5, DISH_Y + 3.1)):
 # dish in -Z, where the pitched rim does not reach.
 for i in range(4):
     shape(entities, f"Mast Whip {i}", (MX - 0.7 + i * 0.45, HEAD_TOP + 1.8, MZ - 1.7),
-          cylinder_params(0.045, 3.6, 8), M["alu"], folder=F_MAST)
+          cylinder_params(0.045, 3.6, 12), M["alu"], folder=F_MAST)
 
 
 # =============================================================================
@@ -804,13 +912,25 @@ def watchtower(tag, cx, cz, facing_deg):
     pad_top = GRADE + 0.3
     deck_y = pad_top + 6.9
     box(entities, f"{tag} Pad", (cx - 3.2, GRADE, cz - 3.2), (6.4, 0.3, 6.4), M["concrete"], folder=F_TOWER)
-    for i, (ox, oz) in enumerate(((-2.6, -2.6), (2.4, -2.6), (2.4, 2.4), (-2.6, 2.4))):
-        box(entities, f"{tag} Leg {i}", (cx + ox, pad_top, cz + oz), (0.22, deck_y - pad_top, 0.22),
-            M["steel_rough"], folder=F_TOWER)
+    LEG_POS = ((-2.6, -2.6), (2.4, -2.6), (2.4, 2.4), (-2.6, 2.4))
+    for i, (ox, oz) in enumerate(LEG_POS):
+        box(entities, f"{tag} Leg {i}", (cx + ox, pad_top, cz + oz), (0.30, deck_y - pad_top, 0.30),
+            M["galv"], folder=F_TOWER)
+    # X-bracing between leg centres, two panels per face, same platform trick as the mast.
+    LEG_C = ((-2.45, -2.45), (2.55, -2.45), (2.55, 2.55), (-2.45, 2.55))
+    for lv in range(2):
+        by = pad_top + 0.4 + lv * 3.2
+        for i in range(4):
+            ax, az = LEG_C[i]
+            bx, bz = LEG_C[(i + 1) % 4]
+            platform(entities, f"{tag} Brace {lv}-{i}A", (cx + ax, by, cz + az),
+                     (cx + bx, by + 2.6, cz + bz), 0.12, M["galv"], thickness=0.1, folder=F_TOWER)
+            platform(entities, f"{tag} Brace {lv}-{i}B", (cx + ax, by + 2.6, cz + az),
+                     (cx + bx, by, cz + bz), 0.12, M["galv"], thickness=0.1, folder=F_TOWER)
     # SpiralStaircase is CENTRE pivot in XZ, helix rising from y=0 about local Y.
     shape(entities, f"{tag} Stair", (cx, pad_top, cz),
-          spiral_params(28, deck_y - pad_top, 2.3, 0.35, 0.14, 620.0, 6, True, False),
-          M["steel_rough"], folder=F_TOWER, friction=0.8)
+          spiral_params(28, deck_y - pad_top, 2.3, 0.35, 0.14, 620.0, 12, True, False),
+          M["steel"], folder=F_TOWER, friction=0.8)
     box(entities, f"{tag} Deck", (cx - 3.0, deck_y, cz - 3.0), (6.0, 0.25, 6.0), M["concrete"], folder=F_TOWER)
     par_y = deck_y + 0.25
     # The west run fills only the gap between the south and north runs -- overlapping
@@ -821,7 +941,7 @@ def watchtower(tag, cx, cz, facing_deg):
             M["concrete_dark"], folder=F_TOWER)
     for i, (ox, oz) in enumerate(((-2.9, -2.9), (2.7, -2.9), (2.7, 2.7), (-2.9, 2.7))):
         box(entities, f"{tag} Roof Post {i}", (cx + ox, par_y, cz + oz), (0.18, 2.4, 0.18),
-            M["steel_rough"], folder=F_TOWER)
+            M["galv"], folder=F_TOWER)
     roof_y = par_y + 2.4
     box(entities, f"{tag} Roof", (cx - 3.3, roof_y, cz - 3.3), (6.6, 0.22, 6.6), M["steel"], folder=F_TOWER)
     e = light(entities, f"{tag} Lamp", (cx, roof_y - 0.3, cz), face_dir(0.0, -1.0, 0.0), folder=F_TOWER)
@@ -829,6 +949,10 @@ def watchtower(tag, cx, cz, facing_deg):
                      draw_emissive=True)
     # Narrow aimed area light: the sharpest DI edge in the level.
     ax, az = math.cos(math.radians(facing_deg)), math.sin(math.radians(facing_deg))
+    # Just a post: the emissive proxy read as a panel floating under the roof, but a housing
+    # box behind it only silhouetted itself against the glow from anywhere the beam points.
+    box(entities, f"{tag} Searchlight Post", (cx + ax * 2.35, par_y, cz + az * 2.35), (0.1, 1.35, 0.1),
+        M["galv"], folder=F_TOWER)
     e = light(entities, f"{tag} Searchlight", (cx + ax * 2.4, par_y + 1.4, cz + az * 2.4),
               face_dir(ax, -0.34, az), folder=F_TOWER)
     add_area_light(e, color=(1.0, 0.96, 0.88), intensity=420.0, half_width=0.5, half_height=0.5,
@@ -845,36 +969,86 @@ watchtower("Tower NE", 50.0, 44.0, 215.0)   # north of the helipad disc, inboard
 F_POOL = folder_entity(folders, "Motor Pool")
 
 CONT = (6.06, 2.59, 2.44)
-for s, (bx, bz, ang) in enumerate(((-14.0, -30.0, 0.0), (-14.0, -25.0, 0.0),
+for s, (bx, bz, ang) in enumerate(((-14.0, -30.0, 0.0), (-14.0, -35.0, 0.0),
                                    (2.0, -30.0, 90.0), (6.0, -22.0, 18.0))):
     for lvl in range(2 if s % 2 == 0 else 1):
         by = GRADE + lvl * (CONT[1] + 0.06)
-        box(entities, f"Container {s}-{lvl}", (bx, by, bz), CONT,
-            [M["olive"], M["red"], M["navy"], M["od_light"]][(s + lvl) % 4], rot=yaw(ang), folder=F_POOL)
-        # Corrugation ribs -- shallow, but enough to break the sun's specular sweep.
+        cmat = [M["olive"], M["container_red"], M["navy"], M["od_light"]][(s + lvl) % 4]
+        box(entities, f"Container {s}-{lvl}", (bx, by, bz), CONT, cmat, rot=yaw(ang), folder=F_POOL)
+        # Corrugation ribs in the container's own colour -- contrast ribs read as planking.
         for r in range(7):
             rx, rz = yaw_offset(bx, bz, ang, 0.3 + r * 0.8, -0.05)
             vbox(entities, f"Container Rib {s}-{lvl}-{r}", (rx, by + 0.15, rz),
-                 (0.12, CONT[1] - 0.3, 0.06), M["concrete_dark"], rot=yaw(ang), folder=F_POOL)
+                 (0.12, CONT[1] - 0.3, 0.06), cmat, rot=yaw(ang), folder=F_POOL)
+        # Door end: two vertical locking bars proud of the +X face.
+        for d in (0, 1):
+            dx_, dz_ = yaw_offset(bx, bz, ang, CONT[0] + 0.02, 0.7 + d * 1.0)
+            vbox(entities, f"Container Bar {s}-{lvl}-{d}", (dx_, by + 0.2, dz_),
+                 (0.05, CONT[1] - 0.4, 0.07), M["concrete_dark"], rot=yaw(ang), folder=F_POOL)
 
-# Jersey barriers staggered into a chicane behind the gate.
-for i in range(10):
-    jx, jz = -9.0 + i * 2.1, -42.0 + (i % 2) * 3.0
-    shape(entities, f"Jersey {i} A", (jx, GRADE, jz), wedge_params(0.55, 1.0, 1.9),
-          M["concrete"], folder=F_POOL)
-    shape(entities, f"Jersey {i} B", (jx + 1.1, GRADE, jz + 1.9), wedge_params(0.55, 1.0, 1.9),
-          M["concrete"], rot=yaw(180.0), folder=F_POOL)
+# Jersey barriers as a proper serpentine: three rows alternating sides of the road, each a
+# run of butted barriers. Cross-section is a two-box trapezoid (wide foot, narrow top) --
+# the wedge-pair version read as a row of dragon's teeth, which is a different obstacle
+# entirely. Each barrier is 2.0 long, so a 4-unit row spans 8m.
+JB_L, JB_FOOT, JB_TOP = 2.0, 0.62, 0.34
+for r, (row_x0, row_z) in enumerate(((-8.0, -44.0), (0.4, -40.0), (-8.0, -36.0))):
+    for k in range(4):
+        # 0.16 gap between units: butted end to end they merged into one unbroken slab.
+        x0 = row_x0 + k * (JB_L + 0.16)
+        box(entities, f"Jersey {r}-{k} Foot", (x0, GRADE, row_z), (JB_L, 0.34, JB_FOOT),
+            M["concrete"], folder=F_POOL)
+        box(entities, f"Jersey {r}-{k} Body", (x0, GRADE + 0.34, row_z + (JB_FOOT - JB_TOP) * 0.5),
+            (JB_L, 0.56, JB_TOP), M["concrete"], folder=F_POOL)
 
-# Fuel tanks on cradles. roll(90) puts the capsule's local +Y axis along world -X.
+# Fuel farm in the south-east corner: bunded pad, three tanks on cradles, one shared
+# manifold run with a riser per tank. Moved out of the hangar approach it used to block.
+FF_X0, FF_Z0 = 30.0, -45.0                 # pad corner; pad is 14 x 16
+box(entities, "Fuel Farm Pad", (FF_X0, GRADE - 0.02, FF_Z0), (14.0, 0.1, 16.0),
+    M["concrete"], folder=F_POOL, friction=0.9)
+for name, corner, size in (
+        ("Fuel Bund West", (FF_X0, GRADE + 0.08, FF_Z0), (0.4, 0.8, 16.0)),
+        ("Fuel Bund East", (FF_X0 + 13.6, GRADE + 0.08, FF_Z0), (0.4, 0.8, 16.0)),
+        ("Fuel Bund South", (FF_X0 + 0.4, GRADE + 0.08, FF_Z0), (13.2, 0.8, 0.4))):
+    box(entities, name, corner, size, M["concrete_dark"], folder=F_POOL)
 for i in range(3):
-    tz = -6.0 + i * 7.0
-    shape(entities, f"Fuel Tank {i}", (-16.0, GRADE + 2.4, tz), capsule_params(2.0, 8.4, 24, 12),
+    tz = FF_Z0 + 3.4 + i * 5.0
+    shape(entities, f"Fuel Tank {i}", (FF_X0 + 6.4, GRADE + 2.4, tz), capsule_params(2.0, 8.4, 36, 18),
           M["steel"], rot=roll(90.0), folder=F_POOL)
     for c in (0, 1):
-        box(entities, f"Fuel Cradle {i}-{c}", (-19.0 + c * 5.2, GRADE, tz - 1.6), (1.0, 1.2, 3.2),
-            M["concrete_dark"], folder=F_POOL)
-    shape(entities, f"Fuel Pipe {i}", (-16.0, GRADE + 0.9, tz - 2.6), cylinder_params(0.12, 3.4, 10),
-          M["steel"], folder=F_POOL)
+        box(entities, f"Fuel Cradle {i}-{c}", (FF_X0 + 3.4 + c * 5.2, GRADE + 0.08, tz - 1.6),
+            (1.0, 1.2, 3.2), M["concrete_dark"], folder=F_POOL)
+    # Riser drops from the tank belly to the manifold run along the east side.
+    shape(entities, f"Fuel Riser {i}", (FF_X0 + 11.6, GRADE + 0.75, tz),
+          cylinder_params(0.09, 1.3, 14), M["galv"], folder=F_POOL)
+shape(entities, "Fuel Manifold", (FF_X0 + 11.6, GRADE + 0.35, FF_Z0 + 6.9),
+      cylinder_params(0.11, 11.0, 14), M["galv"], rot=pitch(90.0), folder=F_POOL)
+
+
+# Repair bay on the south half of the hangar apron: a hull up on stands with its wheels
+# off, plus the clutter that implies. Kept clear of z=-2, the door's sight line.
+RB_X, RB_Z = -22.6, -8.6
+# Chassis + bed + cab rather than one block: a lone box on stands read as an abstract slab.
+box(entities, "Repair Chassis", (RB_X, GRADE + 0.85, RB_Z), (4.6, 0.28, 2.5), M["galv"], folder=F_POOL)
+box(entities, "Repair Bed", (RB_X + 0.1, GRADE + 1.13, RB_Z + 0.05), (2.9, 0.95, 2.4),
+    M["od_light"], folder=F_POOL)
+box(entities, "Repair Cab", (RB_X + 3.15, GRADE + 1.13, RB_Z + 0.1), (1.4, 1.5, 2.3),
+    M["olive"], folder=F_POOL)
+vbox(entities, "Repair Windshield", (RB_X + 3.1, GRADE + 2.0, RB_Z + 0.2), (0.06, 0.55, 2.1),
+     M["navy"], folder=F_POOL)
+for i, (sx_, sz_) in enumerate(((0.4, 0.3), (3.7, 0.3), (0.4, 2.0), (3.7, 2.0))):
+    box(entities, f"Repair Stand {i}", (RB_X + sx_, GRADE, RB_Z + sz_), (0.5, 0.85, 0.5),
+        M["concrete_dark"], folder=F_POOL)
+for i in range(2):
+    shape(entities, f"Repair Wheel {i}", (RB_X + 6.2, GRADE + 0.24 + i * 0.42, RB_Z + 0.6),
+          torus_params(0.62, 0.22, 32, 18), M["rubber"], rot=pitch(90.0), folder=F_POOL)
+shape(entities, "Repair Wheel Leaning", (RB_X + 5.6, GRADE + 0.7, RB_Z + 2.6),
+      torus_params(0.62, 0.22, 32, 18), M["rubber"], rot=roll(18.0), folder=F_POOL)
+box(entities, "Repair Bench", (RB_X - 0.4, GRADE, RB_Z + 3.4), (2.6, 0.9, 0.8), M["galv"], folder=F_POOL)
+for i in range(3):
+    shape(entities, f"Repair Drum {i}", (RB_X + 2.6 + (i % 2) * 0.9, GRADE + 0.45, RB_Z + 3.5 + (i // 2) * 0.9),
+          cylinder_params(0.4, 0.9, 26), M["hazard"] if i else M["olive"], folder=F_POOL)
+vbox(entities, "Repair Tarp", (RB_X + 3.4, GRADE + 0.02, RB_Z - 1.6), (2.4, 0.04, 1.8),
+     M["olive"], rot=yaw(9.0), folder=F_POOL)
 
 
 def vehicle(tag, vx, vz, ang, hull=(6.4, 1.5, 3.0), turret=True):
@@ -890,13 +1064,22 @@ def vehicle(tag, vx, vz, ang, hull=(6.4, 1.5, 3.0), turret=True):
     if turret:
         tx, tz = yaw_offset(vx, vz, ang, hull[0] * 0.45, hull[2] * 0.5)
         shape(entities, f"{tag} Turret", (tx, GRADE + 2.64, tz),
-              cylinder_params(1.25, 0.85, 18), M["olive"], rot=yaw(ang), folder=F_POOL)
+              cylinder_params(1.25, 0.85, 28), M["olive"], rot=yaw(ang), folder=F_POOL)
+        mx, mz = yaw_offset(vx, vz, ang, hull[0] * 0.45 + 1.0, hull[2] * 0.5 - 0.3)
+        box(entities, f"{tag} Mantlet", (mx, GRADE + 2.3, mz), (0.7, 0.65, 0.6),
+            M["olive"], rot=yaw(ang), folder=F_POOL)
         box(entities, f"{tag} Barrel", (tx, GRADE + 2.5, tz),
-            (5.0, 0.19, 0.19), M["steel"], rot=yaw(ang), folder=F_POOL)
-    # Wheel axles run lateral (local +Z): pitch(90) stands the cylinder's axis sideways, then the hull yaw
-    for w in range(4):
-        wx, wz = yaw_offset(vx, vz, ang, 0.9 + (w % 2) * (hull[0] - 2.0), 0.15 if w < 2 else hull[2] - 0.15)
-        shape(entities, f"{tag} Wheel {w}", (wx, GRADE + 0.72, wz), cylinder_params(0.72, 0.5, 16),
+            (5.0, 0.26, 0.26), M["olive"], rot=yaw(ang), folder=F_POOL)
+        ex_, ez_ = yaw_offset(vx, vz, ang, hull[0] * 0.45 + 5.0, hull[2] * 0.5 - 0.17)
+        box(entities, f"{tag} Muzzle", (ex_, GRADE + 2.46, ez_), (0.55, 0.34, 0.34),
+            M["olive"], rot=yaw(ang), folder=F_POOL)
+    # Wheel axles run lateral (local +Z): pitch(90) stands the cylinder's axis sideways,
+    # then the hull yaw. Three axles a side -- two left a 6m hull reading as a toy.
+    for w in range(6):
+        axle = w % 3
+        wx, wz = yaw_offset(vx, vz, ang, 0.9 + axle * (hull[0] - 2.0) * 0.5,
+                            0.15 if w < 3 else hull[2] - 0.15)
+        shape(entities, f"{tag} Wheel {w}", (wx, GRADE + 0.62, wz), cylinder_params(0.62, 0.5, 26),
               M["rubber"], rot=qmul(yaw(ang), pitch(90.0)), folder=F_POOL)
 
 
@@ -908,39 +1091,103 @@ vehicle("Vehicle C", 12.0, -36.0, -25.0)
 for s, (tx, tz) in enumerate(((-6.0, -18.0), (-3.0, -19.5), (16.0, -28.0))):
     for i in range(4):
         shape(entities, f"Tyre {s}-{i}", (tx, GRADE + 0.24 + i * 0.42, tz),
-              torus_params(0.62, 0.22, 20, 12), M["rubber"], rot=pitch(90.0), folder=F_POOL)
+              torus_params(0.62, 0.22, 32, 18), M["rubber"], rot=pitch(90.0), folder=F_POOL)
 
-# Razor-wire spools along the inside of the south wall.
+# Razor-wire spools along the inside of the south wall, skipping the gate throat where a
+# lone 1.6m ring right in the entry sightline read as a leaning tyre.
 for i in range(7):
-    shape(entities, f"Wire Spool {i}", (-40.0 + i * 12.0, GRADE + 0.96, -46.5),
-          torus_params(0.8, 0.16, 18, 10), M["steel"], rot=yaw(90.0), folder=F_POOL)
+    sx = -40.0 + i * 12.0
+    if abs(sx) < 10.0:
+        continue
+    shape(entities, f"Wire Spool {i}", (sx, GRADE + 0.75, -46.5),
+          torus_params(0.6, 0.13, 28, 14), M["steel"], rot=yaw(90.0), folder=F_POOL)
 
 # Sandbag emplacement: two courses of capsules laid tangentially around a firing position.
 SB_X, SB_Z, SB_R = 26.0, 12.0, 4.2
 box(entities, "Emplacement Floor", (SB_X - 3.6, GRADE, SB_Z - 3.6), (7.2, 0.12, 7.2),
-    M["concrete_dark"], folder=F_POOL)
-for course in range(2):
+    M["concrete"], folder=F_POOL)
+for course in range(3):
     for i in range(22):
         a = i / 22.0 * math.tau + course * 0.07
         tang = a + math.pi * 0.5
+        tx, tz = math.cos(tang), math.sin(tang)
+        # A capsule's long axis is local +Y, so run_quat (which only aims local +X) left every
+        # bag standing on end. Map +Y onto the tangent and +X onto world up instead.
         shape(entities, f"Sandbag {course}-{i}",
               (SB_X + math.cos(a) * SB_R, GRADE + 0.2 + course * 0.42, SB_Z + math.sin(a) * SB_R),
-              capsule_params(0.2, 0.78, 10, 5), M["sand"],
-              rot=run_quat(math.cos(tang), math.sin(tang)), folder=F_POOL)
+              capsule_params(0.2, 0.78, 16, 8), M["sand"],
+              rot=mat_to_quat((0.0, 1.0, 0.0), (tx, 0.0, tz), (tz, 0.0, -tx)), folder=F_POOL)
 
 # Floodlight masts around the yard.
+# The last mast covers the fuel farm, which sits in the corner walls' shade at this sun.
 for i, (fx, fz, aim) in enumerate(((-20.0, -12.0, 300.0), (4.0, -14.0, 240.0),
-                                   (18.0, 20.0, 150.0), (-38.0, 16.0, 20.0))):
-    box(entities, f"Floodlight Mast {i}", (fx - 0.16, GRADE, fz - 0.16), (0.32, 9.0, 0.32),
-        M["steel_rough"], folder=F_LIGHT)
+                                   (18.0, 20.0, 150.0), (-38.0, 16.0, 20.0), (46.0, -40.0, 162.0))):
+    box(entities, f"Floodlight Base {i}", (fx - 0.45, GRADE, fz - 0.45), (0.9, 0.5, 0.9),
+        M["concrete"], folder=F_LIGHT)
+    box(entities, f"Floodlight Mast {i}", (fx - 0.16, GRADE + 0.5, fz - 0.16), (0.32, 8.5, 0.32),
+        M["galv"], folder=F_LIGHT)
     ax, az = math.cos(math.radians(aim)), math.sin(math.radians(aim))
     hx, hz = fx + ax * 0.6, fz + az * 0.6
     # Housing is plain steel; the light's own proxy quad is the lit element.
     visual(entities, f"Floodlight Housing {i}", (hx, GRADE + 9.0, hz), box_params(1.1, 0.5, 0.28),
-           M["steel_rough"], rot=yaw(-aim), folder=F_LIGHT)
+           M["galv"], rot=yaw(-aim), folder=F_LIGHT)
     e = light(entities, f"Floodlight {i}", (hx, GRADE + 8.8, hz), face_dir(ax, -0.62, az), folder=F_LIGHT)
     add_area_light(e, color=(1.0, 0.93, 0.80), intensity=300.0, half_width=0.55, half_height=0.25,
                    draw_range=34.0, draw_emissive=True)
+
+
+# =============================================================================
+# barracks row + supply drop -- fills the bare west and north yard
+# =============================================================================
+F_BARRACKS = folder_entity(folders, "Barracks")
+
+HUT_W, HUT_D, HUT_H = 9.0, 4.0, 2.7
+# North of z=30: the hangar is 10m tall and the sun sits at ~25 degrees, so its shadow
+# reaches z~27 here. The row used to sit inside it and read as three black boxes.
+for h, (hz0, wall_mat) in enumerate(((30.0, M["od_light"]), (37.5, M["panel"]), (45.0, M["od_light"]))):
+    hx0 = -57.0
+    n = f"Hut {h}"
+    box(entities, f"{n} Floor", (hx0, GRADE, hz0), (HUT_W, 0.15, HUT_D), M["floor"], folder=F_BARRACKS)
+    box(entities, f"{n} Wall West", (hx0, GRADE + 0.15, hz0), (0.15, HUT_H, HUT_D), wall_mat, folder=F_BARRACKS)
+    box(entities, f"{n} Wall South", (hx0 + 0.15, GRADE + 0.15, hz0), (HUT_W - 0.3, HUT_H, 0.15),
+        wall_mat, folder=F_BARRACKS)
+    box(entities, f"{n} Wall North", (hx0 + 0.15, GRADE + 0.15, hz0 + HUT_D - 0.15), (HUT_W - 0.3, HUT_H, 0.15),
+        wall_mat, folder=F_BARRACKS)
+    wall_run(entities, f"{n} Front", (hx0 + HUT_W, hz0), (hx0 + HUT_W, hz0 + HUT_D), HUT_H, 0.15,
+             wall_mat, openings=[(0.5, 0.0, 0.9, 2.1), (1.8, 1.0, 1.0, 0.9)],
+             base_y=GRADE + 0.15, folder=F_BARRACKS)
+    # Windows down the long side; one door and one window over a 9m run read as a blank shed.
+    for w in range(3):
+        wx = hx0 + 1.6 + w * 2.5
+        vbox(entities, f"{n} Window {w}", (wx, GRADE + 1.25, hz0 - 0.02), (1.1, 0.85, 0.05),
+             M["navy"], folder=F_BARRACKS)
+        vbox(entities, f"{n} Window Sill {w}", (wx - 0.1, GRADE + 1.18, hz0 - 0.07),
+             (1.3, 0.07, 0.1), M["galv"], folder=F_BARRACKS)
+    # Door awning on light posts, the one bit of relief on the entry face.
+    vbox(entities, f"{n} Awning", (hx0 + HUT_W - 0.05, GRADE + 2.35, hz0 + 0.1), (1.3, 0.08, 1.7),
+         M["galv"], folder=F_BARRACKS)
+    for p in (0, 1):
+        vbox(entities, f"{n} Awning Post {p}", (hx0 + HUT_W + 1.1, GRADE + 0.15, hz0 + 0.2 + p * 1.4),
+             (0.08, 2.2, 0.08), M["galv"], folder=F_BARRACKS)
+    box(entities, f"{n} Roof", (hx0 - 0.25, GRADE + 0.15 + HUT_H, hz0 - 0.25),
+        (HUT_W + 0.5, 0.16, HUT_D + 0.5), M["galv"], folder=F_BARRACKS)
+    box(entities, f"{n} Step", (hx0 + HUT_W, GRADE, hz0 + 0.5), (0.7, 0.15, 1.1), M["concrete"], folder=F_BARRACKS)
+    box(entities, f"{n} AC Unit", (hx0 + HUT_W + 0.02, GRADE + 0.4, hz0 + 2.7), (0.5, 0.7, 0.8),
+        M["galv"], folder=F_BARRACKS)
+    e = light(entities, f"{n} Light", (hx0 + HUT_W * 0.5, GRADE + HUT_H - 0.2, hz0 + HUT_D * 0.5),
+              folder=F_BARRACKS)
+    add_sphere_light(e, color=(1.0, 0.93, 0.80), intensity=34.0, radius=0.09, draw_range=10.0,
+                     draw_emissive=True)
+
+# Pallet stacks inside the north gate, staged like an unloaded supply drop.
+for p, (px, pz, cnt, topped) in enumerate(((3.0, 43.0, 6, True), (5.0, 45.0, 4, False),
+                                           (7.4, 43.5, 8, True), (9.4, 45.6, 3, False))):
+    for lv in range(cnt):
+        vbox(entities, f"Pallet {p}-{lv}", (px, GRADE + lv * 0.145, pz), (1.25, 0.13, 1.05),
+             M["od_light"], rot=yaw(((p * 31 + lv * 17) % 10) - 5.0), folder=F_BARRACKS)
+    if topped:
+        box(entities, f"Pallet Crate {p}", (px + 0.05, GRADE + cnt * 0.145, pz + 0.02),
+            (1.1, 0.75, 0.95), M["olive"], folder=F_BARRACKS)
 
 
 # =============================================================================
@@ -952,7 +1199,7 @@ spawn = base_entity("Spawn", (0.0, GRADE + 1.6, -45.5), folder_id=F_GAME)
 spawn[SPAWN] = {"offset": [0.0, 0.0, 0.0], "priority": 1}
 entities.append(spawn)
 
-for name, pos, prio in (("Checkpoint Hangar", (HX1 - 3.0, HFY + 1.2, FUS_CZ + 6.0), 1),
+for name, pos, prio in (("Checkpoint Hangar", (HX1 - 3.0, HFY + 1.2, HELI_Z + 6.0), 1),
                         ("Checkpoint Bunker", (DOOR_CX, BFY + 1.2, BZ1 - 3.0), 2),
                         ("Checkpoint Helipad", (PAD_X, PAD_TOP + 1.2, PAD_Z), 3)):
     e = base_entity(name, pos, folder_id=F_GAME)
@@ -986,16 +1233,21 @@ write_shots(SHOTS_PATH, [
     shot("02_gate", (0.0, 1.8, -58.0), (0.0, 3.0, -40.0)),
     shot("03_motorpool_shadows", (-2.0, 8.0, -18.0), (-22.0, 1.0, -32.0)),
     shot("04_hangar_door", (-10.0, 4.0, -2.0), (-40.0, 3.0, -2.0)),
-    shot("05_hangar_red_wall", (-27.0, 5.0, -2.0), (-51.0, 4.0, -2.0)),
+    shot("05_hangar_red_wall", (-27.0, 5.0, 5.0), (-51.0, 4.0, 1.0)),
     shot("06_hangar_interior", (-26.0, 5.0, 7.0), (-48.0, 2.5, -8.0)),
     shot("07_bunker_console", (BX1 - 1.5, 2.0, BZ1 - 1.0), (BX0 + 3.0, 1.3, BZ0 + 3.0)),
     shot("08_bunker_strip", (BX0 + 2.0, 1.8, BZ1 - 2.0), (BX1, 2.4, BZ0 + 5.0)),
     shot("09_culvert_mouth", (CULV_X, CULV_Y, CULV_Z0 - 4.0), (CULV_X, CULV_Y, CULV_Z0 + 10.0)),
-    shot("10_culvert_middle", (CULV_X, CULV_Y, CULV_Z0 + 12.0), (CULV_X, CULV_Y, CULV_Z0 + 30.0)),
-    shot("11_helipad", (24.0, 6.0, 14.0), (PAD_X, 0.5, PAD_Z)),
+    # Set back from the lamp rather than level with it: standing on the lamp looking away
+    # framed only unlit bore, which shows the falloff test nothing.
+    shot("10_culvert_middle", (CULV_X, CULV_Y, CULV_Z0 + 4.0), (CULV_X, CULV_Y - 0.1, CULV_Z0 + 28.0)),
+    shot("11_helipad", (20.0, 9.0, 46.0), (PAD_X, 1.0, PAD_Z)),
     shot("12_revetment", (REV_X, 3.0, REV_Z - 12.0), (REV_X, 1.0, REV_Z + 2.0)),
     shot("13_radar_mast", (-14.0, 3.0, 26.0), (MX, 12.0, MZ)),
     shot("14_tower_searchlight", (-40.0, 6.0, -33.0), (-50.0, 8.0, -40.0)),
+    shot("15_fuel_farm", (52.0, 5.0, -22.0), (FF_X0 + 6.0, 1.5, FF_Z0 + 8.0)),
+    shot("16_barracks", (-44.0, 6.0, 22.0), (-53.0, 1.5, 38.0)),
+    shot("17_heli", (-28.0, 3.4, 3.5), (HELI_X, 2.2, HELI_Z - 0.5)),
 ])
 
 print(f"wrote {SCENE_PATH}")

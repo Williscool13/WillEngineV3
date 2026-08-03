@@ -538,8 +538,14 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
     float3 H = normalize(V + s.L);
 
     // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
-    float D = (roughness <= lightSpecularFromReflectionsMax) ? 0.0 : D_GGX(N, H, roughness);
-    float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + 0.25 * dot(F0, lumWeights) * D;
+    float spec = 0.0;
+    if (roughness > lightSpecularFromReflectionsMax) {
+        float D = D_GGX(N, H, roughness);
+        float G = G_SMITH_HEIGHT_CORRELATED(N, V, s.L, roughness);
+        float F = dot(F_SCHLICK(V, H, F0), lumWeights);
+        spec = D * G * F / max(4.0 * max(dot(N, V), 0.0) * s.cosShade, 0.001);
+    }
+    float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + spec;
     // Max-channel (not luminance): must match EvalCellLightTarget, avoids chromatic fireflies from saturated colors.
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
     return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * colorMax * s.attenuation;

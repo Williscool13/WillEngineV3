@@ -696,10 +696,12 @@ bool ProceduralModelLoadSlot::GenerateCylinder(const Engine::CylinderParams& p)
         vertices[vi++] = cv;
         for (int j = 0; j < N; j++) {
             const float angle = static_cast<float>(j) / static_cast<float>(N) * 2.0f * glm::pi<float>();
+            // Same phase as the par_shapes wall ring: (sin, -cos)
+            const float x = sinf(angle), z = -cosf(angle);
             Engine::FullVertex v{};
-            v.position = {cosf(angle) * r, hh, sinf(angle) * r};
+            v.position = {x * r, hh, z * r};
             v.normal = {0, 1, 0};
-            v.uv = {-cosf(angle) * 0.5f + 0.5f, sinf(angle) * 0.5f + 0.5f};
+            v.uv = {-x * 0.5f + 0.5f, z * 0.5f + 0.5f};
             v.tangent = {-1, 0, 0, 1};
             v.color = {1, 1, 1, 1};
             vertices[vi++] = v;
@@ -717,10 +719,11 @@ bool ProceduralModelLoadSlot::GenerateCylinder(const Engine::CylinderParams& p)
         vertices[vi++] = cv;
         for (int j = 0; j < N; j++) {
             const float angle = static_cast<float>(j) / static_cast<float>(N) * 2.0f * glm::pi<float>();
+            const float x = sinf(angle), z = -cosf(angle);
             Engine::FullVertex v{};
-            v.position = {cosf(angle) * r, -hh, sinf(angle) * r};
+            v.position = {x * r, -hh, z * r};
             v.normal = {0, -1, 0};
-            v.uv = {cosf(angle) * 0.5f + 0.5f, sinf(angle) * 0.5f + 0.5f};
+            v.uv = {x * 0.5f + 0.5f, z * 0.5f + 0.5f};
             v.tangent = {1, 0, 0, 1};
             v.color = {1, 1, 1, 1};
             vertices[vi++] = v;
