@@ -665,9 +665,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 uint32_t giGatherMode = 0u;
                 const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.debug.giGatherDebugMode);
                 if (frameBuffer.ddgi.bEnabled && ((frameBuffer.ddgi.bFinalGather && bDDGIApply) || giGatherDebug != 0u)) {
-                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherChromaDenoise ? frameBuffer.ddgi.gatherChromaDenoisePasses : 0u, frameBuffer.ddgi.gatherChromaLumaPower, frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.bGatherSkipRay || frameBuffer.debug.bFreezeGatherRay, frameBuffer.ddgi.gatherRaysPerPixel, giGatherDebug != 0u, frameBuffer.debug.bFreezeScreenFeedback);
+                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherChromaDenoise ? frameBuffer.ddgi.gatherChromaDenoisePasses : 0u, frameBuffer.ddgi.gatherChromaLumaPower, frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.bGatherSkipRay || frameBuffer.debug.bFreezeGatherRay, frameBuffer.ddgi.gatherRaysPerPixel, false, frameBuffer.debug.bFreezeScreenFeedback);
                     if (giGather.bValid) {
-                        giGatherMode = giGatherDebug != 0u ? giGatherDebug + 1u : 1u;
+                        giGatherMode = (frameBuffer.ddgi.bFinalGather && bDDGIApply) ? 1u : 0u;
+                        SetupGIGatherDebug(*renderGraph, pipelineManager, renderExtent, frameBuffer.debug.giGatherDebugMode);
                     }
                 }
 
@@ -788,8 +789,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         // Snapshot the lit HDR composite BEFORE any overlay/debug/text/sprite pass so the gather's screen tier reads GI, not UI glyphs or debug lines carried into lit_color_history.
         const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
-        const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bFinalGather;
-        const bool bLitColorIsScene = frameBuffer.debug.giGatherDebugMode == 0 && frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
+        const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || frameBuffer.debug.giGatherDebugMode != 0);
+        const bool bLitColorIsScene = frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
         const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace);
         if (bSnapshotLitColor) {
             renderGraph->CreateTexture(SID("lit_color_preoverlay"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);

@@ -1328,6 +1328,15 @@ SHADER_PUBLIC struct GIDeconstructPushConstant
     SHADER_PUBLIC uint32_t bCascadesValid;
 };
 
+SHADER_PUBLIC struct GIGatherDebugPushConstant
+{
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t resolvedIndex;
+    SHADER_PUBLIC uint32_t dataIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t mode;
+};
+
 SHADER_PUBLIC struct ClusterGridDebugPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(GPUDebugDrawArgs) args;

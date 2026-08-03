@@ -380,4 +380,36 @@ void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Co
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
     });
 }
+
+void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, int32_t mode)
+{
+    if (mode <= 0 || !graph.HasTexture(GI_GATHER_RESOLVED) || !graph.HasTexture(GI_GATHER_DATA)) {
+        return;
+    }
+
+    graph.CreateTexture(GI_GATHER_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+
+    RenderPass& pass = graph.AddPass(SID("GI Gather Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
+    pass.ReadSampledImage(GI_GATHER_RESOLVED);
+    pass.ReadSampledImage(GI_GATHER_DATA);
+    pass.WriteStorageImage(GI_GATHER_DEBUG_TARGET);
+    pass.Execute([pipelineManager, renderExtent, mode](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_gather_debug"));
+        if (!pipelineEntry) {
+            return;
+        }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        GIGatherDebugPushConstant pc{
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .resolvedIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_RESOLVED),
+            .dataIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_DEBUG_TARGET),
+            // GIGatherDebugColor keeps the composite-era 2-based numbering.
+            .mode = static_cast<uint32_t>(mode) + 1u,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
+    });
+}
 } // Render

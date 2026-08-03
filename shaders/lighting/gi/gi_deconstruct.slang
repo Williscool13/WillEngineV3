@@ -165,7 +165,7 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
     float3 color = float3(0.0);
     if (pc.mode == GI_DECONSTRUCT_CACHE_KEY || pc.mode == GI_DECONSTRUCT_CACHE_RADIANCE) {
         RadianceCacheKey key = RadianceCacheComputeKey(worldPosition, worldN, scene.cameraWorldPos.xyz);
-        uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition);
+        uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition, worldN);
         if (slot != RADIANCE_CACHE_HASH_INVALID) {
             if (pc.mode == GI_DECONSTRUCT_CACHE_KEY) {
                 color = GIDeconstructKeyColor(pc.cacheKeys[slot]);

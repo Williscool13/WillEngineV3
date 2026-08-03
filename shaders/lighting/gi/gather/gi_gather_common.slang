@@ -133,7 +133,7 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
     return result;
 }
 
-/** Debug views: 2 = resolved irradiance, 3 = fallback tier (cyan screen / green cache / blue probe / yellow sky / red backface / magenta baked), 4 = hit distance, 5 = temporal accumulation count. */
+/** Debug views: 2 = resolved irradiance, 3 = fallback tier (cyan screen / green cache / blue probe / yellow sky / red backface / magenta baked), 4 = hit distance, 5 = temporal accumulation count, 6 = first-ray escape (yellow sky miss, magenta backface, front-face hitT green-to-red over 2-10m). */
 public float3 GIGatherDebugColor(uint dataIndex, uint resolvedIndex, uint2 pixel, uint mode, float3 indirectDiffuse)
 {
     if (mode == 2u) {
@@ -153,6 +153,16 @@ public float3 GIGatherDebugColor(uint dataIndex, uint resolvedIndex, uint2 pixel
             case 6u: return float3(0.9, 0.2, 0.9);
             default: return float3(0.0);
         }
+    }
+    if (mode == 6u) {
+        uint tier = uint(data.y);
+        if (tier == 3u) {
+            return float3(1.0, 0.9, 0.2);
+        }
+        if (tier == 4u) {
+            return float3(1.0, 0.2, 0.9);
+        }
+        return lerp(float3(0.1, 0.5, 0.1), float3(1.0, 0.1, 0.1), saturate((data.x - 2.0) / 8.0));
     }
     return float3(data.x / 20.0);
 }

@@ -145,8 +145,5 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
     }
 
     float3 finalColor = directLight + ibl + li.emissiveRGB;
-    if (pc.giGatherMode >= 2u) {
-        finalColor = GIGatherDebugColor(pc.giDataIndex, pc.giResolvedIndex, pixel, pc.giGatherMode, indirectDiffuse);
-    }
     rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor, 1.0);
 }

@@ -38,6 +38,7 @@ inline const StringID GI_GATHER_MOMENTS_HISTORY = SID("gi_gather_moments_history
 inline const StringID GI_MOTION_TILED_MAX = SID("gi_motion_tiled_max");
 inline const StringID GI_MOTION_TILED_NEIGHBOR_MAX = SID("gi_motion_tiled_neighbor_max");
 inline const StringID GI_DECONSTRUCT_TARGET = SID("gi_deconstruct_target");
+inline const StringID GI_GATHER_DEBUG_TARGET = SID("gi_gather_debug_target");
 
 inline constexpr uint32_t GI_GATHER_MAX_RAYS_PER_PIXEL = 8u;
 
@@ -78,6 +79,15 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
  * @param mode 1 cache cell identity hash, 2 cache radiance/servability, 3 DDGI Chebyshev-gate weight fractions, 4 dominant-probe mean-vs-distance margin, 5 coverage/confidence/serving cascade, 6 raw DDGI irradiance
  */
 void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, int32_t mode);
+
+/**
+ * Gather debug views written to gi_gather_debug_target for the debug visualizer instead of hijacking the lit composite, so lit_color_history and the screen tier stay authentic while inspecting.
+ * @param graph
+ * @param pipelineManager
+ * @param renderExtent
+ * @param mode UI mode: 1 resolved irradiance, 2 fallback tier, 3 hit distance, 4 accumulation, 5 first-ray escape
+ */
+void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, int32_t mode);
 } // Render
 
 #endif //WILL_ENGINE_FINAL_GATHER_PASSES_H

@@ -382,11 +382,20 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
 
         ImGui::SeparatorText("GI Diffuse Gather"); {
-            const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation"};
+            const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation", "Escape"};
             ImGui::SetNextItemWidth(120.0f);
-            ImGui::Combo("View##GIGatherDebug", &state->debug.render.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)));
+            if (ImGui::Combo("View##GIGatherDebug", &state->debug.render.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)))) {
+                if (state->debug.render.giGatherDebugMode != 0) {
+                    state->debug.resourceName = Core::InlineString("gi_gather_debug_target");
+                    state->debug.transformationType = DebugTransformationType::None;
+                    state->debug.viewAspect = Core::DebugViewAspect::None;
+                }
+                else if (state->debug.resourceName == "gi_gather_debug_target") {
+                    state->debug.resourceName.Clear();
+                }
+            }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Fullscreen final-gather view; runs the gather even when it is not applied to lighting. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where each ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface, magenta baked probe. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history).");
+                ImGui::SetTooltip("Final-gather view in the debug visualizer; runs the gather even when it is not applied, and lighting/lit history stay live so the screen tier behaves as in normal play. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where the first ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface, magenta baked probe. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history). Escape = first-ray classification: yellow sky miss, magenta backface, front-face hit distance green to red over 2-10m; red/yellow/magenta at interior texels means the ray left the room.");
             }
         }
 

@@ -58,20 +58,44 @@ public float3 RadianceCacheBucketNormal(uint bucket)
     }
 }
 
+public static const float RADIANCE_CACHE_KEY_NORMAL_BIAS = 0.5;
+
+// A cell is a surface patch: the tangential footprint grows with level, but the bucket's dominant axis stays at base resolution at every level so co-normal surfaces closer than a coarse cell (interior vs exterior face of one wall) can never share a key.
+public float3 RadianceCacheQuantum(uint normalBucket, uint level)
+{
+    float cs = RadianceCacheCellSizeAtLevel(level);
+    float3 quantum = float3(cs, cs, cs);
+    uint axis = normalBucket >> 1u;
+    if (axis == 0u) {
+        quantum.x = RADIANCE_CACHE_CELL_SIZE_BASE;
+    } else if (axis == 1u) {
+        quantum.y = RADIANCE_CACHE_CELL_SIZE_BASE;
+    } else {
+        quantum.z = RADIANCE_CACHE_CELL_SIZE_BASE;
+    }
+    return quantum;
+}
+
+// Half-quantum normal bias keys the surface's own air side: geometry sitting exactly on a cell plane otherwise coin-flips between the two adjacent cells (at insert AND find).
+static int3 RadianceCacheQuantize(float3 worldPos, float3 normal, uint normalBucket, uint level)
+{
+    float3 quantum = RadianceCacheQuantum(normalBucket, level);
+    return int3(floor((worldPos + normal * (RADIANCE_CACHE_KEY_NORMAL_BIAS * quantum)) / quantum));
+}
+
 public RadianceCacheKey RadianceCacheComputeKey(float3 worldPos, float3 normal, float3 cameraPos)
 {
     RadianceCacheKey key;
     key.level = RadianceCacheLevelFromDistance(distance(worldPos, cameraPos));
-    float cs = RadianceCacheCellSizeAtLevel(key.level);
-    key.cellPos = int3(floor(worldPos / cs));
     key.normalBucket = RadianceCacheNormalBucket(normal);
+    key.cellPos = RadianceCacheQuantize(worldPos, normal, key.normalBucket, key.level);
     return key;
 }
 
 public float3 RadianceCacheCellCenterFromKey(RadianceCacheKey key)
 {
-    float cs = RadianceCacheCellSizeAtLevel(key.level);
-    return (float3(key.cellPos) + 0.5) * cs;
+    float3 quantum = RadianceCacheQuantum(key.normalBucket, key.level);
+    return (float3(key.cellPos) + 0.5) * quantum - RadianceCacheBucketNormal(key.normalBucket) * (RADIANCE_CACHE_KEY_NORMAL_BIAS * RADIANCE_CACHE_CELL_SIZE_BASE);
 }
 
 static uint RadianceCachePackAxis(int v) { return uint(clamp(v + 32768, 0, 65535)); }
@@ -125,7 +149,7 @@ public uint RadianceCacheHashFind(uint* entries, RadianceCacheKey key)
 }
 
 // Exact-level find with +/-1 LOD tolerance: a surface that just crossed a LOD ring reads the surviving neighbour-level cell (still smoothed) until its own-level cell converges, instead of the raw probe tier.
-public uint RadianceCacheHashFindLodTolerant(uint* entries, RadianceCacheKey key, float3 worldPos)
+public uint RadianceCacheHashFindLodTolerant(uint* entries, RadianceCacheKey key, float3 worldPos, float3 normal)
 {
     uint slot = RadianceCacheHashFind(entries, key);
     if (slot != RADIANCE_CACHE_HASH_INVALID) { return slot; }
@@ -133,8 +157,7 @@ public uint RadianceCacheHashFindLodTolerant(uint* entries, RadianceCacheKey key
     if (key.level > 0u) {
         RadianceCacheKey finer = key;
         finer.level = key.level - 1u;
-        float fcs = RadianceCacheCellSizeAtLevel(finer.level);
-        finer.cellPos = int3(floor(worldPos / fcs));
+        finer.cellPos = RadianceCacheQuantize(worldPos, normal, key.normalBucket, finer.level);
         slot = RadianceCacheHashFind(entries, finer);
         if (slot != RADIANCE_CACHE_HASH_INVALID) { return slot; }
     }
@@ -142,7 +165,8 @@ public uint RadianceCacheHashFindLodTolerant(uint* entries, RadianceCacheKey key
     if (key.level < RADIANCE_CACHE_MAX_LEVEL) {
         RadianceCacheKey coarser = key;
         coarser.level = key.level + 1u;
-        coarser.cellPos = key.cellPos >> 1;
+        // Requantized (not cellPos >> 1) so the biased coordinate matches a native coarse-level key.
+        coarser.cellPos = RadianceCacheQuantize(worldPos, normal, key.normalBucket, coarser.level);
         slot = RadianceCacheHashFind(entries, coarser);
     }
     return slot;
@@ -173,15 +197,23 @@ public uint RadianceCacheHashInsert(uint* entries, uint2* keys, RadianceCacheSta
 }
 
 // Seeds a newly-created cell from whichever adjacent LOD already has data, instead of starting black.
-// Parent (level+1) is a single lookup, one candidate. Children (level-1) are up to 8, averaged if found.
+// Parent (level+1) is a single lookup, one candidate. Children (level-1) are up to 4 (the bucket axis does not subdivide across levels), averaged if found.
 public uint2 RadianceCacheWarmStartRadiance(uint* entries, RadianceCacheCell* cells, RadianceCacheKey key, out uint seedCount, out uint seedEmissive)
 {
     seedCount = 0u;
     seedEmissive = 0u;
+    uint axis = key.normalBucket >> 1u;
     if (key.level < RADIANCE_CACHE_MAX_LEVEL) {
         RadianceCacheKey parentKey = key;
         parentKey.level = key.level + 1u;
         parentKey.cellPos = key.cellPos >> 1;
+        if (axis == 0u) {
+            parentKey.cellPos.x = key.cellPos.x;
+        } else if (axis == 1u) {
+            parentKey.cellPos.y = key.cellPos.y;
+        } else {
+            parentKey.cellPos.z = key.cellPos.z;
+        }
         uint parentSlot = RadianceCacheHashFind(entries, parentKey);
         if (parentSlot != RADIANCE_CACHE_HASH_INVALID) {
             uint2 packed = cells[parentSlot].packedRadiance;
@@ -200,8 +232,16 @@ public uint2 RadianceCacheWarmStartRadiance(uint* entries, RadianceCacheCell* ce
         uint minChildCount = RADIANCE_CACHE_ACCUM_FRAMES;
         RadianceCacheKey childKey = key;
         childKey.level = key.level - 1u;
-        for (uint i = 0u; i < 8u; i++) {
-            childKey.cellPos = key.cellPos * 2 + int3(i & 1u, (i >> 1u) & 1u, (i >> 2u) & 1u);
+        for (uint i = 0u; i < 4u; i++) {
+            int u = int(i & 1u);
+            int v = int((i >> 1u) & 1u);
+            if (axis == 0u) {
+                childKey.cellPos = int3(key.cellPos.x, key.cellPos.y * 2 + u, key.cellPos.z * 2 + v);
+            } else if (axis == 1u) {
+                childKey.cellPos = int3(key.cellPos.x * 2 + u, key.cellPos.y, key.cellPos.z * 2 + v);
+            } else {
+                childKey.cellPos = int3(key.cellPos.x * 2 + u, key.cellPos.y * 2 + v, key.cellPos.z);
+            }
             uint childSlot = RadianceCacheHashFind(entries, childKey);
             if (childSlot != RADIANCE_CACHE_HASH_INVALID) {
                 uint2 packed = cells[childSlot].packedRadiance;

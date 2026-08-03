@@ -172,8 +172,5 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     } else {
         finalColor = diffuse * albedo + specular * specReflectance + ibl + emissive;
     }
-    if (pc.giGatherMode >= 2u) {
-        finalColor = GIGatherDebugColor(pc.giDataIndex, pc.giResolvedIndex, pixel, pc.giGatherMode, indirectDiffuse);
-    }
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(finalColor, 1.0);
 }
