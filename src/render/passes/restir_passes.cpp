@@ -637,9 +637,14 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
         buckets[idx++] = {bucketIndex, shader};
     }
 
+    const bool bMergedReflections = reflectionConfig.bMergedDenoise && ComputeReflectionRoughnessMax(reflectionConfig) >= 0.0f && graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET);
+
     RenderPass& lightingResolve = graph.AddPass(SID("[ReSTIR DI] Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
+    if (bMergedReflections) {
+        lightingResolve.ReadSampledImage(REFLECTION_SPEC_NOISY_TARGET);
+    }
     if (graph.HasBuffer(SID("restir_reservoir_final"))) {
         lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
     }
@@ -665,7 +670,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
             depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
             field = activeCheckerboardField, packed = bCheckerboardPacked, fullRate = bFullRateResolve,
-            buckets, lightingCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            buckets, lightingCount, bMergedReflections](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
             for (uint32_t i = 0; i < lightingCount; ++i) {
@@ -698,6 +703,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                     .activeCheckerboardField = field,
                     .bCheckerboardPacked = packed,
+                    .reflectionIndex = bMergedReflections ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET) : ~0x0u,
                     .bFullRateResolve = fullRate,
                     .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
                     .sunVisIndex = graph.HasTexture(SID("restir_sun_vis")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_sun_vis")) : ~0x0u,
@@ -727,8 +733,9 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
-    const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
-    const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
+    const StringID reflectionTarget = REFLECTION_SPEC_NOISY_TARGET;
+    const bool bReflectionMerged = reflectionConfig.bMergedDenoise && reflectionRoughnessMax >= 0.0f && graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET);
+    const bool bReflection = !bReflectionMerged && reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
     RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -757,7 +764,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
     const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, bReflection, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -788,6 +795,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                 .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
+                .bReflectionMerged = bReflectionMerged ? 1u : 0u,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

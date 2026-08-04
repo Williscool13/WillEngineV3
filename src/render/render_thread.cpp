@@ -630,9 +630,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             relax.framerateScale = denoiserFramerateScale;
             reblur.framerateScale = denoiserFramerateScale;
 
-            Core::RELAXParams reflectionRelax = restir.reflectionRelax;
-            reflectionRelax.framerateScale = denoiserFramerateScale;
-
             // Ground-truth reference overlays are orthogonal to LightingMode: when one is active it replaces the normal lighting path entirely.
             if (viewFamily.groundTruthMode != Core::GroundTruthMode::None) {
                 switch (viewFamily.groundTruthMode) {
@@ -687,9 +684,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                             SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, frameBuffer.reflection);
                         }
                         SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, bDDGIApply, false, frameBuffer.debug.bFreezeScreenFeedback);
-                        if (frameBuffer.reflection.bDenoiserEnabled) {
-                            SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, 0u, 1.0f, frameBuffer.reflection);
-                        }
                         SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, giGatherMode, frameBuffer.reflection);
                         break;
                     }
@@ -712,22 +706,20 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         if (bScreenSpaceTrace) {
                             SetupSSRTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection);
                         }
+                        const bool bMergedReflections = frameBuffer.reflection.bMergedDenoise;
+                        const bool bReflectionCheckerboardPacked = bMergedReflections && restirCheckerboardPacked != 0u;
+                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, frameBuffer.debug.bFreezeScreenFeedback);
                         SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked, bRestirFullRateResolve ? 1u : 0u, frameBuffer.reflection);
 
-                        const bool bReflectionCheckerboardPacked = (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) && frameBuffer.reflection.bDenoiserEnabled;
-                        SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, frameBuffer.debug.bFreezeScreenFeedback);
                         const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                         if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                            SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection);
                             SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField, denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                            SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection);
                             SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField, denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR) {
-                            SetupReflectionRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reflectionRelax, frameNumber, restirCheckerboardField, restirCheckerboardResolveSpeed, frameBuffer.reflection);
                             const NrdBackend nrdBackend = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR ? NrdBackend::Reblur : NrdBackend::Relax;
                             // Declaration order defines the RDG read/write sequence: prep writes -> dispatch -> writeback
                             if (nrdDenoiser->Prepare(*renderGraph, viewFamily, renderExtent, nrdBackend, relax, reblur, frameNumber, frameIndex, renderFps)) {

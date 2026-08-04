@@ -206,6 +206,23 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
 
     float diffHitT = (isnan(diffHitDistance) || isinf(diffHitDistance)) ? 0.0 : diffHitDistance;
     float specHitT = (isnan(specHitDistance) || isinf(specHitDistance)) ? 0.0 : specHitDistance;
+
+    // Merged reflections: the reflection shade pass wrote radiance demodulated by this same specReflectance, so it sums
+    // directly into the specular channel. The hitT slot goes to the dominant specular contributor; on smooth surfaces
+    // (roughness <= lightSpecularFromReflectionsMax) the analytic terms were skipped above, so the ray's hitT always wins.
+    if (pc.reflectionIndex != ~0x0u)
+    {
+        uint2 reflCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? PixelPosToReservoirPos(pixel, field) : pixel;
+        float4 refl = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(reflCoord, 0));
+        float reflLum = dot(refl.rgb, float3(0.2126, 0.7152, 0.0722));
+        float specLum = dot(specularOut, float3(0.2126, 0.7152, 0.0722));
+        if (reflLum > specLum)
+        {
+            float reflHitT = refl.w;
+            specHitT = (isnan(reflHitT) || isinf(reflHitT)) ? 0.0 : reflHitT;
+        }
+        specularOut += SanitizeRadiance(refl.rgb);
+    }
     float4 diffPacked = float4(SanitizeRadiance(diffuseOut), diffHitT);
     float4 specPacked = float4(SanitizeRadiance(specularOut), specHitT);
 

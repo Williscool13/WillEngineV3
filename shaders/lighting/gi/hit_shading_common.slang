@@ -18,6 +18,7 @@ import radiance_cache_interop;
 import radiance_cache_hash_common;
 import reflection_probe_interop;
 import reflection_probe_common;
+import reflection_interop;
 
 // Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
@@ -226,7 +227,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
 }
 
 /** Used by the reflection shade pass. */
-public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias)
+public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias, uint sunMode)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -264,20 +265,24 @@ public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance inst
 
     float3 radiance = emissive;
     DirectionalLightData sun = pc.lightData->directionalLight;
-    if (sun.directionIntensity.w > 0.0) {
+    if (sun.directionIntensity.w > 0.0 && sunMode != REFLECTION_SUN_ALWAYS_UNLIT) {
         float3 L = normalize(-sun.directionIntensity.xyz);
         float NoL = dot(N, L);
         if (NoL > 0.0) {
-            RayDesc shadowRay;
-            shadowRay.Origin = OffsetHitRayOrigin(worldPosition, N);
-            shadowRay.Direction = L;
-            shadowRay.TMin = 0.0;
-            shadowRay.TMax = 10000.0;
+            bool bVisible = true;
+            if (sunMode == REFLECTION_SUN_SHADOW_RAY) {
+                RayDesc shadowRay;
+                shadowRay.Origin = OffsetHitRayOrigin(worldPosition, N);
+                shadowRay.Direction = L;
+                shadowRay.TMin = 0.0;
+                shadowRay.TMax = 10000.0;
 
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
-            shadow.Proceed();
-            if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
+                RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+                shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
+                shadow.Proceed();
+                bVisible = shadow.CommittedStatus() == COMMITTED_NOTHING;
+            }
+            if (bVisible) {
                 radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
             }
         }

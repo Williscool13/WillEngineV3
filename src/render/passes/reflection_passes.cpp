@@ -161,7 +161,11 @@ void SetupReflectionShadePass(RenderGraph& graph,
     pass.WriteStorageImage(REFLECTION_SPEC_NOISY_TARGET);
 
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bWorldGrid, bScreenSpace, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, bCheckerboardPacked,
+
+    const uint32_t sunMode = (!bHasTLAS && reflectionConfig.sunMode == Core::ReflectionConfiguration::SunMode::ShadowRay)
+        ? static_cast<uint32_t>(Core::ReflectionConfiguration::SunMode::AlwaysLit)
+        : static_cast<uint32_t>(reflectionConfig.sunMode);
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bWorldGrid, bScreenSpace, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, bCheckerboardPacked, sunMode,
             field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy, reflectionProbeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
 
@@ -198,6 +202,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                 .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
+                .sunMode = sunMode,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_shade"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

@@ -81,8 +81,6 @@ add_library(render STATIC
         passes/restir_passes.h
         passes/reflection_passes.cpp
         passes/reflection_passes.h
-        passes/reflection_denoise_passes.cpp
-        passes/reflection_denoise_passes.h
         passes/denoising_passes.cpp
         passes/denoising_passes.h
         passes/nrd_denoiser.cpp

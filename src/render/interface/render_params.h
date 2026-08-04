@@ -394,7 +394,6 @@ struct ReSTIRParams
     SVGFParams svgf{};
 
     RELAXParams relax{};
-    RELAXParams reflectionRelax{};
 
     ReBLURParams reblur{};
 };
@@ -447,10 +446,13 @@ struct DDGIParams
 
 struct ReflectionConfiguration
 {
+    enum class SunMode : uint32_t { ShadowRay = 0, AlwaysLit = 1, AlwaysUnlit = 2 };
+
     bool bEnabled{true};
-    bool bDenoiserEnabled{true};
+    bool bMergedDenoise{true};
     bool bScreenSpaceLighting{true};
     bool bScreenSpaceTrace{false};
+    SunMode sunMode{SunMode::ShadowRay};
 
     float tracedRoughnessMax{0.3f};
     float lightSpecularFromReflectionsMax{0.3f};

@@ -25,7 +25,6 @@ class PipelineManager;
 /** Descriptor buffer + noisy output name shared between the ReSTIR-mode base-pass side-output producer and the Default-mode dedicated trace producer. */
 inline const StringID REFLECTION_HIT_DESCRIPTORS_BUFFER = SID("reflection_hit_descriptors");
 inline const StringID REFLECTION_SPEC_NOISY_TARGET = SID("reflection_spec_noisy");
-inline const StringID REFLECTION_SPEC_DENOISED_TARGET = SID("reflection_spec_denoised");
 
 inline float ComputeReflectionRoughnessMax(const Core::ReflectionConfiguration& config)
 {

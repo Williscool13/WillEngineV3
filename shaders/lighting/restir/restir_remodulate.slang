@@ -149,7 +149,9 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
             }
         }
 
-        if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
+        if (pc.bReflectionMerged != 0u && roughness <= pc.reflectionRoughnessMax) {
+            reflectionSpecular = float3(0.0);
+        } else if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
             float3 tracedReflection = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb;
             reflectionSpecular = tracedReflection * specReflectance;
         }

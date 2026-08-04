@@ -163,7 +163,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
                 }
             }
             if (!bShaded) {
-                radiance = ShadeReflectionRayHit(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT);
+                radiance = ShadeReflectionRayHit(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT, pc.sunMode);
             }
             hitTOut = hit.hitT;
         }
@@ -195,7 +195,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
     float3 specReflectance = max(F0 * envBRDF.x + envBRDF.y, float3(0.01, 0.01, 0.01));
     float3 demodulated = radiance / specReflectance;
 
-    // Packed (rcoord) when a checkerboard-aware consumer (the reflection RELAX prepass) will resolve it; otherwise dense-duplicated to both fields so a direct .Load(pixel) fallback (denoiser off, or ReBLUR/plain modes) sees no holes. Matches lighting_pbr_restir.slang's writeCoord logic exactly.
+    // Packed (rcoord) when a checkerboard-aware consumer (the merged lighting resolve or the reflection RELAX prepass) will resolve it; otherwise dense-duplicated to both fields so a direct .Load(pixel) fallback (denoiser off, full-rate resolve, or ReBLUR/plain modes) sees no holes. Matches lighting_pbr_restir.slang's writeCoord logic exactly.
     float4 outColor = float4(demodulated, hitTOut);
     uint2 writeCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? rcoord : pixel;
     rdgStorageFloat4[pc.outputIndex][writeCoord] = outColor;

@@ -1039,10 +1039,19 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             static const Core::ReflectionConfiguration reflectionDefaults{};
 
             if (ImGui::Checkbox("Enable Reflections", &reflection.bEnabled)) { changed = true; }
-            if (ImGui::Checkbox("Enable Reflection Denoiser", &reflection.bDenoiserEnabled)) { changed = true; }
+            if (ImGui::Checkbox("Merged Denoise", &reflection.bMergedDenoise)) { changed = true; }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("ReSTIR mode only: sum the traced reflection radiance into the main denoiser's specular channel at the lighting resolve, so one denoiser covers lights + sun + reflections. Off: the raw noisy shade output composites directly in remodulate."); }
             if (ImGui::Checkbox("Screen-Space Hit Lighting", &reflection.bScreenSpaceLighting)) { changed = true; }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reproject the reflection hit into last frame's lit image and reuse that fully shadowed color; falls back to unshadowed analytic hit shading when the hit is off-screen or occluded."); }
             if (ImGui::Checkbox("Screen-Space Trace", &reflection.bScreenSpaceTrace)) { changed = true; }
+
+            static const char* reflectionSunModes[] = {"Shadow Ray", "Always Lit", "Always Unlit"};
+            int reflectionSunMode = static_cast<int>(reflection.sunMode);
+            if (ImGui::Combo("Hit Sun Mode##reflection", &reflectionSunMode, reflectionSunModes, IM_ARRAYSIZE(reflectionSunModes))) {
+                reflection.sunMode = static_cast<Core::ReflectionConfiguration::SunMode>(reflectionSunMode);
+                changed = true;
+            }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Sun term when a reflection hit falls back to analytic shading (screen-space reuse missed). Shadow Ray traces sun visibility at the hit; Always Lit skips the ray and assumes visible; Always Unlit drops the sun entirely (indoor scenes)."); }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Default mode only: march the reflection ray against the depth buffer instead of the TLAS. Off-screen and occluded rays fall back to reflection probes then the skybox."); }
 
             auto reflF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
@@ -1056,10 +1065,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "Screen-space trace only: view-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
             if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Screen-space trace only: maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
 
-            if (reflection.bDenoiserEnabled && state->debug.restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                ImGui::SeparatorText("Reflection Denoiser (RELAX)");
-                DrawRELAXParamsUI(changed, state->debug.restir.reflectionRelax, "reflection_relax", false);
-            }
 
             ImGui::Spacing();
             if (ImGui::Button("Reset RT Reflections")) {

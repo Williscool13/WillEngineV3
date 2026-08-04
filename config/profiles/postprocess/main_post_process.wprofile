@@ -12,7 +12,7 @@
     "bMotionBlurObjectOnly": true,
     "bPaniniEnabled": false,
     "bSharpeningEnabled": true,
-    "bVignetteEnabled": true,
+    "bVignetteEnabled": false,
     "bloomClamp": 10.0,
     "bloomIntensity": 0.25,
     "bloomRadius": 1.0,

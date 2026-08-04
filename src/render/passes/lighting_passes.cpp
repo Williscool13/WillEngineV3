@@ -129,7 +129,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
 
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
-    const StringID reflectionTarget = graph.HasTexture(REFLECTION_SPEC_DENOISED_TARGET) ? REFLECTION_SPEC_DENOISED_TARGET : REFLECTION_SPEC_NOISY_TARGET;
+    const StringID reflectionTarget = REFLECTION_SPEC_NOISY_TARGET;
     const bool bReflection = reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
     struct LightingEntry

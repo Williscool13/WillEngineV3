@@ -220,7 +220,6 @@ nlohmann::json ToJson(const Core::ReSTIRParams& p)
         {"atrous", nlohmann::json{{"iterations", p.atrous.iterations}, {"sigmaLuminance", p.atrous.sigmaLuminance}, {"sigmaNormal", p.atrous.sigmaNormal}, {"sigmaDepth", p.atrous.sigmaDepth}}},
         {"svgf", nlohmann::json{{"alphaMin", p.svgf.alphaMin}, {"gradientThreshold", p.svgf.gradientThreshold}, {"sigmaLuminance", p.svgf.sigmaLuminance}, {"sigmaNormal", p.svgf.sigmaNormal}, {"sigmaDepth", p.svgf.sigmaDepth}, {"atrousIterations", p.svgf.atrousIterations}}},
         {"relax", RelaxToJson(p.relax)},
-        {"reflectionRelax", RelaxToJson(p.reflectionRelax)},
         {"reblur", ReblurToJson(p.reblur)},
     };
 }
@@ -283,9 +282,6 @@ void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
     }
     if (r.contains("relax") && r["relax"].is_object()) {
         RelaxFromJson(r["relax"], p.relax);
-    }
-    if (r.contains("reflectionRelax") && r["reflectionRelax"].is_object()) {
-        RelaxFromJson(r["reflectionRelax"], p.reflectionRelax);
     }
     if (r.contains("reblur") && r["reblur"].is_object()) {
         ReblurFromJson(r["reblur"], p.reblur);
@@ -383,9 +379,10 @@ nlohmann::json ToJson(const Core::ReflectionConfiguration& p)
 {
     return {
         {"bEnabled", p.bEnabled},
-        {"bDenoiserEnabled", p.bDenoiserEnabled},
+        {"bMergedDenoise", p.bMergedDenoise},
         {"bScreenSpaceLighting", p.bScreenSpaceLighting},
         {"bScreenSpaceTrace", p.bScreenSpaceTrace},
+        {"sunMode", static_cast<int32_t>(p.sunMode)},
         {"tracedRoughnessMax", p.tracedRoughnessMax},
         {"lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax},
         {"intensity", p.intensity},
@@ -400,9 +397,11 @@ void FromJson(const nlohmann::json& r, Core::ReflectionConfiguration& p)
     auto rFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
     auto rInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number_integer() ? r[k].get<int32_t>() : def; };
     p.bEnabled = rBool("bEnabled", p.bEnabled);
-    p.bDenoiserEnabled = rBool("bDenoiserEnabled", p.bDenoiserEnabled);
+    p.bMergedDenoise = rBool("bMergedDenoise", p.bMergedDenoise);
     p.bScreenSpaceLighting = rBool("bScreenSpaceLighting", p.bScreenSpaceLighting);
     p.bScreenSpaceTrace = rBool("bScreenSpaceTrace", p.bScreenSpaceTrace);
+    const int32_t sunModeRaw = rInt("sunMode", static_cast<int32_t>(p.sunMode));
+    p.sunMode = static_cast<Core::ReflectionConfiguration::SunMode>(sunModeRaw < 0 ? 0 : (sunModeRaw > 2 ? 2 : sunModeRaw));
     p.tracedRoughnessMax = rFloat("tracedRoughnessMax", p.tracedRoughnessMax);
     p.lightSpecularFromReflectionsMax = rFloat("lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax);
     p.intensity = rFloat("intensity", p.intensity);

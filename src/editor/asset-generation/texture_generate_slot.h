@@ -16,6 +16,7 @@
 #include "core/memory/handle.h"
 #include "core/memory/linear_allocator.h"
 #include "engine/core/texture_id.h"
+#include "engine/resources/texture/texture_format.h"
 #include "render/vulkan/vk_resources.h"
 
 namespace Core

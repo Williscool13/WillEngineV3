@@ -816,6 +816,10 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    // Traced reflections were already summed into the denoised specular channel at the lighting resolve; suppress the
+    // separate reflection composite (and its probe/sky replacement) inside the traced roughness range.
+    SHADER_PUBLIC uint32_t bReflectionMerged;
+    SHADER_PUBLIC uint32_t padR0;
 };
 
 SHADER_PUBLIC struct ReflectionTracePushConstant
@@ -882,6 +886,8 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    SHADER_PUBLIC uint32_t sunMode; // REFLECTION_SUN_* for the analytic hit-shading fallback
+    SHADER_PUBLIC uint32_t padS0;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
