@@ -18,8 +18,9 @@ struct ViewFamily;
 namespace Game::Component
 {
 /**
- * Hand-placed local DDGI probe volume: a fixed fine-spacing probe window sampled before the camera-following cascades where it covers.
- * Bounds come from the entity transform (translation = center, scale = half-extents). rotation is ignored, the probe window is world-axis aligned.
+ * Hand-placed axis-aligned local DDGI probe volume.
+ * Entity translation = window min corner (snapped to the nearest spacing multiple).
+ * Bounds derive as (count - 1) * spacing per axis.
  */
 struct LocalDDGIVolumeComponent
 {
@@ -28,6 +29,7 @@ struct LocalDDGIVolumeComponent
     uint64_t volumeId{0};
     bool bEnabled{true};
     float probeSpacing{0.5f};
+    int32_t probeCount[3]{8, 8, 8};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 

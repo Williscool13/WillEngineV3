@@ -11,7 +11,13 @@ import packing_functions;
 
 // =============== Shader Summary ============
 // GI leak deconstruction: per-pixel diagnostics at the primary surface, written to gi_deconstruct_target for the debug visualizer.
-// Modes: 1 cache cell identity hash, 2 cache radiance/servability, 3 DDGI Chebyshev-gate weight fractions, 4 dominant-probe mean-vs-distance margin, 5 coverage/confidence/cascade, 6 raw DDGI irradiance.
+// Modes:
+//   1 cache cell identity hash
+//   2 cache radiance/servability
+//   3 DDGI Chebyshev-gate weight fractions
+//   4 dominant-probe mean-vs-distance margin
+//   5 coverage/confidence/dominant volume (blue = descriptor index / 15, locals sit past the cascades)
+//   6 raw DDGI irradiance.
 
 static const uint GI_DECONSTRUCT_CACHE_KEY = 1u;
 static const uint GI_DECONSTRUCT_CACHE_RADIANCE = 2u;
@@ -20,8 +26,7 @@ static const uint GI_DECONSTRUCT_DDGI_MARGIN = 4u;
 static const uint GI_DECONSTRUCT_DDGI_COVERAGE = 5u;
 static const uint GI_DECONSTRUCT_DDGI_IRRADIANCE = 6u;
 
-// Mean above this fraction of the blend's miss clamp means the visibility texel is dominated by miss rays.
-static const float GI_DECONSTRUCT_SKY_MEAN_FRACTION = 0.65;
+static const float GI_DECONSTRUCT_SKY_MEAN_FRACTION = 0.95;
 
 struct GICageStats
 {
@@ -92,7 +97,7 @@ static GICageStats GIDeconstructCage(float3 worldPosition, float3 normal, float3
         bool bFired = distanceToProbe > moments.x;
         float chebRatio = 1.0;
         if (bFired) {
-            float cappedStd = 0.3 * moments.x;
+            float cappedStd = DDGI_VISIBILITY_VARIANCE_CAP * moments.x;
             float variance = min(abs(moments.x * moments.x - moments.y), cappedStd * cappedStd);
             float d = distanceToProbe - moments.x;
             float chebyshev = variance / (variance + d * d);
@@ -186,27 +191,58 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
             color = gi.rgb * gi.w;
         } else {
             uint count = min(pc.ddgiCascades->cascadeCount, DDGI_MAX_CASCADES);
-            for (uint c = 0; c < count; ++c) {
+            uint localCount = min(pc.ddgiCascades->localCount, DDGI_MAX_CASCADES - count);
+            float coverage = 0.0;
+            float localFade = 0.0;
+            float3 chebSum = float3(0.0);
+            float dominantContribution = 0.0;
+            float dominantMargin = 0.0;
+            float dominantStdRatio = 0.0;
+            float dominantTrueRatio = 0.0;
+            uint dominantIndex = 0;
+            for (uint i = 0; i < localCount + count && coverage < 0.999; ++i) {
+                bool bLocal = i < localCount;
+                uint c = bLocal ? count + i : i - localCount;
                 DDGICascadeDescriptor desc = pc.ddgiCascades->cascades[c];
+                if (bLocal) {
+                    float3 gridCoord = worldPosition / desc.volume.probeSpacing;
+                    float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
+                    localFade = max(localFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
+                }
                 if (desc.bValid == 0) {
                     continue;
                 }
                 GICageStats s = GIDeconstructCage(worldPosition, worldN, cameraDirection, desc.volume, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid, length(viewPosition));
-                if (s.fade * saturate(s.weightSum / 0.02) <= 0.01) {
+                float w = s.fade * saturate(s.weightSum / 0.02);
+                if (!bLocal) {
+                    w *= 1.0 - localFade;
+                }
+                if (w <= 0.0) {
                     continue;
                 }
+                float contribution = w * (1.0 - coverage);
+                chebSum += contribution * float3(s.wSkyMean, s.wClean, s.wFired) / max(s.weightSum, 1e-6);
+                if (contribution > dominantContribution) {
+                    dominantContribution = contribution;
+                    dominantMargin = s.margin;
+                    dominantStdRatio = s.stdRatio;
+                    dominantTrueRatio = s.trueWeightSum / max(s.weightSum, 1e-6);
+                    dominantIndex = c;
+                }
+                coverage += contribution;
+            }
+            if (coverage > 0.0) {
                 if (pc.mode == GI_DECONSTRUCT_DDGI_CHEB) {
-                    color = float3(s.wSkyMean, s.wClean, s.wFired) / max(s.weightSum, 1e-6);
+                    color = chebSum / coverage;
                 } else if (pc.mode == GI_DECONSTRUCT_DDGI_MARGIN) {
-                    color = s.margin > 0.0
-                                ? float3(saturate(s.margin * 3.0), 0.0, saturate(s.stdRatio))
-                                : float3(0.0, saturate(-s.margin * 3.0), saturate(s.stdRatio));
+                    color = dominantMargin > 0.0
+                                ? float3(saturate(dominantMargin * 3.0), 0.0, saturate(dominantStdRatio))
+                                : float3(0.0, saturate(-dominantMargin * 3.0), saturate(dominantStdRatio));
                 } else {
                     float edgeFade;
                     float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
-                    color = float3(gi.w, s.trueWeightSum / max(s.weightSum, 1e-6), float(c) / 7.0);
+                    color = float3(gi.w, dominantTrueRatio, float(dominantIndex) / 15.0);
                 }
-                break;
             }
         }
     }

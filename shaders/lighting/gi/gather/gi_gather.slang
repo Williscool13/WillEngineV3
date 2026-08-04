@@ -304,9 +304,6 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                     float3 hitWorldPos = ray.Origin + direction * hitT;
                     GatherHitSurface hit = DecodeGatherHit(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
                     bool bFrontFace = q.CommittedTriangleFrontFace();
-                    if (!bFrontFace) {
-                        hit.normal = -hit.normal;
-                    }
 
                     // Tier 0: last frame's on-screen lit color at the hit, when visible and geometry agrees (mirrors reflection_shade).
                     // Emission never rides the gather (emissive DI belongs to ReSTIR tri-lights, absent otherwise by design; probes carry the bounce), and lit history at an emitter contains its glow.
@@ -377,7 +374,9 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                         }
                     }
 
-                    if (!bResolved) {
+                    if (!bFrontFace) {
+                        tier = GI_GATHER_TIER_BACKFACE;
+                    } else if (!bResolved) {
                         radiance = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, originCellKey, tier);
                     }
                 } else {

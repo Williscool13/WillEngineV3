@@ -51,22 +51,15 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
         if (ImGui::DragFloat("Probe Spacing##lddgi", &comp.probeSpacing, 0.01f, 0.25f, 2.0f, "%.2f")) {
             comp.probeSpacing = glm::clamp(comp.probeSpacing, 0.25f, 2.0f);
         }
-
-        if (transform) {
-            const Vec3 aabbMin = transform->translation - transform->scale;
-            const Vec3 aabbMax = transform->translation + transform->scale;
-            const float spacing = comp.probeSpacing;
-            const glm::ivec3 baseCell = glm::ivec3(glm::floor(aabbMin / spacing));
-            const glm::ivec3 rawCount = glm::ivec3(glm::ceil(aabbMax / spacing)) - baseCell + 1;
-            const glm::ivec3 count = glm::clamp(rawCount, 2, Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS);
-            ImGui::Text("Probes: %d x %d x %d (%d)", count.x, count.y, count.z, count.x * count.y * count.z);
-            if (rawCount != count) {
-                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "Window clamped to %d probes/axis. Shrink bounds or raise spacing.", Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS);
-            }
-            if (glm::abs(glm::dot(transform->rotation, Quat{1.0f, 0.0f, 0.0f, 0.0f})) < 0.9999f) {
-                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Rotation ignored; the probe window is world-axis aligned.");
+        if (ImGui::DragInt3("Probe Count##lddgi", comp.probeCount, 0.1f, 2, Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS)) {
+            for (int i = 0; i < 3; ++i) {
+                comp.probeCount[i] = glm::clamp(comp.probeCount[i], 2, Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS);
             }
         }
+
+        const Vec3 extent = Vec3(comp.probeCount[0] - 1, comp.probeCount[1] - 1, comp.probeCount[2] - 1) * comp.probeSpacing;
+        ImGui::Text("Window: %.2f x %.2f x %.2f m (%d probes)", extent.x, extent.y, extent.z, comp.probeCount[0] * comp.probeCount[1] * comp.probeCount[2]);
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Translation = min corner (snapped to spacing); rotation and scale ignored.");
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing);
@@ -80,22 +73,22 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
     if (transform && (open || bEditing)) {
         const auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
         const float spacing = comp.probeSpacing;
-        const glm::ivec3 baseCell = glm::ivec3(glm::floor((transform->translation - transform->scale) / spacing));
-        const glm::ivec3 count = glm::clamp(glm::ivec3(glm::ceil((transform->translation + transform->scale) / spacing)) - baseCell + 1, 2, Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS);
+        const Vec3 windowMin = glm::round(transform->translation / spacing) * spacing;
+        const Vec3 windowMax = windowMin + Vec3(comp.probeCount[0] - 1, comp.probeCount[1] - 1, comp.probeCount[2] - 1) * spacing;
 
-        constexpr Vec4 boundsColor{0.35f, 0.8f, 0.95f, 1.0f};
         constexpr Vec4 windowColor{0.95f, 0.9f, 0.35f, 1.0f};
         constexpr float lineWidth = 0.02f;
-        DEBUG_ADD_BOX(viewFamily.debugBoxes, {transform->translation, transform->scale, Quat{1.0f, 0.0f, 0.0f, 0.0f}, boundsColor, lineWidth});
-        const Vec3 windowMin = Vec3(baseCell) * spacing;
-        const Vec3 windowMax = Vec3(baseCell + count - 1) * spacing;
         DEBUG_ADD_BOX(viewFamily.debugBoxes, {(windowMin + windowMax) * 0.5f, (windowMax - windowMin) * 0.5f, Quat{1.0f, 0.0f, 0.0f, 0.0f}, windowColor, lineWidth});
     }
 
     if (transform && bEditing) {
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
         const auto& vd = viewFamily.mainView.currentViewData;
-        const Vec3 center = transform->translation;
+        auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
+        const float spacing = comp.probeSpacing;
+        const Vec3 windowMin = glm::round(transform->translation / spacing) * spacing;
+        const Vec3 windowMax = windowMin + Vec3(comp.probeCount[0] - 1, comp.probeCount[1] - 1, comp.probeCount[2] - 1) * spacing;
+        const Vec3 center = (windowMin + windowMax) * 0.5f;
 
         const Vec4 viewport{
             static_cast<float>(ctx->windowContext.viewportOffsetX),
@@ -111,17 +104,20 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
                 const float sign = s == 0 ? 1.0f : -1.0f;
                 const Vec3 outward = axes[i] * sign;
                 const int32_t handleId = Editor::DotHandleId::LOCAL_DDGI_BOUNDS_BASE + i * 2 + s;
-                const Vec3 handlePos = center + outward * transform->scale[i];
+                Vec3 handlePos = center;
+                handlePos[i] = sign > 0.0f ? windowMax[i] : windowMin[i];
+                const float fixedFace = sign > 0.0f ? windowMin[i] : windowMax[i];
 
                 Editor::AxisDotHandle(handleId, handlePos, outward,
                                       vd.view, vd.proj, viewport, vd.cameraPos, state,
                                       [&](Vec3 newPt) {
-                                          const Vec3 opposite = center - outward * transform->scale[i];
-                                          const float newExtentFull = glm::dot(newPt - opposite, outward);
-                                          const float newHalf = glm::max(0.05f, newExtentFull * 0.5f);
-                                          transform->scale[i] = newHalf;
-                                          transform->translation = opposite + outward * newHalf;
-                                          registry.emplace_or_replace<DirtyTransformTag>(entity);
+                                          const float newExtent = (newPt[i] - fixedFace) * sign;
+                                          const int32_t newCount = glm::clamp(static_cast<int32_t>(glm::round(newExtent / spacing)) + 1, 2, Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS);
+                                          comp.probeCount[i] = newCount;
+                                          if (sign < 0.0f) {
+                                              transform->translation[i] = fixedFace - static_cast<float>(newCount - 1) * spacing;
+                                              registry.emplace_or_replace<DirtyTransformTag>(entity);
+                                          }
                                       },
                                       colors[i]);
             }
@@ -136,6 +132,7 @@ void LocalDDGIVolumeComponent::Serialize(const LocalDDGIVolumeComponent& comp, n
     json["volumeId"] = comp.volumeId;
     json["bEnabled"] = comp.bEnabled;
     json["probeSpacing"] = comp.probeSpacing;
+    json["probeCount"] = {comp.probeCount[0], comp.probeCount[1], comp.probeCount[2]};
 }
 
 void LocalDDGIVolumeComponent::Deserialize(LocalDDGIVolumeComponent& comp, const nlohmann::json& json)
@@ -144,6 +141,11 @@ void LocalDDGIVolumeComponent::Deserialize(LocalDDGIVolumeComponent& comp, const
     comp.volumeId = json.value("volumeId", uint64_t{0});
     comp.bEnabled = json.value("bEnabled", true);
     comp.probeSpacing = json.value("probeSpacing", 0.5f);
+    if (const auto it = json.find("probeCount"); it != json.end() && it->is_array() && it->size() == 3) {
+        for (int i = 0; i < 3; ++i) {
+            comp.probeCount[i] = glm::clamp((*it)[i].get<int32_t>(), 2, Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS);
+        }
+    }
 }
 
 void LocalDDGIVolumeComponent::OnConstruct(entt::registry& registry, entt::entity entity)

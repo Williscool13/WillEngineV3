@@ -160,9 +160,20 @@ def sealed_room(tag, cx, cz, inner, door_face, door_w, door_h, sill, folder_id, 
     resolution = PROBE_RES_256 if sx > 10.0 else PROBE_RES_128
     add_reflection_probe(probe, name_id(f"gi_sunbounce_{tag}"), resolution=resolution)
     entities.append(probe)
-    spacing = 0.8 if sx <= 10.0 else 1.6
-    volume = base_entity(f"[{tag}] gi volume", (cx, sy * 0.5, cz), scale=(sx * 0.5 + WALL_T + 0.9, sy * 0.5 + WALL_T + 1.0, sz * 0.5 + WALL_T + 0.9), folder_id=folder_id)
-    add_local_ddgi_volume(volume, name_id(f"gi_sunbounce_lv_{tag}"), probe_spacing=spacing)
+    # Every interior face must clear the window edge by the 1-cell fade band plus the half cell the corner snap can eat; hangars need 1.7 to fit that in the 16/axis clamp.
+    spacing = 0.8 if sx <= 10.0 else 1.7
+    counts = [min(16, math.ceil(d / spacing) + 5) for d in (sx, sy, sz)]
+    center = (cx, sy * 0.5, cz)
+    corner = tuple(center[i] - (counts[i] - 1) * spacing * 0.5 for i in range(3))
+    interior_min = (cx - sx * 0.5, 0.0, cz - sz * 0.5)
+    interior_max = (cx + sx * 0.5, sy, cz + sz * 0.5)
+    for i in range(3):
+        snapped = round(corner[i] / spacing) * spacing
+        margin = min(interior_min[i] - snapped, snapped + (counts[i] - 1) * spacing - interior_max[i]) / spacing
+        if margin < 1.0:
+            raise ValueError(f"sealed_room {tag}: axis {i} clears the fade band by only {margin:.2f} cells at spacing {spacing}, counts {counts}")
+    volume = base_entity(f"[{tag}] gi volume", corner, folder_id=folder_id)
+    add_local_ddgi_volume(volume, name_id(f"gi_sunbounce_lv_{tag}"), counts, probe_spacing=spacing)
     entities.append(volume)
     return room
 

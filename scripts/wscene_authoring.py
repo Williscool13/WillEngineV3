@@ -310,13 +310,16 @@ def add_reflection_probe(entity, probe_id, shape=PROBE_BOX, fade_margin=0.0, cap
                       "resolution": resolution, "standInEnvMap": stand_in_env_map}
     return entity
 
-def add_local_ddgi_volume(entity, volume_id, probe_spacing=0.5, enabled=True):
-    """Axis-aligned local DDGI probe window: bounds = transform.scale as HALF-EXTENTS, rotation
-    IGNORED (world-axis lattice). Probe counts = bounds/spacing rounded outward, clamped 2..16 per
-    axis. Size the bounds PAST the walls by ~edgeBlendCells*spacing so the edge fade band lies
-    outside the interior; exact-fit volumes hand wall pixels back to the leaky cascades.
+def add_local_ddgi_volume(entity, volume_id, probe_count, probe_spacing=0.5, enabled=True):
+    """Axis-aligned local DDGI probe window: entity translation = window MIN CORNER (engine snaps it
+    to the nearest spacing multiple), probe_count = probes per axis (2..16), window span =
+    (count-1)*spacing per axis. Rotation and scale IGNORED (world-axis lattice). Size the window
+    PAST the walls by ~edgeBlendCells*spacing so the edge fade band lies outside the interior;
+    exact-fit volumes hand wall pixels back to the leaky cascades.
     volume_id must be non-zero and stable across runs; use name_id("...")."""
-    entity[LOCAL_DDGI] = {"volumeId": volume_id, "bEnabled": enabled, "probeSpacing": probe_spacing}
+    counts = [max(2, min(16, int(c))) for c in probe_count]
+    entity[LOCAL_DDGI] = {"volumeId": volume_id, "bEnabled": enabled, "probeSpacing": probe_spacing,
+                          "probeCount": counts}
     return entity
 
 ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT = 0, 1, 2

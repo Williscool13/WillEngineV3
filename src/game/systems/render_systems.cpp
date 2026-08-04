@@ -1858,8 +1858,8 @@ void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* sta
         if (vf.localDDGIVolumes.IsFull()) { break; }
         if (!volume.bEnabled) { continue; }
         vf.localDDGIVolumes.PushBack(Core::LocalDDGIVolume{
-            .center = worldTransform.translation,
-            .halfExtents = worldTransform.scale,
+            .corner = worldTransform.translation,
+            .probeCount = glm::clamp(glm::ivec3(volume.probeCount[0], volume.probeCount[1], volume.probeCount[2]), 2, Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS),
             .probeSpacing = glm::max(volume.probeSpacing, 0.25f),
             .volumeId = volume.volumeId,
         });

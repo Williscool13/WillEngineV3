@@ -425,11 +425,10 @@ struct ProbePreviewSettings
 inline constexpr size_t MAX_LOCAL_DDGI_VOLUMES = 64;
 inline constexpr int32_t LOCAL_DDGI_MAX_PROBES_PER_AXIS = 16;
 
-/** Hand-placed axis-aligned local DDGI volume; the renderer picks the nearest few as resident fine-spacing probe windows. */
 struct LocalDDGIVolume
 {
-    glm::vec3 center{0.0f};
-    glm::vec3 halfExtents{1.0f};
+    glm::vec3 corner{0.0f};
+    glm::ivec3 probeCount{8};
     float probeSpacing{0.5f};
     uint64_t volumeId{0};
 };

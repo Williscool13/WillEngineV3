@@ -76,7 +76,9 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
                 if (taken[i]) {
                     continue;
                 }
-                const glm::vec3 delta = glm::max(glm::abs(cameraPosition - localVolumes[i].center) - localVolumes[i].halfExtents, glm::vec3(0.0f));
+                const glm::vec3 halfExtents = glm::vec3(localVolumes[i].probeCount - 1) * localVolumes[i].probeSpacing * 0.5f;
+                const glm::vec3 center = glm::round(localVolumes[i].corner / localVolumes[i].probeSpacing) * localVolumes[i].probeSpacing + halfExtents;
+                const glm::vec3 delta = glm::max(glm::abs(cameraPosition - center) - halfExtents, glm::vec3(0.0f));
                 const float dist = glm::dot(delta, delta);
                 if (dist < bestDist) {
                     bestDist = dist;
@@ -122,8 +124,8 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
             const Core::LocalDDGIVolume& local = localVolumes[selected[s]];
             const uint32_t k = slotOf[s];
             const float spacing = glm::max(local.probeSpacing, 0.25f);
-            const glm::ivec3 baseCell = glm::ivec3(glm::floor((local.center - local.halfExtents) / spacing));
-            const glm::ivec3 localCounts = glm::clamp(glm::ivec3(glm::ceil((local.center + local.halfExtents) / spacing)) - baseCell + 1, glm::ivec3(2), glm::ivec3(Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS));
+            const glm::ivec3 baseCell = glm::ivec3(glm::round(local.corner / spacing));
+            const glm::ivec3 localCounts = glm::clamp(local.probeCount, glm::ivec3(2), glm::ivec3(Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS));
 
             DDGIVolumeParams volume{};
             volume.probeCount = glm::uvec3(localCounts);
@@ -131,7 +133,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
             volume.normalBias = glm::max(params.normalBias, 0.0f);
             volume.viewBias = glm::max(params.viewBias, 0.0f);
             volume.irradianceGamma = glm::max(params.irradianceGamma, 1.0f);
-            volume.edgeFadeCells = glm::clamp(params.edgeBlendCells, 1.0f, 8.0f);
+            volume.edgeFadeCells = 1.0f;
             volume.baseCell = baseCell;
 
             cascades.volumes[k] = volume;
@@ -239,7 +241,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         prevSources->count = cascades.count;
         prevSources->localCount = cascades.localCount;
         for (uint32_t k = 0; k < total; ++k) {
-            if (bHistoryValid[k]) {
+            if (!params.bCascadeSampling && k < cascades.count) {
+                prevSources->entries[k].volume = k < prevTotal ? previous.volumes[k] : cascades.volumes[k];
+            } else if (bHistoryValid[k]) {
                 prevSources->entries[k] = DDGICascadeDescSource{
                     .volume = previous.volumes[k],
                     .irradiance = DDGI_IRRADIANCE_HISTORY[k],
@@ -521,7 +525,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     sources->count = cascades.count;
     sources->localCount = cascades.localCount;
     for (uint32_t k = 0; k < total; ++k) {
-        if (cascades.bUpdated[k]) {
+        if (!params.bCascadeSampling && k < cascades.count) {
+            sources->entries[k].volume = cascades.volumes[k];
+        } else if (cascades.bUpdated[k]) {
             sources->entries[k] = DDGICascadeDescSource{
                 .volume = cascades.volumes[k],
                 .irradiance = DDGI_IRRADIANCE[k],
