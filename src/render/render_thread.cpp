@@ -1135,7 +1135,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     if (frameBuffer.bTakeScreenshot && screenCapture->CanScreenshot()) {
         screenCapture->PrepareScreenshotResources(postAaExtent[0], postAaExtent[1]);
-        renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, postAaExtent[0], postAaExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+        renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_SRGB, postAaExtent[0], postAaExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
         auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
         screenshotBlitPass.ReadBlitImage(targets.colorOutput);
