@@ -29,6 +29,7 @@ inline const StringID GI_GATHER_TMP_SH_R = SID("gi_gather_tmp_sh_r");
 inline const StringID GI_GATHER_TMP_SH_G = SID("gi_gather_tmp_sh_g");
 inline const StringID GI_GATHER_TMP_SH_B = SID("gi_gather_tmp_sh_b");
 inline const StringID GI_GATHER_SKY_VIS = SID("gi_gather_sky_vis");
+inline const StringID GI_GATHER_VARIANCE_GUIDE = SID("gi_gather_variance_guide");
 inline const StringID GI_GATHER_RAW_SKY_VIS = SID("gi_gather_raw_sky_vis");
 inline const StringID GI_GATHER_TMP_SKY_VIS = SID("gi_gather_tmp_sky_vis");
 inline const StringID GI_GATHER_RESOLVED = SID("gi_gather_resolved");

@@ -165,6 +165,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
     float2 data = float2(0.0, float(GI_GATHER_TIER_INVALID));
     uint2 guide = uint2(0u, 0u);
     float skyVis = 0.0;
+    float varGuide = 0.0;
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
@@ -255,14 +256,19 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
             if (pc.bCascadesValid != 0) {
                 float3 cameraDirection = normalize(mul((float3x3)scene.invView, viewPosition));
                 float edgeFade;
-                float4 expected = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
+                float priorRelDev;
+                float4 expected = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade, priorRelDev);
                 if (expected.w > 0.5) {
                     maxRadiance = clamp(GI_GATHER_FIREFLY_EXPECTATION_K * Luma(expected.rgb * expected.w), GI_GATHER_MAX_RADIANCE_MIN, GI_GATHER_MAX_RADIANCE);
+                    // Variance guide rides the sample the firefly clamp already pays for; upscale reads it to protect history where 1spp is intrinsically noisy.
+                    varGuide = saturate(priorRelDev / GI_GATHER_VARIANCE_GUIDE_SCALE);
                 }
             }
 
-            // Uniform count, deliberately not adaptive: a per-pixel count diverges inside the wave, and the lost ray coherence plus the frame-time swing cost more than the extra rays buy.
-            uint rayCount = max(pc.rayCount, 1u);
+            // Wave-uniform adaptive count: WaveActiveMax keeps the trip count uniform per wave (no divergence, coherence intact); pc.rayCount is the ceiling, deadzoned so the well-lit baseline stays at 1 ray. Cost is scene-shaped: a saturated guide everywhere costs the same as a flat max count.
+            float relDevMax = WaveActiveMax(varGuide) * GI_GATHER_VARIANCE_GUIDE_SCALE;
+            float rayLerp = saturate((relDevMax - GI_GATHER_VARIANCE_RAY_DEADZONE) / (GI_GATHER_VARIANCE_GUIDE_SCALE - GI_GATHER_VARIANCE_RAY_DEADZONE));
+            uint rayCount = clamp(uint(round(lerp(1.0, float(pc.rayCount), rayLerp))), 1u, max(pc.rayCount, 1u));
             float4 sumR = float4(0.0);
             float4 sumG = float4(0.0);
             float4 sumB = float4(0.0);
@@ -417,4 +423,5 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
     rdgStorageFloat2[pc.dataIndex][gatherPixel] = data;
     rdgStorageUInt2[pc.guideOutIndex][gatherPixel] = guide;
     rdgStorageFloat[pc.skyVisIndex][gatherPixel] = skyVis;
+    rdgStorageFloat[pc.varGuideOutIndex][gatherPixel] = varGuide;
 }

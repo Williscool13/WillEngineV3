@@ -92,9 +92,11 @@ static const float DDGI_VISIBILITY_VARIANCE_CAP = 0.3;
  * Atlas args are rdgTexturesFloat4/rdgTexturesFloat2 descriptor indices (resource-typed params through module imports crash slangc's spirv emit).
  * probeOffsets (when bProbeOffsetsValid) holds per-slot relocation offsets in xyz and the backface fraction in w; relocated positions drive direction/distance/Chebyshev, trilinear stays on the lattice, dead probes are skipped.
  * Returns E/PI in rgb (Lambertian outgoing radiance = albedo * rgb); w in [0,1] combines the window edge fade with a weight-support confidence (dead-probe pockets report low w), so callers can blend to the next cascade or their fallback without a hard edge.
+ * varianceGuide is the probe-weighted atlas alpha: predicted relative deviation of a 1spp gather near this point (see ddgi_blend_irradiance); linear in the probe weights, no gamma decode.
  */
-public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid, float maxBias)
+public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid, float maxBias, out float varianceGuide)
 {
+    varianceGuide = 0.0;
     float3 biasOffset = normal * volume.normalBias - cameraDirection * volume.viewBias;
     float biasLength = length(biasOffset);
     if (biasLength > maxBias) {
@@ -113,6 +115,7 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
     float3 alpha = saturate(gridCoord - float3(baseCell));
 
     float3 irradianceSum = float3(0.0);
+    float guideSum = 0.0;
     float weightSum = 0.0;
     float trueWeightSum = 0.0;
     for (uint i = 0; i < 8; ++i) {
@@ -160,9 +163,10 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         float3 trilinear = lerp(1.0 - alpha, alpha, float3(offset));
         weight *= max(trilinear.x * trilinear.y * trilinear.z, 0.001);
 
-        float3 encoded = rdgTexturesFloat4[irradianceAtlasIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, normal, volume, DDGI_IRRADIANCE_TILE, DDGI_IRRADIANCE_INTERIOR), 0).rgb;
+        float4 encoded = rdgTexturesFloat4[irradianceAtlasIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, normal, volume, DDGI_IRRADIANCE_TILE, DDGI_IRRADIANCE_INTERIOR), 0);
         // Blend in half-gamma space and square after the weighted sum: perceptual interpolation between probes (RTXGI).
-        irradianceSum += weight * pow(max(encoded, float3(0.0)), volume.irradianceGamma * 0.5);
+        irradianceSum += weight * pow(max(encoded.rgb, float3(0.0)), volume.irradianceGamma * 0.5);
+        guideSum += weight * encoded.a;
         weightSum += weight;
         trueWeightSum += weight * chebRatio;
     }
@@ -170,23 +174,34 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         return float4(0.0);
     }
     float3 result = irradianceSum / weightSum;
+    varianceGuide = guideSum / weightSum;
 
     float confidence = saturate(trueWeightSum / weightSum);
     return float4(result * result * confidence, fade * saturate(weightSum / 0.02));
+}
+
+/** No-guide wrapper for callers that only need irradiance. */
+public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid, float maxBias)
+{
+    float varianceGuide;
+    return DDGISampleIrradiance(worldPosition, normal, cameraDirection, volume, irradianceAtlasIndex, visibilityAtlasIndex, probeOffsets, bProbeOffsetsValid, maxBias, varianceGuide);
 }
 
 /**
  * Cascade-chain lookup: front-to-back composite finest-first, so a fine cascade's edge fade (and dead-pocket zero-weight failures) fall through to the next coarser cascade.
  * Local volumes sample before cascade 0 (finest of all); their windows do not extend edgeFade, which tracks only the camera-following cascade set.
  * Returns the same contract as DDGISampleIrradiance; w is total coverage for the caller's fallback blend, dropping below 1 outside every cascade's interior and in weight-starved dead pockets.
+ * varianceGuide composites with the same coverage weights as color; 0 when coverage is 0.
  */
 [ForceInline] // the struct ptr fails to compile
-public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet, float maxBias, out float edgeFade)
+public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet, float maxBias, out float edgeFade, out float varianceGuide)
 {
     float3 color = float3(0.0);
+    float guide = 0.0;
     float coverage = 0.0;
     bool bSaturated = false;
     edgeFade = 0.0;
+    varianceGuide = 0.0;
     uint count = min(cascadeSet->cascadeCount, DDGI_MAX_CASCADES);
     uint localCount = min(cascadeSet->localCount, DDGI_MAX_CASCADES - count);
     for (uint i = 0; i < localCount + count; ++i) {
@@ -208,11 +223,13 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
         if (bSaturated) {
             continue;
         }
-        float4 gi = DDGISampleIrradiance(worldPosition, normal, cameraDirection, desc.volume, desc.irradianceIndex, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid, maxBias);
+        float cascadeGuide;
+        float4 gi = DDGISampleIrradiance(worldPosition, normal, cameraDirection, desc.volume, desc.irradianceIndex, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid, maxBias, cascadeGuide);
         if (gi.w <= 0.0) {
             continue;
         }
         color += gi.rgb * gi.w * (1.0 - coverage);
+        guide += cascadeGuide * gi.w * (1.0 - coverage);
         coverage += gi.w * (1.0 - coverage);
         if (coverage >= 0.999) {
             bSaturated = true;
@@ -221,7 +238,16 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     if (coverage <= 0.0) {
         return float4(0.0);
     }
+    varianceGuide = guide / coverage;
     return float4(color / coverage, coverage);
+}
+
+/** No-guide wrapper preserving the original edge-fade signature. */
+[ForceInline]
+public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet, float maxBias, out float edgeFade)
+{
+    float varianceGuide;
+    return DDGISampleIrradianceCascaded(worldPosition, normal, cameraDirection, cascadeSet, maxBias, edgeFade, varianceGuide);
 }
 
 /** No-fade variant; keeps the hard early break for callers that never blend against the set edge (per-probe-ray bounce feedback). */

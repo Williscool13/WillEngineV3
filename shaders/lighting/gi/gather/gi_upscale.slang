@@ -19,6 +19,7 @@ static const float GI_UPSCALE_MOVING_MAX_ACCUM = 4.0;
 static const float GI_UPSCALE_CLAMP_MIN_HISTORY = 4.0;
 static const float GI_UPSCALE_CLAMP_DEV_SCALE = 4.0;
 static const float GI_UPSCALE_CLAMP_RELATIVE = 1.0;
+static const float GI_UPSCALE_CLAMP_PRIOR_SCALE = 0.5;
 static const float GI_UPSCALE_CLAMP_EPS = 4e-3;
 static const float GI_UPSCALE_MOMENTS_LERP = 0.25;
 static const float GI_UPSCALE_CLAMP_TEMPORAL_SCALE = 3.0;
@@ -86,6 +87,13 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, centerViewZ);
     float invPlaneSigma = 1.0 / (GI_UPSCALE_PLANE_DIST_SIGMA * abs(centerViewZ));
     float centerAO = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(pixel, 0)).y : 1.0;
+
+    // World-space variance prior from the DDGI probes (via the gather's half-res writeout): predicted relative deviation of a 1spp cosine estimate at this surface.
+    // Unlike the temporal moments below it does not reset on motion/disocclusion and is not estimated from the noisy signal itself; 0 where unavailable = current behavior.
+    float priorRelDev = 0.0;
+    if (pc.varGuideIndex != ~0x0u) {
+        priorRelDev = rdgTexturesFloat[pc.varGuideIndex].Load(int3(pixel >> 1u, 0)).r * GI_GATHER_VARIANCE_GUIDE_SCALE;
+    }
 
     // Restores the sky the gather SH no longer carries: filtered miss fraction times prefiltered sky irradiance.
     float3 skyTerm = float3(0.0);
@@ -260,8 +268,9 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float histLuma = Luma(history.color);
         float temporalChange = abs(histLuma - curLuma) / max(histLuma + curLuma, 1e-4);
         // Relative change against relative deviation: fires on genuine lighting change, stays quiet where the pixel is merely noisy.
+        // The probe prior joins via max(): where incident light is intrinsically spiky, a proportionally larger swing is required before history is cut, so 1spp noise stops masquerading as change in dark/indirect-dominated regions. A genuine step still dwarfs both estimates and fires.
         float relDev = temporalDev / max(prevMoments.x, 1e-4);
-        changeResponse = smoothstep(0.1, 1.0, GI_UPSCALE_CHANGE_SENSITIVITY * temporalChange / max(relDev, 0.02));
+        changeResponse = smoothstep(0.1, 1.0, GI_UPSCALE_CHANGE_SENSITIVITY * temporalChange / max(max(relDev, priorRelDev), 0.02));
         if (changeResponse > 0.0) {
             n = min(n, lerp(GI_GATHER_MAX_ACCUM - 1.0, GI_UPSCALE_MOVING_MAX_ACCUM, changeResponse));
             nBlend = n * history.quality;
@@ -281,6 +290,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                 float3 devFloor = max(dev * GI_UPSCALE_CLAMP_DEV_SCALE, relative + float3(GI_UPSCALE_CLAMP_EPS));
                 // A correlated noise frame collapses both spatial dev and the relative floor, letting the box snap converged history onto it; genuine change shrinks the temporal floor so the clamp still bites.
                 devFloor = max(devFloor, float3(temporalDev * GI_UPSCALE_CLAMP_TEMPORAL_SCALE * lerp(1.0, 0.25, changeResponse)));
+                // Probe-prior floor: predicted 1spp deviation scaled to the local level, so the box cannot snap converged history onto a noisy current in intrinsically high-variance regions. Half scale because the spatial denoise has already shrunk current's deviation below the raw prior; shares the changeResponse shrink so detected change still clamps.
+                devFloor = max(devFloor, float3(Luma(mean) * priorRelDev * GI_UPSCALE_CLAMP_PRIOR_SCALE * lerp(1.0, 0.25, changeResponse)));
                 float3 histDist = abs(history.color - current) / devFloor;
                 float3 closest = clamp(history.color, current - devFloor, current + devFloor);
                 history.color = lerp(history.color, closest, smoothstep(float3(1.0), float3(3.0), histDist));

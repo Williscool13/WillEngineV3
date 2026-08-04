@@ -19,7 +19,7 @@
     "edgeBlendCells": 3.0,
     "gatherChromaDenoisePasses": 1,
     "gatherChromaLumaPower": 2.0,
-    "gatherRaysPerPixel": 1,
+    "gatherRaysPerPixel": 4,
     "hysteresis": 0.9700000286102295,
     "irradianceGamma": 5.0,
     "irradianceThreshold": 0.25,

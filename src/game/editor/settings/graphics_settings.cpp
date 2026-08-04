@@ -384,7 +384,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
 
         ImGui::SeparatorText("GI Diffuse Gather"); {
-            const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation", "Escape"};
+            const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation", "Escape", "Variance Guide"};
             ImGui::SetNextItemWidth(120.0f);
             if (ImGui::Combo("View##GIGatherDebug", &state->debug.render.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)))) {
                 if (state->debug.render.giGatherDebugMode != 0) {

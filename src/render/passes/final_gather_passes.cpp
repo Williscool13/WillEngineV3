@@ -30,6 +30,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateTexture(gatherShG, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(gatherShB, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(gatherSkyVis, TextureInfo{VK_FORMAT_R8_UNORM, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
+    // Variance guide: DDGI-predicted relative deviation of a 1spp gather (encoded /GI_GATHER_VARIANCE_GUIDE_SCALE); probe-smooth, so half-res R8 suffices. Not denoised.
+    graph.CreateTexture(GI_GATHER_VARIANCE_GUIDE, TextureInfo{VK_FORMAT_R8_UNORM, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(GI_GATHER_DATA, TextureInfo{VK_FORMAT_R16G16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(GI_GATHER_GUIDE, TextureInfo{VK_FORMAT_R32G32_UINT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
 
@@ -65,6 +67,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.WriteStorageImage(gatherShG);
     pass.WriteStorageImage(gatherShB);
     pass.WriteStorageImage(gatherSkyVis);
+    pass.WriteStorageImage(GI_GATHER_VARIANCE_GUIDE);
     pass.WriteStorageImage(GI_GATHER_DATA);
     pass.WriteStorageImage(GI_GATHER_GUIDE);
 
@@ -117,6 +120,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
             .rayCount = glm::clamp(raysPerPixel, 1u, GI_GATHER_MAX_RAYS_PER_PIXEL),
             .giHistoryIndex = bDemodulate ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_HISTORY) : ~0x0u,
+            .varGuideOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (gatherExtent[0] + 7u) / 8u, (gatherExtent[1] + 7u) / 8u, 1);
@@ -262,6 +266,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     upscale.ReadSampledImage(GI_GATHER_SH_G);
     upscale.ReadSampledImage(GI_GATHER_SH_B);
     upscale.ReadSampledImage(GI_GATHER_SKY_VIS);
+    upscale.ReadSampledImage(GI_GATHER_VARIANCE_GUIDE);
     upscale.ReadSampledImage(GI_GATHER_DATA);
     upscale.ReadSampledImage(GI_GATHER_GUIDE);
     upscale.ReadSampledImage(GI_MOTION_TILED_NEIGHBOR_MAX);
@@ -327,6 +332,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .momentsHistoryIndex = bMoments ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_MOMENTS_HISTORY) : ~0x0u,
             .bMomentsValid = bMoments ? 1u : 0u,
             .motionTileIndex = graph.GetSampledImageViewDescriptorIndex(GI_MOTION_TILED_NEIGHBOR_MAX),
+            .varGuideIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
@@ -389,11 +395,16 @@ void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Co
 
     graph.CreateTexture(GI_GATHER_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
+    const bool bVarGuide = graph.HasTexture(GI_GATHER_VARIANCE_GUIDE);
+
     RenderPass& pass = graph.AddPass(SID("GI Gather Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
     pass.ReadSampledImage(GI_GATHER_RESOLVED);
     pass.ReadSampledImage(GI_GATHER_DATA);
+    if (bVarGuide) {
+        pass.ReadSampledImage(GI_GATHER_VARIANCE_GUIDE);
+    }
     pass.WriteStorageImage(GI_GATHER_DEBUG_TARGET);
-    pass.Execute([pipelineManager, renderExtent, mode](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, renderExtent, mode, bVarGuide](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_gather_debug"));
         if (!pipelineEntry) {
             return;
@@ -407,6 +418,7 @@ void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Co
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_DEBUG_TARGET),
             // GIGatherDebugColor keeps the composite-era 2-based numbering.
             .mode = static_cast<uint32_t>(mode) + 1u,
+            .varGuideIndex = bVarGuide ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
