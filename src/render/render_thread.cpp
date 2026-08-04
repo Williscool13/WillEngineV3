@@ -562,7 +562,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 }
             }
 
-            const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, ddgiPreviousCascades, frameNumber, frameBuffer.debug.bFreezeGIField);
+            const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, viewFamily.localDDGIVolumes.Data(), static_cast<uint32_t>(viewFamily.localDDGIVolumes.Size()), ddgiPreviousCascades, frameNumber, frameBuffer.debug.bFreezeGIField);
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
                 const RadianceCacheFrame radianceCache = SetupRadianceCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.debug.bFreezeGIField);

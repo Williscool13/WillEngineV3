@@ -303,6 +303,7 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"cascadeCount", p.cascadeCount},
         {"edgeBlendCells", p.edgeBlendCells},
         {"bScaleBiasPerCascade", p.bScaleBiasPerCascade},
+        {"bLocalVolumes", p.bLocalVolumes},
         {"raysPerProbe", p.raysPerProbe},
         {"outerRaysPerProbe", p.outerRaysPerProbe},
         {"bClassification", p.bClassification},
@@ -348,6 +349,7 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.cascadeCount = dUint("cascadeCount", p.cascadeCount);
     p.edgeBlendCells = dFloat("edgeBlendCells", p.edgeBlendCells);
     p.bScaleBiasPerCascade = dBool("bScaleBiasPerCascade", p.bScaleBiasPerCascade);
+    p.bLocalVolumes = dBool("bLocalVolumes", p.bLocalVolumes);
     p.raysPerProbe = dUint("raysPerProbe", p.raysPerProbe);
     p.outerRaysPerProbe = dUint("outerRaysPerProbe", p.outerRaysPerProbe);
     p.bClassification = dBool("bClassification", p.bClassification);

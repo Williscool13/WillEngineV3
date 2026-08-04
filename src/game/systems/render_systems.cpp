@@ -28,6 +28,7 @@
 #include "game/components/render/module_mesh_component.h"
 #include "game/components/render/text3d_component.h"
 #include "game/components/render/light_components.h"
+#include "game/components/render/local_ddgi_volume_component.h"
 #include "game/components/render/reflection_probe_component.h"
 #include "render/shaders/lights_interop.h"
 #include "render/shaders/reflection_probe_interop.h"
@@ -79,6 +80,8 @@ void ConnectRenderObservers(entt::registry& registry)
     registry.on_construct<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnConstruct>();
     registry.on_destroy<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnDestroy>();
 
+    registry.on_construct<Component::LocalDDGIVolumeComponent>().connect<&Component::LocalDDGIVolumeComponent::OnConstruct>();
+
     registry.on_construct<Component::SkyboxComponent>().connect<&Component::SkyboxComponent::OnConstruct>();
     registry.on_destroy<Component::SkyboxComponent>().connect<&Component::SkyboxComponent::OnDestroy>();
 }
@@ -119,6 +122,8 @@ void DisconnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnConstruct>();
     registry.on_destroy<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnDestroy>();
+
+    registry.on_construct<Component::LocalDDGIVolumeComponent>().disconnect<&Component::LocalDDGIVolumeComponent::OnConstruct>();
 
     registry.on_construct<Component::SkyboxComponent>().disconnect<&Component::SkyboxComponent::OnConstruct>();
     registry.on_destroy<Component::SkyboxComponent>().disconnect<&Component::SkyboxComponent::OnDestroy>();
@@ -1838,6 +1843,25 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
             .fadeMargin = probe.fadeMargin,
             .flags = flags,
             .intensity = config.intensity,
+        });
+    }
+}
+
+void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    if (!state->lighting.ddgi.bLocalVolumes) { return; }
+
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    auto view = state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>();
+    for (const auto& [entity, volume, worldTransform] : view.each()) {
+        if (vf.localDDGIVolumes.IsFull()) { break; }
+        if (!volume.bEnabled) { continue; }
+        vf.localDDGIVolumes.PushBack(Core::LocalDDGIVolume{
+            .center = worldTransform.translation,
+            .halfExtents = worldTransform.scale,
+            .probeSpacing = glm::max(volume.probeSpacing, 0.25f),
+            .volumeId = volume.volumeId,
         });
     }
 }

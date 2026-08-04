@@ -411,6 +411,7 @@ struct DDGIParams
     uint32_t cascadeCount{4};
     float edgeBlendCells{3.0f};
     bool bScaleBiasPerCascade{true};
+    bool bLocalVolumes{true};
 
     uint32_t raysPerProbe{128};
     uint32_t outerRaysPerProbe{64};

@@ -422,6 +422,18 @@ struct ProbePreviewSettings
     float radius{0.5f};
 };
 
+inline constexpr size_t MAX_LOCAL_DDGI_VOLUMES = 64;
+inline constexpr int32_t LOCAL_DDGI_MAX_PROBES_PER_AXIS = 16;
+
+/** Hand-placed axis-aligned local DDGI volume; the renderer picks the nearest few as resident fine-spacing probe windows. */
+struct LocalDDGIVolume
+{
+    glm::vec3 center{0.0f};
+    glm::vec3 halfExtents{1.0f};
+    float probeSpacing{0.5f};
+    uint64_t volumeId{0};
+};
+
 struct ViewFamily
 {
     ViewFamily() = default;
@@ -464,6 +476,7 @@ struct ViewFamily
     ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};
     ProbePreviewSettings probePreviewSettings{};
     ArenaFixedVector<ProbePreviewSphere> probePreviews{};
+    ArenaFixedVector<LocalDDGIVolume> localDDGIVolumes{};
 
     uint32_t analyticLightCount{0};
     ArenaFixedVector<EmissiveGroup> emissiveGroups{};

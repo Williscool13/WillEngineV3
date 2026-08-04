@@ -25,6 +25,7 @@
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "engine/profiles/profile_library.h"
+#include "render/passes/ddgi_passes.h"
 #include "render/passes/final_gather_passes.h"
 
 #include "render/shaders/restir_features_macros.h"
@@ -355,20 +356,21 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Skip classification-inactive probes in the debug view instead of drawing them flat blue.");
         }
-        const char* cascadeLabels[] = {"All", "0", "1", "2", "3"};
-        int cascadeOptionCount = static_cast<int>(state->lighting.ddgi.cascadeCount) + 1;
-        if (cascadeOptionCount < 2) { cascadeOptionCount = 2; }
-        if (cascadeOptionCount > 5) { cascadeOptionCount = 5; }
-        if (state->debug.render.ddgiProbeDebugCascade + 1 >= cascadeOptionCount) {
+        const char* cascadeLabels[] = {"All", "Locals", "0", "1", "2", "3"};
+        int cascadeOptionCount = static_cast<int>(state->lighting.ddgi.cascadeCount) + 2;
+        if (cascadeOptionCount < 3) { cascadeOptionCount = 3; }
+        if (cascadeOptionCount > 6) { cascadeOptionCount = 6; }
+        if (state->debug.render.ddgiProbeDebugCascade + 2 >= cascadeOptionCount) {
             state->debug.render.ddgiProbeDebugCascade = -1;
         }
-        int cascadeChoice = state->debug.render.ddgiProbeDebugCascade + 1;
+        int cascadeChoice = state->debug.render.ddgiProbeDebugCascade == Render::DDGI_PROBE_DEBUG_LOCALS_ONLY ? 1 : state->debug.render.ddgiProbeDebugCascade + 2;
+        if (state->debug.render.ddgiProbeDebugCascade == -1) { cascadeChoice = 0; }
         ImGui::SetNextItemWidth(80.0f);
         if (ImGui::Combo("Cascade##DDGIDebug", &cascadeChoice, cascadeLabels, cascadeOptionCount)) {
-            state->debug.render.ddgiProbeDebugCascade = cascadeChoice - 1;
+            state->debug.render.ddgiProbeDebugCascade = cascadeChoice == 0 ? -1 : cascadeChoice == 1 ? Render::DDGI_PROBE_DEBUG_LOCALS_ONLY : cascadeChoice - 2;
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("All draws every cascade with an identification tint (0 white, 1 red, 2 green, 3 blue); picking one cascade draws only it, untinted.");
+            ImGui::SetTooltip("All draws every entry with an identification tint (cascade 0 white, 1 red, 2 green, 3 blue; locals continue the palette). Locals draws only the resident hand-placed volumes, tinted. Picking one cascade draws only it, untinted.");
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(240.0f);
@@ -1162,6 +1164,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Scale Biases Per Cascade##ddgi", &ddgi.bScaleBiasPerCascade)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Multiply normal/view bias by each cascade's spacing scale (RTXGI-style). Off = all cascades sample at the same world-space bias, which can reduce fine-vs-coarse disagreement at cascade boundaries.");
+            }
+            if (ImGui::Checkbox("Local Volumes##ddgi", &ddgi.bLocalVolumes)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Hand-placed fine-spacing probe volumes (LocalDDGIVolumeComponent entities), sampled before cascade 0 where they cover. Nearest few volumes stay resident, one updates per frame.");
             }
 
             ImGui::SeparatorText("Trace");

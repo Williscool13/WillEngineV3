@@ -123,6 +123,8 @@ set(GAME_SOURCES
         systems/probe_bake_system.h
         components/render/light_components.cpp
         components/render/light_components.h
+        components/render/local_ddgi_volume_component.cpp
+        components/render/local_ddgi_volume_component.h
         components/render/reflection_probe_component.cpp
         components/render/reflection_probe_component.h
         component-registry/editor_gizmo_helpers.cpp

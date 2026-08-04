@@ -15,6 +15,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     reflectionProbes = ArenaFixedVector<ReflectionProbeGPU>(&arena, MAX_REFLECTION_PROBES);
     emissiveGroups = ArenaFixedVector<EmissiveGroup>(&arena, MAX_EMISSIVE_GROUPS);
     probePreviews = ArenaFixedVector<ProbePreviewSphere>(&arena, MAX_REFLECTION_PROBES);
+    localDDGIVolumes = ArenaFixedVector<LocalDDGIVolume>(&arena, MAX_LOCAL_DDGI_VOLUMES);
 
     primitiveInstances = ArenaVector<PrimitiveInstanceData>(&arena, wm.primitiveInstances);
     worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, wm.worldGlyphQuads);

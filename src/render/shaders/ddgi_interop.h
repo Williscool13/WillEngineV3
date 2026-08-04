@@ -81,11 +81,12 @@ SHADER_PUBLIC struct DDGICascadeDescriptor
     SHADER_PUBLIC uint pad1;
 };
 
-/** Per-frame cascade chain, finest first; consumers get one pointer to this instead of inline volume fields. */
+/** Per-frame cascade chain, finest first; consumers get one pointer to this instead of inline volume fields.
+ * Local volumes (fixed hand-placed windows, finer than cascade 0) occupy [cascadeCount, cascadeCount + localCount) and are sampled before the cascades. */
 SHADER_PUBLIC struct DDGICascadeSetGPU
 {
     SHADER_PUBLIC uint cascadeCount;
-    SHADER_PUBLIC uint pad0;
+    SHADER_PUBLIC uint localCount;
     SHADER_PUBLIC uint pad1;
     SHADER_PUBLIC uint pad2;
     SHADER_PUBLIC DDGICascadeDescriptor cascades[DDGI_MAX_CASCADES];

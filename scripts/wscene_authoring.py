@@ -51,6 +51,7 @@ SKYBOX = component_key("SkyboxComponent")                   # envMap (uint64 env
 # `range` is the influence/falloff+cull radius (NOT the emissive size). `drawEmissiveSurface`=visible glowing rep mesh.
 GIZMO = component_key("DebugGizmoComponent")                # color, extents, lineWidth, shape (0=Box?,2=Sphere confirmed)
 PROBE = component_key("ReflectionProbeComponent")           # probeId, bEnabled, shape, fadeMargin, captureOffset, bParallax, resolution, standInEnvMap
+LOCAL_DDGI = component_key("LocalDDGIVolumeComponent")      # volumeId, bEnabled, probeSpacing; bounds = transform.scale half-extents, rotation ignored
 
 # Schemas below observed in level0.wscene; payload fields verified there, not against source.
 PREFAB_INSTANCE = component_key("PrefabInstanceComponent")  # prefabId (matches a .wprefab header id), bMasterPrefab
@@ -307,6 +308,15 @@ def add_reflection_probe(entity, probe_id, shape=PROBE_BOX, fade_margin=0.0, cap
     entity[PROBE] = {"probeId": probe_id, "bEnabled": enabled, "shape": shape, "fadeMargin": fade_margin,
                       "captureOffset": list(capture_offset), "bParallax": parallax,
                       "resolution": resolution, "standInEnvMap": stand_in_env_map}
+    return entity
+
+def add_local_ddgi_volume(entity, volume_id, probe_spacing=0.5, enabled=True):
+    """Axis-aligned local DDGI probe window: bounds = transform.scale as HALF-EXTENTS, rotation
+    IGNORED (world-axis lattice). Probe counts = bounds/spacing rounded outward, clamped 2..16 per
+    axis. Size the bounds PAST the walls by ~edgeBlendCells*spacing so the edge fade band lies
+    outside the interior; exact-fit volumes hand wall pixels back to the leaky cascades.
+    volume_id must be non-zero and stable across runs; use name_id("...")."""
+    entity[LOCAL_DDGI] = {"volumeId": volume_id, "bEnabled": enabled, "probeSpacing": probe_spacing}
     return entity
 
 ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT = 0, 1, 2

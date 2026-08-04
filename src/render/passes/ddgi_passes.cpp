@@ -4,6 +4,8 @@
 
 #include "render/passes/ddgi_passes.h"
 
+#include <cfloat>
+
 #include "render/render_utils.h"
 #include "render/interface/render_interface.h"
 #include "render/pipelines/pipeline_data.h"
@@ -29,7 +31,7 @@ static const StringID DDGI_BLEND_VISIBILITY_PASS[DDGI_MAX_CASCADES] = {SID("DDGI
 static const StringID DDGI_RELOCATE_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Relocate 0"), SID("DDGI Probe Relocate 1"), SID("DDGI Probe Relocate 2"), SID("DDGI Probe Relocate 3"), SID("DDGI Probe Relocate 4"), SID("DDGI Probe Relocate 5"), SID("DDGI Probe Relocate 6"), SID("DDGI Probe Relocate 7"), SID("DDGI Probe Relocate 8"), SID("DDGI Probe Relocate 9"), SID("DDGI Probe Relocate 10"), SID("DDGI Probe Relocate 11"), SID("DDGI Probe Relocate 12"), SID("DDGI Probe Relocate 13"), SID("DDGI Probe Relocate 14"), SID("DDGI Probe Relocate 15")};
 static const StringID DDGI_DEBUG_PASS[DDGI_MAX_CASCADES] = {SID("DDGI Probe Debug 0"), SID("DDGI Probe Debug 1"), SID("DDGI Probe Debug 2"), SID("DDGI Probe Debug 3"), SID("DDGI Probe Debug 4"), SID("DDGI Probe Debug 5"), SID("DDGI Probe Debug 6"), SID("DDGI Probe Debug 7"), SID("DDGI Probe Debug 8"), SID("DDGI Probe Debug 9"), SID("DDGI Probe Debug 10"), SID("DDGI Probe Debug 11"), SID("DDGI Probe Debug 12"), SID("DDGI Probe Debug 13"), SID("DDGI Probe Debug 14"), SID("DDGI Probe Debug 15")};
 
-DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const DDGICascades& previous, uint64_t frameNumber, bool bFreeze)
+DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const Core::LocalDDGIVolume* localVolumes, uint32_t localVolumeCount, const DDGICascades& previous, uint64_t frameNumber, bool bFreeze)
 {
     const glm::ivec3 counts = glm::clamp(glm::ivec3(params.probeCountX, params.probeCountY, params.probeCountZ), glm::ivec3(2), glm::ivec3(32));
     const float baseSpacing = glm::max(params.probeSpacing, 0.1f);
@@ -59,6 +61,83 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
             volume.baseCell = previous.volumes[k].baseCell;
         }
         cascades.volumes[k] = volume;
+    }
+
+    const uint32_t maxResident = glm::min(DDGI_MAX_RESIDENT_LOCAL_VOLUMES, DDGI_MAX_CASCADES - cascades.count);
+    if (localVolumeCount > 0 && maxResident > 0) {
+        const uint32_t candidates = glm::min(localVolumeCount, static_cast<uint32_t>(Core::MAX_LOCAL_DDGI_VOLUMES));
+        bool taken[Core::MAX_LOCAL_DDGI_VOLUMES]{};
+        uint32_t selected[DDGI_MAX_CASCADES]{};
+        uint32_t selectedCount = 0;
+        for (uint32_t s = 0; s < maxResident && s < candidates; ++s) {
+            float bestDist = FLT_MAX;
+            uint32_t best = UINT32_MAX;
+            for (uint32_t i = 0; i < candidates; ++i) {
+                if (taken[i]) {
+                    continue;
+                }
+                const glm::vec3 delta = glm::max(glm::abs(cameraPosition - localVolumes[i].center) - localVolumes[i].halfExtents, glm::vec3(0.0f));
+                const float dist = glm::dot(delta, delta);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = i;
+                }
+            }
+            if (best == UINT32_MAX) {
+                break;
+            }
+            taken[best] = true;
+            selected[selectedCount++] = best;
+        }
+        cascades.localCount = selectedCount;
+
+        // Slot-sticky assignment: a still-resident volume keeps last frame's slot (and with it the atlas history); newcomers take the free slots and reconverge cold.
+        const uint32_t localBase = cascades.count;
+        bool slotUsed[DDGI_MAX_CASCADES]{};
+        uint32_t slotOf[DDGI_MAX_CASCADES]{};
+        for (uint32_t s = 0; s < selectedCount; ++s) {
+            slotOf[s] = UINT32_MAX;
+            for (uint32_t k = localBase; k < localBase + selectedCount; ++k) {
+                if (!slotUsed[k] && previous.localIds[k] == localVolumes[selected[s]].volumeId) {
+                    slotOf[s] = k;
+                    slotUsed[k] = true;
+                    break;
+                }
+            }
+        }
+        uint32_t nextFree = localBase;
+        for (uint32_t s = 0; s < selectedCount; ++s) {
+            if (slotOf[s] != UINT32_MAX) {
+                continue;
+            }
+            while (slotUsed[nextFree]) {
+                ++nextFree;
+            }
+            slotOf[s] = nextFree;
+            slotUsed[nextFree] = true;
+        }
+
+        const uint32_t updatedLocalSlot = localBase + static_cast<uint32_t>(frameNumber % selectedCount);
+        for (uint32_t s = 0; s < selectedCount; ++s) {
+            const Core::LocalDDGIVolume& local = localVolumes[selected[s]];
+            const uint32_t k = slotOf[s];
+            const float spacing = glm::max(local.probeSpacing, 0.25f);
+            const glm::ivec3 baseCell = glm::ivec3(glm::floor((local.center - local.halfExtents) / spacing));
+            const glm::ivec3 localCounts = glm::clamp(glm::ivec3(glm::ceil((local.center + local.halfExtents) / spacing)) - baseCell + 1, glm::ivec3(2), glm::ivec3(Core::LOCAL_DDGI_MAX_PROBES_PER_AXIS));
+
+            DDGIVolumeParams volume{};
+            volume.probeCount = glm::uvec3(localCounts);
+            volume.probeSpacing = glm::vec3(spacing);
+            volume.normalBias = glm::max(params.normalBias, 0.0f);
+            volume.viewBias = glm::max(params.viewBias, 0.0f);
+            volume.irradianceGamma = glm::max(params.irradianceGamma, 1.0f);
+            volume.edgeFadeCells = glm::clamp(params.edgeBlendCells, 1.0f, 8.0f);
+            volume.baseCell = baseCell;
+
+            cascades.volumes[k] = volume;
+            cascades.localIds[k] = local.volumeId;
+            cascades.bUpdated[k] = !bFreeze && (bColdStart || k == updatedLocalSlot);
+        }
     }
     return cascades;
 }
@@ -94,6 +173,7 @@ struct DDGICascadeDescSources
 {
     DDGICascadeDescSource entries[DDGI_MAX_CASCADES]{};
     uint32_t count{0};
+    uint32_t localCount{0};
 };
 
 /** Small vkCmdUpdateBuffer pass resolving the sources' descriptor indices/addresses at execute time into a DDGICascadeSetGPU. Sources must outlive execution (arena-allocated). */
@@ -105,7 +185,8 @@ static void AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName
     pass.Execute([sources, bufferId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DDGICascadeSetGPU set{};
         set.cascadeCount = sources->count;
-        for (uint32_t k = 0; k < sources->count; ++k) {
+        set.localCount = sources->localCount;
+        for (uint32_t k = 0; k < sources->count + sources->localCount; ++k) {
             const DDGICascadeDescSource& source = sources->entries[k];
             DDGICascadeDescriptor& desc = set.cascades[k];
             desc.volume = source.volume;
@@ -131,7 +212,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         return;
     }
 
-    const uint32_t probeCountTotal = cascades.volumes[0].probeCount.x * cascades.volumes[0].probeCount.y * cascades.volumes[0].probeCount.z;
+    const uint32_t total = cascades.count + cascades.localCount;
+    const uint32_t prevTotal = previous.count + previous.localCount;
 
     const bool bClassify = params.bClassification && params.bRelocation;
 
@@ -139,9 +221,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     bool bOffsetsHistoryValid[DDGI_MAX_CASCADES]{};
     bool bRestartHistoryValid[DDGI_MAX_CASCADES]{};
     bool bActiveHistoryValid[DDGI_MAX_CASCADES]{};
-    for (uint32_t k = 0; k < cascades.count; ++k) {
-        const bool bSameWindow = k < previous.count && previous.volumes[k].probeCount == cascades.volumes[k].probeCount && previous.volumes[k].probeSpacing == cascades.volumes[k].probeSpacing
-            && previous.volumes[k].irradianceGamma == cascades.volumes[k].irradianceGamma;
+    for (uint32_t k = 0; k < total; ++k) {
+        const bool bSameWindow = k < prevTotal && previous.localIds[k] == cascades.localIds[k] && previous.volumes[k].probeCount == cascades.volumes[k].probeCount
+            && previous.volumes[k].probeSpacing == cascades.volumes[k].probeSpacing && previous.volumes[k].irradianceGamma == cascades.volumes[k].irradianceGamma;
         bHistoryValid[k] = bSameWindow && graph.HasTexture(DDGI_IRRADIANCE_HISTORY[k]) && graph.HasTexture(DDGI_VISIBILITY_HISTORY[k]);
         bOffsetsHistoryValid[k] = bSameWindow && params.bRelocation && graph.HasBuffer(DDGI_OFFSETS_HISTORY[k]);
         bRestartHistoryValid[k] = bSameWindow && params.bRelocation && graph.HasBuffer(DDGI_RESTART_HISTORY[k]);
@@ -155,7 +237,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         DDGICascadeDescSources* prevSources = arena.AllocArray<DDGICascadeDescSources>(1);
         *prevSources = DDGICascadeDescSources{};
         prevSources->count = cascades.count;
-        for (uint32_t k = 0; k < cascades.count; ++k) {
+        prevSources->localCount = cascades.localCount;
+        for (uint32_t k = 0; k < total; ++k) {
             if (bHistoryValid[k]) {
                 prevSources->entries[k] = DDGICascadeDescSource{
                     .volume = previous.volumes[k],
@@ -165,14 +248,16 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                     .bValid = true,
                 };
             } else {
-                prevSources->entries[k].volume = k < previous.count ? previous.volumes[k] : cascades.volumes[k];
+                prevSources->entries[k].volume = k < prevTotal ? previous.volumes[k] : cascades.volumes[k];
             }
         }
         AddDDGICascadeDescriptorUpload(graph, SID("DDGI Prev Cascade Descriptors"), DDGI_CASCADES_PREV_BUFFER, prevSources);
     }
 
-    for (uint32_t k = 0; k < cascades.count; ++k) {
+    for (uint32_t k = 0; k < total; ++k) {
         const DDGIVolumeParams& volume = cascades.volumes[k];
+        const bool bLocal = k >= cascades.count;
+        const uint32_t probeCountTotal = volume.probeCount.x * volume.probeCount.y * volume.probeCount.z;
 
         if (!cascades.bUpdated[k]) {
             // Re-carry so the frozen cascade's resources survive the skip; mismatched history is dropped and the cascade restarts on its next turn.
@@ -193,8 +278,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         }
 
         const glm::vec4 rayRotation = DDGIRayRotation(frameNumber * DDGI_MAX_CASCADES + k);
-        const glm::ivec3 previousBaseCell = k < previous.count ? previous.volumes[k].baseCell : volume.baseCell;
-        const uint32_t raysPerProbe = glm::clamp(k == 0 ? params.raysPerProbe : params.outerRaysPerProbe, 16u, DDGI_MAX_RAYS_PER_PROBE);
+        const glm::ivec3 previousBaseCell = k < prevTotal ? previous.volumes[k].baseCell : volume.baseCell;
+        const uint32_t raysPerProbe = glm::clamp(k == 0 || bLocal ? params.raysPerProbe : params.outerRaysPerProbe, 16u, DDGI_MAX_RAYS_PER_PROBE);
         const float maxRayRadiance = glm::max(params.maxRayRadiance, 0.0f);
         const float bounceIntensity = glm::clamp(params.bounceIntensity, 0.0f, 1.0f);
         const uint32_t radianceCacheShadeInterval = glm::max(params.radianceCacheShadeInterval, 1u);
@@ -231,7 +316,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         }
         if (bFeedback) {
             tracePass.ReadBuffer(DDGI_CASCADES_PREV_BUFFER);
-            for (uint32_t j = 0; j < cascades.count; ++j) {
+            for (uint32_t j = 0; j < total; ++j) {
                 if (bHistoryValid[j]) {
                     tracePass.ReadSampledImage(DDGI_IRRADIANCE_HISTORY[j]);
                     tracePass.ReadSampledImage(DDGI_VISIBILITY_HISTORY[j]);
@@ -373,8 +458,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         });
 
         if (params.bRelocation) {
-            // World-space standoff scales with the cascade like the biases, so coarse probes keep proportionate clearance.
-            const float minFrontfaceDistance = glm::max(params.minFrontfaceDistance, 0.0f) * static_cast<float>(1u << k);
+            // World-space standoff scales with the cascade like the biases, so coarse probes keep proportionate clearance; locals are finest and stay unscaled.
+            const float minFrontfaceDistance = glm::max(params.minFrontfaceDistance, 0.0f) * (bLocal ? 1.0f : static_cast<float>(1u << k));
             graph.CreateBuffer(DDGI_OFFSETS[k], static_cast<VkDeviceSize>(probeCountTotal) * sizeof(glm::vec4), false);
             graph.CreateBuffer(DDGI_RESTART[k], static_cast<VkDeviceSize>(probeCountTotal) * sizeof(uint32_t), false);
 
@@ -434,7 +519,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     DDGICascadeDescSources* sources = arena.AllocArray<DDGICascadeDescSources>(1);
     *sources = DDGICascadeDescSources{};
     sources->count = cascades.count;
-    for (uint32_t k = 0; k < cascades.count; ++k) {
+    sources->localCount = cascades.localCount;
+    for (uint32_t k = 0; k < total; ++k) {
         if (cascades.bUpdated[k]) {
             sources->entries[k] = DDGICascadeDescSource{
                 .volume = cascades.volumes[k],
@@ -499,8 +585,11 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
         return;
     }
 
-    for (uint32_t k = 0; k < cascades.count; ++k) {
+    for (uint32_t k = 0; k < cascades.count + cascades.localCount; ++k) {
         if (debugCascade >= 0 && k != static_cast<uint32_t>(debugCascade)) {
+            continue;
+        }
+        if (debugCascade == DDGI_PROBE_DEBUG_LOCALS_ONLY && k < cascades.count) {
             continue;
         }
         const StringID atlasId = graph.HasTexture(DDGI_IRRADIANCE[k]) ? DDGI_IRRADIANCE[k] : DDGI_IRRADIANCE_HISTORY[k];

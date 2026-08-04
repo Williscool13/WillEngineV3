@@ -76,6 +76,7 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
 /** Removes the transient ProbeBakeHiddenTag from every entity, restoring normal gather. */
 void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state);
 void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 } // Game

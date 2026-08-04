@@ -14,6 +14,7 @@
 namespace Core
 {
 struct DDGIParams;
+struct LocalDDGIVolume;
 }
 
 namespace Render
@@ -23,26 +24,33 @@ class PipelineManager;
 /** Per-frame GPU descriptor chain sampled by lighting/remodulate and the trace's infinite-bounce feedback. */
 inline const StringID DDGI_CASCADES_BUFFER = SID("ddgi_cascades");
 inline const StringID DDGI_CASCADES_PREV_BUFFER = SID("ddgi_cascades_prev");
+inline constexpr uint32_t DDGI_MAX_RESIDENT_LOCAL_VOLUMES = 8u;
+inline constexpr int32_t DDGI_PROBE_DEBUG_LOCALS_ONLY = -2;
 
-/** CPU-side cascade chain, finest first; bUpdated marks which cascades trace/blend/relocate this frame. */
+/** CPU-side cascade chain, finest first; bUpdated marks which entries trace/blend/relocate this frame. Local volumes occupy entries [count, count + localCount), slot-sticky by localIds so a resident volume keeps its history. */
 struct DDGICascades
 {
     DDGIVolumeParams volumes[DDGI_MAX_CASCADES]{};
     bool bUpdated[DDGI_MAX_CASCADES]{};
+    uint64_t localIds[DDGI_MAX_CASCADES]{};
     uint32_t count{0};
+    uint32_t localCount{0};
 };
 
 /**
  * Camera-following rolling windows; cascade 0 updates every frame, outer cascades round-robin so trace cost stays flat.
+ * The nearest local volumes are appended as fixed fine-spacing windows, one updating per frame on its own round-robin.
  * @param params
  * @param cameraPosition
- * @param previous cascades used last frame, for frozen windows on skipped cascades
+ * @param localVolumes hand-placed local volumes gathered this frame (may be null when none)
+ * @param localVolumeCount
+ * @param previous cascades used last frame, for frozen windows on skipped cascades and local slot stickiness
  * @param frameNumber
  */
-DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const DDGICascades& previous, uint64_t frameNumber, bool bFreeze);
+DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const Core::LocalDDGIVolume* localVolumes, uint32_t localVolumeCount, const DDGICascades& previous, uint64_t frameNumber, bool bFreeze);
 
 /**
- * Probe trace + irradiance/visibility blend, run per updated cascade; also uploads DDGI_CASCADES_BUFFER/_PREV_BUFFER. No-op without the TLAS and geometry/material/light buffers.
+ * Probe trace + irradiance/visibility blend, run per updated entry (cascades and resident local volumes); also uploads DDGI_CASCADES_BUFFER/_PREV_BUFFER. No-op without the TLAS and geometry/material/light buffers.
  * @param graph
  * @param pipelineManager
  * @param arena frame arena backing the descriptor sources captured by the upload passes
@@ -72,7 +80,7 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass);
  * @param pipelineManager
  * @param cascades
  * @param probeDebugExposure linear scale applied to the fitted probe irradiance so bright probes do not blow out to flat white
- * @param debugCascade -1 draws every cascade with a per-cascade identification tint; 0-3 draws only that cascade, untinted
+ * @param debugCascade -1 draws every entry (cascades and resident locals) with a per-entry identification tint; DDGI_PROBE_DEBUG_LOCALS_ONLY (-2) draws only local entries, tinted; >= 0 draws only that entry, untinted
  * @param bHideInactive skip classification-inactive probes entirely instead of drawing them flat blue
  * @param probeDebugMode 0 fits the irradiance atlas; 1 fits the visibility atlas (red = mean distance / miss clamp, green = std/mean)
  */

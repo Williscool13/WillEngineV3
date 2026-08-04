@@ -43,7 +43,7 @@ wa.seed_ids("gi_sunbounce")   # must precede every next_id() call
 from wscene_authoring import (
     base_entity, box_params, cylinder_params, wall_params, module_part, add_module,
     next_id, name_id, add_procedural, add_directional_light, add_skybox, add_world_text,
-    add_reflection_probe, PROBE_RES_128, PROBE_RES_256,
+    add_reflection_probe, add_local_ddgi_volume, PROBE_RES_128, PROBE_RES_256,
     write_material, PROCEDURAL, PHYSICS, SCENE_FOLDER,
 )
 import asset_index
@@ -150,7 +150,9 @@ def room_parts(inner, door_face, door_w, door_h, sill, judging_cube=True):
 def sealed_room(tag, cx, cz, inner, door_face, door_w, door_h, sill, folder_id, judging_cube=True):
     """Interior floor top at y=0, interior center (cx, cz). Box probe spans the OUTER shell:
     inner-face-aligned bounds flicker under jitter (wall pixels sit exactly on the boundary and
-    flip between probe and skybox). Capture at mid-height clears the judging cube."""
+    flip between probe and skybox). Capture at mid-height clears the judging cube.
+    Local DDGI volume per room, bounds ~1 cell past the outer shell so the edge fade band lies
+    outside the interior; spacing picked so counts stay under the 16/axis window clamp."""
     sx, sy, sz = inner
     origin = (cx - sx * 0.5 - WALL_T, -WALL_T, cz - sz * 0.5 - WALL_T)
     room = module_entity(f"[{tag}] room", origin, room_parts(inner, door_face, door_w, door_h, sill, judging_cube), folder_id)
@@ -158,6 +160,10 @@ def sealed_room(tag, cx, cz, inner, door_face, door_w, door_h, sill, folder_id, 
     resolution = PROBE_RES_256 if sx > 10.0 else PROBE_RES_128
     add_reflection_probe(probe, name_id(f"gi_sunbounce_{tag}"), resolution=resolution)
     entities.append(probe)
+    spacing = 0.8 if sx <= 10.0 else 1.6
+    volume = base_entity(f"[{tag}] gi volume", (cx, sy * 0.5, cz), scale=(sx * 0.5 + WALL_T + 0.9, sy * 0.5 + WALL_T + 1.0, sz * 0.5 + WALL_T + 0.9), folder_id=folder_id)
+    add_local_ddgi_volume(volume, name_id(f"gi_sunbounce_lv_{tag}"), probe_spacing=spacing)
+    entities.append(volume)
     return room
 
 # =============================================================================

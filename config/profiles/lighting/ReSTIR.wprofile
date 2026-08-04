@@ -9,6 +9,7 @@
     "bFinalGatherTemporal": true,
     "bGatherSkipRay": false,
     "bInfiniteBounce": true,
+    "bLocalVolumes": true,
     "bRelocation": true,
     "bScaleBiasPerCascade": true,
     "bounceIntensity": 0.5,
@@ -181,7 +182,7 @@
     },
     "regirWClamp": 0.0,
     "relax": {
-      "atrousIterations": 3,
+      "atrousIterations": 4,
       "bChromaAtrous": true,
       "chromaAtrousIterations": 1,
       "chromaLumaPower": 4.0,
