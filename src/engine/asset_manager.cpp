@@ -1454,7 +1454,7 @@ void AssetManager::Scan()
                     cached.compressionType = header->compressionType;
                     cached.contentVersion = header->contentVersion;
                     cached.bUngenerated = header->bUngenerated;
-                    cached.bModelOwned = header->bModelOwned;
+                    cached.category = header->category;
                     textureNameToId[nameSid] = id;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Texture '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, header->contentVersion);
@@ -1775,20 +1775,20 @@ Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width
 void AssetManager::GetAllTextureInfos(Core::ArenaFixedMap<TextureID, EditorTextureInfo>& out) const
 {
     for (const auto& [texId, desc] : textureRegistry) {
-        out[texId] = {texId, desc.name, desc.width, desc.height, desc.mipCount, desc.bModelOwned};
+        out[texId] = {texId, desc.name, desc.width, desc.height, desc.mipCount, desc.category};
     }
     for (const auto& [texId, desc] : staticProceduralRegistry) {
         uint32_t mipCount = desc.mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(desc.width, desc.height))))) + 1u : 1u;
         if (const TextureHandle* lh = textureIdToHandle.Find(texId); lh && textureAllocator.IsValid(*lh)) {
             mipCount = textures[lh->index].mipCount;
         }
-        out[texId] = {texId, desc.name, desc.width, desc.height, mipCount};
+        out[texId] = {texId, desc.name, desc.width, desc.height, mipCount, TextureCategory::Builtin};
     }
     for (const auto& [texId, handle] : textureIdToHandle) {
         if (!textureAllocator.IsValid(handle)) { continue; }
         const Texture& tex = textures[handle.index];
         if (tex.origin == Texture::Origin::RuntimeProcedural) {
-            out[texId] = {texId, tex.name, tex.width, tex.height, tex.mipCount};
+            out[texId] = {texId, tex.name, tex.width, tex.height, tex.mipCount, TextureCategory::Builtin};
         }
     }
 }

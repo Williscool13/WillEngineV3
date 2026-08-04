@@ -1008,12 +1008,12 @@ bool StaticModelGenerateSlot::WriteStaticModel()
                 textureIDs[i] = *existing;
             }
             else if (image.data.IsAllocated()) {
-                textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i], true);
+                textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i], Engine::TextureCategory::Model);
                 seenTextures.Insert(textureOutPath, textureIDs[i]);
             }
             else {
                 const Core::Path fullSourcePath = gltfPath.Parent() / image.sourcePath.c_str();
-                textureIDs[i] = generator->RequestTextureGenerateFromFile(fullSourcePath, textureOutPath, true, preferredImageFormats[i], false, true);
+                textureIDs[i] = generator->RequestTextureGenerateFromFile(fullSourcePath, textureOutPath, true, preferredImageFormats[i], false, Engine::TextureCategory::Model);
                 seenTextures.Insert(textureOutPath, textureIDs[i]);
             }
         }

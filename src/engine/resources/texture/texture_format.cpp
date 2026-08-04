@@ -27,8 +27,11 @@ bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header)
     out << "data_size " << header.dataSize << "\n";
     out << "uncompressed_size " << header.uncompressedSize << "\n";
     out << "compression " << static_cast<uint32_t>(header.compressionType) << "\n";
-    if (header.bModelOwned) {
-        out << "model_owned 1\n";
+    if (header.category == TextureCategory::Model) {
+        out << "category model\n";
+    }
+    else if (header.category == TextureCategory::Builtin) {
+        out << "category builtin\n";
     }
     if (header.genSource[0] != '\0') {
         out << "gen_source " << header.genSource << "\n";
@@ -91,10 +94,16 @@ std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
             header.compressionType = static_cast<CompressionType>(v);
             bCompressionSeen = true;
         }
+        else if (strncmp(line, "category ", 9) == 0) {
+            const char* value = line + 9;
+            if (strcmp(value, "model") == 0) { header.category = TextureCategory::Model; }
+            else if (strcmp(value, "builtin") == 0) { header.category = TextureCategory::Builtin; }
+            else { header.category = TextureCategory::Standalone; }
+        }
         else if (strncmp(line, "model_owned ", 12) == 0) {
             uint32_t v = 0;
             std::from_chars(line + 12, line + LINE_BUF, v);
-            header.bModelOwned = v != 0;
+            if (v != 0) { header.category = TextureCategory::Model; }
         }
         else if (strncmp(line, "ungenerated ", 12) == 0) {
             uint32_t v = 0;

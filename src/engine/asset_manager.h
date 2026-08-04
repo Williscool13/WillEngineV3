@@ -172,7 +172,7 @@ public: // Textures
         CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
         uint64_t contentVersion{0};
         bool bUngenerated{false};
-        bool bModelOwned{false};
+        TextureCategory category{TextureCategory::Standalone};
     };
 
     const Core::FixedMap<TextureID, DiskTextureDesc>& GetTextureRegistry() const { return textureRegistry; }
@@ -194,7 +194,7 @@ public: // Textures
         uint32_t width;
         uint32_t height;
         uint32_t mipCount;
-        bool bModelOwned{false};
+        TextureCategory category{TextureCategory::Standalone};
     };
 
     bool IsTextureLoaded(const TextureID textureId) const

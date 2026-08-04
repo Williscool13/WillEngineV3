@@ -123,10 +123,10 @@ void AssetGenerator::ThreadMain()
                     TextureGenerateSlot& task = textureGenerateTasks[slotHandle.index];
                     if (req.sourcePixels.IsAllocated()) {
                         task.LaunchFromMemory(slotHandle, std::move(req.sourcePixels), req.sourceWidth, req.sourceHeight, req.sourceBytesPerPixel, req.outputPath, req.textureId, req.mipmapped,
-                                              req.targetFormat, req.contentVersion, req.bModelOwned);
+                                              req.targetFormat, req.contentVersion, req.category);
                     }
                     else {
-                        task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat, req.contentVersion, req.flipY, req.declaredName, req.recipeSource, req.bModelOwned);
+                        task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat, req.contentVersion, req.flipY, req.declaredName, req.recipeSource, req.category);
                     }
                 }
                 else {
@@ -232,7 +232,7 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
     wakeCV.notify_one();
 }
 
-Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat, bool flipY, bool modelOwned)
+Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat, bool flipY, Engine::TextureCategory category)
 {
     ZoneScoped;
     Engine::TextureID id{textureIdRng()};
@@ -256,7 +256,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Pat
     req.contentVersion = contentVersion;
     req.declaredName = declaredName;
     req.recipeSource = recipeSource;
-    req.bModelOwned = modelOwned;
+    req.category = category;
     req.imagePath = imagePath;
     textureGenerateRequestQueue.enqueue(std::move(req));
     workCounter.fetch_add(1);
@@ -265,7 +265,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Pat
 }
 
 Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
-                                                                   bool mipmapped, DXGI_FORMAT targetFormat, bool modelOwned)
+                                                                   bool mipmapped, DXGI_FORMAT targetFormat, Engine::TextureCategory category)
 {
     ZoneScoped;
     Engine::TextureID id{textureIdRng()};
@@ -282,7 +282,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArr
     req.mipmapped = mipmapped;
     req.targetFormat = targetFormat;
     req.contentVersion = contentVersion;
-    req.bModelOwned = modelOwned;
+    req.category = category;
     req.sourcePixels = std::move(pixels);
     req.sourceWidth = w;
     req.sourceHeight = h;

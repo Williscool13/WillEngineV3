@@ -50,7 +50,7 @@ void TextureGenerateSlot::Initialize(
 
 void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId,
                                  bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _flipY,
-                                 const Core::InlineString<128>& _declaredName, const Core::InlineString<256>& _recipeSource, bool _modelOwned)
+                                 const Core::InlineString<128>& _declaredName, const Core::InlineString<256>& _recipeSource, Engine::TextureCategory _category)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
@@ -62,7 +62,7 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Co
     targetFormat = _targetFormat;
     declaredName = _declaredName;
     recipeSource = _recipeSource;
-    modelOwned = _modelOwned;
+    category = _category;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -73,7 +73,7 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Co
 }
 
 void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel,
-                                           const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _modelOwned)
+                                           const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, Engine::TextureCategory _category)
 {
     slotHandle = _slotHandle;
     outputPath = _outputPath;
@@ -88,7 +88,7 @@ void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle
     imagePath = Core::Path{};
     declaredName = {};
     recipeSource = {};
-    modelOwned = _modelOwned;
+    category = _category;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -491,7 +491,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
         header.bGenMips = mipmapped;
         header.bGenFlipY = flipY;
     }
-    header.bModelOwned = modelOwned;
+    header.category = category;
 
     Platform::CreateDirectories(outputPath.Parent().c_str());
     // Temp + rename so a crash mid-write never leaves a truncated .wtexture (an ungenerated stub survives and retries next run)

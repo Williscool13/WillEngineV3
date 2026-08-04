@@ -80,6 +80,7 @@ bool WriteSimpleRGBA8WTexture(Core::MemoryManager* memoryManager, const char* ou
     header.uncompressedSize = ktxSize;
     header.dataSize = realSize;
     header.compressionType = Engine::DEFAULT_TEXTURE_COMPRESSION;
+    header.category = Engine::TextureCategory::Builtin;
     strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
 
     Platform::CreateDirectories(Core::Path(outputPath).Parent().c_str());
@@ -144,6 +145,7 @@ bool WriteRawBytesWTexture(Core::MemoryManager* memoryManager, const char* outpu
     header.uncompressedSize = ktxSize;
     header.dataSize = realSize;
     header.compressionType = Engine::DEFAULT_TEXTURE_COMPRESSION;
+    header.category = Engine::TextureCategory::Builtin;
     strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
 
     Platform::CreateDirectories(Core::Path(outputPath).Parent().c_str());
@@ -158,12 +160,21 @@ bool WriteRawBytesWTexture(Core::MemoryManager* memoryManager, const char* outpu
     return true;
 }
 
+static bool BuiltinUpToDate(const Core::Path& path)
+{
+    if (!path.Exists()) {
+        return false;
+    }
+    std::optional<Engine::WTextureHeader> header = Engine::ReadWTextureHeader(path);
+    return header && header->category == Engine::TextureCategory::Builtin;
+}
+
 void CreateCriticalEngineResources(Core::MemoryManager* memoryManager)
 {
     const Core::Path texturesPath = Platform::GetAssetPath() / "textures";
 
     const Core::Path whitePath = texturesPath / "white.wtexture";
-    if (!whitePath.Exists()) {
+    if (!BuiltinUpToDate(whitePath)) {
         constexpr uint8_t pixels[4] = {255, 255, 255, 255};
         WriteSimpleRGBA8WTexture(
             memoryManager,
@@ -173,7 +184,7 @@ void CreateCriticalEngineResources(Core::MemoryManager* memoryManager)
     }
 
     const Core::Path errorPath = texturesPath / "error.wtexture";
-    if (!errorPath.Exists()) {
+    if (!BuiltinUpToDate(errorPath)) {
         // 4x4 alternating magenta/black checkerboard
         constexpr uint8_t magenta[4] = {255, 0, 255, 255};
         constexpr uint8_t black[4] = {0, 0, 0, 255};
@@ -200,8 +211,8 @@ void CreateBRDFLookupTable(
     Render::PipelineManager* pipelineManager,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback)
 {
-    if (outputPath.Exists()) {
-        LOG_INFO(Asset, "Skipping BRDF LUT generation, file already exists: {}", outputPath.c_str());
+    if (BuiltinUpToDate(outputPath)) {
+        LOG_INFO(Asset, "Skipping BRDF LUT generation, file already up to date: {}", outputPath.c_str());
         return;
     }
 
@@ -368,6 +379,7 @@ void CreateBRDFLookupTable(
     header.uncompressedSize = ktxSize;
     header.dataSize = realSize;
     header.compressionType = Engine::DEFAULT_TEXTURE_COMPRESSION;
+    header.category = Engine::TextureCategory::Builtin;
     strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, "brdf_lut", Engine::WTEXTURE_NAME_LENGTH - 1);
 
     Core::Path outputParent = outputPath.Parent();
@@ -435,8 +447,8 @@ static void GenerateBlueNoiseRanks(uint32_t size, uint32_t seed, Core::MemoryMan
 
 void CreateBlueNoiseTexture(Core::MemoryManager* memoryManager, Core::Path outputPath, Engine::TextureID textureId)
 {
-    if (outputPath.Exists()) {
-        LOG_INFO(Asset, "Skipping blue noise generation, file already exists: {}", outputPath.c_str());
+    if (BuiltinUpToDate(outputPath)) {
+        LOG_INFO(Asset, "Skipping blue noise generation, file already up to date: {}", outputPath.c_str());
         return;
     }
 
@@ -456,8 +468,8 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
                         Engine::TextureID areaTextureId,
                         Engine::TextureID searchTextureId)
 {
-    if (outputAreaPath.Exists() && outputSearchPath.Exists()) {
-        LOG_INFO(Asset, "Skipping SMAA texture generation, files already exist: {} {}", outputAreaPath.c_str(), outputSearchPath.c_str());
+    if (BuiltinUpToDate(outputAreaPath) && BuiltinUpToDate(outputSearchPath)) {
+        LOG_INFO(Asset, "Skipping SMAA texture generation, files already up to date: {} {}", outputAreaPath.c_str(), outputSearchPath.c_str());
         return;
     }
 

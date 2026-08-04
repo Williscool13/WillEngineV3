@@ -84,7 +84,7 @@ struct TextureGenerateRequest
     uint64_t contentVersion{1};
     Core::InlineString<128> declaredName{};
     Core::InlineString<256> recipeSource{};
-    bool bModelOwned{false};
+    Engine::TextureCategory category{Engine::TextureCategory::Standalone};
 
     Core::Path imagePath;
 
@@ -165,10 +165,10 @@ public:
     bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
 
     Engine::TextureID RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped = true,
-                                                     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM, bool flipY = true, bool modelOwned = false);
+                                                     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM, bool flipY = true, Engine::TextureCategory category = Engine::TextureCategory::Standalone);
 
     Engine::TextureID RequestTextureGenerateFromMemory(Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
-                                                       bool mipmapped = false, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM, bool modelOwned = false);
+                                                       bool mipmapped = false, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM, Engine::TextureCategory category = Engine::TextureCategory::Standalone);
 
     bool TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult);
 
