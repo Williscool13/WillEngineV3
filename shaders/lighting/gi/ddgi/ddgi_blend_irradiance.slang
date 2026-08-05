@@ -45,7 +45,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     int2 texel = int2(gtid.xy);
     bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_IRRADIANCE_INTERIOR));
     if (bInterior && bFrozen) {
-        gsTexels[threadIndex] = rdgTexturesFloat4[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0));
+        gsTexels[threadIndex] = (pc.bHistoryInPlace != 0 ? rdgStorageFloat4[pc.atlasOutIndex][uint2(tileOrigin + texel)] : rdgTexturesFloat4[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)));
     } else if (bInterior) {
         float3 texelDirection = DDGIOctTexelDirection(texel, DDGI_IRRADIANCE_INTERIOR);
         float3 radianceSum = float3(0.0);
@@ -88,7 +88,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
 
         if (pc.bHistoryValid != 0) {
             if (bSameCellPrev) {
-                float4 previous = rdgTexturesFloat4[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0));
+                float4 previous = (pc.bHistoryInPlace != 0 ? rdgStorageFloat4[pc.atlasOutIndex][uint2(tileOrigin + texel)] : rdgTexturesFloat4[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)));
 
                 if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
                     // Relocation teleport or revival is a real change, not noise; skip the anti-flicker clamps.

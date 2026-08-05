@@ -41,9 +41,10 @@ public uint DDGIProbeIndexFromSlot(int3 slot, DDGIVolumeParams volume)
     return uint(slot.x) + uint(slot.y) * volume.probeCount.x + uint(slot.z) * volume.probeCount.x * volume.probeCount.y;
 }
 
+/** Texel origin of a probe's tile, offset into this volume's row of the shared atlas (atlasSlot 0 of 1 row = the volume owns the whole texture). */
 public int2 DDGIProbeTileOrigin(int3 slot, DDGIVolumeParams volume, uint tileSize)
 {
-    return int2(slot.x + slot.y * int(volume.probeCount.x), slot.z) * int(tileSize);
+    return int2(slot.x + slot.y * int(volume.probeCount.x), slot.z + int(volume.atlasSlot * volume.probeCount.z)) * int(tileSize);
 }
 
 public float2 DDGIOctEncode(float3 n)
@@ -75,7 +76,7 @@ public float2 DDGIAtlasUV(int3 slot, float3 direction, DDGIVolumeParams volume, 
 {
     float2 uv01 = DDGIOctEncode(direction) * 0.5 + 0.5;
     float2 texel = float2(DDGIProbeTileOrigin(slot, volume, tileSize)) + 1.0 + uv01 * float(interior);
-    float2 atlasSize = float2(float(volume.probeCount.x * volume.probeCount.y), float(volume.probeCount.z)) * float(tileSize);
+    float2 atlasSize = float2(float(volume.probeCount.x * volume.probeCount.y), float(volume.probeCount.z * volume.atlasRows)) * float(tileSize);
     return texel / atlasSize;
 }
 

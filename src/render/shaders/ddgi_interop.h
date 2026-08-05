@@ -69,8 +69,9 @@ SHADER_PUBLIC struct DDGIVolumeParams
     SHADER_PUBLIC float3 probeSpacing;
     SHADER_PUBLIC float irradianceGamma;
     SHADER_PUBLIC float edgeFadeCells;
-    SHADER_PUBLIC float pad0;
-    SHADER_PUBLIC float pad1;
+    /** Same-size world volumes stack as sub-rectangles of one shared atlas: this volume occupies row atlasSlot of atlasRows. Camera cascades own their atlas outright (slot 0 of 1). */
+    SHADER_PUBLIC uint atlasSlot;
+    SHADER_PUBLIC uint atlasRows;
     SHADER_PUBLIC float pad2;
 };
 

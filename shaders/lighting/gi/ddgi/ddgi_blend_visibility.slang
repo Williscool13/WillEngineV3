@@ -40,7 +40,7 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     int2 texel = int2(gtid.xy);
     bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_VISIBILITY_INTERIOR));
     if (bInterior && bFrozen) {
-        gsVisTexels[threadIndex] = rdgTexturesFloat2[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rg;
+        gsVisTexels[threadIndex] = (pc.bHistoryInPlace != 0 ? rdgStorageFloat2[pc.atlasOutIndex][uint2(tileOrigin + texel)] : rdgTexturesFloat2[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rg);
     } else if (bInterior) {
         float3 texelDirection = DDGIOctTexelDirection(texel, DDGI_VISIBILITY_INTERIOR);
         float2 momentsSum = float2(0.0);
@@ -54,7 +54,7 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
         float2 result = weightSum > 1e-4 ? momentsSum / weightSum : float2(0.0);
 
         if (pc.bHistoryValid != 0 && bSameCellPrev) {
-            float2 previous = rdgTexturesFloat2[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rg;
+            float2 previous = (pc.bHistoryInPlace != 0 ? rdgStorageFloat2[pc.atlasOutIndex][uint2(tileOrigin + texel)] : rdgTexturesFloat2[pc.atlasHistoryIndex].Load(int3(tileOrigin + texel, 0)).rg);
             float hysteresis = pc.hysteresis;
             if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
                 hysteresis = max(hysteresis - 0.75, 0.0);

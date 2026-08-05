@@ -25,6 +25,7 @@ class PipelineManager;
 inline const StringID DDGI_CASCADES_BUFFER = SID("ddgi_cascades");
 inline const StringID DDGI_CASCADES_PREV_BUFFER = SID("ddgi_cascades_prev");
 inline constexpr int32_t DDGI_PROBE_DEBUG_LOCALS_ONLY = -2;
+inline constexpr uint32_t DDGI_LOCAL_WARMUP_UPDATES = 16u;
 
 /** CPU-side cascade chain, finest first; bUpdated marks which entries trace/blend/relocate this frame. Local volumes occupy entries [count, count + localCount), slot-sticky by localIds so a resident volume keeps its history. */
 struct DDGICascades
@@ -32,6 +33,8 @@ struct DDGICascades
     DDGIVolumeParams volumes[DDGI_MAX_VOLUME_SLOTS]{};
     bool bUpdated[DDGI_MAX_VOLUME_SLOTS]{};
     uint64_t localIds[DDGI_MAX_VOLUME_SLOTS]{};
+    /** Updates a resident world volume has had, saturating at DDGI_LOCAL_WARMUP_UPDATES; the per-frame pick goes to the least-warmed slot so a volume that just became resident lights up immediately instead of waiting out the round-robin. */
+    uint32_t localWarmup[DDGI_MAX_VOLUME_SLOTS]{};
     uint32_t count{0};
     uint32_t localCount{0};
 };

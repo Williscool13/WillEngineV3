@@ -1411,7 +1411,7 @@ SHADER_PUBLIC struct DDGIProbeBlendPushConstant
     SHADER_PUBLIC uint32_t bRestartValid;
     SHADER_PUBLIC SHADER_PTR(uint32_t) probeActive;
     SHADER_PUBLIC uint32_t bActiveValid;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t bHistoryInPlace;
 };
 
 SHADER_PUBLIC struct DDGIProbeRelocatePushConstant
