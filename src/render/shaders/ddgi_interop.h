@@ -43,7 +43,13 @@ using float4x4 = glm::mat4;
 SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_RAYS_PER_PROBE = 256u;
 /** Ray budget for probes classified inactive (no nearby geometry) */
 SHADER_PUBLIC SHADER_CONST uint DDGI_SENTINEL_RAYS = 16u;
-SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_CASCADES = 16u;
+// Camera
+SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_CAMERA_CASCADES = 6u;
+// World Volume
+SHADER_PUBLIC SHADER_CONST uint32_t DDGI_MAX_RESIDENT_LOCAL_VOLUMES = 26u;
+/** Both kinds share one descriptor array: camera cascades occupy the first entries, resident world volumes the rest. */
+SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_VOLUME_SLOTS = 32u;
+
 SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_TILE = 8u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_INTERIOR = 6u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_VISIBILITY_TILE = 16u;
@@ -89,7 +95,7 @@ SHADER_PUBLIC struct DDGICascadeSetGPU
     SHADER_PUBLIC uint localCount;
     SHADER_PUBLIC uint pad1;
     SHADER_PUBLIC uint pad2;
-    SHADER_PUBLIC DDGICascadeDescriptor cascades[DDGI_MAX_CASCADES];
+    SHADER_PUBLIC DDGICascadeDescriptor cascades[DDGI_MAX_VOLUME_SLOTS];
 };
 
 #endif //WILL_ENGINE_DDGI_INTEROP_H

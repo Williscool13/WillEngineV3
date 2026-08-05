@@ -423,12 +423,11 @@ struct ProbePreviewSettings
 };
 
 inline constexpr size_t MAX_LOCAL_DDGI_VOLUMES = 64;
-inline constexpr int32_t LOCAL_DDGI_MAX_PROBES_PER_AXIS = 16;
+inline constexpr int32_t LOCAL_DDGI_PROBES_PER_AXIS = 10;
 
 struct LocalDDGIVolume
 {
     glm::vec3 corner{0.0f};
-    glm::ivec3 probeCount{8};
     float probeSpacing{0.5f};
     uint64_t volumeId{0};
 };

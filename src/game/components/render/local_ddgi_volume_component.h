@@ -18,9 +18,9 @@ struct ViewFamily;
 namespace Game::Component
 {
 /**
- * Hand-placed axis-aligned local DDGI probe volume.
+ * Hand-placed axis-aligned local DDGI probe volume (10^3)
  * Entity translation = window min corner (snapped to the nearest spacing multiple).
- * Bounds derive as (count - 1) * spacing per axis.
+ * Bounds derive as (count - 1) * spacing per axis, so only position and spacing are authored.
  */
 struct LocalDDGIVolumeComponent
 {
@@ -29,7 +29,6 @@ struct LocalDDGIVolumeComponent
     uint64_t volumeId{0};
     bool bEnabled{true};
     float probeSpacing{0.5f};
-    int32_t probeCount[3]{8, 8, 8};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 

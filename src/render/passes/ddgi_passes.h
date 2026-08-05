@@ -24,15 +24,14 @@ class PipelineManager;
 /** Per-frame GPU descriptor chain sampled by lighting/remodulate and the trace's infinite-bounce feedback. */
 inline const StringID DDGI_CASCADES_BUFFER = SID("ddgi_cascades");
 inline const StringID DDGI_CASCADES_PREV_BUFFER = SID("ddgi_cascades_prev");
-inline constexpr uint32_t DDGI_MAX_RESIDENT_LOCAL_VOLUMES = 8u;
 inline constexpr int32_t DDGI_PROBE_DEBUG_LOCALS_ONLY = -2;
 
 /** CPU-side cascade chain, finest first; bUpdated marks which entries trace/blend/relocate this frame. Local volumes occupy entries [count, count + localCount), slot-sticky by localIds so a resident volume keeps its history. */
 struct DDGICascades
 {
-    DDGIVolumeParams volumes[DDGI_MAX_CASCADES]{};
-    bool bUpdated[DDGI_MAX_CASCADES]{};
-    uint64_t localIds[DDGI_MAX_CASCADES]{};
+    DDGIVolumeParams volumes[DDGI_MAX_VOLUME_SLOTS]{};
+    bool bUpdated[DDGI_MAX_VOLUME_SLOTS]{};
+    uint64_t localIds[DDGI_MAX_VOLUME_SLOTS]{};
     uint32_t count{0};
     uint32_t localCount{0};
 };
@@ -82,7 +81,7 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass);
  * @param probeDebugExposure linear scale applied to the fitted probe irradiance so bright probes do not blow out to flat white
  * @param debugCascade -1 draws every entry (cascades and resident locals) with a per-entry identification tint; DDGI_PROBE_DEBUG_LOCALS_ONLY (-2) draws only local entries, tinted; >= 0 draws only that entry, untinted
  * @param bHideInactive skip classification-inactive probes entirely instead of drawing them flat blue
- * @param probeDebugMode 0 fits the irradiance atlas; 1 fits the visibility atlas (red = mean distance / miss clamp, green = std/mean)
+ * @param probeDebugMode 0 fits the irradiance atlas; 1 fits the visibility atlas (red = mean distance / miss clamp, green = std/mean); 2 draws flat volume tint for reading placement and window coverage
  */
 void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive, int32_t probeDebugMode);
 } // Render

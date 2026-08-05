@@ -8,6 +8,7 @@ import packing_functions;
 // =============== Shader Summary ============
 // DDGI probe debug: one sphere per probe at its relocated position, L1 SH fitted from the probe's decoded atlas tile; dead probes render flat red, inactive probes flat blue (or hidden).
 // debugMode 1 fits the visibility atlas instead: red = mean distance / miss clamp per direction, green = std/mean; a red-hot lobe is a miss-inflated mean that bypasses the Chebyshev gate.
+// debugMode 2 skips the fit entirely and draws flat volume tint, for reading probe placement and window coverage.
 
 [shader("compute")]
 [numthreads(4, 4, 4)]
@@ -34,6 +35,11 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
         if (pc.bHideInactive == 0) {
             GPUDebugAddSphereFlat(pc.sphereArgs, pc.sphereBuffer, position, radius, float3(0.15, 0.3, 0.9));
         }
+        return;
+    }
+
+    if (pc.debugMode == 2u) {
+        GPUDebugAddSphereFlat(pc.sphereArgs, pc.sphereBuffer, position, radius, UnpackUnorm4x8(pc.packedTint).rgb);
         return;
     }
 

@@ -147,12 +147,12 @@ def room_parts(inner, door_face, door_w, door_h, sill, judging_cube=True):
         parts.append(module_part(box_params(1.2, 1.2, 1.2), offset=(t + sx * 0.65, t, t + sz * 0.6)))
     return parts
 
-def sealed_room(tag, cx, cz, inner, door_face, door_w, door_h, sill, folder_id, judging_cube=True):
+def sealed_room(tag, cx, cz, inner, door_face, door_w, door_h, sill, folder_id, judging_cube=True, volume_tiles="auto", volume_spacing=None):
     """Interior floor top at y=0, interior center (cx, cz). Box probe spans the OUTER shell:
     inner-face-aligned bounds flicker under jitter (wall pixels sit exactly on the boundary and
     flip between probe and skybox). Capture at mid-height clears the judging cube.
-    Local DDGI volume per room, bounds ~1 cell past the outer shell so the edge fade band lies
-    outside the interior; spacing picked so counts stay under the 16/axis window clamp."""
+    volume_tiles = "auto" derives the fewest tiles that fit the probe cap, None = no volume
+    (cascade-only baseline), or an explicit (nx, ny, nz); volume_spacing overrides the size default."""
     sx, sy, sz = inner
     origin = (cx - sx * 0.5 - WALL_T, -WALL_T, cz - sz * 0.5 - WALL_T)
     room = module_entity(f"[{tag}] room", origin, room_parts(inner, door_face, door_w, door_h, sill, judging_cube), folder_id)
@@ -160,21 +160,20 @@ def sealed_room(tag, cx, cz, inner, door_face, door_w, door_h, sill, folder_id, 
     resolution = PROBE_RES_256 if sx > 10.0 else PROBE_RES_128
     add_reflection_probe(probe, name_id(f"gi_sunbounce_{tag}"), resolution=resolution)
     entities.append(probe)
-    # Every interior face must clear the window edge by the 1-cell fade band plus the half cell the corner snap can eat; hangars need 1.7 to fit that in the 16/axis clamp.
-    spacing = 0.8 if sx <= 10.0 else 1.7
-    counts = [min(16, math.ceil(d / spacing) + 5) for d in (sx, sy, sz)]
-    center = (cx, sy * 0.5, cz)
-    corner = tuple(center[i] - (counts[i] - 1) * spacing * 0.5 for i in range(3))
+    if volume_tiles is None:
+        return room
+    # One volume reaches interior <= (16 - 5) * spacing, so rooms past ~20m must be tiled; hangars need 1.7 to fit 20m under the clamp.
+    spacing = volume_spacing if volume_spacing is not None else (0.8 if sx <= 10.0 else 1.7)
     interior_min = (cx - sx * 0.5, 0.0, cz - sz * 0.5)
     interior_max = (cx + sx * 0.5, sy, cz + sz * 0.5)
-    for i in range(3):
-        snapped = round(corner[i] / spacing) * spacing
-        margin = min(interior_min[i] - snapped, snapped + (counts[i] - 1) * spacing - interior_max[i]) / spacing
-        if margin < 1.0:
-            raise ValueError(f"sealed_room {tag}: axis {i} clears the fade band by only {margin:.2f} cells at spacing {spacing}, counts {counts}")
-    volume = base_entity(f"[{tag}] gi volume", corner, folder_id=folder_id)
-    add_local_ddgi_volume(volume, name_id(f"gi_sunbounce_lv_{tag}"), counts, probe_spacing=spacing)
-    entities.append(volume)
+    tiles = wa.gi_volume_grid(interior_min, interior_max, spacing) if volume_tiles == "auto" else volume_tiles
+    regions = wa.gi_volume_tiles(interior_min, interior_max, tiles)
+    for index, (sub_min, sub_max) in enumerate(regions):
+        corner = wa.gi_volume_window(sub_min, sub_max, spacing)
+        suffix = "" if len(regions) == 1 else f" {index}"
+        volume = base_entity(f"[{tag}] gi volume{suffix}", corner, folder_id=folder_id)
+        add_local_ddgi_volume(volume, name_id(f"gi_sunbounce_lv_{tag}_{index}"), probe_spacing=spacing)
+        entities.append(volume)
     return room
 
 # =============================================================================
@@ -234,14 +233,35 @@ def build_hangars():
     label("[L2] Label", "L2 Hangar Side - fully indirect at scale (the motivating case)", (16.0, 9.6, 18.3), fid)
 
 # =============================================================================
+# XL row: large-room coverage strategies (interior z 55..85)
+# =============================================================================
+XL_INNER = (30.0, 8.0, 30.0)
+XL_CZ = 70.0
+
+def build_xl_row():
+    """30m rooms: past the ~20m a single window can reach, so the rung is the tiling strategy itself."""
+    fid_row = folder("XL - Large Room Coverage")
+    specs = [
+        ("XL1", -45.0, None, None, "No world volume - cascade-only baseline, corners leak"),
+        ("XL2", 0.0, "auto", 1.7, "auto-tiled at 1.7 - one window cannot reach 30m"),
+        ("XL3", 45.0, "auto", 2.0, "auto-tiled at 2.0 - max spacing, where coarse starts to cost"),
+    ]
+    for tag, cx, tiles, spacing, text in specs:
+        fid = folder(tag, fid_row)
+        sealed_room(tag, cx, XL_CZ, XL_INNER, "south", 6.0, 5.0, 0.0, fid, judging_cube=False, volume_tiles=tiles, volume_spacing=spacing)
+        hangar_props(tag, cx, XL_CZ, fid)
+        label(f"[{tag}] Label", f"{tag} {text}", (cx, 9.6, XL_CZ - XL_INNER[2] * 0.5 - 1.7), fid)
+
+# =============================================================================
 # build
 # =============================================================================
 build_s_row()
 build_i_row()
 build_hangars()
+build_xl_row()
 
 # White ground everywhere: the sunlit apron outside each door IS the bounce source.
-solid_box("Ground", (-55.0, -WALL_T - 0.52, -12.0), (110.0, 0.5, 58.0))
+solid_box("Ground", (-65.0, -WALL_T - 0.52, -12.0), (130.0, 0.5, 100.0))
 
 sun = base_entity("Sun", (0.0, 25.0, -15.0), tuple(face_dir(*SUN_DIR)))
 add_directional_light(sun, color=(1.0, 0.96, 0.88), intensity=5.0, priority=0, angular_radius_deg=0.5)

@@ -17,7 +17,8 @@ import packing_functions;
 //   3 DDGI Chebyshev-gate weight fractions
 //   4 dominant-probe mean-vs-distance margin
 //   5 coverage/confidence/dominant volume (blue = descriptor index / 15, locals sit past the cascades)
-//   6 raw DDGI irradiance.
+//   6 raw DDGI irradiance
+//   7 world-volume coverage: authoring aid answering "does an authored volume own this surface, or do cascades".
 
 static const uint GI_DECONSTRUCT_CACHE_KEY = 1u;
 static const uint GI_DECONSTRUCT_CACHE_RADIANCE = 2u;
@@ -25,6 +26,7 @@ static const uint GI_DECONSTRUCT_DDGI_CHEB = 3u;
 static const uint GI_DECONSTRUCT_DDGI_MARGIN = 4u;
 static const uint GI_DECONSTRUCT_DDGI_COVERAGE = 5u;
 static const uint GI_DECONSTRUCT_DDGI_IRRADIANCE = 6u;
+static const uint GI_DECONSTRUCT_VOLUME_COVERAGE = 7u;
 
 static const float GI_DECONSTRUCT_SKY_MEAN_FRACTION = 0.95;
 
@@ -111,8 +113,8 @@ static GICageStats GIDeconstructCage(float3 worldPosition, float3 normal, float3
         if (weight < crushThreshold) {
             weight *= weight * weight / (crushThreshold * crushThreshold);
         }
-        float3 trilinear = lerp(1.0 - alpha, alpha, float3(offset));
-        weight *= max(trilinear.x * trilinear.y * trilinear.z, 0.001);
+        float3 trilinear = max(float3(0.001), lerp(1.0 - alpha, alpha, float3(offset)));
+        weight *= trilinear.x * trilinear.y * trilinear.z;
 
         s.weightSum += weight;
         s.trueWeightSum += weight * chebRatio;
@@ -190,8 +192,8 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
             float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
             color = gi.rgb * gi.w;
         } else {
-            uint count = min(pc.ddgiCascades->cascadeCount, DDGI_MAX_CASCADES);
-            uint localCount = min(pc.ddgiCascades->localCount, DDGI_MAX_CASCADES - count);
+            uint count = min(pc.ddgiCascades->cascadeCount, DDGI_MAX_VOLUME_SLOTS);
+            uint localCount = min(pc.ddgiCascades->localCount, DDGI_MAX_VOLUME_SLOTS - count);
             float coverage = 0.0;
             float localFade = 0.0;
             float3 chebSum = float3(0.0);
@@ -200,7 +202,8 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
             float dominantStdRatio = 0.0;
             float dominantTrueRatio = 0.0;
             uint dominantIndex = 0;
-            for (uint i = 0; i < localCount + count && coverage < 0.999; ++i) {
+            bool bSaturated = false;
+            for (uint i = 0; i < localCount + count; ++i) {
                 bool bLocal = i < localCount;
                 uint c = bLocal ? count + i : i - localCount;
                 DDGICascadeDescriptor desc = pc.ddgiCascades->cascades[c];
@@ -209,7 +212,7 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
                     float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
                     localFade = max(localFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
                 }
-                if (desc.bValid == 0) {
+                if (desc.bValid == 0 || bSaturated) {
                     continue;
                 }
                 GICageStats s = GIDeconstructCage(worldPosition, worldN, cameraDirection, desc.volume, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid, length(viewPosition));
@@ -230,8 +233,23 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
                     dominantIndex = c;
                 }
                 coverage += contribution;
+                if (coverage >= 0.999) {
+                    bSaturated = true;
+                }
             }
-            if (coverage > 0.0) {
+            if (pc.mode == GI_DECONSTRUCT_VOLUME_COVERAGE) {
+                // Authoring aid: green = an authored world volume owns this surface, yellow = its fade band (cascades still mixing in), red = cascade fallback, magenta = nothing covers it. Value tracks coverage so starved pockets inside a volume read dark.
+                float lit = max(coverage, 0.05);
+                if (coverage <= 0.01) {
+                    color = float3(1.0, 0.0, 1.0);
+                } else if (localFade >= 0.999) {
+                    color = float3(0.0, lit, 0.0);
+                } else if (localFade > 0.0) {
+                    color = float3(lit, lit, 0.0);
+                } else {
+                    color = float3(lit, 0.0, 0.0);
+                }
+            } else if (coverage > 0.0) {
                 if (pc.mode == GI_DECONSTRUCT_DDGI_CHEB) {
                     color = chebSum / coverage;
                 } else if (pc.mode == GI_DECONSTRUCT_DDGI_MARGIN) {

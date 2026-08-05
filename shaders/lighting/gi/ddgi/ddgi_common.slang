@@ -160,8 +160,8 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         if (weight < crushThreshold) {
             weight *= weight * weight / (crushThreshold * crushThreshold);
         }
-        float3 trilinear = lerp(1.0 - alpha, alpha, float3(offset));
-        weight *= max(trilinear.x * trilinear.y * trilinear.z, 0.001);
+        float3 trilinear = max(float3(0.001), lerp(1.0 - alpha, alpha, float3(offset)));
+        weight *= trilinear.x * trilinear.y * trilinear.z;
 
         float4 encoded = rdgTexturesFloat4[irradianceAtlasIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, normal, volume, DDGI_IRRADIANCE_TILE, DDGI_IRRADIANCE_INTERIOR), 0);
         // Blend in half-gamma space and square after the weighted sum: perceptual interpolation between probes (RTXGI).
@@ -203,8 +203,8 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     bool bSaturated = false;
     edgeFade = 0.0;
     varianceGuide = 0.0;
-    uint count = min(cascadeSet->cascadeCount, DDGI_MAX_CASCADES);
-    uint localCount = min(cascadeSet->localCount, DDGI_MAX_CASCADES - count);
+    uint count = min(cascadeSet->cascadeCount, DDGI_MAX_VOLUME_SLOTS);
+    uint localCount = min(cascadeSet->localCount, DDGI_MAX_VOLUME_SLOTS - count);
     for (uint i = 0; i < localCount + count; ++i) {
         bool bLocal = i < localCount;
         uint c = bLocal ? count + i : i - localCount;
@@ -262,8 +262,8 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     float3 color = float3(0.0);
     float coverage = 0.0;
     float localFade = 0.0;
-    uint count = min(cascadeSet->cascadeCount, DDGI_MAX_CASCADES);
-    uint localCount = min(cascadeSet->localCount, DDGI_MAX_CASCADES - count);
+    uint count = min(cascadeSet->cascadeCount, DDGI_MAX_VOLUME_SLOTS);
+    uint localCount = min(cascadeSet->localCount, DDGI_MAX_VOLUME_SLOTS - count);
     for (uint i = 0; i < localCount + count; ++i) {
         bool bLocal = i < localCount;
         uint c = bLocal ? count + i : i - localCount;

@@ -310,17 +310,58 @@ def add_reflection_probe(entity, probe_id, shape=PROBE_BOX, fade_margin=0.0, cap
                       "resolution": resolution, "standInEnvMap": stand_in_env_map}
     return entity
 
-def add_local_ddgi_volume(entity, volume_id, probe_count, probe_spacing=0.5, enabled=True):
-    """Axis-aligned local DDGI probe window: entity translation = window MIN CORNER (engine snaps it
-    to the nearest spacing multiple), probe_count = probes per axis (2..16), window span =
-    (count-1)*spacing per axis. Rotation and scale IGNORED (world-axis lattice). Size the window
-    PAST the walls by ~edgeBlendCells*spacing so the edge fade band lies outside the interior;
-    exact-fit volumes hand wall pixels back to the leaky cascades.
+GI_VOLUME_PROBES_PER_AXIS = 10
+# A window spans (count-1)*spacing; a region must clear it by the 1-cell fade band plus the half cell the engine's corner snap can eat, on both sides.
+GI_VOLUME_COVERAGE_CELLS = GI_VOLUME_PROBES_PER_AXIS - 4
+
+def add_local_ddgi_volume(entity, volume_id, probe_spacing=0.5, enabled=True):
+    """Axis-aligned local DDGI probe window, always GI_VOLUME_PROBES_PER_AXIS cubed: entity
+    translation = window MIN CORNER (engine snaps it to the nearest spacing multiple), window span =
+    (count-1)*spacing. Rotation and scale IGNORED (world-axis lattice). Spacing is the only size
+    control; tile volumes to cover a bigger room, and keep the window PAST the walls so the edge
+    fade band lies outside the interior (exact-fit windows hand wall pixels back to the cascades).
     volume_id must be non-zero and stable across runs; use name_id("...")."""
-    counts = [max(2, min(16, int(c))) for c in probe_count]
-    entity[LOCAL_DDGI] = {"volumeId": volume_id, "bEnabled": enabled, "probeSpacing": probe_spacing,
-                          "probeCount": counts}
+    entity[LOCAL_DDGI] = {"volumeId": volume_id, "bEnabled": enabled, "probeSpacing": probe_spacing}
     return entity
+
+def gi_volume_window(region_min, region_max, spacing, min_margin_cells=1.0):
+    """Min corner for a world DDGI volume covering region_min..region_max, verified against the
+    snapped corner so an under-covered face raises instead of silently leaking. Returns the corner."""
+    corner = []
+    span_limit = GI_VOLUME_COVERAGE_CELLS * spacing
+    for i in range(3):
+        span = region_max[i] - region_min[i]
+        origin = (region_min[i] + region_max[i]) * 0.5 - (GI_VOLUME_PROBES_PER_AXIS - 1) * spacing * 0.5
+        snapped = round(origin / spacing) * spacing
+        margin = min(region_min[i] - snapped, snapped + (GI_VOLUME_PROBES_PER_AXIS - 1) * spacing - region_max[i]) / spacing
+        if margin < min_margin_cells:
+            raise ValueError(f"gi_volume_window: axis {i} spans {span:.2f} but one window covers {span_limit:.2f} at spacing "
+                             f"{spacing} (clears by {margin:.2f} cells); tile the region or raise spacing")
+        corner.append(origin)
+    return tuple(corner)
+
+def gi_volume_grid(region_min, region_max, spacing):
+    """Fewest tiles per axis that keep every sub-region inside one window, so changing the probe
+    count or spacing re-tiles a scene instead of requiring it to be re-authored."""
+    span_limit = GI_VOLUME_COVERAGE_CELLS * spacing
+    return tuple(max(1, math.ceil((region_max[i] - region_min[i]) / span_limit)) for i in range(3))
+
+def gi_volume_tiles(region_min, region_max, tiles):
+    """Even split of a region into a (nx, ny, nz) grid of gap-free sub-regions, one world DDGI volume
+    each. No extra overlap is needed: gi_volume_window already clears every sub-region face by a full
+    fade cell, so a point on a shared boundary sits deep inside both neighbours' windows.
+    Returns a list of (sub_min, sub_max)."""
+    out = []
+    for ix in range(tiles[0]):
+        for iy in range(tiles[1]):
+            for iz in range(tiles[2]):
+                lo, hi = [], []
+                for axis, index in enumerate((ix, iy, iz)):
+                    step = (region_max[axis] - region_min[axis]) / tiles[axis]
+                    lo.append(region_min[axis] + index * step)
+                    hi.append(region_min[axis] + (index + 1) * step)
+                out.append((tuple(lo), tuple(hi)))
+    return out
 
 ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT = 0, 1, 2
 ANCHOR_BASELINE, ANCHOR_TOP, ANCHOR_CENTER, ANCHOR_BOTTOM = 0, 1, 2, 3
