@@ -1174,6 +1174,20 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Hand-placed fine-spacing probe volumes (LocalDDGIVolumeComponent entities), sampled before cascade 0 where they cover. Nearest few volumes stay resident, one updates per frame.");
             }
+            int maxResidentWorldVolumes = static_cast<int>(ddgi.maxResidentWorldVolumes);
+            if (Widgets::SliderInt("Max Resident Volumes##ddgi", &maxResidentWorldVolumes, 1, static_cast<int>(DDGI_MAX_RESIDENT_LOCAL_VOLUMES), {
+                                       .tooltip = "Hand-placed world volumes kept resident (nearest first). The shared probe atlas is allocated in buckets of 10 rows, so it shrinks with this and every volume reconverges whenever the bucket changes.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.maxResidentWorldVolumes)
+                                   })) {
+                ddgi.maxResidentWorldVolumes = maxResidentWorldVolumes;
+                changed = true;
+            }
+            int worldVolumeWarmupBoost = static_cast<int>(ddgi.worldVolumeWarmupBoost);
+            if (Widgets::SliderInt("Warmup Boost##ddgi", &worldVolumeWarmupBoost, 1, 32, {
+                                       .tooltip = "World volumes updated per frame while any resident one is still cold, instead of the steady-state one. At a high resident count a single update per frame never converges a volume that just came into range; the budget collapses back to 1 once everything has warmed.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.worldVolumeWarmupBoost)
+                                   })) {
+                ddgi.worldVolumeWarmupBoost = worldVolumeWarmupBoost;
+                changed = true;
+            }
             if (ImGui::Checkbox("Cascade Sampling##ddgi", &ddgi.bCascadeSampling)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Debug: off = consumers (composite, gather, cache shade, bounce feedback) sample local volumes only; cascade windows keep updating and still suppress sky via edge fade, so toggling back is instant.");

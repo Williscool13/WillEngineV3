@@ -26,6 +26,13 @@ inline const StringID DDGI_CASCADES_BUFFER = SID("ddgi_cascades");
 inline const StringID DDGI_CASCADES_PREV_BUFFER = SID("ddgi_cascades_prev");
 inline constexpr int32_t DDGI_PROBE_DEBUG_LOCALS_ONLY = -2;
 inline constexpr uint32_t DDGI_LOCAL_WARMUP_UPDATES = 16u;
+inline constexpr uint32_t DDGI_ATLAS_ROW_BUCKET = 10u;
+
+inline uint32_t DDGIAtlasRows(uint32_t maxResident)
+{
+    const uint32_t clamped = glm::clamp(maxResident, 1u, DDGI_MAX_RESIDENT_LOCAL_VOLUMES);
+    return glm::min(((clamped + DDGI_ATLAS_ROW_BUCKET - 1u) / DDGI_ATLAS_ROW_BUCKET) * DDGI_ATLAS_ROW_BUCKET, DDGI_MAX_RESIDENT_LOCAL_VOLUMES);
+}
 
 /** CPU-side cascade chain, finest first; bUpdated marks which entries trace/blend/relocate this frame. Local volumes occupy entries [count, count + localCount), slot-sticky by localIds so a resident volume keeps its history. */
 struct DDGICascades
@@ -37,6 +44,7 @@ struct DDGICascades
     uint32_t localWarmup[DDGI_MAX_VOLUME_SLOTS]{};
     uint32_t count{0};
     uint32_t localCount{0};
+    uint32_t localAtlasRows{0};
 };
 
 /**

@@ -412,6 +412,8 @@ struct DDGIParams
     bool bScaleBiasPerCascade{true};
     bool bLocalVolumes{true};
     bool bCascadeSampling{true};
+    int32_t maxResidentWorldVolumes{100};
+    int32_t worldVolumeWarmupBoost{8};
 
     uint32_t raysPerProbe{128};
     uint32_t outerRaysPerProbe{64};

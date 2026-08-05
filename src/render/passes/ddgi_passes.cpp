@@ -14,24 +14,61 @@
 
 namespace Render
 {
-static const StringID DDGI_IRRADIANCE[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_irradiance_0"), SID("ddgi_irradiance_1"), SID("ddgi_irradiance_2"), SID("ddgi_irradiance_3"), SID("ddgi_irradiance_4"), SID("ddgi_irradiance_5"), SID("ddgi_irradiance_6"), SID("ddgi_irradiance_7"), SID("ddgi_irradiance_8"), SID("ddgi_irradiance_9"), SID("ddgi_irradiance_10"), SID("ddgi_irradiance_11"), SID("ddgi_irradiance_12"), SID("ddgi_irradiance_13"), SID("ddgi_irradiance_14"), SID("ddgi_irradiance_15"), SID("ddgi_irradiance_16"), SID("ddgi_irradiance_17"), SID("ddgi_irradiance_18"), SID("ddgi_irradiance_19"), SID("ddgi_irradiance_20"), SID("ddgi_irradiance_21"), SID("ddgi_irradiance_22"), SID("ddgi_irradiance_23"), SID("ddgi_irradiance_24"), SID("ddgi_irradiance_25"), SID("ddgi_irradiance_26"), SID("ddgi_irradiance_27"), SID("ddgi_irradiance_28"), SID("ddgi_irradiance_29"), SID("ddgi_irradiance_30"), SID("ddgi_irradiance_31")};
-static const StringID DDGI_IRRADIANCE_HISTORY[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_irradiance_history_0"), SID("ddgi_irradiance_history_1"), SID("ddgi_irradiance_history_2"), SID("ddgi_irradiance_history_3"), SID("ddgi_irradiance_history_4"), SID("ddgi_irradiance_history_5"), SID("ddgi_irradiance_history_6"), SID("ddgi_irradiance_history_7"), SID("ddgi_irradiance_history_8"), SID("ddgi_irradiance_history_9"), SID("ddgi_irradiance_history_10"), SID("ddgi_irradiance_history_11"), SID("ddgi_irradiance_history_12"), SID("ddgi_irradiance_history_13"), SID("ddgi_irradiance_history_14"), SID("ddgi_irradiance_history_15"), SID("ddgi_irradiance_history_16"), SID("ddgi_irradiance_history_17"), SID("ddgi_irradiance_history_18"), SID("ddgi_irradiance_history_19"), SID("ddgi_irradiance_history_20"), SID("ddgi_irradiance_history_21"), SID("ddgi_irradiance_history_22"), SID("ddgi_irradiance_history_23"), SID("ddgi_irradiance_history_24"), SID("ddgi_irradiance_history_25"), SID("ddgi_irradiance_history_26"), SID("ddgi_irradiance_history_27"), SID("ddgi_irradiance_history_28"), SID("ddgi_irradiance_history_29"), SID("ddgi_irradiance_history_30"), SID("ddgi_irradiance_history_31")};
-static const StringID DDGI_VISIBILITY[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_visibility_0"), SID("ddgi_visibility_1"), SID("ddgi_visibility_2"), SID("ddgi_visibility_3"), SID("ddgi_visibility_4"), SID("ddgi_visibility_5"), SID("ddgi_visibility_6"), SID("ddgi_visibility_7"), SID("ddgi_visibility_8"), SID("ddgi_visibility_9"), SID("ddgi_visibility_10"), SID("ddgi_visibility_11"), SID("ddgi_visibility_12"), SID("ddgi_visibility_13"), SID("ddgi_visibility_14"), SID("ddgi_visibility_15"), SID("ddgi_visibility_16"), SID("ddgi_visibility_17"), SID("ddgi_visibility_18"), SID("ddgi_visibility_19"), SID("ddgi_visibility_20"), SID("ddgi_visibility_21"), SID("ddgi_visibility_22"), SID("ddgi_visibility_23"), SID("ddgi_visibility_24"), SID("ddgi_visibility_25"), SID("ddgi_visibility_26"), SID("ddgi_visibility_27"), SID("ddgi_visibility_28"), SID("ddgi_visibility_29"), SID("ddgi_visibility_30"), SID("ddgi_visibility_31")};
-static const StringID DDGI_VISIBILITY_HISTORY[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_visibility_history_0"), SID("ddgi_visibility_history_1"), SID("ddgi_visibility_history_2"), SID("ddgi_visibility_history_3"), SID("ddgi_visibility_history_4"), SID("ddgi_visibility_history_5"), SID("ddgi_visibility_history_6"), SID("ddgi_visibility_history_7"), SID("ddgi_visibility_history_8"), SID("ddgi_visibility_history_9"), SID("ddgi_visibility_history_10"), SID("ddgi_visibility_history_11"), SID("ddgi_visibility_history_12"), SID("ddgi_visibility_history_13"), SID("ddgi_visibility_history_14"), SID("ddgi_visibility_history_15"), SID("ddgi_visibility_history_16"), SID("ddgi_visibility_history_17"), SID("ddgi_visibility_history_18"), SID("ddgi_visibility_history_19"), SID("ddgi_visibility_history_20"), SID("ddgi_visibility_history_21"), SID("ddgi_visibility_history_22"), SID("ddgi_visibility_history_23"), SID("ddgi_visibility_history_24"), SID("ddgi_visibility_history_25"), SID("ddgi_visibility_history_26"), SID("ddgi_visibility_history_27"), SID("ddgi_visibility_history_28"), SID("ddgi_visibility_history_29"), SID("ddgi_visibility_history_30"), SID("ddgi_visibility_history_31")};
-static const StringID DDGI_OFFSETS[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_probe_offsets_0"), SID("ddgi_probe_offsets_1"), SID("ddgi_probe_offsets_2"), SID("ddgi_probe_offsets_3"), SID("ddgi_probe_offsets_4"), SID("ddgi_probe_offsets_5"), SID("ddgi_probe_offsets_6"), SID("ddgi_probe_offsets_7"), SID("ddgi_probe_offsets_8"), SID("ddgi_probe_offsets_9"), SID("ddgi_probe_offsets_10"), SID("ddgi_probe_offsets_11"), SID("ddgi_probe_offsets_12"), SID("ddgi_probe_offsets_13"), SID("ddgi_probe_offsets_14"), SID("ddgi_probe_offsets_15"), SID("ddgi_probe_offsets_16"), SID("ddgi_probe_offsets_17"), SID("ddgi_probe_offsets_18"), SID("ddgi_probe_offsets_19"), SID("ddgi_probe_offsets_20"), SID("ddgi_probe_offsets_21"), SID("ddgi_probe_offsets_22"), SID("ddgi_probe_offsets_23"), SID("ddgi_probe_offsets_24"), SID("ddgi_probe_offsets_25"), SID("ddgi_probe_offsets_26"), SID("ddgi_probe_offsets_27"), SID("ddgi_probe_offsets_28"), SID("ddgi_probe_offsets_29"), SID("ddgi_probe_offsets_30"), SID("ddgi_probe_offsets_31")};
-static const StringID DDGI_OFFSETS_HISTORY[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_probe_offsets_history_0"), SID("ddgi_probe_offsets_history_1"), SID("ddgi_probe_offsets_history_2"), SID("ddgi_probe_offsets_history_3"), SID("ddgi_probe_offsets_history_4"), SID("ddgi_probe_offsets_history_5"), SID("ddgi_probe_offsets_history_6"), SID("ddgi_probe_offsets_history_7"), SID("ddgi_probe_offsets_history_8"), SID("ddgi_probe_offsets_history_9"), SID("ddgi_probe_offsets_history_10"), SID("ddgi_probe_offsets_history_11"), SID("ddgi_probe_offsets_history_12"), SID("ddgi_probe_offsets_history_13"), SID("ddgi_probe_offsets_history_14"), SID("ddgi_probe_offsets_history_15"), SID("ddgi_probe_offsets_history_16"), SID("ddgi_probe_offsets_history_17"), SID("ddgi_probe_offsets_history_18"), SID("ddgi_probe_offsets_history_19"), SID("ddgi_probe_offsets_history_20"), SID("ddgi_probe_offsets_history_21"), SID("ddgi_probe_offsets_history_22"), SID("ddgi_probe_offsets_history_23"), SID("ddgi_probe_offsets_history_24"), SID("ddgi_probe_offsets_history_25"), SID("ddgi_probe_offsets_history_26"), SID("ddgi_probe_offsets_history_27"), SID("ddgi_probe_offsets_history_28"), SID("ddgi_probe_offsets_history_29"), SID("ddgi_probe_offsets_history_30"), SID("ddgi_probe_offsets_history_31")};
-static const StringID DDGI_RESTART[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_probe_restart_0"), SID("ddgi_probe_restart_1"), SID("ddgi_probe_restart_2"), SID("ddgi_probe_restart_3"), SID("ddgi_probe_restart_4"), SID("ddgi_probe_restart_5"), SID("ddgi_probe_restart_6"), SID("ddgi_probe_restart_7"), SID("ddgi_probe_restart_8"), SID("ddgi_probe_restart_9"), SID("ddgi_probe_restart_10"), SID("ddgi_probe_restart_11"), SID("ddgi_probe_restart_12"), SID("ddgi_probe_restart_13"), SID("ddgi_probe_restart_14"), SID("ddgi_probe_restart_15"), SID("ddgi_probe_restart_16"), SID("ddgi_probe_restart_17"), SID("ddgi_probe_restart_18"), SID("ddgi_probe_restart_19"), SID("ddgi_probe_restart_20"), SID("ddgi_probe_restart_21"), SID("ddgi_probe_restart_22"), SID("ddgi_probe_restart_23"), SID("ddgi_probe_restart_24"), SID("ddgi_probe_restart_25"), SID("ddgi_probe_restart_26"), SID("ddgi_probe_restart_27"), SID("ddgi_probe_restart_28"), SID("ddgi_probe_restart_29"), SID("ddgi_probe_restart_30"), SID("ddgi_probe_restart_31")};
-static const StringID DDGI_RESTART_HISTORY[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_probe_restart_history_0"), SID("ddgi_probe_restart_history_1"), SID("ddgi_probe_restart_history_2"), SID("ddgi_probe_restart_history_3"), SID("ddgi_probe_restart_history_4"), SID("ddgi_probe_restart_history_5"), SID("ddgi_probe_restart_history_6"), SID("ddgi_probe_restart_history_7"), SID("ddgi_probe_restart_history_8"), SID("ddgi_probe_restart_history_9"), SID("ddgi_probe_restart_history_10"), SID("ddgi_probe_restart_history_11"), SID("ddgi_probe_restart_history_12"), SID("ddgi_probe_restart_history_13"), SID("ddgi_probe_restart_history_14"), SID("ddgi_probe_restart_history_15"), SID("ddgi_probe_restart_history_16"), SID("ddgi_probe_restart_history_17"), SID("ddgi_probe_restart_history_18"), SID("ddgi_probe_restart_history_19"), SID("ddgi_probe_restart_history_20"), SID("ddgi_probe_restart_history_21"), SID("ddgi_probe_restart_history_22"), SID("ddgi_probe_restart_history_23"), SID("ddgi_probe_restart_history_24"), SID("ddgi_probe_restart_history_25"), SID("ddgi_probe_restart_history_26"), SID("ddgi_probe_restart_history_27"), SID("ddgi_probe_restart_history_28"), SID("ddgi_probe_restart_history_29"), SID("ddgi_probe_restart_history_30"), SID("ddgi_probe_restart_history_31")};
-static const StringID DDGI_ACTIVE[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_probe_active_0"), SID("ddgi_probe_active_1"), SID("ddgi_probe_active_2"), SID("ddgi_probe_active_3"), SID("ddgi_probe_active_4"), SID("ddgi_probe_active_5"), SID("ddgi_probe_active_6"), SID("ddgi_probe_active_7"), SID("ddgi_probe_active_8"), SID("ddgi_probe_active_9"), SID("ddgi_probe_active_10"), SID("ddgi_probe_active_11"), SID("ddgi_probe_active_12"), SID("ddgi_probe_active_13"), SID("ddgi_probe_active_14"), SID("ddgi_probe_active_15"), SID("ddgi_probe_active_16"), SID("ddgi_probe_active_17"), SID("ddgi_probe_active_18"), SID("ddgi_probe_active_19"), SID("ddgi_probe_active_20"), SID("ddgi_probe_active_21"), SID("ddgi_probe_active_22"), SID("ddgi_probe_active_23"), SID("ddgi_probe_active_24"), SID("ddgi_probe_active_25"), SID("ddgi_probe_active_26"), SID("ddgi_probe_active_27"), SID("ddgi_probe_active_28"), SID("ddgi_probe_active_29"), SID("ddgi_probe_active_30"), SID("ddgi_probe_active_31")};
-static const StringID DDGI_ACTIVE_HISTORY[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_probe_active_history_0"), SID("ddgi_probe_active_history_1"), SID("ddgi_probe_active_history_2"), SID("ddgi_probe_active_history_3"), SID("ddgi_probe_active_history_4"), SID("ddgi_probe_active_history_5"), SID("ddgi_probe_active_history_6"), SID("ddgi_probe_active_history_7"), SID("ddgi_probe_active_history_8"), SID("ddgi_probe_active_history_9"), SID("ddgi_probe_active_history_10"), SID("ddgi_probe_active_history_11"), SID("ddgi_probe_active_history_12"), SID("ddgi_probe_active_history_13"), SID("ddgi_probe_active_history_14"), SID("ddgi_probe_active_history_15"), SID("ddgi_probe_active_history_16"), SID("ddgi_probe_active_history_17"), SID("ddgi_probe_active_history_18"), SID("ddgi_probe_active_history_19"), SID("ddgi_probe_active_history_20"), SID("ddgi_probe_active_history_21"), SID("ddgi_probe_active_history_22"), SID("ddgi_probe_active_history_23"), SID("ddgi_probe_active_history_24"), SID("ddgi_probe_active_history_25"), SID("ddgi_probe_active_history_26"), SID("ddgi_probe_active_history_27"), SID("ddgi_probe_active_history_28"), SID("ddgi_probe_active_history_29"), SID("ddgi_probe_active_history_30"), SID("ddgi_probe_active_history_31")};
-static const StringID DDGI_RAY_DATA[DDGI_MAX_VOLUME_SLOTS] = {SID("ddgi_ray_data_0"), SID("ddgi_ray_data_1"), SID("ddgi_ray_data_2"), SID("ddgi_ray_data_3"), SID("ddgi_ray_data_4"), SID("ddgi_ray_data_5"), SID("ddgi_ray_data_6"), SID("ddgi_ray_data_7"), SID("ddgi_ray_data_8"), SID("ddgi_ray_data_9"), SID("ddgi_ray_data_10"), SID("ddgi_ray_data_11"), SID("ddgi_ray_data_12"), SID("ddgi_ray_data_13"), SID("ddgi_ray_data_14"), SID("ddgi_ray_data_15"), SID("ddgi_ray_data_16"), SID("ddgi_ray_data_17"), SID("ddgi_ray_data_18"), SID("ddgi_ray_data_19"), SID("ddgi_ray_data_20"), SID("ddgi_ray_data_21"), SID("ddgi_ray_data_22"), SID("ddgi_ray_data_23"), SID("ddgi_ray_data_24"), SID("ddgi_ray_data_25"), SID("ddgi_ray_data_26"), SID("ddgi_ray_data_27"), SID("ddgi_ray_data_28"), SID("ddgi_ray_data_29"), SID("ddgi_ray_data_30"), SID("ddgi_ray_data_31")};
-static const StringID DDGI_TRACE_PASS[DDGI_MAX_VOLUME_SLOTS] = {SID("DDGI Probe Trace 0"), SID("DDGI Probe Trace 1"), SID("DDGI Probe Trace 2"), SID("DDGI Probe Trace 3"), SID("DDGI Probe Trace 4"), SID("DDGI Probe Trace 5"), SID("DDGI Probe Trace 6"), SID("DDGI Probe Trace 7"), SID("DDGI Probe Trace 8"), SID("DDGI Probe Trace 9"), SID("DDGI Probe Trace 10"), SID("DDGI Probe Trace 11"), SID("DDGI Probe Trace 12"), SID("DDGI Probe Trace 13"), SID("DDGI Probe Trace 14"), SID("DDGI Probe Trace 15"), SID("DDGI Probe Trace 16"), SID("DDGI Probe Trace 17"), SID("DDGI Probe Trace 18"), SID("DDGI Probe Trace 19"), SID("DDGI Probe Trace 20"), SID("DDGI Probe Trace 21"), SID("DDGI Probe Trace 22"), SID("DDGI Probe Trace 23"), SID("DDGI Probe Trace 24"), SID("DDGI Probe Trace 25"), SID("DDGI Probe Trace 26"), SID("DDGI Probe Trace 27"), SID("DDGI Probe Trace 28"), SID("DDGI Probe Trace 29"), SID("DDGI Probe Trace 30"), SID("DDGI Probe Trace 31")};
-static const StringID DDGI_BLEND_IRRADIANCE_PASS[DDGI_MAX_VOLUME_SLOTS] = {SID("DDGI Blend Irradiance 0"), SID("DDGI Blend Irradiance 1"), SID("DDGI Blend Irradiance 2"), SID("DDGI Blend Irradiance 3"), SID("DDGI Blend Irradiance 4"), SID("DDGI Blend Irradiance 5"), SID("DDGI Blend Irradiance 6"), SID("DDGI Blend Irradiance 7"), SID("DDGI Blend Irradiance 8"), SID("DDGI Blend Irradiance 9"), SID("DDGI Blend Irradiance 10"), SID("DDGI Blend Irradiance 11"), SID("DDGI Blend Irradiance 12"), SID("DDGI Blend Irradiance 13"), SID("DDGI Blend Irradiance 14"), SID("DDGI Blend Irradiance 15"), SID("DDGI Blend Irradiance 16"), SID("DDGI Blend Irradiance 17"), SID("DDGI Blend Irradiance 18"), SID("DDGI Blend Irradiance 19"), SID("DDGI Blend Irradiance 20"), SID("DDGI Blend Irradiance 21"), SID("DDGI Blend Irradiance 22"), SID("DDGI Blend Irradiance 23"), SID("DDGI Blend Irradiance 24"), SID("DDGI Blend Irradiance 25"), SID("DDGI Blend Irradiance 26"), SID("DDGI Blend Irradiance 27"), SID("DDGI Blend Irradiance 28"), SID("DDGI Blend Irradiance 29"), SID("DDGI Blend Irradiance 30"), SID("DDGI Blend Irradiance 31")};
-static const StringID DDGI_BLEND_VISIBILITY_PASS[DDGI_MAX_VOLUME_SLOTS] = {SID("DDGI Blend Visibility 0"), SID("DDGI Blend Visibility 1"), SID("DDGI Blend Visibility 2"), SID("DDGI Blend Visibility 3"), SID("DDGI Blend Visibility 4"), SID("DDGI Blend Visibility 5"), SID("DDGI Blend Visibility 6"), SID("DDGI Blend Visibility 7"), SID("DDGI Blend Visibility 8"), SID("DDGI Blend Visibility 9"), SID("DDGI Blend Visibility 10"), SID("DDGI Blend Visibility 11"), SID("DDGI Blend Visibility 12"), SID("DDGI Blend Visibility 13"), SID("DDGI Blend Visibility 14"), SID("DDGI Blend Visibility 15"), SID("DDGI Blend Visibility 16"), SID("DDGI Blend Visibility 17"), SID("DDGI Blend Visibility 18"), SID("DDGI Blend Visibility 19"), SID("DDGI Blend Visibility 20"), SID("DDGI Blend Visibility 21"), SID("DDGI Blend Visibility 22"), SID("DDGI Blend Visibility 23"), SID("DDGI Blend Visibility 24"), SID("DDGI Blend Visibility 25"), SID("DDGI Blend Visibility 26"), SID("DDGI Blend Visibility 27"), SID("DDGI Blend Visibility 28"), SID("DDGI Blend Visibility 29"), SID("DDGI Blend Visibility 30"), SID("DDGI Blend Visibility 31")};
-static const StringID DDGI_RELOCATE_PASS[DDGI_MAX_VOLUME_SLOTS] = {SID("DDGI Probe Relocate 0"), SID("DDGI Probe Relocate 1"), SID("DDGI Probe Relocate 2"), SID("DDGI Probe Relocate 3"), SID("DDGI Probe Relocate 4"), SID("DDGI Probe Relocate 5"), SID("DDGI Probe Relocate 6"), SID("DDGI Probe Relocate 7"), SID("DDGI Probe Relocate 8"), SID("DDGI Probe Relocate 9"), SID("DDGI Probe Relocate 10"), SID("DDGI Probe Relocate 11"), SID("DDGI Probe Relocate 12"), SID("DDGI Probe Relocate 13"), SID("DDGI Probe Relocate 14"), SID("DDGI Probe Relocate 15"), SID("DDGI Probe Relocate 16"), SID("DDGI Probe Relocate 17"), SID("DDGI Probe Relocate 18"), SID("DDGI Probe Relocate 19"), SID("DDGI Probe Relocate 20"), SID("DDGI Probe Relocate 21"), SID("DDGI Probe Relocate 22"), SID("DDGI Probe Relocate 23"), SID("DDGI Probe Relocate 24"), SID("DDGI Probe Relocate 25"), SID("DDGI Probe Relocate 26"), SID("DDGI Probe Relocate 27"), SID("DDGI Probe Relocate 28"), SID("DDGI Probe Relocate 29"), SID("DDGI Probe Relocate 30"), SID("DDGI Probe Relocate 31")};
-static const StringID DDGI_LOCAL_IRRADIANCE = SID("ddgi_local_irradiance");
-static const StringID DDGI_LOCAL_VISIBILITY = SID("ddgi_local_visibility");
-static const StringID DDGI_DEBUG_PASS[DDGI_MAX_VOLUME_SLOTS] = {SID("DDGI Probe Debug 0"), SID("DDGI Probe Debug 1"), SID("DDGI Probe Debug 2"), SID("DDGI Probe Debug 3"), SID("DDGI Probe Debug 4"), SID("DDGI Probe Debug 5"), SID("DDGI Probe Debug 6"), SID("DDGI Probe Debug 7"), SID("DDGI Probe Debug 8"), SID("DDGI Probe Debug 9"), SID("DDGI Probe Debug 10"), SID("DDGI Probe Debug 11"), SID("DDGI Probe Debug 12"), SID("DDGI Probe Debug 13"), SID("DDGI Probe Debug 14"), SID("DDGI Probe Debug 15"), SID("DDGI Probe Debug 16"), SID("DDGI Probe Debug 17"), SID("DDGI Probe Debug 18"), SID("DDGI Probe Debug 19"), SID("DDGI Probe Debug 20"), SID("DDGI Probe Debug 21"), SID("DDGI Probe Debug 22"), SID("DDGI Probe Debug 23"), SID("DDGI Probe Debug 24"), SID("DDGI Probe Debug 25"), SID("DDGI Probe Debug 26"), SID("DDGI Probe Debug 27"), SID("DDGI Probe Debug 28"), SID("DDGI Probe Debug 29"), SID("DDGI Probe Debug 30"), SID("DDGI Probe Debug 31")};
+static StringID DDGI_IRRADIANCE[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_VISIBILITY[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_OFFSETS[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_OFFSETS_HISTORY[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_RESTART[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_RESTART_HISTORY[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_ACTIVE[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_ACTIVE_HISTORY[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_RAY_DATA[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_TRACE_PASS[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_BLEND_IRRADIANCE_PASS[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_BLEND_VISIBILITY_PASS[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_RELOCATE_PASS[DDGI_MAX_VOLUME_SLOTS];
+static StringID DDGI_DEBUG_PASS[DDGI_MAX_VOLUME_SLOTS];
+static constexpr uint32_t DDGI_ATLAS_BUCKETS = DDGI_MAX_RESIDENT_LOCAL_VOLUMES / DDGI_ATLAS_ROW_BUCKET;
+static StringID DDGI_LOCAL_IRRADIANCE_BUCKET[DDGI_ATLAS_BUCKETS];
+static StringID DDGI_LOCAL_VISIBILITY_BUCKET[DDGI_ATLAS_BUCKETS];
+
+static StringID DDGILocalIrradianceId(uint32_t rows) { return DDGI_LOCAL_IRRADIANCE_BUCKET[rows / DDGI_ATLAS_ROW_BUCKET - 1u]; }
+
+static StringID DDGILocalVisibilityId(uint32_t rows) { return DDGI_LOCAL_VISIBILITY_BUCKET[rows / DDGI_ATLAS_ROW_BUCKET - 1u]; }
+
+static StringID DDGISlotName(const char* format, uint32_t slot)
+{
+    const Core::InlineString<48> name = Core::InlineString<48>::Format(format, slot);
+    return StringID(name.c_str(), name.Size());
+}
+
+static bool InitDDGISlotNames()
+{
+    for (uint32_t k = 0; k < DDGI_MAX_VOLUME_SLOTS; ++k) {
+        DDGI_IRRADIANCE[k] = DDGISlotName("ddgi_irradiance_%u", k);
+        DDGI_VISIBILITY[k] = DDGISlotName("ddgi_visibility_%u", k);
+        DDGI_OFFSETS[k] = DDGISlotName("ddgi_probe_offsets_%u", k);
+        DDGI_OFFSETS_HISTORY[k] = DDGISlotName("ddgi_probe_offsets_history_%u", k);
+        DDGI_RESTART[k] = DDGISlotName("ddgi_probe_restart_%u", k);
+        DDGI_RESTART_HISTORY[k] = DDGISlotName("ddgi_probe_restart_history_%u", k);
+        DDGI_ACTIVE[k] = DDGISlotName("ddgi_probe_active_%u", k);
+        DDGI_ACTIVE_HISTORY[k] = DDGISlotName("ddgi_probe_active_history_%u", k);
+        DDGI_RAY_DATA[k] = DDGISlotName("ddgi_ray_data_%u", k);
+        DDGI_TRACE_PASS[k] = DDGISlotName("DDGI Probe Trace %u", k);
+        DDGI_BLEND_IRRADIANCE_PASS[k] = DDGISlotName("DDGI Blend Irradiance %u", k);
+        DDGI_BLEND_VISIBILITY_PASS[k] = DDGISlotName("DDGI Blend Visibility %u", k);
+        DDGI_RELOCATE_PASS[k] = DDGISlotName("DDGI Probe Relocate %u", k);
+        DDGI_DEBUG_PASS[k] = DDGISlotName("DDGI Probe Debug %u", k);
+    }
+    for (uint32_t b = 0; b < DDGI_ATLAS_BUCKETS; ++b) {
+        const uint32_t rows = (b + 1u) * DDGI_ATLAS_ROW_BUCKET;
+        DDGI_LOCAL_IRRADIANCE_BUCKET[b] = DDGISlotName("ddgi_local_irradiance_%u", rows);
+        DDGI_LOCAL_VISIBILITY_BUCKET[b] = DDGISlotName("ddgi_local_visibility_%u", rows);
+    }
+    return true;
+}
+
+static const bool DDGI_SLOT_NAMES_INIT = InitDDGISlotNames();
 
 DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const Core::LocalDDGIVolume* localVolumes, uint32_t localVolumeCount, const DDGICascades& previous, uint64_t frameNumber, bool bFreeze)
 {
@@ -67,8 +104,8 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
         cascades.volumes[k] = volume;
     }
 
-    const uint32_t residentCap = params.bCascadeSampling ? DDGI_MAX_RESIDENT_LOCAL_VOLUMES / 2u : DDGI_MAX_RESIDENT_LOCAL_VOLUMES;
-    const uint32_t maxResident = glm::min(residentCap, DDGI_MAX_VOLUME_SLOTS - cascades.count);
+    cascades.localAtlasRows = DDGIAtlasRows(static_cast<uint32_t>(glm::max(params.maxResidentWorldVolumes, 1)));
+    const uint32_t maxResident = glm::min(glm::min(static_cast<uint32_t>(glm::max(params.maxResidentWorldVolumes, 1)), cascades.localAtlasRows), DDGI_MAX_VOLUME_SLOTS - cascades.count);
     if (localVolumeCount > 0 && maxResident > 0) {
         const uint32_t candidates = glm::min(localVolumeCount, static_cast<uint32_t>(Core::MAX_LOCAL_DDGI_VOLUMES));
         bool taken[Core::MAX_LOCAL_DDGI_VOLUMES]{};
@@ -129,17 +166,31 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
             cascades.localWarmup[k] = previous.localIds[k] == localVolumes[selected[s]].volumeId ? previous.localWarmup[k] : 0u;
         }
 
-        // Least-warmed slot wins the one update per frame
-        uint32_t updatedLocalSlot = localBase;
-        uint32_t bestWarmup = UINT32_MAX;
+        bool bWarmupPick[DDGI_MAX_VOLUME_SLOTS]{};
+        uint32_t coldCount = 0;
         for (uint32_t s = 0; s < selectedCount; ++s) {
-            const uint32_t k = localBase + (static_cast<uint32_t>(frameNumber) + s) % selectedCount;
-            if (cascades.localWarmup[k] < bestWarmup) {
-                bestWarmup = cascades.localWarmup[k];
-                updatedLocalSlot = k;
+            if (cascades.localWarmup[slotOf[s]] < DDGI_LOCAL_WARMUP_UPDATES) {
+                ++coldCount;
             }
         }
-        cascades.localWarmup[updatedLocalSlot] = glm::min(cascades.localWarmup[updatedLocalSlot] + 1u, DDGI_LOCAL_WARMUP_UPDATES);
+        const uint32_t boost = glm::max(static_cast<uint32_t>(glm::max(params.worldVolumeWarmupBoost, 1)), 1u);
+        const uint32_t updateCount = glm::min(coldCount > 0 ? boost : 1u, selectedCount);
+        for (uint32_t u = 0; u < updateCount; ++u) {
+            uint32_t pick = UINT32_MAX;
+            uint32_t bestWarmup = UINT32_MAX;
+            for (uint32_t s = 0; s < selectedCount; ++s) {
+                const uint32_t k = localBase + (static_cast<uint32_t>(frameNumber) + s) % selectedCount;
+                if (!bWarmupPick[k] && cascades.localWarmup[k] < bestWarmup) {
+                    bestWarmup = cascades.localWarmup[k];
+                    pick = k;
+                }
+            }
+            if (pick == UINT32_MAX) {
+                break;
+            }
+            bWarmupPick[pick] = true;
+            cascades.localWarmup[pick] = glm::min(cascades.localWarmup[pick] + 1u, DDGI_LOCAL_WARMUP_UPDATES);
+        }
         for (uint32_t s = 0; s < selectedCount; ++s) {
             const Core::LocalDDGIVolume& local = localVolumes[selected[s]];
             const uint32_t k = slotOf[s];
@@ -155,12 +206,12 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
             volume.irradianceGamma = glm::max(params.irradianceGamma, 1.0f);
             volume.edgeFadeCells = 1.0f;
             volume.atlasSlot = k - localBase;
-            volume.atlasRows = DDGI_MAX_RESIDENT_LOCAL_VOLUMES;
+            volume.atlasRows = cascades.localAtlasRows;
             volume.baseCell = baseCell;
 
             cascades.volumes[k] = volume;
             cascades.localIds[k] = local.volumeId;
-            cascades.bUpdated[k] = !bFreeze && (bColdStart || k == updatedLocalSlot);
+            cascades.bUpdated[k] = !bFreeze && (bColdStart || bWarmupPick[k]);
         }
     }
     return cascades;
@@ -239,6 +290,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     const uint32_t total = cascades.count + cascades.localCount;
     const uint32_t prevTotal = previous.count + previous.localCount;
 
+    const StringID sharedIrradianceId = DDGILocalIrradianceId(cascades.localAtlasRows);
+    const StringID sharedVisibilityId = DDGILocalVisibilityId(cascades.localAtlasRows);
+
     const bool bClassify = params.bClassification && params.bRelocation;
 
     bool bHistoryValid[DDGI_MAX_VOLUME_SLOTS]{};
@@ -249,8 +303,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         const bool bSameWindow = k < prevTotal && previous.localIds[k] == cascades.localIds[k] && previous.volumes[k].probeCount == cascades.volumes[k].probeCount
             && previous.volumes[k].probeSpacing == cascades.volumes[k].probeSpacing && previous.volumes[k].irradianceGamma == cascades.volumes[k].irradianceGamma;
         bHistoryValid[k] = bSameWindow && (k >= cascades.count
-                                               ? graph.HasTexture(DDGI_LOCAL_IRRADIANCE) && graph.HasTexture(DDGI_LOCAL_VISIBILITY)
-                                               : graph.HasTexture(DDGI_IRRADIANCE_HISTORY[k]) && graph.HasTexture(DDGI_VISIBILITY_HISTORY[k]));
+                                               ? graph.HasTexture(sharedIrradianceId) && graph.HasTexture(sharedVisibilityId)
+                                               : graph.HasTexture(DDGI_IRRADIANCE[k]) && graph.HasTexture(DDGI_VISIBILITY[k]));
         bOffsetsHistoryValid[k] = bSameWindow && params.bRelocation && graph.HasBuffer(DDGI_OFFSETS_HISTORY[k]);
         bRestartHistoryValid[k] = bSameWindow && params.bRelocation && graph.HasBuffer(DDGI_RESTART_HISTORY[k]);
         bActiveHistoryValid[k] = bSameWindow && bClassify && graph.HasBuffer(DDGI_ACTIVE_HISTORY[k]);
@@ -270,8 +324,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             } else if (bHistoryValid[k]) {
                 prevSources->entries[k] = DDGICascadeDescSource{
                     .volume = previous.volumes[k],
-                    .irradiance = k >= cascades.count ? DDGI_LOCAL_IRRADIANCE : DDGI_IRRADIANCE_HISTORY[k],
-                    .visibility = k >= cascades.count ? DDGI_LOCAL_VISIBILITY : DDGI_VISIBILITY_HISTORY[k],
+                    .irradiance = k >= cascades.count ? sharedIrradianceId : DDGI_IRRADIANCE[k],
+                    .visibility = k >= cascades.count ? sharedVisibilityId : DDGI_VISIBILITY[k],
                     .offsets = bOffsetsHistoryValid[k] ? DDGI_OFFSETS_HISTORY[k] : StringID{},
                     .bValid = true,
                 };
@@ -282,13 +336,20 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         AddDDGICascadeDescriptorUpload(graph, SID("DDGI Prev Cascade Descriptors"), DDGI_CASCADES_PREV_BUFFER, prevSources);
     }
 
+    constexpr VkImageUsageFlags atlasUsage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    for (uint32_t k = 0; k < cascades.count; ++k) {
+        const glm::uvec3 probeCount = cascades.volumes[k].probeCount;
+        graph.CreateTexture(DDGI_IRRADIANCE[k], TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, probeCount.x * probeCount.y * DDGI_IRRADIANCE_TILE, probeCount.z * DDGI_IRRADIANCE_TILE, 1}, {std::nullopt}, false);
+        graph.CreateTexture(DDGI_VISIBILITY[k], TextureInfo{VK_FORMAT_R16G16_SFLOAT, probeCount.x * probeCount.y * DDGI_VISIBILITY_TILE, probeCount.z * DDGI_VISIBILITY_TILE, 1}, {std::nullopt}, false);
+        graph.CarryTextureToNextFrame(DDGI_IRRADIANCE[k], DDGI_IRRADIANCE[k], atlasUsage);
+        graph.CarryTextureToNextFrame(DDGI_VISIBILITY[k], DDGI_VISIBILITY[k], atlasUsage);
+    }
     if (cascades.localCount > 0) {
         const uint32_t localProbes = static_cast<uint32_t>(Core::LOCAL_DDGI_PROBES_PER_AXIS);
-        constexpr VkImageUsageFlags sharedUsage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-        graph.CreateTexture(DDGI_LOCAL_IRRADIANCE, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, localProbes * localProbes * DDGI_IRRADIANCE_TILE, localProbes * DDGI_IRRADIANCE_TILE * DDGI_MAX_RESIDENT_LOCAL_VOLUMES, 1}, {std::nullopt}, false);
-        graph.CreateTexture(DDGI_LOCAL_VISIBILITY, TextureInfo{VK_FORMAT_R16G16_SFLOAT, localProbes * localProbes * DDGI_VISIBILITY_TILE, localProbes * DDGI_VISIBILITY_TILE * DDGI_MAX_RESIDENT_LOCAL_VOLUMES, 1}, {std::nullopt}, false);
-        graph.CarryTextureToNextFrame(DDGI_LOCAL_IRRADIANCE, DDGI_LOCAL_IRRADIANCE, sharedUsage);
-        graph.CarryTextureToNextFrame(DDGI_LOCAL_VISIBILITY, DDGI_LOCAL_VISIBILITY, sharedUsage);
+        graph.CreateTexture(sharedIrradianceId, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, localProbes * localProbes * DDGI_IRRADIANCE_TILE, localProbes * DDGI_IRRADIANCE_TILE * cascades.localAtlasRows, 1}, {std::nullopt}, false);
+        graph.CreateTexture(sharedVisibilityId, TextureInfo{VK_FORMAT_R16G16_SFLOAT, localProbes * localProbes * DDGI_VISIBILITY_TILE, localProbes * DDGI_VISIBILITY_TILE * cascades.localAtlasRows, 1}, {std::nullopt}, false);
+        graph.CarryTextureToNextFrame(sharedIrradianceId, sharedIrradianceId, atlasUsage);
+        graph.CarryTextureToNextFrame(sharedVisibilityId, sharedVisibilityId, atlasUsage);
     }
 
     for (uint32_t k = 0; k < total; ++k) {
@@ -296,16 +357,11 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         const bool bLocal = k >= cascades.count;
         const uint32_t probeCountTotal = volume.probeCount.x * volume.probeCount.y * volume.probeCount.z;
 
-        const StringID irradianceId = bLocal ? DDGI_LOCAL_IRRADIANCE : DDGI_IRRADIANCE[k];
-        const StringID visibilityId = bLocal ? DDGI_LOCAL_VISIBILITY : DDGI_VISIBILITY[k];
-        const StringID irradianceHistoryId = bLocal ? DDGI_LOCAL_IRRADIANCE : DDGI_IRRADIANCE_HISTORY[k];
-        const StringID visibilityHistoryId = bLocal ? DDGI_LOCAL_VISIBILITY : DDGI_VISIBILITY_HISTORY[k];
+        const StringID irradianceId = bLocal ? sharedIrradianceId : DDGI_IRRADIANCE[k];
+        const StringID visibilityId = bLocal ? sharedVisibilityId : DDGI_VISIBILITY[k];
 
         if (!cascades.bUpdated[k]) {
-            if (bHistoryValid[k] && !bLocal) {
-                graph.CarryTextureToNextFrame(DDGI_IRRADIANCE_HISTORY[k], DDGI_IRRADIANCE_HISTORY[k], VK_IMAGE_USAGE_SAMPLED_BIT);
-                graph.CarryTextureToNextFrame(DDGI_VISIBILITY_HISTORY[k], DDGI_VISIBILITY_HISTORY[k], VK_IMAGE_USAGE_SAMPLED_BIT);
-            }
+            // Atlases self-carry above regardless of which slot updates; only the relocation buffers still ping-pong.
             if (bOffsetsHistoryValid[k]) {
                 graph.CarryBufferToNextFrame(DDGI_OFFSETS_HISTORY[k], DDGI_OFFSETS_HISTORY[k], 0);
             }
@@ -357,14 +413,14 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         }
         if (bFeedback) {
             tracePass.ReadBuffer(DDGI_CASCADES_PREV_BUFFER);
-            if (graph.HasTexture(DDGI_LOCAL_IRRADIANCE) && graph.HasTexture(DDGI_LOCAL_VISIBILITY)) {
-                tracePass.ReadSampledImage(DDGI_LOCAL_IRRADIANCE);
-                tracePass.ReadSampledImage(DDGI_LOCAL_VISIBILITY);
+            if (graph.HasTexture(sharedIrradianceId) && graph.HasTexture(sharedVisibilityId)) {
+                tracePass.ReadSampledImage(sharedIrradianceId);
+                tracePass.ReadSampledImage(sharedVisibilityId);
             }
             for (uint32_t j = 0; j < total; ++j) {
                 if (bHistoryValid[j] && j < cascades.count) {
-                    tracePass.ReadSampledImage(DDGI_IRRADIANCE_HISTORY[j]);
-                    tracePass.ReadSampledImage(DDGI_VISIBILITY_HISTORY[j]);
+                    tracePass.ReadSampledImage(DDGI_IRRADIANCE[j]);
+                    tracePass.ReadSampledImage(DDGI_VISIBILITY[j]);
                 }
                 if (bOffsetsHistoryValid[j]) {
                     tracePass.ReadBuffer(DDGI_OFFSETS_HISTORY[j]);
@@ -418,27 +474,22 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             vkCmdDispatch(cmd, (raysPerProbe + 63) / 64, probeCountTotal, 1);
         });
 
-        if (!bLocal) {
-            const uint32_t atlasWidth = volume.probeCount.x * volume.probeCount.y * DDGI_IRRADIANCE_TILE;
-            const uint32_t atlasHeight = volume.probeCount.z * DDGI_IRRADIANCE_TILE;
-            graph.CreateTexture(DDGI_IRRADIANCE[k], TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, atlasWidth, atlasHeight, 1}, {std::nullopt}, false);
-            graph.CreateTexture(DDGI_VISIBILITY[k], TextureInfo{VK_FORMAT_R16G16_SFLOAT, volume.probeCount.x * volume.probeCount.y * DDGI_VISIBILITY_TILE, volume.probeCount.z * DDGI_VISIBILITY_TILE, 1}, {std::nullopt}, false);
-        }
+        const uint32_t warmupUpdates = bLocal ? cascades.localWarmup[k] : 0u;
+        const bool bWarming = warmupUpdates > 1u && warmupUpdates < DDGI_LOCAL_WARMUP_UPDATES;
+        const float runningMeanHysteresis = static_cast<float>(warmupUpdates - 1u) / static_cast<float>(glm::max(warmupUpdates, 1u));
+        const float blendHysteresis = bWarming ? glm::min(glm::clamp(params.hysteresis, 0.0f, 0.995f), runningMeanHysteresis) : glm::clamp(params.hysteresis, 0.0f, 0.995f);
+        const float blendVisibilityHysteresis = bWarming ? glm::min(glm::clamp(params.visibilityHysteresis, 0.0f, 0.995f), runningMeanHysteresis) : glm::clamp(params.visibilityHysteresis, 0.0f, 0.995f);
 
         RenderPass& blendPass = graph.AddPass(DDGI_BLEND_IRRADIANCE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
         blendPass.ReadBuffer(DDGI_RAY_DATA[k]);
         blendPass.WriteStorageImage(irradianceId);
-        // In place: the storage view carries the history, so declaring a sampled read of the same image would demand two layouts at once.
-        if (bHistoryValid[k] && !bLocal) {
-            blendPass.ReadSampledImage(DDGI_IRRADIANCE_HISTORY[k]);
-        }
         if (bRestartHistoryValid[k]) {
             blendPass.ReadBuffer(DDGI_RESTART_HISTORY[k]);
         }
         if (bActiveHistoryValid[k]) {
             blendPass.ReadBuffer(DDGI_ACTIVE_HISTORY[k]);
         }
-        blendPass.Execute([pipelineManager, hysteresis = glm::clamp(params.hysteresis, 0.0f, 0.995f), irradianceThreshold = params.irradianceThreshold, brightnessThreshold = params.brightnessThreshold, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, rayDataId = DDGI_RAY_DATA[k], restartHistoryId = DDGI_RESTART_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], atlasId = irradianceId, atlasHistoryId = irradianceHistoryId, bInPlace = bLocal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        blendPass.Execute([pipelineManager, hysteresis = blendHysteresis, irradianceThreshold = params.irradianceThreshold, brightnessThreshold = params.brightnessThreshold, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, rayDataId = DDGI_RAY_DATA[k], restartHistoryId = DDGI_RESTART_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], atlasId = irradianceId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_irradiance"));
             if (!pipelineEntry) {
                 return;
@@ -453,7 +504,6 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .rayData = graph.GetBufferAddress(rayDataId),
                 .probeRestart = bRestartHistory ? graph.GetBufferAddress(restartHistoryId) : 0,
                 .atlasOutIndex = graph.GetStorageImageViewDescriptorIndex(atlasId),
-                .atlasHistoryIndex = bHistory && !bInPlace ? graph.GetSampledImageViewDescriptorIndex(atlasHistoryId) : 0u,
                 .raysPerProbe = raysPerProbe,
                 .hysteresis = hysteresis,
                 .irradianceThreshold = irradianceThreshold,
@@ -461,7 +511,6 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .bRestartValid = bRestartHistory ? 1u : 0u,
                 .probeActive = bActiveHistory ? graph.GetBufferAddress(activeHistoryId) : 0,
                 .bActiveValid = bActiveHistory ? 1u : 0u,
-                .bHistoryInPlace = bInPlace ? 1u : 0u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, probeCountTotal, 1, 1);
@@ -470,16 +519,13 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         RenderPass& visibilityPass = graph.AddPass(DDGI_BLEND_VISIBILITY_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
         visibilityPass.ReadBuffer(DDGI_RAY_DATA[k]);
         visibilityPass.WriteStorageImage(visibilityId);
-        if (bHistoryValid[k] && !bLocal) {
-            visibilityPass.ReadSampledImage(DDGI_VISIBILITY_HISTORY[k]);
-        }
         if (bRestartHistoryValid[k]) {
             visibilityPass.ReadBuffer(DDGI_RESTART_HISTORY[k]);
         }
         if (bActiveHistoryValid[k]) {
             visibilityPass.ReadBuffer(DDGI_ACTIVE_HISTORY[k]);
         }
-        visibilityPass.Execute([pipelineManager, visibilityHysteresis = glm::clamp(params.visibilityHysteresis, 0.0f, 0.995f), distanceExponent = glm::max(params.distanceExponent, 1.0f), volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, rayDataId = DDGI_RAY_DATA[k], restartHistoryId = DDGI_RESTART_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], atlasId = visibilityId, atlasHistoryId = visibilityHistoryId, bInPlace = bLocal](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        visibilityPass.Execute([pipelineManager, visibilityHysteresis = blendVisibilityHysteresis, distanceExponent = glm::max(params.distanceExponent, 1.0f), volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, rayDataId = DDGI_RAY_DATA[k], restartHistoryId = DDGI_RESTART_HISTORY[k], activeHistoryId = DDGI_ACTIVE_HISTORY[k], atlasId = visibilityId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_visibility"));
             if (!pipelineEntry) {
                 return;
@@ -494,14 +540,12 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .rayData = graph.GetBufferAddress(rayDataId),
                 .probeRestart = bRestartHistory ? graph.GetBufferAddress(restartHistoryId) : 0,
                 .atlasOutIndex = graph.GetStorageImageViewDescriptorIndex(atlasId),
-                .atlasHistoryIndex = bHistory && !bInPlace ? graph.GetSampledImageViewDescriptorIndex(atlasHistoryId) : 0u,
                 .raysPerProbe = raysPerProbe,
                 .hysteresis = visibilityHysteresis,
                 .distanceExponent = distanceExponent,
                 .bRestartValid = bRestartHistory ? 1u : 0u,
                 .probeActive = bActiveHistory ? graph.GetBufferAddress(activeHistoryId) : 0,
                 .bActiveValid = bActiveHistory ? 1u : 0u,
-                .bHistoryInPlace = bInPlace ? 1u : 0u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, probeCountTotal, 1, 1);
@@ -561,10 +605,6 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             }
         }
 
-        if (!bLocal) {
-            graph.CarryTextureToNextFrame(DDGI_IRRADIANCE[k], DDGI_IRRADIANCE_HISTORY[k], VK_IMAGE_USAGE_SAMPLED_BIT);
-            graph.CarryTextureToNextFrame(DDGI_VISIBILITY[k], DDGI_VISIBILITY_HISTORY[k], VK_IMAGE_USAGE_SAMPLED_BIT);
-        }
     }
 
     // Current chain for lighting/remodulate: updated cascades read this frame's outputs, frozen cascades read their carried history.
@@ -578,25 +618,17 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         } else if (k >= cascades.count) {
             sources->entries[k] = DDGICascadeDescSource{
                 .volume = cascades.volumes[k],
-                .irradiance = DDGI_LOCAL_IRRADIANCE,
-                .visibility = DDGI_LOCAL_VISIBILITY,
+                .irradiance = sharedIrradianceId,
+                .visibility = sharedVisibilityId,
                 .offsets = params.bRelocation && cascades.bUpdated[k] ? DDGI_OFFSETS[k] : (bOffsetsHistoryValid[k] ? DDGI_OFFSETS_HISTORY[k] : StringID{}),
                 .bValid = cascades.bUpdated[k] || bHistoryValid[k],
             };
-        } else if (cascades.bUpdated[k]) {
+        } else if (cascades.bUpdated[k] || bHistoryValid[k]) {
             sources->entries[k] = DDGICascadeDescSource{
                 .volume = cascades.volumes[k],
                 .irradiance = DDGI_IRRADIANCE[k],
                 .visibility = DDGI_VISIBILITY[k],
-                .offsets = params.bRelocation ? DDGI_OFFSETS[k] : StringID{},
-                .bValid = true,
-            };
-        } else if (bHistoryValid[k]) {
-            sources->entries[k] = DDGICascadeDescSource{
-                .volume = cascades.volumes[k],
-                .irradiance = DDGI_IRRADIANCE_HISTORY[k],
-                .visibility = DDGI_VISIBILITY_HISTORY[k],
-                .offsets = bOffsetsHistoryValid[k] ? DDGI_OFFSETS_HISTORY[k] : StringID{},
+                .offsets = params.bRelocation && cascades.bUpdated[k] ? DDGI_OFFSETS[k] : (bOffsetsHistoryValid[k] ? DDGI_OFFSETS_HISTORY[k] : StringID{}),
                 .bValid = true,
             };
         } else {
@@ -613,19 +645,18 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass)
     }
     pass.ReadBuffer(DDGI_CASCADES_BUFFER);
 
-    if (graph.HasTexture(DDGI_LOCAL_IRRADIANCE) && graph.HasTexture(DDGI_LOCAL_VISIBILITY)) {
-        pass.ReadSampledImage(DDGI_LOCAL_IRRADIANCE);
-        pass.ReadSampledImage(DDGI_LOCAL_VISIBILITY);
+    for (uint32_t b = 0; b < DDGI_ATLAS_BUCKETS; ++b) {
+        const uint32_t rows = (b + 1u) * DDGI_ATLAS_ROW_BUCKET;
+        if (graph.HasTexture(DDGILocalIrradianceId(rows)) && graph.HasTexture(DDGILocalVisibilityId(rows))) {
+            pass.ReadSampledImage(DDGILocalIrradianceId(rows));
+            pass.ReadSampledImage(DDGILocalVisibilityId(rows));
+        }
     }
 
     for (uint32_t k = 0; k < DDGI_MAX_VOLUME_SLOTS; ++k) {
         if (graph.HasTexture(DDGI_IRRADIANCE[k]) && graph.HasTexture(DDGI_VISIBILITY[k])) {
             pass.ReadSampledImage(DDGI_IRRADIANCE[k]);
             pass.ReadSampledImage(DDGI_VISIBILITY[k]);
-        }
-        if (graph.HasTexture(DDGI_IRRADIANCE_HISTORY[k]) && graph.HasTexture(DDGI_VISIBILITY_HISTORY[k])) {
-            pass.ReadSampledImage(DDGI_IRRADIANCE_HISTORY[k]);
-            pass.ReadSampledImage(DDGI_VISIBILITY_HISTORY[k]);
         }
         if (graph.HasBuffer(DDGI_OFFSETS[k])) {
             pass.ReadBuffer(DDGI_OFFSETS[k]);
@@ -637,17 +668,31 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass)
     return true;
 }
 
-// Cascade identification tints for the all-cascades debug view (unorm RGBA, low byte = red): white, warm red, green, blue.
-static const uint32_t DDGI_CASCADE_TINT[DDGI_MAX_VOLUME_SLOTS] = {
-    0xFFFFFFFFu, 0xFF8C8CFFu, 0xFF8CFF8Cu, 0xFFFFB399u,
-    0xFF99FFFFu, 0xFFFF99FFu, 0xFFFFFF99u, 0xFFB399FFu,
-    0xFF99B3FFu, 0xFFB3FF99u, 0xFF99FFB3u, 0xFFFF99B3u,
-    0xFFCCCCCCu, 0xFFCC99FFu, 0xFF99CCFFu, 0xFFFFCC99u,
-    0xFFCCFF99u, 0xFF99FFCCu, 0xFFFF99CCu, 0xFFCCCCFFu,
-    0xFFFFCCCCu, 0xFFCCFFCCu, 0xFFB3B3FFu, 0xFFFFB3B3u,
-    0xFFB3FFB3u, 0xFFE6CCFFu, 0xFFCCE6FFu, 0xFFFFE6CCu,
-    0xFFE6FFCCu, 0xFFCCFFE6u, 0xFFFFCCE6u, 0xFFE6E6E6u,
-};
+/** Slot identification tint for the all-volumes debug view (unorm RGBA, low byte = red). Golden-ratio hue walk at low saturation so neighbouring slots stay distinguishable at any slot count; slot 0 stays white. */
+static uint32_t DDGISlotTint(uint32_t slot)
+{
+    if (slot == 0) {
+        return 0xFFFFFFFFu;
+    }
+    const float hue = glm::fract(static_cast<float>(slot) * 0.618033988f) * 6.0f;
+    const float fraction = hue - glm::floor(hue);
+    constexpr float saturation = 0.4f;
+    const float high = 1.0f;
+    const float low = 1.0f - saturation;
+    const float rising = low + saturation * fraction;
+    const float falling = high - saturation * fraction;
+    glm::vec3 rgb;
+    switch (static_cast<int32_t>(hue)) {
+        case 0: rgb = {high, rising, low}; break;
+        case 1: rgb = {falling, high, low}; break;
+        case 2: rgb = {low, high, rising}; break;
+        case 3: rgb = {low, falling, high}; break;
+        case 4: rgb = {rising, low, high}; break;
+        default: rgb = {high, low, falling}; break;
+    }
+    const glm::uvec3 quantized = glm::uvec3(glm::round(glm::clamp(rgb, 0.0f, 1.0f) * 255.0f));
+    return 0xFF000000u | (quantized.z << 16u) | (quantized.y << 8u) | quantized.x;
+}
 
 void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive, int32_t probeDebugMode)
 {
@@ -664,11 +709,11 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
             continue;
         }
         const bool bLocal = k >= cascades.count;
-        const StringID atlasId = bLocal ? DDGI_LOCAL_IRRADIANCE : (graph.HasTexture(DDGI_IRRADIANCE[k]) ? DDGI_IRRADIANCE[k] : DDGI_IRRADIANCE_HISTORY[k]);
+        const StringID atlasId = bLocal ? DDGILocalIrradianceId(cascades.localAtlasRows) : DDGI_IRRADIANCE[k];
         if (!graph.HasTexture(atlasId)) {
             continue;
         }
-        const StringID visibilityId = bLocal ? DDGI_LOCAL_VISIBILITY : (graph.HasTexture(DDGI_VISIBILITY[k]) ? DDGI_VISIBILITY[k] : DDGI_VISIBILITY_HISTORY[k]);
+        const StringID visibilityId = bLocal ? DDGILocalVisibilityId(cascades.localAtlasRows) : DDGI_VISIBILITY[k];
         const bool bVisibility = graph.HasTexture(visibilityId);
         const StringID offsetsId = graph.HasBuffer(DDGI_OFFSETS[k]) ? DDGI_OFFSETS[k] : DDGI_OFFSETS_HISTORY[k];
         const bool bOffsets = graph.HasBuffer(offsetsId);
@@ -689,7 +734,7 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
         if (bActive) {
             pass.ReadBuffer(activeId);
         }
-        const uint32_t packedTint = debugCascade < 0 ? DDGI_CASCADE_TINT[k] : 0xFFFFFFFFu;
+        const uint32_t packedTint = debugCascade < 0 ? DDGISlotTint(k) : 0xFFFFFFFFu;
         pass.Execute([pipelineManager, volume, bOffsets, bActive, bHideInactive, probeDebugExposure, packedTint, atlasId, visibilityId, bVisibility, probeDebugMode, offsetsId, activeId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_debug"));
             if (!pipelineEntry) {
