@@ -23,25 +23,23 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     previousVolume.baseCell = pc.previousBaseCell;
     bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume));
     bool bInactive = pc.bActiveValid != 0 && bSameCellPrev && pc.probeActive[probeIndex] == 0;
-    bool bFrozen = bInactive && pc.bHistoryValid != 0;
+    if (bInactive && pc.bHistoryValid != 0) {
+        return;
+    }
     uint rayBudget = bInactive ? min(DDGI_SENTINEL_RAYS, pc.raysPerProbe) : pc.raysPerProbe;
 
     // abs() folds the negative backface marker back into a distance; the clamp bounds what Chebyshev ever compares against.
     float maxDistance = length(pc.volume.probeSpacing) * 1.5;
     uint threadIndex = gtid.y * DDGI_VISIBILITY_TILE + gtid.x;
-    if (!bFrozen) {
-        for (uint r = threadIndex; r < rayBudget; r += DDGI_VISIBILITY_TILE * DDGI_VISIBILITY_TILE) {
-            gsRayDistances[r] = min(abs(pc.rayData[probeIndex * pc.raysPerProbe + r].w), maxDistance);
-            gsVisRayDirections[r] = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
-        }
+    for (uint r = threadIndex; r < rayBudget; r += DDGI_VISIBILITY_TILE * DDGI_VISIBILITY_TILE) {
+        gsRayDistances[r] = min(abs(pc.rayData[probeIndex * pc.raysPerProbe + r].w), maxDistance);
+        gsVisRayDirections[r] = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
     }
     GroupMemoryBarrierWithGroupSync();
 
     int2 texel = int2(gtid.xy);
     bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_VISIBILITY_INTERIOR));
-    if (bInterior && bFrozen) {
-        gsVisTexels[threadIndex] = rdgStorageFloat2[pc.atlasOutIndex][uint2(tileOrigin + texel)];
-    } else if (bInterior) {
+    if (bInterior) {
         float3 texelDirection = DDGIOctTexelDirection(texel, DDGI_VISIBILITY_INTERIOR);
         float2 momentsSum = float2(0.0);
         float weightSum = 0.0;

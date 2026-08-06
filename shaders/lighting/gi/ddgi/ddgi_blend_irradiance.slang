@@ -29,24 +29,21 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     previousVolume.baseCell = pc.previousBaseCell;
     bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume));
     bool bInactive = pc.bActiveValid != 0 && bSameCellPrev && pc.probeActive[probeIndex] == 0;
-    // Frozen inactive probe
-    bool bFrozen = bInactive && pc.bHistoryValid != 0;
+    if (bInactive && pc.bHistoryValid != 0) {
+        return;
+    }
     uint rayBudget = bInactive ? min(DDGI_SENTINEL_RAYS, pc.raysPerProbe) : pc.raysPerProbe;
 
     uint threadIndex = gtid.y * DDGI_IRRADIANCE_TILE + gtid.x;
-    if (!bFrozen) {
-        for (uint r = threadIndex; r < rayBudget; r += DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE) {
-            gsRays[r] = pc.rayData[probeIndex * pc.raysPerProbe + r];
-            gsRayDirections[r] = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
-        }
+    for (uint r = threadIndex; r < rayBudget; r += DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE) {
+        gsRays[r] = pc.rayData[probeIndex * pc.raysPerProbe + r];
+        gsRayDirections[r] = DDGIRotate(DDGISphericalFibonacci(r, rayBudget), pc.rayRotation);
     }
     GroupMemoryBarrierWithGroupSync();
 
     int2 texel = int2(gtid.xy);
     bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_IRRADIANCE_INTERIOR));
-    if (bInterior && bFrozen) {
-        gsTexels[threadIndex] = rdgStorageFloat4[pc.atlasOutIndex][uint2(tileOrigin + texel)];
-    } else if (bInterior) {
+    if (bInterior) {
         float3 texelDirection = DDGIOctTexelDirection(texel, DDGI_IRRADIANCE_INTERIOR);
         float3 radianceSum = float3(0.0);
         float weightSum = 0.0;
