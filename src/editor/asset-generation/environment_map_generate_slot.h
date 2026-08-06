@@ -117,8 +117,8 @@ private:
 
     Render::AllocatedBuffer imageStagingBuffer;
     Render::AllocatedBuffer imageReceivingBuffer;
-    Core::LinearAllocator imageStagingAllocator{ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE};
-    Core::LinearAllocator imageReceivingAllocator{ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE};
+    Core::LinearAllocator imageStagingAllocator{ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE, "EnvMapGenStaging"};
+    Core::LinearAllocator imageReceivingAllocator{ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE, "EnvMapGenReceiving"};
 
     GenerateTask task{};
 };

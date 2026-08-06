@@ -1191,8 +1191,17 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             Core::Path screenshotDir = Platform::GetUserDataPath() / "screenshots";
             Platform::CreateDirectories(screenshotDir.c_str());
 
-            Core::InlineString<> filename;
-            filename.len = snprintf(filename.buf, 64, "screenshot_%llu.png", static_cast<unsigned long long>(frameNumber));
+            const auto now = std::chrono::system_clock::now();
+            const auto time = std::chrono::system_clock::to_time_t(now);
+            std::tm tm;
+#ifdef _WIN32
+            localtime_s(&tm, &time);
+#else
+            localtime_r(&time, &tm);
+#endif
+            char timestamp[32];
+            std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tm);
+            const auto filename = Core::InlineString<>::Format("%s_%llu.png", timestamp, static_cast<unsigned long long>(frameNumber));
             screenCapture->screenshotSavePath = screenshotDir / filename.c_str();
         }
         else {

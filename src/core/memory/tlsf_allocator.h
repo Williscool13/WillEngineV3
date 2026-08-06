@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <mutex>
 
+#include "core/containers/inline_string.h"
+
 namespace Core
 {
 enum class AllocTag : uint32_t
@@ -66,7 +68,7 @@ const char* AllocTagName(AllocTag tag);
  *
  * Usage:
  *   TlsfAllocator alloc;
- *   alloc.Init(pool, poolBytes);
+ *   alloc.Init(pool, poolBytes, false, "MyPool");
  *   void* p = alloc.Alloc(256, AllocTag::AssetModel);
  *   alloc.Free(p);
  */
@@ -77,10 +79,10 @@ public:
     // Must equal alignof(std::max_align_t) so returned pointers stay max-aligned.
     static constexpr size_t kHeaderSize = 16;
 
-    void Init(void* pool, size_t bytes, bool bUseMutex);
+    void Init(void* pool, size_t bytes, bool bUseMutex, const char* name);
 
     // Growable fns
-    void InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex);
+    void InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex, const char* name);
 
     void ReleaseEmptyChunks();
 
@@ -116,6 +118,8 @@ public:
     };
 
     [[nodiscard]] Stats GetStats() const;
+
+    [[nodiscard]] const char* GetName() const { return name_.buf; }
 
     // Walks the pool and fills out[0..(Count-1)] with per-tag aggregates, indexed by tag value.
     // Always fills exactly AllocTag::Count entries.
@@ -161,6 +165,7 @@ private:
     bool bGrowable_{false};
     std::mutex mutex_;
     bool bUseMutex_{false};
+    InlineString<32> name_{};
 };
 } // Core
 

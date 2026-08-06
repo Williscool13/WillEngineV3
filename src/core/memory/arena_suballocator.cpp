@@ -8,9 +8,9 @@
 
 namespace Core
 {
-void ArenaSuballocator::Init(void* pool, size_t bytes)
+void ArenaSuballocator::Init(void* pool, size_t bytes, const char* name)
 {
-    tlsf.Init(pool, bytes, false); // mutex_ covers all operations
+    tlsf.Init(pool, bytes, false, name); // mutex_ covers all operations
 }
 
 Arena ArenaSuballocator::Acquire(size_t size, AllocTag tag, const char* name)

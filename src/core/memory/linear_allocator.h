@@ -9,15 +9,18 @@
 #include <cstddef>
 #include <optional>
 
+#include "core/containers/inline_string.h"
+
 namespace Core
 {
 class LinearAllocator
 {
     size_t head = 0;
     size_t capacity;
+    InlineString<32> name{};
 
 public:
-    explicit LinearAllocator(size_t size) : capacity(size)
+    explicit LinearAllocator(size_t size, const char* allocatorName = "") : capacity(size), name(allocatorName)
     {
         assert(size > 0 && size < SIZE_MAX);
     }
@@ -27,7 +30,7 @@ public:
         assert(newCapacity >= old.capacity && "New capacity must be >= old capacity");
         assert(newCapacity > 0 && newCapacity < SIZE_MAX);
 
-        LinearAllocator expanded(newCapacity);
+        LinearAllocator expanded(newCapacity, old.name.buf);
         expanded.head = old.head;
         return expanded;
     }
@@ -49,6 +52,7 @@ public:
     [[nodiscard]] size_t GetUsed() const { return head; }
     [[nodiscard]] size_t GetCapacity() const { return capacity; }
     [[nodiscard]] size_t GetRemaining() const { return capacity - head; }
+    [[nodiscard]] const char* GetName() const { return name.buf; }
 };
 } // Core
 

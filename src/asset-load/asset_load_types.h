@@ -57,7 +57,7 @@ public:
 private:
     bool bStagingExists{false};
     Render::AllocatedBuffer stagingBuffer{};
-    Core::LinearAllocator stagingAllocator{1};
+    Core::LinearAllocator stagingAllocator{1, "AssetUploadStaging"};
 };
 
 struct BLASTransients

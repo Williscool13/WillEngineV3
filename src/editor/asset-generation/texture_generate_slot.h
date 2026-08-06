@@ -109,8 +109,8 @@ private:
 
     Render::AllocatedBuffer imageStagingBuffer;
     Render::AllocatedBuffer imageReceivingBuffer;
-    Core::LinearAllocator imageStagingAllocator{TEXTURE_GENERATION_STAGING_BUFFER_SIZE};
-    Core::LinearAllocator imageReceivingAllocator{TEXTURE_GENERATION_STAGING_BUFFER_SIZE};
+    Core::LinearAllocator imageStagingAllocator{TEXTURE_GENERATION_STAGING_BUFFER_SIZE, "TexGenStaging"};
+    Core::LinearAllocator imageReceivingAllocator{TEXTURE_GENERATION_STAGING_BUFFER_SIZE, "TexGenReceiving"};
 
     GenerateTask task{};
 };

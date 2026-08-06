@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "core/containers/inline_string.h"
+
 namespace Core
 {
 // Returns the smallest k such that (1 << k) >= v.
@@ -55,7 +57,7 @@ public:
      */
     static size_t MetadataSize(size_t poolSize, size_t minBlockSize);
 
-    void  Init(void* pool, size_t poolSize, size_t minBlockSize, void* metadata);
+    void  Init(void* pool, size_t poolSize, size_t minBlockSize, void* metadata, const char* name = "");
     void* Alloc(size_t size);
     void  Free(void* ptr);
 
@@ -69,6 +71,7 @@ public:
     [[nodiscard]] Stats  GetStats()    const { return {poolSize, usedBytes, poolSize - usedBytes}; }
     [[nodiscard]] size_t GetPoolSize() const { return poolSize; }
     [[nodiscard]] size_t GetMinBlock() const { return size_t(1) << minOrder; }
+    [[nodiscard]] const char* GetName() const { return name_.buf; }
 
 private:
     // Stored at the start of each free block — overlaps with user memory (safe: not in use).
@@ -80,6 +83,7 @@ private:
 
     uint8_t*  base{};
     size_t    poolSize{};
+    InlineString<32> name_{};
     size_t    usedBytes{};
     uint32_t  minOrder{};    // log2(min_block_size)
     uint32_t  maxOrder{};    // log2(pool_size)

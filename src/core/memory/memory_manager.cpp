@@ -32,18 +32,18 @@ void MemoryManager::Init(const Layout& layout)
 
     auto* cursor = static_cast<uint8_t*>(megaBuffer);
 
-    tlsfPersistent.Init(cursor, persistentSz, true);
+    tlsfPersistent.Init(cursor, persistentSz, true, "Persistent");
     cursor += persistentSz;
-    tlsfGeneral.Init(cursor, generalSz, true);
+    tlsfGeneral.Init(cursor, generalSz, true, "General");
     cursor += generalSz;
-    tlsfAssets.Init(cursor, assetsSz, true);
+    tlsfAssets.Init(cursor, assetsSz, true, "Assets");
     cursor += assetsSz;
-    tlsfAssetsScratch.InitGrowable(assetsScratchSz, layout.assetsScratchBudget, true);
-    tlsfPhysicsAligned.Init(cursor, physicsAlignedSz, true);
+    tlsfAssetsScratch.InitGrowable(assetsScratchSz, layout.assetsScratchBudget, true, "AssetsScratch");
+    tlsfPhysicsAligned.Init(cursor, physicsAlignedSz, true, "PhysicsAligned");
     cursor += physicsAlignedSz;
-    tlsfRender.Init(cursor, renderSz, false);
+    tlsfRender.Init(cursor, renderSz, false, "Render");
     cursor += renderSz;
-    arenaPool.Init(cursor, arenaPoolSz);
+    arenaPool.Init(cursor, arenaPoolSz, "ArenaPool");
 }
 
 MemoryManager::~MemoryManager()

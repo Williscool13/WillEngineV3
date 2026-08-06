@@ -362,7 +362,7 @@ struct AllocBase
 
     AllocBase() : arena(arenaPool.get(), ARENA_SIZE, "rdg-test")
     {
-        alloc.Init(tlsfPool.get(), TLSF_SIZE, false);
+        alloc.Init(tlsfPool.get(), TLSF_SIZE, false, "rdg-test");
     }
 };
 

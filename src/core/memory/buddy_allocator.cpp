@@ -19,12 +19,13 @@ size_t BuddyAllocator::MetadataSize(size_t poolSize, size_t minBlockSize)
            + N * sizeof(uint8_t); // allocOrder
 }
 
-void BuddyAllocator::Init(void* pool, size_t poolSizeIn, size_t minBlockSize, void* metadata)
+void BuddyAllocator::Init(void* pool, size_t poolSizeIn, size_t minBlockSize, void* metadata, const char* name)
 {
     assert((poolSizeIn & (poolSizeIn - 1)) == 0 && "poolSize must be a power of 2");
     assert((minBlockSize & (minBlockSize - 1)) == 0 && "minBlockSize must be a power of 2");
     assert(minBlockSize >= sizeof(FreeNode) && "minBlockSize must be >= 8");
 
+    name_ = InlineString<32>(name);
     base = static_cast<uint8_t*>(pool);
     poolSize = poolSizeIn;
     minOrder = FloorOrder(minBlockSize);

@@ -9,6 +9,6 @@ namespace Engine
 void MeshPrimitiveStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::AllocTag tag)
 {
     instances_ = Core::HeapArray<MeshPrimitiveInstance>(alloc, tag, capacity);
-    ranges_.Init(capacity, alloc, tag);
+    ranges_.Init(capacity, alloc, tag, "MeshPrimitiveStore");
 }
 } // Engine

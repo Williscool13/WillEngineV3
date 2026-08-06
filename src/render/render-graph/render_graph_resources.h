@@ -325,7 +325,7 @@ struct PhysicalResource
 
     uint64_t lastUsedFrame = 0;
 
-    Core::InlineVector<uint32_t, 16> logicalResourceIndices;
+    Core::InlineVector<uint32_t, 64> logicalResourceIndices;
 
     // Image resources (valid if dimensions.is_image())
     VkImage image{VK_NULL_HANDLE};
@@ -439,7 +439,7 @@ struct TransientUploadArena
     VmaAllocation bufferAllocation{VK_NULL_HANDLE};
     void* mappedData{nullptr};
     VkDeviceAddress address{0};
-    Core::LinearAllocator allocator{RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE};
+    Core::LinearAllocator allocator{RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE, "RdgTransientUpload"};
     size_t size{RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE};
 };
 

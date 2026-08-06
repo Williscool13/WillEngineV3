@@ -8,11 +8,12 @@
 
 namespace Core
 {
-void RangeAllocator::Init(uint32_t capacity, TlsfAllocator* alloc, AllocTag tag)
+void RangeAllocator::Init(uint32_t capacity, TlsfAllocator* alloc, AllocTag tag, const char* name)
 {
     assert(alloc != nullptr && "RangeAllocator: null allocator");
     capacity_ = capacity;
     used_ = 0;
+    name_ = InlineString<32>(name);
     freeSpans_ = Vector<Range>(alloc, tag);
     if (capacity_ > 0) {
         freeSpans_.PushBack(Range{0, capacity_});

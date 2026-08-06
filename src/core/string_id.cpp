@@ -14,7 +14,7 @@ const char* (*gResolveStringIdFn)(uint64_t) = nullptr;
 
 static constexpr size_t INTERN_BUFFER_SIZE = 1024 * 1024; // 1MB
 static char gInternBuffer[INTERN_BUFFER_SIZE];
-static Core::LinearAllocator gInternAllocator{INTERN_BUFFER_SIZE};
+static Core::LinearAllocator gInternAllocator{INTERN_BUFFER_SIZE, "StringIdIntern"};
 
 static std::unordered_map<uint64_t, const char*>& GetInternTable()
 {

@@ -5,6 +5,7 @@
 #include "tlsf_allocator.h"
 
 #include <cassert>
+#include <cstdio>
 #include <cstdlib>
 
 #include "tlsf.h"
@@ -54,16 +55,17 @@ const char* AllocTagName(AllocTag tag)
     return "Unknown";
 }
 
-void TlsfAllocator::Init(void* pool, size_t bytes, bool bUseMutex)
+void TlsfAllocator::Init(void* pool, size_t bytes, bool bUseMutex, const char* name)
 {
     assert(pool != nullptr);
     assert(bytes > tlsf_size() && "pool too small for TLSF control structure");
     tlsf = tlsf_create_with_pool(pool, bytes);
     poolBytes = bytes;
     bUseMutex_ = bUseMutex;
+    name_ = InlineString<32>(name);
 }
 
-void TlsfAllocator::InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex)
+void TlsfAllocator::InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex, const char* name)
 {
     assert(baselineBytes > tlsf_size() && "baseline too small for TLSF control structure");
     void* mem = malloc(baselineBytes);
@@ -75,6 +77,7 @@ void TlsfAllocator::InitGrowable(size_t baselineBytes, size_t budgetBytes, bool 
     budgetBytes_ = budgetBytes;
     bGrowable_ = true;
     bUseMutex_ = bUseMutex;
+    name_ = InlineString<32>(name);
 }
 
 bool TlsfAllocator::Grow(size_t minBytes)
@@ -138,7 +141,10 @@ void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
     if (raw == nullptr && Grow(kHeaderSize + size)) {
         raw = tlsf_malloc(tlsf, kHeaderSize + size);
     }
-    assert(raw != nullptr && "OOM: TLSF pool exhausted");
+    if (raw == nullptr) {
+        fprintf(stderr, "TlsfAllocator '%s' OOM: Alloc %zu bytes (tag %s), used %zu / %zu\n", name_.buf, size, AllocTagName(tag), usedBytes_, poolBytes);
+        assert(false && "OOM: TLSF pool exhausted");
+    }
 
     auto* header = static_cast<AllocHeader*>(raw);
     header->tag = tag;
@@ -171,7 +177,10 @@ void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag tag)
     if (raw == nullptr && Grow(kHeaderSize + newSize)) {
         raw = tlsf_realloc(tlsf, header, kHeaderSize + newSize);
     }
-    assert(raw != nullptr && "OOM: TLSF pool exhausted");
+    if (raw == nullptr) {
+        fprintf(stderr, "TlsfAllocator '%s' OOM: Realloc %zu bytes (tag %s), used %zu / %zu\n", name_.buf, newSize, AllocTagName(savedTag), usedBytes_, poolBytes);
+        assert(false && "OOM: TLSF pool exhausted");
+    }
 
     header = static_cast<AllocHeader*>(raw);
     header->tag = savedTag;
@@ -207,7 +216,10 @@ void* TlsfAllocator::AlignedAlloc(size_t size, size_t alignment, AllocTag tag)
     if (ptr == nullptr && Grow(size + alignment)) {
         ptr = tlsf_memalign(tlsf, alignment, size);
     }
-    assert(ptr != nullptr && "OOM: TLSF pool exhausted");
+    if (ptr == nullptr) {
+        fprintf(stderr, "TlsfAllocator '%s' OOM: AlignedAlloc %zu bytes align %zu (tag %s), used %zu / %zu\n", name_.buf, size, alignment, AllocTagName(tag), usedBytes_, poolBytes);
+        assert(false && "OOM: TLSF pool exhausted");
+    }
 
     usedBytes_ += tlsf_block_size(ptr);
     if (usedBytes_ > highWaterBytes_) { highWaterBytes_ = usedBytes_; }

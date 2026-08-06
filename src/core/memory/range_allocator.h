@@ -26,7 +26,7 @@ public:
         [[nodiscard]] bool IsValid() const { return count != 0; }
     };
 
-    void Init(uint32_t capacity, TlsfAllocator* alloc, AllocTag tag = AllocTag::Unknown);
+    void Init(uint32_t capacity, TlsfAllocator* alloc, AllocTag tag = AllocTag::Unknown, const char* name = "");
 
     void Reset();
 
@@ -47,11 +47,13 @@ public:
     [[nodiscard]] uint32_t GetCapacity() const { return capacity_; }
     [[nodiscard]] uint32_t GetUsed() const { return used_; }
     [[nodiscard]] bool IsInitialized() const { return capacity_ != 0; }
+    [[nodiscard]] const char* GetName() const { return name_.buf; }
 
 private:
     Vector<Range> freeSpans_{};
     uint32_t capacity_{0};
     uint32_t used_{0};
+    InlineString<32> name_{};
 };
 } // Core
 

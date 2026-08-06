@@ -21,7 +21,7 @@ namespace Core
  *
  * Usage:
  *   ArenaSuballocator sub;
- *   sub.Init(pool, poolBytes);
+ *   sub.Init(pool, poolBytes, "MyPool");
  *
  *   Arena a = sub.Acquire(256 * 1024, AllocTag::FrameSync);
  *   sub.RegisterArena(a.Data(), &a);   // patch live pointer for stats
@@ -33,7 +33,7 @@ class ArenaSuballocator
 public:
     static constexpr size_t kMaxTracked = 64;
 
-    void Init(void* pool, size_t bytes);
+    void Init(void* pool, size_t bytes, const char* name);
 
     /**
      * Allocates a contiguous chunk of `size` bytes from the pool and returns
@@ -69,6 +69,8 @@ public:
     };
 
     [[nodiscard]] Stats GetStats() const;
+
+    [[nodiscard]] const char* GetName() const { return tlsf.GetName(); }
 
     void GetTagStats(TlsfAllocator::TagStats out[static_cast<size_t>(AllocTag::Count)]);
 
