@@ -6,6 +6,7 @@
 #define WILLENGINEV3_RENDER_THREAD_H
 
 #include <atomic>
+#include <chrono>
 
 #include "core/containers/vector.h"
 #include "frame_resources.h"
@@ -203,6 +204,9 @@ private:
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
+    std::chrono::steady_clock::time_point lastWallFrameTime{};
+    float smoothedWallFrameMs{0.0f};
+    float smoothedGpuSpanMs{0.0f};
     uint32_t rtGroundTruthDIAccumCount{0};
     uint32_t rtGroundTruthGIAccumCount{0};
     uint32_t rtGroundTruthFullAccumCount{0};

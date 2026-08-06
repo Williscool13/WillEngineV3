@@ -172,6 +172,8 @@ struct GPUProfileSnapshot
     float leafMs[RENDER_CATEGORY_BIT_COUNT]{};
     float groupMs[RENDER_CATEGORY_GROUP_COUNT]{};
     float totalMs{0.0f};
+    /** Wall span from first pass begin to last pass end */
+    float spanMs{0.0f};
 };
 
 enum class DepthAccessType

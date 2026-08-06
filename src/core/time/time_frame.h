@@ -19,6 +19,10 @@ struct TimeFrame
     float renderDeltaTime;
     float renderTotalTime;
     float renderFps;
+
+    // Written by Render Thread
+    float renderWallMs;
+    float gpuFrameMs;
 };
 } // Core
 

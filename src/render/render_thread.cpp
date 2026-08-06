@@ -253,6 +253,16 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
 {
     ZoneScoped;
 
+    const auto wallNow = std::chrono::steady_clock::now();
+    if (lastWallFrameTime.time_since_epoch().count() != 0) {
+        const float wallMs = std::chrono::duration<float, std::milli>(wallNow - lastWallFrameTime).count();
+        if (wallMs < 1000.0f) {
+            smoothedWallFrameMs = smoothedWallFrameMs <= 0.0f ? wallMs : smoothedWallFrameMs + (wallMs - smoothedWallFrameMs) * 0.02f;
+        }
+    }
+    lastWallFrameTime = wallNow;
+    statisticsManager.scratch.wallFrameMs = smoothedWallFrameMs;
+
     //
     {
         ZoneScopedN("WaitForFence");
@@ -267,6 +277,11 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     statisticsManager.scratch.computeInvocations = pipelineStats.computeInvocations;
     statisticsManager.scratch.meshInvocations = pipelineStats.meshInvocations;
     statisticsManager.scratch.gpuProfile = renderGraph->CollectGPUProfile(currentFrameIndex);
+    const float gpuSpanMs = statisticsManager.scratch.gpuProfile.spanMs;
+    if (gpuSpanMs > 0.0f) {
+        smoothedGpuSpanMs = smoothedGpuSpanMs <= 0.0f ? gpuSpanMs : smoothedGpuSpanMs + (gpuSpanMs - smoothedGpuSpanMs) * 0.02f;
+    }
+    statisticsManager.scratch.gpuSpanMs = smoothedGpuSpanMs;
     screenCapture->ResolveScreenshot(currentFrameIndex);
     screenCapture->ResolveProbeCapture(currentFrameIndex);
 

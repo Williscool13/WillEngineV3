@@ -601,8 +601,8 @@ static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::En
         ImGui::SetNextWindowPos(ImVec2(vpLeft + 8.0f, vpTop + 8.0f), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(0.5f);
         if (ImGui::Begin("##fps_overlay", nullptr, fpsFlags)) {
-            const float fps = frameBuffer->timeFrame.renderFps;
-            ImGui::Text("%.0f FPS (%.2f ms)", fps, fps > 0.0f ? 1000.0f / fps : 0.0f);
+            const float wallMs = frameBuffer->timeFrame.renderWallMs;
+            ImGui::Text("%.0f FPS (%.2f ms) | GPU %.2f ms", wallMs > 0.0f ? 1000.0f / wallMs : 0.0f, wallMs, frameBuffer->timeFrame.gpuFrameMs);
         }
         ImGui::End();
     }

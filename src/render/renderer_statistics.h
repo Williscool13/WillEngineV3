@@ -44,6 +44,11 @@ struct RendererStatistics
 
     // Per-category GPU pass timing (always-on)
     GPUProfileSnapshot gpuProfile{};
+
+    // Render-thread wall interval between frames
+    float wallFrameMs{};
+    // gpuProfile.spanMs
+    float gpuSpanMs{};
 };
 
 /**

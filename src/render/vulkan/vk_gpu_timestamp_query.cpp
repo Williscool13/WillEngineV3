@@ -47,10 +47,15 @@ GPUProfileSnapshot GPUTimestampQueryPool::Collect(VkDevice device, uint32_t fram
     if (result != VK_SUCCESS) { return snapshot; }
 
     const auto& categories = passCategories[frameIndex];
+    uint64_t frameBegin = UINT64_MAX;
+    uint64_t frameEnd = 0;
     for (uint32_t p = 0; p < count; ++p) {
         const uint64_t begin = raw[2 * p];
         const uint64_t end = raw[2 * p + 1];
         if (end <= begin) { continue; }
+
+        frameBegin = begin < frameBegin ? begin : frameBegin;
+        frameEnd = end > frameEnd ? end : frameEnd;
 
         const float passMs = static_cast<float>(end - begin) * timestampPeriodNs * 1e-6f;
         const auto mask = static_cast<uint64_t>(categories[p]);
@@ -60,6 +65,10 @@ GPUProfileSnapshot GPUTimestampQueryPool::Collect(VkDevice device, uint32_t fram
             }
         }
         snapshot.totalMs += passMs;
+    }
+
+    if (frameEnd > frameBegin) {
+        snapshot.spanMs = static_cast<float>(frameEnd - frameBegin) * timestampPeriodNs * 1e-6f;
     }
 
     for (uint32_t bit = 0; bit < RENDER_CATEGORY_BIT_COUNT; ++bit) {

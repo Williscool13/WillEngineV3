@@ -989,7 +989,7 @@ void WillEngine::EditorImgui()
                     for (uint32_t g = 0; g < Render::RENDER_CATEGORY_GROUP_COUNT; ++g) { groupMs[g] = profile.groupMs[g]; }
 
                     ImGui::Spacing();
-                    ImGui::Text("GPU Frame Time -- Total: %.3f ms", profile.totalMs);
+                    ImGui::Text("GPU Frame Time -- Span: %.3f ms, Pass Sum: %.3f ms", profile.spanMs, profile.totalMs);
                     DrawCategoryGroupTree("##gpu_profile_tree", leafMs, groupMs, profile.totalMs, "%.3f");
                 }
             }
@@ -1490,7 +1490,11 @@ void WillEngine::Run()
                 {
                     ZoneScopedN("SwapAndPrepare");
                     // std::swap(currentFrameBuffer, engineRenderSynchronization->stagingFrameBuffer);
-                    engineRenderSynchronization->GetCurrentFrameBuffer()->timeFrame = timeManager->GetTime();
+                    Core::TimeFrame& handoffTimeFrame = engineRenderSynchronization->GetCurrentFrameBuffer()->timeFrame;
+                    handoffTimeFrame = timeManager->GetTime();
+                    const Render::RendererStatistics renderStats = renderThread->GetRendererStatistics();
+                    handoffTimeFrame.renderWallMs = renderStats.wallFrameMs;
+                    handoffTimeFrame.gpuFrameMs = renderStats.gpuSpanMs;
                     PrepareImgui(currentImguiSnapshot);
                 }
 

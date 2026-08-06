@@ -2214,11 +2214,12 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
 #endif
 
-        // FPS counter, top-left: render thread FPS (EMA-smoothed in TimeManager::UpdateRender) and game-tick FPS (TimeManager::UpdateGame).
         const Core::TimeFrame& tf = frameBuffer->timeFrame;
-        const auto renderFpsText = Core::InlineString<48>::Format("Render: %.0f FPS (%.2f ms)", tf.renderFps, tf.renderFps > 0.0f ? 1000.0f / tf.renderFps : 0.0f);
+        const auto renderFpsText = Core::InlineString<48>::Format("Render: %.0f FPS (%.2f ms)", tf.renderWallMs > 0.0f ? 1000.0f / tf.renderWallMs : 0.0f, tf.renderWallMs);
+        const auto gpuText = Core::InlineString<48>::Format("GPU: %.2f ms", tf.gpuFrameMs);
         const auto gameFpsText = Core::InlineString<48>::Format("Game: %.0f FPS (%.2f ms)", tf.gameFps, tf.gameFps > 0.0f ? 1000.0f / tf.gameFps : 0.0f);
         const Clay_String renderFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(renderFpsText.Size()), .chars = renderFpsText.c_str()};
+        const Clay_String gpuString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(gpuText.Size()), .chars = gpuText.c_str()};
         const Clay_String gameFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(gameFpsText.Size()), .chars = gameFpsText.c_str()};
 
         static constexpr const char* AA_MODE_NAMES[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
@@ -2273,6 +2274,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
              },
              }) {
             CLAY_TEXT(renderFpsString, { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+            CLAY_TEXT(gpuString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
             CLAY_TEXT(gameFpsString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
             CLAY_TEXT(profileString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
             CLAY_TEXT(aaString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
