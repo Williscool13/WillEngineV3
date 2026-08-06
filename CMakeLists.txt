@@ -3,6 +3,14 @@ project(will-engine)
 
 set(CMAKE_CXX_STANDARD 23)
 
+# x86-64-v3 baseline (AVX2/FMA/F16C/BMI)
+# We can make the assumption users have support for this w/ the GPU target of SM 6.6
+if (MSVC)
+    add_compile_options(/arch:AVX2 /fp:contract)
+else ()
+    add_compile_options(-march=x86-64-v3)
+endif ()
+
 
 option(WILL_ENGINE_BUILD_EDITOR "Build editor features" OFF)
 option(WILL_ENGINE_GAME_STATIC "Build game as static library" OFF)
@@ -185,6 +193,14 @@ endif ()
 
 # Jolt ========================================
 set(PHYSICS_REPO_ROOT "${CMAKE_SOURCE_DIR}/extern/JoltPhysics")
+set(USE_SSE4_1 ON)
+set(USE_SSE4_2 ON)
+set(USE_AVX ON)
+set(USE_AVX2 ON)
+set(USE_LZCNT ON)
+set(USE_TZCNT ON)
+set(USE_F16C ON)
+set(USE_FMADD ON)
 include("${PHYSICS_REPO_ROOT}/Jolt/Jolt.cmake")
 target_include_directories(Jolt PUBLIC
         ${PHYSICS_REPO_ROOT}
