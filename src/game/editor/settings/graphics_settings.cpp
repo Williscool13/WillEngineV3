@@ -375,11 +375,11 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SameLine();
         ImGui::SetNextItemWidth(240.0f);
         Widgets::SliderFloat("Probe Exposure##GPUDebug", &state->debug.render.ddgiProbeDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0}); {
-            const char* probeDisplayLabels[] = {"Irradiance", "Visibility", "Placement"};
+            const char* probeDisplayLabels[] = {"Irradiance", "Visibility", "Placement", "Age"};
             ImGui::SetNextItemWidth(120.0f);
             ImGui::Combo("Display##DDGIDebug", &state->debug.render.ddgiProbeDebugMode, probeDisplayLabels, static_cast<int>(std::size(probeDisplayLabels)));
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Visibility shows the probe's distance atlas as L1 lobes: red = mean distance relative to the miss clamp per direction, green = std/mean. A red-hot lobe pointing into the room from an exterior probe is a miss-inflated mean, which bypasses the Chebyshev occlusion test at sampling. Placement drops the shading entirely and draws flat per-volume tint, for reading probe positions and window coverage; dead (red) and inactive (blue) probes still show through.");
+                ImGui::SetTooltip("Visibility shows the probe's distance atlas as L1 lobes: red = mean distance relative to the miss clamp per direction, green = std/mean. A red-hot lobe pointing into the room from an exterior probe is a miss-inflated mean, which bypasses the Chebyshev occlusion test at sampling. Placement drops the shading entirely and draws flat per-volume tint, for reading probe positions and window coverage; dead (red) and inactive (blue) probes still show through. Age tints each world volume by its update count: green ramp while warming (0-16), then black to white as it ages toward the cap; camera cascades always show full age.");
             }
         }
 
@@ -1191,6 +1191,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Cascade Sampling##ddgi", &ddgi.bCascadeSampling)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Debug: off = consumers (composite, gather, cache shade, bounce feedback) sample local volumes only; cascade windows keep updating and still suppress sky via edge fade, so toggling back is instant.");
+            }
+            if (ImGui::Checkbox("World Volume Grid Cull##ddgi", &ddgi.bWorldVolumeGridCull)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Debug: off = the sampler walks every resident world volume instead of the world grid's per-cell overlap list. Same result, slower; a difference means the bin is dropping volumes.");
             }
 
             ImGui::SeparatorText("Trace");

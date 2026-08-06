@@ -156,7 +156,8 @@ def sealed_room(tag, cx, cz, inner, door_face, door_w, door_h, sill, folder_id, 
     sx, sy, sz = inner
     origin = (cx - sx * 0.5 - WALL_T, -WALL_T, cz - sz * 0.5 - WALL_T)
     room = module_entity(f"[{tag}] room", origin, room_parts(inner, door_face, door_w, door_h, sill, judging_cube), folder_id)
-    probe = base_entity(f"[{tag}] probe", (cx, sy * 0.5, cz), scale=(sx * 0.5 + WALL_T, sy * 0.5 + WALL_T, sz * 0.5 + WALL_T), folder_id=folder_id)
+    # Boundary buried mid-wall: probes are hard-edged (fade_margin 0), so the containment plane must sit where no visible surface can straddle it under TAA jitter. Interior faces end half a wall inside, exterior faces half a wall outside.
+    probe = base_entity(f"[{tag}] probe", (cx, sy * 0.5, cz), scale=(sx * 0.5 + WALL_T * 0.5, sy * 0.5 + WALL_T * 0.5, sz * 0.5 + WALL_T * 0.5), folder_id=folder_id)
     resolution = PROBE_RES_256 if sx > 10.0 else PROBE_RES_128
     add_reflection_probe(probe, name_id(f"gi_sunbounce_{tag}"), resolution=resolution)
     entities.append(probe)

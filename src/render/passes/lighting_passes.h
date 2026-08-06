@@ -13,6 +13,7 @@
 namespace Render
 {
 class PipelineManager;
+struct DDGICascades;
 
 /** Unused */
 void SetupFrustumBinningPass(RenderGraph& graph,
@@ -22,11 +23,17 @@ void SetupFrustumBinningPass(RenderGraph& graph,
                              float clusterZNear,
                              float clusterZFar);
 
-/** Camera-centered cascaded world-space grid, rebuilt every frame; see world_grid_interop.h for the cascade layout. */
+/**
+ * Camera-centered cascaded world-space grid, rebuilt every frame; see world_grid_interop.h for the cascade layout.
+ * Bins analytic lights, emissive groups, reflection probes and DDGI world volumes.
+ * @param ddgiCascades this frame's cascade set; its resident world volumes are binned so DDGISampleIrradianceCascaded can visit a cell's overlaps instead of every slot
+ */
 void SetupWorldGridBinningPass(RenderGraph& graph,
                                PipelineManager* pipelineManager,
                                const Core::ViewFamily& viewFamily,
-                               uint32_t sceneIndex);
+                               uint32_t sceneIndex,
+                               Core::Arena& arena,
+                               const DDGICascades& ddgiCascades);
 
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,

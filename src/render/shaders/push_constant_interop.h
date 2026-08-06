@@ -611,6 +611,11 @@ SHADER_PUBLIC struct WorldGridBinningPushConstant
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC uint32_t pad1;
+    SHADER_PUBLIC SHADER_PTR(DDGIVolumeParams) ddgiVolumes;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridDDGIGrid;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridDDGIIndexList;
+    SHADER_PUBLIC uint32_t ddgiVolumeCount;
+    SHADER_PUBLIC uint32_t ddgiVolumeSlotBase;
 };
 
 SHADER_PUBLIC struct WorldGridDebugPushConstant
@@ -1320,6 +1325,8 @@ SHADER_PUBLIC struct DDGIProbeDebugPushConstant
     SHADER_PUBLIC uint32_t bHideInactive;
     SHADER_PUBLIC uint32_t visibilityAtlasIndex;
     SHADER_PUBLIC uint32_t debugMode;
+    SHADER_PUBLIC uint32_t warmupAge;
+    SHADER_PUBLIC uint32_t pad9;
 };
 
 SHADER_PUBLIC struct GIDeconstructPushConstant

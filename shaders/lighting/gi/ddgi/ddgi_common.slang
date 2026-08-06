@@ -3,6 +3,8 @@ module ddgi_common;
 import ddgi_interop;
 import constants_interop;
 import bindless_declarations;
+import world_grid_interop;
+import binning_common;
 
 // =============== Shader Summary ============
 // Rolling-grid math for the DDGI probe volume. Probes live on an infinite world-space lattice (cell * spacing); the volume is a window of probeCount cells starting at baseCell that follows the camera in whole-cell steps.
@@ -143,7 +145,7 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         // Chebyshev test against the probe's mean/mean^2 distance along this direction: probably-occluded probes fade out.
         float3 biasedToProbe = probePosition - biasedPosition;
         float distanceToProbe = length(biasedToProbe);
-        float2 moments = rdgTexturesFloat2[visibilityAtlasIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, -biasedToProbe / max(distanceToProbe, 1e-6), volume, DDGI_VISIBILITY_TILE, DDGI_VISIBILITY_INTERIOR), 0);
+        float2 moments = rdgTexturesFloat2[NonUniformResourceIndex(visibilityAtlasIndex)].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, -biasedToProbe / max(distanceToProbe, 1e-6), volume, DDGI_VISIBILITY_TILE, DDGI_VISIBILITY_INTERIOR), 0);
         float chebRatio = 1.0;
         if (distanceToProbe > moments.x) {
             float cappedStd = DDGI_VISIBILITY_VARIANCE_CAP * moments.x;
@@ -164,7 +166,7 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         float3 trilinear = max(float3(0.001), lerp(1.0 - alpha, alpha, float3(offset)));
         weight *= trilinear.x * trilinear.y * trilinear.z;
 
-        float4 encoded = rdgTexturesFloat4[irradianceAtlasIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, normal, volume, DDGI_IRRADIANCE_TILE, DDGI_IRRADIANCE_INTERIOR), 0);
+        float4 encoded = rdgTexturesFloat4[NonUniformResourceIndex(irradianceAtlasIndex)].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, normal, volume, DDGI_IRRADIANCE_TILE, DDGI_IRRADIANCE_INTERIOR), 0);
         // Blend in half-gamma space and square after the weighted sum: perceptual interpolation between probes (RTXGI).
         irradianceSum += weight * pow(max(encoded.rgb, float3(0.0)), volume.irradianceGamma * 0.5);
         guideSum += weight * encoded.a;
@@ -188,6 +190,37 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
     return DDGISampleIrradiance(worldPosition, normal, cameraDirection, volume, irradianceAtlasIndex, visibilityAtlasIndex, probeOffsets, bProbeOffsetsValid, maxBias, varianceGuide);
 }
 
+public struct DDGILocalWalk
+{
+    public uint visit;
+    public uint offset;
+    public bool bGrid;
+};
+
+/**
+ * Local slots worth visiting at this point: the world-grid cell's overlap list, else every resident slot.
+ * The list is exact for localFade too, since a volume whose fade band reaches the point necessarily overlaps its cell; a cell that overflowed K carries the sentinel count and falls back to the full walk.
+ */
+[ForceInline]
+public DDGILocalWalk DDGIResolveLocalWalk(float3 worldPosition, DDGICascadeSetGPU* cascadeSet, uint localCount)
+{
+    DDGILocalWalk walk;
+    walk.visit = localCount;
+    walk.offset = 0u;
+    walk.bGrid = cascadeSet->bVolumeGridValid != 0u && localCount > 0u;
+    if (walk.bGrid) {
+        WorldGridKey key = WorldGridResolveCell(worldPosition, cascadeSet->gridCamPos.xyz);
+        uint2 entry = cascadeSet->volumeGrid[key.cellIndex];
+        if (entry.y > MAX_DDGI_VOLUMES_PER_WORLD_GRID_CELL) {
+            walk.bGrid = false;
+        } else {
+            walk.offset = entry.x;
+            walk.visit = entry.y;
+        }
+    }
+    return walk;
+}
+
 /**
  * Cascade-chain lookup: front-to-back composite finest-first, so a fine cascade's edge fade (and dead-pocket zero-weight failures) fall through to the next coarser cascade.
  * Local volumes sample before cascade 0 (finest of all); their windows do not extend edgeFade, which tracks only the camera-following cascade set.
@@ -206,9 +239,13 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     varianceGuide = 0.0;
     uint count = min(cascadeSet->cascadeCount, DDGI_MAX_VOLUME_SLOTS);
     uint localCount = min(cascadeSet->localCount, DDGI_MAX_VOLUME_SLOTS - count);
-    for (uint i = 0; i < localCount + count; ++i) {
-        bool bLocal = i < localCount;
-        uint c = bLocal ? count + i : i - localCount;
+    DDGILocalWalk walk = DDGIResolveLocalWalk(worldPosition, cascadeSet, localCount);
+    for (uint i = 0; i < walk.visit + count; ++i) {
+        bool bLocal = i < walk.visit;
+        uint c = bLocal ? (walk.bGrid ? cascadeSet->volumeIndexList[walk.offset + i] : count + i) : i - walk.visit;
+        if (c >= DDGI_MAX_VOLUME_SLOTS) {
+            continue;
+        }
         DDGICascadeDescriptor desc = cascadeSet->cascades[c];
 
         if (bLocal) {
@@ -265,9 +302,13 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     float localFade = 0.0;
     uint count = min(cascadeSet->cascadeCount, DDGI_MAX_VOLUME_SLOTS);
     uint localCount = min(cascadeSet->localCount, DDGI_MAX_VOLUME_SLOTS - count);
-    for (uint i = 0; i < localCount + count; ++i) {
-        bool bLocal = i < localCount;
-        uint c = bLocal ? count + i : i - localCount;
+    DDGILocalWalk walk = DDGIResolveLocalWalk(worldPosition, cascadeSet, localCount);
+    for (uint i = 0; i < walk.visit + count; ++i) {
+        bool bLocal = i < walk.visit;
+        uint c = bLocal ? (walk.bGrid ? cascadeSet->volumeIndexList[walk.offset + i] : count + i) : i - walk.visit;
+        if (c >= DDGI_MAX_VOLUME_SLOTS) {
+            continue;
+        }
         DDGICascadeDescriptor desc = cascadeSet->cascades[c];
         if (bLocal) {
             float3 gridCoord = worldPosition / desc.volume.probeSpacing;

@@ -20,12 +20,14 @@ struct LocalDDGIVolume;
 namespace Render
 {
 class PipelineManager;
+class RenderPass;
 
 /** Per-frame GPU descriptor chain sampled by lighting/remodulate and the trace's infinite-bounce feedback. */
 inline const StringID DDGI_CASCADES_BUFFER = SID("ddgi_cascades");
 inline const StringID DDGI_CASCADES_PREV_BUFFER = SID("ddgi_cascades_prev");
+inline const StringID WORLD_GRID_DDGI_GRID_BUFFER = SID("world_grid_ddgi_grid");
+inline const StringID WORLD_GRID_DDGI_INDEX_BUFFER = SID("world_grid_ddgi_index_list");
 inline constexpr int32_t DDGI_PROBE_DEBUG_LOCALS_ONLY = -2;
-inline constexpr uint32_t DDGI_LOCAL_WARMUP_UPDATES = 16u;
 inline constexpr uint32_t DDGI_ATLAS_ROW_BUCKET = 10u;
 
 inline uint32_t DDGIAtlasRows(uint32_t maxResident)
@@ -74,8 +76,12 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
  * @param radianceCache this frame's radiance cache buffers; trace populates it as a side effect when valid, keyed with scene.cameraWorldPos (never the per-cascade window center)
  * @param reflectionProbeCount baked probes this frame; inside a probe volume the trace's cache-miss fallback shading uses probe irradiance ahead of the skybox ambient
  * @param bReflectionProbeBruteForce debug: bypass the world-grid probe bin for the fallback shading's probe pick
+ * @param gridCamPos camera the world grid binned against; stored in the uploaded descriptor set so samplers resolve the same cell the bin wrote
  */
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce);
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos);
+
+/** Declares the world-volume cull buffers that any pass calling DDGISampleIrradianceCascaded dereferences through its cascade set. */
+void DeclareDDGIVolumeGridReads(RenderGraph& graph, RenderPass& pass);
 
 /**
  * Declares the pass dependencies for sampling the cascade chain. Returns false when the chain doesn't exist this frame.

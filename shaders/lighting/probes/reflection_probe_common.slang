@@ -111,11 +111,11 @@ public float3 SampleReflectionProbeSpecular(ReflectionProbeGPU probe, float3 wor
     }
 
     float mip = sqrt(roughness) * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1);
-    return assetCubemaps[probe.cubemapIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(sampleDir), mip).rgb;
+    return assetCubemaps[NonUniformResourceIndex(probe.cubemapIndex)].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(sampleDir), mip).rgb;
 }
 
 /** Prefiltered diffuse irradiance from a probe along worldNormal. Direction-only (no parallax; irradiance is positionless within the volume). Routes through the shared cubemap Y-flip and samples ENVIRONMENT_MAP_DIFFUSE_MIP, matching DiffuseIrradiance. Returns raw radiance; the caller applies intensity. */
 public float3 SampleReflectionProbeIrradiance(ReflectionProbeGPU probe, float3 worldNormal)
 {
-    return assetCubemaps[probe.cubemapIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(worldNormal), ENVIRONMENT_MAP_DIFFUSE_MIP).rgb;
+    return assetCubemaps[NonUniformResourceIndex(probe.cubemapIndex)].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(worldNormal), ENVIRONMENT_MAP_DIFFUSE_MIP).rgb;
 }

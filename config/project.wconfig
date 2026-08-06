@@ -147,7 +147,7 @@
       ]
     }
   ],
-  "defaultScene": "New Scene",
+  "defaultScene": "GI Sun Bounce",
   "editorCameraFovDegrees": 70.0,
   "editorCameraNearPlane": 0.10000000149011612,
   "frameLimitTarget": 60,

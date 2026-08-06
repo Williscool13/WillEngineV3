@@ -412,6 +412,7 @@ struct DDGIParams
     bool bScaleBiasPerCascade{true};
     bool bLocalVolumes{true};
     bool bCascadeSampling{true};
+    bool bWorldVolumeGridCull{true};
     int32_t maxResidentWorldVolumes{100};
     int32_t worldVolumeWarmupBoost{8};
 

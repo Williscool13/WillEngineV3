@@ -95,7 +95,7 @@ static GICageStats GIDeconstructCage(float3 worldPosition, float3 normal, float3
 
         float3 biasedToProbe = probePosition - biasedPosition;
         float distanceToProbe = length(biasedToProbe);
-        float2 moments = rdgTexturesFloat2[visibilityAtlasIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, -biasedToProbe / max(distanceToProbe, 1e-6), volume, DDGI_VISIBILITY_TILE, DDGI_VISIBILITY_INTERIOR), 0);
+        float2 moments = rdgTexturesFloat2[NonUniformResourceIndex(visibilityAtlasIndex)].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, -biasedToProbe / max(distanceToProbe, 1e-6), volume, DDGI_VISIBILITY_TILE, DDGI_VISIBILITY_INTERIOR), 0);
         bool bFired = distanceToProbe > moments.x;
         float chebRatio = 1.0;
         if (bFired) {
@@ -238,16 +238,12 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
                 }
             }
             if (pc.mode == GI_DECONSTRUCT_VOLUME_COVERAGE) {
-                // Authoring aid: green = an authored world volume owns this surface, yellow = its fade band (cascades still mixing in), red = cascade fallback, magenta = nothing covers it. Value tracks coverage so starved pockets inside a volume read dark.
+                // Authoring aid: continuous red -> yellow -> green ramp on localFade (green = an authored world volume owns this surface, yellow = its fade band, red = cascade fallback), magenta = nothing covers it. Continuous so faces sitting at the band edge do not flicker under TAA jitter. Value tracks coverage so starved pockets inside a volume read dark.
                 float lit = max(coverage, 0.05);
                 if (coverage <= 0.01) {
                     color = float3(1.0, 0.0, 1.0);
-                } else if (localFade >= 0.999) {
-                    color = float3(0.0, lit, 0.0);
-                } else if (localFade > 0.0) {
-                    color = float3(lit, lit, 0.0);
                 } else {
-                    color = float3(lit, 0.0, 0.0);
+                    color = float3(saturate(2.0 * (1.0 - localFade)), saturate(2.0 * localFade), 0.0) * lit;
                 }
             } else if (coverage > 0.0) {
                 if (pc.mode == GI_DECONSTRUCT_DDGI_CHEB) {

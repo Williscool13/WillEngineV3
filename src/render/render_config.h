@@ -77,7 +77,7 @@ inline constexpr uint32_t GPU_DEBUG_MAX_CUBES = 131072;
 inline constexpr uint32_t GPU_DEBUG_CUBE_VERTEX_COUNT = 6 * 6;
 
 inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
-inline constexpr int32_t RDG_MAX_PASSES = 256;
+inline constexpr int32_t RDG_MAX_PASSES = 512;
 inline constexpr int32_t RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE = 1 * 1024 * 1024; // 1MB base (doubles as needed)
 
 inline constexpr int32_t BINDLESS_MODEL_BUFFER_COUNT = 16384;

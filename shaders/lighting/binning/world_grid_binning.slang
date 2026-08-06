@@ -5,6 +5,7 @@ import world_grid_interop;
 import binning_common;
 import reflection_probe_common;
 import reflection_probe_interop;
+import ddgi_interop;
 
 // Probe influence volume vs cell AABB. Sphere: point-AABB distance. Box: 15-axis OBB/AABB SAT (RTCD 4.4.1), OBB derived from worldToLocal (rows have length 1/extent_i; center solves Linear*c + t = 0).
 static bool ReflectionProbeIntersectsCellAABB(ReflectionProbeGPU probe, float3 aabbMin, float3 aabbMax)
@@ -184,4 +185,24 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
         }
     }
     pc.worldGridProbeGrid[flatIndex] = bestProbe;
+
+    uint volumeOffset = flatIndex * MAX_DDGI_VOLUMES_PER_WORLD_GRID_CELL;
+    uint volumeCount = 0u;
+    for (uint v = 0u; v < pc.ddgiVolumeCount; v++)
+    {
+        DDGIVolumeParams volume = pc.ddgiVolumes[v];
+        float3 pad = float3(volume.normalBias + volume.viewBias);
+        float3 windowMin = float3(volume.baseCell) * volume.probeSpacing - pad;
+        float3 windowMax = float3(volume.baseCell + int3(volume.probeCount) - 1) * volume.probeSpacing + pad;
+        if (any(windowMin > aabbMax) || any(windowMax < aabbMin)) { continue; }
+
+        if (volumeCount == MAX_DDGI_VOLUMES_PER_WORLD_GRID_CELL)
+        {
+            volumeCount = WORLD_GRID_DDGI_OVERFLOW;
+            break;
+        }
+        pc.worldGridDDGIIndexList[volumeOffset + volumeCount] = pc.ddgiVolumeSlotBase + v;
+        volumeCount++;
+    }
+    pc.worldGridDDGIGrid[flatIndex] = uint2(volumeOffset, volumeCount);
 }

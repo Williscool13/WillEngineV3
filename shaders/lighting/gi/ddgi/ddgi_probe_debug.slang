@@ -9,6 +9,7 @@ import packing_functions;
 // DDGI probe debug: one sphere per probe at its relocated position, L1 SH fitted from the probe's decoded atlas tile; dead probes render flat red, inactive probes flat blue (or hidden).
 // debugMode 1 fits the visibility atlas instead: red = mean distance / miss clamp per direction, green = std/mean; a red-hot lobe is a miss-inflated mean that bypasses the Chebyshev gate.
 // debugMode 2 skips the fit entirely and draws flat volume tint, for reading probe placement and window coverage.
+// debugMode 3 draws flat per-volume update age: green ramp while warming (0 -> DDGI_LOCAL_WARMUP_UPDATES), then black -> white up to DDGI_LOCAL_AGE_CAP; dead/inactive states are ignored so the volume reads uniformly.
 
 [shader("compute")]
 [numthreads(4, 4, 4)]
@@ -25,10 +26,23 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
     if (pc.bOffsetsValid != 0) {
         float4 probeOffset = pc.probeOffsets[probeIndex];
         position += probeOffset.xyz;
-        if (probeOffset.w > DDGI_PROBE_DEAD_BACKFACE_FRACTION) {
+        if (pc.debugMode != 3u && probeOffset.w > DDGI_PROBE_DEAD_BACKFACE_FRACTION) {
             GPUDebugAddSphereFlat(pc.sphereArgs, pc.sphereBuffer, position, radius, float3(1.0, 0.0, 0.0));
             return;
         }
+    }
+
+    if (pc.debugMode == 3u) {
+        float3 color;
+        if (pc.warmupAge < DDGI_LOCAL_WARMUP_UPDATES) {
+            float t = float(pc.warmupAge) / float(DDGI_LOCAL_WARMUP_UPDATES);
+            color = float3(0.0, lerp(0.1, 1.0, t), 0.0);
+        } else {
+            float t = float(pc.warmupAge - DDGI_LOCAL_WARMUP_UPDATES) / float(DDGI_LOCAL_AGE_CAP - DDGI_LOCAL_WARMUP_UPDATES);
+            color = float3(saturate(t));
+        }
+        GPUDebugAddSphereFlat(pc.sphereArgs, pc.sphereBuffer, position, radius, color);
+        return;
     }
 
     if (pc.bActiveValid != 0 && pc.probeActive[probeIndex] == 0) {

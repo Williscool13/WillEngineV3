@@ -50,6 +50,9 @@ SHADER_PUBLIC SHADER_CONST uint32_t DDGI_MAX_RESIDENT_LOCAL_VOLUMES = 100u;
 /** Both kinds share one descriptor array: camera cascades occupy the first entries, resident world volumes the rest. */
 SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_VOLUME_SLOTS = 106u;
 
+SHADER_PUBLIC SHADER_CONST uint32_t DDGI_LOCAL_WARMUP_UPDATES = 16u;
+SHADER_PUBLIC SHADER_CONST uint32_t DDGI_LOCAL_AGE_CAP = 64u;
+
 SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_TILE = 8u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_INTERIOR = 6u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_VISIBILITY_TILE = 16u;
@@ -94,9 +97,12 @@ SHADER_PUBLIC struct DDGICascadeSetGPU
 {
     SHADER_PUBLIC uint cascadeCount;
     SHADER_PUBLIC uint localCount;
-    SHADER_PUBLIC uint pad1;
+    SHADER_PUBLIC uint bVolumeGridValid;
     SHADER_PUBLIC uint pad2;
     SHADER_PUBLIC DDGICascadeDescriptor cascades[DDGI_MAX_VOLUME_SLOTS];
+    SHADER_PUBLIC SHADER_PTR(uint2) volumeGrid;
+    SHADER_PUBLIC SHADER_PTR(uint) volumeIndexList;
+    SHADER_PUBLIC float4 gridCamPos;
 };
 
 #endif //WILL_ENGINE_DDGI_INTEROP_H

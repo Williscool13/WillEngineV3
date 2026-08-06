@@ -301,6 +301,7 @@ nlohmann::json ToJson(const Core::DDGIParams& p)
         {"bScaleBiasPerCascade", p.bScaleBiasPerCascade},
         {"bLocalVolumes", p.bLocalVolumes},
         {"bCascadeSampling", p.bCascadeSampling},
+        {"bWorldVolumeGridCull", p.bWorldVolumeGridCull},
         {"maxResidentWorldVolumes", p.maxResidentWorldVolumes},
         {"worldVolumeWarmupBoost", p.worldVolumeWarmupBoost},
         {"raysPerProbe", p.raysPerProbe},
@@ -350,6 +351,7 @@ void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
     p.bScaleBiasPerCascade = dBool("bScaleBiasPerCascade", p.bScaleBiasPerCascade);
     p.bLocalVolumes = dBool("bLocalVolumes", p.bLocalVolumes);
     p.bCascadeSampling = dBool("bCascadeSampling", p.bCascadeSampling);
+    p.bWorldVolumeGridCull = dBool("bWorldVolumeGridCull", p.bWorldVolumeGridCull);
     p.maxResidentWorldVolumes = dInt("maxResidentWorldVolumes", p.maxResidentWorldVolumes);
     p.worldVolumeWarmupBoost = dInt("worldVolumeWarmupBoost", p.worldVolumeWarmupBoost);
     p.raysPerProbe = dUint("raysPerProbe", p.raysPerProbe);
