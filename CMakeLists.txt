@@ -319,6 +319,29 @@ target_include_directories(bc7enc_rdo PUBLIC extern/bc7enc_rdo)
 target_compile_definitions(bc7enc_rdo PRIVATE MINIZ_HEADER_FILE_ONLY)
 target_link_libraries(bc7enc_rdo PUBLIC miniz)
 
+# BC7E (ISPC-vectorized BC7 encoder)
+find_program(ISPC_EXECUTABLE ispc)
+if (ISPC_EXECUTABLE)
+    set(BC7E_GEN_DIR ${CMAKE_BINARY_DIR}/bc7e)
+    file(MAKE_DIRECTORY ${BC7E_GEN_DIR})
+    if (WIN32)
+        set(BC7E_OBJ ${BC7E_GEN_DIR}/bc7e.obj)
+    else ()
+        set(BC7E_OBJ ${BC7E_GEN_DIR}/bc7e.o)
+    endif ()
+    add_custom_command(
+            OUTPUT ${BC7E_OBJ} ${BC7E_GEN_DIR}/bc7e_ispc.h
+            COMMAND ${ISPC_EXECUTABLE} -O2 ${CMAKE_SOURCE_DIR}/extern/bc7enc_rdo/bc7e.ispc -o ${BC7E_OBJ} -h ${BC7E_GEN_DIR}/bc7e_ispc.h --target=avx2 --opt=fast-math --opt=disable-assertions
+            DEPENDS ${CMAKE_SOURCE_DIR}/extern/bc7enc_rdo/bc7e.ispc
+    )
+    target_sources(bc7enc_rdo PRIVATE ${BC7E_OBJ})
+    target_include_directories(bc7enc_rdo PUBLIC ${BC7E_GEN_DIR})
+    target_compile_definitions(bc7enc_rdo PUBLIC SUPPORT_BC7E=1)
+    message(STATUS "BC7E enabled via ${ISPC_EXECUTABLE}")
+else ()
+    message(STATUS "ispc not found; BC7 encoding falls back to scalar bc7enc")
+endif ()
+
 # Clay UI =====================================
 add_library(clay STATIC
         extern/clay/clay.cpp

@@ -161,19 +161,27 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
         ZoneScopedN("KTXCreateFromMemory");
         ktx_error_code_e result;
 
-        std::ifstream f(cubemapPath.c_str(), std::ios::binary);
-
         Core::HeapArray<uint8_t> compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->dataSize);
-        f.seekg(static_cast<std::streamoff>(outputCubemap->dataOffset));
-        f.read(reinterpret_cast<char*>(compressed.Data()), static_cast<std::streamsize>(outputCubemap->dataSize));
-        if (!f) {
-            SPDLOG_ERROR("Failed to read .wenvmap data: {}", cubemapPath.c_str());
-            return false;
+        {
+            ZoneScopedN("FileRead");
+            std::ifstream f(cubemapPath.c_str(), std::ios::binary);
+            f.seekg(static_cast<std::streamoff>(outputCubemap->dataOffset));
+            f.read(reinterpret_cast<char*>(compressed.Data()), static_cast<std::streamsize>(outputCubemap->dataSize));
+            if (!f) {
+                SPDLOG_ERROR("Failed to read .wenvmap data: {}", cubemapPath.c_str());
+                return false;
+            }
         }
 
         Core::HeapArray<uint8_t> decompressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->uncompressedSize);
-        Engine::Decompress(outputCubemap->compressionType, compressed.Data(), compressed.Size(), decompressed.Data(), outputCubemap->uncompressedSize);
-        result = ktxTexture2_CreateFromMemory(decompressed.Data(), decompressed.Size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+        {
+            ZoneScopedN("Decompress");
+            Engine::Decompress(outputCubemap->compressionType, compressed.Data(), compressed.Size(), decompressed.Data(), outputCubemap->uncompressedSize);
+        }
+        {
+            ZoneScopedN("KTXParse");
+            result = ktxTexture2_CreateFromMemory(decompressed.Data(), decompressed.Size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+        }
 
         if (result != KTX_SUCCESS) {
             SPDLOG_ERROR("Failed to load KTX cubemap: {}", cubemapPath.c_str());

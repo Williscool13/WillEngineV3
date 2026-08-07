@@ -409,17 +409,12 @@ bool TextureGenerateSlot::WriteWTextureFile()
             void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override
             {
                 for (uint32_t mip = range.start; mip < range.end; ++mip) {
+                    ZoneScopedN("EncodeMip");
                     uint32_t mipWidth = std::max(1u, imageExtent.width >> mip);
                     uint32_t mipHeight = std::max(1u, imageExtent.height >> mip);
 
                     utils::image_u8 srcImage(mipWidth, mipHeight);
-                    const uint8_t* rgbaData = (*mipData)[mip].Data();
-                    for (uint32_t y = 0; y < mipHeight; ++y) {
-                        for (uint32_t x = 0; x < mipWidth; ++x) {
-                            const uint8_t* pixel = &rgbaData[(y * mipWidth + x) * 4];
-                            srcImage(x, y).set(pixel[0], pixel[1], pixel[2], pixel[3]);
-                        }
-                    }
+                    memcpy(srcImage.get_pixels().data(), (*mipData)[mip].Data(), static_cast<size_t>(mipWidth) * mipHeight * 4);
 
                     rdo_bc::rdo_bc_encoder encoder;
                     if (!encoder.init(srcImage, *params)) {
