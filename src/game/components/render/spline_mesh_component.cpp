@@ -44,6 +44,7 @@ Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
 
 void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
+    registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<SplineMeshComponent>(entity);
     auto* state = registry.ctx().get<Engine::EngineState*>();
 
@@ -199,10 +200,11 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
     ImGui::PopStyleColor();
 
     if (open) {
-        bool visible = component.modelFlags.x != 0.0f;
-        if (ImGui::Checkbox("Visible##splinemesh", &visible)) { component.modelFlags.x = visible ? 1.0f : 0.0f; }
-        bool probeBakeExclude = component.modelFlags.y == 0.0f;
-        if (ImGui::Checkbox("Probe Bake Exclude##splinemesh", &probeBakeExclude)) { component.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f; }
+        auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
+        bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
+        if (ImGui::Checkbox("Visible##splinemesh", &visible)) { renderFlags.Set(RenderFlagsComponent::VISIBLE, visible); }
+        bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
+        if (ImGui::Checkbox("Probe Bake Exclude##splinemesh", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
 
         bool dirty = false;
 

@@ -76,6 +76,7 @@ void StaticMeshComponent::SetMaterialOverride(uint32_t slot, Engine::MaterialID 
 
 void StaticMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
+    registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<StaticMeshComponent>(entity);
     if (!component.modelId.IsValid()) {
         return;
@@ -101,7 +102,6 @@ bool Component::StaticMeshComponent::CanAdd(const entt::registry& registry, entt
 void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, nlohmann::json& json)
 {
     json["modelId"] = comp.modelId.id;
-    json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
 
     nlohmann::json overrides = nlohmann::json::object();
     for (const auto& ov : comp.materialOverrides) {
@@ -125,10 +125,6 @@ void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, 
 void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, const nlohmann::json& json)
 {
     comp.modelId = Engine::ModelID(json["modelId"].get<uint64_t>());
-    if (json.contains("modelFlags")) {
-        const auto& f = json["modelFlags"];
-        comp.modelFlags = glm::vec4(f[0].get<float>(), f[1].get<float>(), f[2].get<float>(), f[3].get<float>());
-    }
 
     if (json.contains("materialOverrides")) {
         for (const auto& [key, val] : json["materialOverrides"].items()) {
@@ -176,18 +172,19 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
     ImGui::PopStyleColor();
 
     if (open) {
-        bool visible = component.modelFlags.x != 0.0f;
-        bool ddgiContribution = component.modelFlags.z == 0.0f;
+        auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
+        bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
+        bool ddgiContribution = renderFlags.Has(RenderFlagsComponent::DDGI_CONTRIBUTE);
         if (ImGui::Checkbox("Visible", &visible)) {
-            component.modelFlags.x = visible ? 1.0f : 0.0f;
+            renderFlags.Set(RenderFlagsComponent::VISIBLE, visible);
         }
         ImGui::SameLine();
         if (ImGui::Checkbox("DDGI Contribution", &ddgiContribution)) {
-            component.modelFlags.z = ddgiContribution ? 0.0f : 1.0f;
+            renderFlags.Set(RenderFlagsComponent::DDGI_CONTRIBUTE, ddgiContribution);
         }
-        bool probeBakeExclude = component.modelFlags.y == 0.0f;
+        bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
         if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) {
-            component.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f;
+            renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude);
         }
 
         auto* runtime = registry.try_get<MeshRuntime>(entity);

@@ -21,6 +21,7 @@ namespace Game::Component
 {
 void ModuleMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
+    registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<ModuleMeshComponent>(entity);
     auto* state = registry.ctx().get<Engine::EngineState*>();
 
@@ -53,7 +54,6 @@ bool Component::ModuleMeshComponent::CanAdd(const entt::registry& registry, entt
 
 void Component::ModuleMeshComponent::Serialize(const ModuleMeshComponent& comp, nlohmann::json& json)
 {
-    json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
     json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
     json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
 
@@ -78,10 +78,6 @@ void Component::ModuleMeshComponent::Serialize(const ModuleMeshComponent& comp, 
 
 void Component::ModuleMeshComponent::Deserialize(ModuleMeshComponent& comp, const nlohmann::json& json)
 {
-    if (json.contains("modelFlags")) {
-        const auto& f = json["modelFlags"];
-        comp.modelFlags = glm::vec4(f[0].get<float>(), f[1].get<float>(), f[2].get<float>(), f[3].get<float>());
-    }
     if (json.contains("renderOffset")) {
         const auto& o = json["renderOffset"];
         comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
@@ -130,10 +126,11 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
     ImGui::PopStyleColor();
 
     if (open) {
-        bool visible = component.modelFlags.x != 0.0f;
-        if (ImGui::Checkbox("Visible##modulemesh", &visible)) { component.modelFlags.x = visible ? 1.0f : 0.0f; }
-        bool probeBakeExclude = component.modelFlags.y == 0.0f;
-        if (ImGui::Checkbox("Probe Bake Exclude##modulemesh", &probeBakeExclude)) { component.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f; }
+        auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
+        bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
+        if (ImGui::Checkbox("Visible##modulemesh", &visible)) { renderFlags.Set(RenderFlagsComponent::VISIBLE, visible); }
+        bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
+        if (ImGui::Checkbox("Probe Bake Exclude##modulemesh", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
 
         // Parts are script-authored; the editor only re-skins slots
         int32_t maxSlot = -1;

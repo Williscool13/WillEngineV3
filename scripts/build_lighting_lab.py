@@ -111,7 +111,7 @@ MAT["em_warm"]     = emissive("lab_emissive_warm", [1.0, 0.5, 0.15], 4.0)
 # geometry helpers (corner-pivot boxes; render-only unless physics requested)
 # =============================================================================
 def _mesh(entity, ptype_idx, fields, material):
-    entity[PROCEDURAL] = {**fields, "material": material, "modelFlags": [1.0, 1.0, 0.0, 0.0],
+    entity[PROCEDURAL] = {**fields, "material": material,
                           "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0], "type": ptype_idx}
     return entity
 
@@ -169,7 +169,7 @@ def label(entities, name, text, pos, scale=0.9, material=0, rot=(0.0, 0.0, 1.0, 
     toward the camera; align/anchor centre it on `pos`."""
     e = base_entity(name, pos, rot)
     e[TEXT3D] = {"depth": 0.05, "flatness": 0.0005, "fontId": ROBOTO_FONT, "material": material,
-                 "modelFlags": [1.0, 1.0, 0.0, 0.0], "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0],
+                 "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0],
                  "scale": scale, "smoothNormals": True, "text": text, "tracking": 0.05, "align": 1, "anchor": 2}
     entities.append(e)
     return e

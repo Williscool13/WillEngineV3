@@ -44,6 +44,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
 
     RegisterComponent<Component::TransformComponent>(componentRegistry, false, false);
     RegisterComponent<Component::HierarchyComponent>(componentRegistry, true, true);
+    RegisterComponent<Component::RenderFlagsComponent>(componentRegistry, true, true);
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, false, false);
     RegisterComponent<Component::StaticMeshComponent>(componentRegistry, false, false);
     RegisterComponent<Component::StaticMeshPrimitiveComponent>(componentRegistry, false, false);

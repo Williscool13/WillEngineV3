@@ -35,13 +35,14 @@ STABLEID = component_key("StableIdComponent")               # id, sortOrder
 FOLDER = component_key("EntityFolderComponent")             # folderId (0 = root/no folder, always safe)
 HIERARCHY = component_key("HierarchyComponent")             # parentStableId (StringID of parent's StableIdComponent.id)
 SCENE_FOLDER = component_key("SceneFolderComponent")        # folder metadata pseudo-entities: folderId, name, parentFolder
-PROCEDURAL = component_key("ProceduralMeshComponent")       # flattened shape params + material/modelFlags/renderOffset/renderRotation/type
+PROCEDURAL = component_key("ProceduralMeshComponent")       # flattened shape params + material/renderOffset/renderRotation/type
 PHYSICS = component_key("PhysicsBodyDesc")                  # motionType/mass/friction/restitution/motionQuality/layerOverride/.../shapes[]
-TEXT3D = component_key("Text3DComponent")                   # fontId/text/depth/flatness/tracking/scale/smoothNormals/material/modelFlags/renderOffset/renderRotation
+TEXT3D = component_key("Text3DComponent")                   # fontId/text/depth/flatness/tracking/scale/smoothNormals/material/renderOffset/renderRotation
 SPLINE = component_key("SplineMeshComponent")               # profile/railing/spline fields, flattened (see spline_fields())
-MODULE = component_key("ModuleMeshComponent")               # parts[]{type, <shape fields>, offset[3], rotation[wxyz], slot}, slotMaterials[8], modelFlags; see add_module()
-STATIC_MESH = component_key("StaticMeshComponent")          # modelId, modelFlags, materialOverrides{slot:id}, primitiveBlacklist[], renderOffset, renderRotation. ONE entity = one whole model.
-STATIC_MESH_PRIMITIVE = component_key("StaticMeshPrimitiveComponent")  # modelId, primitiveOrdinal, modelFlags, renderOffset, renderRotation
+MODULE = component_key("ModuleMeshComponent")               # parts[]{type, <shape fields>, offset[3], rotation[wxyz], slot}, slotMaterials[8]; see add_module()
+STATIC_MESH = component_key("StaticMeshComponent")          # modelId, materialOverrides{slot:id}, primitiveBlacklist[], renderOffset, renderRotation. ONE entity = one whole model.
+STATIC_MESH_PRIMITIVE = component_key("StaticMeshPrimitiveComponent")  # modelId, primitiveOrdinal, renderOffset, renderRotation
+RENDER_FLAGS = component_key("RenderFlagsComponent")        # flags bitfield: 1=visible, 2=probe bake include, 4=ddgi contribute. Absent entry = all set (engine default); see add_render_flags()
 SPAWN = component_key("PlayerSpawnComponent")               # offset, priority
 LIGHT_DIRECTIONAL = component_key("DirectionalLightComponent")  # color, intensity, priority, angularRadiusDegrees; direction = rotation*(0,0,1), highest priority wins
 LIGHT_AREA = component_key("AreaLightComponent")            # color[3], intensity, halfWidth, halfHeight, range, drawEmissiveSurface; world extent = half*transform.scale, emissive quad = unit XZ plane
@@ -233,7 +234,20 @@ def next_sort():
     _sort[0] += 1
     return _sort[0]
 
-RENDER_DEFAULTS = {"material": 0, "modelFlags": [1.0, 1.0, 0.0, 0.0], "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
+RENDER_DEFAULTS = {"material": 0, "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
+
+RF_VISIBLE = 1
+RF_PROBE_BAKE_INCLUDE = 2
+RF_DDGI_CONTRIBUTE = 4
+
+def add_render_flags(entity, visible=True, probe_bake_include=True, ddgi_contribute=True):
+    """RenderFlagsComponent entry. Only needed for NON-default flags; entities without one
+    get all bits set on load (engine OnConstruct default)."""
+    flags = ((RF_VISIBLE if visible else 0)
+             | (RF_PROBE_BAKE_INCLUDE if probe_bake_include else 0)
+             | (RF_DDGI_CONTRIBUTE if ddgi_contribute else 0))
+    entity[RENDER_FLAGS] = {"flags": flags}
+    return entity
 
 def base_entity(name, pos, rot=(1.0, 0.0, 0.0, 0.0), scale=(1.0, 1.0, 1.0), folder_id=0):
     return {
@@ -394,7 +408,7 @@ def module_part(shape, offset=(0.0, 0.0, 0.0), rotation=(1.0, 0.0, 0.0, 0.0), sl
         raise ValueError(f"module_part: slot {slot} out of range 0..7")
     return {"type": idx, **fields, "offset": list(offset), "rotation": list(rotation), "slot": slot}
 
-def add_module(entity, parts, materials=(), model_flags=(1.0, 1.0, 0.0, 0.0)):
+def add_module(entity, parts, materials=()):
     """Kit piece: up to 32 module_part() shapes baked into ONE content-hashed model with one
     primitive per used material slot; identical part lists dedupe across entities. materials =
     material id per slot (0 or omitted = engine default material) -- re-skin per instance by
@@ -404,7 +418,7 @@ def add_module(entity, parts, materials=(), model_flags=(1.0, 1.0, 0.0, 0.0)):
     if len(parts) > 32:
         raise ValueError(f"add_module: {len(parts)} parts, max is 32")
     mats = [materials[i] if i < len(materials) else 0 for i in range(8)]
-    entity[MODULE] = {"modelFlags": list(model_flags), "renderOffset": [0.0, 0.0, 0.0],
+    entity[MODULE] = {"renderOffset": [0.0, 0.0, 0.0],
                       "renderRotation": [1.0, 0.0, 0.0, 0.0], "slotMaterials": mats, "parts": parts}
     return entity
 
@@ -414,7 +428,7 @@ def add_static_mesh(entity, model_id, lighting_shader=0, shading_shader=0, mater
     each imported material's own shader (imports default to default_pbr, NOT the restir one).
     material_overrides = {slot: material_id} (cap 32); primitive_blacklist = [ordinal, ...] (cap 64).
     No physics; add a PhysicsBodyDesc separately if the model needs collision."""
-    comp = {"modelId": model_id, "modelFlags": [1.0, 1.0, 0.0, 0.0],
+    comp = {"modelId": model_id,
             "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
     if lighting_shader:
         comp["lightingShaderOverride"] = lighting_shader

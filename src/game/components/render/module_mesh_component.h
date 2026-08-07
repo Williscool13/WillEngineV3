@@ -30,7 +30,6 @@ struct ModuleMeshComponent
 
     Engine::ModuleParams params{};
     Core::Array<Engine::MaterialID, Engine::MAX_MODULE_SLOTS> slotMaterials{};
-    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: include in probe bake (nonzero=included, default), z: exclude from DDGI (0=contributes, default), w: free
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 

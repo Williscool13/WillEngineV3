@@ -2,17 +2,11 @@ wprefab
 version 1 0
 id 4933586796549546436
 name Player Ball
-component_count 7
+component_count 8
 end_header
 {
   "16978062943051320070": {
     "material": 15322811231333375334,
-    "modelFlags": [
-      1.0,
-      1.0,
-      1.0,
-      1.0
-    ],
     "radius": 0.5,
     "renderOffset": [
       0.0,
@@ -90,5 +84,8 @@ end_header
   "5268930226829884326": {
     "id": 7821607683974761419,
     "sortOrder": 18204
+  },
+  "13305479425752038259": {
+    "flags": 3
   }
 }

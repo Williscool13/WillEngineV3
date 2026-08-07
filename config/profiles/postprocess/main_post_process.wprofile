@@ -7,7 +7,7 @@
     "bColorGradingEnabled": false,
     "bDitherEnabled": true,
     "bExposureEnabled": true,
-    "bFilmGrainEnabled": false,
+    "bFilmGrainEnabled": true,
     "bMotionBlurEnabled": false,
     "bMotionBlurObjectOnly": true,
     "bPaniniEnabled": false,

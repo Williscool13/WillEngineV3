@@ -9,6 +9,7 @@
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <entt/entt.hpp>
+#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/containers/inline_vector.h"
 #include "engine/material_manager.h"
@@ -24,26 +25,35 @@ struct MultiframeDirtyTransformComponent
     int32_t counter{2};
 };
 
+struct RenderFlagsComponent
+{
+    static constexpr const char* COMPONENT_NAME = "RenderFlagsComponent";
+
+    static constexpr uint32_t VISIBLE = 1u << 0;
+    static constexpr uint32_t PROBE_BAKE_INCLUDE = 1u << 1;
+    static constexpr uint32_t DDGI_CONTRIBUTE = 1u << 2;
+    static constexpr uint32_t DEFAULT_FLAGS = VISIBLE | PROBE_BAKE_INCLUDE | DDGI_CONTRIBUTE;
+
+    uint32_t flags{DEFAULT_FLAGS};
+
+    [[nodiscard]] bool Has(uint32_t bit) const { return (flags & bit) != 0; }
+
+    void Set(uint32_t bit, bool value)
+    {
+        if (value) { flags |= bit; }
+        else { flags &= ~bit; }
+    }
+
+    static void Serialize(const RenderFlagsComponent& comp, nlohmann::json& json);
+    static void Deserialize(RenderFlagsComponent& comp, const nlohmann::json& json);
+};
+
 struct RenderTransformComponent
 {
     glm::mat4 modelMatrix;
     glm::mat4 previousMatrix;
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
-};
-
-// Quad transform for an area light's emissive surface. Spawned off AreaLightComponent (lifetime-linked), rolled each frame in RenderPrepareTransforms.
-struct AreaLightTransformComponent
-{
-    glm::mat4 modelMatrix{1.0f};
-    glm::mat4 previousMatrix{1.0f};
-};
-
-// Sphere transform for a sphere light's emissive surface. Spawned off SphereLightComponent (lifetime-linked), rolled each frame in RenderPrepareTransforms.
-struct SphereLightTransformComponent
-{
-    glm::mat4 modelMatrix{1.0f};
-    glm::mat4 previousMatrix{1.0f};
 };
 
 struct MeshRuntime

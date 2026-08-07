@@ -170,16 +170,15 @@ glm::mat4 Component::ComputeAreaLightQuadMatrix(const TransformComponent& transf
 
 void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
-    glm::mat4 m(1.0f);
-    if (auto* transform = registry.try_get<TransformComponent>(entity)) {
-        m = ComputeAreaLightQuadMatrix(*transform, registry.get<AreaLightComponent>(entity));
-    }
-    registry.emplace_or_replace<AreaLightTransformComponent>(entity, m, m);
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    registry.emplace_or_replace<LightSurfacePendingTag>(entity);
+    state->assetLoad.bPendingModelResolve = true;
 }
 
 void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    registry.remove<AreaLightTransformComponent>(entity);
+    registry.remove<LightSurfacePendingTag>(entity);
+    registry.remove<LightSurfaceRuntime>(entity);
 }
 
 Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -239,16 +238,25 @@ glm::mat4 Component::ComputeSphereLightMatrix(const TransformComponent& transfor
 
 void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
-    glm::mat4 m(1.0f);
-    if (auto* transform = registry.try_get<TransformComponent>(entity)) {
-        m = ComputeSphereLightMatrix(*transform, registry.get<SphereLightComponent>(entity));
-    }
-    registry.emplace_or_replace<SphereLightTransformComponent>(entity, m, m);
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    registry.emplace_or_replace<LightSurfacePendingTag>(entity);
+    state->assetLoad.bPendingModelResolve = true;
 }
 
 void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    registry.remove<SphereLightTransformComponent>(entity);
+    registry.remove<LightSurfacePendingTag>(entity);
+    registry.remove<LightSurfaceRuntime>(entity);
+}
+
+void Component::LightSurfaceRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    auto& runtime = registry.get<LightSurfaceRuntime>(entity);
+    if (!runtime.range.IsValid()) { return; }
+
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    state->meshPrimitiveStore.ReleaseAndFree(ctx->materialManager, runtime.range);
 }
 
 Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

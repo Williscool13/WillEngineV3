@@ -2,7 +2,7 @@ wprefab
 version 1 0
 id 16907205951425301799
 name Barrel
-component_count 7
+component_count 8
 end_header
 {
   "16978062943051320070": {
@@ -72,5 +72,8 @@ end_header
       }
     ]
   },
-  "5268930226829884326": null
+  "5268930226829884326": null,
+  "13305479425752038259": {
+    "flags": 7
+  }
 }

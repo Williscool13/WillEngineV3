@@ -362,7 +362,6 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
 
     Component::StaticMeshComponent meshComp{};
     meshComp.modelId = modelId;
-    meshComp.modelFlags = {1.0f, 1.0f, 0.0f, 0.0f};
     registry.emplace<Component::StaticMeshComponent>(entity, std::move(meshComp));
 
     spawned.PushBack(entity);
@@ -393,9 +392,11 @@ entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity pare
 
     Component::StaticMeshPrimitiveComponent childMesh{};
     childMesh.modelId = parentComp.modelId;
-    childMesh.modelFlags = parentComp.modelFlags;
     childMesh.primitiveOrdinal = primitiveOrdinal;
     registry.emplace<Component::StaticMeshPrimitiveComponent>(child, childMesh);
+    if (auto* parentFlags = registry.try_get<Component::RenderFlagsComponent>(parent)) {
+        registry.emplace_or_replace<Component::RenderFlagsComponent>(child, *parentFlags);
+    }
 
     if (!parentComp.primitiveBlacklist.Contains(primitiveOrdinal)) { parentComp.primitiveBlacklist.PushBack(primitiveOrdinal); }
     registry.emplace_or_replace<Component::StaticMeshLoadingTag>(parent);

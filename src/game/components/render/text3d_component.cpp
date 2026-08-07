@@ -52,6 +52,7 @@ void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::
 
 void Text3DComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
+    registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<Text3DComponent>(entity);
     LoadText3DFont(component, registry, entity);
 
@@ -91,7 +92,6 @@ void Component::Text3DComponent::Serialize(const Text3DComponent& comp, nlohmann
     json["align"] = static_cast<uint8_t>(comp.align);
     json["anchor"] = static_cast<uint8_t>(comp.anchor);
     json["material"] = comp.material.id;
-    json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
     json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
     json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
 }
@@ -110,10 +110,6 @@ void Component::Text3DComponent::Deserialize(Text3DComponent& comp, const nlohma
     if (json.contains("align")) { comp.align = static_cast<Engine::Text3DAlign>(json["align"].get<uint8_t>()); }
     if (json.contains("anchor")) { comp.anchor = static_cast<Engine::Text3DAnchor>(json["anchor"].get<uint8_t>()); }
     comp.material = Engine::MaterialID(json["material"].get<uint64_t>());
-    if (json.contains("modelFlags")) {
-        const auto& f = json["modelFlags"];
-        comp.modelFlags = glm::vec4(f[0].get<float>(), f[1].get<float>(), f[2].get<float>(), f[3].get<float>());
-    }
     if (json.contains("renderOffset")) {
         const auto& o = json["renderOffset"];
         comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
@@ -145,13 +141,14 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
         ImGui::TextDisabled("Generating mesh...");
     }
 
-    bool visible = comp.modelFlags.x != 0.0f;
-    bool ddgiContribution = comp.modelFlags.z == 0.0f;
-    if (ImGui::Checkbox("Visible##text3d", &visible)) { comp.modelFlags.x = visible ? 1.0f : 0.0f; }
+    auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
+    bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
+    bool ddgiContribution = renderFlags.Has(RenderFlagsComponent::DDGI_CONTRIBUTE);
+    if (ImGui::Checkbox("Visible##text3d", &visible)) { renderFlags.Set(RenderFlagsComponent::VISIBLE, visible); }
     ImGui::SameLine();
-    if (ImGui::Checkbox("DDGI Contribution##text3d", &ddgiContribution)) { comp.modelFlags.z = ddgiContribution ? 0.0f : 1.0f; }
-    bool probeBakeExclude = comp.modelFlags.y == 0.0f;
-    if (ImGui::Checkbox("Probe Bake Exclude##text3d", &probeBakeExclude)) { comp.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f; }
+    if (ImGui::Checkbox("DDGI Contribution##text3d", &ddgiContribution)) { renderFlags.Set(RenderFlagsComponent::DDGI_CONTRIBUTE, ddgiContribution); }
+    bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
+    if (ImGui::Checkbox("Probe Bake Exclude##text3d", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
 
     ImGui::BeginDisabled(busy);
 

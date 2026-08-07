@@ -14,6 +14,9 @@
 
 namespace Engine
 {
+class MaterialManager;
+struct StaticModel;
+
 struct MeshPrimitiveInstance
 {
     uint32_t primitiveIndex{0};
@@ -29,7 +32,7 @@ inline constexpr uint32_t MAX_MESH_PRIMITIVE_INSTANCES = 256 * 1024;
 
 
 /**
- * Shared store of flattened mesh primitives (static, static-primitive, procedural, spline, text3d). A RangeAllocator hands out one contiguous run per entity. Callers own material lifetimes and GPU uploads. Not thread-safe.
+ * Shared store of flattened mesh primitives (static, static-primitive, procedural, spline, text3d, light surfaces). A RangeAllocator hands out one contiguous run per entity. Raw Allocate/Free leave material lifetimes to callers; AllocateSingleMeshRange/ReleaseAndFree manage the per-entry material refs. Callers own GPU uploads. Not thread-safe.
  */
 class MeshPrimitiveStore
 {
@@ -41,6 +44,12 @@ public:
     Range Allocate(uint32_t count) { return ranges_.Allocate(count); }
 
     void Free(Range range) { ranges_.Free(range); }
+
+    /** Range over model mesh[0]'s primitives with a uniform material (acquired per entry) and identity transforms. Invalid range on an empty model or full store. */
+    Range AllocateSingleMeshRange(MaterialManager* materialManager, StaticModel* model, MaterialID material);
+
+    /** Releases each entry's material ref, frees the range, and invalidates it. No-op on an invalid range. */
+    void ReleaseAndFree(MaterialManager* materialManager, Range& range);
 
     MeshPrimitiveInstance* Get(Range range) { return range.IsValid() ? &instances_[range.offset] : nullptr; }
 

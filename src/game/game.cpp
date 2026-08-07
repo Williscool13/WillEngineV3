@@ -309,6 +309,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (ctx->frameStatus.bAssetsChangedThisFrame || state->assetLoad.bPendingModelResolve) {
         state->assetLoad.bPendingModelResolve = false;
         Game::StaticMeshLoadResolve(ctx, state);
+        Game::LightSurfaceResolve(ctx, state);
         Game::ReflectionProbeLoadResolve(ctx, state);
         Game::StaticMeshPrimitiveLoadResolve(ctx, state);
         Game::ProceduralMeshLoadResolve(ctx, state);

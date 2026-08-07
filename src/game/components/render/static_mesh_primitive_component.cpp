@@ -48,6 +48,7 @@ void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, entt::regi
 
 void StaticMeshPrimitiveComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
+    registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<StaticMeshPrimitiveComponent>(entity);
     if (!component.modelId.IsValid() || component.primitiveOrdinal == ~0u) {
         return;
@@ -70,7 +71,6 @@ void StaticMeshPrimitiveComponent::Serialize(const StaticMeshPrimitiveComponent&
 {
     json["modelId"] = comp.modelId.id;
     json["primitiveOrdinal"] = comp.primitiveOrdinal;
-    json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
     if (comp.materialOverride.IsValid()) { json["materialOverride"] = comp.materialOverride.id; }
     if (comp.shadingShaderOverride) { json["shadingShaderOverride"] = comp.shadingShaderOverride.id; }
     if (comp.lightingShaderOverride) { json["lightingShaderOverride"] = comp.lightingShaderOverride.id; }
@@ -82,10 +82,6 @@ void StaticMeshPrimitiveComponent::Deserialize(StaticMeshPrimitiveComponent& com
 {
     comp.modelId = Engine::ModelID(json["modelId"].get<uint64_t>());
     comp.primitiveOrdinal = json["primitiveOrdinal"].get<uint32_t>();
-    if (json.contains("modelFlags")) {
-        const auto& f = json["modelFlags"];
-        comp.modelFlags = glm::vec4(f[0].get<float>(), f[1].get<float>(), f[2].get<float>(), f[3].get<float>());
-    }
     if (json.contains("materialOverride")) { comp.materialOverride = Engine::MaterialID(json["materialOverride"].get<uint64_t>()); }
     if (json.contains("shadingShaderOverride")) { comp.shadingShaderOverride = StringID(json["shadingShaderOverride"].get<uint64_t>()); }
     if (json.contains("lightingShaderOverride")) { comp.lightingShaderOverride = StringID(json["lightingShaderOverride"].get<uint64_t>()); }
@@ -112,10 +108,11 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
     ImGui::PopStyleColor();
 
     if (open) {
-        bool visible = component.modelFlags.x != 0.0f;
-        if (ImGui::Checkbox("Visible", &visible)) { component.modelFlags.x = visible ? 1.0f : 0.0f; }
-        bool probeBakeExclude = component.modelFlags.y == 0.0f;
-        if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) { component.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f; }
+        auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
+        bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
+        if (ImGui::Checkbox("Visible", &visible)) { renderFlags.Set(RenderFlagsComponent::VISIBLE, visible); }
+        bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
+        if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
 
         if (!component.modelId.IsValid()) {
             if (ImGui::BeginCombo("Select Model", "")) {

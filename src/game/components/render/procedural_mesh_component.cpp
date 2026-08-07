@@ -22,6 +22,7 @@ namespace Game::Component
 {
 void ProceduralMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
+    registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<ProceduralMeshComponent>(entity);
     RecreateProceduralMesh(component, registry, entity);
 }
@@ -69,7 +70,6 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
 {
     json["type"] = comp.params.index();
     json["material"] = comp.material.id;
-    json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
     json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
     json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
 
@@ -256,10 +256,6 @@ void Component::SerializeProceduralShape(const Engine::ProceduralParams& params,
 void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& comp, const nlohmann::json& json)
 {
     comp.material = Engine::MaterialID(json["material"].get<uint64_t>());
-    if (json.contains("modelFlags")) {
-        const auto& f = json["modelFlags"];
-        comp.modelFlags = glm::vec4(f[0].get<float>(), f[1].get<float>(), f[2].get<float>(), f[3].get<float>());
-    }
     if (json.contains("renderOffset")) {
         const auto& o = json["renderOffset"];
         comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
@@ -604,18 +600,19 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
     ImGui::PopStyleColor();
 
     if (open) {
-        bool visible = component.modelFlags.x != 0.0f;
-        bool ddgiContribution = component.modelFlags.z == 0.0f;
+        auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
+        bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
+        bool ddgiContribution = renderFlags.Has(RenderFlagsComponent::DDGI_CONTRIBUTE);
         if (ImGui::Checkbox("Visible##proceduralmesh", &visible)) {
-            component.modelFlags.x = visible ? 1.0f : 0.0f;
+            renderFlags.Set(RenderFlagsComponent::VISIBLE, visible);
         }
         ImGui::SameLine();
         if (ImGui::Checkbox("DDGI Contribution##proceduralmesh", &ddgiContribution)) {
-            component.modelFlags.z = ddgiContribution ? 0.0f : 1.0f;
+            renderFlags.Set(RenderFlagsComponent::DDGI_CONTRIBUTE, ddgiContribution);
         }
-        bool probeBakeExclude = component.modelFlags.y == 0.0f;
+        bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
         if (ImGui::Checkbox("Probe Bake Exclude##proceduralmesh", &probeBakeExclude)) {
-            component.modelFlags.y = probeBakeExclude ? 0.0f : 1.0f;
+            renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude);
         }
 
         if (std::holds_alternative<std::monostate>(component.params)) {

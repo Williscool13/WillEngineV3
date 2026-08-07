@@ -101,7 +101,7 @@ entities = []
 def wall(name, corner, size, mat):
     e = base_entity(name, corner)
     fields, idx = box_params(size[0], size[1], size[2])
-    e[PROCEDURAL] = {**fields, "material": mat, "modelFlags": [1.0, 1.0, 0.0, 0.0],
+    e[PROCEDURAL] = {**fields, "material": mat,
                      "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0], "type": idx}
     entities.append(e)
 
@@ -120,7 +120,7 @@ wall("Wall -Z cyan",    (-H - T, -H, -H - T), (2 * (H + T), 2 * H, T),   MAT["-Z
 def label(name, text, pos, rot):
     e = base_entity(name, pos, rot)
     e[TEXT3D] = {"depth": 0.05, "flatness": 0.0005, "fontId": ROBOTO_FONT, "material": MAT["label"],
-                 "modelFlags": [1.0, 1.0, 0.0, 0.0], "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0],
+                 "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0],
                  "scale": 1.4, "smoothNormals": True, "text": text, "tracking": 0.05, "align": 1, "anchor": 2}
     entities.append(e)
 
@@ -134,14 +134,15 @@ label("Label -Z", "-Z", (0.0, 0.0, -IN), (1.0, 0.0, 0.0, 0.0)) # identity, faces
 label("Label +Y", "+Y", (0.0,  IN, 0.0), ( S,  S, 0.0, 0.0))   # +90 about X, faces -Y, glyph-up = +Z
 label("Label -Y", "-Y", (0.0, -IN, 0.0), ( S, -S, 0.0, 0.0))   # -90 about X, faces +Y, glyph-up = -Z
 
-# Viewing spheres: excluded from the probe bake (modelFlags.y = 0) so the capture
+# Viewing spheres: excluded from the probe bake (probe_bake_include=False) so the capture
 # stays walls-only, but visible live to inspect the probe's reflections on a
 # mirror and at a mip-blurring roughness. Place the probe entity at the origin.
 def view_sphere(name, pos, mat):
     e = base_entity(name, pos)
     fields, idx = sphere_params(1.0, 32, 32)
-    e[PROCEDURAL] = {**fields, "material": mat, "modelFlags": [1.0, 0.0, 0.0, 0.0],
+    e[PROCEDURAL] = {**fields, "material": mat,
                      "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0], "type": idx}
+    wa.add_render_flags(e, probe_bake_include=False)
     entities.append(e)
 
 view_sphere("View Sphere Mirror", (-1.5, -2.8, 0.0), MAT_MIRROR)

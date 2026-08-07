@@ -6,6 +6,7 @@
 #include "render/static_mesh_component.h"
 
 #include <entt/entt.hpp>
+#include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
 
@@ -15,20 +16,23 @@
 
 namespace Game::Component
 {
+void RenderFlagsComponent::Serialize(const RenderFlagsComponent& comp, nlohmann::json& json)
+{
+    json["flags"] = comp.flags;
+}
+
+void RenderFlagsComponent::Deserialize(RenderFlagsComponent& comp, const nlohmann::json& json)
+{
+    comp.flags = json.value("flags", DEFAULT_FLAGS);
+}
+
 void MeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get<MeshRuntime>(entity);
 
-    if (runtime.range.IsValid()) {
-        Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
-        for (uint32_t i = 0; i < runtime.range.count; ++i) {
-            ctx->materialManager->ReleaseMaterial(store[runtime.range.offset + i].materialID);
-        }
-        store.Free(runtime.range);
-        runtime.range = {};
-    }
+    state->meshPrimitiveStore.ReleaseAndFree(ctx->materialManager, runtime.range);
     if (runtime.modelHandle.IsValid()) {
         ctx->assetManager->UnloadModel(runtime.modelHandle);
     }

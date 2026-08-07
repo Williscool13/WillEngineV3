@@ -44,6 +44,7 @@ void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
 void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);

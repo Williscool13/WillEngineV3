@@ -28,8 +28,6 @@ struct StaticMeshComponent
 
     struct MaterialOverride { uint32_t slot; Engine::MaterialID id; };
 
-    Vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: include in probe bake (nonzero=included, default; 0=excluded, legacy scenes store 1), z: exclude from DDGI (0=contributes, default), w: free
-
     Engine::ModelID modelId{};
     Core::InlineVector<MaterialOverride, MaxMaterialOverrides> materialOverrides{};
     Core::InlineVector<uint32_t, MaxBlacklist> primitiveBlacklist{};
