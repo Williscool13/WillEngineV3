@@ -29,12 +29,9 @@ inline glm::quat ToGLM(JPH::QuatArg q)
 
 inline glm::mat4 ToGLM(JPH::Mat44Arg m)
 {
-    return glm::mat4(
-        m(0, 0), m(1, 0), m(2, 0), m(3, 0),
-        m(0, 1), m(1, 1), m(2, 1), m(3, 1),
-        m(0, 2), m(1, 2), m(2, 2), m(3, 2),
-        m(0, 3), m(1, 3), m(2, 3), m(3, 3)
-    );
+    glm::mat4 out;
+    m.StoreFloat4x4(reinterpret_cast<JPH::Float4*>(&out));
+    return out;
 }
 
 inline glm::vec4 ToGLM(JPH::ColorArg c)
@@ -59,12 +56,7 @@ inline JPH::Quat ToJolt(const glm::quat& q)
 
 inline JPH::Mat44 ToJolt(const glm::mat4& m)
 {
-    return JPH::Mat44(
-        JPH::Vec4(m[0][0], m[1][0], m[2][0], m[3][0]),
-        JPH::Vec4(m[0][1], m[1][1], m[2][1], m[3][1]),
-        JPH::Vec4(m[0][2], m[1][2], m[2][2], m[3][2]),
-        JPH::Vec4(m[0][3], m[1][3], m[2][3], m[3][3])
-    );
+    return JPH::Mat44::sLoadFloat4x4(reinterpret_cast<const JPH::Float4*>(&m));
 }
 
 inline JPH::Color ToJolt(const glm::vec4& c)

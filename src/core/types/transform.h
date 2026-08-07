@@ -15,7 +15,15 @@ struct Transform
     Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     Vec3 scale{1.0f, 1.0f, 1.0f};
 
-    [[nodiscard]] glm::mat4 GetMatrix() const { return glm::translate(Mat4(1.0f), translation) * mat4_cast(rotation) * glm::scale(Mat4(1.0f), scale); }
+    [[nodiscard]] glm::mat4 GetMatrix() const
+    {
+        Mat4 m = mat4_cast(rotation);
+        m[0] *= scale.x;
+        m[1] *= scale.y;
+        m[2] *= scale.z;
+        m[3] = glm::vec4(translation, 1.0f);
+        return m;
+    }
 
     static const Transform IDENTITY;
 };

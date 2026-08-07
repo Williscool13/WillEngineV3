@@ -152,13 +152,14 @@ Engine::MeshBounds CalculateMeshBounds(Core::Span<Engine::FullVertex> vertices)
     }
 
     Vec3 center = result.aabb.Center();
-    float radius = 0.f;
+    float radiusSq = 0.f;
     for (const auto& v : vertices) {
-        radius = glm::max(radius, glm::length(v.position - center));
+        const Vec3 d = v.position - center;
+        radiusSq = glm::max(radiusSq, glm::dot(d, d));
     }
 
     result.sphere.center = center;
-    result.sphere.radius = radius;
+    result.sphere.radius = glm::sqrt(radiusSq);
     result.aabbExtents = result.aabb.max - result.aabb.min;
 
     return result;

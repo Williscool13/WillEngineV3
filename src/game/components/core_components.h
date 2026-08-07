@@ -58,7 +58,7 @@ struct TransformComponent
 
 inline glm::mat4 GetMatrix(const TransformComponent& transform)
 {
-    return glm::translate(glm::mat4(1.0f), transform.translation) * mat4_cast(transform.rotation) * glm::scale(glm::mat4(1.0f), transform.scale);
+    return Transform{transform.translation, transform.rotation, transform.scale}.GetMatrix();
 }
 
 /**
@@ -84,7 +84,7 @@ struct WorldTransformComponent
 
 inline glm::mat4 GetMatrix(const WorldTransformComponent& transform)
 {
-    return glm::translate(glm::mat4(1.0f), transform.translation) * mat4_cast(transform.rotation) * glm::scale(glm::mat4(1.0f), transform.scale);
+    return Transform{transform.translation, transform.rotation, transform.scale}.GetMatrix();
 }
 
 /**

@@ -234,37 +234,6 @@ void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartiti
     vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
 }
 
-struct ProbeAssembleFaceOrientation
-{
-    bool flipX;
-    bool flipY;
-    int32_t rotateQuarters;
-};
-
-static const ProbeAssembleFaceOrientation PROBE_ASSEMBLE_FACE_ORIENTATIONS[6] = {
-    {false, true, 0},
-    {false, true, 0},
-    {false, true, 0},
-    {false, true, 0},
-    {false, true, 0},
-    {false, true, 0},
-};
-
-static void ProbeFaceRemap(const ProbeAssembleFaceOrientation& o, uint32_t x, uint32_t y, uint32_t n, uint32_t& sx, uint32_t& sy)
-{
-    uint32_t rx = x;
-    uint32_t ry = y;
-    for (int32_t r = 0; r < o.rotateQuarters; ++r) {
-        const uint32_t t = rx;
-        rx = ry;
-        ry = n - 1 - t;
-    }
-    if (o.flipX) { rx = n - 1 - rx; }
-    if (o.flipY) { ry = n - 1 - ry; }
-    sx = rx;
-    sy = ry;
-}
-
 bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait)
 {
     ZoneScopedN("AssembleProbeCubemapAndGenerate");
@@ -297,18 +266,10 @@ bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer
         }
         const uint16_t* src = probeFaces[face].Data();
         uint16_t* dst = stagingBase + faceTexels * 4 * face;
-        const ProbeAssembleFaceOrientation& orient = PROBE_ASSEMBLE_FACE_ORIENTATIONS[face];
+        // Every face orientation reduces to a vertical flip of the captured image
+        const size_t rowElems = static_cast<size_t>(S) * 4;
         for (uint32_t y = 0; y < S; ++y) {
-            for (uint32_t x = 0; x < S; ++x) {
-                uint32_t sx, sy;
-                ProbeFaceRemap(orient, x, y, S, sx, sy);
-                const size_t srcIdx = (static_cast<size_t>(sy) * S + sx) * 4;
-                const size_t dstIdx = (static_cast<size_t>(y) * S + x) * 4;
-                dst[dstIdx + 0] = src[srcIdx + 0];
-                dst[dstIdx + 1] = src[srcIdx + 1];
-                dst[dstIdx + 2] = src[srcIdx + 2];
-                dst[dstIdx + 3] = src[srcIdx + 3];
-            }
+            memcpy(dst + y * rowElems, src + (S - 1 - y) * rowElems, rowElems * sizeof(uint16_t));
         }
     }
 

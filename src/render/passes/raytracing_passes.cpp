@@ -67,13 +67,17 @@ void SetupTLASBuild(RenderGraph& graph,
         if (src.blasDeviceAddress == 0) { continue; }
         const Model& model = viewFamily.modelMatrices[src.modelIndex];
 
-        // VkTransformMatrixKHR is row-major 3x4; glm mat4 is column-major, so transpose
-        const glm::mat4 m = glm::transpose(model.modelMatrix);
-        VkTransformMatrixKHR transform{};
-        memcpy(&transform, &m, sizeof(VkTransformMatrixKHR));
+        // VkTransformMatrixKHR is row-major 3x4; glm mat4 is column-major, so transpose and drop row 3
+        __m128 r0 = _mm_loadu_ps(&model.modelMatrix[0][0]);
+        __m128 r1 = _mm_loadu_ps(&model.modelMatrix[1][0]);
+        __m128 r2 = _mm_loadu_ps(&model.modelMatrix[2][0]);
+        __m128 r3 = _mm_loadu_ps(&model.modelMatrix[3][0]);
+        _MM_TRANSPOSE4_PS(r0, r1, r2, r3);
 
         VkAccelerationStructureInstanceKHR& inst = instanceData[instanceSlot++];
-        inst.transform = transform;
+        _mm_storeu_ps(inst.transform.matrix[0], r0);
+        _mm_storeu_ps(inst.transform.matrix[1], r1);
+        _mm_storeu_ps(inst.transform.matrix[2], r2);
         inst.instanceCustomIndex = static_cast<uint32_t>(i);
         const bool isLightProxy = src.lightIndex != 0xFFFFFFFFu;
         uint32_t mask = isLightProxy ? INSTANCE_MASK_LIGHT_PROXY : INSTANCE_MASK_OCCLUDER;
