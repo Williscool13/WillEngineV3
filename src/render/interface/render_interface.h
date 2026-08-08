@@ -130,7 +130,7 @@ struct ScreenFadeState
 
 /**
  * 1 Unit of rendering for the renderer. Represents 1 primitive for a mesh (multiple primitives can share the same model matrix, hence the modelIndex).
- * Slot-indexed by stable MeshPrimitiveStore index; a default-constructed entry is a dead slot.
+ * Slot-indexed by stable InstanceStore index; a default-constructed entry is a dead slot.
  */
 struct PrimitiveInstanceData
 {

@@ -61,8 +61,10 @@ add_library(engine STATIC
         resources/model/model_types.h
         resources/model/static_model.h
         resources/model/model_format.cpp
-        resources/model/mesh_primitive_store.h
-        resources/model/mesh_primitive_store.cpp
+        resources/model/instance_store.h
+        resources/model/instance_store.cpp
+        resources/model/model_store.h
+        resources/model/model_store.cpp
         resources/physics/physics_collider_asset.h
         resources/physics/collider_generation.h
         resources/physics/collider_generation.cpp

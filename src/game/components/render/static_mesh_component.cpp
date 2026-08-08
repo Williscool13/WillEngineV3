@@ -229,7 +229,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             return {.requestRemoval = remove};
         }
 
-        Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
+        Engine::InstanceStore& store = state->instanceStore;
         const uint32_t primCount = runtime->range.count;
         ImGui::Text("Primitive Count: %u", primCount);
 

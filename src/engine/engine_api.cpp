@@ -117,7 +117,8 @@ EngineState::EngineState(Core::TlsfAllocator* allocator)
       editor(allocator),
       input(allocator)
 {
-    meshPrimitiveStore.Init(MAX_MESH_PRIMITIVE_INSTANCES, allocator, Core::AllocTag::RenderMesh);
+    instanceStore.Init(MAX_INSTANCE_SLOTS, allocator, Core::AllocTag::RenderMesh);
+    modelStore.Init(MAX_MODEL_SLOTS, allocator, Core::AllocTag::RenderMesh);
 
     const uint64_t clayMemorySize = Clay_MinMemorySize();
     void* clayMemory = allocator->Alloc(clayMemorySize, Core::AllocTag::Clay);

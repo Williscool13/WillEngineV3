@@ -2,7 +2,7 @@
 // Created by William on 2026-07-01.
 //
 
-#include "engine/resources/model/mesh_primitive_store.h"
+#include "engine/resources/model/instance_store.h"
 
 #include "engine/material_manager.h"
 #include "engine/resources/model/static_model.h"
@@ -10,13 +10,13 @@
 
 namespace Engine
 {
-void MeshPrimitiveStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::AllocTag tag)
+void InstanceStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::AllocTag tag)
 {
-    instances_ = Core::HeapArray<MeshPrimitiveInstance>(alloc, tag, capacity);
-    ranges_.Init(capacity, alloc, tag, "MeshPrimitiveStore");
+    instances_ = Core::HeapArray<InstanceSource>(alloc, tag, capacity);
+    ranges_.Init(capacity, alloc, tag, "InstanceStore");
 }
 
-MeshPrimitiveStore::Range MeshPrimitiveStore::AllocateSingleMeshRange(MaterialManager* materialManager, StaticModel* model, MaterialID material)
+InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* materialManager, StaticModel* model, MaterialID material, uint32_t modelSlot)
 {
     if (model->modelData.meshes.IsEmpty()) { return {}; }
     MeshInformation& mesh = model->modelData.meshes[0];
@@ -25,7 +25,7 @@ MeshPrimitiveStore::Range MeshPrimitiveStore::AllocateSingleMeshRange(MaterialMa
 
     Range range = ranges_.Allocate(count);
     if (!range.IsValid()) {
-        LOG_ERROR(Engine, "Mesh primitive store full; cannot allocate single-mesh range for model ({})", model->name.c_str());
+        LOG_ERROR(Engine, "Instance store full; cannot allocate single-mesh range for model ({})", model->name.c_str());
         return {};
     }
 
@@ -37,6 +37,7 @@ MeshPrimitiveStore::Range MeshPrimitiveStore::AllocateSingleMeshRange(MaterialMa
             .originalMaterialIndex = -1,
             .sourceNodeIndex = 0,
             .modelPrimitiveOrdinal = j,
+            .modelSlot = modelSlot,
             .materialID = material,
             .blasDeviceAddress = primitive.blasDeviceAddress,
             .modelSpaceTransform = Mat4(1.0f),
@@ -47,7 +48,7 @@ MeshPrimitiveStore::Range MeshPrimitiveStore::AllocateSingleMeshRange(MaterialMa
     return range;
 }
 
-void MeshPrimitiveStore::ReleaseAndFree(MaterialManager* materialManager, Range& range)
+void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, Range& range)
 {
     if (!range.IsValid()) { return; }
     for (uint32_t i = 0; i < range.count; ++i) {

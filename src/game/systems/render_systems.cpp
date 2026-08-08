@@ -473,13 +473,20 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             m = areaLight ? Component::ComputeAreaLightQuadMatrix(*transform, *areaLight) : Component::ComputeSphereLightMatrix(*transform, *sphereLight);
         }
 
-        state->registry.remove<Component::LightSurfaceRuntime>(entity); // frees any stale range via OnDestroy
-        const Engine::MeshPrimitiveStore::Range range = state->meshPrimitiveStore.AllocateSingleMeshRange(ctx->materialManager, model, materialID);
-        if (!range.IsValid()) {
+        state->registry.remove<Component::LightSurfaceRuntime>(entity); // frees any stale ranges via OnDestroy
+        Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
+        if (!modelRange.IsValid()) {
             resolved.PushBack(entity);
             continue;
         }
-        state->registry.emplace<Component::LightSurfaceRuntime>(entity, range, m, m, materialID);
+        const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, model, materialID, modelRange.offset);
+        if (!range.IsValid()) {
+            state->modelStore.Free(modelRange);
+            resolved.PushBack(entity);
+            continue;
+        }
+        state->modelStore.Models()[modelRange.offset] = {m, m};
+        state->registry.emplace<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
         resolved.PushBack(entity);
     }
 
@@ -503,9 +510,10 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (!runtime) continue;
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
-        Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
+        Engine::InstanceStore& store = state->instanceStore;
 
         store.ReleaseAndFree(materialManager, runtime->range);
+        state->modelStore.Free(runtime->modelRange);
 
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
@@ -526,6 +534,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         };
 
         uint32_t totalPrimitives = 0;
+        uint32_t contributingNodes = 0;
 
         //
         {
@@ -534,10 +543,15 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                 const uint32_t mi = nodes[n].meshIndex;
                 if (mi == ~0u || mi >= meshes.Size()) { continue; }
                 const size_t nodePrimCount = meshes[mi].primitiveProperties.Size();
+                uint32_t nodeIncluded = 0;
                 for (size_t j = 0; j < nodePrimCount; ++j) {
-                    if (included(ordinal)) { ++totalPrimitives; }
+                    if (included(ordinal)) {
+                        ++totalPrimitives;
+                        ++nodeIncluded;
+                    }
                     ++ordinal;
                 }
+                if (nodeIncluded > 0) { ++contributingNodes; }
             }
         }
 
@@ -546,9 +560,16 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             continue;
         }
 
-        Engine::MeshPrimitiveStore::Range range = store.Allocate(totalPrimitives);
+        Engine::ModelStore::Range modelRange = state->modelStore.Allocate(contributingNodes);
+        if (!modelRange.IsValid()) {
+            resolved.PushBack(entity);
+            continue;
+        }
+
+        Engine::InstanceStore::Range range = store.Allocate(totalPrimitives);
         if (!range.IsValid()) {
-            LOG_ERROR(Game, "Static primitive store full; cannot flatten model ({}) needing {} primitives", model->name.c_str(), totalPrimitives);
+            LOG_ERROR(Game, "Instance store full; cannot flatten model ({}) needing {} primitives", model->name.c_str(), totalPrimitives);
+            state->modelStore.Free(modelRange);
             resolved.PushBack(entity);
             continue;
         }
@@ -561,6 +582,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         uint32_t writeIndex = range.offset;
         uint32_t ordinal = 0;
+        uint32_t nodeModelSlot = modelRange.offset - 1;
         for (uint32_t n = 0; n < nodes.Size(); ++n) {
             const uint32_t mi = nodes[n].meshIndex;
             if (mi == ~0u || mi >= meshes.Size()) { continue; }
@@ -568,9 +590,14 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             const glm::mat4 nodeModelSpace = ComposeNodeModelSpace(nodes, n);
             Engine::MeshInformation& mesh = meshes[mi];
 
+            bool bNodeSlotAssigned = false;
             for (size_t j = 0; j < mesh.primitiveProperties.Size(); ++j) {
                 const uint32_t thisOrdinal = ordinal++;
                 if (!included(thisOrdinal)) { continue; }
+                if (!bNodeSlotAssigned) {
+                    ++nodeModelSlot;
+                    bNodeSlotAssigned = true;
+                }
 
                 Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
 
@@ -599,6 +626,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                     .originalMaterialIndex = primitive.materialIndex,
                     .sourceNodeIndex = n,
                     .modelPrimitiveOrdinal = thisOrdinal,
+                    .modelSlot = nodeModelSlot,
                     .materialID = matID,
                     .blasDeviceAddress = primitive.blasDeviceAddress,
                     .modelSpaceTransform = nodeModelSpace,
@@ -609,6 +637,8 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         runtime->range = range;
+        runtime->modelRange = modelRange;
+        state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
         resolved.PushBack(entity);
     }
 
@@ -656,7 +686,8 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
         if (!runtime) continue;
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
-        state->meshPrimitiveStore.ReleaseAndFree(materialManager, runtime->range);
+        state->instanceStore.ReleaseAndFree(materialManager, runtime->range);
+        state->modelStore.Free(runtime->modelRange);
 
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
@@ -710,10 +741,16 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
             matID = materialManager->CreateImmutableMaterial(applyShaderOverrides(model->modelData.materials[targetPrim->materialIndex]));
         }
 
-        Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
-        Engine::MeshPrimitiveStore::Range range = store.Allocate(1);
+        Engine::InstanceStore& store = state->instanceStore;
+        Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
+        if (!modelRange.IsValid()) {
+            resolved.PushBack(entity);
+            continue;
+        }
+        Engine::InstanceStore::Range range = store.Allocate(1);
         if (!range.IsValid()) {
-            LOG_ERROR(Game, "Static primitive store full; cannot resolve split primitive");
+            LOG_ERROR(Game, "Instance store full; cannot resolve split primitive");
+            state->modelStore.Free(modelRange);
             resolved.PushBack(entity);
             continue;
         }
@@ -723,12 +760,15 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
             .originalMaterialIndex = targetPrim->materialIndex,
             .sourceNodeIndex = targetNode,
             .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
+            .modelSlot = modelRange.offset,
             .materialID = matID,
             .blasDeviceAddress = targetPrim->blasDeviceAddress,
             .modelSpaceTransform = glm::mat4(1.0f),
         };
         materialManager->AcquireMaterial(matID);
         runtime->range = range;
+        runtime->modelRange = modelRange;
+        state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
 
         resolved.PushBack(entity);
     }
@@ -784,8 +824,13 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
             matID = meshComponent.material;
         }
-        state->meshPrimitiveStore.ReleaseAndFree(ctx->materialManager, runtime->range);
-        runtime->range = state->meshPrimitiveStore.AllocateSingleMeshRange(ctx->materialManager, model, matID);
+        state->instanceStore.ReleaseAndFree(ctx->materialManager, runtime->range);
+        state->modelStore.Free(runtime->modelRange);
+        runtime->modelRange = state->modelStore.Allocate(1);
+        if (runtime->modelRange.IsValid()) {
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, model, matID, runtime->modelRange.offset);
+            state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        }
 
         resolved.PushBack(entity);
     }
@@ -806,17 +851,22 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
 
 static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState* state, Component::MeshRuntime* runtime, Engine::StaticModel* model, const Component::ModuleMeshComponent& meshComponent)
 {
-    state->meshPrimitiveStore.ReleaseAndFree(ctx->materialManager, runtime->range);
+    state->instanceStore.ReleaseAndFree(ctx->materialManager, runtime->range);
+    state->modelStore.Free(runtime->modelRange);
 
     if (model->modelData.meshes.IsEmpty()) { return; }
     Engine::MeshInformation& mesh = model->modelData.meshes[0];
     const auto count = static_cast<uint32_t>(mesh.primitiveProperties.Size());
     if (count == 0) { return; }
 
-    Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
-    Engine::MeshPrimitiveStore::Range range = store.Allocate(count);
+    Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
+    if (!modelRange.IsValid()) { return; }
+
+    Engine::InstanceStore& store = state->instanceStore;
+    Engine::InstanceStore::Range range = store.Allocate(count);
     if (!range.IsValid()) {
-        LOG_ERROR(Game, "Static primitive store full; cannot resolve module runtime for model ({})", model->name.c_str());
+        LOG_ERROR(Game, "Instance store full; cannot resolve module runtime for model ({})", model->name.c_str());
+        state->modelStore.Free(modelRange);
         return;
     }
 
@@ -836,6 +886,7 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
             .originalMaterialIndex = primitive.materialIndex,
             .sourceNodeIndex = 0,
             .modelPrimitiveOrdinal = j,
+            .modelSlot = modelRange.offset,
             .materialID = matID,
             .blasDeviceAddress = primitive.blasDeviceAddress,
             .modelSpaceTransform = glm::mat4(1.0f),
@@ -844,6 +895,7 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
         ++writeIndex;
     }
     runtime->range = range;
+    runtime->modelRange = modelRange;
 }
 
 void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -886,6 +938,7 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         FillModuleMeshRange(ctx, state, runtime, model, meshComponent);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
 
         resolved.PushBack(entity);
     }
@@ -937,8 +990,13 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
             matID = meshComponent.material;
         }
-        state->meshPrimitiveStore.ReleaseAndFree(ctx->materialManager, runtime->range);
-        runtime->range = state->meshPrimitiveStore.AllocateSingleMeshRange(ctx->materialManager, model, matID);
+        state->instanceStore.ReleaseAndFree(ctx->materialManager, runtime->range);
+        state->modelStore.Free(runtime->modelRange);
+        runtime->modelRange = state->modelStore.Allocate(1);
+        if (runtime->modelRange.IsValid()) {
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, model, matID, runtime->modelRange.offset);
+            state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        }
 
         resolved.PushBack(entity);
     }
@@ -990,7 +1048,8 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (!runtime) continue;
 
         if (!runtime->modelHandle.IsValid()) {
-            state->meshPrimitiveStore.ReleaseAndFree(ctx->materialManager, runtime->range);
+            state->instanceStore.ReleaseAndFree(ctx->materialManager, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
             resolved.PushBack(entity); // nothing to resolve (e.g. empty text / no font); drop the tag
             continue;
         }
@@ -1001,7 +1060,8 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             continue;
         }
         if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            state->meshPrimitiveStore.ReleaseAndFree(ctx->materialManager, runtime->range);
+            state->instanceStore.ReleaseAndFree(ctx->materialManager, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
             resolved.PushBack(entity); // generation failed (e.g. empty/whitespace text); stop waiting so editing unlocks
             continue;
         }
@@ -1013,8 +1073,13 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (textComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(textComponent.material)) {
             matID = textComponent.material;
         }
-        state->meshPrimitiveStore.ReleaseAndFree(ctx->materialManager, runtime->range);
-        runtime->range = state->meshPrimitiveStore.AllocateSingleMeshRange(ctx->materialManager, model, matID);
+        state->instanceStore.ReleaseAndFree(ctx->materialManager, runtime->range);
+        state->modelStore.Free(runtime->modelRange);
+        runtime->modelRange = state->modelStore.Allocate(1);
+        if (runtime->modelRange.IsValid()) {
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, model, matID, runtime->modelRange.offset);
+            state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        }
 
         resolved.PushBack(entity);
     }
@@ -1145,16 +1210,36 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         ctx->scheduler->WaitforTask(&task);
     }
 
+    // Dirty entities write their node matrices into their stable model slots
+    {
+        Engine::InstanceStore& store = state->instanceStore;
+        Model* models = state->modelStore.Models();
+        for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyTransformComponent>().each()) {
+            if (!runtime.range.IsValid()) { continue; }
+            uint32_t lastSlot = ~0u;
+            for (uint32_t i = 0; i < runtime.range.count; ++i) {
+                const Engine::InstanceSource& inst = store[runtime.range.offset + i];
+                if (inst.modelSlot == lastSlot) { continue; }
+                lastSlot = inst.modelSlot;
+                models[inst.modelSlot] = {renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform};
+            }
+        }
+    }
+
     // Area light emissive quads
     for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyTransformComponent>().each()) {
-        surfaceRuntime.previousMatrix = surfaceRuntime.modelMatrix;
-        surfaceRuntime.modelMatrix = Component::ComputeAreaLightQuadMatrix(transform, light);
+        if (!surfaceRuntime.modelRange.IsValid()) { continue; }
+        Model& m = state->modelStore.Models()[surfaceRuntime.modelRange.offset];
+        m.prevModelMatrix = m.modelMatrix;
+        m.modelMatrix = Component::ComputeAreaLightQuadMatrix(transform, light);
     }
 
     // Sphere light emissive meshes
     for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyTransformComponent>(entt::exclude<Component::AreaLightComponent>).each()) {
-        surfaceRuntime.previousMatrix = surfaceRuntime.modelMatrix;
-        surfaceRuntime.modelMatrix = Component::ComputeSphereLightMatrix(transform, light);
+        if (!surfaceRuntime.modelRange.IsValid()) { continue; }
+        Model& m = state->modelStore.Models()[surfaceRuntime.modelRange.offset];
+        m.prevModelMatrix = m.modelMatrix;
+        m.modelMatrix = Component::ComputeSphereLightMatrix(transform, light);
     }
 
     for (auto [entity, dirty] : state->registry.view<Component::MultiframeDirtyTransformComponent>().each()) {
@@ -1177,7 +1262,14 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     }
 
     frameBuffer->mainViewFamily.primitiveInstances.Clear();
-    frameBuffer->mainViewFamily.primitiveInstances.Resize(state->meshPrimitiveStore.GetWatermark());
+    frameBuffer->mainViewFamily.primitiveInstances.Resize(state->instanceStore.GetWatermark());
+
+
+    const uint32_t modelWatermark = state->modelStore.GetWatermark();
+    frameBuffer->mainViewFamily.modelMatrices.Clear();
+    frameBuffer->mainViewFamily.modelMatrices.Resize(modelWatermark);
+    memcpy(frameBuffer->mainViewFamily.modelMatrices.Data(), state->modelStore.Models(), modelWatermark * sizeof(Model));
+
 
     // Gather regular renderables
     {
@@ -1189,7 +1281,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 Component::ProbeBakeHiddenTag
             >);
 
-        Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
+        Engine::InstanceStore& store = state->instanceStore;
 
         for (const auto& [entity, runtime, renderTransform] : view.each()) {
             if (!runtime.range.IsValid()) { continue; }
@@ -1200,23 +1292,16 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
 
-            uint32_t modelIndex = 0;
-            uint32_t lastNode = ~0u;
             const uint32_t base = runtime.range.offset;
             const uint32_t count = runtime.range.count;
             for (uint32_t i = 0; i < count; ++i) {
-                const Engine::MeshPrimitiveInstance& inst = store[base + i];
-                if (inst.sourceNodeIndex != lastNode) {
-                    modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
-                    frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform);
-                    lastNode = inst.sourceNodeIndex;
-                }
+                const Engine::InstanceSource& inst = store[base + i];
                 const uint32_t slot = base + i;
                 const uint32_t triBase = slot < frameBuffer->mainViewFamily.triLightBaseBySlot.Size() ? frameBuffer->mainViewFamily.triLightBaseBySlot[slot] : 0xFFFFFFFFu;
                 frameBuffer->mainViewFamily.primitiveInstances[slot] = {
                     .primitiveIndex = inst.primitiveIndex,
                     .materialID = inst.materialID,
-                    .modelIndex = modelIndex,
+                    .modelIndex = inst.modelSlot,
                     .stableId = stableId,
                     .blasDeviceAddress = inst.blasDeviceAddress,
                     .emissiveTriLightBase = triBase,
@@ -1226,7 +1311,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     } {
         ZoneScopedN("LightSurfaces");
-        Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
+        Engine::InstanceStore& store = state->instanceStore;
         const Engine::Material* defaultMaterial = materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
         Engine::Material emissiveMaterial{};
         if (defaultMaterial) {
@@ -1253,15 +1338,12 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
             const uint32_t* lightIdxPtr = frameBuffer->mainViewFamily.lightEntityToIndex.Find(static_cast<uint32_t>(lightEntity));
-            const Engine::MeshPrimitiveInstance& inst = store[surfaceRuntime.range.offset];
-
-            const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
-            frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(surfaceRuntime.modelMatrix, surfaceRuntime.previousMatrix);
+            const Engine::InstanceSource& inst = store[surfaceRuntime.range.offset];
 
             frameBuffer->mainViewFamily.primitiveInstances[surfaceRuntime.range.offset] = {
                 .primitiveIndex = inst.primitiveIndex,
                 .materialID = inst.materialID,
-                .modelIndex = modelIndex,
+                .modelIndex = inst.modelSlot,
                 .stableId = stableId,
                 .blasDeviceAddress = inst.blasDeviceAddress,
                 .lightIndex = lightIdxPtr ? *lightIdxPtr : 0xFFFFFFFFu,
@@ -1595,7 +1677,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 
             std::ranges::sort(sorted, [](const EmissiveEntry& a, const EmissiveEntry& b) { return a.sortKey < b.sortKey; });
 
-            Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
+            Engine::InstanceStore& store = state->instanceStore;
             vf.triLightBaseBySlot.Resize(store.GetWatermark());
             memset(vf.triLightBaseBySlot.Data(), 0xFF, vf.triLightBaseBySlot.Size() * sizeof(uint32_t));
             const auto maxPerPrimitive = static_cast<uint32_t>(glm::max(state->debug.restir.emissiveTriMaxPerPrimitive, 1));
@@ -1608,7 +1690,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 
                 for (uint32_t i = 0; i < runtime.range.count; ++i) {
                     const uint32_t slot = runtime.range.offset + i;
-                    const Engine::MeshPrimitiveInstance& inst = store[slot];
+                    const Engine::InstanceSource& inst = store[slot];
 
                     const Engine::EmissiveTriangleSet* set = nullptr;
                     for (const auto& candidate : sets) {

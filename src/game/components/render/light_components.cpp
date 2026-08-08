@@ -252,11 +252,12 @@ void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::
 void Component::LightSurfaceRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto& runtime = registry.get<LightSurfaceRuntime>(entity);
-    if (!runtime.range.IsValid()) { return; }
+    if (!runtime.range.IsValid() && !runtime.modelRange.IsValid()) { return; }
 
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    state->meshPrimitiveStore.ReleaseAndFree(ctx->materialManager, runtime.range);
+    state->instanceStore.ReleaseAndFree(ctx->materialManager, runtime.range);
+    state->modelStore.Free(runtime.modelRange);
 }
 
 Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

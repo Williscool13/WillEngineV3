@@ -11,7 +11,7 @@
 #include "engine/engine_api.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/environment_map_id.h"
-#include "engine/resources/model/mesh_primitive_store.h"
+#include "engine/resources/model/instance_store.h"
 
 namespace Core
 {
@@ -85,9 +85,8 @@ glm::mat4 ComputeSphereLightMatrix(const TransformComponent& transform, const Sp
 
 struct LightSurfaceRuntime
 {
-    Engine::MeshPrimitiveStore::Range range{};
-    glm::mat4 modelMatrix{1.0f};
-    glm::mat4 previousMatrix{1.0f};
+    Engine::InstanceStore::Range range{};
+    Engine::ModelStore::Range modelRange{};
     Engine::MaterialID materialID{};
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);

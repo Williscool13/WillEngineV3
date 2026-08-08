@@ -15,7 +15,8 @@
 #include "engine/material_manager.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
-#include "engine/resources/model/mesh_primitive_store.h"
+#include "engine/resources/model/instance_store.h"
+#include "engine/resources/model/model_store.h"
 
 namespace Game::Component
 {
@@ -59,9 +60,13 @@ struct RenderTransformComponent
 struct MeshRuntime
 {
     /**
-     * Entity's contiguous run in EngineState::meshPrimitiveStore
+     * Entity's contiguous run in EngineState::instanceStore
      */
-    Engine::MeshPrimitiveStore::Range range{};
+    Engine::InstanceStore::Range range{};
+    /**
+     * Entity's model matrix slots in EngineState::modelStore
+     */
+    Engine::ModelStore::Range modelRange{};
     Engine::StaticModelHandle modelHandle{};
     bool visible{true};
     bool ddgiVisible{true};

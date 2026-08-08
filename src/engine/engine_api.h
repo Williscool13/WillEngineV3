@@ -38,7 +38,8 @@
 #include "engine/component_registry.h"
 #include "engine/editor_state.h"
 #include "engine/editor_texture_residency.h"
-#include "engine/resources/model/mesh_primitive_store.h"
+#include "engine/resources/model/instance_store.h"
+#include "engine/resources/model/model_store.h"
 
 struct ResolvedCollisionEvent
 {
@@ -180,7 +181,8 @@ struct EngineState
     // todo: remove
     FontHandle uiFont{FontHandle::INVALID};
 
-    MeshPrimitiveStore meshPrimitiveStore{};
+    InstanceStore instanceStore{};
+    ModelStore modelStore{};
 
     AssetLoadState assetLoad{};
     BuiltinAssets builtinAssets{};

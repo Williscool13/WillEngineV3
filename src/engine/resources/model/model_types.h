@@ -61,7 +61,7 @@ struct MeshInformation
  */
 struct EmissiveTriangleSet
 {
-    // Global mega-buffer primitive index (post-rebase, matches MeshPrimitiveInstance.primitiveIndex).
+    // Global mega-buffer primitive index (post-rebase, matches InstanceSource.primitiveIndex).
     uint32_t primitiveIndex{~0u};
     bool bTruncated{false};
     Core::HeapArray<Vec3> verts{};
