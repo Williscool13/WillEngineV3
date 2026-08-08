@@ -593,7 +593,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
 
     RenderPass& resolvePass = graph.AddPass(SID("Shade Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     resolvePass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
-    resolvePass.Execute([&, pipelineManager, materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    resolvePass.Execute([&, pipelineManager, materialCount = static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         ShadeBucketingResolvePushConstant pc{
             .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
             .materialCount = materialCount,
@@ -623,7 +623,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     dispatchCountPass.ReadBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     dispatchCountPass.ReadWriteBuffer(SID("readback_buffer"));
     dispatchCountPass.Execute([&, pipelineManager,
-            materialCount = static_cast<uint32_t>(viewFamily.materials.Size()),
+            materialCount = static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT),
             lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BucketDispatchCountPushConstant pc{
                 .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
@@ -655,10 +655,10 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
         StringID fragmentShader{};
     };
 
-    const auto materialCount = static_cast<uint32_t>(viewFamily.materials.Size());
+    const auto materialCount = static_cast<uint32_t>(viewFamily.activeMaterials.Size());
     auto* sortedMaterials = arena.AllocArray<MaterialEntry>(materialCount);
     for (uint32_t i = 0; i < materialCount; ++i) {
-        sortedMaterials[i] = {i, viewFamily.materials[i].fragmentShader};
+        sortedMaterials[i] = {viewFamily.activeMaterials[i].stableIndex, viewFamily.activeMaterials[i].material.fragmentShader};
     }
     std::sort(sortedMaterials, sortedMaterials + materialCount, [](const MaterialEntry& a, const MaterialEntry& b) {
         return a.fragmentShader < b.fragmentShader;
@@ -757,7 +757,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
     bucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
             visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            materialCount = static_cast<uint32_t>(viewFamily.activeMaterials.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shading_bucket_visualize"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -775,7 +775,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                     .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                     .shadeDispatchBuffer = shadeDispatchAddress,
-                    .materialIndex = i,
+                    .materialIndex = viewFamily.activeMaterials[i].stableIndex,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
                     .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),

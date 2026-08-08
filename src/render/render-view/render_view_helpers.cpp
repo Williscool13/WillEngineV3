@@ -143,12 +143,12 @@ void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineM
         return exists;
     };
 
-    for (Engine::RenderMaterial& mat : viewFamily.materials) {
-        bool fragOk = checkExists(mat.fragmentShader);
-        bool lightOk = checkExists(mat.lightingShader);
+    for (Core::ActiveMaterial& active : viewFamily.activeMaterials) {
+        bool fragOk = checkExists(active.material.fragmentShader);
+        bool lightOk = checkExists(active.material.lightingShader);
         if (!fragOk || !lightOk) {
-            mat.fragmentShader = "error_unlit"_sid;
-            mat.lightingShader = "default_unlit"_sid;
+            active.material.fragmentShader = "error_unlit"_sid;
+            active.material.lightingShader = "default_unlit"_sid;
         }
     }
 }
@@ -158,10 +158,8 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
     // Lighting bucket finalization
     {
         uint32_t runningLightingBucketIndex{0};
-        for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
-            Engine::RenderMaterial& mat = viewFamily.materials[i];
-
-            auto [lightingVal, lightingInserted] = viewFamily.lightingBuckets.TryEmplace(mat.lightingShader, runningLightingBucketIndex);
+        for (const Core::ActiveMaterial& active : viewFamily.activeMaterials) {
+            auto [lightingVal, lightingInserted] = viewFamily.lightingBuckets.TryEmplace(active.material.lightingShader, runningLightingBucketIndex);
             if (lightingInserted) {
                 runningLightingBucketIndex++;
             }
@@ -232,7 +230,6 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.bCanRender = _pipelineManager->IsCategoryReady(PipelineCategory::Critical);
 
     _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.modelMatrices.Size()));
-    _limits.highestMaterialCount = std::max(_limits.highestMaterialCount, NextPowerOfTwo(viewFamily.materials.Size()));
     _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(viewFamily.lightingBuckets.Size()));
 
     uint32_t totalInstanceCountThisFrame = viewFamily.primitiveInstances.Size();
@@ -246,8 +243,8 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
 
 
     renderFamilyProperties.modelBufferSize = _limits.highestModelCount * sizeof(Model);
-    renderFamilyProperties.materialBufferSize = _limits.highestMaterialCount * sizeof(MaterialProperties);
-    renderFamilyProperties.shadeDispatchBufferSize = _limits.highestMaterialCount * sizeof(ShadeDispatchParameters);
+    renderFamilyProperties.materialBufferSize = Render::BINDLESS_MATERIAL_BUFFER_SIZE;
+    renderFamilyProperties.shadeDispatchBufferSize = Render::BINDLESS_MATERIAL_BUFFER_COUNT * sizeof(ShadeDispatchParameters);
     renderFamilyProperties.lightingDispatchBufferSize = _limits.highestLightingCount * sizeof(LightingDispatchParameters);
     renderFamilyProperties.instanceBufferSize = _limits.highestInstanceCount * sizeof(Instance);
 

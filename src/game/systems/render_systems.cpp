@@ -621,17 +621,18 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                     }
                 }
 
+                materialManager->AcquireMaterial(matID);
                 store[writeIndex] = {
                     .primitiveIndex = primitive.index,
                     .originalMaterialIndex = primitive.materialIndex,
                     .sourceNodeIndex = n,
                     .modelPrimitiveOrdinal = thisOrdinal,
                     .modelSlot = nodeModelSlot,
+                    .materialIndex = materialManager->GetMaterialIndex(matID),
                     .materialID = matID,
                     .blasDeviceAddress = primitive.blasDeviceAddress,
                     .modelSpaceTransform = nodeModelSpace,
                 };
-                materialManager->AcquireMaterial(matID);
                 ++writeIndex;
             }
         }
@@ -755,17 +756,18 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
             continue;
         }
 
+        materialManager->AcquireMaterial(matID);
         store[range.offset] = {
             .primitiveIndex = targetPrim->index,
             .originalMaterialIndex = targetPrim->materialIndex,
             .sourceNodeIndex = targetNode,
             .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
             .modelSlot = modelRange.offset,
+            .materialIndex = materialManager->GetMaterialIndex(matID),
             .materialID = matID,
             .blasDeviceAddress = targetPrim->blasDeviceAddress,
             .modelSpaceTransform = glm::mat4(1.0f),
         };
-        materialManager->AcquireMaterial(matID);
         runtime->range = range;
         runtime->modelRange = modelRange;
         state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
@@ -881,17 +883,18 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
                 matID = slotMat;
             }
         }
+        ctx->materialManager->AcquireMaterial(matID);
         store[writeIndex] = {
             .primitiveIndex = primitive.index,
             .originalMaterialIndex = primitive.materialIndex,
             .sourceNodeIndex = 0,
             .modelPrimitiveOrdinal = j,
             .modelSlot = modelRange.offset,
+            .materialIndex = ctx->materialManager->GetMaterialIndex(matID),
             .materialID = matID,
             .blasDeviceAddress = primitive.blasDeviceAddress,
             .modelSpaceTransform = glm::mat4(1.0f),
         };
-        ctx->materialManager->AcquireMaterial(matID);
         ++writeIndex;
     }
     runtime->range = range;
@@ -1301,6 +1304,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 frameBuffer->mainViewFamily.primitiveInstances[slot] = {
                     .primitiveIndex = inst.primitiveIndex,
                     .materialID = inst.materialID,
+                    .materialIndex = inst.materialIndex,
                     .modelIndex = inst.modelSlot,
                     .stableId = stableId,
                     .blasDeviceAddress = inst.blasDeviceAddress,
@@ -1330,6 +1334,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 materialManager->AcquireMaterial(materialID);
                 materialManager->ReleaseMaterial(surfaceRuntime.materialID);
                 store[surfaceRuntime.range.offset].materialID = materialID;
+                store[surfaceRuntime.range.offset].materialIndex = materialManager->GetMaterialIndex(materialID);
                 surfaceRuntime.materialID = materialID;
             }
 
@@ -1343,6 +1348,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             frameBuffer->mainViewFamily.primitiveInstances[surfaceRuntime.range.offset] = {
                 .primitiveIndex = inst.primitiveIndex,
                 .materialID = inst.materialID,
+                .materialIndex = inst.materialIndex,
                 .modelIndex = inst.modelSlot,
                 .stableId = stableId,
                 .blasDeviceAddress = inst.blasDeviceAddress,
@@ -1361,13 +1367,12 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     // Material remap
     {
         ZoneScopedN("Material Recording");
+        Core::Array<bool, Render::BINDLESS_MATERIAL_BUFFER_COUNT> seen{};
         for (auto& instance : frameBuffer->mainViewFamily.primitiveInstances) {
             if (instance.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) { continue; }
-            auto [val, inserted] = frameBuffer->mainViewFamily.activeMaterials.TryEmplace(instance.materialID);
-            if (inserted) {
-                val = frameBuffer->mainViewFamily.materials.Size();
-                frameBuffer->mainViewFamily.materials.PushBack(materialManager->GetRenderMaterial(instance.materialID));
-            }
+            if (seen[instance.materialIndex]) { continue; }
+            seen[instance.materialIndex] = true;
+            frameBuffer->mainViewFamily.activeMaterials.PushBack({instance.materialIndex, materialManager->GetRenderMaterial(instance.materialID)});
         }
     } {
         int32_t bestPriority = INT32_MIN;

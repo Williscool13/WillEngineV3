@@ -27,6 +27,7 @@ struct InstanceSource
     uint32_t sourceNodeIndex{~0u};
     uint32_t modelPrimitiveOrdinal{~0u};
     uint32_t modelSlot{~0u};
+    uint32_t materialIndex{~0u};
     MaterialID materialID{};
     uint64_t blasDeviceAddress{0};
     Mat4 modelSpaceTransform{1.0f};

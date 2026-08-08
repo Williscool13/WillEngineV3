@@ -136,12 +136,19 @@ struct PrimitiveInstanceData
 {
     uint32_t primitiveIndex{DEAD_SLOT_PRIMITIVE_INDEX};
     Engine::MaterialID materialID{};
+    uint32_t materialIndex{0};
     uint32_t modelIndex{};
     uint64_t stableId{};
     uint64_t blasDeviceAddress{};
     uint32_t lightIndex{0xFFFFFFFFu};
     uint32_t emissiveTriLightBase{0xFFFFFFFFu};
     bool ddgiVisible{true};
+};
+
+struct ActiveMaterial
+{
+    uint32_t stableIndex{};
+    Engine::RenderMaterial material{};
 };
 
 struct CustomShaderDraw
@@ -390,7 +397,6 @@ struct ViewFamilyWatermarks
     size_t modelMatrices{256};
     size_t lights{256};
     size_t activeMaterials{256};
-    size_t materials{256};
     size_t activeTextMaterials{32};
     size_t textMaterials{256};
     size_t debugLines{131072};
@@ -454,9 +460,7 @@ struct ViewFamily
 
     ArenaVector<PrimitiveInstanceData> primitiveInstances{};
     ArenaVector<Model> modelMatrices{};
-    /** Indexes into the materials vector */
-    ArenaMap<Engine::MaterialID, uint32_t> activeMaterials{};
-    ArenaVector<Engine::RenderMaterial> materials{};
+    ArenaVector<ActiveMaterial> activeMaterials{};
 
     ArenaVector<WorldGlyphQuad> worldGlyphQuads{};
     ArenaVector<TextInstanceDataFull> textInstances{};

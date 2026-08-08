@@ -752,6 +752,13 @@ void WillEngine::EditorImgui()
                     ImGui::Text("free spans %u  largest run %u", ms2.freeSpanCount, ms2.largestFreeRun);
                 }
 
+                if (engineContext->materialManager) {
+                    ImGui::SeparatorText("Materials");
+                    ImGui::Text("resident %u / %u  definitions %u / %u",
+                                engineContext->materialManager->GetActiveMaterialCount(), Render::BINDLESS_MATERIAL_BUFFER_COUNT,
+                                static_cast<uint32_t>(engineContext->materialManager->GetMaterials().Size()), Engine::MAX_LOADED_MATERIALS);
+                }
+
                 ImGui::SeparatorText("Arena Pool"); {
                     const Core::ArenaSuballocator::Stats as = memoryManager.ArenaPool().GetStats();
                     const float totalBytes = static_cast<float>(as.totalBytes);

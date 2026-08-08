@@ -32,17 +32,18 @@ InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* mat
     uint32_t writeIndex = range.offset;
     for (uint32_t j = 0; j < count; ++j) {
         PrimitiveProperty& primitive = mesh.primitiveProperties[j];
+        materialManager->AcquireMaterial(material);
         instances_[writeIndex] = {
             .primitiveIndex = primitive.index,
             .originalMaterialIndex = -1,
             .sourceNodeIndex = 0,
             .modelPrimitiveOrdinal = j,
             .modelSlot = modelSlot,
+            .materialIndex = materialManager->GetMaterialIndex(material),
             .materialID = material,
             .blasDeviceAddress = primitive.blasDeviceAddress,
             .modelSpaceTransform = Mat4(1.0f),
         };
-        materialManager->AcquireMaterial(material);
         ++writeIndex;
     }
     return range;

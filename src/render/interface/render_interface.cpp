@@ -24,10 +24,9 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     lightingBuckets = ArenaFixedMap<StringID, uint32_t>(&arena, 256);
     textDrawCalls = ArenaVector<TextDrawCall>(&arena, wm.textDrawCalls);
 
-    activeMaterials = ArenaMap<Engine::MaterialID, uint32_t>(&arena, wm.activeMaterials);
+    activeMaterials = ArenaVector<ActiveMaterial>(&arena, wm.activeMaterials);
     lightEntityToIndex = ArenaMap<uint32_t, uint32_t>(&arena, MAX_LIGHTS);
     triLightBaseBySlot = ArenaVector<uint32_t>(&arena);
-    materials = ArenaVector<Engine::RenderMaterial>(&arena, wm.materials);
     activeTextMaterials = ArenaMap<Engine::TextMaterialID, uint32_t>(&arena, wm.activeTextMaterials);
     textMaterials = ArenaVector<TextRenderMaterial>(&arena, wm.textMaterials);
 
@@ -63,7 +62,6 @@ void FrameBuffer::Reinitialize()
     viewFamilyWatermarks.modelMatrices = std::max(viewFamilyWatermarks.modelMatrices, vf.modelMatrices.Size());
     viewFamilyWatermarks.lights = std::max(viewFamilyWatermarks.lights, vf.lights.Size());
     viewFamilyWatermarks.activeMaterials = std::max(viewFamilyWatermarks.activeMaterials, vf.activeMaterials.Size());
-    viewFamilyWatermarks.materials = std::max(viewFamilyWatermarks.materials, vf.materials.Size());
     viewFamilyWatermarks.activeTextMaterials = std::max(viewFamilyWatermarks.activeTextMaterials, vf.activeTextMaterials.Size());
     viewFamilyWatermarks.textMaterials = std::max(viewFamilyWatermarks.textMaterials, vf.textMaterials.Size());
     viewFamilyWatermarks.debugLines = std::max(viewFamilyWatermarks.debugLines, vf.debugLines.Size());

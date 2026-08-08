@@ -1811,19 +1811,22 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     UploadAllocation instanceUpload = renderGraph->AllocateTransient(totalInstanceCount * sizeof(Instance));
     auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
 
+    Core::Array<uint32_t, Render::BINDLESS_MATERIAL_BUFFER_COUNT> lightingIndexByStable{};
+    for (const Core::ActiveMaterial& active : viewFamily.activeMaterials) {
+        lightingIndexByStable[active.stableIndex] = viewFamily.lightingBuckets[active.material.lightingShader];
+    }
+
     for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
         auto& inst = viewFamily.primitiveInstances[i];
         if (inst.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) {
             instanceBuffer[i] = {.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
             continue;
         }
-        uint32_t materialIndex = viewFamily.activeMaterials[inst.materialID];
-        Engine::RenderMaterial& mat = viewFamily.materials[materialIndex];
-        uint32_t lightingIndex = viewFamily.lightingBuckets[mat.lightingShader];
+        uint32_t lightingIndex = lightingIndexByStable[inst.materialIndex];
         instanceBuffer[i] = {
             .primitiveIndex = inst.primitiveIndex,
             .modelIndex = inst.modelIndex,
-            .materialIndex = materialIndex,
+            .materialIndex = inst.materialIndex,
             .lightingIndex = lightingIndex,
             .stableId = inst.stableId,
             .lightIndex = inst.lightIndex,
@@ -1884,24 +1887,24 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             });
     }
 
-    if (!viewFamily.materials.IsEmpty()) {
+    if (!viewFamily.activeMaterials.IsEmpty()) {
         renderGraph->CreateBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize, false);
 
-        // Assign unique IDs for materials and lighting shaders.
-        UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(MaterialProperties));
+        UploadAllocation materialUpload = renderGraph->AllocateTransient(Render::BINDLESS_MATERIAL_BUFFER_SIZE);
         auto* dst = static_cast<MaterialProperties*>(materialUpload.ptr);
-        for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
-            assert(viewFamily.lightingBuckets.Contains(viewFamily.materials[i].lightingShader) && "Lighting bucket missing lighting model for a material");
-            viewFamily.materials[i].props.shadingBucketIndex = i;
-            viewFamily.materials[i].props.lightingBucketIndex = viewFamily.lightingBuckets.At(viewFamily.materials[i].lightingShader);
-            dst[i] = viewFamily.materials[i].props;
+        memset(dst, 0, Render::BINDLESS_MATERIAL_BUFFER_SIZE);
+        for (Core::ActiveMaterial& active : viewFamily.activeMaterials) {
+            assert(viewFamily.lightingBuckets.Contains(active.material.lightingShader) && "Lighting bucket missing lighting model for a material");
+            active.material.props.shadingBucketIndex = active.stableIndex;
+            active.material.props.lightingBucketIndex = viewFamily.lightingBuckets.At(active.material.lightingShader);
+            dst[active.stableIndex] = active.material.props;
         }
 
         RenderPass& uploadMaterialsPass = renderGraph->AddPass(SID("Upload Materials"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
         uploadMaterialsPass.WriteTransferBuffer(SID("material_buffer"));
         uploadMaterialsPass.Execute([&,
                 materialOffset = materialUpload.offset,
-                materialSize = viewFamily.materials.Size() * sizeof(MaterialProperties)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                materialSize = static_cast<size_t>(Render::BINDLESS_MATERIAL_BUFFER_SIZE)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy2 copy{
                     .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
                     .srcOffset = materialOffset,
@@ -1921,9 +1924,9 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
         renderGraph->CreateBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, false);
 
-        UploadAllocation shadeDispatchUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(ShadeDispatchParameters));
+        UploadAllocation shadeDispatchUpload = renderGraph->AllocateTransient(Render::BINDLESS_MATERIAL_BUFFER_COUNT * sizeof(ShadeDispatchParameters));
         auto* shadeDispatchBuffer = static_cast<ShadeDispatchParameters*>(shadeDispatchUpload.ptr);
-        for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
+        for (int32_t i = 0; i < Render::BINDLESS_MATERIAL_BUFFER_COUNT; ++i) {
             shadeDispatchBuffer[i] = {
                 .xDispatch = 0,
                 .yDispatch = 0,
@@ -1940,7 +1943,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         uploadShadeDispatchPass.WriteTransferBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
         uploadShadeDispatchPass.Execute([&,
                 shadeDispatchOffset = shadeDispatchUpload.offset,
-                shadeDispatchSize = viewFamily.materials.Size() * sizeof(ShadeDispatchParameters)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                shadeDispatchSize = Render::BINDLESS_MATERIAL_BUFFER_COUNT * sizeof(ShadeDispatchParameters)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy2 copy{
                     .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
                     .srcOffset = shadeDispatchOffset,
