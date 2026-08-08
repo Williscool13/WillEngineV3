@@ -588,7 +588,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.debug.bDDGIBounceOnly;
                 SetupRadianceCacheShade(*renderGraph, pipelineManager, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.radianceCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
                 SetupRadianceCacheEnd(*renderGraph, radianceCache);
-                if (radianceCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
+                if (GPU_STATS_ENABLED && radianceCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
                     RenderPass& wcStatsReadback = renderGraph->AddPass(SID("Radiance Cache Stats Readback"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::RadianceCache);
                     wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_STATS);
                     wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_ACTIVE_COUNT);

@@ -191,8 +191,10 @@ public uint RadianceCacheHashInsert(uint* entries, uint2* keys, RadianceCacheSta
         }
         if (prev == cs) { return s; }
     }
-    uint prevFail;
-    InterlockedAdd(stats->insertsFailed, 1u, prevFail);
+    if (stats != nullptr) {
+        uint prevFail;
+        InterlockedAdd(stats->insertsFailed, 1u, prevFail);
+    }
     return RADIANCE_CACHE_HASH_INVALID;
 }
 

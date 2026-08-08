@@ -32,6 +32,12 @@ bool IsSphereInFrustum(Frustum frustum, float4 sphere) {
     return true;
 }
 
+// Returns true if the sphere's projected diameter is below minPixels. Paraxial estimate: diameterPx = (2r / dist) * P11 * (screenHeight / 2)
+bool IsContributionCulled(float4 sphere, float3 cameraPos, float proj11, float screenHeight, float minPixels) {
+    float dist = max(length(sphere.xyz - cameraPos), sphere.w);
+    return (sphere.w / dist) * abs(proj11) * screenHeight < minPixels;
+}
+
 // Returns false if backface culled
 bool IsConeFrontFacing(float3 coneAxis, float coneCutoff, float3 center, float radius, float3 cameraPos, float3x3 modelMatrix) {
     float3 worldConeAxis = normalize(mul(modelMatrix, coneAxis));

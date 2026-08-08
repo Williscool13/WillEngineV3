@@ -44,10 +44,13 @@ void SetupGeometryPass(RenderGraph& graph,
     auto lodBias = static_cast<int32_t>(LOD_BIAS);
     auto highestMeshletCount = renderFamilyProperties.visibleMeshletUpperBound;
 
+    const StringID visBits = SID("instance_vis_bits");
+    const bool bOcclusion = sceneIndex == 0 && renderFamilyProperties.bOcclusionCulling;
+    const bool bOcclusionFreeze = bOcclusion && renderFamilyProperties.bOcclusionFreeze;
+    const uint32_t cullFlags = renderFamilyProperties.cullFlags;
 
-    // Instancing
+    // Shared buffers
     {
-        // Create and Clear
         {
             graph.CreateBuffer(instanceMeshletOffsets, renderFamilyProperties.instanceMeshletOffsetsBufferSize, false);
             graph.CreateBuffer(level1Sums, renderFamilyProperties.level1SumsBufferSize, false);
@@ -64,7 +67,17 @@ void SetupGeometryPass(RenderGraph& graph,
             graph.CreateBuffer(visibleMeshlets, renderFamilyProperties.visibleMeshletsBufferSize, false);
             graph.CreateBuffer(meshletCountDispatchArgs, sizeof(InstancingMeshletDispatchIndirect), false);
             graph.CreateBuffer(compactedMeshletDispatchArgs, sizeof(InstancingCompactedMeshletDispatchIndirect), false);
+            if (bOcclusion) {
+                // Fixed size so the cross-frame carry never resizes; garbage content on first use is safe (phase 2 corrects)
+                graph.CreateBuffer(visBits, MAX_INSTANCE_SLOTS / 8, false);
+                graph.CarryBufferToNextFrame(visBits, visBits, 0);
+            }
+        }
+    }
 
+    auto addCullChain = [&](bool bPhase2) {
+        // Clear; phase 1 also zeroes the per-frame cull tallies (contiguous ReadbackStruct region)
+        {
             RenderPass& clearDispatchArgs = graph.AddPass(SID("Clear Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::Geometry);
             clearDispatchArgs.WriteTransferBuffer(compactedMeshletDispatchArgs);
             clearDispatchArgs.Execute([compactedMeshletDispatchArgs](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -72,18 +85,66 @@ void SetupGeometryPass(RenderGraph& graph,
             });
         }
 
-        // Instance Visibility/LOD
-        {
+        // Instance Visibility/LOD: phase 1 gates on last frame's bit, phase 2 tests against the fresh pyramid
+        if (bPhase2) {
+            RenderPass& instanceLODPass = graph.AddPass(SID("Instance Occlusion/LOD Selection P2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
+            instanceLODPass.ReadBuffer(SCENE_DATA_BUFFER);
+            instanceLODPass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+            instanceLODPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+            instanceLODPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+            instanceLODPass.ReadSampledImage(HIZ_PYRAMID);
+            instanceLODPass.ReadWriteBuffer(visBits);
+            instanceLODPass.ReadWriteBuffer(instanceMeshletOffsets);
+            if (GPU_STATS_ENABLED) {
+                instanceLODPass.ReadWriteBuffer(SID("readback_buffer"));
+            }
+            instanceLODPass.Execute([instanceMeshletOffsets, visBits, instanceCount, lodBias, cullFlags, pipelineManager, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                const ResourceDimensions& dims = graph.GetImageDimensions(HIZ_PYRAMID);
+                InstanceLODOcclusionPushConstant pc{
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .visBits = graph.GetBufferAddress(visBits),
+                    .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
+                    .occludedCounter = GPU_STATS_ENABLED ? graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, culledInstanceOcclusion) : 0,
+                    .hizExtent = {dims.width, dims.height},
+                    .instanceCount = instanceCount,
+                    .sceneDataIndex = sceneIndex,
+                    .lodBias = lodBias,
+                    .hizIndex = graph.GetSampledImageViewDescriptorIndex(HIZ_PYRAMID),
+                    .hizMipCount = dims.levels,
+                    .cullFlags = cullFlags,
+                };
+
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_instance_lod_occlusion"));
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+                uint32_t xDispatch = (instanceCount + INSTANCING_VISIBILITY_DISPATCH_X - 1) / INSTANCING_VISIBILITY_DISPATCH_X;
+                vkCmdDispatch(cmd, xDispatch, 1, 1);
+            });
+        }
+        else {
             RenderPass& instanceLODPass = graph.AddPass(SID("Instance Visibility/LOD Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
             instanceLODPass.ReadBuffer(SCENE_DATA_BUFFER);
             instanceLODPass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
             instanceLODPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
             instanceLODPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+            if (bOcclusion) {
+                instanceLODPass.ReadBuffer(visBits);
+            }
             instanceLODPass.WriteBuffer(instanceMeshletOffsets);
+            if (GPU_STATS_ENABLED) {
+                instanceLODPass.ReadWriteBuffer(SID("readback_buffer"));
+            }
             instanceLODPass.Execute(
                 [instanceMeshletOffsets,
+                    visBits,
+                    bOcclusion,
                     instanceCount,
                     lodBias,
+                    cullFlags,
                     pipelineManager,
                     sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     InstanceLODPushConstant pc{
@@ -91,10 +152,13 @@ void SetupGeometryPass(RenderGraph& graph,
                         .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
                         .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                         .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                        .visBits = bOcclusion ? graph.GetBufferAddress(visBits) : 0,
                         .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
+                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, culledInstanceFrustum) : 0,
                         .instanceCount = instanceCount,
                         .sceneDataIndex = sceneIndex,
                         .lodBias = lodBias,
+                        .cullFlags = cullFlags,
                     };
 
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_instance_lod"));
@@ -256,8 +320,23 @@ void SetupGeometryPass(RenderGraph& graph,
             expandInstancesToMeshlets.ReadBuffer(instanceMeshletOffsets);
             expandInstancesToMeshlets.ReadIndirectBuffer(meshletCountDispatchArgs);
             expandInstancesToMeshlets.WriteBuffer(intermediateMeshlets);
+            if (bPhase2) {
+                expandInstancesToMeshlets.ReadSampledImage(HIZ_PYRAMID);
+            }
+            if (GPU_STATS_ENABLED) {
+                expandInstancesToMeshlets.ReadWriteBuffer(SID("readback_buffer"));
+            }
             expandInstancesToMeshlets.Execute([instanceMeshletOffsets, meshletCountDispatchArgs, intermediateMeshlets,
-                    pipelineManager, instanceCount, highestMeshletCount, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                    pipelineManager, instanceCount, highestMeshletCount, sceneIndex, bPhase2, cullFlags](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                    uint2 hizExtent{0u, 0u};
+                    uint32_t hizIndex = 0;
+                    uint32_t hizMipCount = 1;
+                    if (bPhase2) {
+                        const ResourceDimensions& dims = graph.GetImageDimensions(HIZ_PYRAMID);
+                        hizExtent = {dims.width, dims.height};
+                        hizIndex = graph.GetSampledImageViewDescriptorIndex(HIZ_PYRAMID);
+                        hizMipCount = dims.levels;
+                    }
                     ExpandMeshletsPushConstant pc{
                         .indirectDispatchBuffer = graph.GetBufferAddress(meshletCountDispatchArgs),
                         .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
@@ -267,9 +346,15 @@ void SetupGeometryPass(RenderGraph& graph,
                         .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                         .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
                         .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, culledMeshletFrustum) : 0,
+                        .hizExtent = hizExtent,
                         .sceneDataIndex = sceneIndex,
                         .instanceCount = instanceCount,
                         .currentFrameBufferMeshletLimit = highestMeshletCount,
+                        .hizIndex = hizIndex,
+                        .hizMipCount = hizMipCount,
+                        .bHiZ = bPhase2 ? 1u : 0u,
+                        .cullFlags = cullFlags,
                     };
 
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_expand_instance_to_meshlet"));
@@ -445,71 +530,88 @@ void SetupGeometryPass(RenderGraph& graph,
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
         });
+
+        RenderPass& instancedMeshShading = graph.AddPass(
+            bPhase2 ? SID("Phase 2 Mesh Shading") : SID("Instanced Mesh Shading"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                                                                                   VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::RenderCategory::Geometry);
+        instancedMeshShading.WriteColorAttachment(targets.visibility);
+        instancedMeshShading.WriteColorAttachment(targets.gbufferOne);
+        instancedMeshShading.WriteColorAttachment(targets.stableId);
+        instancedMeshShading.WriteDepthAttachment(targets.depthStencil);
+        instancedMeshShading.ReadBuffer(SCENE_DATA_BUFFER);
+        instancedMeshShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+        instancedMeshShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+        instancedMeshShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+        instancedMeshShading.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+        instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
+        instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
+        instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
+        instancedMeshShading.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
+        instancedMeshShading.ReadBuffer(visibleMeshlets);
+        instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
+        instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
+                bWireframe = renderFamilyProperties.bWireframe,
+                visibility = targets.visibility, stableId = targets.stableId, depthStencil = targets.depthStencil](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+                vkCmdSetViewport(cmd, 0, 1, &viewport);
+                VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+                vkCmdSetScissor(cmd, 0, 1, &scissor);
+                vkCmdSetPolygonModeEXT(cmd, bWireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL);
+
+                auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(visibility), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+                auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+                const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
+                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
+
+                vkCmdBeginRendering(cmd, &renderInfo);
+
+                VisibilityBufferAccumulatePushConstant pushConstants{
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
+                    .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+                    .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+                    .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                    .visibleMeshlets = graph.GetBufferAddress(visibleMeshlets),
+                    .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
+                };
+
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate"));
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(VisibilityBufferAccumulatePushConstant), &pushConstants);
+
+                vkCmdDrawMeshTasksIndirectEXT(
+                    cmd,
+                    graph.GetBufferHandle(compactedMeshletDispatchArgs),
+                    offsetof(InstancingCompactedMeshletDispatchIndirect, x),
+                    1,
+                    sizeof(InstancingCompactedMeshletDispatchIndirect));
+
+                vkCmdEndRendering(cmd);
+            });
+    };
+
+    addCullChain(false);
+
+    if (!bOcclusion || bOcclusionFreeze) {
+        return;
     }
 
-    RenderPass& instancedMeshShading = graph.AddPass(
-        SID("Instanced Mesh Shading"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-                                       VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::RenderCategory::Geometry);
-    instancedMeshShading.WriteColorAttachment(targets.visibility);
-    instancedMeshShading.WriteColorAttachment(targets.gbufferOne);
-    instancedMeshShading.WriteColorAttachment(targets.stableId);
-    instancedMeshShading.WriteDepthAttachment(targets.depthStencil);
-    instancedMeshShading.ReadBuffer(SCENE_DATA_BUFFER);
-    instancedMeshShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-    instancedMeshShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-    instancedMeshShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    instancedMeshShading.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
-    instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
-    instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
-    instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
-    instancedMeshShading.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
-    instancedMeshShading.ReadBuffer(visibleMeshlets);
-    instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
-    instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
-            bWireframe = renderFamilyProperties.bWireframe,
-            visibility = targets.visibility, stableId = targets.stableId, depthStencil = targets.depthStencil](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkViewport viewport = VkHelpers::GenerateViewport(width, height);
-            vkCmdSetViewport(cmd, 0, 1, &viewport);
-            VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
-            vkCmdSetScissor(cmd, 0, 1, &scissor);
-            vkCmdSetPolygonModeEXT(cmd, bWireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL);
+    // Phase 2: pyramid from phase-1 depth, then the whole chain again with the Hi-Z variants
+    SetupHiZPyramid(graph, pipelineManager, renderExtent, targets);
 
-            auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(visibility), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-            auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    RenderPass& occlusionClear = graph.AddPass(SID("Occlusion Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::Geometry);
+    occlusionClear.WriteTransferBuffer(visBits);
+    occlusionClear.Execute([visBits](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle(visBits), 0, VK_WHOLE_SIZE, 0);
+    });
 
-            const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
-
-            vkCmdBeginRendering(cmd, &renderInfo);
-
-            VisibilityBufferAccumulatePushConstant pushConstants{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-                .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-                .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-                .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-                .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-                .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                .visibleMeshlets = graph.GetBufferAddress(visibleMeshlets),
-                .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
-            };
-
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
-            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(VisibilityBufferAccumulatePushConstant), &pushConstants);
-
-            vkCmdDrawMeshTasksIndirectEXT(
-                cmd,
-                graph.GetBufferHandle(compactedMeshletDispatchArgs),
-                offsetof(InstancingCompactedMeshletDispatchIndirect, x),
-                1,
-                sizeof(InstancingCompactedMeshletDispatchIndirect));
-
-            vkCmdEndRendering(cmd);
-        });
+    addCullChain(true);
 }
 
 void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
@@ -616,6 +718,10 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (lightingCount + 255) / 256, 1, 1);
     });
+
+    if (!GPU_STATS_ENABLED) {
+        return;
+    }
 
     // Technically not "critical", used for stats. But since we write to readback_buffer, it becomes critical.
     RenderPass& dispatchCountPass = graph.AddPass(SID("Bucket Dispatch Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);

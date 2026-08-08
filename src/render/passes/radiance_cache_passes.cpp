@@ -4,6 +4,7 @@
 
 #include "render/passes/radiance_cache_passes.h"
 
+#include "render/renderer_types.h"
 #include "render/passes/ddgi_passes.h"
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
@@ -67,7 +68,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
                 .cameraPos = glm::vec4(cameraPos, 0.0f),
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .bFreeze = bFreeze ? 1u : 0u,
-                .stats = graph.GetBufferAddress(RADIANCE_CACHE_STATS),
+                .stats = GPU_STATS_ENABLED ? graph.GetBufferAddress(RADIANCE_CACHE_STATS) : 0,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             const uint32_t groups = (RADIANCE_CACHE_HASH_CAPACITY + 63u) / 64u;
@@ -87,7 +88,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
             .descriptors = graph.PeekBufferAddress(RADIANCE_CACHE_DESCRIPTORS),
             .activeList = graph.PeekBufferAddress(RADIANCE_CACHE_ACTIVE_LIST),
             .activeCount = graph.PeekBufferAddress(RADIANCE_CACHE_ACTIVE_COUNT),
-            .stats = graph.PeekBufferAddress(RADIANCE_CACHE_STATS),
+            .stats = GPU_STATS_ENABLED ? graph.PeekBufferAddress(RADIANCE_CACHE_STATS) : 0,
         };
         vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(RADIANCE_CACHE_BUFFERS_CURRENT), 0, sizeof(buffers), &buffers);
     });
@@ -187,7 +188,7 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
             .accumCap = accumCap,
             .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
             .worldGridProbeGrid = (!bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
-            .stats = graph.GetBufferAddress(RADIANCE_CACHE_STATS),
+            .stats = GPU_STATS_ENABLED ? graph.GetBufferAddress(RADIANCE_CACHE_STATS) : 0,
             .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
             .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
             .reflectionProbeCount = reflectionProbeCount,

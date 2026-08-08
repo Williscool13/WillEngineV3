@@ -7,6 +7,7 @@ import constants_interop;
 
 import limits_declarations;
 import bindless_declarations;
+import hiz_common;
 
 // =============== Instancing Step 2f: Gather total number of meshlets from final instance postfix sum ===============
 [shader("compute")]
@@ -77,12 +78,32 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
     float3 worldCenter = mul(model.modelMatrix, float4(mlet.meshletBoundingSphere.xyz, 1.0)).xyz;
     float4 worldBounds = float4(worldCenter, worldRadius);
 
-    bool bVisible = true;
-    if (!IsSphereInFrustum(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds)) {
-        bVisible = false;
-    }
-    if (bVisible && !IsConeFrontFacing(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
-        bVisible = false;
+    // First cull in test order wins the tally
+    bool bFrustumCulled = (pc.cullFlags & CULL_FLAG_MESHLET_FRUSTUM) != 0u && !IsSphereInFrustum(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds);
+    bool bConeCulled = !bFrustumCulled && (pc.cullFlags & CULL_FLAG_MESHLET_CONE) != 0u && !IsConeFrontFacing(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix);
+    bool bContributionCulled = !bFrustumCulled && !bConeCulled && (pc.cullFlags & CULL_FLAG_MESHLET_CONTRIBUTION) != 0u && IsContributionCulled(worldBounds, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, pc.sceneData[pc.sceneDataIndex].proj[1][1], pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y, CONTRIBUTION_CULL_MESHLET_MIN_PIXELS);
+    bool bOccluded = !bFrustumCulled && !bConeCulled && !bContributionCulled && pc.bHiZ != 0u && IsOccludedHiZ(worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].viewProj, pc.hizIndex, pc.hizMipCount, pc.hizExtent);
+    bool bVisible = !bFrustumCulled && !bConeCulled && !bContributionCulled && !bOccluded;
+
+    if (pc.cullStats != nullptr) {
+        uint waveFrustum = WaveActiveCountBits(bFrustumCulled);
+        uint waveCone = WaveActiveCountBits(bConeCulled);
+        uint waveContribution = WaveActiveCountBits(bContributionCulled);
+        uint waveOccluded = WaveActiveCountBits(bOccluded);
+        if (WaveIsFirstLane()) {
+            if (waveFrustum > 0) {
+                InterlockedAdd(pc.cullStats[0], waveFrustum);
+            }
+            if (waveCone > 0) {
+                InterlockedAdd(pc.cullStats[1], waveCone);
+            }
+            if (waveContribution > 0) {
+                InterlockedAdd(pc.cullStats[2], waveContribution);
+            }
+            if (waveOccluded > 0) {
+                InterlockedAdd(pc.cullStats[3], waveOccluded);
+            }
+        }
     }
 
     // Instance greatest bit is visibility,

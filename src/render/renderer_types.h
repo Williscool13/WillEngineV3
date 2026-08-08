@@ -6,6 +6,13 @@
 #define WILL_ENGINE_RENDERER_TYPES_H
 #include "core/string_id.h"
 
+// Cull tallies, dispatch counts, radiance-cache stats
+#if WILL_EDITOR
+inline constexpr bool GPU_STATS_ENABLED = true;
+#else
+inline constexpr bool GPU_STATS_ENABLED = false;
+#endif
+
 struct RendererStatistics
 {
     uint64_t clippingInvocations{};

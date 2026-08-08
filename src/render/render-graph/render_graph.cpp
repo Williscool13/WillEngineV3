@@ -930,8 +930,7 @@ void RenderGraph::PrecomputeBarriers()
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
                 VkPipelineStageFlags2 dstStages = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-                VkAccessFlags2 dstAccess = 0;
-                if ((pass->depthAccessType & DepthAccessType::Read) != DepthAccessType::None) { dstAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT; }
+                VkAccessFlags2 dstAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
                 if ((pass->depthAccessType & DepthAccessType::Write) != DepthAccessType::None) { dstAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT; }
                 addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
                                                               phys.event.stages, phys.event.access, tex.layout, dstStages, dstAccess,
@@ -1203,8 +1202,7 @@ void RenderGraph::PrecomputeBarriers()
             if (pass->depthStencilAttachment != UINT_MAX) {
                 const uint32_t i = pass->depthStencilAttachment;
                 textures[i].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-                VkAccessFlags2 acc = 0;
-                if ((pass->depthAccessType & DepthAccessType::Read) != DepthAccessType::None) { acc |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT; }
+                VkAccessFlags2 acc = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
                 if ((pass->depthAccessType & DepthAccessType::Write) != DepthAccessType::None) { acc |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT; }
                 const bool isWrite = (pass->depthAccessType & DepthAccessType::Write) != DepthAccessType::None;
                 const VkPipelineStageFlags2 stage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;

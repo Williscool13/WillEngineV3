@@ -139,7 +139,13 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t wcDumped;
     SHADER_PUBLIC uint32_t wcDark;
     SHADER_PUBLIC uint32_t wcShaded;
-    SHADER_PUBLIC uint32_t _pad1;
+    SHADER_PUBLIC uint32_t culledInstanceFrustum;
+    SHADER_PUBLIC uint32_t culledInstanceContribution;
+    SHADER_PUBLIC uint32_t culledInstanceOcclusion;
+    SHADER_PUBLIC uint32_t culledMeshletFrustum;
+    SHADER_PUBLIC uint32_t culledMeshletCone;
+    SHADER_PUBLIC uint32_t culledMeshletContribution;
+    SHADER_PUBLIC uint32_t culledMeshletOcclusion;
 };
 
 SHADER_PUBLIC struct DrawMeshTasksIndirectCommand

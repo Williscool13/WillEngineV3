@@ -504,6 +504,13 @@ struct DebugRenderParams
     int32_t giDeconstructMode{0};
     // -1 = off, otherwise pyramid mip shown in hiz_debug_target
     int32_t hizDebugMip{-1};
+    bool bOcclusionCulling{true};
+    bool bOcclusionFreeze{false};
+    bool bCullInstanceFrustum{true};
+    bool bCullInstanceContribution{true};
+    bool bCullMeshletFrustum{true};
+    bool bCullMeshletCone{true};
+    bool bCullMeshletContribution{true};
 };
 } // Core
 

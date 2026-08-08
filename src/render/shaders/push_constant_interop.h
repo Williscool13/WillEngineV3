@@ -112,11 +112,32 @@ SHADER_PUBLIC struct InstanceLODPushConstant
 
     // Write
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+    // [0] frustum, [1] contribution (readback culledInstanceFrustum base)
+    SHADER_PUBLIC SHADER_PTR(uint) cullStats;
 
     // Read-Only
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC int32_t lodBias;
+    SHADER_PUBLIC uint32_t cullFlags;
+};
+
+SHADER_PUBLIC struct InstanceLODOcclusionPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) visBits;
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+    SHADER_PUBLIC SHADER_PTR(uint) occludedCounter;
+    SHADER_PUBLIC uint2 hizExtent;
+    SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC int32_t lodBias;
+    SHADER_PUBLIC uint32_t hizIndex;
+    SHADER_PUBLIC uint32_t hizMipCount;
+    SHADER_PUBLIC uint32_t cullFlags;
 };
 
 SHADER_PUBLIC struct PrefixSumUpsweep1PushConstant
@@ -203,10 +224,18 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    // [0] frustum, [1] cone, [2] contribution, [3] occlusion (readback culledMeshletFrustum base)
+    SHADER_PUBLIC SHADER_PTR(uint) cullStats;
 
+    SHADER_PUBLIC uint2 hizExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
+    SHADER_PUBLIC uint32_t hizIndex;
+    SHADER_PUBLIC uint32_t hizMipCount;
+    // Phase 2 sets this; phase 1 runs frustum + cone + contribution only
+    SHADER_PUBLIC uint32_t bHiZ;
+    SHADER_PUBLIC uint32_t cullFlags;
 };
 
 SHADER_PUBLIC struct MeshletVisibilityPrefixSumUpsweep1PushConstant

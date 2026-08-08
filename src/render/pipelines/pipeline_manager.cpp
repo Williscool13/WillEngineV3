@@ -412,6 +412,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(CompactedMeshletDispatchPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("instancing_max_meshlet_count"), src / "instancing_meshlets.spv", "ComputeMaxMeshletCount",
                             sizeof(MaxMeshletCountPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_instance_lod_occlusion"), src / "instancing_lod.spv", "ComputeInstanceLODOcclusion",
+                            sizeof(InstanceLODOcclusionPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline("visibility_buffer_barycentric_derivative"_sid, src / "visibility_barycentric_derivative.spv", "ComputeVisibilityBarycentricDerivative",
                             sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::Critical);
