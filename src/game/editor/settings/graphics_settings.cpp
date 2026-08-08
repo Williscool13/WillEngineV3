@@ -420,6 +420,25 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
 
+        ImGui::SeparatorText("Occlusion"); {
+            int hizMip = state->debug.render.hizDebugMip;
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::SliderInt("Hi-Z Mip##HiZDebug", &hizMip, -1, 11, hizMip < 0 ? "Off" : "%d")) {
+                state->debug.render.hizDebugMip = hizMip;
+                if (hizMip >= 0) {
+                    state->debug.resourceName = Core::InlineString("hiz_debug_target");
+                    state->debug.transformationType = DebugTransformationType::None;
+                    state->debug.viewAspect = Core::DebugViewAspect::None;
+                }
+                else if (state->debug.resourceName == "hiz_debug_target") {
+                    state->debug.resourceName.Clear();
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Shows the occlusion Hi-Z depth pyramid at the chosen mip, nearest-upscaled, grayscale = pow(depth, 0.25) so reversed-Z far reads dark. Mip 0 is pow2-down of half render resolution; each level is a conservative min (farthest) reduce. Sky is black; higher mips should only ever get darker.");
+            }
+        }
+
         ImGui::SeparatorText("Render Target Views");
 
         ImGui::Text("Current Debug View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());

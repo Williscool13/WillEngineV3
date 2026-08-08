@@ -1883,6 +1883,25 @@ SHADER_PUBLIC struct ColorCopyPushConstant
     SHADER_PUBLIC uint2 extents;
 };
 
+SHADER_PUBLIC struct HiZBuildPushConstant
+{
+    SHADER_PUBLIC uint2 srcExtent;
+    SHADER_PUBLIC uint2 dstExtent;
+    SHADER_PUBLIC uint32_t srcIndex;
+    SHADER_PUBLIC uint32_t dstMipCount;
+    SHADER_PUBLIC uint32_t bSampledSrc;
+    SHADER_PUBLIC uint32_t dstIndex[5];
+};
+
+SHADER_PUBLIC struct HiZDebugPushConstant
+{
+    SHADER_PUBLIC uint32_t hizIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint2 outExtent;
+    SHADER_PUBLIC uint2 mipExtent;
+    SHADER_PUBLIC uint32_t mip;
+};
+
 SHADER_PUBLIC struct RTShadowTestPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;

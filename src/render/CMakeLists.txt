@@ -75,6 +75,8 @@ add_library(render STATIC
         renderer.h
         passes/geometry_passes.cpp
         passes/geometry_passes.h
+        passes/occlusion_passes.cpp
+        passes/occlusion_passes.h
         passes/lighting_passes.cpp
         passes/lighting_passes.h
         passes/restir_passes.cpp

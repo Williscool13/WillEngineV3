@@ -581,6 +581,11 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("depth_copy"), src / "depth_copy.spv", "ComputeDepthCopy",
                             sizeof(DepthCopyPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline(SID("hiz_build"), src / "hiz_build.spv", "ComputeHiZBuild",
+                            sizeof(HiZBuildPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("hiz_debug"), src / "hiz_build.spv", "ComputeHiZDebug",
+                            sizeof(HiZDebugPushConstant), PipelineCategory::Critical);
+
     RegisterComputePipeline(SID("color_copy"), src / "color_copy.spv", "ComputeColorCopy",
                             sizeof(ColorCopyPushConstant), PipelineCategory::Critical);
 

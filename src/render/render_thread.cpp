@@ -628,6 +628,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     });
             }
 
+            SetupHiZPyramid(*renderGraph, pipelineManager, renderExtent, targets);
+            if (frameBuffer.debug.hizDebugMip >= 0) {
+                SetupHiZDebug(*renderGraph, pipelineManager, renderExtent, frameBuffer.debug.hizDebugMip);
+            }
+
             if (frameBuffer.ddgi.bEnabled && frameBuffer.debug.giDeconstructMode != 0) {
                 SetupGIDeconstruct(*renderGraph, pipelineManager, renderExtent, targets, 0, frameBuffer.debug.giDeconstructMode);
             }
@@ -1653,6 +1658,7 @@ void RenderThread::RegisterDebugReadbacks()
 
 void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const
 {
+    ZoneScoped;
     renderGraph->CreateBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE, false);
     renderGraph->CreateBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE, false);
     renderGraph->CreateBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE, false);
@@ -1675,7 +1681,9 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
     // Lights
     UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
-    auto* lightData = static_cast<LightData*>(lightDataUploadAllocation.ptr); {
+    auto* lightData = static_cast<LightData*>(lightDataUploadAllocation.ptr);
+    //
+    {
         const glm::vec3& dir = viewFamily.directionalLight.direction;
         const glm::vec3& col = viewFamily.directionalLight.color;
         lightData->directionalLight.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
@@ -1691,14 +1699,16 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         lightData->_pad1 = 0.0f;
 
 
+        // lightData is write-combined upload memory: never read through it (loop bounds included), only stream writes
         lightData->lightCount = static_cast<int32_t>(viewFamily.lights.Size());
-        for (int32_t i = 0; i < lightData->lightCount; i++) {
-            lightData->lights[i] = viewFamily.lights[i];
+        if (!viewFamily.lights.IsEmpty()) {
+            memcpy(lightData->lights, viewFamily.lights.Data(), viewFamily.lights.Size() * sizeof(LightInfo));
         }
 
-        lightData->emissiveGroupCount = static_cast<int32_t>(glm::min(viewFamily.emissiveGroups.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS)));
-        for (int32_t i = 0; i < lightData->emissiveGroupCount; i++) {
-            lightData->emissiveGroups[i] = viewFamily.emissiveGroups[i];
+        const size_t groupCount = glm::min(viewFamily.emissiveGroups.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS));
+        lightData->emissiveGroupCount = static_cast<int32_t>(groupCount);
+        if (groupCount > 0) {
+            memcpy(lightData->emissiveGroups, viewFamily.emissiveGroups.Data(), groupCount * sizeof(EmissiveGroup));
         }
     }
 
@@ -1807,6 +1817,8 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
 void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
 {
+    ZoneScoped;
+
     size_t totalInstanceCount = viewFamily.primitiveInstances.Size();
     UploadAllocation instanceUpload = renderGraph->AllocateTransient(totalInstanceCount * sizeof(Instance));
     auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
@@ -2002,6 +2014,8 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
 void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
 {
+    ZoneScoped;
+
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
 
     renderGraph->CreateBuffer(TEXT_GLYPH_QUAD_BUFFER, renderFamilyProperties.glyphQuadBufferSize, false);
@@ -2113,6 +2127,8 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
 
 void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) const
 {
+    ZoneScoped;
+
     if (viewFamily.spriteBatches.IsEmpty()) {
         return;
     }
@@ -2163,6 +2179,8 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) cons
 
 void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
 {
+    ZoneScoped;
+
     if (!viewFamily.uiGlyphQuads.IsEmpty()) {
         renderGraph->CreateBuffer(UI_GLYPH_QUAD_BUFFER, renderFamilyProperties.uiGlyphQuadBufferSize, false);
         const uint32_t quadCount = viewFamily.uiGlyphQuads.Size();
