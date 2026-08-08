@@ -45,37 +45,6 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_PUBLIC struct InstancedMeshIndirectDrawParameters
-{
-    // indirect parameters
-    SHADER_PUBLIC uint32_t groupCountX; // meshlet count / group size
-    SHADER_PUBLIC uint32_t groupCountY; // instance offset
-    SHADER_PUBLIC uint32_t groupCountZ;
-
-    SHADER_PUBLIC uint32_t compactedInstanceStart;
-    SHADER_PUBLIC uint32_t compactedInstanceCount;
-
-    SHADER_PUBLIC uint32_t meshletOffset;
-    SHADER_PUBLIC uint32_t meshletCount;
-    uint32_t padding0;
-};
-
-// Direct to mesh shader, no task shader
-SHADER_PUBLIC struct CustomMeshRenderingDrawParameters
-{
-    SHADER_PUBLIC uint32_t groupCountX; // meshlet count / group size
-    SHADER_PUBLIC uint32_t groupCountY; // always 1
-    SHADER_PUBLIC uint32_t groupCountZ; // always 1
-
-    SHADER_PUBLIC uint32_t compactedInstanceStart;
-    SHADER_PUBLIC uint32_t compactedInstanceCount;
-
-    SHADER_PUBLIC uint32_t meshletOffset;
-    SHADER_PUBLIC uint32_t meshletCount;
-    uint32_t padding0;
-};
-
-
 SHADER_PUBLIC struct InstanceMeshletOffsetPrefixSum
 {
     SHADER_PUBLIC uint32_t offset;

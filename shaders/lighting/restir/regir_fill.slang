@@ -41,8 +41,12 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     float3 cellCenterWS = ReGIRCellCenterFromKey(key);
     float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
 
+    // Skip the dead [analyticCount, MAX_ANALYTIC_LIGHTS) gap: analytic slots end at the watermark, triangles start at the fixed boundary
+    uint analyticCount = uint(pc.lightData->analyticLightCount);
+    uint triCount = uint(max(lightCount - MAX_ANALYTIC_LIGHTS, 0));
     float localSum = 0.0;
-    for (uint li = localID.x; li < uint(lightCount); li += 64u) {
+    for (uint i = localID.x; i < analyticCount + triCount; i += 64u) {
+        uint li = (i < analyticCount) ? i : (i - analyticCount) + uint(MAX_ANALYTIC_LIGHTS);
         LightView vsl = UnpackLightVS(pc.lightVS[li]);
         localSum += EvalCellLightTarget(vsl, cellCenterVS, UnpackUnorm4x8(vsl.packedColor).rgb);
     }
