@@ -19,6 +19,13 @@ void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_Disp
     }
 
     Instance inst = pc.instanceBuffer[instanceID];
+    if (inst.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) {
+        pc.instanceMeshletOffsets[instanceID].count = 0;
+        pc.instanceMeshletOffsets[instanceID].lod = LOD_CULLED;
+        pc.instanceMeshletOffsets[instanceID].primitiveIndex = inst.primitiveIndex;
+        return;
+    }
+
     Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model model = pc.modelBuffer[inst.modelIndex];
 

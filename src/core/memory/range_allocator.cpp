@@ -110,8 +110,20 @@ RangeAllocator::Stats RangeAllocator::GetStats() const
     return Stats{
         .capacity = capacity_,
         .used = used_,
+        .watermark = GetWatermark(),
         .largestFreeRun = largest,
         .freeSpanCount = static_cast<uint32_t>(freeSpans_.Size()),
     };
+}
+
+uint32_t RangeAllocator::GetWatermark() const
+{
+    if (!freeSpans_.IsEmpty()) {
+        const Range& last = freeSpans_[freeSpans_.Size() - 1];
+        if (last.offset + last.count == capacity_) {
+            return last.offset;
+        }
+    }
+    return capacity_;
 }
 } // Core

@@ -26,7 +26,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
 
     activeMaterials = ArenaMap<Engine::MaterialID, uint32_t>(&arena, wm.activeMaterials);
     lightEntityToIndex = ArenaMap<uint32_t, uint32_t>(&arena, MAX_LIGHTS);
-    triLightBaseBySlot = ArenaMap<uint32_t, uint32_t>(&arena, MAX_LIGHTS);
+    triLightBaseBySlot = ArenaVector<uint32_t>(&arena);
     materials = ArenaVector<Engine::RenderMaterial>(&arena, wm.materials);
     activeTextMaterials = ArenaMap<Engine::TextMaterialID, uint32_t>(&arena, wm.activeTextMaterials);
     textMaterials = ArenaVector<TextRenderMaterial>(&arena, wm.textMaterials);

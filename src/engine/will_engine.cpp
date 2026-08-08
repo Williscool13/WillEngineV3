@@ -738,6 +738,13 @@ void WillEngine::EditorImgui()
                 ImGui::SeparatorText("Engine");
                 drawMemBar("Persistent", ms.persistent.usedBytes, ms.persistent.totalBytes, ms.persistent.allocCount);
 
+                if (engineState->meshPrimitiveStore.IsInitialized()) {
+                    ImGui::SeparatorText("Mesh Primitive Store");
+                    const Core::RangeAllocator::Stats ss = engineState->meshPrimitiveStore.GetStats();
+                    ImGui::Text("used %u  watermark %u / %u", ss.used, ss.watermark, ss.capacity);
+                    ImGui::Text("free spans %u  largest run %u", ss.freeSpanCount, ss.largestFreeRun);
+                }
+
                 ImGui::SeparatorText("Arena Pool"); {
                     const Core::ArenaSuballocator::Stats as = memoryManager.ArenaPool().GetStats();
                     const float totalBytes = static_cast<float>(as.totalBytes);

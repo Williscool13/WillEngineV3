@@ -129,11 +129,12 @@ struct ScreenFadeState
 };
 
 /**
- * 1 Unit of rendering for the renderer. Represents 1 primitive for a mesh (multiple primitives can share the same model matrix, hence the modelIndex)
+ * 1 Unit of rendering for the renderer. Represents 1 primitive for a mesh (multiple primitives can share the same model matrix, hence the modelIndex).
+ * Slot-indexed by stable MeshPrimitiveStore index; a default-constructed entry is a dead slot.
  */
 struct PrimitiveInstanceData
 {
-    uint32_t primitiveIndex{};
+    uint32_t primitiveIndex{DEAD_SLOT_PRIMITIVE_INDEX};
     Engine::MaterialID materialID{};
     uint32_t modelIndex{};
     uint64_t stableId{};
@@ -478,8 +479,7 @@ struct ViewFamily
 
     uint32_t analyticLightCount{0};
     ArenaFixedVector<EmissiveGroup> emissiveGroups{};
-    // MeshPrimitiveStore slot -> base light index of light list
-    ArenaMap<uint32_t, uint32_t> triLightBaseBySlot{};
+    ArenaVector<uint32_t> triLightBaseBySlot{};
 
     GTAOConfiguration gtaoConfig{};
     AntiAliasingConfiguration aaConfig{};

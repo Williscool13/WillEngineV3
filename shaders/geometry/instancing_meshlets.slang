@@ -34,7 +34,7 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
         return;
     }
 
-    // Binary search to find which instance owns this meshlet
+    // Binary search to find which instance owns this meshlet.
     uint left = 0;
     uint right = pc.instanceCount - 1;
     uint instanceIndex = 0;

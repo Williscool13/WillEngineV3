@@ -1176,6 +1176,9 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
+    frameBuffer->mainViewFamily.primitiveInstances.Clear();
+    frameBuffer->mainViewFamily.primitiveInstances.Resize(state->meshPrimitiveStore.GetWatermark());
+
     // Gather regular renderables
     {
         ZoneScopedN("MeshRuntimeGather");
@@ -1208,16 +1211,17 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform);
                     lastNode = inst.sourceNodeIndex;
                 }
-                const uint32_t* triBase = frameBuffer->mainViewFamily.triLightBaseBySlot.Find(base + i);
-                frameBuffer->mainViewFamily.primitiveInstances.PushBack({
+                const uint32_t slot = base + i;
+                const uint32_t triBase = slot < frameBuffer->mainViewFamily.triLightBaseBySlot.Size() ? frameBuffer->mainViewFamily.triLightBaseBySlot[slot] : 0xFFFFFFFFu;
+                frameBuffer->mainViewFamily.primitiveInstances[slot] = {
                     .primitiveIndex = inst.primitiveIndex,
                     .materialID = inst.materialID,
                     .modelIndex = modelIndex,
                     .stableId = stableId,
                     .blasDeviceAddress = inst.blasDeviceAddress,
-                    .emissiveTriLightBase = triBase ? *triBase : 0xFFFFFFFFu,
+                    .emissiveTriLightBase = triBase,
                     .ddgiVisible = runtime.ddgiVisible,
-                });
+                };
             }
         }
     } {
@@ -1254,14 +1258,14 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
             frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(surfaceRuntime.modelMatrix, surfaceRuntime.previousMatrix);
 
-            frameBuffer->mainViewFamily.primitiveInstances.PushBack({
+            frameBuffer->mainViewFamily.primitiveInstances[surfaceRuntime.range.offset] = {
                 .primitiveIndex = inst.primitiveIndex,
                 .materialID = inst.materialID,
                 .modelIndex = modelIndex,
                 .stableId = stableId,
                 .blasDeviceAddress = inst.blasDeviceAddress,
                 .lightIndex = lightIdxPtr ? *lightIdxPtr : 0xFFFFFFFFu,
-            });
+            };
         };
 
         for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::AreaLightComponent, Component::LightSurfaceRuntime>(entt::exclude<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>).each()) {
@@ -1276,6 +1280,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     {
         ZoneScopedN("Material Recording");
         for (auto& instance : frameBuffer->mainViewFamily.primitiveInstances) {
+            if (instance.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) { continue; }
             auto [val, inserted] = frameBuffer->mainViewFamily.activeMaterials.TryEmplace(instance.materialID);
             if (inserted) {
                 val = frameBuffer->mainViewFamily.materials.Size();
@@ -1591,6 +1596,8 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
             std::ranges::sort(sorted, [](const EmissiveEntry& a, const EmissiveEntry& b) { return a.sortKey < b.sortKey; });
 
             Engine::MeshPrimitiveStore& store = state->meshPrimitiveStore;
+            vf.triLightBaseBySlot.Resize(store.GetWatermark());
+            memset(vf.triLightBaseBySlot.Data(), 0xFF, vf.triLightBaseBySlot.Size() * sizeof(uint32_t));
             const auto maxPerPrimitive = static_cast<uint32_t>(glm::max(state->debug.restir.emissiveTriMaxPerPrimitive, 1));
             bool bLoggedCapacity = false;
             for (const EmissiveEntry& entry : sorted) {

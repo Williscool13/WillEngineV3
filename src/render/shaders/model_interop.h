@@ -170,6 +170,8 @@ SHADER_PUBLIC struct MaterialProperties
     SHADER_PUBLIC float4 physicalProperties; // x: IOR, y: dispersion, z: normal scale, w: occlusion strength
 };
 
+SHADER_PUBLIC SHADER_CONST uint32_t DEAD_SLOT_PRIMITIVE_INDEX = 0xFFFFFFFFu;
+
 SHADER_PUBLIC struct Instance
 {
     SHADER_PUBLIC uint32_t primitiveIndex;

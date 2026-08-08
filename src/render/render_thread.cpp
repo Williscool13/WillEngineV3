@@ -1813,6 +1813,10 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
     for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
         auto& inst = viewFamily.primitiveInstances[i];
+        if (inst.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) {
+            instanceBuffer[i] = {.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
+            continue;
+        }
         uint32_t materialIndex = viewFamily.activeMaterials[inst.materialID];
         Engine::RenderMaterial& mat = viewFamily.materials[materialIndex];
         uint32_t lightingIndex = viewFamily.lightingBuckets[mat.lightingShader];

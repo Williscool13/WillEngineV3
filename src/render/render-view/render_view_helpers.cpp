@@ -231,13 +231,6 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.viewFamily = &viewFamily;
     renderFamilyProperties.bCanRender = _pipelineManager->IsCategoryReady(PipelineCategory::Critical);
 
-    if (!viewFamily.primitiveInstances.IsEmpty()) {
-        std::ranges::sort(viewFamily.primitiveInstances, [](const Core::PrimitiveInstanceData& a, const Core::PrimitiveInstanceData& b) {
-            return a.primitiveIndex < b.primitiveIndex;
-        });
-    }
-
-
     _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.modelMatrices.Size()));
     _limits.highestMaterialCount = std::max(_limits.highestMaterialCount, NextPowerOfTwo(viewFamily.materials.Size()));
     _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(viewFamily.lightingBuckets.Size()));

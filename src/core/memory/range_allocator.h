@@ -38,11 +38,15 @@ public:
     {
         uint32_t capacity;
         uint32_t used;
+        uint32_t watermark;
         uint32_t largestFreeRun;
         uint32_t freeSpanCount;
     };
 
     [[nodiscard]] Stats GetStats() const;
+
+    /** One past the highest allocated slot */
+    [[nodiscard]] uint32_t GetWatermark() const;
 
     [[nodiscard]] uint32_t GetCapacity() const { return capacity_; }
     [[nodiscard]] uint32_t GetUsed() const { return used_; }

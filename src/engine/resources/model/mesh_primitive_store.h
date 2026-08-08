@@ -29,6 +29,7 @@ struct MeshPrimitiveInstance
 };
 
 inline constexpr uint32_t MAX_MESH_PRIMITIVE_INSTANCES = 256 * 1024;
+static_assert(MAX_MESH_PRIMITIVE_INSTANCES < (1u << 31));
 
 
 /**
@@ -60,6 +61,7 @@ public:
     const MeshPrimitiveInstance* Data() const { return instances_.Data(); }
 
     [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
+    [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
     [[nodiscard]] bool IsInitialized() const { return ranges_.IsInitialized(); }
 
 private:
