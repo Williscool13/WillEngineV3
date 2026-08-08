@@ -325,9 +325,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         const bool bSameWindow = k < prevTotal && previous.localIds[k] == cascades.localIds[k] && previous.volumes[k].probeCount == cascades.volumes[k].probeCount
             && previous.volumes[k].probeSpacing == cascades.volumes[k].probeSpacing && previous.volumes[k].irradianceGamma == cascades.volumes[k].irradianceGamma;
         const bool bWritten = k < cascades.count || previous.localWarmup[k] > 0;
-        bHistoryValid[k] = bSameWindow && (k >= cascades.count
-                                               ? graph.HasTexture(sharedIrradianceId) && graph.HasTexture(sharedVisibilityId)
-                                               : graph.HasTexture(DDGI_IRRADIANCE[k]) && graph.HasTexture(DDGI_VISIBILITY[k]));
+        bHistoryValid[k] = bSameWindow && bWritten && (k >= cascades.count
+                                                          ? graph.HasTexture(sharedIrradianceId) && graph.HasTexture(sharedVisibilityId)
+                                                          : graph.HasTexture(DDGI_IRRADIANCE[k]) && graph.HasTexture(DDGI_VISIBILITY[k]));
         bOffsetsHistoryValid[k] = bSameWindow && bWritten && params.bRelocation && bOffsetsCarried;
         bRestartHistoryValid[k] = bSameWindow && bWritten && params.bRelocation && bRestartCarried;
         bActiveHistoryValid[k] = bSameWindow && bWritten && bClassify && bActiveCarried;

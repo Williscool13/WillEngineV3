@@ -125,11 +125,11 @@ void ComputeInstanceLODOcclusion(uniform InstanceLODOcclusionPushConstant pc, ui
             float4 worldBounds = ComputeInstanceWorldBounds(prim, model);
 
             bool bFrustumCulled = (pc.cullFlags & CULL_FLAG_INSTANCE_FRUSTUM) != 0u && !IsSphereInFrustum(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds);
-            bool bContributionCulled = !bFrustumCulled && (pc.cullFlags & CULL_FLAG_INSTANCE_CONTRIBUTION) != 0u &&
-                IsContributionCulled(worldBounds, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, pc.sceneData[pc.sceneDataIndex].proj[1][1], pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y, CONTRIBUTION_CULL_INSTANCE_MIN_PIXELS);
+            bool bContributionCulled = !bFrustumCulled && (pc.cullFlags & CULL_FLAG_INSTANCE_CONTRIBUTION) != 0u && IsContributionCulled(worldBounds, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, pc.sceneData[pc.sceneDataIndex].proj[1][1], pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y, CONTRIBUTION_CULL_INSTANCE_MIN_PIXELS);
             if (!bFrustumCulled && !bContributionCulled) {
                 lod = SelectInstanceLOD(worldBounds, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, pc.sceneData[pc.sceneDataIndex].lodScreenSizeScale, pc.lodBias);
-                bOccluded = IsOccludedHiZ(worldBounds.xyz, worldBounds.w, pc.sceneData[pc.sceneDataIndex].viewProj, pc.hizIndex, pc.hizMipCount, pc.hizExtent);
+                float4x4 mvp = mul(pc.sceneData[pc.sceneDataIndex].viewProj, model.modelMatrix);
+                bOccluded = IsOccludedHiZBox(prim.boundingBoxMin, prim.boundingBoxMax, mvp, pc.hizIndex, pc.hizMipCount, pc.hizExtent);
                 if (!bOccluded) {
                     InterlockedOr(pc.visBits[instanceID >> 5], 1u << (instanceID & 31u));
                     // Phase-1 count read before the overwrite below: count > 0 means it was already drawn
