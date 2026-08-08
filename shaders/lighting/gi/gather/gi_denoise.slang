@@ -247,6 +247,12 @@ void ComputeGIDenoiseChroma(uniform GIDenoisePushConstant pc, uint3 dtid : SV_Di
         float scale = shY.x / sumW;
         float4 co = sumCo * scale;
         float4 cg = sumCg * scale;
+        // Scale chroma back rather than per-channel clamping, so widened chroma can neither push RGB negative nor hue-shift via clipping.
+        float3 delta = float3(co.x - cg.x, cg.x, -co.x - cg.x);
+        float minDelta = min(delta.r, min(delta.g, delta.b));
+        float chromaScale = minDelta < 0.0 ? saturate(shY.x / max(-minDelta, 1e-6)) : 1.0;
+        co *= chromaScale;
+        cg *= chromaScale;
         shR = shY + co - cg;
         shG = shY + cg;
         shB = shY - co - cg;
