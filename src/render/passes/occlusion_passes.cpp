@@ -34,8 +34,8 @@ void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core:
         const uint32_t srcW = chunkStart == 0 ? renderExtent[0] : dstW * 2u;
         const uint32_t srcH = chunkStart == 0 ? renderExtent[1] : dstH * 2u;
 
-        Core::InlineString<32> passName = Core::InlineString<32>::Format("HiZ Build %u-%u", chunkStart, chunkStart + chunkMips - 1);
-        RenderPass& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Geometry);
+        Core::InlineString<48> passName = Core::InlineString<48>::Format("[Geometry P2] HiZ Build %u-%u", chunkStart, chunkStart + chunkMips - 1);
+        RenderPass& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GeometryPhase2);
         if (chunkStart == 0) {
             pass.ReadSampledImage(targets.depthCopy);
             pass.WriteStorageImage(HIZ_PYRAMID);
