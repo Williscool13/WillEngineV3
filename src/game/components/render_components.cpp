@@ -32,7 +32,7 @@ void MeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get<MeshRuntime>(entity);
 
-    state->instanceStore.ReleaseAndFree(ctx->materialManager, runtime.range);
+    state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime.range);
     state->modelStore.Free(runtime.modelRange);
     if (runtime.modelHandle.IsValid()) {
         ctx->assetManager->UnloadModel(runtime.modelHandle);

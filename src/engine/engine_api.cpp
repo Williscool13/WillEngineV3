@@ -119,6 +119,8 @@ EngineState::EngineState(Core::TlsfAllocator* allocator)
 {
     instanceStore.Init(MAX_INSTANCE_SLOTS, allocator, Core::AllocTag::RenderMesh);
     modelStore.Init(MAX_MODEL_SLOTS, allocator, Core::AllocTag::RenderMesh);
+    analyticLightStore.Init(MAX_ANALYTIC_LIGHTS, allocator, Core::AllocTag::Render);
+    triLightStore.Init(MAX_LIGHTS - MAX_ANALYTIC_LIGHTS, allocator, Core::AllocTag::Render);
 
     const uint64_t clayMemorySize = Clay_MinMemorySize();
     void* clayMemory = allocator->Alloc(clayMemorySize, Core::AllocTag::Clay);

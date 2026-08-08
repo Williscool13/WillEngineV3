@@ -752,6 +752,20 @@ void WillEngine::EditorImgui()
                     ImGui::Text("free spans %u  largest run %u", ms2.freeSpanCount, ms2.largestFreeRun);
                 }
 
+                if (engineState->analyticLightStore.IsInitialized()) {
+                    ImGui::SeparatorText("Analytic Light Store");
+                    const Core::RangeAllocator::Stats ls = engineState->analyticLightStore.GetStats();
+                    ImGui::Text("used %u  watermark %u / %u  pending free %u", ls.used, ls.watermark, ls.capacity, engineState->analyticLightStore.GetPendingFreeCount());
+                    ImGui::Text("free spans %u  largest run %u", ls.freeSpanCount, ls.largestFreeRun);
+                }
+
+                if (engineState->triLightStore.IsInitialized()) {
+                    ImGui::SeparatorText("Tri Light Store");
+                    const Core::RangeAllocator::Stats ts = engineState->triLightStore.GetStats();
+                    ImGui::Text("used %u  watermark %u / %u  pending free %u", ts.used, ts.watermark, ts.capacity, engineState->triLightStore.GetPendingFreeCount());
+                    ImGui::Text("free spans %u  largest run %u", ts.freeSpanCount, ts.largestFreeRun);
+                }
+
                 if (engineContext->materialManager) {
                     ImGui::SeparatorText("Materials");
                     ImGui::Text("resident %u / %u  definitions %u / %u",

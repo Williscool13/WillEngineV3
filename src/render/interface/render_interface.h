@@ -475,7 +475,6 @@ struct ViewFamily
 
     DirectionalLight directionalLight{};
     ArenaVector<LightInfo> lights{};
-    ArenaMap<uint32_t, uint32_t> lightEntityToIndex{};
     ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};
     ProbePreviewSettings probePreviewSettings{};
     ArenaFixedVector<ProbePreviewSphere> probePreviews{};

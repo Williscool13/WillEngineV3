@@ -171,12 +171,15 @@ glm::mat4 Component::ComputeAreaLightQuadMatrix(const TransformComponent& transf
 void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
+    registry.get<AreaLightComponent>(entity).lightSlot = state->analyticLightStore.Allocate();
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
     state->assetLoad.bPendingModelResolve = true;
 }
 
 void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    state->analyticLightStore.Free(registry.get<AreaLightComponent>(entity).lightSlot);
     registry.remove<LightSurfacePendingTag>(entity);
     registry.remove<LightSurfaceRuntime>(entity);
 }
@@ -239,12 +242,15 @@ glm::mat4 Component::ComputeSphereLightMatrix(const TransformComponent& transfor
 void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
+    registry.get<SphereLightComponent>(entity).lightSlot = state->analyticLightStore.Allocate();
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
     state->assetLoad.bPendingModelResolve = true;
 }
 
 void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    state->analyticLightStore.Free(registry.get<SphereLightComponent>(entity).lightSlot);
     registry.remove<LightSurfacePendingTag>(entity);
     registry.remove<LightSurfaceRuntime>(entity);
 }
@@ -256,7 +262,7 @@ void Component::LightSurfaceRuntime::OnDestroy(entt::registry& registry, entt::e
 
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    state->instanceStore.ReleaseAndFree(ctx->materialManager, runtime.range);
+    state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime.range);
     state->modelStore.Free(runtime.modelRange);
 }
 

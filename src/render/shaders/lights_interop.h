@@ -47,6 +47,7 @@ using float4x4 = glm::mat4;
 #endif // __SLANG__
 
 SHADER_PUBLIC SHADER_CONST int MAX_LIGHTS = 32768;
+SHADER_PUBLIC SHADER_CONST int MAX_ANALYTIC_LIGHTS = 16384;
 
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_AREA = 0u;
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_SPHERE = 1u;
@@ -115,7 +116,9 @@ SHADER_PUBLIC struct EmissiveGroup
 SHADER_PUBLIC struct LightData
 {
     SHADER_PUBLIC int lightCount;
-    // Lights [0, analyticLightCount) are analytic (area/sphere); [analyticLightCount, lightCount) are emissive triangles
+    // [0, analyticLightCount) are analytic (area/sphere) slots
+    //   analyticLightCount = analytic store watermark <= MAX_ANALYTIC_LIGHTS.
+    //   Emissive triangles start at MAX_ANALYTIC_LIGHTS, so index >= analyticLightCount still means triangle-or-dead.
     SHADER_PUBLIC int analyticLightCount;
     SHADER_PUBLIC int emissiveGroupCount;
     float _pad1;

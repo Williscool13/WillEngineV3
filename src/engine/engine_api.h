@@ -40,6 +40,8 @@
 #include "engine/editor_texture_residency.h"
 #include "engine/resources/model/instance_store.h"
 #include "engine/resources/model/model_store.h"
+#include "engine/resources/light/analytic_light_store.h"
+#include "engine/resources/light/tri_light_store.h"
 
 struct ResolvedCollisionEvent
 {
@@ -183,6 +185,8 @@ struct EngineState
 
     InstanceStore instanceStore{};
     ModelStore modelStore{};
+    AnalyticLightStore analyticLightStore{};
+    TriLightStore triLightStore{};
 
     AssetLoadState assetLoad{};
     BuiltinAssets builtinAssets{};

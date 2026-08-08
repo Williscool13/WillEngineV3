@@ -34,6 +34,9 @@ struct AreaLightComponent
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
 
+    /** Runtime-only stable analytic light slot. Allocated OnConstruct */
+    uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
+
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
     static void Serialize(const AreaLightComponent& comp, nlohmann::json& json);
@@ -63,6 +66,9 @@ struct SphereLightComponent
     float range{10.0f};
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
+
+    /** Runtime-only stable analytic light slot. Allocated OnConstruct */
+    uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 

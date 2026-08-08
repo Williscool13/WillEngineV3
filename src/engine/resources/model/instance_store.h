@@ -15,7 +15,9 @@
 namespace Engine
 {
 class MaterialManager;
+class TriLightStore;
 struct StaticModel;
+struct PrimitiveProperty;
 
 /**
  * Persistent per-slot source data one GPU Instance is derived from each frame.
@@ -31,10 +33,28 @@ struct InstanceSource
     MaterialID materialID{};
     uint64_t blasDeviceAddress{0};
     Mat4 modelSpaceTransform{1.0f};
+
+    /**
+     * TriLightStore range covering this primitive's full emissive triangle set
+     */
+    Core::RangeAllocator::Range triLightRange{};
 };
 
 inline constexpr uint32_t MAX_INSTANCE_SLOTS = 256 * 1024;
 static_assert(MAX_INSTANCE_SLOTS < (1u << 31));
+
+/**
+ * Caller-varying fields for FillEntry; everything else is derived from the primitive and the managers.
+ */
+struct InstanceFill
+{
+    MaterialID material{};
+    uint32_t modelSlot{~0u};
+    int32_t originalMaterialIndex{-1};
+    uint32_t sourceNodeIndex{0};
+    uint32_t modelPrimitiveOrdinal{~0u};
+    Mat4 modelSpaceTransform{1.0f};
+};
 
 
 /**
@@ -51,11 +71,14 @@ public:
 
     void Free(Range range) { ranges_.Free(range); }
 
-    /** Range over model mesh[0]'s primitives with a uniform material (acquired per entry), identity transforms, and a shared ModelStore slot. Invalid range on an empty model or full store. */
-    Range AllocateSingleMeshRange(MaterialManager* materialManager, StaticModel* model, MaterialID material, uint32_t modelSlot);
+    /** Range over model mesh[0]'s primitives with a uniform material (acquired per entry), identity transforms, a shared ModelStore slot, and a tri-light range per emissive primitive. Invalid range on an empty model or full store. */
+    Range AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot);
 
-    /** Releases each entry's material ref, frees the range, and invalidates it. No-op on an invalid range. */
-    void ReleaseAndFree(MaterialManager* materialManager, Range& range);
+    /** The single writer for InstanceSource entries: acquires the material, stamps the stable material index, and allocates the primitive's tri-light range. */
+    void FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill);
+
+    /** Releases each entry's material ref and tri-light range, frees the range, and invalidates it. No-op on an invalid range. */
+    void ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range);
 
     InstanceSource* Get(Range range) { return range.IsValid() ? &instances_[range.offset] : nullptr; }
 

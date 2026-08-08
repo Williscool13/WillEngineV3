@@ -65,6 +65,10 @@ add_library(engine STATIC
         resources/model/instance_store.cpp
         resources/model/model_store.h
         resources/model/model_store.cpp
+        resources/light/analytic_light_store.h
+        resources/light/analytic_light_store.cpp
+        resources/light/tri_light_store.h
+        resources/light/tri_light_store.cpp
         resources/physics/physics_collider_asset.h
         resources/physics/collider_generation.h
         resources/physics/collider_generation.cpp
