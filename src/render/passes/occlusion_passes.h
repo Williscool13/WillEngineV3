@@ -17,7 +17,7 @@ inline const StringID HIZ_PYRAMID = SID("hiz_pyramid");
 inline const StringID HIZ_DEBUG_TARGET = SID("hiz_debug_target");
 
 /**
- * Min-reduce depth pyramid from depth_copy. Mip 0 is half render extent.
+ * Min-reduce depth pyramid from the depth attachment (call after the phase-1 draw). Mip 0 is pow2-down of half render extent.
  */
 void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets);
 

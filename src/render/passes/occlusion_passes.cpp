@@ -37,19 +37,19 @@ void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core:
         Core::InlineString<48> passName = Core::InlineString<48>::Format("[Geometry P2] HiZ Build %u-%u", chunkStart, chunkStart + chunkMips - 1);
         RenderPass& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GeometryPhase2);
         if (chunkStart == 0) {
-            pass.ReadSampledImage(targets.depthCopy);
+            pass.ReadSampledImage(targets.depthStencil);
             pass.WriteStorageImage(HIZ_PYRAMID);
         }
         else {
             pass.ReadWriteImage(HIZ_PYRAMID);
         }
-        pass.Execute([pipelineManager, chunkStart, chunkMips, srcW, srcH, dstW, dstH, depthCopy = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, chunkStart, chunkMips, srcW, srcH, dstW, dstH, depthStencil = targets.depthStencil](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("hiz_build"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
             HiZBuildPushConstant pc{
                 .srcExtent = {srcW, srcH},
                 .dstExtent = {dstW, dstH},
-                .srcIndex = chunkStart == 0 ? graph.GetSampledImageViewDescriptorIndex(depthCopy) : graph.GetStorageImageViewDescriptorIndex(HIZ_PYRAMID, chunkStart - 1),
+                .srcIndex = chunkStart == 0 ? graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil) : graph.GetStorageImageViewDescriptorIndex(HIZ_PYRAMID, chunkStart - 1),
                 .dstMipCount = chunkMips,
                 .bSampledSrc = chunkStart == 0 ? 1u : 0u,
             };

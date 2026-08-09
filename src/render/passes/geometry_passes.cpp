@@ -4,6 +4,7 @@
 
 #include "render/passes/geometry_passes.h"
 
+#include "render/passes/occlusion_passes.h"
 #include "render/render_utils.h"
 #include "core/containers/inline_string.h"
 #include "render/pipelines/pipeline_data.h"

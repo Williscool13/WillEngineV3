@@ -27,6 +27,13 @@ struct RendererStatistics
 {
     // Geometry pass
     uint32_t visibleMeshletCount{};
+    uint32_t culledInstanceFrustum{};
+    uint32_t culledInstanceContribution{};
+    uint32_t culledInstanceOcclusion{};
+    uint32_t culledMeshletFrustum{};
+    uint32_t culledMeshletCone{};
+    uint32_t culledMeshletContribution{};
+    uint32_t culledMeshletOcclusion{};
 
     // Visibility bucketing
     uint32_t shadingDispatches{};

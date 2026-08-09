@@ -1058,6 +1058,13 @@ void WillEngine::EditorImgui()
         if (ImGui::CollapsingHeader("Renderer Statistics")) {
             const Render::RendererStatistics stats = renderThread->GetRendererStatistics();
             ImGui::Text("Visible Meshlets:            %u", stats.visibleMeshletCount);
+            ImGui::Text("Culled Inst Frustum:         %u", stats.culledInstanceFrustum);
+            ImGui::Text("Culled Inst Contribution:    %u", stats.culledInstanceContribution);
+            ImGui::Text("Culled Inst Occlusion:       %u", stats.culledInstanceOcclusion);
+            ImGui::Text("Culled Mlet Frustum:         %u", stats.culledMeshletFrustum);
+            ImGui::Text("Culled Mlet Cone:            %u", stats.culledMeshletCone);
+            ImGui::Text("Culled Mlet Contribution:    %u", stats.culledMeshletContribution);
+            ImGui::Text("Culled Mlet Occlusion:       %u", stats.culledMeshletOcclusion);
             ImGui::Text("Shading Dispatches:          %u", stats.shadingDispatches);
             ImGui::Text("Lighting Dispatches:         %u", stats.lightingDispatches);
             ImGui::Separator();

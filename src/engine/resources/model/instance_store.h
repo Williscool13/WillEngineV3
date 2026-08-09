@@ -11,6 +11,7 @@
 #include "core/memory/range_allocator.h"
 #include "core/types/math.h"
 #include "engine/core/material_id.h"
+#include "render/shaders/model_interop.h"
 
 namespace Engine
 {
@@ -39,9 +40,6 @@ struct InstanceSource
      */
     Core::RangeAllocator::Range triLightRange{};
 };
-
-inline constexpr uint32_t MAX_INSTANCE_SLOTS = 256 * 1024;
-static_assert(MAX_INSTANCE_SLOTS < (1u << 31));
 
 /**
  * Caller-varying fields for FillEntry; everything else is derived from the primitive and the managers.

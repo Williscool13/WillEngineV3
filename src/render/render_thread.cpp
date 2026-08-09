@@ -426,6 +426,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
     frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
     statisticsManager.scratch.visibleMeshletCount = readbackData->meshletCount;
+    statisticsManager.scratch.culledInstanceFrustum = readbackData->culledInstanceFrustum;
+    statisticsManager.scratch.culledInstanceContribution = readbackData->culledInstanceContribution;
+    statisticsManager.scratch.culledInstanceOcclusion = readbackData->culledInstanceOcclusion;
+    statisticsManager.scratch.culledMeshletFrustum = readbackData->culledMeshletFrustum;
+    statisticsManager.scratch.culledMeshletCone = readbackData->culledMeshletCone;
+    statisticsManager.scratch.culledMeshletContribution = readbackData->culledMeshletContribution;
+    statisticsManager.scratch.culledMeshletOcclusion = readbackData->culledMeshletOcclusion;
     statisticsManager.scratch.shadingDispatches = readbackData->shadingDispatches;
     statisticsManager.scratch.lightingDispatches = readbackData->lightingDispatches;
     statisticsManager.scratch.radianceCache.occupiedSlots = readbackData->wcOccupied;
@@ -440,6 +447,14 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     PrepareRenderFamily(viewFamily);
     RenderFamilyProperties renderFamilyProperties = PrepareRenderFamilyProperties(viewFamily, readbackData, pipelineManager, frameResourceLimits);
     renderFamilyProperties.bWireframe = frameBuffer.debug.bWireframe;
+    renderFamilyProperties.bOcclusionCulling = frameBuffer.debug.bOcclusionCulling;
+    renderFamilyProperties.bOcclusionFreeze = frameBuffer.debug.bOcclusionFreeze;
+    renderFamilyProperties.cullFlags =
+            (frameBuffer.debug.bCullInstanceFrustum ? CULL_FLAG_INSTANCE_FRUSTUM : 0u) |
+            (frameBuffer.debug.bCullInstanceContribution ? CULL_FLAG_INSTANCE_CONTRIBUTION : 0u) |
+            (frameBuffer.debug.bCullMeshletFrustum ? CULL_FLAG_MESHLET_FRUSTUM : 0u) |
+            (frameBuffer.debug.bCullMeshletCone ? CULL_FLAG_MESHLET_CONE : 0u) |
+            (frameBuffer.debug.bCullMeshletContribution ? CULL_FLAG_MESHLET_CONTRIBUTION : 0u);
 
     //
     {
@@ -628,7 +643,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     });
             }
 
-            SetupHiZPyramid(*renderGraph, pipelineManager, renderExtent, targets);
             if (frameBuffer.debug.hizDebugMip >= 0) {
                 SetupHiZDebug(*renderGraph, pipelineManager, renderExtent, frameBuffer.debug.hizDebugMip);
             }

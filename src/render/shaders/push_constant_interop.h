@@ -109,6 +109,8 @@ SHADER_PUBLIC struct InstanceLODPushConstant
     SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    // Last frame's occlusion visibility bits
+    SHADER_PUBLIC SHADER_PTR(uint) visBits;
 
     // Write
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
@@ -1980,6 +1982,8 @@ SHADER_PUBLIC struct RTGroundTruthGIPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t accumulationCount;
     SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC uint32_t samplesPerFrame;
+    SHADER_PUBLIC uint32_t pad0;
     SHADER_PUBLIC uint2 renderExtent;
 };
 

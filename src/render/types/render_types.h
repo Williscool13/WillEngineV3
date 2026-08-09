@@ -38,6 +38,9 @@ struct RenderFamilyProperties
 
     bool bCanRender{false};
     bool bWireframe{false};
+    bool bOcclusionCulling{true};
+    bool bOcclusionFreeze{false};
+    uint32_t cullFlags{0xFFFFFFFFu};
 
     size_t modelBufferSize{128};
     size_t materialBufferSize{128};

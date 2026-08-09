@@ -421,6 +421,25 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
 
         ImGui::SeparatorText("Occlusion"); {
+            ImGui::Checkbox("Inst Frustum##Cull", &state->debug.render.bCullInstanceFrustum);
+            ImGui::SameLine();
+            ImGui::Checkbox("Inst Contribution##Cull", &state->debug.render.bCullInstanceContribution);
+            ImGui::SameLine();
+            ImGui::Checkbox("Mlet Frustum##Cull", &state->debug.render.bCullMeshletFrustum);
+            ImGui::SameLine();
+            ImGui::Checkbox("Mlet Cone##Cull", &state->debug.render.bCullMeshletCone);
+            ImGui::SameLine();
+            ImGui::Checkbox("Mlet Contribution##Cull", &state->debug.render.bCullMeshletContribution);
+            ImGui::Checkbox("Occlusion Culling##HiZ", &state->debug.render.bOcclusionCulling);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Two-phase Hi-Z occlusion culling of the visibility-buffer geometry pass. Phase 1 draws what was visible last frame, phase 2 re-tests everything against the fresh depth pyramid and late-draws disocclusions, so the final image is identical to no culling. Off = frustum-only.");
+            }
+            ImGui::SameLine();
+            ImGui::Checkbox("Freeze##HiZ", &state->debug.render.bOcclusionFreeze);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Locks the visibility bits and stops phase 2, so only the frozen visible set draws. Move the camera or flip wireframe to see the culled geometry as holes. Debug only; the image is intentionally wrong while frozen.");
+            }
+            ImGui::SameLine();
             int hizMip = state->debug.render.hizDebugMip;
             ImGui::SetNextItemWidth(120.0f);
             if (ImGui::SliderInt("Hi-Z Mip##HiZDebug", &hizMip, -1, 11, hizMip < 0 ? "Off" : "%d")) {
