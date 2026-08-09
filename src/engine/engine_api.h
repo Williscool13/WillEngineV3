@@ -74,6 +74,7 @@ struct LightingState
     Core::LightingMode lightingMode{Core::LightingMode::Default};
     Core::GroundTruthMode groundTruthMode{Core::GroundTruthMode::None};
     bool bResetGroundTruth{false};
+    int32_t groundTruthSpp{1};
 
     Core::GTAOConfiguration gtaoConfig{};
     Core::AntiAliasingConfiguration aaConfig{};

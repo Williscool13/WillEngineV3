@@ -878,6 +878,11 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Engage GI Freeze once the first face has converged and settled, so all 6 faces capture the identical field. Freeze scope follows the checkboxes below. Restored when the probe finishes.");
     }
+    if (ImGui::Checkbox("Ground Truth Bake##bake", &probeBake.bGroundTruth)) { bakeChanged = true; }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Bake faces with the Full ground-truth path tracer instead of the live lighting path. Total samples per face = Settle Frames x GT Samples/Frame; the converge boost and GI freeze are skipped. The GI-gather-off / GTAO-off profile hygiene is unnecessary in this mode.");
+    }
+    if (Widgets::SliderInt("GT Samples/Frame##bake", &probeBake.groundTruthSpp, 1, 32, {.tooltip = "Path-traced samples per pixel per frame during a Ground Truth bake. Higher converges each face in fewer frames at the same total cost; too high risks GPU timeout at large capture sizes. Default 8.", .reset = true, .resetTo = 8.0})) { bakeChanged = true; }
     if (bakeChanged) {
         Engine::WriteProjectConfig(state->projectConfig);
     }
@@ -1015,6 +1020,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             gtToggle("GI", Core::GroundTruthMode::GI);
             ImGui::SameLine();
             gtToggle("Full", Core::GroundTruthMode::Full);
+            ImGui::SliderInt("Samples/Frame##gt", &state->lighting.groundTruthSpp, 1, 32);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Path-traced samples per pixel per frame; Full mode only, DI/GI stay 1. The probe bake overrides this with its own GT Samples/Frame while baking.");
+            }
         }
 
         ImGui::SeparatorText("Render Cache Reset"); {

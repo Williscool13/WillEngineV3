@@ -238,7 +238,7 @@ void SetupRTSunShadow(RenderGraph& graph,
     });
 }
 
-void SetupRTGroundTruthDI(RenderGraph& graph,
+bool SetupRTGroundTruthDI(RenderGraph& graph,
                            PipelineManager* pipelineManager,
                            const Core::ViewFamily& viewFamily,
                            Core::Array<uint32_t, 2> renderExtent,
@@ -248,7 +248,8 @@ void SetupRTGroundTruthDI(RenderGraph& graph,
                            uint32_t accumulationCount,
                            uint64_t frameNumber)
 {
-    if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
+    if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return false; }
+    if (!pipelineManager->GetPipelineEntry(SID("rt_ground_truth_di"))) { return false; }
 
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
@@ -305,9 +306,10 @@ void SetupRTGroundTruthDI(RenderGraph& graph,
     });
 
     graph.CarryBufferToNextFrame(SID("rt_gt_di_accum"), SID("rt_gt_di_accum"), 0);
+    return true;
 }
 
-void SetupRTGroundTruthGI(RenderGraph& graph,
+bool SetupRTGroundTruthGI(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
                           Core::Array<uint32_t, 2> renderExtent,
@@ -317,7 +319,8 @@ void SetupRTGroundTruthGI(RenderGraph& graph,
                           uint32_t accumulationCount,
                           uint64_t frameNumber)
 {
-    if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return; }
+    if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return false; }
+    if (!pipelineManager->GetPipelineEntry(SID("rt_ground_truth_gi"))) { return false; }
 
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
@@ -387,9 +390,10 @@ void SetupRTGroundTruthGI(RenderGraph& graph,
     });
 
     graph.CarryBufferToNextFrame(SID("rt_gt_gi_accum"), SID("rt_gt_gi_accum"), 0);
+    return true;
 }
 
-void SetupRTGroundTruthFull(RenderGraph& graph,
+bool SetupRTGroundTruthFull(RenderGraph& graph,
                             PipelineManager* pipelineManager,
                             const Core::ViewFamily& viewFamily,
                             Core::Array<uint32_t, 2> renderExtent,
@@ -397,9 +401,11 @@ void SetupRTGroundTruthFull(RenderGraph& graph,
                             uint32_t sceneIndex,
                             bool bReset,
                             uint32_t accumulationCount,
-                            uint64_t frameNumber)
+                            uint64_t frameNumber,
+                            uint32_t samplesPerFrame)
 {
-    if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return; }
+    if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return false; }
+    if (!pipelineManager->GetPipelineEntry(SID("rt_ground_truth_full"))) { return false; }
 
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
@@ -432,7 +438,7 @@ void SetupRTGroundTruthFull(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.WriteStorageImage(targets.colorOutput);
-    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
+    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, samplesPerFrame, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_full"));
@@ -459,6 +465,7 @@ void SetupRTGroundTruthFull(RenderGraph& graph,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .accumulationCount = accumulationCount,
             .iblIntensity = iblIntensity,
+            .samplesPerFrame = samplesPerFrame,
             .renderExtent = {renderExtent[0], renderExtent[1]},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -469,6 +476,7 @@ void SetupRTGroundTruthFull(RenderGraph& graph,
     });
 
     graph.CarryBufferToNextFrame(SID("rt_gt_full_accum"), SID("rt_gt_full_accum"), 0);
+    return true;
 }
 
 } // Render

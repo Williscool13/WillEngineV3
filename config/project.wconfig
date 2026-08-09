@@ -147,7 +147,7 @@
       ]
     }
   ],
-  "defaultScene": "GI Sun Bounce",
+  "defaultScene": "military_sandbox",
   "editorCameraFovDegrees": 70.0,
   "editorCameraNearPlane": 0.10000000149011612,
   "frameLimitTarget": 60,
@@ -161,6 +161,7 @@
   "probeBake": {
     "bAutoConverge": true,
     "bAutoFreeze": true,
+    "bGroundTruth": true,
     "captureSize": 1024,
     "settleFrames": 240
   },

@@ -83,6 +83,10 @@ struct ProbeBakeSystem
     Core::ReflectionProbeConfiguration stashedProbeConfig{};
     Engine::InputContext stashedInputContext{};
     bool stashedGIFreeze{false};
+    /** Latched from ProbeBakeSettings::bGroundTruth at Starting so a mid-bake config toggle cannot half-apply. */
+    bool bGroundTruthBake{false};
+    Core::GroundTruthMode stashedGroundTruthMode{Core::GroundTruthMode::None};
+    int32_t stashedGroundTruthSpp{1};
     Core::HeapArray<uint16_t> faceBuffers[6]{};
 
     /** Probe entities awaiting a bake; drained one at a time from the Idle phase. */

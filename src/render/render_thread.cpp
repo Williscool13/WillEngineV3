@@ -672,22 +672,26 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     case Core::GroundTruthMode::DI:
                     {
                         if (viewFamily.bResetGroundTruth) { rtGroundTruthDIAccumCount = 0; }
-                        SetupRTGroundTruthDI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthDIAccumCount, frameNumber);
-                        rtGroundTruthDIAccumCount += 1;
+                        if (SetupRTGroundTruthDI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthDIAccumCount, frameNumber)) {
+                            rtGroundTruthDIAccumCount += 1;
+                        }
                         break;
                     }
                     case Core::GroundTruthMode::GI:
                     {
                         if (viewFamily.bResetGroundTruth) { rtGroundTruthGIAccumCount = 0; }
-                        SetupRTGroundTruthGI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthGIAccumCount, frameNumber);
-                        rtGroundTruthGIAccumCount += 1;
+                        if (SetupRTGroundTruthGI(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthGIAccumCount, frameNumber)) {
+                            rtGroundTruthGIAccumCount += 1;
+                        }
                         break;
                     }
                     case Core::GroundTruthMode::Full:
                     {
                         if (viewFamily.bResetGroundTruth) { rtGroundTruthFullAccumCount = 0; }
-                        SetupRTGroundTruthFull(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthFullAccumCount, frameNumber);
-                        rtGroundTruthFullAccumCount += 1;
+                        const uint32_t gtSpp = glm::max(1u, viewFamily.groundTruthSpp);
+                        if (SetupRTGroundTruthFull(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthFullAccumCount, frameNumber, gtSpp)) {
+                            rtGroundTruthFullAccumCount += gtSpp;
+                        }
                         break;
                     }
                     case Core::GroundTruthMode::None:

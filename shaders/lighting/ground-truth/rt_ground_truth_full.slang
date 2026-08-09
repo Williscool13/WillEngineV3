@@ -16,9 +16,12 @@ import random_common;
 // Full path-traced reference: direct illumination (analytic light + cone-sampled sun, full BRDF) plus a complete indirect path that carries BOTH diffuse and
 // specular lobes at every vertex (single-sample MIS between the two), with NEE at each bounce and the skybox on miss. Unlike rt_ground_truth_gi (diffuse-only
 // indirect), this includes specular GI: mirror/glossy inter-reflections and specular reflections of the environment. Accumulated per pixel until reset.
-// Reuses RTGroundTruthGIPushConstant verbatim (identical inputs).
+// Analytic light emission is MIS-complete: NEE (area sampling) is balance-heuristic paired with BRDF rays that intersect the analytic light shapes in-shader
+// (sphere/quad along each bounce segment, sun cone on miss), so smooth-surface light reflections and reflective caustics converge instead of relying on
+// NEE through a near-delta GGX lobe. Lights stay transparent to rays, matching the shadow-ray mask. Reuses RTGroundTruthGIPushConstant verbatim.
 
 static const uint GT_FULL_MAX_BOUNCES = 8;
+static const float GT_FIREFLY_CLAMP_BASE = 16.0;
 
 static float GTLuminance(float3 c)
 {
@@ -62,6 +65,25 @@ static float3 SampleGGXHalfVector(float3 n, float roughness, float u1, float u2)
     float3 t = normalize(cross(up, n));
     float3 b = cross(n, t);
     return normalize(t * h.x + b * h.y + n * h.z);
+}
+
+static float BrdfSelectPSpec(float3 albedo, float metallic, float3 F0)
+{
+    float diffLum = GTLuminance(albedo * (1.0 - metallic));
+    float specLum = GTLuminance(F0);
+    return clamp(specLum / max(specLum + diffLum, 1e-4), 0.1, 0.9);
+}
+
+/** Solid-angle pdf of SampleSurfaceBrdf for direction L; must stay in lockstep with its sampling. */
+static float BrdfPdf(float3 N, float3 V, float3 L, float roughness, float pSpec)
+{
+    float nDotL = max(dot(N, L), 0.0);
+    float3 H = normalize(V + L);
+    float nDotH = max(dot(N, H), 0.0);
+    float vDotH = max(dot(V, H), 1e-4);
+    float pdfDiff = nDotL / PI;
+    float pdfSpec = D_GGX(N, H, roughness) * nDotH / max(4.0 * vDotH, 1e-4);
+    return pSpec * pdfSpec + (1.0 - pSpec) * pdfDiff;
 }
 
 struct GTFullSurface
@@ -118,12 +140,13 @@ static GTFullSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance in
     return surface;
 }
 
-/** Direct radiance at a vertex: cone-sampled sun + one uniformly picked analytic light, both shadow-ray tested, full (diffuse + specular) BRDF. rayOrigin is P already lifted off its surface; the caller owns that offset because a gbuffer vertex and a bounce vertex need different scales. */
-static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float3 rayOrigin, float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, inout uint rng)
+/** Direct radiance at a vertex: cone-sampled sun + one uniformly picked analytic light, both shadow-ray tested, full (diffuse + specular) BRDF. rayOrigin is P already lifted off its surface; the caller owns that offset because a gbuffer vertex and a bounce vertex need different scales. bMisPartner = a BRDF ray will leave this vertex (CollectAnalyticLightHits is the paired estimator); false at the final path vertex so NEE keeps full weight. */
+static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float3 rayOrigin, float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, bool bMisPartner, inout uint rng)
 {
     float3 radiance = float3(0.0);
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
     float nDotV = max(dot(N, V), 0.0);
+    float pSpec = BrdfSelectPSpec(albedo, metallic, F0);
 
     // NEE (analytic lights only)
     int analyticCount = pc.lightData->analyticLightCount;
@@ -178,7 +201,13 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
                 float3 diff = kD * albedo * orenNayar;
                 float geomTerm = LightGeometryTerm(cosLight, lightDist);
                 float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                radiance += (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(analyticCount) * lightArea;
+                float w = 1.0;
+                if (bMisPartner) {
+                    float pdfLightArea = 1.0 / (float(analyticCount) * lightArea);
+                    float pdfBrdfArea = BrdfPdf(N, V, L, roughness, pSpec) * cosLight / max(lightDist * lightDist, 1e-8);
+                    w = pdfLightArea / max(pdfLightArea + pdfBrdfArea, 1e-12);
+                }
+                radiance += (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(analyticCount) * lightArea * w;
             }
         }
     }
@@ -208,7 +237,15 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
                 float3 kD = (1.0 - F) * (1.0 - metallic);
                 float orenNayar = Diffuse_OrenNayar(cosShade, nDotV, L, V, roughness);
                 float3 diff = kD * albedo * orenNayar;
-                radiance += (diff + spec) * cosShade * dl.directionIntensity.w * UnpackUnorm4x8(dl.packedColor).rgb;
+                float w = 1.0;
+                if (bMisPartner) {
+                    float coneSolidAngle = 2.0 * PI * (1.0 - cos(dl.angularRadius));
+                    if (coneSolidAngle > 1e-7) {
+                        float pdfCone = 1.0 / coneSolidAngle;
+                        w = pdfCone / (pdfCone + BrdfPdf(N, V, L, roughness, pSpec));
+                    }
+                }
+                radiance += (diff + spec) * cosShade * dl.directionIntensity.w * UnpackUnorm4x8(dl.packedColor).rgb * w;
             }
         }
     }
@@ -216,10 +253,58 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
     return radiance;
 }
 
+/** MIS partner to EvalDirectLighting's NEE: emission a BRDF ray with pdf brdfPdf collects from analytic lights crossed along [0, maxT). Lights are transparent to rays (matching the shadow-ray mask), so every light on the segment contributes; the implied surface radiance intensity * color * LightRangeCull matches the NEE estimator's units exactly. */
+static float3 CollectAnalyticLightHits(RTGroundTruthGIPushConstant pc, float3 rayOrigin, float3 rayDir, float maxT, float brdfPdf)
+{
+    float3 radiance = float3(0.0);
+    int analyticCount = pc.lightData->analyticLightCount;
+    for (int i = 0; i < analyticCount; ++i) {
+        LightInfo al = pc.lightData->lights[i];
+        if (al.intensity <= 0.0) { continue; }
+
+        float t;
+        float cosLight;
+        float lightArea;
+        if (al.type == LIGHT_TYPE_SPHERE) {
+            float radius = al.right.w;
+            float3 oc = rayOrigin - al.position.xyz;
+            float b = dot(oc, rayDir);
+            float c = dot(oc, oc) - radius * radius;
+            float disc = b * b - c;
+            if (disc <= 0.0) { continue; }
+            t = -b - sqrt(disc);
+            if (t <= 0.0 || t >= maxT) { continue; }
+            cosLight = dot(normalize(rayOrigin + rayDir * t - al.position.xyz), -rayDir);
+            lightArea = 4.0 * PI * radius * radius;
+        } else if (al.type == LIGHT_TYPE_AREA) {
+            float denom = dot(al.normal.xyz, rayDir);
+            if (abs(denom) < 1e-6) { continue; }
+            t = dot(al.position.xyz - rayOrigin, al.normal.xyz) / denom;
+            if (t <= 0.0 || t >= maxT) { continue; }
+            float3 rel = rayOrigin + rayDir * t - al.position.xyz;
+            if (abs(dot(rel, al.right.xyz)) > al.right.w || abs(dot(rel, al.up.xyz)) > al.up.w) { continue; }
+            cosLight = dot(-al.normal.xyz, rayDir);
+            lightArea = 4.0 * al.right.w * al.up.w;
+        } else {
+            continue;
+        }
+
+        if (cosLight <= 0.0) { continue; }
+        float atten = LightRangeCull(t, al.range);
+        if (atten <= 0.0) { continue; }
+        float pdfLightArea = 1.0 / (float(analyticCount) * lightArea);
+        float pdfBrdfArea = brdfPdf * cosLight / max(t * t, 1e-8);
+        float w = pdfBrdfArea / max(pdfBrdfArea + pdfLightArea, 1e-12);
+        radiance += UnpackUnorm4x8(al.packedColor).rgb * al.intensity * atten * w;
+    }
+    return radiance;
+}
+
 struct BrdfSample
 {
     float3 direction;
     float3 weight; // f * cos / pdf
+    float pdf;
     bool valid;
 };
 
@@ -229,13 +314,12 @@ static BrdfSample SampleSurfaceBrdf(float3 N, float3 V, float3 albedo, float met
     BrdfSample result;
     result.direction = float3(0.0, 0.0, 1.0);
     result.weight = float3(0.0);
+    result.pdf = 0.0;
     result.valid = false;
 
     float nDotV = max(dot(N, V), 1e-4);
 
-    float diffLum = GTLuminance(albedo * (1.0 - metallic));
-    float specLum = GTLuminance(F0);
-    float pSpec = clamp(specLum / max(specLum + diffLum, 1e-4), 0.1, 0.9);
+    float pSpec = BrdfSelectPSpec(albedo, metallic, F0);
 
     float3 L;
     if (HashStep(rng) < pSpec) {
@@ -267,15 +351,14 @@ static BrdfSample SampleSurfaceBrdf(float3 N, float3 V, float3 albedo, float met
     float3 diff = kD * albedo * orenNayar;
     float3 f = diff + spec;
 
-    float pdfDiff = nDotL / PI;
-    float pdfSpec = NDF * nDotH / max(4.0 * vDotH, 1e-4);
-    float pdf = pSpec * pdfSpec + (1.0 - pSpec) * pdfDiff;
+    float pdf = BrdfPdf(N, V, L, roughness, pSpec);
     if (pdf <= 1e-6) {
         return result;
     }
 
     result.direction = L;
     result.weight = f * nDotL / pdf;
+    result.pdf = pdf;
     result.valid = true;
     return result;
 }
@@ -331,8 +414,16 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
     uint rng = SeedRng(pixel, pc.frameIndex, 0x7A1B3Du);
 
+    uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
+    float4 accum = pc.accumulationBuffer[pixelIdx];
+    float count = float(pc.accumulationCount);
+
+    uint spp = max(pc.samplesPerFrame, 1u);
+    float3 sampleSum = float3(0.0);
+    for (uint s = 0; s < spp; ++s) {
+
     // Direct at the primary surface (full BRDF NEE).
-    float3 direct = EvalDirectLighting(pc, worldPos, primaryOrigin, N, V, albedo.xyz, metallic, roughness, F0, rng);
+    float3 direct = EvalDirectLighting(pc, worldPos, primaryOrigin, N, V, albedo.xyz, metallic, roughness, F0, true, rng);
 
     // Indirect: full BRDF path carrying both diffuse and specular lobes. NEE at each bounce, skybox on miss.
     float3 indirect = float3(0.0);
@@ -358,20 +449,34 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
         ray.TMin = 0.0;
         ray.TMax = 10000.0;
 
-        // Light proxies excluded. NEE owns all analytic light emission.
+        // Light proxies excluded from the TLAS trace; analytic light emission along the segment is collected by CollectAnalyticLightHits (MIS partner to NEE).
         RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
         q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
         q.Proceed();
 
-        if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT) {
+        const bool bTriangleHit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+        float segmentT = bTriangleHit ? q.CommittedRayT() : ray.TMax;
+        indirect += throughput * CollectAnalyticLightHits(pc, rayOrigin, bs.direction, segmentT, bs.pdf);
+
+        if (!bTriangleHit) {
             if (pc.skyboxIndex >= 0) {
                 float3 skyDirection = float3(bs.direction.x, -bs.direction.y, bs.direction.z);
                 indirect += throughput * assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb * pc.iblIntensity;
             }
+            DirectionalLightData dl = pc.lightData->directionalLight;
+            if (dl.directionIntensity.w > 0.0) {
+                float cosThetaMax = cos(dl.angularRadius);
+                float coneSolidAngle = 2.0 * PI * (1.0 - cosThetaMax);
+                if (coneSolidAngle > 1e-7 && dot(bs.direction, normalize(-dl.directionIntensity.xyz)) >= cosThetaMax) {
+                    float pdfCone = 1.0 / coneSolidAngle;
+                    float w = bs.pdf / (bs.pdf + pdfCone);
+                    indirect += throughput * (dl.directionIntensity.w / coneSolidAngle) * UnpackUnorm4x8(dl.packedColor).rgb * w;
+                }
+            }
             break;
         }
 
-        float hitT = q.CommittedRayT();
+        float hitT = segmentT;
         float3 hitPosition = ray.Origin + bs.direction * hitT;
         Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
         GTFullSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
@@ -383,7 +488,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
         float3 hitOrigin = OffsetHitRayOrigin(hitPosition, shadingN);
 
         indirect += throughput * surface.emissive;
-        indirect += throughput * EvalDirectLighting(pc, hitPosition, hitOrigin, shadingN, Vnext, surface.albedo, surface.metallic, surface.roughness, surface.F0, rng);
+        indirect += throughput * EvalDirectLighting(pc, hitPosition, hitOrigin, shadingN, Vnext, surface.albedo, surface.metallic, surface.roughness, surface.F0, bounce + 1 < GT_FULL_MAX_BOUNCES, rng);
 
         rayOrigin = hitOrigin;
         Nv = shadingN;
@@ -396,10 +501,17 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
 
     float3 newSample = direct + indirect + emissiveRGB;
 
-    uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
-    float4 accum = pc.accumulationBuffer[pixelIdx];
-    float count = float(pc.accumulationCount);
-    accum = (accum * count + float4(newSample, 1.0)) / (count + 1.0);
+    // Progressive firefly clamp: the cap grows with sqrt(count) so the bias vanishes as accumulation converges (consistent estimator).
+    float lum = GTLuminance(newSample);
+    float cap = GT_FIREFLY_CLAMP_BASE * sqrt(count + float(s) + 1.0);
+    if (lum > cap) {
+        newSample *= cap / lum;
+    }
+    sampleSum += newSample;
+
+    } // spp
+
+    accum = (accum * count + float4(sampleSum, float(spp))) / (count + float(spp));
     pc.accumulationBuffer[pixelIdx] = accum;
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(accum.xyz, 1.0);
 }

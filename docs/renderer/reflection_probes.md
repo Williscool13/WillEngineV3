@@ -26,6 +26,7 @@ Sun and skybox always bake in. In-world text/sprites bake in. Debug draws/outlin
 - Captured post-TAA, pre-post-processing (raw HDR).
 - Bakes record the converged scene. Rebake after lighting changes; rebakes hot-reload in place.
 - 2-pass interbounce: pass 1 bakes probes-off, pass 2 rebakes with pass-1 results.
+- Ground Truth Bake (`probeBake.bGroundTruth`): faces render via the Full GT path tracer.
 - Output = `assets/probes/probe_<id>.wprobe`. Duplicated entities re-roll their ID.
 
 ## Bake lighting profile (user responsibility)

@@ -157,6 +157,12 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
     if (bBakeActive) {
         state->lighting.reflectionProbe = stashedProbeConfig;
         state->debug.bGIFreeze = stashedGIFreeze;
+        if (bGroundTruthBake) {
+            state->lighting.groundTruthMode = stashedGroundTruthMode;
+            state->lighting.groundTruthSpp = stashedGroundTruthSpp;
+            state->lighting.bResetGroundTruth = true;
+            bGroundTruthBake = false;
+        }
         ClearProbeBakeHideSet(ctx, state);
         state->inputContext = stashedInputContext;
         if (bakeForcedExtent > 0) {
@@ -295,7 +301,15 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
 
             stashedGIFreeze = state->debug.bGIFreeze;
             state->debug.bGIFreeze = false;
-            if (state->projectConfig.probeBake.bAutoConverge) {
+
+            // GT bake: the path-traced reference replaces the whole lighting path, so the DDGI converge boost and GI freeze are dead work.
+            bGroundTruthBake = state->projectConfig.probeBake.bGroundTruth;
+            stashedGroundTruthMode = state->lighting.groundTruthMode;
+            stashedGroundTruthSpp = state->lighting.groundTruthSpp;
+            if (bGroundTruthBake) {
+                state->lighting.groundTruthMode = Core::GroundTruthMode::Full;
+                state->lighting.groundTruthSpp = glm::max(1, state->projectConfig.probeBake.groundTruthSpp);
+            } else if (state->projectConfig.probeBake.bAutoConverge) {
                 DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, state->lighting.ddgi);
             }
 
@@ -312,6 +326,9 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             bViewOverrideActive = true;
 
             state->requests.pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
+            if (bGroundTruthBake) {
+                state->lighting.bResetGroundTruth = true;
+            }
             settleCounter = 0;
             phase = Phase::Settling;
             return;
@@ -370,6 +387,12 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
         {
             state->lighting.reflectionProbe = stashedProbeConfig;
             state->debug.bGIFreeze = stashedGIFreeze;
+            if (bGroundTruthBake) {
+                state->lighting.groundTruthMode = stashedGroundTruthMode;
+                state->lighting.groundTruthSpp = stashedGroundTruthSpp;
+                state->lighting.bResetGroundTruth = true;
+                bGroundTruthBake = false;
+            }
             ClearProbeBakeHideSet(ctx, state);
             state->inputContext = stashedInputContext;
             if (bakeForcedExtent > 0) {

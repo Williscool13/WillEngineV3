@@ -517,6 +517,7 @@ struct ViewFamily
     LightingMode lightingMode{LightingMode::Default};
     GroundTruthMode groundTruthMode{GroundTruthMode::None};
     bool bResetGroundTruth{false};
+    uint32_t groundTruthSpp{1};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
 

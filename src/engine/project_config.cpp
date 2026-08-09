@@ -108,6 +108,12 @@ ProjectConfig ReadProjectConfig()
         if (b.contains("bAutoFreeze") && b["bAutoFreeze"].is_boolean()) {
             config.probeBake.bAutoFreeze = b["bAutoFreeze"].get<bool>();
         }
+        if (b.contains("bGroundTruth") && b["bGroundTruth"].is_boolean()) {
+            config.probeBake.bGroundTruth = b["bGroundTruth"].get<bool>();
+        }
+        if (b.contains("groundTruthSpp") && b["groundTruthSpp"].is_number_integer()) {
+            config.probeBake.groundTruthSpp = b["groundTruthSpp"].get<int32_t>();
+        }
     }
 
     if (j.contains("cameraPresets") && j["cameraPresets"].is_array()) {
@@ -164,6 +170,8 @@ bool WriteProjectConfig(const ProjectConfig& config)
         {"captureSize", config.probeBake.captureSize},
         {"bAutoConverge", config.probeBake.bAutoConverge},
         {"bAutoFreeze", config.probeBake.bAutoFreeze},
+        {"bGroundTruth", config.probeBake.bGroundTruth},
+        {"groundTruthSpp", config.probeBake.groundTruthSpp},
     };
 
     nlohmann::json presets = nlohmann::json::array();

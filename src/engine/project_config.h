@@ -27,6 +27,8 @@ struct ProbeBakeSettings
     int32_t captureSize{1024};
     bool bAutoConverge{true};
     bool bAutoFreeze{true};
+    bool bGroundTruth{false};
+    int32_t groundTruthSpp{8};
 };
 
 struct ProjectConfig
