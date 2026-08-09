@@ -1190,6 +1190,13 @@ void AssetManager::KickOffRetires()
             collider.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
         }
     }
+    for (auto& cubemap : cubemaps) {
+        if (!cubemapAllocator.IsValid(cubemap.selfHandle)) { continue; }
+        if (cubemap.refCount > 0 || cubemap.retireFrame != CUBEMAP_RETIRE_PENDING) { continue; }
+        if (cubemap.loadState != Render::Cubemap::LoadState::Loading) {
+            cubemap.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+        }
+    }
 }
 
 bool AssetManager::HasPendingLoads() const
@@ -1353,6 +1360,22 @@ bool AssetManager::ResolveUnloads()
     if (pendingTextureUnloadLogCount > 0 && texturesUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - textureUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
         LOG_INFO(Asset, "{} texture(s) unloaded", pendingTextureUnloadLogCount);
         pendingTextureUnloadLogCount = 0;
+    }
+
+    for (auto& cubemap : cubemaps) {
+        if (!cubemapAllocator.IsValid(cubemap.selfHandle)) { continue; }
+        if (cubemap.refCount > 0 || cubemap.retireFrame == 0 || cubemap.retireFrame == CUBEMAP_RETIRE_PENDING || currentFrame < cubemap.retireFrame) { continue; }
+
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Cubemap unloaded: {} (bindless index: {})", cubemap.name.c_str(), static_cast<uint32_t>(cubemap.bindlessHandle.index));
+        }
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseCubemapBinding(cubemap.bindlessHandle);
+        CubemapHandle* storedCubemap = cubemapIdToHandle.Find(cubemap.cubemapId);
+        if (storedCubemap && *storedCubemap == cubemap.selfHandle) {
+            cubemapIdToHandle.Remove(cubemap.cubemapId);
+        }
+        cubemapAllocator.Remove(cubemap.selfHandle);
+        cubemap = {};
     }
 
     int32_t samplersUnloadedThisTick{0};
@@ -1953,8 +1976,10 @@ CubemapHandle AssetManager::LoadCubemap(EnvironmentMapID cubemapId)
     if (existingPtr != nullptr) {
         CubemapHandle existingHandle = *existingPtr;
         if (cubemapAllocator.IsValid(existingHandle)) {
-            cubemaps[existingHandle.index].refCount++;
-            LOG_TRACE(Asset, "Cubemap already loaded: {}, refCount: {}", cubemaps[existingHandle.index].name.c_str(), cubemaps[existingHandle.index].refCount);
+            Render::Cubemap& existing = cubemaps[existingHandle.index];
+            existing.refCount++;
+            existing.retireFrame = 0;
+            LOG_TRACE(Asset, "Cubemap already loaded: {}, refCount: {}", existing.name.c_str(), existing.refCount);
             return existingHandle;
         }
         cubemapIdToHandle.Remove(cubemapId);
@@ -1971,11 +1996,13 @@ CubemapHandle AssetManager::LoadCubemap(EnvironmentMapID cubemapId)
     cubemap.source = meta.source;
     cubemap.name = meta.name;
     cubemap.cubemapId = cubemapId;
+    cubemap.selfHandle = handle;
     cubemap.dataOffset = meta.dataOffset;
     cubemap.dataSize = meta.dataSize;
     cubemap.uncompressedSize = meta.uncompressedSize;
     cubemap.compressionType = meta.compressionType;
     cubemap.refCount = 1;
+    cubemap.retireFrame = 0;
     cubemap.loadState = Render::Cubemap::LoadState::Loading;
     cubemap.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateCubemap();
 
@@ -2048,9 +2075,7 @@ void AssetManager::UnloadCubemap(CubemapHandle handle)
     }
 
     if (cubemap.refCount == 0) {
-        cubemap.loadState = Render::Cubemap::LoadState::NotLoaded;
-        // assetLoadThread->RequestCubemapUnload(handle, &cubemap);
-        cubemapIdToHandle.Remove(cubemap.cubemapId);
+        cubemap.retireFrame = CUBEMAP_RETIRE_PENDING;
     }
 }
 

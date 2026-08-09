@@ -41,6 +41,7 @@ inline constexpr uint64_t TEXTURE_RETIRE_PENDING = UINT64_MAX;
 inline constexpr uint64_t MODEL_RETIRE_PENDING = UINT64_MAX;
 inline constexpr uint64_t FONT_RETIRE_PENDING = UINT64_MAX;
 inline constexpr uint64_t COLLIDER_RETIRE_PENDING = UINT64_MAX;
+inline constexpr uint64_t CUBEMAP_RETIRE_PENDING = UINT64_MAX;
 
 }
 
