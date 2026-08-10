@@ -2188,13 +2188,13 @@ void RenderGraph::CarryBufferToNextFrame(StringID bufferId, StringID newBufferId
 UploadAllocation RenderGraph::AllocateTransient(size_t size)
 {
     TransientUploadArena& arena = uploadArenas[currentFrameIndex];
-    size_t offset = arena.allocator.Allocate(size);
+    size_t offset = arena.allocator.Allocate(size, 64);
 
     if (offset == SIZE_MAX) {
-        size_t required = arena.allocator.GetUsed() + size;
+        size_t required = arena.allocator.GetUsed() + size + 64;
         size_t newSize = std::max(arena.size * 2, required);
         RecreateTransientArena(currentFrameIndex, newSize);
-        offset = arena.allocator.Allocate(size);
+        offset = arena.allocator.Allocate(size, 64);
         ENGINE_ASSERT(Renderer, offset != SIZE_MAX, "Still OOM after transient arena resize");
     }
 

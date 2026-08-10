@@ -39,6 +39,7 @@
 #include "game/components/common/stable_id_component.h"
 #include "game/components/core_components.h"
 #include "game/components/physics/physics_body_desc.h"
+#include "render/types/render_types.h"
 
 
 namespace Game
@@ -1096,6 +1097,13 @@ void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 }
 
+// Tick-to-tick physics deltas are tiny, so normalized lerp is visually identical to slerp without the trig
+static glm::quat NlerpPose(const glm::quat& a, glm::quat b, float t)
+{
+    if (glm::dot(a, b) < 0.0f) { b = -b; }
+    return glm::normalize(glm::lerp(a, b, t));
+}
+
 void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
@@ -1114,7 +1122,7 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
     for (auto [entity, physics, local, world] : registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent, Component::WorldTransformComponent>(
              entt::exclude<Component::HierarchyComponent>).each()) {
         world.translation = glm::mix(physics.previousPosition, physics.currentPosition, alpha);
-        world.rotation = glm::slerp(physics.previousRotation, physics.currentRotation, alpha);
+        world.rotation = NlerpPose(physics.previousRotation, physics.currentRotation, alpha);
         world.scale = local.scale;
         registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
     }
@@ -1149,7 +1157,7 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
         // Physics (interpolated Jolt pose)
         if (physics) {
             world.translation = glm::mix(physics->previousPosition, physics->currentPosition, alpha);
-            world.rotation = glm::slerp(physics->previousRotation, physics->currentRotation, alpha);
+            world.rotation = NlerpPose(physics->previousRotation, physics->currentRotation, alpha);
             world.scale = local.scale;
         }
         else {
@@ -1612,17 +1620,12 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         const glm::vec3 normal = rot[2];
         const glm::vec3 right = rot[0];
         const glm::vec3 up = rot[1];
-        const glm::vec3& c = light.color;
         vf.lights[light.lightSlot] = LightInfo{
             .position = {transform.translation, 0.0f},
             .normal = {normal, 0.0f},
             .right = {right, light.halfWidth * transform.scale.x},
             .up = {up, light.halfHeight * transform.scale.y},
-            .packedColor =
-            (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
-            (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
-            (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-            (0xFFu << 24),
+            .packedColor = Render::PackColorRGB8(light.color),
             .intensity = light.intensity,
             .range = light.range,
             .type = LIGHT_TYPE_AREA,
@@ -1633,17 +1636,12 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     for (auto [entity, light, transform] : sphereView.each()) {
         if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
         if (state->registry.all_of<Component::ProbeBakeHiddenTag>(entity)) { continue; }
-        const glm::vec3& c = light.color;
         vf.lights[light.lightSlot] = LightInfo{
             .position = {transform.translation, 0.0f},
             .normal = {0.0f, 0.0f, 0.0f, 0.0f},
             .right = {0.0f, 0.0f, 0.0f, light.radius * transform.scale.x},
             .up = {0.0f, 0.0f, 0.0f, 0.0f},
-            .packedColor =
-            (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
-            (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
-            (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-            (0xFFu << 24),
+            .packedColor = Render::PackColorRGB8(light.color),
             .intensity = light.intensity,
             .range = light.range,
             .type = LIGHT_TYPE_SPHERE,
@@ -1702,11 +1700,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
                 }
 
                 const glm::vec3 color = emissive / maxEmissive;
-                const uint32_t packedColor =
-                        (static_cast<uint32_t>(glm::clamp(color.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
-                        (static_cast<uint32_t>(glm::clamp(color.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
-                        (static_cast<uint32_t>(glm::clamp(color.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-                        (0xFFu << 24);
+                const uint32_t packedColor = Render::PackColorRGB8(color);
                 const glm::mat4 m = renderTransform.modelMatrix * inst.modelSpaceTransform;
                 const glm::mat3 m3 = glm::mat3(m);
                 glm::vec3 groupMin{FLT_MAX};

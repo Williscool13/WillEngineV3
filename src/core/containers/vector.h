@@ -11,6 +11,7 @@
 #include <new>
 #include <utility>
 
+#include "core/containers/container_utils.h"
 #include "core/memory/tlsf_allocator.h"
 
 namespace Core
@@ -19,6 +20,7 @@ namespace Core
  * Dynamic array backed by a TlsfAllocator.
  * Grows by doubling (minimum capacity 4).
  * Elements are placement-new'd; non-trivial destructors are called on removal.
+ * Bulk operations degrade to memcpy/memset for trivially copyable T.
  *
  * PREFER StackVector or InlineVector wherever the maximum count is known at init time.
  * Vector is a last resort for truly unbounded, unpredictable growth.
@@ -48,9 +50,7 @@ public:
     {
         if (other.size_ > 0) {
             Reserve(other.size_);
-            for (size_t i = 0; i < other.size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, other.size_);
             size_ = other.size_;
         }
     }
@@ -63,9 +63,7 @@ public:
         tag_ = other.tag_;
         if (other.size_ > 0) {
             Reserve(other.size_);
-            for (size_t i = 0; i < other.size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, other.size_);
             size_ = other.size_;
         }
         return *this;
@@ -138,9 +136,14 @@ public:
     {
         assert(index < size_ && "Index out of bounds");
         data_[index].~T();
-        for (size_t i = index; i < size_ - 1; ++i) {
-            new(data_ + i) T(std::move(data_[i + 1]));
-            data_[i + 1].~T();
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            memmove(data_ + index, data_ + index + 1, (size_ - 1 - index) * sizeof(T));
+        }
+        else {
+            for (size_t i = index; i < size_ - 1; ++i) {
+                new(data_ + i) T(std::move(data_[i + 1]));
+                data_[i + 1].~T();
+            }
         }
         --size_;
     }
@@ -215,11 +218,11 @@ public:
     void Resize(size_t newSize)
     {
         if (newSize > capacity_) { Reserve(newSize); }
-        for (size_t i = size_; i < newSize; ++i) {
-            new(data_ + i) T();
+        if (newSize > size_) {
+            Detail::ValueConstructRange(data_ + size_, newSize - size_);
         }
-        for (size_t i = newSize; i < size_; ++i) {
-            data_[i].~T();
+        else {
+            Detail::DestroyRange(data_ + newSize, size_ - newSize);
         }
         size_ = newSize;
     }
@@ -233,9 +236,7 @@ public:
             Grow(size_ + count);
         }
 
-        for (size_t i = 0; i < count; ++i) {
-            new(data_ + size_ + i) T(first[i]);
-        }
+        Detail::CopyConstructRange(data_ + size_, first, count);
         size_ += count;
     }
 
@@ -251,23 +252,23 @@ public:
         }
 
         // Shift existing elements
-        for (size_t i = size_; i > index; --i) {
-            new(data_ + i + count - 1) T(std::move(data_[i - 1]));
-            data_[i - 1].~T();
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            memmove(data_ + index + count, data_ + index, (size_ - index) * sizeof(T));
+        }
+        else {
+            for (size_t i = size_; i > index; --i) {
+                new(data_ + i + count - 1) T(std::move(data_[i - 1]));
+                data_[i - 1].~T();
+            }
         }
 
-        // Copy-construct new elements
-        for (size_t i = 0; i < count; ++i) {
-            new(data_ + index + i) T(first[i]);
-        }
+        Detail::CopyConstructRange(data_ + index, first, count);
         size_ += count;
     }
 
     void Clear()
     {
-        for (size_t i = 0; i < size_; ++i) {
-            data_[i].~T();
-        }
+        Detail::DestroyRange(data_, size_);
         size_ = 0;
     }
 

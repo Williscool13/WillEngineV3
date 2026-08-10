@@ -50,15 +50,24 @@ uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, LightAlia
         total += static_cast<double>(pdf[i]);
     }
 
+    if (count == scratch.prevCount && memcmp(pdf, scratch.prevPower.Data(), count * sizeof(float)) == 0) {
+        memcpy(outEntries, scratch.cachedEntries.Data(), count * sizeof(LightAliasEntry));
+        return count;
+    }
+    memcpy(scratch.prevPower.Data(), pdf, count * sizeof(float));
+    scratch.prevCount = count;
+    LightAliasEntry* entries = scratch.cachedEntries.Data();
+
     // Degenerate (no positive power)
     if (total <= 0.0) {
         const float uniformPdf = 1.0f / static_cast<float>(count);
         for (uint32_t i = 0; i < count; i++) {
-            outEntries[i].prob = 1.0f;
-            outEntries[i].alias = i;
-            outEntries[i].pdf = uniformPdf;
-            outEntries[i].pdfAlias = uniformPdf;
+            entries[i].prob = 1.0f;
+            entries[i].alias = i;
+            entries[i].pdf = uniformPdf;
+            entries[i].pdfAlias = uniformPdf;
         }
+        memcpy(outEntries, entries, count * sizeof(LightAliasEntry));
         return count;
     }
 
@@ -91,11 +100,12 @@ uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, LightAlia
     while (nSmall > 0u) { prob[smallQ[--nSmall]] = 1.0f; }
 
     for (uint32_t i = 0; i < count; i++) {
-        outEntries[i].prob = prob[i];
-        outEntries[i].alias = aliasIdx[i];
-        outEntries[i].pdf = pdf[i];
-        outEntries[i].pdfAlias = pdf[aliasIdx[i]];
+        entries[i].prob = prob[i];
+        entries[i].alias = aliasIdx[i];
+        entries[i].pdf = pdf[i];
+        entries[i].pdfAlias = pdf[aliasIdx[i]];
     }
+    memcpy(outEntries, entries, count * sizeof(LightAliasEntry));
     return count;
 }
 } // namespace Render

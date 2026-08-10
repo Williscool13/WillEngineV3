@@ -114,12 +114,7 @@ static bool ReadModelColliderGeometry(const Core::Path& source, Core::MemoryMana
             vertMax = std::max(vertMax, indices[ii]);
         }
         for (uint32_t vi = vertMin; vi <= vertMax; ++vi) {
-            const Engine::Vertex& v = vertices[vi];
-            allPositions[vi] = Vec3{
-                static_cast<float>(v.pos0 & 0xFFFF) / 65535.0f * boundsExtents.x + boundsMin.x,
-                static_cast<float>(v.pos0 >> 16 & 0xFFFF) / 65535.0f * boundsExtents.y + boundsMin.y,
-                static_cast<float>(v.pos1 & 0xFFFF) / 65535.0f * boundsExtents.z + boundsMin.z
-            };
+            allPositions[vi] = AssetLoad::DequantizeVertexPosition(vertices[vi], boundsMin, boundsExtents);
         }
     }
 

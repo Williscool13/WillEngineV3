@@ -70,11 +70,7 @@ void ExtractEmissiveTriangles(const UnpackedStaticModel& rawData, Engine::Static
                 Vec3 v[3];
                 for (uint32_t c = 0; c < 3; ++c) {
                     const Engine::Vertex& vert = rawData.vertices[rawData.indices[indexStart + static_cast<size_t>(t) * 3 + c]];
-                    v[c] = Vec3{
-                        static_cast<float>(vert.pos0 & 0xFFFF) / 65535.0f * boundsExtents.x + boundsMin.x,
-                        static_cast<float>(vert.pos0 >> 16 & 0xFFFF) / 65535.0f * boundsExtents.y + boundsMin.y,
-                        static_cast<float>(vert.pos1 & 0xFFFF) / 65535.0f * boundsExtents.z + boundsMin.z
-                    };
+                    v[c] = DequantizeVertexPosition(vert, boundsMin, boundsExtents);
                 }
                 set.verts[t * 3 + 0] = v[0];
                 set.verts[t * 3 + 1] = v[1] - v[0];

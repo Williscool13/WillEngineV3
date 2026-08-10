@@ -11,6 +11,7 @@
 #include <new>
 #include <utility>
 
+#include "core/containers/container_utils.h"
 #include "core/memory/arena.h"
 
 namespace Core
@@ -49,9 +50,7 @@ public:
     {
         if (other.size_ > 0) {
             Reserve(other.size_);
-            for (size_t i = 0; i < other.size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, other.size_);
             size_ = other.size_;
         }
     }
@@ -63,9 +62,7 @@ public:
         arena_ = other.arena_;
         if (other.size_ > 0) {
             Reserve(other.size_);
-            for (size_t i = 0; i < other.size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, other.size_);
             size_ = other.size_;
         }
         return *this;
@@ -169,9 +166,14 @@ public:
     {
         assert(index < size_ && "Index out of bounds");
         data_[index].~T();
-        for (size_t i = index; i < size_ - 1; ++i) {
-            new(data_ + i) T(std::move(data_[i + 1]));
-            data_[i + 1].~T();
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            memmove(data_ + index, data_ + index + 1, (size_ - 1 - index) * sizeof(T));
+        }
+        else {
+            for (size_t i = index; i < size_ - 1; ++i) {
+                new(data_ + i) T(std::move(data_[i + 1]));
+                data_[i + 1].~T();
+            }
         }
         --size_;
     }
@@ -202,10 +204,7 @@ public:
         T* newData = static_cast<T*>(arena_->AllocRaw(newCapacity * sizeof(T), alignof(T)));
         assert(newData != nullptr && "ArenaVector: allocation failed");
         if (data_) {
-            for (size_t i = 0; i < size_; ++i) {
-                new(newData + i) T(std::move(data_[i]));
-                data_[i].~T();
-            }
+            Detail::RelocateRange(newData, data_, size_);
         }
         data_ = newData;
         capacity_ = newCapacity;
@@ -214,11 +213,11 @@ public:
     void Resize(size_t newSize)
     {
         if (newSize > capacity_) { Reserve(newSize); }
-        for (size_t i = size_; i < newSize; ++i) {
-            new(data_ + i) T();
+        if (newSize > size_) {
+            Detail::ValueConstructRange(data_ + size_, newSize - size_);
         }
-        for (size_t i = newSize; i < size_; ++i) {
-            data_[i].~T();
+        else {
+            Detail::DestroyRange(data_ + newSize, size_ - newSize);
         }
         size_ = newSize;
     }
@@ -228,9 +227,7 @@ public:
         size_t count = static_cast<size_t>(last - first);
         if (count == 0) { return; }
         if (size_ + count > capacity_) { Grow(size_ + count); }
-        for (size_t i = 0; i < count; ++i) {
-            new(data_ + size_ + i) T(first[i]);
-        }
+        Detail::CopyConstructRange(data_ + size_, first, count);
         size_ += count;
     }
 
@@ -241,19 +238,22 @@ public:
         size_t count = static_cast<size_t>(last - first);
         if (count == 0) { return; }
         if (size_ + count > capacity_) { Grow(size_ + count); }
-        for (size_t i = size_; i > index; --i) {
-            new(data_ + i + count - 1) T(std::move(data_[i - 1]));
-            data_[i - 1].~T();
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            memmove(data_ + index + count, data_ + index, (size_ - index) * sizeof(T));
         }
-        for (size_t i = 0; i < count; ++i) {
-            new(data_ + index + i) T(first[i]);
+        else {
+            for (size_t i = size_; i > index; --i) {
+                new(data_ + i + count - 1) T(std::move(data_[i - 1]));
+                data_[i - 1].~T();
+            }
         }
+        Detail::CopyConstructRange(data_ + index, first, count);
         size_ += count;
     }
 
     void Clear()
     {
-        for (size_t i = 0; i < size_; ++i) { data_[i].~T(); }
+        Detail::DestroyRange(data_, size_);
         size_ = 0;
     }
 

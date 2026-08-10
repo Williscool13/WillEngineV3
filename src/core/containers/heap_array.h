@@ -10,6 +10,7 @@
 #include <new>
 #include <utility>
 
+#include "core/containers/container_utils.h"
 #include "core/memory/tlsf_allocator.h"
 
 namespace Core
@@ -35,9 +36,7 @@ public:
         assert(size_ > 0 && "HeapArray: size must be > 0");
         data_ = static_cast<T*>(alloc_->Alloc(size_ * sizeof(T), tag_));
         assert(data_ != nullptr && "OOM: HeapArray allocation failed");
-        for (size_t i = 0; i < size_; ++i) {
-            new(data_ + i) T();
-        }
+        Detail::ValueConstructRange(data_, size_);
     }
 
     ~HeapArray() { Reset(); }
@@ -48,9 +47,7 @@ public:
         if (other.data_) {
             data_ = static_cast<T*>(alloc_->Alloc(size_ * sizeof(T), tag_));
             assert(data_ != nullptr && "HeapArray: allocation failed");
-            for (size_t i = 0; i < size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, size_);
         }
     }
 
@@ -64,9 +61,7 @@ public:
         if (other.data_) {
             data_ = static_cast<T*>(alloc_->Alloc(size_ * sizeof(T), tag_));
             assert(data_ != nullptr && "HeapArray: allocation failed");
-            for (size_t i = 0; i < size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, size_);
         }
         return *this;
     }
@@ -95,7 +90,7 @@ public:
     void Reset()
     {
         if (data_) {
-            for (size_t i = 0; i < size_; ++i) { data_[i].~T(); }
+            Detail::DestroyRange(data_, size_);
             alloc_->Free(data_);
             data_ = nullptr;
             size_ = 0;

@@ -26,6 +26,21 @@ bool IntersectsOBB(const Frustum& frustum, const glm::vec3& center, const glm::v
 
 int32_t GetSphereSegments(const glm::vec3& center, const glm::vec3& viewPos, float radius);
 
+/** Packs [0,1] RGBA to 8-bit unorm (round half up, matching the historical inline packs bit-exactly). */
+inline uint32_t PackColorRGBA8(const glm::vec4& c)
+{
+    return (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
+           (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
+           (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+           (static_cast<uint32_t>(glm::clamp(c.a, 0.0f, 1.0f) * 255.0f + 0.5f) << 24);
+}
+
+/** RGB variant with alpha forced to 255. */
+inline uint32_t PackColorRGB8(const glm::vec3& c)
+{
+    return PackColorRGBA8(glm::vec4(c, 1.0f));
+}
+
 struct BucketIndices
 {
     uint32_t shadingBucket;

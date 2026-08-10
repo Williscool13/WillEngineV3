@@ -20,9 +20,16 @@ constexpr VkClearValue CLEAR_DEPTH_FAR   = {.depthStencil = {.depth = 0.0f, .ste
 constexpr VkClearValue CLEAR_VISIBILITY_EMPTY = {.color = {.uint32 = {0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu}}};
 } // Render
 
+namespace enki
+{
+class TaskScheduler;
+}
+
 Vec2 OctEncode(Vec3 n);
 Vec3 OctDecode(Vec2 f);
 
 Engine::Vertex CompressVertex(const Engine::FullVertex& fullVertex, const Engine::MeshBounds& bounds);
+
+void CompressVertices(enki::TaskScheduler* scheduler, const Engine::FullVertex* src, uint32_t count, const Engine::MeshBounds& bounds, Engine::Vertex* dst);
 
 #endif //WILL_ENGINE_RENDER_UTILS_H

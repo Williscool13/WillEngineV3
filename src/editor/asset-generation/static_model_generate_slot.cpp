@@ -554,10 +554,10 @@ bool StaticModelGenerateSlot::LoadGltf()
                 // All LODs draw from the same "source vertex buffer".
                 // Perhaps with LOD streaming this needs to change
                 uint32_t vertexOffset = rawModel.vertices.Size();
-                rawModel.vertices.Reserve(rawModel.vertices.Size() + primitiveVertices.Size());
+                rawModel.vertices.Resize(rawModel.vertices.Size() + primitiveVertices.Size());
+                CompressVertices(scheduler, primitiveVertices.Data(), static_cast<uint32_t>(primitiveVertices.Size()), primitiveBounds, rawModel.vertices.Data() + vertexOffset);
                 allPositions.Reserve(allPositions.Size() + primitiveVertices.Size());
                 for (const auto& v : primitiveVertices) {
-                    rawModel.vertices.EmplaceBack(CompressVertex(v, primitiveBounds));
                     allPositions.PushBack(v.position);
                 }
 

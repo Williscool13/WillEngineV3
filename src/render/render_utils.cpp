@@ -59,3 +59,37 @@ Engine::Vertex CompressVertex(const Engine::FullVertex& fullVertex, const Engine
 
     return outVertex;
 }
+
+struct CompressVerticesTask final : enki::ITaskSet
+{
+    const Engine::FullVertex* src{};
+    const Engine::MeshBounds* bounds{};
+    Engine::Vertex* dst{};
+
+    void ExecuteRange(enki::TaskSetPartition range, uint32_t) override
+    {
+        for (uint32_t i = range.start; i < range.end; ++i) {
+            dst[i] = CompressVertex(src[i], *bounds);
+        }
+    }
+};
+
+void CompressVertices(enki::TaskScheduler* scheduler, const Engine::FullVertex* src, uint32_t count, const Engine::MeshBounds& bounds, Engine::Vertex* dst)
+{
+    constexpr uint32_t PARALLEL_THRESHOLD = 8192;
+    if (!scheduler || count < PARALLEL_THRESHOLD) {
+        for (uint32_t i = 0; i < count; ++i) {
+            dst[i] = CompressVertex(src[i], bounds);
+        }
+        return;
+    }
+
+    CompressVerticesTask task;
+    task.m_SetSize = count;
+    task.m_MinRange = 4096;
+    task.src = src;
+    task.bounds = &bounds;
+    task.dst = dst;
+    scheduler->AddTaskSetToPipe(&task);
+    scheduler->WaitforTask(&task);
+}

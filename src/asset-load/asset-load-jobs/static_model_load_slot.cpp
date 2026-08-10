@@ -428,12 +428,7 @@ void StaticModelLoadSlot::PrepareUploadData()
             }
 
             for (uint32_t vi = vertMin; vi <= vertMax; ++vi) {
-                const Engine::Vertex& v = rawData.vertices[vi];
-                allPositions[vi] = Vec3{
-                    static_cast<float>(v.pos0 & 0xFFFF) / 65535.0f * boundsExtents.x + boundsMin.x,
-                    static_cast<float>(v.pos0 >> 16 & 0xFFFF) / 65535.0f * boundsExtents.y + boundsMin.y,
-                    static_cast<float>(v.pos1 & 0xFFFF) / 65535.0f * boundsExtents.z + boundsMin.z
-                };
+                allPositions[vi] = AssetLoad::DequantizeVertexPosition(rawData.vertices[vi], boundsMin, boundsExtents);
             }
         }
         outputModel->bounds = ComputeBounds(allPositions);
@@ -517,6 +512,18 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::Inline
             if (srcStride == dstElementSize && srcOffset == 0) {
                 const char* srcPtr = static_cast<const char*>(sourceData) + uploaded * dstElementSize;
                 memcpy(dstPtr, srcPtr, bytesRemaining);
+            }
+            else if (dstElementSize == 8) {
+                const char* srcPtr = static_cast<const char*>(sourceData) + uploaded * srcStride + srcOffset;
+                for (size_t i = 0; i < elemsRemaining; ++i) {
+                    memcpy(dstPtr + i * 8, srcPtr + i * srcStride, 8);
+                }
+            }
+            else if (dstElementSize == 16) {
+                const char* srcPtr = static_cast<const char*>(sourceData) + uploaded * srcStride + srcOffset;
+                for (size_t i = 0; i < elemsRemaining; ++i) {
+                    memcpy(dstPtr + i * 16, srcPtr + i * srcStride, 16);
+                }
             }
             else {
                 for (size_t i = 0; i < elemsRemaining; ++i) {

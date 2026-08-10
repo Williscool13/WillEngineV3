@@ -10,6 +10,8 @@
 #include <initializer_list>
 #include <utility>
 
+#include "core/containers/container_utils.h"
+
 namespace Core
 {
 /**
@@ -71,8 +73,13 @@ public:
     void RemoveAt(size_t index)
     {
         assert(index < size_ && "Index out of bounds");
-        for (size_t i = index; i < size_ - 1; ++i) {
-            data_[i] = std::move(data_[i + 1]);
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            memmove(data_ + index, data_ + index + 1, (size_ - 1 - index) * sizeof(T));
+        }
+        else {
+            for (size_t i = index; i < size_ - 1; ++i) {
+                data_[i] = std::move(data_[i + 1]);
+            }
         }
         --size_;
     }

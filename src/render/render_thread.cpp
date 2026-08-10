@@ -1697,20 +1697,23 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         memcpy(portalSceneDataUploadAllocation.ptr, &portalSceneData, sizeof(SceneData));
     }
 
-    // Lights
-    UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
+    const uint32_t analyticLightCount = viewFamily.analyticLightCount;
+    const auto totalLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
+    const uint32_t triLightCount = totalLightCount > static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) ? totalLightCount - static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) : 0u;
+    const size_t lightHeaderBytes = offsetof(LightData, lights);
+    const size_t analyticLightBytes = analyticLightCount * sizeof(LightInfo);
+    const size_t triLightBytes = triLightCount * sizeof(LightInfo);
+    const size_t emissiveGroupCount = glm::min(viewFamily.emissiveGroups.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS));
+    const size_t emissiveGroupBytes = emissiveGroupCount * sizeof(EmissiveGroup);
+
+    UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(lightHeaderBytes + analyticLightBytes + triLightBytes + emissiveGroupBytes);
     auto* lightData = static_cast<LightData*>(lightDataUploadAllocation.ptr);
-    //
+    auto* lightUploadBytes = static_cast<uint8_t*>(lightDataUploadAllocation.ptr);
     {
         const glm::vec3& dir = viewFamily.directionalLight.direction;
-        const glm::vec3& col = viewFamily.directionalLight.color;
         lightData->directionalLight.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
         lightData->directionalLight.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
-        lightData->directionalLight.packedColor =
-                (static_cast<uint32_t>(glm::clamp(col.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
-                (static_cast<uint32_t>(glm::clamp(col.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
-                (static_cast<uint32_t>(glm::clamp(col.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-                (0xFFu << 24);
+        lightData->directionalLight.packedColor = PackColorRGB8(viewFamily.directionalLight.color);
         lightData->directionalLight._pad1 = 0.0f;
         lightData->directionalLight._pad2 = 0.0f;
         lightData->analyticLightCount = static_cast<int32_t>(viewFamily.analyticLightCount);
@@ -1718,15 +1721,16 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
 
         // lightData is write-combined upload memory: never read through it (loop bounds included), only stream writes
-        lightData->lightCount = static_cast<int32_t>(viewFamily.lights.Size());
-        if (!viewFamily.lights.IsEmpty()) {
-            memcpy(lightData->lights, viewFamily.lights.Data(), viewFamily.lights.Size() * sizeof(LightInfo));
+        lightData->lightCount = static_cast<int32_t>(totalLightCount);
+        lightData->emissiveGroupCount = static_cast<int32_t>(emissiveGroupCount);
+        if (analyticLightBytes > 0) {
+            memcpy(lightUploadBytes + lightHeaderBytes, viewFamily.lights.Data(), analyticLightBytes);
         }
-
-        const size_t groupCount = glm::min(viewFamily.emissiveGroups.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS));
-        lightData->emissiveGroupCount = static_cast<int32_t>(groupCount);
-        if (groupCount > 0) {
-            memcpy(lightData->emissiveGroups, viewFamily.emissiveGroups.Data(), groupCount * sizeof(EmissiveGroup));
+        if (triLightBytes > 0) {
+            memcpy(lightUploadBytes + lightHeaderBytes + analyticLightBytes, viewFamily.lights.Data() + MAX_ANALYTIC_LIGHTS, triLightBytes);
+        }
+        if (emissiveGroupBytes > 0) {
+            memcpy(lightUploadBytes + lightHeaderBytes + analyticLightBytes + triLightBytes, viewFamily.emissiveGroups.Data(), emissiveGroupBytes);
         }
     }
 
@@ -1758,6 +1762,10 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
             portalOffset = portalSceneDataUploadAllocation.offset,
             hasPortal = bHasPortal,
             lightOffset = lightDataUploadAllocation.offset,
+            lightHeaderBytes = lightHeaderBytes,
+            analyticLightBytes = analyticLightBytes,
+            triLightBytes = triLightBytes,
+            emissiveGroupBytes = emissiveGroupBytes,
             aliasOffset = aliasUploadAllocation.offset,
             aliasBytes = aliasBytes,
             probeOffset = probeUploadAllocation.offset,
@@ -1785,16 +1793,31 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
             };
             vkCmdCopyBuffer2(cmd, &sceneDataCopyInfo);
 
-            Core::Array<VkBufferCopy2, 1> lightDataRegions{};
+            Core::Array<VkBufferCopy2, 3> lightDataRegions{};
+            uint32_t lightRegionCount{1};
             lightDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
             lightDataRegions[0].srcOffset = lightOffset;
             lightDataRegions[0].dstOffset = 0;
-            lightDataRegions[0].size = sizeof(LightData);
+            lightDataRegions[0].size = lightHeaderBytes + analyticLightBytes;
+            if (triLightBytes > 0) {
+                lightDataRegions[lightRegionCount].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+                lightDataRegions[lightRegionCount].srcOffset = lightOffset + lightHeaderBytes + analyticLightBytes;
+                lightDataRegions[lightRegionCount].dstOffset = offsetof(LightData, lights) + static_cast<size_t>(MAX_ANALYTIC_LIGHTS) * sizeof(LightInfo);
+                lightDataRegions[lightRegionCount].size = triLightBytes;
+                lightRegionCount++;
+            }
+            if (emissiveGroupBytes > 0) {
+                lightDataRegions[lightRegionCount].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+                lightDataRegions[lightRegionCount].srcOffset = lightOffset + lightHeaderBytes + analyticLightBytes + triLightBytes;
+                lightDataRegions[lightRegionCount].dstOffset = offsetof(LightData, emissiveGroups);
+                lightDataRegions[lightRegionCount].size = emissiveGroupBytes;
+                lightRegionCount++;
+            }
             const VkCopyBufferInfo2 lightDataCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                 .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle(LIGHT_DATA_BUFFER),
-                .regionCount = lightDataRegions.Size(),
+                .regionCount = lightRegionCount,
                 .pRegions = lightDataRegions.Data()
             };
             vkCmdCopyBuffer2(cmd, &lightDataCopyInfo);
@@ -2041,20 +2064,28 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
     //
     {
         auto* dst = static_cast<WorldGlyphQuad*>(glyphUpload.ptr);
-        for (uint32_t i = 0; i < viewFamily.worldGlyphQuads.Size(); ++i) {
+        const uint32_t quadCount = static_cast<uint32_t>(viewFamily.worldGlyphQuads.Size());
+        uint32_t runDrawCall = UINT32_MAX;
+        Vec2 shadowPad = {0.0f, 0.0f};
+        for (uint32_t i = 0; i < quadCount; ++i) {
             WorldGlyphQuad q = viewFamily.worldGlyphQuads[i];
             q.uvOrigMin = q.uvMin;
             q.uvOrigMax = q.uvMax;
-            const Core::TextInstanceDataFull& inst = viewFamily.textInstances[q.drawCallIndex];
-            const TextRenderMaterial& mat = viewFamily.textMaterials[inst.textMaterialIndex];
-            Vec2 shadowPad = {glm::abs(mat.shadowOffset.x), glm::abs(mat.shadowOffset.y)};
+            if (q.drawCallIndex != runDrawCall) {
+                runDrawCall = q.drawCallIndex;
+                const Core::TextInstanceDataFull& inst = viewFamily.textInstances[q.drawCallIndex];
+                const TextRenderMaterial& mat = viewFamily.textMaterials[inst.textMaterialIndex];
+                shadowPad = {glm::abs(mat.shadowOffset.x), glm::abs(mat.shadowOffset.y)};
+            }
             if (shadowPad.x > 0.0f || shadowPad.y > 0.0f) {
                 Vec2 posDelta = abs(q.posMax - q.posMin);
                 Vec2 uvPerPos = (q.uvMax - q.uvMin) / posDelta;
-                q.posMin -= shadowPad * posDelta / uvPerPos;
-                q.posMax += shadowPad * posDelta / uvPerPos;
-                q.uvMin -= shadowPad * posDelta;
-                q.uvMax += shadowPad * posDelta;
+                const Vec2 posPad = shadowPad * posDelta / uvPerPos;
+                const Vec2 uvPad = shadowPad * posDelta;
+                q.posMin -= posPad;
+                q.posMax += posPad;
+                q.uvMin -= uvPad;
+                q.uvMax += uvPad;
             }
             dst[i] = q;
         }
@@ -2160,15 +2191,10 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) cons
 
     for (uint32_t i = 0; i < spriteCount; i++) {
         const Core::Sprite& s = viewFamily.sprites[i];
-        const glm::vec4& c = s.color;
         dst[i] = {
             .worldPosition = s.worldPosition,
             .pixelSize = s.pixelSize,
-            .packedColor =
-            (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
-            (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
-            (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-            (static_cast<uint32_t>(glm::clamp(c.a, 0.0f, 1.0f) * 255.0f + 0.5f) << 24),
+            .packedColor = PackColorRGBA8(s.color),
             .stableIdLo = static_cast<uint32_t>(s.stableId & 0xFFFFFFFFu),
             .stableIdHi = static_cast<uint32_t>(s.stableId >> 32u),
             .flags = s.billboard ? SPRITE_FLAG_BILLBOARD : 0u,
@@ -2257,6 +2283,35 @@ void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const Re
     });
 }*/
 
+#ifdef WDEBUG
+struct DebugCircleTable
+{
+    glm::vec2 c8[9];
+    glm::vec2 c16[17];
+    glm::vec2 c24[25];
+    glm::vec2 c32[33];
+};
+
+static const DebugCircleTable& GetDebugCircleTable()
+{
+    static const DebugCircleTable table = [] {
+        DebugCircleTable t{};
+        auto fill = [](glm::vec2* out, int n) {
+            for (int i = 0; i <= n; ++i) {
+                const float a = static_cast<float>(i) / static_cast<float>(n) * 2.0f * glm::pi<float>();
+                out[i] = {glm::cos(a), glm::sin(a)};
+            }
+        };
+        fill(t.c8, 8);
+        fill(t.c16, 16);
+        fill(t.c24, 24);
+        fill(t.c32, 32);
+        return t;
+    }();
+    return table;
+}
+#endif
+
 void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const
 {
 #ifdef WDEBUG
@@ -2293,22 +2348,23 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         }
 
         const int segs = GetSphereSegments(sphere.center, viewFamily.mainView.currentViewData.cameraPos, sphere.radius);
+        const DebugCircleTable& circles = GetDebugCircleTable();
+        const glm::vec2* dirs = segs == 32 ? circles.c32 : (segs == 16 ? circles.c16 : circles.c8);
         for (int i = 0; i < segs; ++i) {
-            float a0 = static_cast<float>(i) / segs * 2.0f * glm::pi<float>();
-            float a1 = static_cast<float>(i + 1) / segs * 2.0f * glm::pi<float>();
+            const glm::vec2 d0 = dirs[i] * sphere.radius;
+            const glm::vec2 d1 = dirs[i + 1] * sphere.radius;
             glm::vec3 s = sphere.center;
-            float r = sphere.radius;
             // XY
             segments[segmentOffset++] = {
-                .a = s + glm::vec3(glm::cos(a0), glm::sin(a0), 0.0f) * r, .width = sphere.width, .b = s + glm::vec3(glm::cos(a1), glm::sin(a1), 0.0f) * r, .pad = 0.0f, .color = sphere.color
+                .a = s + glm::vec3(d0.x, d0.y, 0.0f), .width = sphere.width, .b = s + glm::vec3(d1.x, d1.y, 0.0f), .pad = 0.0f, .color = sphere.color
             };
             // XZ
             segments[segmentOffset++] = {
-                .a = s + glm::vec3(glm::cos(a0), 0.0f, glm::sin(a0)) * r, .width = sphere.width, .b = s + glm::vec3(glm::cos(a1), 0.0f, glm::sin(a1)) * r, .pad = 0.0f, .color = sphere.color
+                .a = s + glm::vec3(d0.x, 0.0f, d0.y), .width = sphere.width, .b = s + glm::vec3(d1.x, 0.0f, d1.y), .pad = 0.0f, .color = sphere.color
             };
             // YZ
             segments[segmentOffset++] = {
-                .a = s + glm::vec3(0.0f, glm::cos(a0), glm::sin(a0)) * r, .width = sphere.width, .b = s + glm::vec3(0.0f, glm::cos(a1), glm::sin(a1)) * r, .pad = 0.0f, .color = sphere.color
+                .a = s + glm::vec3(0.0f, d0.x, d0.y), .width = sphere.width, .b = s + glm::vec3(0.0f, d1.x, d1.y), .pad = 0.0f, .color = sphere.color
             };
         }
     }
@@ -2325,11 +2381,10 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         const glm::vec3 top = cyl.center + ax * cyl.halfHeight;
         const glm::vec3 bot = cyl.center - ax * cyl.halfHeight;
         constexpr int N = 24;
+        const glm::vec2* dirs = GetDebugCircleTable().c24;
         for (int i = 0; i < N; ++i) {
-            const float a0 = static_cast<float>(i) / N * 2.0f * glm::pi<float>();
-            const float a1 = static_cast<float>(i + 1) / N * 2.0f * glm::pi<float>();
-            const glm::vec3 d0 = (glm::cos(a0) * ex + glm::sin(a0) * ez) * cyl.radius;
-            const glm::vec3 d1 = (glm::cos(a1) * ex + glm::sin(a1) * ez) * cyl.radius;
+            const glm::vec3 d0 = (dirs[i].x * ex + dirs[i].y * ez) * cyl.radius;
+            const glm::vec3 d1 = (dirs[i + 1].x * ex + dirs[i + 1].y * ez) * cyl.radius;
             segments[segmentOffset++] = {.a = top + d0, .width = cyl.width, .b = top + d1, .pad = 0.0f, .color = cyl.color};
             segments[segmentOffset++] = {.a = bot + d0, .width = cyl.width, .b = bot + d1, .pad = 0.0f, .color = cyl.color};
             if (i % (N / 4) == 0) {
@@ -2350,23 +2405,20 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         const glm::vec3 top = cap.center + ax * cap.halfHeight;
         const glm::vec3 bot = cap.center - ax * cap.halfHeight;
         constexpr int N = 24;
+        const glm::vec2* dirs = GetDebugCircleTable().c24;
         for (int i = 0; i < N; ++i) {
-            const float a0 = static_cast<float>(i) / N * 2.0f * glm::pi<float>();
-            const float a1 = static_cast<float>(i + 1) / N * 2.0f * glm::pi<float>();
-            const glm::vec3 d0 = (glm::cos(a0) * ex + glm::sin(a0) * ez) * cap.radius;
-            const glm::vec3 d1 = (glm::cos(a1) * ex + glm::sin(a1) * ez) * cap.radius;
+            const glm::vec3 d0 = (dirs[i].x * ex + dirs[i].y * ez) * cap.radius;
+            const glm::vec3 d1 = (dirs[i + 1].x * ex + dirs[i + 1].y * ez) * cap.radius;
             segments[segmentOffset++] = {.a = top + d0, .width = cap.width, .b = top + d1, .pad = 0.0f, .color = cap.color};
             segments[segmentOffset++] = {.a = bot + d0, .width = cap.width, .b = bot + d1, .pad = 0.0f, .color = cap.color};
             if (i % (N / 4) == 0) {
                 segments[segmentOffset++] = {.a = top + d0, .width = cap.width, .b = bot + d0, .pad = 0.0f, .color = cap.color};
             }
         }
-        // Hemispherical caps: a great-circle half-arc in each of the ex/ez planes, per end.
+        // Hemispherical caps: a great-circle half-arc in each of the ex/ez planes, per end. The 12-step half-arc angles land exactly on c24 entries 0..12.
         constexpr int H = 12;
         for (int i = 0; i < H; ++i) {
-            const float t0 = static_cast<float>(i) / H * glm::pi<float>();
-            const float t1 = static_cast<float>(i + 1) / H * glm::pi<float>();
-            const float c0 = glm::cos(t0), s0 = glm::sin(t0), c1 = glm::cos(t1), s1 = glm::sin(t1);
+            const float c0 = dirs[i].x, s0 = dirs[i].y, c1 = dirs[i + 1].x, s1 = dirs[i + 1].y;
             const glm::vec3 exr = ex * cap.radius, ezr = ez * cap.radius, axr = ax * cap.radius;
             segments[segmentOffset++] = {.a = top + c0 * exr + s0 * axr, .width = cap.width, .b = top + c1 * exr + s1 * axr, .pad = 0.0f, .color = cap.color};
             segments[segmentOffset++] = {.a = top + c0 * ezr + s0 * axr, .width = cap.width, .b = top + c1 * ezr + s1 * axr, .pad = 0.0f, .color = cap.color};

@@ -378,9 +378,7 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(Core::Span<const Engine::FullVert
     rawData.meshletTriangles = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, meshletTriangleCount);
     rawData.meshlets = Core::HeapArray<Meshlet>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, meshletCount);
 
-    for (size_t i = 0; i < remappedVertices.Size(); ++i) {
-        rawData.vertices[i] = CompressVertex(remappedVertices[i], bounds);
-    }
+    CompressVertices(scheduler, remappedVertices.Data(), static_cast<uint32_t>(remappedVertices.Size()), bounds, rawData.vertices.Data());
     for (size_t i = 0; i < remappedIndices.Size(); ++i) {
         rawData.indices[i] = remappedIndices[i];
     }
@@ -523,9 +521,7 @@ bool ProceduralModelLoadSlot::FinalizeGeometryGroups(Core::Span<const Engine::Fu
     size_t vBase = 0, iBase = 0, mBase = 0, mvBase = 0, mtBase = 0;
     for (size_t g = 0; g < groupCount; ++g) {
         GroupBuild& gb = builds[g];
-        for (size_t i = 0; i < gb.verts.Size(); ++i) {
-            rawData.vertices[vBase + i] = CompressVertex(gb.verts[i], gb.bounds);
-        }
+        CompressVertices(scheduler, gb.verts.Data(), static_cast<uint32_t>(gb.verts.Size()), gb.bounds, rawData.vertices.Data() + vBase);
         for (size_t i = 0; i < gb.indices.Size(); ++i) {
             rawData.indices[iBase + i] = gb.indices[i] + static_cast<uint32_t>(vBase);
         }
@@ -3148,6 +3144,17 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::In
             if (srcStride == dstElementSize && srcOffset == 0) {
                 const char* srcPtr = static_cast<const char*>(sourceData) + uploaded * dstElementSize;
                 memcpy(dstPtr, srcPtr, bytesRemaining);
+            } else if (dstElementSize == 8) {
+                // Constant-size copies compile to plain moves; the vertex de-interleave hits this (positions) and the 16B branch (attributes)
+                const char* srcPtr = static_cast<const char*>(sourceData) + uploaded * srcStride + srcOffset;
+                for (size_t i = 0; i < elemsRemaining; ++i) {
+                    memcpy(dstPtr + i * 8, srcPtr + i * srcStride, 8);
+                }
+            } else if (dstElementSize == 16) {
+                const char* srcPtr = static_cast<const char*>(sourceData) + uploaded * srcStride + srcOffset;
+                for (size_t i = 0; i < elemsRemaining; ++i) {
+                    memcpy(dstPtr + i * 16, srcPtr + i * srcStride, 16);
+                }
             } else {
                 for (size_t i = 0; i < elemsRemaining; ++i) {
                     const char* srcPtr = static_cast<const char*>(sourceData) + (uploaded + i) * srcStride + srcOffset;

@@ -7,9 +7,11 @@
 
 #include <cassert>
 #include <cstddef>
+#include <cstring>
 #include <new>
 #include <utility>
 
+#include "core/containers/container_utils.h"
 #include "core/memory/arena.h"
 
 namespace Core
@@ -45,9 +47,7 @@ public:
         if (other.data_) {
             data_ = static_cast<T*>(arena_->AllocRaw(capacity_ * sizeof(T), alignof(T)));
             assert(data_ != nullptr && "ArenaFixedVector: allocation failed");
-            for (size_t i = 0; i < other.size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, other.size_);
             size_ = other.size_;
         }
     }
@@ -61,9 +61,7 @@ public:
         if (other.data_) {
             data_ = static_cast<T*>(arena_->AllocRaw(capacity_ * sizeof(T), alignof(T)));
             assert(data_ != nullptr && "ArenaFixedVector: allocation failed");
-            for (size_t i = 0; i < other.size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, other.size_);
             size_ = other.size_;
         }
         return *this;
@@ -135,9 +133,14 @@ public:
     {
         assert(index < size_ && "Index out of bounds");
         data_[index].~T();
-        for (size_t i = index; i < size_ - 1; ++i) {
-            new(data_ + i) T(std::move(data_[i + 1]));
-            data_[i + 1].~T();
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            memmove(data_ + index, data_ + index + 1, (size_ - 1 - index) * sizeof(T));
+        }
+        else {
+            for (size_t i = index; i < size_ - 1; ++i) {
+                new(data_ + i) T(std::move(data_[i + 1]));
+                data_[i + 1].~T();
+            }
         }
         --size_;
     }
@@ -186,7 +189,7 @@ public:
 
     void Clear()
     {
-        for (size_t i = 0; i < size_; ++i) { data_[i].~T(); }
+        Detail::DestroyRange(data_, size_);
         size_ = 0;
     }
 

@@ -105,9 +105,37 @@ struct HierarchyComponent
 
 inline Transform ComposeWorldTransform(const Transform& parent, const Transform& local)
 {
+    // SSE lanes are [x, y, z, w]; loads are member-wise so glm quat storage order is irrelevant
+    const __m128 pq = _mm_set_ps(parent.rotation.w, parent.rotation.z, parent.rotation.y, parent.rotation.x);
+    const __m128 lq = _mm_set_ps(local.rotation.w, local.rotation.z, local.rotation.y, local.rotation.x);
+
+    // Hamilton product parent.rotation * local.rotation
+    const __m128 signW = _mm_set_ps(-0.0f, 0.0f, 0.0f, 0.0f);
+    __m128 rq = _mm_mul_ps(_mm_shuffle_ps(pq, pq, _MM_SHUFFLE(3, 3, 3, 3)), lq);
+    rq = _mm_add_ps(rq, _mm_xor_ps(signW, _mm_mul_ps(_mm_shuffle_ps(pq, pq, _MM_SHUFFLE(0, 2, 1, 0)), _mm_shuffle_ps(lq, lq, _MM_SHUFFLE(0, 3, 3, 3)))));
+    rq = _mm_add_ps(rq, _mm_xor_ps(signW, _mm_mul_ps(_mm_shuffle_ps(pq, pq, _MM_SHUFFLE(1, 0, 2, 1)), _mm_shuffle_ps(lq, lq, _MM_SHUFFLE(1, 1, 0, 2)))));
+    rq = _mm_sub_ps(rq, _mm_mul_ps(_mm_shuffle_ps(pq, pq, _MM_SHUFFLE(2, 1, 0, 2)), _mm_shuffle_ps(lq, lq, _MM_SHUFFLE(2, 0, 2, 1))));
+
+    // Rotate the scaled local translation: v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)
+    const __m128 v = _mm_set_ps(0.0f, parent.scale.z * local.translation.z, parent.scale.y * local.translation.y, parent.scale.x * local.translation.x);
+    auto cross3 = [](__m128 a, __m128 b) {
+        const __m128 aYzx = _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 0, 2, 1));
+        const __m128 bYzx = _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 0, 2, 1));
+        const __m128 c = _mm_sub_ps(_mm_mul_ps(a, bYzx), _mm_mul_ps(aYzx, b));
+        return _mm_shuffle_ps(c, c, _MM_SHUFFLE(3, 0, 2, 1));
+    };
+    const __m128 t = _mm_add_ps(cross3(pq, v), _mm_mul_ps(_mm_shuffle_ps(pq, pq, _MM_SHUFFLE(3, 3, 3, 3)), v));
+    const __m128 c2 = cross3(pq, t);
+    const __m128 rotated = _mm_add_ps(v, _mm_add_ps(c2, c2));
+
+    alignas(16) float outQ[4];
+    alignas(16) float outV[4];
+    _mm_store_ps(outQ, rq);
+    _mm_store_ps(outV, rotated);
+
     Transform out;
-    out.translation = parent.translation + parent.rotation * (parent.scale * local.translation);
-    out.rotation = parent.rotation * local.rotation;
+    out.translation = glm::vec3(parent.translation.x + outV[0], parent.translation.y + outV[1], parent.translation.z + outV[2]);
+    out.rotation = glm::quat(outQ[3], outQ[0], outQ[1], outQ[2]);
     out.scale = parent.scale * local.scale;
     return out;
 }

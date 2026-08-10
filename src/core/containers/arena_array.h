@@ -10,6 +10,7 @@
 #include <new>
 #include <utility>
 
+#include "core/containers/container_utils.h"
 #include "core/memory/arena.h"
 
 namespace Core
@@ -37,9 +38,7 @@ public:
         assert(size_ > 0 && "ArenaArray: size must be > 0");
         data_ = static_cast<T*>(arena_->AllocRaw(size_ * sizeof(T), alignof(T)));
         assert(data_ != nullptr && "ArenaArray: allocation failed");
-        for (size_t i = 0; i < size_; ++i) {
-            new(data_ + i) T();
-        }
+        Detail::ValueConstructRange(data_, size_);
     }
 
     ~ArenaArray() { Clear(); }
@@ -50,9 +49,7 @@ public:
         if (other.data_) {
             data_ = static_cast<T*>(arena_->AllocRaw(size_ * sizeof(T), alignof(T)));
             assert(data_ != nullptr && "ArenaArray: allocation failed");
-            for (size_t i = 0; i < size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, size_);
         }
     }
 
@@ -65,9 +62,7 @@ public:
         if (other.data_) {
             data_ = static_cast<T*>(arena_->AllocRaw(size_ * sizeof(T), alignof(T)));
             assert(data_ != nullptr && "ArenaArray: allocation failed");
-            for (size_t i = 0; i < size_; ++i) {
-                new(data_ + i) T(other.data_[i]);
-            }
+            Detail::CopyConstructRange(data_, other.data_, size_);
         }
         return *this;
     }
@@ -96,7 +91,7 @@ public:
     void Clear()
     {
         if (data_) {
-            for (size_t i = 0; i < size_; ++i) { data_[i].~T(); }
+            Detail::DestroyRange(data_, size_);
             data_ = nullptr;
             size_ = 0;
         }
