@@ -11,6 +11,8 @@ namespace Render
 {
 void GPUTimestampQueryPool::Init(VulkanContext* context)
 {
+    if (context->device == VK_NULL_HANDLE) { return; }
+
     timestampPeriodNs = VulkanContext::deviceInfo.properties.properties.limits.timestampPeriod;
 
     VkQueryPoolCreateInfo info{.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
@@ -80,12 +82,14 @@ GPUProfileSnapshot GPUTimestampQueryPool::Collect(VkDevice device, uint32_t fram
 
 void GPUTimestampQueryPool::BeginFrame(VkCommandBuffer cmd, uint32_t frameIndex)
 {
+    if (pools[frameIndex] == VK_NULL_HANDLE) { return; }
     vkCmdResetQueryPool(cmd, pools[frameIndex], 0, 2 * kMaxPasses);
     passCount[frameIndex] = 0;
 }
 
 void GPUTimestampQueryPool::BeginPass(VkCommandBuffer cmd, uint32_t frameIndex, RenderCategory category)
 {
+    if (pools[frameIndex] == VK_NULL_HANDLE) { return; }
     const uint32_t slot = passCount[frameIndex];
     if (slot >= kMaxPasses) { return; }
 
@@ -95,6 +99,7 @@ void GPUTimestampQueryPool::BeginPass(VkCommandBuffer cmd, uint32_t frameIndex, 
 
 void GPUTimestampQueryPool::EndPass(VkCommandBuffer cmd, uint32_t frameIndex)
 {
+    if (pools[frameIndex] == VK_NULL_HANDLE) { return; }
     const uint32_t slot = passCount[frameIndex];
     if (slot >= kMaxPasses) { return; }
 

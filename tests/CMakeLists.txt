@@ -1,5 +1,8 @@
 add_executable(engine-tests
         render-graph/render_graph_tests.cpp
+        containers/container_tests.cpp
+        core/string_id_tests.cpp
+        core/math_tests.cpp
 )
 
 target_link_libraries(engine-tests PRIVATE
