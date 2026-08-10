@@ -45,6 +45,10 @@ InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* mat
 void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill)
 {
     materialManager->AcquireMaterial(fill.material);
+    // Determine whether an instance should contribute as an emissive based on material properties at fill-time (so we don't saturate)
+    const MaterialProperties props = materialManager->GetProperties(fill.material);
+    const float maxEmissive = glm::max(props.emissiveFactor.x, glm::max(props.emissiveFactor.y, props.emissiveFactor.z));
+    const bool bEmissive = props.emissiveFactor.w > 0.0f && (maxEmissive > 0.0f || props.textureImageIndices.w >= 0);
     instances_[slot] = {
         .primitiveIndex = primitive.index,
         .originalMaterialIndex = fill.originalMaterialIndex,
@@ -55,7 +59,7 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, T
         .materialID = fill.material,
         .blasDeviceAddress = primitive.blasDeviceAddress,
         .modelSpaceTransform = fill.modelSpaceTransform,
-        .triLightRange = triLightStore->AllocateForPrimitive(*model, primitive.index),
+        .triLightRange = bEmissive ? triLightStore->AllocateForPrimitive(*model, primitive.index) : TriLightStore::Range{},
     };
 }
 
