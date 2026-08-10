@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_PHYSICS_PLAYER_CONTROLLER_H
 #define WILL_ENGINE_PHYSICS_PLAYER_CONTROLLER_H
 
-#include <memory>
+#include <optional>
 
 #include "physics_character.h"
 #include "game/gameplay/camera/gameplay_camera.h"
@@ -25,10 +25,10 @@ public:
     void Update(Engine::EngineContext* ctx, Engine::EngineState* state);
     void Shutdown(Physics::PhysicsSystem* physicsSystem);
 
-    PhysicsCharacter* GetCharacter() { return character.get(); }
+    PhysicsCharacter* GetCharacter() { return character ? &*character : nullptr; }
 
 private:
-    std::unique_ptr<PhysicsCharacter> character;
+    std::optional<PhysicsCharacter> character;
 
     float lookYaw{0.0f};
     float lookPitch{0.0f};

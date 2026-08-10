@@ -18,7 +18,7 @@ namespace Game
 {
 void PlayerController::Initialize(Engine::EngineState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition)
 {
-    character = std::make_unique<Character>();
+    character.emplace();
     character->Initialize(gameState, physicsSystem, spawnPosition);
 }
 

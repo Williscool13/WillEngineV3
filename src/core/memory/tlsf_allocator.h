@@ -54,6 +54,7 @@ enum class AllocTag : uint32_t
     MaterialManager,
     Clay,
     Meshopt,
+    Vulkan,
 
     Count
 };
@@ -98,6 +99,9 @@ public:
     // No AllocHeader; tag stats reported under AllocTag::Aligned.
     // usedBytes_ uses tlsf_block_size for symmetric tracking.
     void* AlignedAlloc(size_t size, size_t alignment, AllocTag tag = AllocTag::Unknown);
+
+    /** Realloc for AlignedAlloc'd pointers; old size recovered via tlsf_block_size. Null ptr = alloc, zero size = free returning null (VkAllocationCallbacks semantics). */
+    void* AlignedRealloc(void* ptr, size_t newSize, size_t alignment, AllocTag tag = AllocTag::Unknown);
 
     void AlignedFree(void* ptr);
 

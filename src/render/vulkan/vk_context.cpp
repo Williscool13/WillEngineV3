@@ -37,6 +37,22 @@ static void VKAPI_PTR VkFree(void* pUserData, void* pMemory)
     static_cast<Core::MemoryManager*>(pUserData)->RenderFree(pMemory);
 }
 
+static void* VKAPI_PTR VkHostAlloc(void* pUserData, size_t size, size_t alignment, VkSystemAllocationScope)
+{
+    if (size == 0) { return nullptr; }
+    return static_cast<Core::MemoryManager*>(pUserData)->General().AlignedAlloc(size, alignment, Core::AllocTag::Vulkan);
+}
+
+static void* VKAPI_PTR VkHostRealloc(void* pUserData, void* pOriginal, size_t size, size_t alignment, VkSystemAllocationScope)
+{
+    return static_cast<Core::MemoryManager*>(pUserData)->General().AlignedRealloc(pOriginal, size, alignment, Core::AllocTag::Vulkan);
+}
+
+static void VKAPI_PTR VkHostFree(void* pUserData, void* pMemory)
+{
+    static_cast<Core::MemoryManager*>(pUserData)->General().AlignedFree(pMemory);
+}
+
 #ifdef WDEBUG
 static void VKAPI_PTR VmaDeviceAllocate(VmaAllocator, uint32_t, VkDeviceMemory, VkDeviceSize size, void* pUserData)
 {
@@ -574,8 +590,12 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     vulkanFunctions.vkGetDeviceImageMemoryRequirements = vkGetDeviceImageMemoryRequirements;
 
     allocatorInfo.pVulkanFunctions = &vulkanFunctions;
-    // todo: idk about this
-    // allocatorInfo.pAllocationCallbacks = &allocationCallbacks;
+    VkAllocationCallbacks allocationCallbacks{};
+    allocationCallbacks.pUserData = &memoryManager;
+    allocationCallbacks.pfnAllocation = VkHostAlloc;
+    allocationCallbacks.pfnReallocation = VkHostRealloc;
+    allocationCallbacks.pfnFree = VkHostFree;
+    allocatorInfo.pAllocationCallbacks = &allocationCallbacks;
 #ifdef WDEBUG
     VmaDeviceMemoryCallbacks deviceMemoryCallbacks{};
     deviceMemoryCallbacks.pfnAllocate = VmaDeviceAllocate;

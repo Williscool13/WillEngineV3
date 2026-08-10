@@ -17,7 +17,7 @@ namespace Game
 {
 void PhysicsPlayerController::Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition)
 {
-    character = std::make_unique<PhysicsCharacter>();
+    character.emplace();
     character->Initialize(gameState, ctx, spawnPosition);
 
     cameraParams.sideOffset = 0;

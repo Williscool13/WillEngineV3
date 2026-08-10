@@ -51,6 +51,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::MaterialManager: return "MaterialManager";
         case AllocTag::Clay: return "Clay";
         case AllocTag::Meshopt: return "Meshopt";
+        case AllocTag::Vulkan: return "Vulkan";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";
@@ -227,6 +228,36 @@ void* TlsfAllocator::AlignedAlloc(size_t size, size_t alignment, AllocTag tag)
     allocCount_ += 1;
 
     return ptr;
+}
+
+void* TlsfAllocator::AlignedRealloc(void* ptr, size_t newSize, size_t alignment, AllocTag tag)
+{
+    if (ptr == nullptr) { return AlignedAlloc(newSize, alignment, tag); }
+    if (newSize == 0) {
+        AlignedFree(ptr);
+        return nullptr;
+    }
+
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (bUseMutex_) { lock.lock(); }
+
+    const size_t oldSize = tlsf_block_size(ptr);
+    void* newPtr = tlsf_memalign(tlsf, alignment, newSize);
+    if (newPtr == nullptr && Grow(newSize + alignment)) {
+        newPtr = tlsf_memalign(tlsf, alignment, newSize);
+    }
+    if (newPtr == nullptr) {
+        fprintf(stderr, "TlsfAllocator '%s' OOM: AlignedRealloc %zu bytes align %zu (tag %s), used %zu / %zu\n", name_.buf, newSize, alignment, AllocTagName(tag), usedBytes_, poolBytes);
+        assert(false && "OOM: TLSF pool exhausted");
+    }
+
+    memcpy(newPtr, ptr, oldSize < newSize ? oldSize : newSize);
+    usedBytes_ += tlsf_block_size(newPtr);
+    usedBytes_ -= oldSize;
+    if (usedBytes_ > highWaterBytes_) { highWaterBytes_ = usedBytes_; }
+    tlsf_free(tlsf, ptr);
+
+    return newPtr;
 }
 
 void TlsfAllocator::AlignedFree(void* ptr)
