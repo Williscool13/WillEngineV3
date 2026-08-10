@@ -79,7 +79,7 @@ void TextComponent::Deserialize(TextComponent& comp, const nlohmann::json& json)
     if (json.contains("textMaterialId")) {
         comp.textMaterialId = Engine::TextMaterialID(json["textMaterialId"].get<uint64_t>());
     }
-    comp.text = Core::InlineString<256>(json["text"].get<std::string>().c_str());
+    comp.text = Core::InlineString<256>(json["text"].get<std::string_view>());
     comp.renderSizePx = json["renderSizePx"].get<float>();
     if (json.contains("color")) {
         const auto& c = json["color"];

@@ -73,6 +73,10 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
 
     // Main sweep: one box (or capsule for Tube) per ring-to-ring segment, per lane.
     const int stitchCount = bClosed ? totalRings : totalRings - 1;
+    size_t primBound = laneOffsets.Size() * static_cast<size_t>(stitchCount);
+    if (p.railing.bEnabled && p.railing.lanes.Size() == 2 && p.bCrossPlanks) { primBound += static_cast<size_t>(stitchCount / std::max(1, p.crossPlankInterval)) + 1; }
+    if (p.railing.bEnabled && p.railing.bPosts) { primBound += static_cast<size_t>(totalRings / std::max(1, p.railing.postInterval)) + 1; }
+    out.Reserve(out.Size() + primBound);
     for (int rail = 0; rail < static_cast<int>(laneOffsets.Size()); rail++) {
         const Vec2 laneOff = laneOffsets[rail];
         for (int i = 0; i < stitchCount; i++) {
@@ -174,6 +178,7 @@ static void HullWedge(const WedgeParams& p, Core::Vector<Vec3>& out)
 {
     // Corner pivot (matches GenerateWedge): bottom quad + top back edge.
     const float sx = p.sizeX, sy = p.sizeY, sz = p.sizeZ;
+    out.Reserve(out.Size() + 6);
     out.PushBack(Vec3(0.0f, 0.0f, 0.0f));
     out.PushBack(Vec3(sx, 0.0f, 0.0f));
     out.PushBack(Vec3(sx, 0.0f, sz));
@@ -195,6 +200,7 @@ static void HullCone(const ConeParams& p, Core::Vector<Vec3>& out)
 {
     // Base at y=0, apex at y=height (matches GenerateCone).
     const int slices = glm::clamp(p.slices, 3, 32);
+    out.Reserve(out.Size() + slices + 1);
     HullRing(0.0f, p.radius, slices, out);
     out.PushBack(Vec3(0.0f, p.height, 0.0f));
 }
@@ -205,6 +211,7 @@ static void HullHemisphere(const HemisphereParams& p, Core::Vector<Vec3>& out)
     const int slices = glm::clamp(p.slices, 3, 24);
     const float r = p.radius;
     const int stacks = 3;
+    out.Reserve(out.Size() + static_cast<size_t>(slices) * stacks + 1);
     for (int i = 0; i < stacks; i++) {
         const float phi = glm::pi<float>() * 0.5f * static_cast<float>(i) / static_cast<float>(stacks); // 0 (base) -> pi/2 (near pole)
         HullRing(r * std::sin(phi), r * std::cos(phi), slices, out);
@@ -250,6 +257,7 @@ static void CompoundStaircase(const StaircaseParams& p, Core::Vector<SplineColli
     const float uniformH = p.totalHeight / static_cast<float>(steps);
     const float usedStepH = (p.bSpecifyStepHeight && p.stepHeight > 0.0f) ? p.stepHeight : uniformH;
     const float hw = p.width * 0.5f;
+    out.Reserve(out.Size() + steps);
     for (int i = 0; i < steps; i++) {
         const float yTop = (i < steps - 1) ? static_cast<float>(i + 1) * usedStepH : p.totalHeight;
         const float zMin = static_cast<float>(i) * stepDepth;
@@ -263,6 +271,7 @@ static void PushHullPrim(Core::Span<const Vec3> verts, Core::Vector<SplineCollid
     prim.type = SplineColliderPrimitiveType::ConvexHull;
     prim.hullOffset = static_cast<uint32_t>(outPositions.Size());
     prim.hullCount = static_cast<uint32_t>(verts.Size());
+    outPositions.Reserve(outPositions.Size() + verts.Size());
     for (size_t i = 0; i < verts.Size(); i++) { outPositions.PushBack(verts[i]); }
     outPrims.PushBack(prim);
 }
@@ -280,6 +289,8 @@ static void CompoundSpiralStaircase(const SpiralStaircaseParams& p, Core::Vector
     const float dStep = glm::radians(p.bSpecifyDegreesPerStep ? p.degreesPerStep : p.totalSweep / static_cast<float>(steps));
     const float heightPerRad = stepH / std::max(dStep, 1e-6f);
     const int subdiv = seg; // one hull per arc-segment so the inner/outer edges facet along the arc, matching the render tread (ramp mode also needs this for the helicoid slope)
+    out.Reserve(out.Size() + static_cast<size_t>(steps) * subdiv + 1);
+    outPositions.Reserve(outPositions.Size() + static_cast<size_t>(steps) * subdiv * 8);
 
     for (int i = 0; i < steps; i++) {
         const float a0 = static_cast<float>(i) * dStep;
@@ -327,6 +338,7 @@ static void CompoundPipe(const PipeParams& p, Core::Vector<SplineColliderPrimiti
     const float midR = (ri + ro) * 0.5f;
     const float twoPi = 2.0f * glm::pi<float>();
     const Vec3 up(0.0f, 1.0f, 0.0f);
+    out.Reserve(out.Size() + N);
     for (int j = 0; j < N; j++) {
         const float a0 = twoPi * static_cast<float>(j) / static_cast<float>(N);
         const float a1 = twoPi * static_cast<float>(j + 1) / static_cast<float>(N);
@@ -348,6 +360,7 @@ static void CompoundTorus(const TorusParams& p, Core::Vector<SplineColliderPrimi
     const float tr = std::max(0.001f, p.tubeRadius);
     const float tube = rr * glm::clamp(tr / rr, 0.1f, 0.99f);
     const float twoPi = 2.0f * glm::pi<float>();
+    out.Reserve(out.Size() + N);
     for (int j = 0; j < N; j++) {
         const float t0 = twoPi * static_cast<float>(j) / static_cast<float>(N);
         const float t1 = twoPi * static_cast<float>(j + 1) / static_cast<float>(N);
@@ -371,6 +384,8 @@ static void CompoundRing(const RingParams& p, Core::Vector<SplineColliderPrimiti
     }
     const int N = glm::clamp(p.slices, 3, 64);
     const float twoPi = 2.0f * glm::pi<float>();
+    out.Reserve(out.Size() + N);
+    outPositions.Reserve(outPositions.Size() + static_cast<size_t>(N) * 8);
     for (int j = 0; j < N; j++) {
         const float a0 = twoPi * static_cast<float>(j) / static_cast<float>(N);
         const float a1 = twoPi * static_cast<float>(j + 1) / static_cast<float>(N);
@@ -422,6 +437,7 @@ static void CompoundArch(const ArchParams& p, Core::Vector<SplineColliderPrimiti
 
     const int M = static_cast<int>(outerC.Size());
     const Vec3 zAxis(0.0f, 0.0f, 1.0f);
+    out.Reserve(out.Size() + (M - 1) + ((p.bFillCorners && N >= 2) ? 2 * N + 2 : 0));
     for (int i = 0; i + 1 < M; i++) {
         const Vec2 mo = (outerC[i] + outerC[i + 1]) * 0.5f;
         const Vec2 mi = (innerC[i] + innerC[i + 1]) * 0.5f;
@@ -495,6 +511,7 @@ static const float kTetraVerts[4 * 3] = {
 // remapZUp mirrors the generator's Z-up -> Y-up remap {px, pz, -py}; tetra is already Y-up.
 static void HullPlatonic(const float* verts, int count, float r, bool remapZUp, Core::Vector<Vec3>& out)
 {
+    out.Reserve(out.Size() + count);
     for (int i = 0; i < count; i++) {
         const float px = verts[i * 3 + 0], py = verts[i * 3 + 1], pz = verts[i * 3 + 2];
         out.PushBack(remapZUp ? Vec3(px, pz, -py) * r : Vec3(px, py, pz) * r);
@@ -538,6 +555,7 @@ static void HullDoor(const DoorParams& p, Core::Vector<Vec3>& out)
     if (p.bFlip) {
         for (Vec2& pt : poly) { pt.x = -pt.x; }
     }
+    out.Reserve(out.Size() + poly.Size() * 2);
     for (const Vec2& pt : poly) {
         out.PushBack(Vec3(pt.x, pt.y, 0.0f));
         out.PushBack(Vec3(pt.x, pt.y, d));
@@ -587,6 +605,7 @@ static void CompoundWall(const WallParams& p, Core::Vector<SplineColliderPrimiti
     }
 
     const int cols = xn - 1, rows = yn - 1;
+    out.Reserve(out.Size() + static_cast<size_t>(cols) * rows);
     bool solid[(MAX_CUTS - 1) * (MAX_CUTS - 1)];
     bool used[(MAX_CUTS - 1) * (MAX_CUTS - 1)] = {};
     for (int cy = 0; cy < rows; cy++) {
@@ -641,6 +660,7 @@ static void CompoundLattice(const LatticeParams& p, Core::Vector<SplineColliderP
     const int bays = glm::max(1, p.bayCount);
     const float chord = glm::clamp(p.chordSize, 0.005f, glm::min(sx, sz));
     const float brace = glm::clamp(p.braceSize, 0.005f, glm::min(sx, sz));
+    out.Reserve(out.Size() + 4 + 4 * (static_cast<size_t>(bays) + 1) + 8 * static_cast<size_t>(bays));
 
     auto addMember = [&](Vec3 a, Vec3 b, float t) {
         const Vec3 seg = b - a;
@@ -698,6 +718,7 @@ static void CompoundCorrugatedPanel(const CorrugatedPanelParams& p, Core::Vector
     const float sx = p.sizeX, sy = p.sizeY, base = p.sizeZ;
     if (sx <= 0.0f || sy <= 0.0f || base <= 0.0f) { return; }
     const int ribs = glm::max(1, p.ribCount);
+    out.Reserve(out.Size() + 1 + ribs);
     const float pitch = sx / static_cast<float>(ribs);
     const float w = glm::clamp(p.ribWidth, 0.0f, glm::max(0.0f, pitch - 2e-3f));
     const float flank = glm::min(glm::max(p.ribDepth, 0.0f), (pitch - w) * 0.5f);
@@ -904,6 +925,7 @@ bool BuildText3DColliderPrimitives(const Font& font, const Text3DParams& params,
 
     Text3DGlyphPlacements placements;
     LayoutText3D(font, params, placements);
+    out.Reserve(out.Size() + placements.Size());
 
     for (uint32_t p = 0; p < placements.Size(); ++p) {
         const WGlyphInfo& g = font.glyphs[placements[p].glyphIndex];

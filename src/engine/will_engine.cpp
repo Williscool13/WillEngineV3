@@ -13,6 +13,7 @@
 #include <entt/entt.hpp>
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
+#include "meshoptimizer/src/meshoptimizer.h"
 
 #include "asset_manager.h"
 #include "engine_api.h"
@@ -82,6 +83,16 @@ static void* SdlRealloc(void* mem, size_t size)
 static void SdlFree(void* mem)
 {
     gMemory->GeneralFree(mem);
+}
+
+static void* MeshoptAlloc(size_t size)
+{
+    return gMemory->AssetsScratch().Alloc(size, Core::AllocTag::Meshopt);
+}
+
+static void MeshoptFree(void* ptr)
+{
+    gMemory->AssetsScratch().Free(ptr);
 }
 
 static void* ImGuiAlloc(size_t size, void* userData)
@@ -162,6 +173,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         ZoneScopedN("SDL_Init");
         gMemory = &memoryManager;
         SDL_SetMemoryFunctions(SdlMalloc, SdlCalloc, SdlRealloc, SdlFree);
+        meshopt_setAllocator(MeshoptAlloc, MeshoptFree);
         bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD);
         if (!sdlInitSuccess) {
             SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());

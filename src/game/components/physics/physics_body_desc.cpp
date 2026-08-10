@@ -740,7 +740,7 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                     const auto& t3 = shapeJson["text3DSource"];
                     Text3DShapeSource src{};
                     src.fontId = Engine::FontID(t3["fontId"].get<uint64_t>());
-                    src.text = Core::InlineString<256>(t3["text"].get<std::string>().c_str());
+                    src.text = Core::InlineString<256>(t3["text"].get<std::string_view>());
                     src.depth = t3.value("depth", 0.2f);
                     src.flatness = t3.value("flatness", 0.005f);
                     src.tracking = t3.value("tracking", 0.0f);

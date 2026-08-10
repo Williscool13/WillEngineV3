@@ -53,6 +53,7 @@ enum class AllocTag : uint32_t
     AssetManager,
     MaterialManager,
     Clay,
+    Meshopt,
 
     Count
 };

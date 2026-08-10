@@ -37,8 +37,8 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS),
       fontNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
       fontCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
-      deferredTextureBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager),
-      deferredCubemapBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager)
+      deferredTextureBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXTURES),
+      deferredCubemapBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_CUBEMAPS)
 {
     for (uint32_t i = MAX_LOADED_MODULE_MODELS; i > 0; i--) {
         moduleParamsFreeList.PushBack(i - 1);

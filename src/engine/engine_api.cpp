@@ -11,8 +11,8 @@
 namespace Engine
 {
 EditorTextureResidency::EditorTextureResidency(Core::TlsfAllocator* allocator)
-    : entries(allocator, Core::AllocTag::EngineContext, 64),
-      pendingRemoval(allocator, Core::AllocTag::EngineContext, 64)
+    : entries(allocator, Core::AllocTag::EngineContext, 256),
+      pendingRemoval(allocator, Core::AllocTag::EngineContext, 256)
 {}
 
 void EditorTextureResidency::Tick(EngineContext* ctx)

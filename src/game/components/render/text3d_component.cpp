@@ -99,7 +99,7 @@ void Component::Text3DComponent::Serialize(const Text3DComponent& comp, nlohmann
 void Component::Text3DComponent::Deserialize(Text3DComponent& comp, const nlohmann::json& json)
 {
     comp.fontId = Engine::FontID(json["fontId"].get<uint64_t>());
-    comp.text = Core::InlineString<256>(json["text"].get<std::string>().c_str());
+    comp.text = Core::InlineString<256>(json["text"].get<std::string_view>());
     comp.depth = json["depth"].get<float>();
     comp.flatness = json["flatness"].get<float>();
     comp.tracking = json["tracking"].get<float>();
