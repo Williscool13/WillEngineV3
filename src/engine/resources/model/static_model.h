@@ -98,6 +98,7 @@ public:
 
     // Populated by AssetManager, Only for normal models
     Core::Path source{};
+    uint64_t uncompressedBodySize{0};
 
     // Populated by AssetManager, Only for (simple) procedural models
     ProceduralParams proceduralParams{};

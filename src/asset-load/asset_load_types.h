@@ -5,9 +5,13 @@
 #ifndef WILL_ENGINE_ASSET_LOAD_TYPES_H
 #define WILL_ENGINE_ASSET_LOAD_TYPES_H
 
+#include <mutex>
 #include <semaphore>
 
+#include "asset_load_config.h"
+#include "core/containers/array.h"
 #include "core/containers/heap_array.h"
+#include "core/containers/inline_vector.h"
 #include "core/memory/tlsf_allocator.h"
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
@@ -51,6 +55,8 @@ public:
 
     void Initialize(Render::VulkanContext* context, size_t stagingSize);
 
+    void Destroy();
+
     Core::LinearAllocator& GetStagingAllocator() { return stagingAllocator; }
     Render::AllocatedBuffer& GetStagingBuffer() { return stagingBuffer; }
 
@@ -58,6 +64,60 @@ private:
     bool bStagingExists{false};
     Render::AllocatedBuffer stagingBuffer{};
     Core::LinearAllocator stagingAllocator{1, "AssetUploadStaging"};
+};
+
+/** Staging buffer sized to content (clamped to [MIN,MAX]).
+ * A shared byte budget gates concurrent checkouts
+ * CheckOut returns null when the budget or slots are exhausted (caller requeues).
+*/
+class UploadStagingDepot
+{
+public:
+    void Initialize(Render::VulkanContext* _context, uint64_t _budgetBytes);
+
+    UploadStaging* CheckOut(uint64_t contentBytes);
+
+    void Return(UploadStaging* staging);
+
+    void SetBudgetBytes(uint64_t newBudget);
+
+private:
+    Render::VulkanContext* context{nullptr};
+    std::mutex mutex;
+    uint64_t budgetBytes{0};
+    uint64_t usedBytes{0};
+    Core::Array<UploadStaging, UPLOAD_STAGING_DEPOT_MAX> stagings{};
+    Core::InlineVector<UploadStaging*, UPLOAD_STAGING_DEPOT_MAX> freeSlots{};
+};
+
+struct SubmitContext
+{
+    VkCommandPool pool{VK_NULL_HANDLE};
+    VkCommandBuffer cmd{VK_NULL_HANDLE};
+    VkFence fence{VK_NULL_HANDLE};
+    uint32_t queueFamily{UINT32_MAX};
+};
+
+/**
+ * Lazily created command pool + buffer + fence sets keyed by queue family.
+ */
+class SubmitContextDepot
+{
+public:
+    void Initialize(Render::VulkanContext* _context);
+
+    void Shutdown();
+
+    SubmitContext* CheckOut(uint32_t queueFamily);
+
+    void Return(SubmitContext* submitContext);
+
+private:
+    Render::VulkanContext* context{nullptr};
+    std::mutex mutex;
+    uint32_t createdCount{0};
+    Core::Array<SubmitContext, SUBMIT_CONTEXT_DEPOT_MAX> contexts{};
+    Core::InlineVector<SubmitContext*, SUBMIT_CONTEXT_DEPOT_MAX> freelist{};
 };
 
 struct BLASTransients
@@ -88,7 +148,6 @@ using PhysicsColliderSlotHandle = Core::Handle<PhysicsColliderLoadSlot>;
 using TextureSlotHandle = Core::Handle<TextureLoadSlot>;
 using CubemapSlotHandle = Core::Handle<CubemapLoadSlot>;
 using ProceduralTextureSlotHandle = Core::Handle<ProceduralTextureLoadSlot>;
-using UploadStagingSlotHandle = Core::Handle<UploadStaging>;
 
 struct AudioLoadRequest
 {

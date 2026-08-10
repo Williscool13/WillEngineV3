@@ -163,6 +163,7 @@
     "bAutoFreeze": true,
     "bGroundTruth": true,
     "captureSize": 1024,
+    "groundTruthSpp": 8,
     "settleFrames": 240
   },
   "reflectionProbeLineWidth": 0.019999999552965164,

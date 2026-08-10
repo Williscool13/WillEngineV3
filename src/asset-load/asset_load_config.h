@@ -24,9 +24,19 @@ inline constexpr uint32_t PROCEDURAL_TEXTURE_JOB_COUNT = 4;
 inline constexpr uint32_t PROCEDURAL_TEXTURE_DISPATCHES_PER_FRAME = 4;
 inline constexpr uint32_t TEXTURE_LOAD_QUEUE_COUNT = 128;
 
-static constexpr uint32_t GPU_DISPATCH_COUNT = 4;
-inline constexpr uint32_t GPU_DISPATCH_STAGING_SIZE = 16 * 1024 * 1024; // 16MB
-inline constexpr uint32_t TEXTURE_LOAD_STAGING_SIZE = 16 * 1024 * 1024; // 16MB, Mip0 BC7 == 16777217, which is exactly 16MB
+inline constexpr uint32_t UPLOAD_STAGING_DEPOT_MAX = MODEL_JOB_COUNT + PROCEDURAL_MODEL_JOB_COUNT + TEXTURE_JOB_COUNT + CUBEMAP_JOB_COUNT;
+inline constexpr uint64_t UPLOAD_STAGING_MIP0_DIVISOR = 1;
+inline constexpr uint64_t UPLOAD_STAGING_MIN_SIZE = 1ull * 1024 * 1024;  // 1MB
+inline constexpr uint64_t UPLOAD_STAGING_MAX_SIZE = 64ull * 1024 * 1024; // 64MB
+
+// During loading screens, game/engine can increase asset loading memory budget
+inline constexpr uint64_t UPLOAD_STAGING_BUDGET_DEFAULT = 128ull * 1024 * 1024;
+inline constexpr uint64_t UPLOAD_STAGING_BUDGET_LOADING_SCREEN = 256ull * 1024 * 1024;
+static_assert(UPLOAD_STAGING_BUDGET_DEFAULT >= UPLOAD_STAGING_MAX_SIZE, "budget must fit the largest single checkout");
+static_assert(UPLOAD_STAGING_BUDGET_LOADING_SCREEN >= UPLOAD_STAGING_MAX_SIZE, "budget must fit the largest single checkout");
+static_assert(UPLOAD_STAGING_MIN_SIZE <= UPLOAD_STAGING_MAX_SIZE, "staging clamp range is inverted");
+
+inline constexpr uint32_t SUBMIT_CONTEXT_DEPOT_MAX = MODEL_JOB_COUNT + PROCEDURAL_MODEL_JOB_COUNT + TEXTURE_JOB_COUNT + CUBEMAP_JOB_COUNT + PROCEDURAL_TEXTURE_JOB_COUNT;
 }
 
 #endif //WILL_ENGINE_ASSET_LOAD_CONFIG_H

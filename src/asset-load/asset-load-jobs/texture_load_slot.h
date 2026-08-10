@@ -49,12 +49,12 @@ public:
         Render::VulkanContext* _context,
         Render::ResourceManager* _resourceManager,
         Core::MemoryManager* _memoryManager,
+        SubmitContextDepot* _submitDepot,
         Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
-        Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback);
+        Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle)> notifyCallback);
 
     void Launch(
         TextureSlotHandle _textureSlotHandle,
-        UploadStagingSlotHandle _uploadStagingSlotHandle,
         UploadStaging* _uploadStaging,
         Engine::Texture* _outputTexture);
 
@@ -76,7 +76,6 @@ public:
     void PostUploadSetup();
 
     TextureSlotHandle textureSlotHandle{};
-    UploadStagingSlotHandle uploadStagingSlotHandle{};
 
     Engine::Texture* outputTexture{nullptr};
     UploadStaging* uploadStaging{nullptr};
@@ -99,11 +98,12 @@ private:
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
+    SubmitContextDepot* submitDepot{nullptr};
 
     ktxTexture2* texture{nullptr};
 
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
-    Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
+    Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle)> _notifyCallback;
 };
 } // AssetLoad
 

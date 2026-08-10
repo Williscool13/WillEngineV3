@@ -24,6 +24,7 @@ void ProceduralTextureLoadSlot::Initialize(
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
     Render::PipelineManager* _pipelineManager,
+    SubmitContextDepot* _submitDepot,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
     Core::InlineFunction<void(bool success, ProceduralTextureSlotHandle slotHandle)> notifyCallback)
 {
@@ -31,6 +32,7 @@ void ProceduralTextureLoadSlot::Initialize(
     context = _context;
     resourceManager = _resourceManager;
     pipelineManager = _pipelineManager;
+    submitDepot = _submitDepot;
     _dispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 }
@@ -59,17 +61,9 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
 {
     ZoneScopedN("ProceduralTextureLoadSlot::GenerateTask");
 
-    VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(loadSlot->context->graphicsQueueFamily);
-    VkCommandPool commandPool;
-    VK_CHECK(vkCreateCommandPool(loadSlot->context->device, &poolInfo, nullptr, &commandPool));
-
-    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, commandPool);
-    VkCommandBuffer cmd;
-    VK_CHECK(vkAllocateCommandBuffers(loadSlot->context->device, &cmdInfo, &cmd));
-
-    VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VkFence fence;
-    VK_CHECK(vkCreateFence(loadSlot->context->device, &fenceInfo, nullptr, &fence));
+    SubmitContext* submitContext = loadSlot->submitDepot->CheckOut(loadSlot->context->graphicsQueueFamily);
+    VkCommandBuffer cmd = submitContext->cmd;
+    VkFence fence = submitContext->fence;
 
     VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
@@ -90,8 +84,7 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
     const Render::PipelineEntry entry = loadSlot->pipelineManager->GetPipelineEntrySnapshot(loadSlot->pipelineId);
     if (entry.pipeline == VK_NULL_HANDLE) {
         SPDLOG_ERROR("ProceduralTextureLoadSlot: pipeline {:x} not ready", loadSlot->pipelineId.id);
-        vkDestroyFence(loadSlot->context->device, fence, nullptr);
-        vkDestroyCommandPool(loadSlot->context->device, commandPool, nullptr);
+        loadSlot->submitDepot->Return(submitContext);
         loadSlot->_notifyCallback(false, loadSlot->slotHandle);
         loadSlot->Clear();
         return;
@@ -229,8 +222,7 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
 
     loadSlot->PostGenerateSetup();
 
-    vkDestroyFence(loadSlot->context->device, fence, nullptr);
-    vkDestroyCommandPool(loadSlot->context->device, commandPool, nullptr);
+    loadSlot->submitDepot->Return(submitContext);
 
     loadSlot->_notifyCallback(true, loadSlot->slotHandle);
 }

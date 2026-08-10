@@ -116,6 +116,7 @@ public: // Models
         Core::HeapArray<Node> nodes;
         ModelBounds bounds{};
         uint64_t contentVersion{0};
+        uint64_t uncompressedBodySize{0};
     };
 
     const Core::FixedMap<ModelID, CachedModelMetadata>& GetModelCache() { return modelCache; }

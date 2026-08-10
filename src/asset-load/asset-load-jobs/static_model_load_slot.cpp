@@ -25,34 +25,42 @@ namespace AssetLoad
 {
 StaticModelLoadSlot::StaticModelLoadSlot() = default;
 
-StaticModelLoadSlot::~StaticModelLoadSlot() = default;
+StaticModelLoadSlot::~StaticModelLoadSlot()
+{
+    if (uploadCompleteSemaphore != VK_NULL_HANDLE) {
+        vkDestroySemaphore(context->device, uploadCompleteSemaphore, nullptr);
+    }
+}
 
 void StaticModelLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
     Core::MemoryManager* _memoryManager,
+    SubmitContextDepot* _submitDepot,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore)> transferDispatchCallback,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore)> graphicsDispatchCallback,
-    Core::InlineFunction<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
+    Core::InlineFunction<void(bool success, ModelSlotHandle modelSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     resourceManager = _resourceManager;
     memoryManager = _memoryManager;
+    submitDepot = _submitDepot;
     _requestTransferDispatchCallback = std::move(transferDispatchCallback);
     _requestGraphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
+
+    VkSemaphoreCreateInfo semaphoreInfo = Render::VkHelpers::SemaphoreCreateInfo();
+    VK_CHECK(vkCreateSemaphore(context->device, &semaphoreInfo, nullptr, &uploadCompleteSemaphore));
 }
 
 void StaticModelLoadSlot::Launch(
     ModelSlotHandle _modelSlotHandle,
-    UploadStagingSlotHandle _uploadStagingSlotHandle,
     UploadStaging* _uploadStaging,
     Engine::StaticModel* _outputModel)
 {
     modelSlotHandle = _modelSlotHandle;
-    uploadStagingSlotHandle = _uploadStagingSlotHandle;
     uploadStaging = _uploadStaging;
     outputModel = _outputModel;
 
@@ -66,7 +74,6 @@ void StaticModelLoadSlot::Launch(
 void StaticModelLoadSlot::Clear()
 {
     modelSlotHandle = {};
-    uploadStagingSlotHandle = {};
     outputModel = nullptr;
     uploadStaging = nullptr;
 
@@ -78,13 +85,13 @@ void StaticModelLoadSlot::Clear()
 void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
 {
     if (!loadSlot->LoadModelFromDisk()) {
-        loadSlot->_notifyCallback(false, loadSlot->modelSlotHandle, loadSlot->uploadStagingSlotHandle);
+        loadSlot->_notifyCallback(false, loadSlot->modelSlotHandle);
         loadSlot->Clear();
         return;
     }
 
     if (!loadSlot->AllocateGPUResources()) {
-        loadSlot->_notifyCallback(false, loadSlot->modelSlotHandle, loadSlot->uploadStagingSlotHandle);
+        loadSlot->_notifyCallback(false, loadSlot->modelSlotHandle);
         loadSlot->Clear();
         return;
     }
@@ -92,23 +99,10 @@ void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition ran
     // Cannot fail past those first 2 checks
     loadSlot->PrepareUploadData();
 
-    VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(loadSlot->context->transferQueueFamily);
-    VkCommandPool commandPool;
-    VK_CHECK(vkCreateCommandPool(loadSlot->context->device, &poolInfo, nullptr, &commandPool));
-
-    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, commandPool);
-    VkCommandBuffer cmd;
-    VK_CHECK(vkAllocateCommandBuffers(loadSlot->context->device, &cmdInfo, &cmd));
-
-    VkFenceCreateInfo fenceInfo = {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    };
-    VkFence fence;
-    VK_CHECK(vkCreateFence(loadSlot->context->device, &fenceInfo, nullptr, &fence));
-
-    VkSemaphoreCreateInfo uploadCompleteSemaphoreInfo = Render::VkHelpers::SemaphoreCreateInfo();
-    VkSemaphore uploadCompleteSemaphore;
-    VK_CHECK(vkCreateSemaphore(loadSlot->context->device, &uploadCompleteSemaphoreInfo, nullptr, &uploadCompleteSemaphore));
+    SubmitContext* transferContext = loadSlot->submitDepot->CheckOut(loadSlot->context->transferQueueFamily);
+    VkCommandBuffer cmd = transferContext->cmd;
+    VkFence fence = transferContext->fence;
+    VkSemaphore uploadCompleteSemaphore = loadSlot->uploadCompleteSemaphore;
 
     auto submitAndWait = [&](bool reset) {
         ZoneScopedN("SubmitAndWait");
@@ -139,22 +133,13 @@ void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition ran
     loadSlot->_requestTransferDispatchCallback(cmd, fence, &done, uploadCompleteSemaphore);
     done.acquire();
 
-    vkDestroyFence(loadSlot->context->device, fence, nullptr);
-    vkDestroyCommandPool(loadSlot->context->device, commandPool, nullptr);
+    loadSlot->submitDepot->Return(transferContext);
 
     // Build BLAS on graphics queue
     {
-        VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(loadSlot->context->graphicsQueueFamily);
-        VkCommandPool graphicsCommandPool;
-        VK_CHECK(vkCreateCommandPool(loadSlot->context->device, &graphicsPoolInfo, nullptr, &graphicsCommandPool));
-
-        VkCommandBufferAllocateInfo graphicsCmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, graphicsCommandPool);
-        VkCommandBuffer graphicsCmd;
-        VK_CHECK(vkAllocateCommandBuffers(loadSlot->context->device, &graphicsCmdInfo, &graphicsCmd));
-
-        VkFenceCreateInfo graphicsFenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-        VkFence graphicsFence;
-        VK_CHECK(vkCreateFence(loadSlot->context->device, &graphicsFenceInfo, nullptr, &graphicsFence));
+        SubmitContext* graphicsContext = loadSlot->submitDepot->CheckOut(loadSlot->context->graphicsQueueFamily);
+        VkCommandBuffer graphicsCmd = graphicsContext->cmd;
+        VkFence graphicsFence = graphicsContext->fence;
 
         VkCommandBufferBeginInfo graphicsBeginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &graphicsBeginInfo));
@@ -177,13 +162,10 @@ void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition ran
 
         loadSlot->BuildBLAS(graphicsCmd, graphicsSubmitAndWait);
 
-        vkDestroyFence(loadSlot->context->device, graphicsFence, nullptr);
-        vkDestroyCommandPool(loadSlot->context->device, graphicsCommandPool, nullptr);
+        loadSlot->submitDepot->Return(graphicsContext);
     }
 
-    vkDestroySemaphore(loadSlot->context->device, uploadCompleteSemaphore, nullptr);
-
-    loadSlot->_notifyCallback(true, loadSlot->modelSlotHandle, loadSlot->uploadStagingSlotHandle);
+    loadSlot->_notifyCallback(true, loadSlot->modelSlotHandle);
 }
 
 bool StaticModelLoadSlot::LoadModelFromDisk()

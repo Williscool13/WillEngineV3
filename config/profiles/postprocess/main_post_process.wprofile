@@ -6,7 +6,7 @@
     "bChromaticAberrationEnabled": false,
     "bColorGradingEnabled": false,
     "bDitherEnabled": true,
-    "bExposureEnabled": true,
+    "bExposureEnabled": false,
     "bFilmGrainEnabled": true,
     "bMotionBlurEnabled": false,
     "bMotionBlurObjectOnly": true,

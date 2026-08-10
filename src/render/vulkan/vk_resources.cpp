@@ -406,7 +406,7 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedBufferAligned(const VulkanContex
     return buffer;
 }
 
-AllocatedBuffer AllocatedBuffer::CreateAllocatedStagingBuffer(const VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages)
+AllocatedBuffer AllocatedBuffer::CreateAllocatedStagingBuffer(const VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages, size_t minAlignment)
 {
     const VkBufferCreateInfo bufferInfo{
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -423,7 +423,7 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedStagingBuffer(const VulkanContex
 
     AllocatedBuffer buffer;
     buffer.context = context;
-    VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &allocInfo, &buffer.handle, &buffer.allocation, &buffer.allocationInfo));
+    VK_CHECK(vmaCreateBufferWithAlignment(context->allocator, &bufferInfo, &allocInfo, minAlignment, &buffer.handle, &buffer.allocation, &buffer.allocationInfo));
     buffer.size = bufferInfo.size;
     // Staging buffer doesn't typically need device address. If needed, make a new function
     // buffer.address = VkHelpers::GetDeviceAddress(context->device, buffer.handle);

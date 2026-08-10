@@ -31,25 +31,25 @@ void CubemapLoadSlot::Initialize(
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
     Core::MemoryManager* _memoryManager,
+    SubmitContextDepot* _submitDepot,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
-    Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
+    Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     resourceManager = _resourceManager;
     memoryManager = _memoryManager;
+    submitDepot = _submitDepot;
     _requestDispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 }
 
 void CubemapLoadSlot::Launch(
     CubemapSlotHandle _cubemapSlotHandle,
-    UploadStagingSlotHandle _uploadStagingSlotHandle,
     UploadStaging* _uploadStaging,
     Render::Cubemap* _outputCubemap)
 {
     cubemapSlotHandle = _cubemapSlotHandle;
-    uploadStagingSlotHandle = _uploadStagingSlotHandle;
     uploadStaging = _uploadStaging;
     outputCubemap = _outputCubemap;
 
@@ -63,7 +63,6 @@ void CubemapLoadSlot::Launch(
 void CubemapLoadSlot::Clear()
 {
     cubemapSlotHandle = {};
-    uploadStagingSlotHandle = {};
     outputCubemap = nullptr;
     uploadStaging = nullptr;
 
@@ -76,30 +75,20 @@ void CubemapLoadSlot::Clear()
 void CubemapLoadSlot::LoadCubemapTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
 {
     if (!loadSlot->LoadCubemapFromDisk()) {
-        loadSlot->_notifyCallback(false, loadSlot->cubemapSlotHandle, loadSlot->uploadStagingSlotHandle);
+        loadSlot->_notifyCallback(false, loadSlot->cubemapSlotHandle);
         loadSlot->Clear();
         return;
     }
 
     if (!loadSlot->AllocateGPUResources()) {
-        loadSlot->_notifyCallback(false, loadSlot->cubemapSlotHandle, loadSlot->uploadStagingSlotHandle);
+        loadSlot->_notifyCallback(false, loadSlot->cubemapSlotHandle);
         loadSlot->Clear();
         return;
     }
 
-    VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(loadSlot->context->transferQueueFamily);
-    VkCommandPool commandPool;
-    VK_CHECK(vkCreateCommandPool(loadSlot->context->device, &poolInfo, nullptr, &commandPool));
-
-    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, commandPool);
-    VkCommandBuffer cmd;
-    VK_CHECK(vkAllocateCommandBuffers(loadSlot->context->device, &cmdInfo, &cmd));
-
-    VkFenceCreateInfo fenceInfo = {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    };
-    VkFence fence;
-    VK_CHECK(vkCreateFence(loadSlot->context->device, &fenceInfo, nullptr, &fence));
+    SubmitContext* submitContext = loadSlot->submitDepot->CheckOut(loadSlot->context->transferQueueFamily);
+    VkCommandBuffer cmd = submitContext->cmd;
+    VkFence fence = submitContext->fence;
 
     auto submitAndWait = [&](bool reset) {
         ZoneScopedN("SubmitAndWait");
@@ -132,10 +121,9 @@ void CubemapLoadSlot::LoadCubemapTask::ExecuteRange(enki::TaskSetPartition range
 
     loadSlot->PostUploadSetup();
 
-    vkDestroyFence(loadSlot->context->device, fence, nullptr);
-    vkDestroyCommandPool(loadSlot->context->device, commandPool, nullptr);
+    loadSlot->submitDepot->Return(submitContext);
 
-    loadSlot->_notifyCallback(true, loadSlot->cubemapSlotHandle, loadSlot->uploadStagingSlotHandle);
+    loadSlot->_notifyCallback(true, loadSlot->cubemapSlotHandle);
 }
 
 bool CubemapLoadSlot::LoadCubemapFromDisk()
@@ -201,9 +189,8 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
         return false;
     }
 
-    ktx_size_t mip0Size = ktxTexture_GetImageSize(ktxTexture(texture), 0);
-    if (mip0Size > TEXTURE_LOAD_STAGING_SIZE) {
-        SPDLOG_ERROR("Cubemap face too large for staging buffer: {}", cubemapPath.c_str());
+    if (ktxTexture_GetRowPitch(ktxTexture(texture), 0) > uploadStaging->GetStagingAllocator().GetCapacity()) {
+        SPDLOG_ERROR("Cubemap block row too large for staging buffer: {}", cubemapPath.c_str());
         return false;
     }
 
@@ -266,11 +253,14 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
     depInfo.pImageMemoryBarriers = &preCopyBarrier;
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
-    // Upload all mip levels for all 6 faces
+    // Upload all mip levels for all 6 faces; faces larger than the staging buffer stream in block-row chunks
     for (uint32_t mipLevel = 0; mipLevel < texture->numLevels; mipLevel++) {
         uint32_t mipWidth = std::max(1u, texture->baseWidth >> mipLevel);
         uint32_t mipHeight = std::max(1u, texture->baseHeight >> mipLevel);
         size_t mipSize = ktxTexture_GetImageSize(ktxTexture(texture), mipLevel);
+        const size_t rowPitch = ktxTexture_GetRowPitch(ktxTexture(texture), mipLevel);
+        const uint32_t totalRows = std::max(1u, static_cast<uint32_t>(mipSize / rowPitch));
+        const uint32_t texelRowsPerRow = (mipHeight + totalRows - 1) / totalRows;
 
         for (uint32_t face = 0; face < 6; face++) {
             ZoneScopedN("Upload Face");
@@ -278,36 +268,50 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
             size_t faceOffset;
             ktxTexture_GetImageOffset(ktxTexture(texture), mipLevel, 0, face, &faceOffset);
 
-            size_t allocation = stagingAllocator.Allocate(mipSize, 16);
-            if (allocation == SIZE_MAX) {
-                submitAndWait(true);
-                stagingAllocator.Reset();
-                allocation = stagingAllocator.Allocate(mipSize, 16);
-                assert(allocation != SIZE_MAX && "Cubemap face too large for staging buffer");
+            uint32_t rowsDone = 0;
+            while (rowsDone < totalRows) {
+                uint32_t rowsFit = static_cast<uint32_t>(stagingAllocator.GetRemaining() / rowPitch);
+                if (rowsFit == 0) {
+                    submitAndWait(true);
+                    stagingAllocator.Reset();
+                    rowsFit = static_cast<uint32_t>(stagingAllocator.GetRemaining() / rowPitch);
+                    assert(rowsFit > 0 && "Single block row too large for staging buffer");
+                }
+                rowsFit = std::min(rowsFit, totalRows - rowsDone);
+                const size_t chunkBytes = static_cast<size_t>(rowsFit) * rowPitch;
+                const size_t allocation = stagingAllocator.Allocate(chunkBytes, 16);
+                if (allocation == SIZE_MAX) {
+                    submitAndWait(true);
+                    stagingAllocator.Reset();
+                    continue;
+                }
+
+                char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
+                memcpy(stagingPtr, texture->pData + faceOffset + static_cast<size_t>(rowsDone) * rowPitch, chunkBytes);
+
+                const uint32_t texelY = rowsDone * texelRowsPerRow;
+                VkBufferImageCopy copyRegion{};
+                copyRegion.bufferOffset = allocation;
+                copyRegion.bufferRowLength = 0;
+                copyRegion.bufferImageHeight = 0;
+                copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyRegion.imageSubresource.mipLevel = mipLevel;
+                copyRegion.imageSubresource.baseArrayLayer = face;
+                copyRegion.imageSubresource.layerCount = 1;
+                copyRegion.imageOffset = {0, static_cast<int32_t>(texelY), 0};
+                copyRegion.imageExtent = {mipWidth, std::min(rowsFit * texelRowsPerRow, mipHeight - texelY), 1};
+
+                vkCmdCopyBufferToImage(
+                    cmd,
+                    stagingBuffer.handle,
+                    outputCubemap->image.handle,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1,
+                    &copyRegion
+                );
+
+                rowsDone += rowsFit;
             }
-
-            char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
-            memcpy(stagingPtr, texture->pData + faceOffset, mipSize);
-
-            VkBufferImageCopy copyRegion{};
-            copyRegion.bufferOffset = allocation;
-            copyRegion.bufferRowLength = 0;
-            copyRegion.bufferImageHeight = 0;
-            copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.imageSubresource.mipLevel = mipLevel;
-            copyRegion.imageSubresource.baseArrayLayer = face;
-            copyRegion.imageSubresource.layerCount = 1;
-            copyRegion.imageOffset = {0, 0, 0};
-            copyRegion.imageExtent = {mipWidth, mipHeight, 1};
-
-            vkCmdCopyBufferToImage(
-                cmd,
-                stagingBuffer.handle,
-                outputCubemap->image.handle,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1,
-                &copyRegion
-            );
         }
     }
 

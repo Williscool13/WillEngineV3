@@ -264,6 +264,7 @@ StaticModelHandle AssetManager::LoadModel(ModelID modelId)
     model.selfHandle = handle;
     model.name = modelCache[modelId].name;
     model.source = modelCache[modelId].source;
+    model.uncompressedBodySize = modelCache[modelId].uncompressedBodySize;
     model.modelId = modelId;
     model.refCount = 1;
     model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
@@ -1513,6 +1514,7 @@ void AssetManager::Scan()
                     cached.nodes = std::move(optNodes->nodes);
                     cached.bounds = optNodes->bounds;
                     cached.contentVersion = optModelHeader->contentVersion;
+                    cached.uncompressedBodySize = optModelHeader->uncompressedBodySize;
                     modelNameToId[nameSid] = id;
                     if (bExisted && prevVersion != optModelHeader->contentVersion) {
                         LOG_TRACE(Asset, "Model '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, optModelHeader->contentVersion);

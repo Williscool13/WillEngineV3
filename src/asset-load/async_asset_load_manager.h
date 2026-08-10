@@ -119,9 +119,37 @@ public:
         return textureLoadAllocator.GetCount();
     }
 
+    [[nodiscard]] uint32_t GetActiveProceduralModelLoadCount() const
+    {
+        return proceduralModelLoadAllocator.GetCount();
+    }
+
+    [[nodiscard]] uint32_t GetActivePhysicsColliderLoadCount() const
+    {
+        return physicsColliderLoadAllocator.GetCount();
+    }
+
+    [[nodiscard]] uint32_t GetActiveCubemapLoadCount() const
+    {
+        return cubemapLoadAllocator.GetCount();
+    }
+
+    [[nodiscard]] uint32_t GetActiveProceduralTextureLoadCount() const
+    {
+        return proceduralTextureLoadAllocator.GetCount();
+    }
+
     void QueueTransferDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore);
 
     void QueueGraphicsDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore);
+
+    /** Slack knob: raise for loading screens, lower for gameplay; floored at UPLOAD_STAGING_MAX_SIZE. Wakes the load thread so requeued requests re-attempt under the new budget. */
+    void SetUploadStagingBudget(uint64_t budgetBytes)
+    {
+        stagingDepot.SetBudgetBytes(budgetBytes);
+        workCounter.fetch_add(1);
+        wakeCV.notify_one();
+    }
 
     // Drained by RenderThread each frame on the graphics queue
     moodycamel::ConcurrentQueue<GPUDispatchRequest> graphicsDispatchQueue;
@@ -199,22 +227,22 @@ private:
 
     // GPU Uploads (transfer queue)
     moodycamel::ConcurrentQueue<GPUDispatchRequest> gpuDispatchQueue;
-    Core::LockFreeHandleAllocator<UploadStaging, GPU_DISPATCH_COUNT> uploadStagingAllocator{};
-    Core::Array<UploadStaging, GPU_DISPATCH_COUNT> uploadStagings{};
+    UploadStagingDepot stagingDepot{};
+    SubmitContextDepot submitDepot{};
 
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);
 
     void OnPipelineLoadComplete(bool success, PipelineSlotHandle slotHandle);
 
-    void OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
+    void OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle);
 
-    void OnProceduralModelLoadComplete(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
+    void OnProceduralModelLoadComplete(bool success, ProceduralModelSlotHandle slotHandle);
 
     void OnPhysicsColliderLoadComplete(bool success, PhysicsColliderSlotHandle slotHandle);
 
-    void OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
+    void OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle);
 
-    void OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
+    void OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle);
 
     void OnProceduralTextureLoadComplete(bool success, ProceduralTextureSlotHandle slotHandle);
 };

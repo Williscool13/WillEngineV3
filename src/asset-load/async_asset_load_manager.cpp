@@ -25,6 +25,37 @@
 
 namespace AssetLoad
 {
+static uint64_t Mip0ByteSize(const Engine::Texture* texture)
+{
+    const uint32_t width = texture->width;
+    const uint32_t height = texture->height;
+    switch (texture->format) {
+        case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
+        case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+        case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
+        case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
+        case VK_FORMAT_BC4_UNORM_BLOCK:
+        case VK_FORMAT_BC4_SNORM_BLOCK:
+            return static_cast<uint64_t>((width + 3) / 4) * ((height + 3) / 4) * 8;
+        case VK_FORMAT_BC2_UNORM_BLOCK:
+        case VK_FORMAT_BC2_SRGB_BLOCK:
+        case VK_FORMAT_BC3_UNORM_BLOCK:
+        case VK_FORMAT_BC3_SRGB_BLOCK:
+        case VK_FORMAT_BC5_UNORM_BLOCK:
+        case VK_FORMAT_BC5_SNORM_BLOCK:
+        case VK_FORMAT_BC6H_UFLOAT_BLOCK:
+        case VK_FORMAT_BC6H_SFLOAT_BLOCK:
+        case VK_FORMAT_BC7_UNORM_BLOCK:
+        case VK_FORMAT_BC7_SRGB_BLOCK:
+            return static_cast<uint64_t>((width + 3) / 4) * ((height + 3) / 4) * 16;
+        case VK_FORMAT_UNDEFINED:
+            // Disk textures don't know their format until the KTX blob is parsed; full chain is ~4/3 of mip0
+            return texture->uncompressedSize * 3 / 4;
+        default:
+            return static_cast<uint64_t>(width) * height * Render::VkHelpers::GetBytesPerPixel(texture->format);
+    }
+}
+
 AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
                                              Render::VulkanContext* context,
                                              Render::ResourceManager* resourceManager,
@@ -55,20 +86,24 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             });
     }
 
+    stagingDepot.Initialize(context, UPLOAD_STAGING_BUDGET_DEFAULT);
+    submitDepot.Initialize(context);
+
     for (uint32_t i = 0; i < MODEL_JOB_COUNT; ++i) {
         modelLoadSlots[i].Initialize(
             scheduler,
             context,
             resourceManager,
             &memoryManager,
+            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore) {
                 QueueTransferDispatch(cmd, fence, completionSignal, signalSemaphore);
             },
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore) {
                 QueueGraphicsDispatch(cmd, fence, completionSignal, waitSemaphore);
             },
-            [this](bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
-                OnModelLoadComplete(success, modelSlotHandle, uploadStagingSlotHandle);
+            [this](bool success, ModelSlotHandle modelSlotHandle) {
+                OnModelLoadComplete(success, modelSlotHandle);
             }
         );
     }
@@ -79,14 +114,15 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             &memoryManager,
+            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore) {
                 QueueTransferDispatch(cmd, fence, completionSignal, signalSemaphore);
             },
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore) {
                 QueueGraphicsDispatch(cmd, fence, completionSignal, waitSemaphore);
             },
-            [this](bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
-                OnProceduralModelLoadComplete(success, slotHandle, uploadStagingSlotHandle);
+            [this](bool success, ProceduralModelSlotHandle slotHandle) {
+                OnProceduralModelLoadComplete(success, slotHandle);
             }
         );
     }
@@ -107,11 +143,12 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             &memoryManager,
+            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
             },
-            [this](bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
-                OnTextureLoadComplete(success, textureSlotHandle, uploadStagingSlotHandle);
+            [this](bool success, TextureSlotHandle textureSlotHandle) {
+                OnTextureLoadComplete(success, textureSlotHandle);
             }
         );
     }
@@ -122,17 +159,14 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             &memoryManager,
+            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
             },
-            [this](bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
-                OnCubemapComplete(success, cubemapSlotHandle, uploadStagingSlotHandle);
+            [this](bool success, CubemapSlotHandle cubemapSlotHandle) {
+                OnCubemapComplete(success, cubemapSlotHandle);
             }
         );
-    }
-
-    for (UploadStaging& uploadStaging : uploadStagings) {
-        uploadStaging.Initialize(context, GPU_DISPATCH_STAGING_SIZE);
     }
 
     for (uint32_t i = 0; i < PROCEDURAL_TEXTURE_JOB_COUNT; ++i) {
@@ -141,6 +175,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             pipelineManager,
+            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueGraphicsDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
             },
@@ -154,7 +189,10 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
     gpuDispatchThread = std::jthread([this] { GPUDispatchThreadMain(); });
 }
 
-AsyncAssetLoadManager::~AsyncAssetLoadManager() = default;
+AsyncAssetLoadManager::~AsyncAssetLoadManager()
+{
+    submitDepot.Shutdown();
+}
 
 void AsyncAssetLoadManager::ThreadMain()
 {
@@ -202,12 +240,10 @@ void AsyncAssetLoadManager::ThreadMain()
             if (modelRequestQueue.try_dequeue(modelReq)) {
                 Core::Handle<StaticModelLoadSlot> slotHandle = modelLoadAllocator.Add();
                 if (slotHandle.IsValid()) {
-                    Core::Handle<UploadStaging> uploadHandle = uploadStagingAllocator.Add();
-                    if (uploadHandle.IsValid()) {
+                    UploadStaging* uploadStaging = stagingDepot.CheckOut(modelReq.model->uncompressedBodySize);
+                    if (uploadStaging) {
                         StaticModelLoadSlot& slot = modelLoadSlots[slotHandle.index];
-                        UploadStaging* uploadStaging = &uploadStagings[uploadHandle.index];
-
-                        slot.Launch(slotHandle, uploadHandle, uploadStaging, modelReq.model);
+                        slot.Launch(slotHandle, uploadStaging, modelReq.model);
                     }
                     else {
                         modelRequestQueue.enqueue(modelReq);
@@ -226,12 +262,10 @@ void AsyncAssetLoadManager::ThreadMain()
             if (proceduralModelRequestQueue.try_dequeue(proceduralReq)) {
                 Core::Handle<ProceduralModelLoadSlot> slotHandle = proceduralModelLoadAllocator.Add();
                 if (slotHandle.IsValid()) {
-                    Core::Handle<UploadStaging> uploadHandle = uploadStagingAllocator.Add();
-                    if (uploadHandle.IsValid()) {
+                    UploadStaging* uploadStaging = stagingDepot.CheckOut(proceduralReq.model->uncompressedBodySize);
+                    if (uploadStaging) {
                         ProceduralModelLoadSlot& slot = proceduralModelLoadSlots[slotHandle.index];
-                        UploadStaging* uploadStaging = &uploadStagings[uploadHandle.index];
-
-                        slot.Launch(slotHandle, uploadHandle, uploadStaging, proceduralReq.model);
+                        slot.Launch(slotHandle, uploadStaging, proceduralReq.model);
                     }
                     else {
                         proceduralModelRequestQueue.enqueue(proceduralReq);
@@ -265,12 +299,10 @@ void AsyncAssetLoadManager::ThreadMain()
             if (textureRequestQueue.try_dequeue(textureReq)) {
                 Core::Handle<TextureLoadSlot> slotHandle = textureLoadAllocator.Add();
                 if (slotHandle.IsValid()) {
-                    Core::Handle<UploadStaging> uploadHandle = uploadStagingAllocator.Add();
-                    if (uploadHandle.IsValid()) {
+                    UploadStaging* uploadStaging = stagingDepot.CheckOut(Mip0ByteSize(textureReq.texture) / UPLOAD_STAGING_MIP0_DIVISOR);
+                    if (uploadStaging) {
                         TextureLoadSlot& slot = textureLoadSlots[slotHandle.index];
-                        UploadStaging* uploadStaging = &uploadStagings[uploadHandle.index];
-
-                        slot.Launch(slotHandle, uploadHandle, uploadStaging, textureReq.texture);
+                        slot.Launch(slotHandle, uploadStaging, textureReq.texture);
                     }
                     else {
                         textureRequestQueue.enqueue(textureReq);
@@ -289,12 +321,11 @@ void AsyncAssetLoadManager::ThreadMain()
             if (cubemapRequestQueue.try_dequeue(cubemapReq)) {
                 Core::Handle<CubemapLoadSlot> slotHandle = cubemapLoadAllocator.Add();
                 if (slotHandle.IsValid()) {
-                    Core::Handle<UploadStaging> uploadHandle = uploadStagingAllocator.Add();
-                    if (uploadHandle.IsValid()) {
+                    // 6 faces of a full chain sum to ~8x one face's mip0
+                    UploadStaging* uploadStaging = stagingDepot.CheckOut((cubemapReq.cubemap->uncompressedSize / 8) / UPLOAD_STAGING_MIP0_DIVISOR);
+                    if (uploadStaging) {
                         CubemapLoadSlot& slot = cubemapLoadSlots[slotHandle.index];
-                        UploadStaging* uploadStaging = &uploadStagings[uploadHandle.index];
-
-                        slot.Launch(slotHandle, uploadHandle, uploadStaging, cubemapReq.cubemap);
+                        slot.Launch(slotHandle, uploadStaging, cubemapReq.cubemap);
                     }
                     else {
                         cubemapRequestQueue.enqueue(cubemapReq);
@@ -671,7 +702,7 @@ void AsyncAssetLoadManager::OnPipelineLoadComplete(bool success, PipelineSlotHan
     wakeCV.notify_one();
 }
 
-void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)
+void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle)
 {
     ZoneScoped;
 
@@ -687,18 +718,17 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
         LOG_ERROR(Asset, "Failed to load model: {}", slot.outputModel->name.c_str());
     }
 
+    if (slot.uploadStaging) {
+        stagingDepot.Return(slot.uploadStaging);
+    }
     slot.Clear();
     modelLoadAllocator.Remove(modelSlotHandle);
-
-    if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
-        uploadStagingAllocator.Remove(uploadStagingSlotHandle);
-    }
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
 
-void AsyncAssetLoadManager::OnProceduralModelLoadComplete(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)
+void AsyncAssetLoadManager::OnProceduralModelLoadComplete(bool success, ProceduralModelSlotHandle slotHandle)
 {
     ZoneScoped;
 
@@ -714,12 +744,11 @@ void AsyncAssetLoadManager::OnProceduralModelLoadComplete(bool success, Procedur
         LOG_ERROR(Asset, "Failed to generate procedural model: {}", slot.outputModel->name.c_str());
     }
 
+    if (slot.uploadStaging) {
+        stagingDepot.Return(slot.uploadStaging);
+    }
     slot.Clear();
     proceduralModelLoadAllocator.Remove(slotHandle);
-
-    if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
-        uploadStagingAllocator.Remove(uploadStagingSlotHandle);
-    }
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();
@@ -748,7 +777,7 @@ void AsyncAssetLoadManager::OnPhysicsColliderLoadComplete(bool success, PhysicsC
     wakeCV.notify_one();
 }
 
-void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)
+void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle)
 {
     ZoneScoped;
 
@@ -764,18 +793,17 @@ void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandl
         LOG_ERROR(Asset, "Failed to load texture: {}", slot.outputTexture->source.c_str());
     }
 
+    if (slot.uploadStaging) {
+        stagingDepot.Return(slot.uploadStaging);
+    }
     slot.Clear();
     textureLoadAllocator.Remove(textureSlotHandle);
-
-    if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
-        uploadStagingAllocator.Remove(uploadStagingSlotHandle);
-    }
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
 
-void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)
+void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle)
 {
     ZoneScoped;
 
@@ -794,12 +822,11 @@ void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cu
         LOG_ERROR(Asset, "Failed to load cubemap: {}", slot.outputCubemap->source.c_str());
     }
 
+    if (slot.uploadStaging) {
+        stagingDepot.Return(slot.uploadStaging);
+    }
     slot.Clear();
     cubemapLoadAllocator.Remove(cubemapSlotHandle);
-
-    if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
-        uploadStagingAllocator.Remove(uploadStagingSlotHandle);
-    }
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();

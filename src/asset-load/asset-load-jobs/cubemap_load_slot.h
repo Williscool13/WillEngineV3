@@ -42,12 +42,12 @@ public:
         Render::VulkanContext* _context,
         Render::ResourceManager* _resourceManager,
         Core::MemoryManager* _memoryManager,
+        SubmitContextDepot* _submitDepot,
         Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
-        Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback);
+        Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle)> notifyCallback);
 
     void Launch(
         CubemapSlotHandle _cubemapSlotHandle,
-        UploadStagingSlotHandle _uploadStagingSlotHandle,
         UploadStaging* _uploadStaging,
         Render::Cubemap* _outputCubemap);
 
@@ -62,7 +62,6 @@ public:
     void PostUploadSetup();
 
     CubemapSlotHandle cubemapSlotHandle{};
-    UploadStagingSlotHandle uploadStagingSlotHandle{};
 
     Render::Cubemap* outputCubemap{nullptr};
     UploadStaging* uploadStaging{nullptr};
@@ -84,11 +83,12 @@ private:
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
+    SubmitContextDepot* submitDepot{nullptr};
 
     ktxTexture2* texture{nullptr};
 
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
-    Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
+    Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle)> _notifyCallback;
 };
 } // AssetLoad
 

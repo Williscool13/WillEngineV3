@@ -1106,11 +1106,13 @@ void WillEngine::EditorImgui()
                 return;
             }
             switch (entry.kind) {
-                case Editor::AssetSourceKind::Model: {
+                case Editor::AssetSourceKind::Model:
+                {
                     assetGenerator->RequestModelGenerate(entry.sourcePath, output, Editor::AssetSourceCatalog::TextureOutputDirFor(entry));
                     break;
                 }
-                case Editor::AssetSourceKind::Texture: {
+                case Editor::AssetSourceKind::Texture:
+                {
                     bool mips = true;
                     bool flipY = true;
                     DXGI_FORMAT format = DXGI_FORMAT_BC7_UNORM_SRGB;
@@ -1122,11 +1124,13 @@ void WillEngine::EditorImgui()
                     assetGenerator->RequestTextureGenerateFromFile(entry.sourcePath, output, mips, format, flipY);
                     break;
                 }
-                case Editor::AssetSourceKind::EnvironmentMap: {
+                case Editor::AssetSourceKind::EnvironmentMap:
+                {
                     assetGenerator->RequestEnvironmentMapGenerate(entry.sourcePath, output);
                     break;
                 }
-                case Editor::AssetSourceKind::Font: {
+                case Editor::AssetSourceKind::Font:
+                {
                     assetGenerator->RequestFontGenerate(entry.sourcePath, output);
                     break;
                 }
@@ -1198,27 +1202,27 @@ void WillEngine::EditorImgui()
             assetGenerator->GenerateBlueNoiseTexture(Platform::GetAssetPath() / "textures/blue_noise.wtexture");
         }
 
-            ImGui::SeparatorText("Skybox LOD:"); {
-                static constexpr const char* kLODLabels[] = {"Specular 0", "Specular 1", "Specular 2", "Specular 3", "Diffuse"};
-                ImGui::SetNextItemWidth(-1);
-                if (ImGui::BeginCombo("##skybox_lod", kLODLabels[engineState->lighting.skyboxLOD])) {
-                    for (int i = 0; i < 5; ++i) {
-                        const bool selected = engineState->lighting.skyboxLOD == i;
-                        if (ImGui::Selectable(kLODLabels[i], selected)) {
-                            engineState->lighting.skyboxLOD = i;
-                        }
+        ImGui::SeparatorText("Skybox LOD:"); {
+            static constexpr const char* kLODLabels[] = {"Specular 0", "Specular 1", "Specular 2", "Specular 3", "Diffuse"};
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::BeginCombo("##skybox_lod", kLODLabels[engineState->lighting.skyboxLOD])) {
+                for (int i = 0; i < 5; ++i) {
+                    const bool selected = engineState->lighting.skyboxLOD == i;
+                    if (ImGui::Selectable(kLODLabels[i], selected)) {
+                        engineState->lighting.skyboxLOD = i;
                     }
-                    ImGui::EndCombo();
                 }
+                ImGui::EndCombo();
             }
+        }
 
-            ImGui::SeparatorText("Procedural Textures:");
-            if (ImGui::Button("Load Yellow Texture")) {
-                assetManager->LoadProceduralTexture(SID("yellow_texture"), 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
-            }
-            if (ImGui::Button("Load Domain Warp")) {
-                assetManager->LoadProceduralTexture(SID("domain_warp"), 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
-            }
+        ImGui::SeparatorText("Procedural Textures:");
+        if (ImGui::Button("Load Yellow Texture")) {
+            assetManager->LoadProceduralTexture(SID("yellow_texture"), 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
+        }
+        if (ImGui::Button("Load Domain Warp")) {
+            assetManager->LoadProceduralTexture(SID("domain_warp"), 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
+        }
 
         ImGui::Separator();
         ImGui::Text("Generation Progress:");
@@ -1272,10 +1276,36 @@ void WillEngine::Run()
     renderThread->Start();
     timeManager->Reset();
 
+    const auto startupTime = std::chrono::steady_clock::now();
+    auto startupStreamQuietTime = startupTime;
+    bool bStartupStreamActivitySeen = false;
+    bool bStartupStreamLogged = false;
+    uint32_t startupStreamQuietFrames = 0;
+
     SDL_Event e;
     auto nextFrameTime = std::chrono::steady_clock::now();
     while (true) {
         ZoneScopedN("EngineFrame");
+
+        if (!bStartupStreamLogged) {
+            const uint32_t activeLoads = asyncAssetLoadManager->GetActiveModelLoadCount() + asyncAssetLoadManager->GetActiveProceduralModelLoadCount()
+                                         + asyncAssetLoadManager->GetActiveTextureLoadCount() + asyncAssetLoadManager->GetActiveCubemapLoadCount()
+                                         + asyncAssetLoadManager->GetActiveProceduralTextureLoadCount() + asyncAssetLoadManager->GetActivePhysicsColliderLoadCount()
+                                         + asyncAssetLoadManager->GetActivePipelineLoadCount() + asyncAssetLoadManager->GetActiveAudioLoadCount();
+
+            if (activeLoads > 0) {
+                bStartupStreamActivitySeen = true;
+                startupStreamQuietFrames = 0;
+            }
+            else if (bStartupStreamActivitySeen) {
+                if (startupStreamQuietFrames == 0) { startupStreamQuietTime = std::chrono::steady_clock::now(); }
+                startupStreamQuietFrames++;
+                if (startupStreamQuietFrames >= 30) {
+                    bStartupStreamLogged = true;
+                    LOG_INFO(Engine, "Startup asset streaming complete in {:.3f}s", std::chrono::duration<double>(startupStreamQuietTime - startupTime).count());
+                }
+            }
+        }
         if (engineState->projectConfig.bLimitFps && engineState->projectConfig.frameLimitTarget > 0) {
             const auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(1.0 / static_cast<double>(engineState->projectConfig.frameLimitTarget)));
             nextFrameTime += interval;
@@ -1349,6 +1379,7 @@ void WillEngine::Run()
         memoryManager.AssetsScratch().ReleaseEmptyChunks();
 #if WILL_EDITOR
         bool bTextureGenerated = false;
+        //
         {
             engineState->assetLoad.pendingHotReloadModelIds.Clear();
             Editor::ModelGenerateComplete modelComplete{};
