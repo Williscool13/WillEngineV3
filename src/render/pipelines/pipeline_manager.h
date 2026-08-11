@@ -100,11 +100,11 @@ private:
         for (auto [name, pipeline] : pipelines) {
             if (pipeline.retirementFrame != 0 && currentFrame > pipeline.retirementFrame) {
                 if (pipeline.retiredEntry.pipeline != VK_NULL_HANDLE) {
-                    vkDestroyPipeline(context->device, pipeline.retiredEntry.pipeline, nullptr);
+                    vkDestroyPipeline(context->device, pipeline.retiredEntry.pipeline, context->HostAllocCallbacks());
                     pipeline.retiredEntry.pipeline = VK_NULL_HANDLE;
                 }
                 if (pipeline.retiredEntry.layout != VK_NULL_HANDLE) {
-                    vkDestroyPipelineLayout(context->device, pipeline.retiredEntry.layout, nullptr);
+                    vkDestroyPipelineLayout(context->device, pipeline.retiredEntry.layout, context->HostAllocCallbacks());
                     pipeline.retiredEntry.layout = VK_NULL_HANDLE;
                 }
                 pipeline.retirementFrame = 0;

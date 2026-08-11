@@ -81,13 +81,13 @@ void UploadStagingDepot::SetBudgetBytes(uint64_t newBudget)
 void SubmitContext::Initialize(Render::VulkanContext* context, uint32_t queueFamily)
 {
     VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(queueFamily);
-    VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &pool));
+    VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, context->HostAllocCallbacks(), &pool));
 
     VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, pool);
     VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, &cmd));
 
     VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &fence));
+    VK_CHECK(vkCreateFence(context->device, &fenceInfo, context->HostAllocCallbacks(), &fence));
 }
 
 void SubmitContext::Reset(Render::VulkanContext* context)
@@ -99,8 +99,8 @@ void SubmitContext::Reset(Render::VulkanContext* context)
 void SubmitContext::Destroy(Render::VulkanContext* context)
 {
     if (pool == VK_NULL_HANDLE) { return; }
-    vkDestroyFence(context->device, fence, nullptr);
-    vkDestroyCommandPool(context->device, pool, nullptr);
+    vkDestroyFence(context->device, fence, context->HostAllocCallbacks());
+    vkDestroyCommandPool(context->device, pool, context->HostAllocCallbacks());
     pool = VK_NULL_HANDLE;
     cmd = VK_NULL_HANDLE;
     fence = VK_NULL_HANDLE;

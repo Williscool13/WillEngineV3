@@ -219,6 +219,7 @@ GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState*
     if (ctx->scheduler) {
         ctx->scheduler->DeRegisterExternalTaskThread();
     }
+    ctx->physicsSystem->UnregisterPhysics();
 #endif
 }
 
@@ -461,6 +462,7 @@ GAME_API void GameUnload(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (ctx->scheduler) {
         ctx->scheduler->DeRegisterExternalTaskThread();
     }
+    ctx->physicsSystem->UnregisterPhysics();
 #endif
 }
 

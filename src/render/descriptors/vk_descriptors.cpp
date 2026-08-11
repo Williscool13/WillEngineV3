@@ -4,6 +4,7 @@
 
 #include "vk_descriptors.h"
 
+#include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace Render
@@ -54,7 +55,7 @@ VkDescriptorSetLayoutCreateInfo DescriptorLayoutBuilder::Build(const VkShaderSta
 }
 
 
-VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext,
+VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks, VkShaderStageFlags shaderStages, void* pNext,
                                                      VkDescriptorSetLayoutCreateFlags flags)
 {
     for (auto& b : bindings) {
@@ -69,7 +70,7 @@ VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, VkShaderSt
     info.flags = flags;
 
     VkDescriptorSetLayout set;
-    VK_CHECK(vkCreateDescriptorSetLayout(device, &info, nullptr, &set));
+    VK_CHECK(vkCreateDescriptorSetLayout(device, &info, hostAllocCallbacks, &set));
 
     return set;
 }

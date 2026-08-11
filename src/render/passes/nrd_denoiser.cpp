@@ -145,25 +145,25 @@ NrdDenoiser::~NrdDenoiser()
 {
     ReleaseRetired(0, true);
     for (TrackedTexture& tex : poolTextures) {
-        if (tex.view != VK_NULL_HANDLE) { vkDestroyImageView(context->device, tex.view, nullptr); }
+        if (tex.view != VK_NULL_HANDLE) { vkDestroyImageView(context->device, tex.view, context->HostAllocCallbacks()); }
         if (tex.image != VK_NULL_HANDLE) { vmaDestroyImage(context->allocator, tex.image, tex.allocation); }
     }
     for (TrackedTexture& tex : ioTextures) {
-        if (tex.view != VK_NULL_HANDLE) { vkDestroyImageView(context->device, tex.view, nullptr); }
+        if (tex.view != VK_NULL_HANDLE) { vkDestroyImageView(context->device, tex.view, context->HostAllocCallbacks()); }
         if (tex.image != VK_NULL_HANDLE) { vmaDestroyImage(context->allocator, tex.image, tex.allocation); }
     }
     for (PipelineObjects& p : pipelines) {
-        if (p.pipeline != VK_NULL_HANDLE) { vkDestroyPipeline(context->device, p.pipeline, nullptr); }
-        if (p.layout != VK_NULL_HANDLE) { vkDestroyPipelineLayout(context->device, p.layout, nullptr); }
-        if (p.setLayout != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(context->device, p.setLayout, nullptr); }
+        if (p.pipeline != VK_NULL_HANDLE) { vkDestroyPipeline(context->device, p.pipeline, context->HostAllocCallbacks()); }
+        if (p.layout != VK_NULL_HANDLE) { vkDestroyPipelineLayout(context->device, p.layout, context->HostAllocCallbacks()); }
+        if (p.setLayout != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(context->device, p.setLayout, context->HostAllocCallbacks()); }
     }
     for (VkDescriptorPool pool : frameDescriptorPools) {
-        if (pool != VK_NULL_HANDLE) { vkDestroyDescriptorPool(context->device, pool, nullptr); }
+        if (pool != VK_NULL_HANDLE) { vkDestroyDescriptorPool(context->device, pool, context->HostAllocCallbacks()); }
     }
-    if (sharedDescriptorPool != VK_NULL_HANDLE) { vkDestroyDescriptorPool(context->device, sharedDescriptorPool, nullptr); }
-    if (sharedSetLayout != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(context->device, sharedSetLayout, nullptr); }
+    if (sharedDescriptorPool != VK_NULL_HANDLE) { vkDestroyDescriptorPool(context->device, sharedDescriptorPool, context->HostAllocCallbacks()); }
+    if (sharedSetLayout != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(context->device, sharedSetLayout, context->HostAllocCallbacks()); }
     for (VkSampler sampler : samplers) {
-        if (sampler != VK_NULL_HANDLE) { vkDestroySampler(context->device, sampler, nullptr); }
+        if (sampler != VK_NULL_HANDLE) { vkDestroySampler(context->device, sampler, context->HostAllocCallbacks()); }
     }
     if (instance != nullptr) {
         nrd::DestroyInstance(*instance);
@@ -213,7 +213,7 @@ bool NrdDenoiser::EnsureInstance()
             .maxLod = 16.0f,
         };
         VkSampler sampler = VK_NULL_HANDLE;
-        VK_CHECK(vkCreateSampler(context->device, &samplerInfo, nullptr, &sampler));
+        VK_CHECK(vkCreateSampler(context->device, &samplerInfo, context->HostAllocCallbacks(), &sampler));
         samplers.PushBack(sampler);
     }
 
@@ -249,7 +249,7 @@ bool NrdDenoiser::EnsureInstance()
             .bindingCount = static_cast<uint32_t>(bindings.Size()),
             .pBindings = bindings.Data(),
         };
-        VK_CHECK(vkCreateDescriptorSetLayout(context->device, &layoutInfo, nullptr, &sharedSetLayout));
+        VK_CHECK(vkCreateDescriptorSetLayout(context->device, &layoutInfo, context->HostAllocCallbacks(), &sharedSetLayout));
 
         Core::Array<VkDescriptorPoolSize, 2> poolSizes{
             VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, glm::max(desc.samplersNum, 1u)},
@@ -261,7 +261,7 @@ bool NrdDenoiser::EnsureInstance()
             .poolSizeCount = static_cast<uint32_t>(poolSizes.Size()),
             .pPoolSizes = poolSizes.Data(),
         };
-        VK_CHECK(vkCreateDescriptorPool(context->device, &poolInfo, nullptr, &sharedDescriptorPool));
+        VK_CHECK(vkCreateDescriptorPool(context->device, &poolInfo, context->HostAllocCallbacks(), &sharedDescriptorPool));
 
         VkDescriptorSetAllocateInfo allocInfo{
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -296,7 +296,7 @@ bool NrdDenoiser::EnsureInstance()
             .pPoolSizes = poolSizes.Data(),
         };
         for (uint32_t i = 0; i < Core::FRAME_BUFFER_COUNT; i++) {
-            VK_CHECK(vkCreateDescriptorPool(context->device, &poolInfo, nullptr, &frameDescriptorPools[i]));
+            VK_CHECK(vkCreateDescriptorPool(context->device, &poolInfo, context->HostAllocCallbacks(), &frameDescriptorPools[i]));
         }
     }
 
@@ -325,7 +325,7 @@ bool NrdDenoiser::EnsureInstance()
             .bindingCount = static_cast<uint32_t>(bindings.Size()),
             .pBindings = bindings.Data(),
         };
-        VK_CHECK(vkCreateDescriptorSetLayout(context->device, &layoutInfo, nullptr, &objects.setLayout));
+        VK_CHECK(vkCreateDescriptorSetLayout(context->device, &layoutInfo, context->HostAllocCallbacks(), &objects.setLayout));
 
         const Core::Array<VkDescriptorSetLayout, 2> setLayouts{objects.setLayout, sharedSetLayout};
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{
@@ -333,13 +333,13 @@ bool NrdDenoiser::EnsureInstance()
             .setLayoutCount = static_cast<uint32_t>(setLayouts.Size()),
             .pSetLayouts = setLayouts.Data(),
         };
-        VK_CHECK(vkCreatePipelineLayout(context->device, &pipelineLayoutInfo, nullptr, &objects.layout));
+        VK_CHECK(vkCreatePipelineLayout(context->device, &pipelineLayoutInfo, context->HostAllocCallbacks(), &objects.layout));
 
         VkShaderModule shaderModule = VK_NULL_HANDLE;
-        if (!VkHelpers::LoadShaderModuleFromBlob(pipelineDesc.computeShaderSPIRV.bytecode, pipelineDesc.computeShaderSPIRV.size, context->device, &shaderModule)) {
+        if (!VkHelpers::LoadShaderModuleFromBlob(pipelineDesc.computeShaderSPIRV.bytecode, pipelineDesc.computeShaderSPIRV.size, context->device, context->HostAllocCallbacks(), &shaderModule)) {
             LOG_ERROR(Renderer, "[NRD] Failed to create shader module for pipeline {} ({})", i, pipelineDesc.shaderIdentifier);
-            vkDestroyPipelineLayout(context->device, objects.layout, nullptr);
-            vkDestroyDescriptorSetLayout(context->device, objects.setLayout, nullptr);
+            vkDestroyPipelineLayout(context->device, objects.layout, context->HostAllocCallbacks());
+            vkDestroyDescriptorSetLayout(context->device, objects.setLayout, context->HostAllocCallbacks());
             bInitFailed = true;
             return false;
         }
@@ -348,12 +348,12 @@ bool NrdDenoiser::EnsureInstance()
         VkComputePipelineCreateInfo pipelineInfo = VkHelpers::ComputePipelineCreateInfo(objects.layout, stage);
         // Remove descriptor buffer flag
         pipelineInfo.flags = 0;
-        const VkResult pipelineResult = vkCreateComputePipelines(context->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &objects.pipeline);
-        vkDestroyShaderModule(context->device, shaderModule, nullptr);
+        const VkResult pipelineResult = vkCreateComputePipelines(context->device, VK_NULL_HANDLE, 1, &pipelineInfo, context->HostAllocCallbacks(), &objects.pipeline);
+        vkDestroyShaderModule(context->device, shaderModule, context->HostAllocCallbacks());
         if (pipelineResult != VK_SUCCESS) {
             LOG_ERROR(Renderer, "[NRD] Failed to create pipeline {} ({})", i, pipelineDesc.shaderIdentifier);
-            vkDestroyPipelineLayout(context->device, objects.layout, nullptr);
-            vkDestroyDescriptorSetLayout(context->device, objects.setLayout, nullptr);
+            vkDestroyPipelineLayout(context->device, objects.layout, context->HostAllocCallbacks());
+            vkDestroyDescriptorSetLayout(context->device, objects.setLayout, context->HostAllocCallbacks());
             bInitFailed = true;
             return false;
         }
@@ -377,7 +377,7 @@ bool NrdDenoiser::CreateTrackedTexture(TrackedTexture& tex, VkFormat format, uin
         return false;
     }
     VkImageViewCreateInfo viewInfo = VkHelpers::ImageViewCreateInfo(tex.image, format, VK_IMAGE_ASPECT_COLOR_BIT);
-    VK_CHECK(vkCreateImageView(context->device, &viewInfo, nullptr, &tex.view));
+    VK_CHECK(vkCreateImageView(context->device, &viewInfo, context->HostAllocCallbacks(), &tex.view));
     tex.format = format;
     tex.width = width;
     tex.height = height;
@@ -400,7 +400,7 @@ void NrdDenoiser::ReleaseRetired(uint64_t frameNumber, bool bForce)
     for (size_t i = retiredImages.Size(); i > 0; i--) {
         RetiredImage& retired = retiredImages[i - 1];
         if (bForce || frameNumber > retired.retiredFrame + Core::FRAME_BUFFER_COUNT) {
-            if (retired.view != VK_NULL_HANDLE) { vkDestroyImageView(context->device, retired.view, nullptr); }
+            if (retired.view != VK_NULL_HANDLE) { vkDestroyImageView(context->device, retired.view, context->HostAllocCallbacks()); }
             vmaDestroyImage(context->allocator, retired.image, retired.allocation);
             retired = retiredImages[retiredImages.Size() - 1];
             retiredImages.PopBack();

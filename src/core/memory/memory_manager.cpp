@@ -21,11 +21,11 @@ void MemoryManager::Init(const Layout& layout)
     const size_t generalSz = AlignUp(layout.generalPoolSize, kAlign);
     const size_t assetsScratchSz = AlignUp(layout.assetsScratchPoolSize, kAlign);
     const size_t assetsSz = AlignUp(layout.assetsPoolSize, kAlign);
-    const size_t physicsAlignedSz = AlignUp(layout.physicsAlignedPoolSize, kAlign);
+    const size_t physicsSz = AlignUp(layout.physicsPoolSize, kAlign);
     const size_t renderSz = AlignUp(layout.renderPoolSize, kAlign);
     const size_t arenaPoolSz = AlignUp(layout.arenaPoolSize, kAlign);
 
-    totalSize = persistentSz + assetsSz + physicsAlignedSz + renderSz + arenaPoolSz;
+    totalSize = persistentSz + assetsSz + physicsSz + renderSz + arenaPoolSz;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
@@ -38,8 +38,8 @@ void MemoryManager::Init(const Layout& layout)
     tlsfAssets.Init(cursor, assetsSz, true, "Assets");
     cursor += assetsSz;
     tlsfAssetsScratch.InitGrowable(assetsScratchSz, layout.assetsScratchBudget, true, "AssetsScratch");
-    tlsfPhysicsAligned.Init(cursor, physicsAlignedSz, true, "PhysicsAligned");
-    cursor += physicsAlignedSz;
+    tlsfPhysics.Init(cursor, physicsSz, true, "Physics");
+    cursor += physicsSz;
     tlsfRender.Init(cursor, renderSz, false, "Render");
     cursor += renderSz;
     arenaPool.Init(cursor, arenaPoolSz, "ArenaPool");
@@ -91,16 +91,23 @@ void MemoryManager::GeneralFree(void* ptr)
     tlsfGeneral.Free(ptr);
 }
 
-void* MemoryManager::PhysicsAlignedAllocRaw(size_t size, size_t alignment)
+void* MemoryManager::PhysicsAllocRaw(size_t size, size_t alignment)
 {
-    void* ptr = tlsfPhysicsAligned.AlignedAlloc(size, alignment);
-    assert(ptr != nullptr && "OOM: physics aligned pool exhausted");
+    void* ptr = tlsfPhysics.AlignedAlloc(size, alignment, AllocTag::Physics);
+    assert(ptr != nullptr && "OOM: physics pool exhausted");
     return ptr;
 }
 
-void MemoryManager::PhysicsAlignedFree(void* ptr)
+void* MemoryManager::PhysicsRealloc(void* ptr, size_t newSize, size_t alignment)
 {
-    tlsfPhysicsAligned.AlignedFree(ptr);
+    void* p = tlsfPhysics.AlignedRealloc(ptr, newSize, alignment, AllocTag::Physics);
+    assert(p != nullptr && "OOM: physics pool exhausted");
+    return p;
+}
+
+void MemoryManager::PhysicsFree(void* ptr)
+{
+    tlsfPhysics.AlignedFree(ptr);
 }
 
 void* MemoryManager::RenderAllocRaw(size_t size)
@@ -130,7 +137,7 @@ MemoryManager::Stats MemoryManager::GetStats()
         tlsfGeneral.GetStats(),
         tlsfAssetsScratch.GetStats(),
         tlsfAssets.GetStats(),
-        tlsfPhysicsAligned.GetStats(),
+        tlsfPhysics.GetStats(),
         tlsfRender.GetStats(),
     };
 #ifdef WDEBUG

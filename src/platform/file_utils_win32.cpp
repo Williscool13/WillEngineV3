@@ -112,6 +112,15 @@ uint64_t GetFileWriteTime(const char* path)
 
 uint64_t GetFileWriteTime(const Core::Path& path) { return GetFileWriteTime(path.c_str()); }
 
+uint64_t GetFileSize(const char* path)
+{
+    WIN32_FILE_ATTRIBUTE_DATA info;
+    if (!GetFileAttributesExA(path, GetFileExInfoStandard, &info)) { return 0; }
+    return (static_cast<uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+}
+
+uint64_t GetFileSize(const Core::Path& path) { return GetFileSize(path.c_str()); }
+
 void RecursiveDirectoryIterator(const Core::Path& dir, Core::Vector<Core::Path>& out)
 {
     Core::Path search = dir / "*";

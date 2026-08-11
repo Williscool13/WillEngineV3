@@ -24,6 +24,7 @@
 #include "render/descriptors/vk_bindless_resources_storage.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
+#include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_utils.h"
 #include "smaa/Textures/AreaTex.h"
 #include "smaa/Textures/SearchTex.h"
@@ -218,7 +219,7 @@ void CreateBRDFLookupTable(
 
     VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->graphicsQueueFamily);
     VkCommandPool graphicsCommandPool;
-    VK_CHECK(vkCreateCommandPool(context->device, &graphicsPoolInfo, nullptr, &graphicsCommandPool));
+    VK_CHECK(vkCreateCommandPool(context->device, &graphicsPoolInfo, context->HostAllocCallbacks(), &graphicsCommandPool));
 
     VkCommandBufferAllocateInfo graphicsCmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, graphicsCommandPool);
     VkCommandBuffer graphicsCmd;
@@ -226,7 +227,7 @@ void CreateBRDFLookupTable(
 
     VkFenceCreateInfo graphicsFenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     VkFence graphicsFence;
-    VK_CHECK(vkCreateFence(context->device, &graphicsFenceInfo, nullptr, &graphicsFence));
+    VK_CHECK(vkCreateFence(context->device, &graphicsFenceInfo, context->HostAllocCallbacks(), &graphicsFence));
 
     auto startGraphicsRecording = [&] {
         VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -393,8 +394,8 @@ void CreateBRDFLookupTable(
 
     LOG_INFO(Asset, "Wrote {}", outputPath.c_str());
 
-    vkDestroyFence(context->device, graphicsFence, nullptr);
-    vkDestroyCommandPool(context->device, graphicsCommandPool, nullptr);
+    vkDestroyFence(context->device, graphicsFence, context->HostAllocCallbacks());
+    vkDestroyCommandPool(context->device, graphicsCommandPool, context->HostAllocCallbacks());
 }
 
 static void GenerateBlueNoiseRanks(uint32_t size, uint32_t seed, Core::MemoryManager* memoryManager, uint8_t* out, uint32_t stride, uint32_t channel)

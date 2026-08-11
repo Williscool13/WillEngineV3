@@ -168,7 +168,7 @@ void AllocatedImage::SetDebugName(const char* name)
 ImageView::~ImageView()
 {
     if (handle != VK_NULL_HANDLE) {
-        vkDestroyImageView(context->device, handle, nullptr);
+        vkDestroyImageView(context->device, handle, context->HostAllocCallbacks());
         handle = VK_NULL_HANDLE;
     }
 }
@@ -186,7 +186,7 @@ ImageView& ImageView::operator=(ImageView&& other) noexcept
 {
     if (this != &other) {
         if (handle != VK_NULL_HANDLE) {
-            vkDestroyImageView(context->device, handle, nullptr);
+            vkDestroyImageView(context->device, handle, context->HostAllocCallbacks());
             handle = VK_NULL_HANDLE;
         }
 
@@ -213,7 +213,7 @@ void ImageView::SetDebugName(const char* name)
 Sampler::~Sampler()
 {
     if (handle != VK_NULL_HANDLE) {
-        vkDestroySampler(context->device, handle, nullptr);
+        vkDestroySampler(context->device, handle, context->HostAllocCallbacks());
     }
 }
 
@@ -230,7 +230,7 @@ Sampler& Sampler::operator=(Sampler&& other) noexcept
 {
     if (this != &other) {
         if (handle != VK_NULL_HANDLE) {
-            vkDestroySampler(context->device, handle, nullptr);
+            vkDestroySampler(context->device, handle, context->HostAllocCallbacks());
         }
 
         context = other.context;
@@ -256,7 +256,7 @@ void Sampler::SetDebugName(const char* name)
 DescriptorSetLayout::~DescriptorSetLayout()
 {
     if (context && handle != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(context->device, handle, nullptr);
+        vkDestroyDescriptorSetLayout(context->device, handle, context->HostAllocCallbacks());
     }
 }
 
@@ -273,7 +273,7 @@ DescriptorSetLayout& DescriptorSetLayout::operator=(DescriptorSetLayout&& other)
 {
     if (this != &other) {
         if (context && handle != VK_NULL_HANDLE) {
-            vkDestroyDescriptorSetLayout(context->device, handle, nullptr);
+            vkDestroyDescriptorSetLayout(context->device, handle, context->HostAllocCallbacks());
         }
 
         context = other.context;
@@ -299,7 +299,7 @@ void DescriptorSetLayout::SetDebugName(const char* name)
 PipelineLayout::~PipelineLayout()
 {
     if (context && handle != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(context->device, handle, nullptr);
+        vkDestroyPipelineLayout(context->device, handle, context->HostAllocCallbacks());
     }
 }
 
@@ -316,7 +316,7 @@ PipelineLayout& PipelineLayout::operator=(PipelineLayout&& other) noexcept
 {
     if (this != &other) {
         if (context && handle != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(context->device, handle, nullptr);
+            vkDestroyPipelineLayout(context->device, handle, context->HostAllocCallbacks());
         }
 
         context = other.context;
@@ -342,7 +342,7 @@ void PipelineLayout::SetDebugName(const char* name)
 Pipeline::~Pipeline()
 {
     if (context && handle != VK_NULL_HANDLE) {
-        vkDestroyPipeline(context->device, handle, nullptr);
+        vkDestroyPipeline(context->device, handle, context->HostAllocCallbacks());
     }
 }
 
@@ -359,7 +359,7 @@ Pipeline& Pipeline::operator=(Pipeline&& other) noexcept
 {
     if (this != &other) {
         if (context && handle != VK_NULL_HANDLE) {
-            vkDestroyPipeline(context->device, handle, nullptr);
+            vkDestroyPipeline(context->device, handle, context->HostAllocCallbacks());
         }
 
         context = other.context;
@@ -473,7 +473,7 @@ ImageView ImageView::CreateImageView(const VulkanContext* context, const VkImage
 {
     ImageView newImageView;
     newImageView.context = context;
-    VK_CHECK(vkCreateImageView(context->device, &imageViewCreateInfo, nullptr, &newImageView.handle));
+    VK_CHECK(vkCreateImageView(context->device, &imageViewCreateInfo, context->HostAllocCallbacks(), &newImageView.handle));
     return newImageView;
 }
 
@@ -481,7 +481,7 @@ Sampler Sampler::CreateSampler(const VulkanContext* context, const VkSamplerCrea
 {
     Sampler sampler;
     sampler.context = context;
-    vkCreateSampler(context->device, &samplerCreateInfo, nullptr, &sampler.handle);
+    vkCreateSampler(context->device, &samplerCreateInfo, context->HostAllocCallbacks(), &sampler.handle);
     return sampler;
 }
 
@@ -489,7 +489,7 @@ DescriptorSetLayout DescriptorSetLayout::CreateDescriptorSetLayout(const VulkanC
 {
     DescriptorSetLayout layout;
     layout.context = context;
-    VK_CHECK(vkCreateDescriptorSetLayout(context->device, &layoutCreateInfo, nullptr, &layout.handle));
+    VK_CHECK(vkCreateDescriptorSetLayout(context->device, &layoutCreateInfo, context->HostAllocCallbacks(), &layout.handle));
     return layout;
 }
 
@@ -497,7 +497,7 @@ PipelineLayout PipelineLayout::CreatePipelineLayout(const VulkanContext* context
 {
     PipelineLayout layout;
     layout.context = context;
-    VK_CHECK(vkCreatePipelineLayout(context->device, &layoutCreateInfo, nullptr, &layout.handle));
+    VK_CHECK(vkCreatePipelineLayout(context->device, &layoutCreateInfo, context->HostAllocCallbacks(), &layout.handle));
     return layout;
 }
 
@@ -505,7 +505,7 @@ Pipeline Pipeline::CreateGraphicsPipeline(const VulkanContext* context, const Vk
 {
     Pipeline pipeline;
     pipeline.context = context;
-    VK_CHECK(vkCreateGraphicsPipelines(context->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &pipeline.handle));
+    VK_CHECK(vkCreateGraphicsPipelines(context->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, context->HostAllocCallbacks(), &pipeline.handle));
     return pipeline;
 }
 
@@ -513,7 +513,7 @@ Pipeline Pipeline::CreateComputePipeline(const VulkanContext* context, const VkC
 {
     Pipeline pipeline;
     pipeline.context = context;
-    VK_CHECK(vkCreateComputePipelines(context->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &pipeline.handle));
+    VK_CHECK(vkCreateComputePipelines(context->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, context->HostAllocCallbacks(), &pipeline.handle));
     return pipeline;
 }
 } // Render

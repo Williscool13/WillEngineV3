@@ -49,32 +49,27 @@ static Core::MemoryManager* sPhysicsMemory = nullptr;
 
 static void* JoltAlloc(size_t size)
 {
-    return sPhysicsMemory->PhysicsAlignedAllocRaw(size, JPH_RVECTOR_ALIGNMENT);
+    return sPhysicsMemory->PhysicsAllocRaw(size, JPH_RVECTOR_ALIGNMENT);
 }
 
-static void* JoltRealloc(void* ptr, size_t oldSize, size_t newSize)
+static void* JoltRealloc(void* ptr, size_t, size_t newSize)
 {
-    void* newPtr = sPhysicsMemory->PhysicsAlignedAllocRaw(newSize, JPH_RVECTOR_ALIGNMENT);
-    if (ptr) {
-        memcpy(newPtr, ptr, oldSize < newSize ? oldSize : newSize);
-        sPhysicsMemory->PhysicsAlignedFree(ptr);
-    }
-    return newPtr;
+    return sPhysicsMemory->PhysicsRealloc(ptr, newSize, JPH_RVECTOR_ALIGNMENT);
 }
 
 static void JoltFree(void* ptr)
 {
-    sPhysicsMemory->PhysicsAlignedFree(ptr);
+    sPhysicsMemory->PhysicsFree(ptr);
 }
 
 static void* JoltAlignedAlloc(size_t size, size_t alignment)
 {
-    return sPhysicsMemory->PhysicsAlignedAllocRaw(size, alignment);
+    return sPhysicsMemory->PhysicsAllocRaw(size, alignment);
 }
 
 static void JoltAlignedFree(void* ptr)
 {
-    sPhysicsMemory->PhysicsAlignedFree(ptr);
+    sPhysicsMemory->PhysicsFree(ptr);
 }
 
 namespace Physics
@@ -98,6 +93,13 @@ void PhysicsSystem::RegisterPhysics() const
     JPH::RegisterTypes();
 }
 
+void PhysicsSystem::UnregisterPhysics() const
+{
+    JPH::UnregisterTypes();
+    delete JPH::Factory::sInstance;
+    JPH::Factory::sInstance = nullptr;
+}
+
 PhysicsSystem::PhysicsSystem(Core::MemoryManager& memoryManager, enki::TaskScheduler* scheduler)
     : memoryManager(&memoryManager)
     , scheduler(scheduler)
@@ -109,7 +111,7 @@ PhysicsSystem::PhysicsSystem(Core::MemoryManager& memoryManager, enki::TaskSched
     JPH::Trace = TraceImpl;
     JPH_IF_ENABLE_ASSERTS(JPH::AssertFailed = AssertFailedImpl;)
 
-    void* jobMem = memoryManager.PhysicsAlignedAllocRaw(sizeof(PhysicsJobSystem), 64);
+    void* jobMem = memoryManager.PhysicsAllocRaw(sizeof(PhysicsJobSystem), 64);
     jobSystem = new(jobMem) PhysicsJobSystem(scheduler, MAX_PHYSICS_JOBS, 8);
 
     physicsSystem.Init(MAX_PHYSICS_BODIES, PHYSICS_BODY_MUTEX_COUNT,
@@ -124,9 +126,9 @@ PhysicsSystem::PhysicsSystem(Core::MemoryManager& memoryManager, enki::TaskSched
                 MAX_PHYSICS_BODIES, PHYSICS_BODY_MUTEX_COUNT, MAX_BODY_PAIRS, MAX_CONTACT_CONSTRAINTS, MAX_PHYSICS_JOBS);
 
 #if JPH_DEBUG_RENDERER
-    void* mem0 = memoryManager.PhysicsAlignedAllocRaw(sizeof(DebugRenderer), 64);
+    void* mem0 = memoryManager.PhysicsAllocRaw(sizeof(DebugRenderer), 64);
     debugRenderer = new(mem0) DebugRenderer();
-    void* mem1 = memoryManager.PhysicsAlignedAllocRaw(sizeof(DebugDrawFilter), 64);
+    void* mem1 = memoryManager.PhysicsAllocRaw(sizeof(DebugDrawFilter), 64);
     debugDrawFilter = new(mem1) DebugDrawFilter(memoryManager);
 #endif
 }
@@ -136,18 +138,16 @@ PhysicsSystem::~PhysicsSystem()
 #if JPH_DEBUG_RENDERER
     if (debugRenderer) {
         debugRenderer->~DebugRenderer();
-        memoryManager->PhysicsAlignedFree(debugRenderer);
+        memoryManager->PhysicsFree(debugRenderer);
         debugRenderer = nullptr;
     }
     if (debugDrawFilter) {
         debugDrawFilter->~DebugDrawFilter();
-        memoryManager->PhysicsAlignedFree(debugDrawFilter);
+        memoryManager->PhysicsFree(debugDrawFilter);
         debugDrawFilter = nullptr;
     }
 #endif
-    JPH::UnregisterTypes();
-    delete JPH::Factory::sInstance;
-    JPH::Factory::sInstance = nullptr;
+    UnregisterPhysics();
 };
 
 void PhysicsSystem::Step(float deltaTime)

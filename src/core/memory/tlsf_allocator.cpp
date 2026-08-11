@@ -215,23 +215,36 @@ void TlsfAllocator::Free(void* ptr)
 void* TlsfAllocator::AlignedAlloc(size_t size, size_t alignment, AllocTag tag)
 {
     if (size == 0) { return nullptr; }
+    assert((alignment & (alignment - 1)) == 0 && "alignment must be a power of two");
+    if (alignment < 8) { alignment = 8; }
     std::unique_lock lock(mutex_, std::defer_lock);
     if (bUseMutex_) { lock.lock(); }
 
-    void* ptr = tlsf_memalign(tlsf, alignment, size);
-    if (ptr == nullptr && Grow(size + alignment)) {
-        ptr = tlsf_memalign(tlsf, alignment, size);
+    // Layout: [AllocHeader at block start (for the tag walker)][padding][uint64 back-offset][user data at `alignment`]
+    const size_t total = kHeaderSize + 8 + alignment + size;
+    void* raw = tlsf_malloc(tlsf, total);
+    if (raw == nullptr && Grow(total)) {
+        raw = tlsf_malloc(tlsf, total);
     }
-    if (ptr == nullptr) {
+    if (raw == nullptr) {
         fprintf(stderr, "TlsfAllocator '%s' OOM: AlignedAlloc %zu bytes align %zu (tag %s), used %zu / %zu\n", name_.buf, size, alignment, AllocTagName(tag), usedBytes_, poolBytes);
         assert(false && "OOM: TLSF pool exhausted");
     }
 
-    usedBytes_ += tlsf_block_size(ptr);
+    auto* header = static_cast<AllocHeader*>(raw);
+    header->tag = tag;
+    header->size = static_cast<uint32_t>(size);
+    header->_pad = 0;
+
+    const uintptr_t rawAddr = reinterpret_cast<uintptr_t>(raw);
+    const uintptr_t userAddr = (rawAddr + kHeaderSize + 8 + alignment - 1) & ~(static_cast<uintptr_t>(alignment) - 1);
+    *reinterpret_cast<uint64_t*>(userAddr - 8) = userAddr - rawAddr;
+
+    usedBytes_ += tlsf_block_size(raw);
     if (usedBytes_ > highWaterBytes_) { highWaterBytes_ = usedBytes_; }
     allocCount_ += 1;
 
-    return ptr;
+    return reinterpret_cast<void*>(userAddr);
 }
 
 void* TlsfAllocator::AlignedRealloc(void* ptr, size_t newSize, size_t alignment, AllocTag tag)
@@ -242,25 +255,22 @@ void* TlsfAllocator::AlignedRealloc(void* ptr, size_t newSize, size_t alignment,
         return nullptr;
     }
 
-    std::unique_lock lock(mutex_, std::defer_lock);
-    if (bUseMutex_) { lock.lock(); }
+    const uintptr_t userAddr = reinterpret_cast<uintptr_t>(ptr);
+    const uint64_t backOffset = *reinterpret_cast<const uint64_t*>(userAddr - 8);
+    auto* header = reinterpret_cast<AllocHeader*>(userAddr - backOffset);
+    const size_t oldSize = header->size;
 
-    const size_t oldSize = tlsf_block_size(ptr);
-    void* newPtr = tlsf_memalign(tlsf, alignment, newSize);
-    if (newPtr == nullptr && Grow(newSize + alignment)) {
-        newPtr = tlsf_memalign(tlsf, alignment, newSize);
-    }
-    if (newPtr == nullptr) {
-        fprintf(stderr, "TlsfAllocator '%s' OOM: AlignedRealloc %zu bytes align %zu (tag %s), used %zu / %zu\n", name_.buf, newSize, alignment, AllocTagName(tag), usedBytes_, poolBytes);
-        assert(false && "OOM: TLSF pool exhausted");
+    // TLSF rounds blocks up, so grow/shrink within the existing block keeps the pointer (a moved block would lose the alignment)
+    void* raw = reinterpret_cast<void*>(userAddr - backOffset);
+    const size_t available = tlsf_block_size(raw) - backOffset;
+    if (newSize <= available) {
+        header->size = static_cast<uint32_t>(newSize);
+        return ptr;
     }
 
+    void* newPtr = AlignedAlloc(newSize, alignment, tag);
     memcpy(newPtr, ptr, oldSize < newSize ? oldSize : newSize);
-    usedBytes_ += tlsf_block_size(newPtr);
-    usedBytes_ -= oldSize;
-    if (usedBytes_ > highWaterBytes_) { highWaterBytes_ = usedBytes_; }
-    tlsf_free(tlsf, ptr);
-
+    AlignedFree(ptr);
     return newPtr;
 }
 
@@ -270,10 +280,14 @@ void TlsfAllocator::AlignedFree(void* ptr)
     std::unique_lock lock(mutex_, std::defer_lock);
     if (bUseMutex_) { lock.lock(); }
 
-    usedBytes_ -= tlsf_block_size(ptr);
+    const uintptr_t userAddr = reinterpret_cast<uintptr_t>(ptr);
+    const uint64_t backOffset = *reinterpret_cast<const uint64_t*>(userAddr - 8);
+    void* raw = reinterpret_cast<void*>(userAddr - backOffset);
+
+    usedBytes_ -= tlsf_block_size(raw);
     allocCount_ -= 1;
 
-    tlsf_free(tlsf, ptr);
+    tlsf_free(tlsf, raw);
 }
 
 TlsfAllocator::Stats TlsfAllocator::GetStats() const

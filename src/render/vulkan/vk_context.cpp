@@ -95,6 +95,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
 
 VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryManager)
 {
+    hostAllocationCallbacks.pUserData = &memoryManager;
+    hostAllocationCallbacks.pfnAllocation = VkHostAlloc;
+    hostAllocationCallbacks.pfnReallocation = VkHostRealloc;
+    hostAllocationCallbacks.pfnFree = VkHostFree;
+
     VkResult res = volkInitialize();
     if (res != VK_SUCCESS) {
         LOG_ERROR(Engine, "Failed to initialize volk: {}", string_VkResult(res));
@@ -150,7 +155,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         instanceInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.Size());
         instanceInfo.ppEnabledLayerNames = instanceLayers.Data();
 
-        res = vkCreateInstance(&instanceInfo, nullptr, &instance);
+        res = vkCreateInstance(&instanceInfo, &hostAllocationCallbacks, &instance);
         if (res != VK_SUCCESS) {
             LOG_ERROR(Engine, "Failed to create Vulkan instance: {}", string_VkResult(res));
             std::abort();
@@ -171,7 +176,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                     VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
             debugInfo.pfnUserCallback = VulkanDebugCallback;
 
-            res = vkCreateDebugUtilsMessengerEXT(instance, &debugInfo, nullptr, &debugMessenger);
+            res = vkCreateDebugUtilsMessengerEXT(instance, &debugInfo, &hostAllocationCallbacks, &debugMessenger);
             if (res != VK_SUCCESS) {
                 LOG_ERROR(Engine, "Failed to create debug messenger: {}", string_VkResult(res));
                 std::abort();
@@ -179,7 +184,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         }
     }
 
-    SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface);
+    SDL_Vulkan_CreateSurface(window, instance, &hostAllocationCallbacks, &surface);
 
     // Feature structs declared here so they remain in scope for vkCreateDevice below
     VkPhysicalDeviceVulkan13Features features13{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
@@ -523,7 +528,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         deviceCreateInfo.ppEnabledExtensionNames = deviceExts.Data();
         deviceCreateInfo.pEnabledFeatures = &features10;
 
-        res = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
+        res = vkCreateDevice(physicalDevice, &deviceCreateInfo, &hostAllocationCallbacks, &device);
         if (res != VK_SUCCESS) {
             LOG_ERROR(Engine, "Failed to create Vulkan device: {}", string_VkResult(res));
             std::abort();
@@ -574,12 +579,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     vulkanFunctions.vkGetDeviceImageMemoryRequirements = vkGetDeviceImageMemoryRequirements;
 
     allocatorInfo.pVulkanFunctions = &vulkanFunctions;
-    VkAllocationCallbacks allocationCallbacks{};
-    allocationCallbacks.pUserData = &memoryManager;
-    allocationCallbacks.pfnAllocation = VkHostAlloc;
-    allocationCallbacks.pfnReallocation = VkHostRealloc;
-    allocationCallbacks.pfnFree = VkHostFree;
-    allocatorInfo.pAllocationCallbacks = &allocationCallbacks;
+    allocatorInfo.pAllocationCallbacks = &hostAllocationCallbacks;
 #ifdef WDEBUG
     VmaDeviceMemoryCallbacks deviceMemoryCallbacks{};
     deviceMemoryCallbacks.pfnAllocate = VmaDeviceAllocate;
@@ -646,19 +646,19 @@ VulkanContext::~VulkanContext()
     }
 
     if (instance && surface) {
-        vkDestroySurfaceKHR(instance, surface, nullptr);
+        vkDestroySurfaceKHR(instance, surface, &hostAllocationCallbacks);
     }
 
     if (device) {
-        vkDestroyDevice(device, nullptr);
+        vkDestroyDevice(device, &hostAllocationCallbacks);
     }
 
     if (debugMessenger != VK_NULL_HANDLE) {
-        vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+        vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, &hostAllocationCallbacks);
     }
 
     if (instance) {
-        vkDestroyInstance(instance, nullptr);
+        vkDestroyInstance(instance, &hostAllocationCallbacks);
     }
 }
 } // Renderer

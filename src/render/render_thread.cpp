@@ -89,13 +89,11 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 #if WILL_EDITOR
     RegisterDebugReadbacks();
 #endif
-    // The TLAS is now a first-class RDG acceleration-structure resource (CreateTLAS); the graph owns its buffer, handle and
-    // descriptor and destroys them via the physical-pool death timer, so no persistent-buffer registration is needed.
 }
 
 RenderThread::~RenderThread()
 {
-    pipelineStatsQuery.Destroy(context->device);
+    pipelineStatsQuery.Destroy(context->device, context->HostAllocCallbacks());
     screenCapture->~RenderScreenCapture();
 
     for (auto& sync : frameSynchronization) {

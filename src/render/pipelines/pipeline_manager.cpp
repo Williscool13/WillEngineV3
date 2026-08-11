@@ -52,7 +52,7 @@ PipelineManager::PipelineManager(VulkanContext* context, ResourceManager* resour
     cacheInfo.initialDataSize = cacheData.Size();
     cacheInfo.pInitialData = cacheData.Data();
 
-    VK_CHECK(vkCreatePipelineCache(context->device, &cacheInfo, nullptr, &pipelineCache));
+    VK_CHECK(vkCreatePipelineCache(context->device, &cacheInfo, context->HostAllocCallbacks(), &pipelineCache));
 }
 
 PipelineManager::~PipelineManager()
@@ -74,34 +74,34 @@ PipelineManager::~PipelineManager()
             }
         }
 
-        vkDestroyPipelineCache(context->device, pipelineCache, nullptr);
+        vkDestroyPipelineCache(context->device, pipelineCache, context->HostAllocCallbacks());
     }
 
     auto cleanupPipeline = [this](PipelineData& pipeline) {
         if (pipeline.activeEntry.pipeline != VK_NULL_HANDLE) {
-            vkDestroyPipeline(context->device, pipeline.activeEntry.pipeline, nullptr);
+            vkDestroyPipeline(context->device, pipeline.activeEntry.pipeline, context->HostAllocCallbacks());
             pipeline.activeEntry.pipeline = VK_NULL_HANDLE;
         }
         if (pipeline.activeEntry.layout != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(context->device, pipeline.activeEntry.layout, nullptr);
+            vkDestroyPipelineLayout(context->device, pipeline.activeEntry.layout, context->HostAllocCallbacks());
             pipeline.activeEntry.layout = VK_NULL_HANDLE;
         }
 
         if (pipeline.loadingEntry.pipeline != VK_NULL_HANDLE) {
-            vkDestroyPipeline(context->device, pipeline.loadingEntry.pipeline, nullptr);
+            vkDestroyPipeline(context->device, pipeline.loadingEntry.pipeline, context->HostAllocCallbacks());
             pipeline.loadingEntry.pipeline = VK_NULL_HANDLE;
         }
         if (pipeline.loadingEntry.layout != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(context->device, pipeline.loadingEntry.layout, nullptr);
+            vkDestroyPipelineLayout(context->device, pipeline.loadingEntry.layout, context->HostAllocCallbacks());
             pipeline.loadingEntry.layout = VK_NULL_HANDLE;
         }
 
         if (pipeline.retiredEntry.pipeline != VK_NULL_HANDLE) {
-            vkDestroyPipeline(context->device, pipeline.retiredEntry.pipeline, nullptr);
+            vkDestroyPipeline(context->device, pipeline.retiredEntry.pipeline, context->HostAllocCallbacks());
             pipeline.retiredEntry.pipeline = VK_NULL_HANDLE;
         }
         if (pipeline.retiredEntry.layout != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(context->device, pipeline.retiredEntry.layout, nullptr);
+            vkDestroyPipelineLayout(context->device, pipeline.retiredEntry.layout, context->HostAllocCallbacks());
             pipeline.retiredEntry.layout = VK_NULL_HANDLE;
         }
     };

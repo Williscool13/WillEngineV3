@@ -27,6 +27,34 @@
 
 namespace Editor
 {
+struct GltfParseArena
+{
+    uint8_t* base{nullptr};
+    size_t capacity{0};
+    size_t used{0};
+    Core::TlsfAllocator* fallback{nullptr};
+};
+
+static void* GltfArenaAlloc(void* user, cgltf_size size)
+{
+    auto* arena = static_cast<GltfParseArena*>(user);
+    const size_t offset = (arena->used + 15) & ~size_t(15);
+    if (offset + size <= arena->capacity) {
+        arena->used = offset + size;
+        return arena->base + offset;
+    }
+    return arena->fallback->Alloc(size, Core::AllocTag::AssetGenerator);
+}
+
+static void GltfArenaFree(void* user, void* ptr)
+{
+    if (ptr == nullptr) { return; }
+    auto* arena = static_cast<GltfParseArena*>(user);
+    const auto* p = static_cast<const uint8_t*>(ptr);
+    if (p >= arena->base && p < arena->base + arena->capacity) { return; }
+    arena->fallback->Free(ptr);
+}
+
 StaticModelGenerateSlot::StaticModelGenerateSlot() = default;
 
 StaticModelGenerateSlot::~StaticModelGenerateSlot() = default;
@@ -106,10 +134,15 @@ bool StaticModelGenerateSlot::LoadGltf()
     int32_t _progress = 0;
     int32_t stepDiff = 50 / 9;
 
+    const uint64_t gltfFileSize = Platform::GetFileSize(gltfPath);
+    const size_t arenaBytes = static_cast<size_t>(gltfFileSize * 3 + (8ull << 20));
+    Core::HeapArray<uint8_t> parseArenaStorage(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, arenaBytes);
+    GltfParseArena parseArena{parseArenaStorage.Data(), parseArenaStorage.Size(), 0, &memoryManager->AssetsScratch()};
+
     cgltf_options options{};
-    options.memory.alloc_func = [](void* user, cgltf_size size) { return static_cast<Core::TlsfAllocator*>(user)->Alloc(size, Core::AllocTag::AssetGenerator); };
-    options.memory.free_func = [](void* user, void* ptr) { static_cast<Core::TlsfAllocator*>(user)->Free(ptr); };
-    options.memory.user_data = &memoryManager->AssetsScratch();
+    options.memory.alloc_func = GltfArenaAlloc;
+    options.memory.free_func = GltfArenaFree;
+    options.memory.user_data = &parseArena;
 
     cgltf_data* gltfData = nullptr;
     const cgltf_result parseResult = cgltf_parse_file(&options, gltfPath.c_str(), &gltfData);

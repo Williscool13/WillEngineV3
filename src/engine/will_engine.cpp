@@ -181,7 +181,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     memoryManager.Init({
         .persistentSize = 48ull * 1024 * 1024, // 64 MB
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
-        .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 64 MB
+        .physicsPoolSize = 32ull * 1024 * 1024, // 64 MB
         .renderPoolSize = 8ull * 1024 * 1024, // 4 MB
         .arenaPoolSize = 256ull * 1024 * 1024, // 256 MB
         .generalPoolSize = 64ull * 1024 * 1024,
@@ -330,7 +330,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     //
     {
         ZoneScopedN("CreatePhysicsSystem");
-        physicsSystem = new(memoryManager.PhysicsAlignedAllocRaw(sizeof(Physics::PhysicsSystem), 64)) Physics::PhysicsSystem(memoryManager, scheduler);
+        physicsSystem = new(memoryManager.PhysicsAllocRaw(sizeof(Physics::PhysicsSystem), 64)) Physics::PhysicsSystem(memoryManager, scheduler);
     }
 
 
@@ -710,7 +710,7 @@ void WillEngine::EditorImgui()
                     memoryManager.General().GetTagStats(cachedGeneralTags.Data());
                     memoryManager.AssetsScratch().GetTagStats(cachedAssetsScratchTags.Data());
                     memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
-                    memoryManager.PhysicsAligned().GetTagStats(cachedPhysicsAlignedTags.Data());
+                    memoryManager.Physics().GetTagStats(cachedPhysicsTags.Data());
                     memoryManager.Render().GetTagStats(cachedRenderTags.Data());
                     memoryManager.ArenaPool().GetTagStats(cachedArenaPoolTags.Data());
                     refreshTimer = 0.0f;
@@ -791,11 +791,11 @@ void WillEngine::EditorImgui()
                 // Grand total across all TLSF pools
                 {
                     const size_t tlsfUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assetsScratch.usedBytes
-                                            + ms.assets.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
+                                            + ms.assets.usedBytes + ms.physics.usedBytes + ms.render.usedBytes;
                     const size_t tlsfTotal = ms.persistent.totalBytes + ms.general.totalBytes + ms.assetsScratch.totalBytes
-                                             + ms.assets.totalBytes + ms.physicsAligned.totalBytes + ms.render.totalBytes;
+                                             + ms.assets.totalBytes + ms.physics.totalBytes + ms.render.totalBytes;
                     const size_t tlsfAllocs = ms.persistent.allocCount + ms.general.allocCount + ms.assetsScratch.allocCount
-                                              + ms.assets.allocCount + ms.physicsAligned.allocCount + ms.render.allocCount;
+                                              + ms.assets.allocCount + ms.physics.allocCount + ms.render.allocCount;
                     ImGui::SeparatorText("TLSF Total");
                     drawMemBar("All Pools", tlsfUsed, tlsfTotal, tlsfAllocs);
                 }
@@ -806,7 +806,7 @@ void WillEngine::EditorImgui()
                 drawMemBar("Assets", ms.assets.usedBytes, ms.assets.totalBytes, ms.assets.allocCount);
 
                 ImGui::SeparatorText("Physics");
-                drawMemBar("Phys Aligned", ms.physicsAligned.usedBytes, ms.physicsAligned.totalBytes, ms.physicsAligned.allocCount);
+                drawMemBar("Physics", ms.physics.usedBytes, ms.physics.totalBytes, ms.physics.allocCount);
 
                 ImGui::SeparatorText("Render");
                 drawMemBar("Render", ms.render.usedBytes, ms.render.totalBytes, ms.render.allocCount);
@@ -1002,7 +1002,7 @@ void WillEngine::EditorImgui()
                     {"General", cachedGeneralTags.Data()},
                     {"Assets Scratch", cachedAssetsScratchTags.Data()},
                     {"Assets", cachedAssetsTags.Data()},
-                    {"Phys Aligned", cachedPhysicsAlignedTags.Data()},
+                    {"Physics", cachedPhysicsTags.Data()},
                     {"Render", cachedRenderTags.Data()},
                 };
                 constexpr int kPoolCount = 6;

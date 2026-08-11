@@ -33,7 +33,7 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
             pool_info.maxSets += pool_size.descriptorCount;
         pool_info.poolSizeCount = static_cast<uint32_t>(1);
         pool_info.pPoolSizes = pool_sizes;
-        VK_CHECK(vkCreateDescriptorPool(context->device, &pool_info, nullptr, &imguiPool));
+        VK_CHECK(vkCreateDescriptorPool(context->device, &pool_info, context->HostAllocCallbacks(), &imguiPool));
     }
 
     float main_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
@@ -71,7 +71,7 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
     initInfo.MinImageCount = swapchainImageCount;
     initInfo.ImageCount = swapchainImageCount;
     initInfo.MinAllocationSize = 1024 * 1024;
-    initInfo.Allocator = nullptr;
+    initInfo.Allocator = context->HostAllocCallbacks();
     // initInfo.PipelineInfoMain.RenderPass = wd->RenderPass;
     initInfo.PipelineInfoMain.Subpass = 0;
     initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
@@ -105,7 +105,7 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
 ImguiWrapper::~ImguiWrapper()
 {
     ImGui_ImplVulkan_Shutdown();
-    vkDestroyDescriptorPool(context->device, imguiPool, nullptr);
+    vkDestroyDescriptorPool(context->device, imguiPool, context->HostAllocCallbacks());
 }
 
 void ImguiWrapper::HandleInput(const SDL_Event& e)

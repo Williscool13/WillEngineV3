@@ -7,6 +7,7 @@
 #include <fstream>
 
 #include "core/containers/heap_array.h"
+#include "vk_context.h"
 
 namespace Render
 {
@@ -257,7 +258,7 @@ VkImageViewCreateInfo VkHelpers::ImageViewCreateInfo(VkImage image, VkFormat for
     };
 }
 
-bool VkHelpers::LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::Path& filePath, VkDevice device, VkShaderModule* outShaderModule)
+bool VkHelpers::LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::Path& filePath, VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks, VkShaderModule* outShaderModule)
 {
     // open the file. With cursor at the end
     std::ifstream file(filePath.c_str(), std::ios::ate | std::ios::binary);
@@ -296,14 +297,14 @@ bool VkHelpers::LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::
 
     // check that the creation goes well.
     VkShaderModule shaderModule;
-    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+    if (vkCreateShaderModule(device, &createInfo, hostAllocCallbacks, &shaderModule) != VK_SUCCESS) {
         return false;
     }
     *outShaderModule = shaderModule;
     return true;
 }
 
-bool VkHelpers::LoadShaderModuleFromBlob(const void* spirvData, size_t spirvSize, VkDevice device, VkShaderModule* outShaderModule)
+bool VkHelpers::LoadShaderModuleFromBlob(const void* spirvData, size_t spirvSize, VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks, VkShaderModule* outShaderModule)
 {
     if (spirvData == nullptr || spirvSize == 0 || (spirvSize % sizeof(uint32_t)) != 0) {
         return false;
@@ -316,7 +317,7 @@ bool VkHelpers::LoadShaderModuleFromBlob(const void* spirvData, size_t spirvSize
     };
 
     VkShaderModule shaderModule;
-    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+    if (vkCreateShaderModule(device, &createInfo, hostAllocCallbacks, &shaderModule) != VK_SUCCESS) {
         return false;
     }
     *outShaderModule = shaderModule;

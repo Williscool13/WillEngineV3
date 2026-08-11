@@ -42,7 +42,7 @@ struct PipelineStatsQueryPool
     static constexpr uint32_t kMaxStatCount = 5;
 
     void Init(VulkanContext* context);
-    void Destroy(VkDevice device);
+    void Destroy(VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks);
 
     /**
      * Reads results from the completed frame slot and writes them into scratch.

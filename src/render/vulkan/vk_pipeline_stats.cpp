@@ -26,15 +26,15 @@ void PipelineStatsQueryPool::Init(VulkanContext* context)
     info.pipelineStatistics = statFlags;
 
     for (uint32_t i = 0; i < Core::FRAME_BUFFER_COUNT; ++i) {
-        VK_CHECK(vkCreateQueryPool(context->device, &info, nullptr, &pools[i]));
+        VK_CHECK(vkCreateQueryPool(context->device, &info, context->HostAllocCallbacks(), &pools[i]));
     }
 }
 
-void PipelineStatsQueryPool::Destroy(VkDevice device)
+void PipelineStatsQueryPool::Destroy(VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks)
 {
     for (uint32_t i = 0; i < Core::FRAME_BUFFER_COUNT; ++i) {
         if (pools[i] != VK_NULL_HANDLE) {
-            vkDestroyQueryPool(device, pools[i], nullptr);
+            vkDestroyQueryPool(device, pools[i], hostAllocCallbacks);
             pools[i] = VK_NULL_HANDLE;
         }
     }

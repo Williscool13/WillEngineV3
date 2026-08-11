@@ -49,6 +49,10 @@ struct VulkanContext
 
     VmaVulkanFunctions vulkanFunctions{};
 
+    VkAllocationCallbacks hostAllocationCallbacks{};
+
+    [[nodiscard]] const VkAllocationCallbacks* HostAllocCallbacks() const { return &hostAllocationCallbacks; }
+
     VulkanContext() = default;
 
     VulkanContext(SDL_Window* window, Core::MemoryManager& memoryManager);

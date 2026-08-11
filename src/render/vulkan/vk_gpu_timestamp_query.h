@@ -25,7 +25,7 @@ struct GPUTimestampQueryPool
     static constexpr uint32_t kMaxPasses = static_cast<uint32_t>(RDG_MAX_PASSES);
 
     void Init(VulkanContext* context);
-    void Destroy(VkDevice device);
+    void Destroy(VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks);
 
     GPUProfileSnapshot Collect(VkDevice device, uint32_t frameIndex);
 

@@ -4,9 +4,9 @@
 
 #include "paths.h"
 
-#include <windows.h>
+#include <cstdlib>
 
-#include <SDL3/SDL_filesystem.h>
+#include <windows.h>
 
 #include "file_utils.h"
 
@@ -28,9 +28,9 @@ const Core::Path& GetExecutablePath()
 const Core::Path& GetUserDataPath()
 {
     static const Core::Path path = []() {
-        char* prefPath = SDL_GetPrefPath("WillEngine", "GameEngine");
-        Core::Path p(prefPath);
-        SDL_free(prefPath);
+        const char* appData = getenv("APPDATA");
+        Core::Path p = Core::Path(appData != nullptr ? appData : ".") / "WillEngine" / "GameEngine";
+        CreateDirectories(p.c_str());
         return p;
     }();
     return path;

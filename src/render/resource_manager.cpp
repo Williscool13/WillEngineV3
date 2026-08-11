@@ -5,6 +5,7 @@
 #include "resource_manager.h"
 
 #include "vulkan/vk_config.h"
+#include "vulkan/vk_context.h"
 #include "vulkan/vk_utils.h"
 
 namespace Render
@@ -14,13 +15,13 @@ ResourceManager::ResourceManager() = default;
 ResourceManager::~ResourceManager()
 {
     if (pointSampler != VK_NULL_HANDLE) {
-        vkDestroySampler(context->device, pointSampler, nullptr);
+        vkDestroySampler(context->device, pointSampler, context->HostAllocCallbacks());
     }
     if (linearSampler != VK_NULL_HANDLE) {
-        vkDestroySampler(context->device, linearSampler, nullptr);
+        vkDestroySampler(context->device, linearSampler, context->HostAllocCallbacks());
     }
     if (depthCompareSampler != VK_NULL_HANDLE) {
-        vkDestroySampler(context->device, depthCompareSampler, nullptr);
+        vkDestroySampler(context->device, depthCompareSampler, context->HostAllocCallbacks());
     }
 };
 
@@ -110,7 +111,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
         .unnormalizedCoordinates = VK_FALSE
     };
 
-    VK_CHECK(vkCreateSampler(context->device, &pointSamplerInfo, nullptr, &pointSampler));
+    VK_CHECK(vkCreateSampler(context->device, &pointSamplerInfo, context->HostAllocCallbacks(), &pointSampler));
     bindlessRDGTransientDescriptorBuffer.WriteSamplerDescriptor(RDG_POINT_SAMPLER_INDEX, {pointSampler, nullptr, {}});
 
     VkSamplerCreateInfo linearSamplerInfo = {
@@ -132,7 +133,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
         .unnormalizedCoordinates = VK_FALSE
     };
 
-    VK_CHECK(vkCreateSampler(context->device, &linearSamplerInfo, nullptr, &linearSampler));
+    VK_CHECK(vkCreateSampler(context->device, &linearSamplerInfo, context->HostAllocCallbacks(), &linearSampler));
     bindlessRDGTransientDescriptorBuffer.WriteSamplerDescriptor(RDG_LINEAR_SAMPLER_INDEX, {linearSampler, nullptr, {}});
 
     VkSamplerCreateInfo depthCompareSamplerInfo = {
@@ -154,7 +155,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
         .unnormalizedCoordinates = VK_FALSE
     };
 
-    VK_CHECK(vkCreateSampler(context->device, &depthCompareSamplerInfo, nullptr, &depthCompareSampler));
+    VK_CHECK(vkCreateSampler(context->device, &depthCompareSamplerInfo, context->HostAllocCallbacks(), &depthCompareSampler));
     bindlessRDGTransientDescriptorBuffer.WriteCompareSamplerDescriptor(RDG_LINEAR_DEPTH_SAMPLER_INDEX, {depthCompareSampler, nullptr, {}});
 
     VkExtent3D extent{

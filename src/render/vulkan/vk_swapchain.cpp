@@ -23,9 +23,9 @@ Swapchain::Swapchain(const VulkanContext* context, uint32_t width, uint32_t heig
 
 Swapchain::~Swapchain()
 {
-    vkDestroySwapchainKHR(context->device, handle, nullptr);
+    vkDestroySwapchainKHR(context->device, handle, context->HostAllocCallbacks());
     for (VkImageView swapchainImageView : swapchainImageViews) {
-        vkDestroyImageView(context->device, swapchainImageView, nullptr);
+        vkDestroyImageView(context->device, swapchainImageView, context->HostAllocCallbacks());
     }
 }
 
@@ -107,7 +107,7 @@ void Swapchain::Create(uint32_t width, uint32_t height)
     createInfo.clipped = VK_TRUE;
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
-    VkResult result = vkCreateSwapchainKHR(context->device, &createInfo, nullptr, &handle);
+    VkResult result = vkCreateSwapchainKHR(context->device, &createInfo, context->HostAllocCallbacks(), &handle);
     if (result != VK_SUCCESS) {
         LOG_ERROR(Renderer, "Failed to create swapchain: {}", string_VkResult(result));
         std::abort();
@@ -144,7 +144,7 @@ void Swapchain::Create(uint32_t width, uint32_t height)
         viewInfo.subresourceRange.layerCount = 1;
 
         VkImageView view = VK_NULL_HANDLE;
-        vkCreateImageView(context->device, &viewInfo, nullptr, &view);
+        vkCreateImageView(context->device, &viewInfo, context->HostAllocCallbacks(), &view);
         swapchainImageViews.PushBack(view);
     }
 }
@@ -152,9 +152,9 @@ void Swapchain::Create(uint32_t width, uint32_t height)
 void Swapchain::Recreate(uint32_t width, uint32_t height)
 {
     vkQueueWaitIdle(context->graphicsQueue);
-    vkDestroySwapchainKHR(context->device, handle, nullptr);
+    vkDestroySwapchainKHR(context->device, handle, context->HostAllocCallbacks());
     for (const auto swapchainImage : swapchainImageViews) {
-        vkDestroyImageView(context->device, swapchainImage, nullptr);
+        vkDestroyImageView(context->device, swapchainImage, context->HostAllocCallbacks());
     }
 
     swapchainImages.Clear();

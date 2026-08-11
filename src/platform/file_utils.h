@@ -62,6 +62,15 @@ uint64_t GetFileWriteTime(const char* path);
 uint64_t GetFileWriteTime(const Core::Path& path);
 
 /**
+ * Returns the size of the file at path in bytes. Returns 0 on failure.
+ * @param path
+ * @return
+ */
+uint64_t GetFileSize(const char* path);
+
+uint64_t GetFileSize(const Core::Path& path);
+
+/**
  * Recursively enumerates all files under path and appends their paths to out.
  * @param path
  * @param out

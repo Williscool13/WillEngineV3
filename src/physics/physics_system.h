@@ -79,6 +79,8 @@ public:
 
     void RegisterPhysics() const;
 
+    void UnregisterPhysics() const;
+
 private:
     Core::MemoryManager* memoryManager{};
     enki::TaskScheduler* scheduler{};

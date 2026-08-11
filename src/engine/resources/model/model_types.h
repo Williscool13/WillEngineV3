@@ -81,45 +81,6 @@ struct Node
     Vec3 localScale{1.0f};
 };
 
-/*
-// Remove heap when implementing
-struct AnimationSampler
-{
-    enum class Interpolation
-    {
-        Linear,
-        Step,
-        CubicSpline,
-    };
-
-    std::vector<float> timestamps;
-    std::vector<float> values;
-    Interpolation interpolation;
-};
-
-struct AnimationChannel
-{
-    enum class TargetPath
-    {
-        Translation,
-        Rotation,
-        Scale,
-        Weights,
-    };
-
-    uint32_t samplerIndex;
-    uint32_t targetNodeIndex;
-    TargetPath targetPath;
-};
-
-struct Animation
-{
-    std::string name;
-    std::vector<AnimationSampler> samplers;
-    std::vector<AnimationChannel> channels;
-    float duration;
-};*/
-
 struct StaticModelData
 {
     Core::HeapArray<MeshInformation> meshes{};

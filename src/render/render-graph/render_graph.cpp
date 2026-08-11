@@ -18,6 +18,7 @@
 #include "engine/logging/engine_assert.h"
 #include "engine/logging/engine_log.h"
 #include "render/resource_manager.h"
+#include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 
@@ -80,7 +81,7 @@ GPUProfileSnapshot RenderGraph::CollectGPUProfile(uint32_t frameIndex)
 
 RenderGraph::~RenderGraph()
 {
-    gpuTimestampQuery.Destroy(context->device);
+    gpuTimestampQuery.Destroy(context->device, context->HostAllocCallbacks());
     for (auto& phys : physicalResources) {
         DestroyPhysicalResource(phys);
     }
@@ -2523,7 +2524,7 @@ RenderGraphAllocFns::ImageAlloc RenderGraphAllocFns::DefaultCreateImage(const Vu
 VkImageView RenderGraphAllocFns::DefaultCreateImageView(const VulkanContext* context, const VkImageViewCreateInfo& info)
 {
     VkImageView view = VK_NULL_HANDLE;
-    VK_CHECK(vkCreateImageView(context->device, &info, nullptr, &view));
+    VK_CHECK(vkCreateImageView(context->device, &info, context->HostAllocCallbacks(), &view));
     return view;
 }
 
@@ -2534,7 +2535,7 @@ void RenderGraphAllocFns::DefaultDestroyImage(const VulkanContext* context, VkIm
 
 void RenderGraphAllocFns::DefaultDestroyImageView(const VulkanContext* context, VkImageView view)
 {
-    vkDestroyImageView(context->device, view, nullptr);
+    vkDestroyImageView(context->device, view, context->HostAllocCallbacks());
 }
 
 RenderGraphAllocFns::BufferAlloc RenderGraphAllocFns::DefaultCreateBuffer(const VulkanContext* context, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& vmaAllocInfo)
@@ -2562,7 +2563,7 @@ void RenderGraphAllocFns::DefaultDestroyBuffer(const VulkanContext* context, VkB
 
 void RenderGraphAllocFns::DefaultDestroyAccelerationStructure(const VulkanContext* context, VkAccelerationStructureKHR accelerationStructure)
 {
-    vkDestroyAccelerationStructureKHR(context->device, accelerationStructure, nullptr);
+    vkDestroyAccelerationStructureKHR(context->device, accelerationStructure, context->HostAllocCallbacks());
 }
 
 VkDeviceAddress RenderGraphAllocFns::DefaultGetBufferDeviceAddress(const VulkanContext* context, VkBuffer buffer)
@@ -2818,7 +2819,7 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
         createInfo.offset = 0;
         createInfo.size = dim.bufferSize;
         createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-        VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, nullptr, &resource.accelerationStructure));
+        VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, context->HostAllocCallbacks(), &resource.accelerationStructure));
 
         resource.asDescriptorHandle = transientASHandleAllocator.Add();
         ENGINE_ASSERT(Renderer, resource.asDescriptorHandle.IsValid(), "Acceleration-structure descriptor pool exhausted (RDG_MAX_TLAS)");

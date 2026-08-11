@@ -18,6 +18,7 @@
 #include "engine/resources/model/static_model.h"
 #include "engine/serialization/serialization.h"
 #include "render/resource_manager.h"
+#include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 
@@ -28,7 +29,7 @@ StaticModelLoadSlot::StaticModelLoadSlot() = default;
 StaticModelLoadSlot::~StaticModelLoadSlot()
 {
     if (uploadCompleteSemaphore != VK_NULL_HANDLE) {
-        vkDestroySemaphore(context->device, uploadCompleteSemaphore, nullptr);
+        vkDestroySemaphore(context->device, uploadCompleteSemaphore, context->HostAllocCallbacks());
     }
     transferSubmit.Destroy(context);
     graphicsSubmit.Destroy(context);
@@ -52,7 +53,7 @@ void StaticModelLoadSlot::Initialize(
     _notifyCallback = std::move(notifyCallback);
 
     VkSemaphoreCreateInfo semaphoreInfo = Render::VkHelpers::SemaphoreCreateInfo();
-    VK_CHECK(vkCreateSemaphore(context->device, &semaphoreInfo, nullptr, &uploadCompleteSemaphore));
+    VK_CHECK(vkCreateSemaphore(context->device, &semaphoreInfo, context->HostAllocCallbacks(), &uploadCompleteSemaphore));
 
     transferSubmit.Initialize(context, context->transferQueueFamily);
     graphicsSubmit.Initialize(context, context->graphicsQueueFamily);
@@ -725,7 +726,7 @@ bool StaticModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunct
             createInfo.size = sizeInfo.accelerationStructureSize;
             createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
             VkAccelerationStructureKHR blas{};
-            VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, nullptr, &blas));
+            VK_CHECK(vkCreateAccelerationStructureKHR(context->device, &createInfo, context->HostAllocCallbacks(), &blas));
             props.blasHandle = reinterpret_cast<uint64_t>(blas);
 
             VkAccelerationStructureDeviceAddressInfoKHR addrInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};

@@ -41,7 +41,7 @@ public:
     {
         size_t persistentSize;
         size_t assetsPoolSize;
-        size_t physicsAlignedPoolSize;
+        size_t physicsPoolSize;
         size_t renderPoolSize;
         size_t arenaPoolSize;
 
@@ -59,7 +59,7 @@ public:
         TlsfAllocator::Stats general;
         TlsfAllocator::Stats assetsScratch;
         TlsfAllocator::Stats assets;
-        TlsfAllocator::Stats physicsAligned;
+        TlsfAllocator::Stats physics;
         TlsfAllocator::Stats render;
 
         struct
@@ -91,9 +91,11 @@ public:
 
     void GeneralFree(void* ptr);
 
-    void* PhysicsAlignedAllocRaw(size_t size, size_t alignment);
+    void* PhysicsAllocRaw(size_t size, size_t alignment);
 
-    void PhysicsAlignedFree(void* ptr);
+    void* PhysicsRealloc(void* ptr, size_t newSize, size_t alignment);
+
+    void PhysicsFree(void* ptr);
 
     void* RenderAllocRaw(size_t size);
 
@@ -105,7 +107,7 @@ public:
     TlsfAllocator& General() { return tlsfGeneral; }
     TlsfAllocator& AssetsScratch() { return tlsfAssetsScratch; }
     TlsfAllocator& Assets() { return tlsfAssets; }
-    TlsfAllocator& PhysicsAligned() { return tlsfPhysicsAligned; }
+    TlsfAllocator& Physics() { return tlsfPhysics; }
     TlsfAllocator& Render() { return tlsfRender; }
     /**
      * General per-frame arena. Cleared at the end of each game frame.
@@ -129,7 +131,7 @@ private:
 
     TlsfAllocator tlsfAssetsScratch;
     TlsfAllocator tlsfAssets;
-    TlsfAllocator tlsfPhysicsAligned;
+    TlsfAllocator tlsfPhysics;
     TlsfAllocator tlsfRender;
     ArenaSuballocator arenaPool;
 

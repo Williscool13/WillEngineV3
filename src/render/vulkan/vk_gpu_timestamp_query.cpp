@@ -20,16 +20,16 @@ void GPUTimestampQueryPool::Init(VulkanContext* context)
     info.queryCount = 2 * kMaxPasses;
 
     for (uint32_t i = 0; i < Core::FRAME_BUFFER_COUNT; ++i) {
-        VK_CHECK(vkCreateQueryPool(context->device, &info, nullptr, &pools[i]));
+        VK_CHECK(vkCreateQueryPool(context->device, &info, context->HostAllocCallbacks(), &pools[i]));
         passCount[i] = 0;
     }
 }
 
-void GPUTimestampQueryPool::Destroy(VkDevice device)
+void GPUTimestampQueryPool::Destroy(VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks)
 {
     for (uint32_t i = 0; i < Core::FRAME_BUFFER_COUNT; ++i) {
         if (pools[i] != VK_NULL_HANDLE) {
-            vkDestroyQueryPool(device, pools[i], nullptr);
+            vkDestroyQueryPool(device, pools[i], hostAllocCallbacks);
             pools[i] = VK_NULL_HANDLE;
         }
     }

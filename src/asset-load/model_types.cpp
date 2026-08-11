@@ -5,6 +5,7 @@
 #include "engine/resources/model/model_types.h"
 
 #include "render/resource_manager.h"
+#include "render/vulkan/vk_context.h"
 
 namespace Engine
 {
@@ -13,7 +14,7 @@ void StaticModelData::Reset(Render::ResourceManager* resourceManager)
     for (auto& mesh : meshes) {
         for (auto& prim : mesh.primitiveProperties) {
             if (prim.blasHandle != 0) {
-                vkDestroyAccelerationStructureKHR(resourceManager->context->device, reinterpret_cast<VkAccelerationStructureKHR>(prim.blasHandle), nullptr);
+                vkDestroyAccelerationStructureKHR(resourceManager->context->device, reinterpret_cast<VkAccelerationStructureKHR>(prim.blasHandle), resourceManager->context->HostAllocCallbacks());
                 prim.blasHandle = 0;
             }
             if (prim.blasAllocation.offset != OffsetAllocator::Allocation::NO_SPACE) {

@@ -25,7 +25,7 @@ struct DescriptorLayoutBuilder
 
     VkDescriptorSetLayoutCreateInfo Build(VkShaderStageFlagBits shaderStageFlags, VkDescriptorSetLayoutCreateFlags layoutCreateFlags);
 
-    VkDescriptorSetLayout Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
+    VkDescriptorSetLayout Build(VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
 };
 }
 

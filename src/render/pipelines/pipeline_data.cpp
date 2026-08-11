@@ -17,15 +17,15 @@ bool ComputePipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMan
     loadingLastModified = GetLatestShaderWriteTime();
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
-    if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPath, context->device, &shaderModule)) {
+    if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPath, context->device, context->HostAllocCallbacks(), &shaderModule)) {
         SPDLOG_ERROR("Failed to load shader: {}", shaderPath.c_str());
         return false;
     }
 
-    VkResult layoutResult = vkCreatePipelineLayout(context->device, &layoutCreateInfo, nullptr, &loadingEntry.layout);
+    VkResult layoutResult = vkCreatePipelineLayout(context->device, &layoutCreateInfo, context->HostAllocCallbacks(), &loadingEntry.layout);
     if (layoutResult != VK_SUCCESS) {
         SPDLOG_ERROR("Failed to create pipeline layout for: {}", shaderPath.c_str());
-        vkDestroyShaderModule(context->device, shaderModule, nullptr);
+        vkDestroyShaderModule(context->device, shaderModule, context->HostAllocCallbacks());
         return false;
     }
 
@@ -60,16 +60,16 @@ bool ComputePipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMan
         pipelineInfo.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
     }
 #endif
-    VkResult pipelineResult = vkCreateComputePipelines(context->device, pipelineCache, 1, &pipelineInfo, nullptr, &loadingEntry.pipeline);
+    VkResult pipelineResult = vkCreateComputePipelines(context->device, pipelineCache, 1, &pipelineInfo, context->HostAllocCallbacks(), &loadingEntry.pipeline);
 
     if (pipelineResult != VK_SUCCESS) {
         SPDLOG_ERROR("Failed to create compute pipeline: {}", shaderPath.c_str());
-        vkDestroyPipelineLayout(context->device, loadingEntry.layout, nullptr);
-        vkDestroyShaderModule(context->device, shaderModule, nullptr);
+        vkDestroyPipelineLayout(context->device, loadingEntry.layout, context->HostAllocCallbacks());
+        vkDestroyShaderModule(context->device, shaderModule, context->HostAllocCallbacks());
         return false;
     }
 
-    vkDestroyShaderModule(context->device, shaderModule, nullptr);
+    vkDestroyShaderModule(context->device, shaderModule, context->HostAllocCallbacks());
 
     return true;
 }
@@ -85,11 +85,11 @@ bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMa
 
     Core::Array<VkShaderModule, MAX_SHADER_STAGES> shaderModules{};
     for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
-        if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPaths[i], context->device, &shaderModules[i])) {
+        if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPaths[i], context->device, context->HostAllocCallbacks(), &shaderModules[i])) {
             SPDLOG_ERROR("Failed to load shader: {}", shaderPaths[i].c_str());
             for (uint32_t j = 0; j < i; ++j) {
                 if (shaderModules[j] != VK_NULL_HANDLE) {
-                    vkDestroyShaderModule(context->device, shaderModules[j], nullptr);
+                    vkDestroyShaderModule(context->device, shaderModules[j], context->HostAllocCallbacks());
                 }
             }
             return false;
@@ -98,11 +98,11 @@ bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMa
         shaderStages[i].pName = entryPoints[i].c_str();
     }
 
-    VkResult layoutResult = vkCreatePipelineLayout(context->device, &layoutCreateInfo, nullptr, &loadingEntry.layout);
+    VkResult layoutResult = vkCreatePipelineLayout(context->device, &layoutCreateInfo, context->HostAllocCallbacks(), &loadingEntry.layout);
     if (layoutResult != VK_SUCCESS) {
         SPDLOG_ERROR("Failed to create pipeline layout for graphics pipeline");
         for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
-            vkDestroyShaderModule(context->device, shaderModules[i], nullptr);
+            vkDestroyShaderModule(context->device, shaderModules[i], context->HostAllocCallbacks());
         }
         return false;
     }
@@ -181,19 +181,19 @@ bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMa
         stage.pSpecializationInfo = &specInfo;
     }
 
-    VkResult pipelineResult = vkCreateGraphicsPipelines(context->device, pipelineCache, 1, &pipelineInfo, nullptr, &loadingEntry.pipeline);
+    VkResult pipelineResult = vkCreateGraphicsPipelines(context->device, pipelineCache, 1, &pipelineInfo, context->HostAllocCallbacks(), &loadingEntry.pipeline);
 
     if (pipelineResult != VK_SUCCESS) {
         SPDLOG_ERROR("Failed to create graphics pipeline");
-        vkDestroyPipelineLayout(context->device, loadingEntry.layout, nullptr);
+        vkDestroyPipelineLayout(context->device, loadingEntry.layout, context->HostAllocCallbacks());
         for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
-            vkDestroyShaderModule(context->device, shaderModules[i], nullptr);
+            vkDestroyShaderModule(context->device, shaderModules[i], context->HostAllocCallbacks());
         }
         return false;
     }
 
     for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
-        vkDestroyShaderModule(context->device, shaderModules[i], nullptr);
+        vkDestroyShaderModule(context->device, shaderModules[i], context->HostAllocCallbacks());
     }
 
     return true;
