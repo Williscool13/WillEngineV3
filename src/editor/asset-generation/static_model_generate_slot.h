@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_MODEL_GENERATE_TASK_H
 #define WILL_ENGINE_MODEL_GENERATE_TASK_H
 
-#include <fastgltf/types.hpp>
+#include <cgltf/cgltf.h>
 #include <TaskScheduler.h>
 
 #include "asset_generation_types.h"
@@ -74,13 +74,13 @@ private:
      */
     void TopologicalSortNodes(Core::Span<Engine::Node> nodes, Core::Span<uint32_t> oldToNew);
 
-    static VkFilter ExtractFilter(fastgltf::Filter filter);
+    static VkFilter ExtractFilter(cgltf_filter_type filter);
 
-    static VkSamplerMipmapMode ExtractMipmapMode(fastgltf::Filter filter);
+    static VkSamplerMipmapMode ExtractMipmapMode(cgltf_filter_type filter);
 
-    static MaterialProperties ExtractMaterial(fastgltf::Asset& gltf, const fastgltf::Material& gltfMaterial);
+    static MaterialProperties ExtractMaterial(const cgltf_data& gltf, const cgltf_material& gltfMaterial);
 
-    static void LoadTextureIndicesAndUV(const fastgltf::TextureInfo& texture, const fastgltf::Asset& gltf, int& imageIndex, int& samplerIndex, glm::vec4& uvTransform);
+    static void LoadTextureIndicesAndUV(const cgltf_texture_view& textureView, const cgltf_data& gltf, int& imageIndex, int& samplerIndex, glm::vec4& uvTransform);
 
     static Vec4 GenerateBoundingSphere(Core::Span<Engine::FullVertex> vertices);
 

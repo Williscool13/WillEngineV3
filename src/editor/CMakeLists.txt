@@ -4,6 +4,7 @@ add_library(editor STATIC
         asset-generation/asset_generation_types.h
         asset-generation/asset_source_catalog.cpp
         asset-generation/asset_source_catalog.h
+        asset-generation/cgltf_impl.cpp
         asset-generation/stb_impl.cpp
         asset-generation/static_model_generate_slot.cpp
         asset-generation/static_model_generate_slot.h
@@ -30,7 +31,6 @@ target_link_libraries(editor PUBLIC
         core
         render
         ktx
-        fastgltf
         enkiTS
         meshoptimizer
         bc7enc_rdo

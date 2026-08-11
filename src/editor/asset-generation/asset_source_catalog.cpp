@@ -119,7 +119,7 @@ void AssetSourceCatalog::Scan(Core::MemoryManager& memoryManager)
     Core::InlineVector<Core::Path, 64> modelDirs;
     for (const Core::Path& path : paths) {
         const std::string_view ext = path.Extension();
-        // .obj marks a model directory for image exclusion but is never generatable (importer is fastgltf only)
+        // .obj marks a model directory for image exclusion but is never generatable (importer is glTF only)
         if (ext != ".gltf" && ext != ".glb" && ext != ".obj") {
             continue;
         }
