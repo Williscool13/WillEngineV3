@@ -6,9 +6,9 @@
 #define WILL_ENGINE_COMPONENT_EDITOR_H
 
 #include <entt/entt.hpp>
-#include <fmt/format.h>
 #include <json/nlohmann/json_fwd.hpp>
 #include "imgui.h"
+#include "core/containers/inline_string.h"
 
 #include "render/interface/render_interface.h"
 #include "game/components/component_types.h"
@@ -41,7 +41,7 @@ inline Engine::ComponentEditorResult DefaultDrawComponentEditor(const char* name
     ImGui::CollapsingHeader(name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    bool remove = ImGui::SmallButton(fmt::format("X##{}", name).c_str());
+    bool remove = ImGui::SmallButton(Core::InlineString<96>::Format("X##%s", name).c_str());
     ImGui::PopStyleColor();
     return {.requestRemoval = remove};
 }

@@ -52,10 +52,73 @@ void* operator new(std::size_t count)
     return ptr;
 }
 
+void* operator new[](std::size_t count)
+{
+    auto ptr = malloc(count);
+    TracyAlloc(ptr, count);
+    return ptr;
+}
+
+void* operator new(std::size_t count, std::align_val_t align)
+{
+    auto ptr = _aligned_malloc(count, static_cast<std::size_t>(align));
+    TracyAlloc(ptr, count);
+    return ptr;
+}
+
+void* operator new[](std::size_t count, std::align_val_t align)
+{
+    auto ptr = _aligned_malloc(count, static_cast<std::size_t>(align));
+    TracyAlloc(ptr, count);
+    return ptr;
+}
+
 void operator delete(void* ptr) noexcept
 {
     TracyFree(ptr);
     free(ptr);
+}
+
+void operator delete(void* ptr, std::size_t) noexcept
+{
+    TracyFree(ptr);
+    free(ptr);
+}
+
+void operator delete[](void* ptr) noexcept
+{
+    TracyFree(ptr);
+    free(ptr);
+}
+
+void operator delete[](void* ptr, std::size_t) noexcept
+{
+    TracyFree(ptr);
+    free(ptr);
+}
+
+void operator delete(void* ptr, std::align_val_t) noexcept
+{
+    TracyFree(ptr);
+    _aligned_free(ptr);
+}
+
+void operator delete(void* ptr, std::size_t, std::align_val_t) noexcept
+{
+    TracyFree(ptr);
+    _aligned_free(ptr);
+}
+
+void operator delete[](void* ptr, std::align_val_t) noexcept
+{
+    TracyFree(ptr);
+    _aligned_free(ptr);
+}
+
+void operator delete[](void* ptr, std::size_t, std::align_val_t) noexcept
+{
+    TracyFree(ptr);
+    _aligned_free(ptr);
 }
 
 #endif
@@ -117,11 +180,12 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 
     memoryManager.Init({
         .persistentSize = 48ull * 1024 * 1024, // 64 MB
-        .generalPoolSize = 64ull * 1024 * 1024, // 16 MB
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
         .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 64 MB
         .renderPoolSize = 8ull * 1024 * 1024, // 4 MB
         .arenaPoolSize = 256ull * 1024 * 1024, // 256 MB
+        .generalPoolSize = 64ull * 1024 * 1024,
+        .generalPoolBudget = 512ull * 1024 * 1024,
         .assetsScratchPoolSize = 128ull * 1024 * 1024,
         .assetsScratchBudget = 4096ull * 1024 * 1024,
     });
@@ -1376,7 +1440,24 @@ void WillEngine::Run()
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(*engineRenderSynchronization->GetCurrentFrameBuffer());
         assetManager->KickOffRetires();
         const bool assetsReclaimed = assetManager->ResolveUnloads();
-        memoryManager.AssetsScratch().ReleaseEmptyChunks();
+
+        // Chunks are 256MB mallocs; releasing mid-burst thrashes when a load straddles the baseline, so only release after the loaders have been quiet for a while
+        {
+            constexpr uint32_t SCRATCH_RELEASE_QUIET_FRAMES = 120;
+            const uint32_t activeScratchLoads = asyncAssetLoadManager->GetActiveModelLoadCount() + asyncAssetLoadManager->GetActiveProceduralModelLoadCount()
+                                                + asyncAssetLoadManager->GetActiveTextureLoadCount() + asyncAssetLoadManager->GetActiveCubemapLoadCount()
+                                                + asyncAssetLoadManager->GetActivePhysicsColliderLoadCount();
+            static uint32_t scratchQuietFrames = 0;
+            if (activeScratchLoads > 0) {
+                scratchQuietFrames = 0;
+            }
+            else if (scratchQuietFrames <= SCRATCH_RELEASE_QUIET_FRAMES) {
+                scratchQuietFrames++;
+            }
+            if (scratchQuietFrames >= SCRATCH_RELEASE_QUIET_FRAMES) {
+                memoryManager.AssetsScratch().ReleaseEmptyChunks();
+            }
+        }
 #if WILL_EDITOR
         bool bTextureGenerated = false;
         //

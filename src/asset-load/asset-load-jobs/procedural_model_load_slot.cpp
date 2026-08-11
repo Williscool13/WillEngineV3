@@ -164,12 +164,12 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
             }
         };
 
-        loadSlot->BuildBLAS(graphicsCmd, graphicsSubmitAndWait);
+        const bool bBlasBuilt = loadSlot->BuildBLAS(graphicsCmd, graphicsSubmitAndWait);
 
         loadSlot->graphicsSubmit.Reset(loadSlot->context);
-    }
 
-    loadSlot->_notifyCallback(true, loadSlot->slotHandle);
+        loadSlot->_notifyCallback(bBlasBuilt, loadSlot->slotHandle);
+    }
 }
 
 bool ProceduralModelLoadSlot::GenerateGeometry()
@@ -3245,7 +3245,7 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::In
     }
 }
 
-void ProceduralModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
+bool ProceduralModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
 {
     ZoneScopedN("BuildBLAS");
 
@@ -3348,7 +3348,7 @@ void ProceduralModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineF
             }
             if (props.blasAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
                 SPDLOG_ERROR("[ProceduralModelLoadSlot] No space in mega BLAS buffer for primitive {} of mesh {} of {}", i, j, outputModel->name.c_str());
-                return;
+                return false;
             }
 
             VkAccelerationStructureCreateInfoKHR createInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
@@ -3386,5 +3386,6 @@ void ProceduralModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineF
             submitAndWait(!isLast);
         }
     }
+    return true;
 }
 } // AssetLoad

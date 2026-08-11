@@ -9,6 +9,7 @@
 #include <TaskScheduler.h>
 
 #include "asset_generation_types.h"
+#include "asset-load/asset_load_types.h"
 #include "dds_defs.h"
 #include "core/containers/array.h"
 #include "core/containers/inline_function.h"
@@ -87,6 +88,7 @@ private:
     Render::VulkanContext* context{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
     AssetGenerator* assetGenerator{nullptr};
+    AssetLoad::SubmitContext graphicsSubmit{};
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
     Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> _notifyCallback;
 

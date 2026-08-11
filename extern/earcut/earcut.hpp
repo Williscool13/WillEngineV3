@@ -29,7 +29,10 @@ struct EarcutAllocator {
     EarcutAllocator() = default;
     template <typename U>
     EarcutAllocator(const EarcutAllocator<U>&) {}
-    T* allocate(std::size_t n) { return static_cast<T*>(earcut_alloc(n * sizeof(T))); }
+    T* allocate(std::size_t n) {
+        assert(earcut_alloc && "earcut_set_allocator not called");
+        return static_cast<T*>(earcut_alloc(n * sizeof(T)));
+    }
     void deallocate(T* p, std::size_t) { earcut_free(p); }
     bool operator==(const EarcutAllocator&) const { return true; }
     bool operator!=(const EarcutAllocator&) const { return false; }

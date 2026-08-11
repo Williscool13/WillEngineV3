@@ -55,7 +55,8 @@ public:
     void PrepareUploadData();
 
     void UploadGeometry(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
-    void BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
+    /** @return false if the mega BLAS buffer ran out of space; the load must then fail (partial BLAS handles would be invalid downstream). */
+    bool BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
 
     ModelSlotHandle modelSlotHandle{};
 

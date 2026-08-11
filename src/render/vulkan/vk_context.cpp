@@ -21,22 +21,6 @@ namespace Render
 {
 DeviceInfo VulkanContext::deviceInfo{};
 
-// If ever considering a custom allocator for vulkan types, then use these with a mutex
-static void* VKAPI_PTR VkAllocate(void* pUserData, size_t size, size_t, VkSystemAllocationScope)
-{
-    return static_cast<Core::MemoryManager*>(pUserData)->RenderAllocRaw(size);
-}
-
-static void* VKAPI_PTR VkReallocate(void* pUserData, void* pOriginal, size_t size, size_t, VkSystemAllocationScope)
-{
-    return static_cast<Core::MemoryManager*>(pUserData)->RenderRealloc(pOriginal, size);
-}
-
-static void VKAPI_PTR VkFree(void* pUserData, void* pMemory)
-{
-    static_cast<Core::MemoryManager*>(pUserData)->RenderFree(pMemory);
-}
-
 static void* VKAPI_PTR VkHostAlloc(void* pUserData, size_t size, size_t alignment, VkSystemAllocationScope)
 {
     if (size == 0) { return nullptr; }

@@ -5,7 +5,6 @@
 #include "text3d_geometry.h"
 
 #include <cmath>
-#include <vector>
 
 #include "earcut/earcut.hpp"
 #include "engine/resources/font/font.h"

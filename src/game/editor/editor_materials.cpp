@@ -60,7 +60,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 for (const auto& [id, mat] : allMaterials) {
                     if (!mat.immutable) { ++mutableCount; }
                 }
-                ImGui::SeparatorText(fmt::format("Materials ({})", mutableCount).c_str());
+                ImGui::SeparatorText(Core::InlineString<48>::Format("Materials (%u)", mutableCount).c_str());
 
                 static Engine::MaterialID matRenameActive = Engine::MaterialID::INVALID;
                 static char matRenameBuffer[128] = {};
@@ -459,7 +459,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 }
 
                 const auto& allTextMaterials = materialManager->GetTextMaterials();
-                ImGui::SeparatorText(fmt::format("Text Materials ({})", allTextMaterials.Size()).c_str());
+                ImGui::SeparatorText(Core::InlineString<48>::Format("Text Materials (%u)", static_cast<uint32_t>(allTextMaterials.Size())).c_str());
 
                 static Engine::TextMaterialID textMatRenameActive = Engine::TextMaterialID::INVALID;
                 static char textMatRenameBuffer[128] = {};

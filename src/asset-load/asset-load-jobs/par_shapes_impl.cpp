@@ -4,12 +4,14 @@
 
 #include "core/memory/tlsf_allocator.h"
 
+#include <cassert>
 #include <cstring>
 
 static Core::TlsfAllocator* gParShapesAllocator = nullptr;
 
 static void* ParShapesAlloc(size_t bytes)
 {
+    assert(gParShapesAllocator && "par_shapes_set_allocator not called");
     return gParShapesAllocator->Alloc(bytes, Core::AllocTag::ParShapes);
 }
 

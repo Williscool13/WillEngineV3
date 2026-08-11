@@ -58,7 +58,11 @@ public:
     void PrepareUploadData();
 
     void UploadGeometry(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
-    void BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
+
+    /**
+     * @return false if the mega BLAS buffer ran out of space.
+     */
+    bool BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
 
     ProceduralModelSlotHandle slotHandle{};
 
@@ -113,34 +117,63 @@ private:
     Core::Vector<uint32_t>* moduleSinkIndices{nullptr};
 
     bool GenerateStaircase(const Engine::StaircaseParams& p);
+
     bool GenerateBox(const Engine::BoxParams& p);
+
     bool GenerateCylinder(const Engine::CylinderParams& p);
+
     bool GenerateCapsule(const Engine::CapsuleParams& p);
+
     bool GenerateTorus(const Engine::TorusParams& p);
+
     bool GenerateArch(const Engine::ArchParams& p);
+
     bool GenerateWedge(const Engine::WedgeParams& p);
+
     bool GenerateCone(const Engine::ConeParams& p);
+
     bool GenerateDoor(const Engine::DoorParams& p);
+
     bool GeneratePlane(const Engine::PlaneParams& p);
+
     bool GenerateSphere(const Engine::SphereParams& p);
+
     bool GenerateSubdividedSphere(const Engine::SubdividedSphereParams& p);
+
     bool GenerateHemisphere(const Engine::HemisphereParams& p);
+
     bool GeneratePipe(const Engine::PipeParams& p);
+
     bool GenerateTetrahedron(const Engine::TetrahedronParams& p);
+
     bool GenerateOctahedron(const Engine::OctahedronParams& p);
+
     bool GenerateIcosahedron(const Engine::IcosahedronParams& p);
+
     bool GenerateDodecahedron(const Engine::DodecahedronParams& p);
+
     bool GenerateKleinBottle(const Engine::KleinBottleParams& p);
+
     bool GenerateTrefoilKnot(const Engine::TrefoilKnotParams& p);
+
     bool GenerateCurvedRamp(const Engine::CurvedRampParams& p);
+
     bool GenerateBowl(const Engine::BowlParams& p);
+
     bool GenerateSpiralStaircase(const Engine::SpiralStaircaseParams& p);
+
     bool GenerateRing(const Engine::RingParams& p);
+
     bool GenerateWall(const Engine::WallParams& p);
+
     bool GenerateLattice(const Engine::LatticeParams& p);
+
     bool GenerateCorrugatedPanel(const Engine::CorrugatedPanelParams& p);
+
     bool GenerateModule(const Engine::ModuleParams& p);
+
     bool GenerateSpline(const Engine::SplineParams& p);
+
     bool GenerateText3D(const Engine::Text3DParams& p);
 };
 } // AssetLoad

@@ -7,18 +7,19 @@
 
 #include <chrono>
 #include <string>
-#include <functional>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
+
+#include "core/containers/inline_function.h"
 
 namespace Platform
 {
 class DirectoryWatcher
 {
 public:
-    using Callback = std::function<void()>;
+    using Callback = Core::InlineFunction<void()>;
 
     DirectoryWatcher() = default;
 

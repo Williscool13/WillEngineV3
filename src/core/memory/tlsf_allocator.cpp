@@ -69,7 +69,7 @@ void TlsfAllocator::Init(void* pool, size_t bytes, bool bUseMutex, const char* n
     name_ = InlineString<32>(name);
 }
 
-void TlsfAllocator::InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex, const char* name)
+void TlsfAllocator::InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex, const char* name, size_t growChunkBytes)
 {
     assert(baselineBytes > tlsf_size() && "baseline too small for TLSF control structure");
     void* mem = malloc(baselineBytes);
@@ -79,6 +79,7 @@ void TlsfAllocator::InitGrowable(size_t baselineBytes, size_t budgetBytes, bool 
     chunkCount_ = 1;
     poolBytes = baselineBytes;
     budgetBytes_ = budgetBytes;
+    growChunkBytes_ = growChunkBytes;
     bGrowable_ = true;
     bUseMutex_ = bUseMutex;
     name_ = InlineString<32>(name);
@@ -89,7 +90,8 @@ bool TlsfAllocator::Grow(size_t minBytes)
     if (!bGrowable_ || chunkCount_ >= MAX_CHUNKS) { return false; }
     // TLSF's good-fit search rounds requests up by up to size/32 to stay O(1); a chunk sized to the bytes alone can fail the class lookup right after being added.
     const size_t need = minBytes + (minBytes >> 4) + tlsf_pool_overhead() + 4096;
-    size_t chunkBytes = need > GROW_CHUNK_BYTES ? need : GROW_CHUNK_BYTES;
+    const size_t growChunk = growChunkBytes_ != 0 ? growChunkBytes_ : GROW_CHUNK_BYTES;
+    size_t chunkBytes = need > growChunk ? need : growChunk;
     if (budgetBytes_ != 0 && poolBytes + chunkBytes > budgetBytes_) {
         if (poolBytes + need > budgetBytes_) { return false; }
         chunkBytes = need;

@@ -86,7 +86,15 @@ public:
     void Init(void* pool, size_t bytes, bool bUseMutex, const char* name);
 
     // Growable fns
-    void InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex, const char* name);
+
+    /**
+     * @param baselineBytes
+     * @param budgetBytes
+     * @param bUseMutex
+     * @param name
+     * @param growChunkBytes minimum size of each growth chunk; 0 = 256MB default
+     */
+    void InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex, const char* name, size_t growChunkBytes = 0);
 
     void ReleaseEmptyChunks();
 
@@ -169,6 +177,7 @@ private:
     Chunk chunks_[MAX_CHUNKS]{};
     size_t chunkCount_{0};
     size_t budgetBytes_{0};
+    size_t growChunkBytes_{0};
     bool bGrowable_{false};
     std::mutex mutex_;
     bool bUseMutex_{false};

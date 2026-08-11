@@ -730,7 +730,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         // Folder node
         auto drawFolderNode = [&](const AnchorInfo& a, const char* idPrefix, Core::Span<AnchorInfo*> siblings) -> bool {
             if (state->editor.renamingEntity == a.entity) {
-                ImGui::PushID(fmt::format("{}{}", idPrefix, a.id.id).c_str());
+                ImGui::PushID(Core::InlineString<64>::Format("%s%llu", idPrefix, static_cast<unsigned long long>(a.id.id)).c_str());
                 if (state->editor.renameRequestFocus) {
                     ImGui::SetKeyboardFocusHere();
                     state->editor.renameRequestFocus = false;
@@ -754,7 +754,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             if (expandFoldersForFilter) { ImGui::SetNextItemOpen(true, ImGuiCond_Always); }
             const ImGuiTreeNodeFlags folderFlags = ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick |
                                                    (folderSelected(a.entity) ? ImGuiTreeNodeFlags_Selected : 0);
-            bool open = ImGui::TreeNodeEx(fmt::format("{}##{}{}", a.name, idPrefix, a.id.id).c_str(), folderFlags);
+            bool open = ImGui::TreeNodeEx(Core::InlineString<192>::Format("%s##%s%llu", a.name, idPrefix, static_cast<unsigned long long>(a.id.id)).c_str(), folderFlags);
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
                 folderClicked(a.entity, siblings);
             }
@@ -785,7 +785,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                 }
                 ImGui::EndDragDropTarget();
             }
-            if (ImGui::BeginPopupContextItem(fmt::format("folderctx##{}", a.id.id).c_str())) {
+            if (ImGui::BeginPopupContextItem(Core::InlineString<64>::Format("folderctx##%llu", static_cast<unsigned long long>(a.id.id)).c_str())) {
                 static char nameBuf[64];
                 if (ImGui::IsWindowAppearing()) { strncpy_s(nameBuf, a.name, sizeof(nameBuf) - 1); }
                 ImGui::SetNextItemWidth(160.0f);

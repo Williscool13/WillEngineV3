@@ -27,7 +27,10 @@ namespace Editor
 {
 TextureGenerateSlot::TextureGenerateSlot() = default;
 
-TextureGenerateSlot::~TextureGenerateSlot() = default;
+TextureGenerateSlot::~TextureGenerateSlot()
+{
+    graphicsSubmit.Destroy(context);
+}
 
 void TextureGenerateSlot::Initialize(
     enki::TaskScheduler* _scheduler,
@@ -46,6 +49,8 @@ void TextureGenerateSlot::Initialize(
 
     imageStagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, TEXTURE_GENERATION_STAGING_BUFFER_SIZE);
     imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, TEXTURE_GENERATION_STAGING_BUFFER_SIZE);
+
+    graphicsSubmit.Initialize(context, context->graphicsQueueFamily);
 }
 
 void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId,
@@ -114,17 +119,8 @@ void TextureGenerateSlot::Clear()
 
 void TextureGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
 {
-    VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(taskSlot->context->graphicsQueueFamily);
-    VkCommandPool graphicsCommandPool;
-    VK_CHECK(vkCreateCommandPool(taskSlot->context->device, &graphicsPoolInfo, nullptr, &graphicsCommandPool));
-
-    VkCommandBufferAllocateInfo graphicsCmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, graphicsCommandPool);
-    VkCommandBuffer graphicsCmd;
-    VK_CHECK(vkAllocateCommandBuffers(taskSlot->context->device, &graphicsCmdInfo, &graphicsCmd));
-
-    VkFenceCreateInfo graphicsFenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VkFence graphicsFence;
-    VK_CHECK(vkCreateFence(taskSlot->context->device, &graphicsFenceInfo, nullptr, &graphicsFence));
+    VkCommandBuffer graphicsCmd = taskSlot->graphicsSubmit.cmd;
+    VkFence graphicsFence = taskSlot->graphicsSubmit.fence;
 
     auto startGraphicsRecording = [&] {
         VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -149,22 +145,19 @@ void TextureGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition rang
     bool loadRes = taskSlot->LoadImageAndGenerate(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait);
     if (!loadRes) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
-        vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
-        vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
+        taskSlot->graphicsSubmit.Reset(taskSlot->context);
         return;
     }
 
     if (!taskSlot->WriteWTextureFile()) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
-        vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
-        vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
+        taskSlot->graphicsSubmit.Reset(taskSlot->context);
         return;
     }
 
     taskSlot->_notifyCallback(true, taskSlot->slotHandle);
 
-    vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
-    vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
+    taskSlot->graphicsSubmit.Reset(taskSlot->context);
 }
 
 bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait)

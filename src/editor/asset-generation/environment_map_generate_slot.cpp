@@ -26,7 +26,10 @@ namespace Editor
 {
 EnvironmentMapGenerateSlot::EnvironmentMapGenerateSlot() = default;
 
-EnvironmentMapGenerateSlot::~EnvironmentMapGenerateSlot() = default;
+EnvironmentMapGenerateSlot::~EnvironmentMapGenerateSlot()
+{
+    graphicsSubmit.Destroy(context);
+}
 
 void EnvironmentMapGenerateSlot::Initialize(
     enki::TaskScheduler* _scheduler,
@@ -92,6 +95,8 @@ void EnvironmentMapGenerateSlot::Initialize(
 
     resourceManager->environmentMapGenerateResources.SetSampler(equiSampler.handle, EQUI_IMAGE_SAMPLER_INDEX);
     resourceManager->environmentMapGenerateResources.SetSampler(cubemapSampler.handle, CUBEMAP_IMAGE_SAMPLER_INDEX);
+
+    graphicsSubmit.Initialize(context, context->graphicsQueueFamily);
 }
 
 void EnvironmentMapGenerateSlot::Launch(
@@ -178,17 +183,8 @@ void EnvironmentMapGenerateSlot::Clear()
 
 void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
 {
-    VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(taskSlot->context->graphicsQueueFamily);
-    VkCommandPool graphicsCommandPool;
-    VK_CHECK(vkCreateCommandPool(taskSlot->context->device, &graphicsPoolInfo, nullptr, &graphicsCommandPool));
-
-    VkCommandBufferAllocateInfo graphicsCmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, graphicsCommandPool);
-    VkCommandBuffer graphicsCmd;
-    VK_CHECK(vkAllocateCommandBuffers(taskSlot->context->device, &graphicsCmdInfo, &graphicsCmd));
-
-    VkFenceCreateInfo graphicsFenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VkFence graphicsFence;
-    VK_CHECK(vkCreateFence(taskSlot->context->device, &graphicsFenceInfo, nullptr, &graphicsFence));
+    VkCommandBuffer graphicsCmd = taskSlot->graphicsSubmit.cmd;
+    VkFence graphicsFence = taskSlot->graphicsSubmit.fence;
 
     auto startGraphicsRecording = [&] {
         VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -215,23 +211,20 @@ void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartiti
         : taskSlot->LoadEquirectangularAndGenerate(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait);
     if (!loadRes) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
-        vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
-        vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
+        taskSlot->graphicsSubmit.Reset(taskSlot->context);
         return;
     }
 
     const bool bWriteRes = taskSlot->bProbeMode ? taskSlot->WriteWProbeFile() : taskSlot->WriteWEnvMapFile();
     if (!bWriteRes) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
-        vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
-        vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
+        taskSlot->graphicsSubmit.Reset(taskSlot->context);
         return;
     }
 
     taskSlot->_notifyCallback(true, taskSlot->slotHandle);
 
-    vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
-    vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
+    taskSlot->graphicsSubmit.Reset(taskSlot->context);
 }
 
 bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait)
