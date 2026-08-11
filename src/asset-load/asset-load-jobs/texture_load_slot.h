@@ -49,7 +49,6 @@ public:
         Render::VulkanContext* _context,
         Render::ResourceManager* _resourceManager,
         Core::MemoryManager* _memoryManager,
-        SubmitContextDepot* _submitDepot,
         Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
         Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle)> notifyCallback);
 
@@ -98,7 +97,7 @@ private:
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
-    SubmitContextDepot* submitDepot{nullptr};
+    SubmitContext transferSubmit{};
 
     ktxTexture2* texture{nullptr};
 

@@ -228,7 +228,6 @@ private:
     // GPU Uploads (transfer queue)
     moodycamel::ConcurrentQueue<GPUDispatchRequest> gpuDispatchQueue;
     UploadStagingDepot stagingDepot{};
-    SubmitContextDepot submitDepot{};
 
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);
 

@@ -30,14 +30,13 @@ class ProceduralTextureLoadSlot
 {
 public:
     ProceduralTextureLoadSlot() = default;
-    ~ProceduralTextureLoadSlot() = default;
+    ~ProceduralTextureLoadSlot();
 
     void Initialize(
         enki::TaskScheduler* _scheduler,
         Render::VulkanContext* _context,
         Render::ResourceManager* _resourceManager,
         Render::PipelineManager* _pipelineManager,
-        SubmitContextDepot* _submitDepot,
         Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
         Core::InlineFunction<void(bool success, ProceduralTextureSlotHandle slotHandle)> notifyCallback);
 
@@ -68,7 +67,7 @@ private:
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
     Render::PipelineManager* pipelineManager{nullptr};
-    SubmitContextDepot* submitDepot{nullptr};
+    SubmitContext graphicsSubmit{};
 
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _dispatchCallback;
     Core::InlineFunction<void(bool success, ProceduralTextureSlotHandle slotHandle)> _notifyCallback;

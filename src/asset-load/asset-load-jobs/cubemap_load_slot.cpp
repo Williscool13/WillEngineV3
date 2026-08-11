@@ -24,14 +24,16 @@ namespace AssetLoad
 {
 CubemapLoadSlot::CubemapLoadSlot() = default;
 
-CubemapLoadSlot::~CubemapLoadSlot() = default;
+CubemapLoadSlot::~CubemapLoadSlot()
+{
+    transferSubmit.Destroy(context);
+}
 
 void CubemapLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
     Core::MemoryManager* _memoryManager,
-    SubmitContextDepot* _submitDepot,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
     Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle)> notifyCallback)
 {
@@ -39,9 +41,10 @@ void CubemapLoadSlot::Initialize(
     context = _context;
     resourceManager = _resourceManager;
     memoryManager = _memoryManager;
-    submitDepot = _submitDepot;
     _requestDispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
+
+    transferSubmit.Initialize(context, context->transferQueueFamily);
 }
 
 void CubemapLoadSlot::Launch(
@@ -86,9 +89,8 @@ void CubemapLoadSlot::LoadCubemapTask::ExecuteRange(enki::TaskSetPartition range
         return;
     }
 
-    SubmitContext* submitContext = loadSlot->submitDepot->CheckOut(loadSlot->context->transferQueueFamily);
-    VkCommandBuffer cmd = submitContext->cmd;
-    VkFence fence = submitContext->fence;
+    VkCommandBuffer cmd = loadSlot->transferSubmit.cmd;
+    VkFence fence = loadSlot->transferSubmit.fence;
 
     auto submitAndWait = [&](bool reset) {
         ZoneScopedN("SubmitAndWait");
@@ -121,7 +123,7 @@ void CubemapLoadSlot::LoadCubemapTask::ExecuteRange(enki::TaskSetPartition range
 
     loadSlot->PostUploadSetup();
 
-    loadSlot->submitDepot->Return(submitContext);
+    loadSlot->transferSubmit.Reset(loadSlot->context);
 
     loadSlot->_notifyCallback(true, loadSlot->cubemapSlotHandle);
 }

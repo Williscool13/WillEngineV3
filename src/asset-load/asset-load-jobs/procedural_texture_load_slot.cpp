@@ -19,12 +19,16 @@
 
 namespace AssetLoad
 {
+ProceduralTextureLoadSlot::~ProceduralTextureLoadSlot()
+{
+    graphicsSubmit.Destroy(context);
+}
+
 void ProceduralTextureLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
     Render::PipelineManager* _pipelineManager,
-    SubmitContextDepot* _submitDepot,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
     Core::InlineFunction<void(bool success, ProceduralTextureSlotHandle slotHandle)> notifyCallback)
 {
@@ -32,9 +36,10 @@ void ProceduralTextureLoadSlot::Initialize(
     context = _context;
     resourceManager = _resourceManager;
     pipelineManager = _pipelineManager;
-    submitDepot = _submitDepot;
     _dispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
+
+    graphicsSubmit.Initialize(context, context->graphicsQueueFamily);
 }
 
 void ProceduralTextureLoadSlot::Launch(ProceduralTextureSlotHandle handle, Engine::Texture* texture, StringID _pipelineId)
@@ -61,9 +66,8 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
 {
     ZoneScopedN("ProceduralTextureLoadSlot::GenerateTask");
 
-    SubmitContext* submitContext = loadSlot->submitDepot->CheckOut(loadSlot->context->graphicsQueueFamily);
-    VkCommandBuffer cmd = submitContext->cmd;
-    VkFence fence = submitContext->fence;
+    VkCommandBuffer cmd = loadSlot->graphicsSubmit.cmd;
+    VkFence fence = loadSlot->graphicsSubmit.fence;
 
     VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
@@ -84,7 +88,7 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
     const Render::PipelineEntry entry = loadSlot->pipelineManager->GetPipelineEntrySnapshot(loadSlot->pipelineId);
     if (entry.pipeline == VK_NULL_HANDLE) {
         SPDLOG_ERROR("ProceduralTextureLoadSlot: pipeline {:x} not ready", loadSlot->pipelineId.id);
-        loadSlot->submitDepot->Return(submitContext);
+        loadSlot->graphicsSubmit.Reset(loadSlot->context);
         loadSlot->_notifyCallback(false, loadSlot->slotHandle);
         loadSlot->Clear();
         return;
@@ -222,7 +226,7 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
 
     loadSlot->PostGenerateSetup();
 
-    loadSlot->submitDepot->Return(submitContext);
+    loadSlot->graphicsSubmit.Reset(loadSlot->context);
 
     loadSlot->_notifyCallback(true, loadSlot->slotHandle);
 }

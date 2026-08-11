@@ -90,7 +90,6 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
     }
 
     stagingDepot.Initialize(context, UPLOAD_STAGING_BUDGET_DEFAULT);
-    submitDepot.Initialize(context);
 
     for (uint32_t i = 0; i < MODEL_JOB_COUNT; ++i) {
         modelLoadSlots[i].Initialize(
@@ -98,7 +97,6 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             &memoryManager,
-            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore) {
                 QueueTransferDispatch(cmd, fence, completionSignal, signalSemaphore);
             },
@@ -117,7 +115,6 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             &memoryManager,
-            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore) {
                 QueueTransferDispatch(cmd, fence, completionSignal, signalSemaphore);
             },
@@ -146,7 +143,6 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             &memoryManager,
-            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
             },
@@ -162,7 +158,6 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             &memoryManager,
-            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
             },
@@ -178,7 +173,6 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             context,
             resourceManager,
             pipelineManager,
-            &submitDepot,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueGraphicsDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
             },
@@ -192,10 +186,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
     gpuDispatchThread = std::jthread([this] { GPUDispatchThreadMain(); });
 }
 
-AsyncAssetLoadManager::~AsyncAssetLoadManager()
-{
-    submitDepot.Shutdown();
-}
+AsyncAssetLoadManager::~AsyncAssetLoadManager() = default;
 
 void AsyncAssetLoadManager::ThreadMain()
 {

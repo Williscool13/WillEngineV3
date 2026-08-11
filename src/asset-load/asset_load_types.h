@@ -90,34 +90,20 @@ private:
     Core::InlineVector<UploadStaging*, UPLOAD_STAGING_DEPOT_MAX> freeSlots{};
 };
 
+/**
+ * Slot-owned command pool + buffer + fence. Each GPU-uploading slot creates its own at Initialize (one per queue family it submits to), resets it after each load, and destroys it in its dtor. Deterministic ownership, no contention.
+ */
 struct SubmitContext
 {
+    void Initialize(Render::VulkanContext* context, uint32_t queueFamily);
+
+    void Reset(Render::VulkanContext* context);
+
+    void Destroy(Render::VulkanContext* context);
+
     VkCommandPool pool{VK_NULL_HANDLE};
     VkCommandBuffer cmd{VK_NULL_HANDLE};
     VkFence fence{VK_NULL_HANDLE};
-    uint32_t queueFamily{UINT32_MAX};
-};
-
-/**
- * Lazily created command pool + buffer + fence sets keyed by queue family.
- */
-class SubmitContextDepot
-{
-public:
-    void Initialize(Render::VulkanContext* _context);
-
-    void Shutdown();
-
-    SubmitContext* CheckOut(uint32_t queueFamily);
-
-    void Return(SubmitContext* submitContext);
-
-private:
-    Render::VulkanContext* context{nullptr};
-    std::mutex mutex;
-    uint32_t createdCount{0};
-    Core::Array<SubmitContext, SUBMIT_CONTEXT_DEPOT_MAX> contexts{};
-    Core::InlineVector<SubmitContext*, SUBMIT_CONTEXT_DEPOT_MAX> freelist{};
 };
 
 struct BLASTransients

@@ -37,6 +37,8 @@ ProceduralModelLoadSlot::~ProceduralModelLoadSlot()
     if (uploadCompleteSemaphore != VK_NULL_HANDLE) {
         vkDestroySemaphore(context->device, uploadCompleteSemaphore, nullptr);
     }
+    transferSubmit.Destroy(context);
+    graphicsSubmit.Destroy(context);
 }
 
 void ProceduralModelLoadSlot::Initialize(
@@ -44,7 +46,6 @@ void ProceduralModelLoadSlot::Initialize(
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
     Core::MemoryManager* _memoryManager,
-    SubmitContextDepot* _submitDepot,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore)> transferDispatchCallback,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore)> graphicsDispatchCallback,
     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle)> notifyCallback)
@@ -53,13 +54,15 @@ void ProceduralModelLoadSlot::Initialize(
     context = _context;
     resourceManager = _resourceManager;
     memoryManager = _memoryManager;
-    submitDepot = _submitDepot;
     _requestTransferDispatchCallback = std::move(transferDispatchCallback);
     _requestGraphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 
     VkSemaphoreCreateInfo semaphoreInfo = Render::VkHelpers::SemaphoreCreateInfo();
     VK_CHECK(vkCreateSemaphore(context->device, &semaphoreInfo, nullptr, &uploadCompleteSemaphore));
+
+    transferSubmit.Initialize(context, context->transferQueueFamily);
+    graphicsSubmit.Initialize(context, context->graphicsQueueFamily);
 }
 
 void ProceduralModelLoadSlot::Launch(
@@ -104,9 +107,8 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
 
     loadSlot->PrepareUploadData();
 
-    SubmitContext* transferContext = loadSlot->submitDepot->CheckOut(loadSlot->context->transferQueueFamily);
-    VkCommandBuffer cmd = transferContext->cmd;
-    VkFence fence = transferContext->fence;
+    VkCommandBuffer cmd = loadSlot->transferSubmit.cmd;
+    VkFence fence = loadSlot->transferSubmit.fence;
     VkSemaphore uploadCompleteSemaphore = loadSlot->uploadCompleteSemaphore;
 
     auto submitAndWait = [&](bool reset) {
@@ -136,13 +138,12 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
     loadSlot->_requestTransferDispatchCallback(cmd, fence, &done, uploadCompleteSemaphore);
     done.acquire();
 
-    loadSlot->submitDepot->Return(transferContext);
+    loadSlot->transferSubmit.Reset(loadSlot->context);
 
     // Build BLAS on graphics queue (requires transfer ownership acquire first)
     {
-        SubmitContext* graphicsContext = loadSlot->submitDepot->CheckOut(loadSlot->context->graphicsQueueFamily);
-        VkCommandBuffer graphicsCmd = graphicsContext->cmd;
-        VkFence graphicsFence = graphicsContext->fence;
+        VkCommandBuffer graphicsCmd = loadSlot->graphicsSubmit.cmd;
+        VkFence graphicsFence = loadSlot->graphicsSubmit.fence;
 
         VkCommandBufferBeginInfo graphicsBeginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &graphicsBeginInfo));
@@ -165,7 +166,7 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
 
         loadSlot->BuildBLAS(graphicsCmd, graphicsSubmitAndWait);
 
-        loadSlot->submitDepot->Return(graphicsContext);
+        loadSlot->graphicsSubmit.Reset(loadSlot->context);
     }
 
     loadSlot->_notifyCallback(true, loadSlot->slotHandle);

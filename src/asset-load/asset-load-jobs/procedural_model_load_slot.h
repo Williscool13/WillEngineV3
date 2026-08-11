@@ -43,7 +43,6 @@ public:
 
     void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager,
                     Core::MemoryManager* _memoryManager,
-                    SubmitContextDepot* _submitDepot,
                     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore)> _requestTransferDispatchCallback,
                     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore)> _requestGraphicsDispatchCallback,
                     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle)> _notifyCallback);
@@ -84,7 +83,8 @@ private:
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
-    SubmitContextDepot* submitDepot{nullptr};
+    SubmitContext transferSubmit{};
+    SubmitContext graphicsSubmit{};
     VkSemaphore uploadCompleteSemaphore{VK_NULL_HANDLE};
 
     UnpackedStaticModel rawData{};

@@ -78,58 +78,31 @@ void UploadStagingDepot::SetBudgetBytes(uint64_t newBudget)
     budgetBytes = newBudget;
 }
 
-void SubmitContextDepot::Initialize(Render::VulkanContext* _context)
+void SubmitContext::Initialize(Render::VulkanContext* context, uint32_t queueFamily)
 {
-    context = _context;
-}
-
-void SubmitContextDepot::Shutdown()
-{
-    std::lock_guard lock(mutex);
-    for (uint32_t i = 0; i < createdCount; i++) {
-        vkDestroyFence(context->device, contexts[i].fence, nullptr);
-        vkDestroyCommandPool(context->device, contexts[i].pool, nullptr);
-        contexts[i] = {};
-    }
-    createdCount = 0;
-    freelist.Clear();
-}
-
-SubmitContext* SubmitContextDepot::CheckOut(uint32_t queueFamily)
-{
-    std::lock_guard lock(mutex);
-    for (size_t i = 0; i < freelist.Size(); i++) {
-        if (freelist[i]->queueFamily == queueFamily) {
-            SubmitContext* submitContext = freelist[i];
-            freelist[i] = freelist[freelist.Size() - 1];
-            freelist.PopBack();
-            return submitContext;
-        }
-    }
-
-    assert(createdCount < SUBMIT_CONTEXT_DEPOT_MAX && "SubmitContextDepot exhausted; cap must cover all GPU-uploading slots");
-    ZoneScopedN("SubmitContextDepot Create Pool/Fence");
-    SubmitContext& submitContext = contexts[createdCount];
-    createdCount++;
-
     VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(queueFamily);
-    VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &submitContext.pool));
+    VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &pool));
 
-    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, submitContext.pool);
-    VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, &submitContext.cmd));
+    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, pool);
+    VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, &cmd));
 
     VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &submitContext.fence));
-
-    submitContext.queueFamily = queueFamily;
-    return &submitContext;
+    VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &fence));
 }
 
-void SubmitContextDepot::Return(SubmitContext* submitContext)
+void SubmitContext::Reset(Render::VulkanContext* context)
 {
-    VK_CHECK(vkResetCommandPool(context->device, submitContext->pool, 0));
-    VK_CHECK(vkResetFences(context->device, 1, &submitContext->fence));
-    std::lock_guard lock(mutex);
-    freelist.PushBack(submitContext);
+    VK_CHECK(vkResetCommandPool(context->device, pool, 0));
+    VK_CHECK(vkResetFences(context->device, 1, &fence));
+}
+
+void SubmitContext::Destroy(Render::VulkanContext* context)
+{
+    if (pool == VK_NULL_HANDLE) { return; }
+    vkDestroyFence(context->device, fence, nullptr);
+    vkDestroyCommandPool(context->device, pool, nullptr);
+    pool = VK_NULL_HANDLE;
+    cmd = VK_NULL_HANDLE;
+    fence = VK_NULL_HANDLE;
 }
 } // AssetLoad
