@@ -53,6 +53,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::Meshopt: return "Meshopt";
         case AllocTag::Vulkan: return "Vulkan";
         case AllocTag::ParShapes: return "ParShapes";
+        case AllocTag::Earcut: return "Earcut";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";

@@ -7,10 +7,33 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
 namespace mapbox {
+
+// WillEngine modification: every heap allocation (indices, node pool blocks, hole queue) routes through
+// these hooks. earcut_set_allocator must be called before the first earcut() invocation.
+inline void* (*earcut_alloc)(std::size_t) = nullptr;
+inline void (*earcut_free)(void*) = nullptr;
+
+inline void earcut_set_allocator(void* (*allocFn)(std::size_t), void (*freeFn)(void*)) {
+    earcut_alloc = allocFn;
+    earcut_free = freeFn;
+}
+
+template <typename T>
+struct EarcutAllocator {
+    using value_type = T;
+    EarcutAllocator() = default;
+    template <typename U>
+    EarcutAllocator(const EarcutAllocator<U>&) {}
+    T* allocate(std::size_t n) { return static_cast<T*>(earcut_alloc(n * sizeof(T))); }
+    void deallocate(T* p, std::size_t) { earcut_free(p); }
+    bool operator==(const EarcutAllocator&) const { return true; }
+    bool operator!=(const EarcutAllocator&) const { return false; }
+};
 
 namespace util {
 
@@ -26,7 +49,7 @@ namespace detail {
 template <typename N = uint32_t>
 class Earcut {
 public:
-    std::vector<N> indices;
+    std::vector<N, EarcutAllocator<N>> indices;
     std::size_t vertices = 0;
 
     template <typename Polygon>
@@ -174,8 +197,9 @@ private:
             void operator()(T* ptr) { alloc_traits::deallocate(alloc, ptr, capacity); }
         };
 
-        std::vector<std::unique_ptr<T[], AllocDeleter>> memoryBlocks;
-        std::vector<std::size_t> blockCapacities;
+        using BlockPtr = std::unique_ptr<T[], AllocDeleter>;
+        std::vector<BlockPtr, typename alloc_traits::template rebind_alloc<BlockPtr>> memoryBlocks;
+        std::vector<std::size_t, typename alloc_traits::template rebind_alloc<std::size_t>> blockCapacities;
         std::size_t currentBlockIndex = 0;
         std::size_t currentIndex = 0;
         std::size_t totalObjects = 0;
@@ -191,8 +215,8 @@ private:
         }
     };
 
-    std::unique_ptr<ObjectPool<Node>> nodes;
-    std::vector<Node*> holeQueue;
+    std::optional<ObjectPool<Node, EarcutAllocator<Node>>> nodes;
+    std::vector<Node*, EarcutAllocator<Node*>> holeQueue;
 };
 
 template <typename N>
@@ -217,7 +241,7 @@ void Earcut<N>::operator()(const Polygon& points) {
     // estimate size of nodes and indices
     if (!nodes) {
         std::size_t estimatedNodes = len * 3 / 2;
-        nodes = std::make_unique<ObjectPool<Node>>(std::max<std::size_t>(estimatedNodes, 256));
+        nodes.emplace(std::max<std::size_t>(estimatedNodes, 256));
     }
     indices.reserve(len + points[0].size());
 
@@ -862,7 +886,7 @@ void Earcut<N>::removeNode(Node* p) {
 } // namespace detail
 
 template <typename N = uint32_t, typename Polygon>
-std::vector<N> earcut(const Polygon& poly) {
+std::vector<N, EarcutAllocator<N>> earcut(const Polygon& poly) {
     mapbox::detail::Earcut<N> earcut;
     earcut(poly);
     return std::move(earcut.indices);

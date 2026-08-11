@@ -10,6 +10,7 @@
 #include "audio/audio_asset.h"
 #include "platform/thread_utils.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
+#include "asset-load-jobs/text3d_geometry.h"
 #include "core/memory/memory_manager.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/model/static_model.h"
@@ -71,6 +72,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
       pipelineCache(pipelineCache)
 {
     par_shapes_set_allocator(&memoryManager.AssetsScratch());
+    SetEarcutAllocator(&memoryManager.AssetsScratch());
 
     for (uint32_t i = 0; i < AUDIO_JOB_COUNT; ++i) {
         audioLoadSlots[i].Initialize(scheduler, [this](bool success, AudioSlotHandle slotHandle) {

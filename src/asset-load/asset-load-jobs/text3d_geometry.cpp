@@ -13,6 +13,24 @@
 
 namespace AssetLoad
 {
+static Core::TlsfAllocator* gEarcutAllocator = nullptr;
+
+static void* EarcutAlloc(size_t bytes)
+{
+    return gEarcutAllocator->Alloc(bytes, Core::AllocTag::Earcut);
+}
+
+static void EarcutFree(void* ptr)
+{
+    gEarcutAllocator->Free(ptr);
+}
+
+void SetEarcutAllocator(Core::TlsfAllocator* allocator)
+{
+    gEarcutAllocator = allocator;
+    mapbox::earcut_set_allocator(EarcutAlloc, EarcutFree);
+}
+
 namespace Text3DDetail
 {
 struct EcPoint
@@ -280,7 +298,7 @@ bool BuildText3DGeometry(const Engine::Font& font, const Engine::Text3DParams& p
                     }
 
                     const EcPolygon poly{ecRings.Data(), ecRings.Size()};
-                    const std::vector<uint32_t> tris = mapbox::earcut<uint32_t>(poly);
+                    const auto tris = mapbox::earcut<uint32_t>(poly);
                     if (tris.empty()) { continue; }
 
                     const uint32_t baseFront = static_cast<uint32_t>(outVertices.Size());
