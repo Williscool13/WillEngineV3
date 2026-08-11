@@ -2,10 +2,46 @@
 // Created by William on 2026-03-14.
 //
 
+#include "core/memory/tlsf_allocator.h"
+
+#include <cstring>
+
+static Core::TlsfAllocator* gParShapesAllocator = nullptr;
+
+static void* ParShapesAlloc(size_t bytes)
+{
+    return gParShapesAllocator->Alloc(bytes, Core::AllocTag::ParShapes);
+}
+
+static void* ParShapesCalloc(size_t bytes)
+{
+    void* ptr = gParShapesAllocator->Alloc(bytes, Core::AllocTag::ParShapes);
+    if (ptr) { memset(ptr, 0, bytes); }
+    return ptr;
+}
+
+static void* ParShapesRealloc(void* ptr, size_t bytes)
+{
+    return gParShapesAllocator->Realloc(ptr, bytes, Core::AllocTag::ParShapes);
+}
+
+static void ParShapesFree(void* ptr)
+{
+    gParShapesAllocator->Free(ptr);
+}
+
+#define PAR_MALLOC(T, N) ((T*) ParShapesAlloc((N) * sizeof(T)))
+#define PAR_CALLOC(T, N) ((T*) ParShapesCalloc((N) * sizeof(T)))
+#define PAR_REALLOC(T, BUF, N) ((T*) ParShapesRealloc(BUF, sizeof(T) * (N)))
+#define PAR_FREE(BUF) ParShapesFree(BUF)
+
 #define PAR_SHAPES_IMPLEMENTATION
 #include "par/par_shapes.h"
 
-#include <stdlib.h>
+void par_shapes_set_allocator(Core::TlsfAllocator* allocator)
+{
+    gParShapesAllocator = allocator;
+}
 
 extern "C" par_shapes_mesh* par_shapes_create_staircase(int steps, float width, float total_depth, float total_height, float step_height, int closed)
 {
@@ -18,8 +54,8 @@ extern "C" par_shapes_mesh* par_shapes_create_staircase(int steps, float width, 
     // Cross-section polygon in the Z-Y plane (CW when viewed from +X).
     // Layout: (0,0), [riser top, tread end] x steps, (totalDepth, totalHeight), (totalDepth, 0)
     const int npts = 2 * steps + 2;
-    float* pz = (float*) malloc(npts * sizeof(float));
-    float* py = (float*) malloc(npts * sizeof(float));
+    float* pz = PAR_MALLOC(float, npts);
+    float* py = PAR_MALLOC(float, npts);
 
     pz[0] = 0.0f;
     py[0] = 0.0f;
@@ -91,7 +127,7 @@ extern "C" par_shapes_mesh* par_shapes_create_staircase(int steps, float width, 
         *t++ = bj;
     }
 
-    free(pz);
-    free(py);
+    PAR_FREE(pz);
+    PAR_FREE(py);
     return m;
 }

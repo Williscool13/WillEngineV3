@@ -16,6 +16,7 @@
 #include "engine/resources/physics/physics_collider_asset.h"
 #include "engine/resources/sampler/sampler.h"
 #include "engine/resources/texture/texture.h"
+#include "par/par_shapes_ext.h"
 #include "render/resource_manager.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/types/cubemap_asset.h"
@@ -69,6 +70,8 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
       pipelineManager(pipelineManager),
       pipelineCache(pipelineCache)
 {
+    par_shapes_set_allocator(&memoryManager.AssetsScratch());
+
     for (uint32_t i = 0; i < AUDIO_JOB_COUNT; ++i) {
         audioLoadSlots[i].Initialize(scheduler, [this](bool success, AudioSlotHandle slotHandle) {
             OnAudioLoadComplete(success, slotHandle);

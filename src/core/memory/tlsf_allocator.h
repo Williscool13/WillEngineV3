@@ -55,6 +55,7 @@ enum class AllocTag : uint32_t
     Clay,
     Meshopt,
     Vulkan,
+    ParShapes,
 
     Count
 };

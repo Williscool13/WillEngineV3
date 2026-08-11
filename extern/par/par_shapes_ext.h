@@ -8,6 +8,15 @@
 #include "par_shapes.h"
 
 #ifdef __cplusplus
+namespace Core { class TlsfAllocator; }
+
+/**
+ * Routes all par_shapes allocations (PAR_MALLOC/PAR_CALLOC/PAR_REALLOC/PAR_FREE) through the given TLSF allocator.
+ * Must be called before any par_shapes_create_* call.
+ * @param allocator
+ */
+void par_shapes_set_allocator(Core::TlsfAllocator* allocator);
+
 extern "C" {
 #endif
 
