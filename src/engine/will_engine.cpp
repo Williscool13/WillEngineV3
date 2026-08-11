@@ -152,11 +152,11 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         config.profilerCallbacks.waitForTaskCompleteSuspendStop = [](uint32_t) {};
         config.numExternalTaskThreads = 8;
         config.customAllocator.userData = &memoryManager;
-        config.customAllocator.alloc = [](size_t, size_t size_, void* userData_, const char*, int) -> void* {
-            return static_cast<Core::MemoryManager*>(userData_)->GeneralAllocRaw(size_, Core::AllocTag::TaskScheduler);
+        config.customAllocator.alloc = [](size_t align_, size_t size_, void* userData_, const char*, int) -> void* {
+            return static_cast<Core::MemoryManager*>(userData_)->General().AlignedAlloc(size_, align_, Core::AllocTag::TaskScheduler);
         };
         config.customAllocator.free = [](void* ptr_, size_t, void* userData_, const char*, int) {
-            static_cast<Core::MemoryManager*>(userData_)->GeneralFree(ptr_);
+            static_cast<Core::MemoryManager*>(userData_)->General().AlignedFree(ptr_);
         };
 
         SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);

@@ -44,6 +44,43 @@
 #include "clay/clay.h"
 #include "engine/resources/font/font_metrics.h"
 
+#ifndef GAME_STATIC
+#include "meshoptimizer/src/meshoptimizer.h"
+#include "par/par_shapes_ext.h"
+#include "asset-load/asset-load-jobs/text3d_geometry.h"
+#include "core/memory/memory_manager.h"
+
+static Core::MemoryManager* gDllMemory = nullptr;
+
+static void* DllMeshoptAlloc(size_t size)
+{
+    return gDllMemory->AssetsScratch().Alloc(size, Core::AllocTag::Meshopt);
+}
+
+static void DllMeshoptFree(void* ptr)
+{
+    gDllMemory->AssetsScratch().Free(ptr);
+}
+
+static void RegisterDllEngineHooks(Engine::EngineContext* ctx)
+{
+    if (ctx->engineLogger) {
+        ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
+    }
+
+    ImGui::SetCurrentContext(ctx->imguiContext);
+    ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
+    Clay_SetCurrentContext(ctx->clayContext);
+
+    ctx->physicsSystem->RegisterPhysics();
+    ctx->scheduler->RegisterExternalTaskThread();
+
+    gDllMemory = ctx->memoryManager;
+    meshopt_setAllocator(DllMeshoptAlloc, DllMeshoptFree);
+    par_shapes_set_allocator(&ctx->memoryManager->AssetsScratch());
+    AssetLoad::SetEarcutAllocator(&ctx->memoryManager->AssetsScratch());
+}
+#endif
 
 extern "C"
 {
@@ -75,7 +112,7 @@ GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state
 {
     SPDLOG_TRACE("Game Start Up");
 
-    new (ctx->gameState) Game::GameState();
+    new(ctx->gameState) Game::GameState();
 
     constexpr Vec3 defaultCameraPos{0.0f, 3.0f, 5.0f};
     const Quat defaultCameraRot = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - defaultCameraPos), WORLD_UP);
@@ -88,16 +125,7 @@ GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state
 GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
 #ifndef GAME_STATIC
-    if (ctx->engineLogger) {
-        ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
-    }
-
-    ImGui::SetCurrentContext(ctx->imguiContext);
-    ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
-    Clay_SetCurrentContext(ctx->clayContext);
-
-    ctx->physicsSystem->RegisterPhysics();
-    ctx->scheduler->RegisterExternalTaskThread();
+    RegisterDllEngineHooks(ctx);
 #endif
 
     const Engine::FontID robotoId = ctx->assetManager->FindFontByName("Roboto");
@@ -162,7 +190,7 @@ GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState*
     if (Game::IsPlaying(state)) {
         Game::PlayStop(ctx, state);
     }
-
+    //
     {
         auto camView = state->registry.view<Game::Component::EditorCameraTag, Game::Component::TransformComponent>();
         const auto camEntity = camView.front();
@@ -197,16 +225,7 @@ GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState*
 GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
 #ifndef GAME_STATIC
-    if (ctx->engineLogger) {
-        ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
-    }
-
-    ImGui::SetCurrentContext(ctx->imguiContext);
-    ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
-    Clay_SetCurrentContext(ctx->clayContext);
-
-    ctx->physicsSystem->RegisterPhysics();
-    ctx->scheduler->RegisterExternalTaskThread();
+    RegisterDllEngineHooks(ctx);
 #endif
 
     Game::RegisterComponents(state->componentRegistry);

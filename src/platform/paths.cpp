@@ -4,6 +4,8 @@
 
 #include "paths.h"
 
+#include <windows.h>
+
 #include <SDL3/SDL_filesystem.h>
 
 #include "file_utils.h"
@@ -12,7 +14,14 @@ namespace Platform
 {
 const Core::Path& GetExecutablePath()
 {
-    static const Core::Path path(SDL_GetBasePath());
+    static const Core::Path path = []() {
+        char buf[1024];
+        const DWORD len = GetModuleFileNameA(nullptr, buf, sizeof(buf));
+        DWORD end = len;
+        while (end > 0 && buf[end - 1] != '\\' && buf[end - 1] != '/') { end--; }
+        buf[end] = '\0';
+        return Core::Path(buf);
+    }();
     return path;
 }
 
