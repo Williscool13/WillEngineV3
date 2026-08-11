@@ -25,6 +25,7 @@ namespace Game
 /**
  * Editor-side relection probe bake driver.
  * The 6 captured face buffers stay resident after a bake for the assembly checkpoint to consume.
+ * Non-editor builds compile every entry point as a no-op stub (ProbeBakeActive returns false).
  */
 struct ProbeBakeSystem
 {

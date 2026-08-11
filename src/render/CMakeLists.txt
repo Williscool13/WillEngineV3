@@ -136,7 +136,6 @@ target_link_libraries(render PUBLIC
         spdlog::spdlog
         enkiTS
         offsetAllocator
-        ktx
         miniz
         lz4
         zstd

@@ -29,6 +29,7 @@ target_include_directories(editor PUBLIC
 target_link_libraries(editor PUBLIC
         core
         render
+        ktx
         fastgltf
         enkiTS
         meshoptimizer

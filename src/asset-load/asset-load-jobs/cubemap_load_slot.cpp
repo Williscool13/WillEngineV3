@@ -12,7 +12,6 @@
 #include "core/memory/memory_manager.h"
 #include "engine/compression/compression.h"
 #include "engine/resources/environment_map/environment_map_format.h"
-#include "ktxvulkan.h"
 #include "render/resource_manager.h"
 #include "render/types/cubemap_asset.h"
 #include "render/vulkan/vk_context.h"
@@ -69,10 +68,8 @@ void CubemapLoadSlot::Clear()
     outputCubemap = nullptr;
     uploadStaging = nullptr;
 
-    if (texture) {
-        ktxTexture2_Destroy(texture);
-        texture = nullptr;
-    }
+    ktxData = {};
+    ktxView = {};
 }
 
 void CubemapLoadSlot::LoadCubemapTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
@@ -149,7 +146,6 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
 
     {
         ZoneScopedN("KTXCreateFromMemory");
-        ktx_error_code_e result;
 
         Core::HeapArray<uint8_t> compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->dataSize);
         {
@@ -163,35 +159,26 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
             }
         }
 
-        Core::HeapArray<uint8_t> decompressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->uncompressedSize);
+        ktxData = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->uncompressedSize);
         {
             ZoneScopedN("Decompress");
-            Engine::Decompress(outputCubemap->compressionType, compressed.Data(), compressed.Size(), decompressed.Data(), outputCubemap->uncompressedSize);
+            Engine::Decompress(outputCubemap->compressionType, compressed.Data(), compressed.Size(), ktxData.Data(), outputCubemap->uncompressedSize);
         }
         {
             ZoneScopedN("KTXParse");
-            result = ktxTexture2_CreateFromMemory(decompressed.Data(), decompressed.Size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
-        }
-
-        if (result != KTX_SUCCESS) {
-            SPDLOG_ERROR("Failed to load KTX cubemap: {}", cubemapPath.c_str());
-            return false;
+            if (!ktxView.Parse(ktxData.Data(), ktxData.Size())) {
+                SPDLOG_ERROR("Failed to parse KTX2 cubemap: {}", cubemapPath.c_str());
+                return false;
+            }
         }
     }
 
-    assert(!ktxTexture2_NeedsTranscoding(texture) && "This engine no longer supports UASTC/ETC1S compressed textures");
-
-    if (!texture->isCubemap) {
+    if (!ktxView.bCubemap) {
         SPDLOG_ERROR("Expected cubemap texture: {}", cubemapPath.c_str());
         return false;
     }
 
-    if (texture->numFaces != 6) {
-        SPDLOG_ERROR("Cubemap must have 6 faces: {}", cubemapPath.c_str());
-        return false;
-    }
-
-    if (ktxTexture_GetRowPitch(ktxTexture(texture), 0) > uploadStaging->GetStagingAllocator().GetCapacity()) {
+    if (ktxView.RowPitch(0) > uploadStaging->GetStagingAllocator().GetCapacity()) {
         SPDLOG_ERROR("Cubemap block row too large for staging buffer: {}", cubemapPath.c_str());
         return false;
     }
@@ -202,20 +189,19 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
 bool CubemapLoadSlot::AllocateGPUResources()
 {
     VkExtent3D extent{
-        .width = texture->baseWidth,
-        .height = texture->baseHeight,
+        .width = ktxView.baseWidth,
+        .height = ktxView.baseHeight,
         .depth = 1
     };
 
-    VkFormat imageFormat = ktxTexture2_GetVkFormat(texture);
     VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
-        imageFormat,
+        ktxView.vkFormat,
         extent,
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
     );
     imageCreateInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.mipLevels = texture->numLevels;
+    imageCreateInfo.mipLevels = ktxView.levelCount;
     imageCreateInfo.arrayLayers = 6;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -228,7 +214,7 @@ bool CubemapLoadSlot::AllocateGPUResources()
     );
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
     viewInfo.subresourceRange.layerCount = 6;
-    viewInfo.subresourceRange.levelCount = texture->numLevels;
+    viewInfo.subresourceRange.levelCount = ktxView.levelCount;
 
     outputCubemap->imageView = Render::ImageView::CreateImageView(context, viewInfo);
 
@@ -245,7 +231,7 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
     // Pre-copy barrier: UNDEFINED -> TRANSFER_DST_OPTIMAL
     VkImageMemoryBarrier2 preCopyBarrier = Render::VkHelpers::ImageMemoryBarrier(
         outputCubemap->image.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, texture->numLevels, 0, 6),
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, ktxView.levelCount, 0, 6),
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
     );
@@ -256,19 +242,18 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
     // Upload all mip levels for all 6 faces; faces larger than the staging buffer stream in block-row chunks
-    for (uint32_t mipLevel = 0; mipLevel < texture->numLevels; mipLevel++) {
-        uint32_t mipWidth = std::max(1u, texture->baseWidth >> mipLevel);
-        uint32_t mipHeight = std::max(1u, texture->baseHeight >> mipLevel);
-        size_t mipSize = ktxTexture_GetImageSize(ktxTexture(texture), mipLevel);
-        const size_t rowPitch = ktxTexture_GetRowPitch(ktxTexture(texture), mipLevel);
+    for (uint32_t mipLevel = 0; mipLevel < ktxView.levelCount; mipLevel++) {
+        uint32_t mipWidth = ktxView.LevelWidth(mipLevel);
+        uint32_t mipHeight = ktxView.LevelHeight(mipLevel);
+        size_t mipSize = ktxView.FaceSize(mipLevel);
+        const size_t rowPitch = ktxView.RowPitch(mipLevel);
         const uint32_t totalRows = std::max(1u, static_cast<uint32_t>(mipSize / rowPitch));
         const uint32_t texelRowsPerRow = (mipHeight + totalRows - 1) / totalRows;
 
         for (uint32_t face = 0; face < 6; face++) {
             ZoneScopedN("Upload Face");
 
-            size_t faceOffset;
-            ktxTexture_GetImageOffset(ktxTexture(texture), mipLevel, 0, face, &faceOffset);
+            const uint8_t* faceData = ktxView.FaceData(mipLevel, face);
 
             uint32_t rowsDone = 0;
             while (rowsDone < totalRows) {
@@ -289,7 +274,7 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
                 }
 
                 char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
-                memcpy(stagingPtr, texture->pData + faceOffset + static_cast<size_t>(rowsDone) * rowPitch, chunkBytes);
+                memcpy(stagingPtr, faceData + static_cast<size_t>(rowsDone) * rowPitch, chunkBytes);
 
                 const uint32_t texelY = rowsDone * texelRowsPerRow;
                 VkBufferImageCopy copyRegion{};
@@ -320,7 +305,7 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
     // Final barrier: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL with queue family transfer
     VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
         outputCubemap->image.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, texture->numLevels, 0, 6),
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, ktxView.levelCount, 0, 6),
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
@@ -332,8 +317,8 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
 
     outputCubemap->acquireBarrier = Render::VkHelpers::FromVkBarrier(finalBarrier);
 
-    ktxTexture2_Destroy(texture);
-    texture = nullptr;
+    ktxData = {};
+    ktxView = {};
 }
 
 void CubemapLoadSlot::PostUploadSetup()

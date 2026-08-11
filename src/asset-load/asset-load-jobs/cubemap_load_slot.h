@@ -7,11 +7,11 @@
 
 #include <semaphore>
 #include <volk.h>
-#include <ktx.h>
 
 #include <enkiTS/src/TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
+#include "asset-load/ktx2_view.h"
 #include "core/containers/inline_function.h"
 #include "engine/asset_manager_types.h"
 
@@ -84,7 +84,8 @@ private:
     Core::MemoryManager* memoryManager{nullptr};
     SubmitContext transferSubmit{};
 
-    ktxTexture2* texture{nullptr};
+    Core::HeapArray<uint8_t> ktxData{};
+    Ktx2View ktxView{};
 
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
     Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle)> _notifyCallback;

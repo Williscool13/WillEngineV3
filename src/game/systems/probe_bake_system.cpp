@@ -51,6 +51,8 @@ ProbeBakeSystem& ProbeBakeGet(Engine::EngineContext* ctx)
     return ctx->GetGameState<GameState>()->probeBake;
 }
 
+#if WILL_EDITOR
+
 bool ProbeBakeActive(Engine::EngineContext* ctx)
 {
     return ProbeBakeGet(ctx).bBakeActive;
@@ -477,4 +479,20 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     }
 }
+
+#else
+
+bool ProbeBakeActive(Engine::EngineContext*) { return false; }
+void ProbeBakeTick(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}
+void ProbeBakeOverrideView(Engine::EngineContext*, Core::ViewFamily&) {}
+void ProbeBakeScrubFrame(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}
+void ProbeBakeSystem::Start(Engine::EngineContext*, Engine::EngineState*, entt::entity) {}
+void ProbeBakeSystem::StartDryRun(Engine::EngineContext*, Engine::EngineState*, entt::entity) {}
+void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState*) {}
+void ProbeBakeSystem::EnqueueAllProbesInterbounce(Engine::EngineState*) {}
+void ProbeBakeSystem::EnqueueProbeInterbounce(Engine::EngineState*, entt::entity) {}
+void ProbeBakeSystem::Tick(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}
+void ProbeBakeSystem::Cancel(Engine::EngineContext*, Engine::EngineState*) {}
+
+#endif
 } // Game

@@ -10,7 +10,6 @@
 #include "asset-load/asset_load_config.h"
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
-#include "ktxvulkan.h"
 #include "core/memory/memory_manager.h"
 #include "engine/resources/texture/texture.h"
 #include "render/resource_manager.h"
@@ -68,10 +67,8 @@ void TextureLoadSlot::Clear()
     outputTexture = nullptr;
     uploadStaging = nullptr;
 
-    if (texture) {
-        ktxTexture2_Destroy(texture);
-        texture = nullptr;
-    }
+    ktxData = {};
+    ktxView = {};
 }
 
 void TextureLoadSlot::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
@@ -148,7 +145,6 @@ bool TextureLoadSlot::LoadTextureFromDisk()
         }
     } {
         ZoneScopedN("KTXCreateFromFile");
-        ktx_error_code_e result;
 
         std::ifstream f(texturePath.c_str(), std::ios::binary);
 
@@ -160,35 +156,31 @@ bool TextureLoadSlot::LoadTextureFromDisk()
             return false;
         }
 
-        // todo hand roll texture generation from ktx instead of using ktx functions which heap alloc
-        Core::HeapArray<uint8_t> decompressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputTexture->uncompressedSize);
-        Engine::Decompress(outputTexture->compressionType, compressed.Data(), compressed.Size(), decompressed.Data(), outputTexture->uncompressedSize);
-        result = ktxTexture2_CreateFromMemory(decompressed.Data(), decompressed.Size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+        ktxData = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputTexture->uncompressedSize);
+        Engine::Decompress(outputTexture->compressionType, compressed.Data(), compressed.Size(), ktxData.Data(), outputTexture->uncompressedSize);
 
-        if (result != KTX_SUCCESS) {
-            LOG_ERROR(Asset, "Failed to load KTX texture: {}", texturePath.c_str());
+        if (!ktxView.Parse(ktxData.Data(), ktxData.Size())) {
+            LOG_ERROR(Asset, "Failed to parse KTX2 texture: {}", texturePath.c_str());
             return false;
         }
     }
 
-    assert(!ktxTexture2_NeedsTranscoding(texture) && "This engine no longer supports UASTC/ETC1S compressed textures");
-
-    if (ktxTexture_GetRowPitch(ktxTexture(texture), 0) > uploadStaging->GetStagingAllocator().GetCapacity()) {
+    if (ktxView.RowPitch(0) > uploadStaging->GetStagingAllocator().GetCapacity()) {
         LOG_ERROR(Asset, "Texture block row too large for staging buffer: {}", texturePath.c_str());
         return false;
     }
 
-    if (texture->numDimensions != 2) {
+    if (ktxView.baseHeight == 0 || ktxView.baseDepth > 1) {
         LOG_ERROR(Asset, "Only 2D textures supported: {}", texturePath.c_str());
         return false;
     }
 
-    if (texture->isArray) {
+    if (ktxView.bArray) {
         LOG_ERROR(Asset, "Texture arrays not supported: {}", texturePath.c_str());
         return false;
     }
 
-    if (texture->isCubemap) {
+    if (ktxView.bCubemap) {
         LOG_ERROR(Asset, "Cubemaps not supported: {}", texturePath.c_str());
         return false;
     }
@@ -200,20 +192,19 @@ TextureLoadSlot::AllocatedTextureResources TextureLoadSlot::AllocateGPUResources
 {
     AllocatedTextureResources output{};
     VkExtent3D extent{
-        .width = texture->baseWidth,
-        .height = texture->baseHeight,
-        .depth = texture->baseDepth
+        .width = ktxView.baseWidth,
+        .height = ktxView.baseHeight,
+        .depth = ktxView.baseDepth
     };
 
-    VkFormat imageFormat = ktxTexture2_GetVkFormat(texture);
     VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
-        imageFormat,
+        ktxView.vkFormat,
         extent,
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
     );
     imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.mipLevels = texture->numLevels;
-    imageCreateInfo.arrayLayers = texture->numLayers;
+    imageCreateInfo.mipLevels = ktxView.levelCount;
+    imageCreateInfo.arrayLayers = ktxView.layerCount;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     output.image = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
@@ -224,8 +215,8 @@ TextureLoadSlot::AllocatedTextureResources TextureLoadSlot::AllocateGPUResources
         VK_IMAGE_ASPECT_COLOR_BIT
     );
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.subresourceRange.layerCount = texture->numLayers;
-    viewInfo.subresourceRange.levelCount = texture->numLevels;
+    viewInfo.subresourceRange.layerCount = ktxView.layerCount;
+    viewInfo.subresourceRange.levelCount = ktxView.levelCount;
 
     output.imageView = Render::ImageView::CreateImageView(context, viewInfo);
     output.bSuccess = true;
@@ -242,7 +233,7 @@ void TextureLoadSlot::UploadTexture(VkCommandBuffer cmd, const Core::InlineFunct
     // Pre-copy barrier: UNDEFINED -> TRANSFER_DST_OPTIMAL
     VkImageMemoryBarrier2 preCopyBarrier = Render::VkHelpers::ImageMemoryBarrier(
         outputTexture->image.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, texture->numLevels, 0, texture->numLayers),
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, ktxView.levelCount, 0, ktxView.layerCount),
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
     );
@@ -253,16 +244,15 @@ void TextureLoadSlot::UploadTexture(VkCommandBuffer cmd, const Core::InlineFunct
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
     // Upload all mip levels; mips larger than the staging buffer stream in block-row chunks
-    for (uint32_t mipLevel = 0; mipLevel < texture->numLevels; mipLevel++) {
+    for (uint32_t mipLevel = 0; mipLevel < ktxView.levelCount; mipLevel++) {
         ZoneScopedN("Upload Mip");
 
-        size_t mipOffset;
-        ktxTexture_GetImageOffset(ktxTexture(texture), mipLevel, 0, 0, &mipOffset);
-        uint32_t mipWidth = std::max(1u, texture->baseWidth >> mipLevel);
-        uint32_t mipHeight = std::max(1u, texture->baseHeight >> mipLevel);
-        uint32_t mipDepth = std::max(1u, texture->baseDepth >> mipLevel);
-        size_t mipSize = ktxTexture_GetImageSize(ktxTexture(texture), mipLevel);
-        const size_t rowPitch = ktxTexture_GetRowPitch(ktxTexture(texture), mipLevel);
+        const uint8_t* mipData = ktxView.FaceData(mipLevel, 0);
+        uint32_t mipWidth = ktxView.LevelWidth(mipLevel);
+        uint32_t mipHeight = ktxView.LevelHeight(mipLevel);
+        uint32_t mipDepth = ktxView.LevelDepth(mipLevel);
+        size_t mipSize = ktxView.FaceSize(mipLevel);
+        const size_t rowPitch = ktxView.RowPitch(mipLevel);
         const uint32_t totalRows = std::max(1u, static_cast<uint32_t>(mipSize / rowPitch));
         const uint32_t texelRowsPerRow = (mipHeight + totalRows - 1) / totalRows;
 
@@ -285,7 +275,7 @@ void TextureLoadSlot::UploadTexture(VkCommandBuffer cmd, const Core::InlineFunct
             }
 
             char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
-            memcpy(stagingPtr, texture->pData + mipOffset + static_cast<size_t>(rowsDone) * rowPitch, chunkBytes);
+            memcpy(stagingPtr, mipData + static_cast<size_t>(rowsDone) * rowPitch, chunkBytes);
 
             const uint32_t texelY = rowsDone * texelRowsPerRow;
             VkBufferImageCopy copyRegion{};
@@ -295,7 +285,7 @@ void TextureLoadSlot::UploadTexture(VkCommandBuffer cmd, const Core::InlineFunct
             copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copyRegion.imageSubresource.mipLevel = mipLevel;
             copyRegion.imageSubresource.baseArrayLayer = 0;
-            copyRegion.imageSubresource.layerCount = texture->numLayers;
+            copyRegion.imageSubresource.layerCount = ktxView.layerCount;
             copyRegion.imageOffset = {0, static_cast<int32_t>(texelY), 0};
             copyRegion.imageExtent = {mipWidth, std::min(rowsFit * texelRowsPerRow, mipHeight - texelY), mipDepth};
 
@@ -315,7 +305,7 @@ void TextureLoadSlot::UploadTexture(VkCommandBuffer cmd, const Core::InlineFunct
     // Final barrier: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL with queue family transfer
     VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
         outputTexture->image.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, texture->numLevels, 0, texture->numLayers),
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, ktxView.levelCount, 0, ktxView.layerCount),
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
@@ -327,8 +317,8 @@ void TextureLoadSlot::UploadTexture(VkCommandBuffer cmd, const Core::InlineFunct
 
     outputTexture->acquireBarrier = Render::VkHelpers::FromVkBarrier(finalBarrier);
 
-    ktxTexture2_Destroy(texture);
-    texture = nullptr;
+    ktxData = {};
+    ktxView = {};
 }
 
 void TextureLoadSlot::PostUploadSetup()
