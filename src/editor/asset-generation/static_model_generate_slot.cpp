@@ -134,8 +134,19 @@ bool StaticModelGenerateSlot::LoadGltf()
     int32_t _progress = 0;
     int32_t stepDiff = 50 / 9;
 
-    const uint64_t gltfFileSize = Platform::GetFileSize(gltfPath);
-    const size_t arenaBytes = static_cast<size_t>(gltfFileSize * 3 + (8ull << 20));
+    Platform::ScopedFileMapping gltfMapping(gltfPath);
+    if (gltfMapping.data == nullptr) {
+        LOG_ERROR(Asset, "Failed to map glTF file: {}", gltfPath.c_str());
+        return false;
+    }
+
+    uint64_t jsonSize = gltfMapping.size;
+    if (gltfMapping.size >= 16 && memcmp(gltfMapping.data, "glTF", 4) == 0) {
+        uint32_t jsonChunkLength = 0;
+        memcpy(&jsonChunkLength, gltfMapping.data + 12, sizeof(jsonChunkLength));
+        jsonSize = jsonChunkLength;
+    }
+    const size_t arenaBytes = static_cast<size_t>(jsonSize) * 3 + (2ull << 20);
     Core::HeapArray<uint8_t> parseArenaStorage(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, arenaBytes);
     GltfParseArena parseArena{parseArenaStorage.Data(), parseArenaStorage.Size(), 0, &memoryManager->AssetsScratch()};
 
@@ -145,7 +156,7 @@ bool StaticModelGenerateSlot::LoadGltf()
     options.memory.user_data = &parseArena;
 
     cgltf_data* gltfData = nullptr;
-    const cgltf_result parseResult = cgltf_parse_file(&options, gltfPath.c_str(), &gltfData);
+    const cgltf_result parseResult = cgltf_parse(&options, gltfMapping.data, gltfMapping.size, &gltfData);
     if (parseResult != cgltf_result_success) {
         LOG_ERROR(Asset, "Failed to parse glTF file ({}): cgltf result {}", gltfPath.Filename(), static_cast<int>(parseResult));
         return false;

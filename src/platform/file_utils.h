@@ -71,6 +71,30 @@ uint64_t GetFileSize(const char* path);
 uint64_t GetFileSize(const Core::Path& path);
 
 /**
+ * Read-only memory-mapped view of an entire file. data is null on failure (including empty files). Release with UnmapFile.
+ */
+struct FileMapping
+{
+    const uint8_t* data{nullptr};
+    uint64_t size{0};
+    void* fileHandle{nullptr};
+    void* mappingHandle{nullptr};
+};
+
+FileMapping MapFileReadOnly(const Core::Path& path);
+
+void UnmapFile(FileMapping& mapping);
+
+/** RAII FileMapping */
+struct ScopedFileMapping : FileMapping
+{
+    explicit ScopedFileMapping(const Core::Path& path) : FileMapping(MapFileReadOnly(path)) {}
+    ~ScopedFileMapping() { UnmapFile(*this); }
+    ScopedFileMapping(const ScopedFileMapping&) = delete;
+    ScopedFileMapping& operator=(const ScopedFileMapping&) = delete;
+};
+
+/**
  * Recursively enumerates all files under path and appends their paths to out.
  * @param path
  * @param out

@@ -121,6 +121,42 @@ uint64_t GetFileSize(const char* path)
 
 uint64_t GetFileSize(const Core::Path& path) { return GetFileSize(path.c_str()); }
 
+FileMapping MapFileReadOnly(const Core::Path& path)
+{
+    FileMapping mapping{};
+    HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) { return mapping; }
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file, &size) || size.QuadPart == 0) {
+        CloseHandle(file);
+        return mapping;
+    }
+    HANDLE mapHandle = CreateFileMappingA(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    if (mapHandle == nullptr) {
+        CloseHandle(file);
+        return mapping;
+    }
+    const void* view = MapViewOfFile(mapHandle, FILE_MAP_READ, 0, 0, 0);
+    if (view == nullptr) {
+        CloseHandle(mapHandle);
+        CloseHandle(file);
+        return mapping;
+    }
+    mapping.data = static_cast<const uint8_t*>(view);
+    mapping.size = static_cast<uint64_t>(size.QuadPart);
+    mapping.fileHandle = file;
+    mapping.mappingHandle = mapHandle;
+    return mapping;
+}
+
+void UnmapFile(FileMapping& mapping)
+{
+    if (mapping.data != nullptr) { UnmapViewOfFile(mapping.data); }
+    if (mapping.mappingHandle != nullptr) { CloseHandle(static_cast<HANDLE>(mapping.mappingHandle)); }
+    if (mapping.fileHandle != nullptr) { CloseHandle(static_cast<HANDLE>(mapping.fileHandle)); }
+    mapping = {};
+}
+
 void RecursiveDirectoryIterator(const Core::Path& dir, Core::Vector<Core::Path>& out)
 {
     Core::Path search = dir / "*";
