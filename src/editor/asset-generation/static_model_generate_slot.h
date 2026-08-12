@@ -40,7 +40,7 @@ public:
         Core::InlineFunction<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(ModelGenerateSlotHandle slotHandle, const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath, uint64_t modelId, uint64_t contentVersion);
+    void Launch(ModelGenerateSlotHandle slotHandle, const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath, uint64_t modelId, uint64_t contentVersion, bool bSkipExistingTextures);
 
     void Clear();
 
@@ -49,6 +49,7 @@ public:
     Core::Path textureOutputPath;
     uint64_t modelId{0};
     uint64_t contentVersion{1};
+    bool bSkipExistingTextures{false};
 
 private:
     struct GenerateTask : enki::ITaskSet
@@ -77,6 +78,8 @@ private:
     static VkFilter ExtractFilter(cgltf_filter_type filter);
 
     static VkSamplerMipmapMode ExtractMipmapMode(cgltf_filter_type filter);
+
+    static VkSamplerAddressMode ExtractAddressMode(cgltf_wrap_mode wrap);
 
     static MaterialProperties ExtractMaterial(const cgltf_data& gltf, const cgltf_material& gltfMaterial);
 

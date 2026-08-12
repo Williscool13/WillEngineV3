@@ -65,6 +65,7 @@ struct ModelGenerateRequest
     Core::Path textureOutputPath;
     uint64_t modelId{0};
     uint64_t contentVersion{1};
+    bool bSkipExistingTextures{false};
 };
 
 struct ModelGenerateComplete
@@ -162,7 +163,7 @@ public:
 
     ~AssetGenerator();
 
-    void RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath = {});
+    void RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath = {}, bool bSkipExistingTextures = false);
 
     bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
 

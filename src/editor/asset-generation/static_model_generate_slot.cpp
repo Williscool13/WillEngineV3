@@ -18,6 +18,7 @@
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/model/model_format.h"
+#include "engine/resources/texture/texture_format.h"
 #include "engine/serialization/serialization.h"
 #include "asset-load/asset_load_utils.h"
 #include "render/render_utils.h"
@@ -74,7 +75,7 @@ void StaticModelGenerateSlot::Initialize(
     _notifyCallback = std::move(notifyCallback);
 }
 
-void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const Core::Path& _gltfPath, const Core::Path& _outputPath, const Core::Path& _textureOutputPath, uint64_t _modelId, uint64_t _contentVersion)
+void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const Core::Path& _gltfPath, const Core::Path& _outputPath, const Core::Path& _textureOutputPath, uint64_t _modelId, uint64_t _contentVersion, bool _bSkipExistingTextures)
 {
     gltfPath = Core::Path{};
     slotHandle = _slotHandle;
@@ -83,6 +84,7 @@ void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const 
     textureOutputPath = _textureOutputPath;
     modelId = _modelId;
     contentVersion = _contentVersion;
+    bSkipExistingTextures = _bSkipExistingTextures;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -190,6 +192,8 @@ bool StaticModelGenerateSlot::LoadGltf()
             rawModel.samplerInfos[i].magFilter = ExtractFilter(gltfSampler.mag_filter != cgltf_filter_type_undefined ? gltfSampler.mag_filter : cgltf_filter_type_nearest);
             rawModel.samplerInfos[i].minFilter = ExtractFilter(gltfSampler.min_filter != cgltf_filter_type_undefined ? gltfSampler.min_filter : cgltf_filter_type_nearest);
             rawModel.samplerInfos[i].mipmapMode = ExtractMipmapMode(gltfSampler.min_filter != cgltf_filter_type_undefined ? gltfSampler.min_filter : cgltf_filter_type_linear);
+            rawModel.samplerInfos[i].addressModeU = ExtractAddressMode(gltfSampler.wrap_s);
+            rawModel.samplerInfos[i].addressModeV = ExtractAddressMode(gltfSampler.wrap_t);
         }
     }
 
@@ -451,11 +455,12 @@ bool StaticModelGenerateSlot::LoadGltf()
 
                     // todo: Skinned Rendering will be done in another model format (JOINTS_0/WEIGHTS_0 in the skinned generate slot)
 
-                    // UV (unpack_floats applies KHR_mesh_quantization normalization; clamp matches the spec's signed-normalized floor of -1)
+                    // UV (unpack_floats applies KHR_mesh_quantization normalization; the -1 snorm floor only applies to normalized accessors, raw float tiling UVs may span far below -1)
                     if (uvAccessor != nullptr) {
                         cgltf_accessor_unpack_floats(uvAccessor, attrScratch.Data(), uvAccessor->count * 2);
+                        const float uvFloor = uvAccessor->normalized ? -1.0f : -FLT_MAX;
                         for (size_t v = 0; v < uvAccessor->count; ++v) {
-                            primitiveVertices[v].uv = {std::max(attrScratch[v * 2 + 0], -1.0f), std::max(attrScratch[v * 2 + 1], -1.0f)};
+                            primitiveVertices[v].uv = {std::max(attrScratch[v * 2 + 0], uvFloor), std::max(attrScratch[v * 2 + 1], uvFloor)};
                         }
                     }
 
@@ -1014,8 +1019,17 @@ bool StaticModelGenerateSlot::WriteStaticModel()
 
             if (const Engine::TextureID* existing = seenTextures.Find(textureOutPath)) {
                 textureIDs[i] = *existing;
+                continue;
             }
-            else if (image.data.IsAllocated()) {
+            if (bSkipExistingTextures) {
+                // Reuse only current-major textures; stale/missing ones still regenerate so skip mode never wires a dead ID
+                if (auto header = Engine::ReadWTextureHeaderAnyVersion(textureOutPath); header && header->major == Engine::TEXTURE_MAJOR_VERSION) {
+                    textureIDs[i] = Engine::TextureID{header->textureId};
+                    seenTextures.Insert(textureOutPath, textureIDs[i]);
+                    continue;
+                }
+            }
+            if (image.data.IsAllocated()) {
                 textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i], Engine::TextureCategory::Model,
                                                                             modelId, static_cast<uint32_t>(i));
                 seenTextures.Insert(textureOutPath, textureIDs[i]);
@@ -1180,6 +1194,19 @@ VkFilter StaticModelGenerateSlot::ExtractFilter(cgltf_filter_type filter)
         case cgltf_filter_type_linear_mipmap_linear:
         default:
             return VK_FILTER_LINEAR;
+    }
+}
+
+VkSamplerAddressMode StaticModelGenerateSlot::ExtractAddressMode(cgltf_wrap_mode wrap)
+{
+    switch (wrap) {
+        case cgltf_wrap_mode_clamp_to_edge:
+            return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        case cgltf_wrap_mode_mirrored_repeat:
+            return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        case cgltf_wrap_mode_repeat:
+        default:
+            return VK_SAMPLER_ADDRESS_MODE_REPEAT;
     }
 }
 

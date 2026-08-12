@@ -1164,6 +1164,8 @@ void WillEngine::EditorImgui()
             sourceCatalog->Scan(memoryManager);
         }
 
+        static bool bSkipModelTextures = false;
+
         auto requestGenerate = [this](const Editor::AssetSourceEntry& entry) {
             const Core::Path output = Editor::AssetSourceCatalog::OutputPathFor(entry);
             if (output.IsEmpty()) {
@@ -1172,7 +1174,7 @@ void WillEngine::EditorImgui()
             switch (entry.kind) {
                 case Editor::AssetSourceKind::Model:
                 {
-                    assetGenerator->RequestModelGenerate(entry.sourcePath, output, Editor::AssetSourceCatalog::TextureOutputDirFor(entry));
+                    assetGenerator->RequestModelGenerate(entry.sourcePath, output, Editor::AssetSourceCatalog::TextureOutputDirFor(entry), bSkipModelTextures);
                     break;
                 }
                 case Editor::AssetSourceKind::Texture:
@@ -1215,6 +1217,8 @@ void WillEngine::EditorImgui()
             }
         }
         ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::Checkbox("Skip Existing Model Textures", &bSkipModelTextures);
         if (sourceCatalog->staleModelTextureCount > 0) {
             ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "Old-format model textures on disk: %u", sourceCatalog->staleModelTextureCount);
             ImGui::SameLine();

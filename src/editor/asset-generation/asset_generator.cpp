@@ -106,7 +106,7 @@ void AssetGenerator::ThreadMain()
                 Core::Handle<StaticModelGenerateSlot> slotHandle = modelGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     StaticModelGenerateSlot& task = modelGenerateTasks[slotHandle.index];
-                    task.Launch(slotHandle, req.gltfPath, req.outputPath, req.textureOutputPath, req.modelId, req.contentVersion);
+                    task.Launch(slotHandle, req.gltfPath, req.outputPath, req.textureOutputPath, req.modelId, req.contentVersion, req.bSkipExistingTextures);
                 }
                 else {
                     modelGenerateRequestQueue.enqueue(req);
@@ -217,7 +217,7 @@ void AssetGenerator::GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence
     renderThread->editorGPUDispatchQueue.enqueue({cmd, fence, completionSignal, VK_NULL_HANDLE, VK_NULL_HANDLE});
 }
 
-void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath)
+void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath, bool bSkipExistingTextures)
 {
     ZoneScoped;
 
@@ -229,7 +229,7 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
             contentVersion = header->contentVersion + 1;
         }
     }
-    modelGenerateRequestQueue.enqueue({gltfPath, outputPath, textureOutputPath, modelId, contentVersion});
+    modelGenerateRequestQueue.enqueue({gltfPath, outputPath, textureOutputPath, modelId, contentVersion, bSkipExistingTextures});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
