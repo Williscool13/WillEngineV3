@@ -1180,7 +1180,7 @@ void WillEngine::EditorImgui()
                     bool mips = true;
                     bool flipY = true;
                     DXGI_FORMAT format = DXGI_FORMAT_BC7_UNORM_SRGB;
-                    if (auto header = ReadWTextureHeader(output); header && header->genSource[0] != '\0') {
+                    if (auto header = ReadWTextureHeaderAnyVersion(output); header && header->genSource[0] != '\0') {
                         format = static_cast<DXGI_FORMAT>(header->genFormat);
                         mips = header->bGenMips;
                         flipY = header->bGenFlipY;
@@ -1209,12 +1209,17 @@ void WillEngine::EditorImgui()
         const auto regenLabel = Core::InlineString<64>::Format("Regenerate Outdated (%u)###regen_outdated", sourceCatalog->outdatedCount);
         if (ImGui::Button(regenLabel.c_str())) {
             for (const Editor::AssetSourceEntry& entry : sourceCatalog->entries) {
-                if (entry.state == Editor::AssetOutputState::Outdated && entry.kind != Editor::AssetSourceKind::Font) {
+                if (entry.state != Editor::AssetOutputState::Current && entry.state != Editor::AssetOutputState::Missing && entry.kind != Editor::AssetSourceKind::Font) {
                     requestGenerate(entry);
                 }
             }
         }
         ImGui::EndDisabled();
+        if (sourceCatalog->staleModelTextureCount > 0) {
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "Old-format model textures on disk: %u", sourceCatalog->staleModelTextureCount);
+            ImGui::SameLine();
+            ImGui::TextDisabled("(regenerate their models; whatever remains is orphaned)");
+        }
 
         const std::string_view assetRootView = Platform::GetAssetPath().View();
         auto drawSourceSection = [&](const char* title, Editor::AssetSourceKind kind, ImGuiTreeNodeFlags flags) {
@@ -1246,9 +1251,13 @@ void WillEngine::EditorImgui()
                     ImGui::SameLine();
                     ImGui::TextDisabled("not generated");
                 }
-                else if (entry.state == Editor::AssetOutputState::Outdated) {
+                if (entry.state == Editor::AssetOutputState::Outdated || entry.state == Editor::AssetOutputState::OutdatedAndDerivativeContent) {
                     ImGui::SameLine();
                     ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "outdated");
+                }
+                if (entry.state == Editor::AssetOutputState::DerivativeContentOutdated || entry.state == Editor::AssetOutputState::OutdatedAndDerivativeContent) {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "textures outdated");
                 }
                 ImGui::PopID();
             }

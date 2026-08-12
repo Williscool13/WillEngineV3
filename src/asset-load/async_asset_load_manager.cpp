@@ -51,7 +51,7 @@ static uint64_t Mip0ByteSize(const Engine::Texture* texture)
         case VK_FORMAT_BC7_SRGB_BLOCK:
             return static_cast<uint64_t>((width + 3) / 4) * ((height + 3) / 4) * 16;
         case VK_FORMAT_UNDEFINED:
-            // Disk textures don't know their format until the KTX blob is parsed; full chain is ~4/3 of mip0
+            // Disk textures don't know their format until the image blob is parsed; full chain is ~4/3 of mip0
             return texture->uncompressedSize * 3 / 4;
         default:
             return static_cast<uint64_t>(width) * height * Render::VkHelpers::GetBytesPerPixel(texture->format);

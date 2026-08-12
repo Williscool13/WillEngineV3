@@ -35,7 +35,7 @@ struct ProbeFaceOrientation
     glm::vec3 up;
 };
 
-// Vulkan/KTX2 cube layer order: +X, -X, +Y, -Y, +Z, -Z (Y-up, GLM).
+// Vulkan cube layer order: +X, -X, +Y, -Y, +Z, -Z (Y-up, GLM).
 // Y rows are swapped in this engine though
 static const ProbeFaceOrientation kProbeFaceOrientations[6] = {
     {{ 1.0f,  0.0f,  0.0f}, { 0.0f, -1.0f,  0.0f}},

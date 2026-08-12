@@ -47,7 +47,7 @@ bool WriteWProbeHeader(std::ostream& out, const WProbeHeader& header)
     return out.good();
 }
 
-std::optional<WProbeHeader> ReadWProbeHeader(std::istream& in)
+static std::optional<WProbeHeader> ReadWProbeHeaderInternal(std::istream& in, bool bAnyVersion)
 {
     constexpr size_t LINE_BUF = 256;
     char line[LINE_BUF];
@@ -72,9 +72,9 @@ std::optional<WProbeHeader> ReadWProbeHeader(std::istream& in)
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
-            uint32_t major = 0;
-            std::from_chars(line + 8, lineEnd, major);
-            if (major != PROBE_MAJOR_VERSION) { return std::nullopt; }
+            auto res = std::from_chars(line + 8, lineEnd, header.major);
+            if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, lineEnd, header.minor); }
+            if (!bAnyVersion && header.major != PROBE_MAJOR_VERSION) { return std::nullopt; }
         }
         else if (strncmp(line, "probe_id ", 9) == 0) { std::from_chars(line + 9, lineEnd, header.probeId); }
         else if (strncmp(line, "id ", 3) == 0) { std::from_chars(line + 3, lineEnd, header.environmentMapId); }
@@ -105,9 +105,20 @@ std::optional<WProbeHeader> ReadWProbeHeader(std::istream& in)
     return std::nullopt;
 }
 
+std::optional<WProbeHeader> ReadWProbeHeader(std::istream& in)
+{
+    return ReadWProbeHeaderInternal(in, false);
+}
+
 std::optional<WProbeHeader> ReadWProbeHeader(const Core::Path& path)
 {
     std::ifstream f(path.c_str(), std::ios::binary);
     return ReadWProbeHeader(f);
+}
+
+std::optional<WProbeHeader> ReadWProbeHeaderAnyVersion(const Core::Path& path)
+{
+    std::ifstream f(path.c_str(), std::ios::binary);
+    return ReadWProbeHeaderInternal(f, true);
 }
 } // Engine

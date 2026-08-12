@@ -7,13 +7,13 @@
 #include <fstream>
 #include <spdlog/spdlog.h>
 #include <stb/stb_image.h>
-#include <ktx.h>
 #include <tracy/Tracy.hpp>
 
 #include "asset_generation_types.h"
 #include "engine/compression/compression.h"
 #include "engine/resources/environment_map/environment_map_format.h"
 #include "engine/resources/environment_map/probe_format.h"
+#include "engine/resources/wimage_format.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
@@ -830,7 +830,7 @@ bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, c
     );
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
-    // Copy all mip faces back to CPU for KTX generation
+    // Copy all mip faces back to CPU for blob serialization
     {
         ZoneScopedN("CopyCubemapToCPU");
 
@@ -868,44 +868,22 @@ bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
 {
     ZoneScopedN("WriteWEnvMapFile");
 
-    ktxTexture2* texture;
-    ktxTextureCreateInfo createInfo{};
-    createInfo.vkFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-    createInfo.baseWidth = baseResolution;
-    createInfo.baseHeight = baseResolution;
-    createInfo.baseDepth = 1;
-    createInfo.numDimensions = 2;
-    createInfo.numLevels = ENVIRONMENT_MAP_MIPS;
-    createInfo.numLayers = 1;
-    createInfo.numFaces = 6;
-    createInfo.isArray = KTX_FALSE;
-    createInfo.generateMipmaps = KTX_FALSE;
-
-    ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
-    if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to create KTX texture");
+    const Engine::WImageDesc desc{VK_FORMAT_R16G16B16A16_SFLOAT, baseResolution, baseResolution, ENVIRONMENT_MAP_MIPS, 6};
+    const size_t blobSize = Engine::WImageBlobSize(desc);
+    auto blob = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, blobSize);
+    if (Engine::WImageBlobInit(blob.Data(), blob.Size(), desc) == 0) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to lay out environment map image blob");
         return false;
     }
     for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_MIPS; mip++) {
         for (uint32_t face = 0; face < 6; face++) {
-            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, face, mipData[mip][face].Data(), mipData[mip][face].Size());
+            memcpy(Engine::WImageFaceData(blob.Data(), mip, face), mipData[mip][face].Data(), mipData[mip][face].Size());
         }
     }
 
-    ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t ktxSize{0};
-    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
-    ktxTexture_Destroy(ktxTexture(texture));
-
-    if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to serialise KTX texture to memory");
-        return false;
-    }
-
-    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_ENV_MAP_COMPRESSION, ktxSize);
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_ENV_MAP_COMPRESSION, blobSize);
     auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_ENV_MAP_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
-    free(ktxBytes);
+    size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_ENV_MAP_COMPRESSION, blob.Data(), blobSize, compressed.Data(), compressed.Size());
 
     Engine::WEnvMapHeader header{};
     header.environmentMapId = environmentMapId.id;
@@ -913,7 +891,7 @@ bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
     header.width = baseResolution;
     header.height = baseResolution;
     header.mipCount = ENVIRONMENT_MAP_MIPS;
-    header.uncompressedSize = ktxSize;
+    header.uncompressedSize = blobSize;
     header.dataSize = realCompressedSize;
 
     Core::InlineString stem{imagePath.IsEmpty() ? Core::InlineString(outputPath.Stem()) : Core::InlineString(imagePath.Stem())};
@@ -942,44 +920,22 @@ bool EnvironmentMapGenerateSlot::WriteWProbeFile()
 {
     ZoneScopedN("WriteWProbeFile");
 
-    ktxTexture2* texture;
-    ktxTextureCreateInfo createInfo{};
-    createInfo.vkFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-    createInfo.baseWidth = baseResolution;
-    createInfo.baseHeight = baseResolution;
-    createInfo.baseDepth = 1;
-    createInfo.numDimensions = 2;
-    createInfo.numLevels = ENVIRONMENT_MAP_MIPS;
-    createInfo.numLayers = 1;
-    createInfo.numFaces = 6;
-    createInfo.isArray = KTX_FALSE;
-    createInfo.generateMipmaps = KTX_FALSE;
-
-    ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
-    if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to create KTX texture");
+    const Engine::WImageDesc desc{VK_FORMAT_R16G16B16A16_SFLOAT, baseResolution, baseResolution, ENVIRONMENT_MAP_MIPS, 6};
+    const size_t blobSize = Engine::WImageBlobSize(desc);
+    auto blob = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, blobSize);
+    if (Engine::WImageBlobInit(blob.Data(), blob.Size(), desc) == 0) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to lay out probe image blob");
         return false;
     }
     for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_MIPS; mip++) {
         for (uint32_t face = 0; face < 6; face++) {
-            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, face, mipData[mip][face].Data(), mipData[mip][face].Size());
+            memcpy(Engine::WImageFaceData(blob.Data(), mip, face), mipData[mip][face].Data(), mipData[mip][face].Size());
         }
     }
 
-    ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t ktxSize{0};
-    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
-    ktxTexture_Destroy(ktxTexture(texture));
-
-    if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to serialise KTX texture to memory");
-        return false;
-    }
-
-    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_ENV_MAP_COMPRESSION, ktxSize);
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_ENV_MAP_COMPRESSION, blobSize);
     auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_ENV_MAP_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
-    free(ktxBytes);
+    size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_ENV_MAP_COMPRESSION, blob.Data(), blobSize, compressed.Data(), compressed.Size());
 
     Engine::WProbeHeader header{};
     header.probeId = probeId;
@@ -988,7 +944,7 @@ bool EnvironmentMapGenerateSlot::WriteWProbeFile()
     header.width = baseResolution;
     header.height = baseResolution;
     header.mipCount = ENVIRONMENT_MAP_MIPS;
-    header.uncompressedSize = ktxSize;
+    header.uncompressedSize = blobSize;
     header.dataSize = realCompressedSize;
     header.resolution = baseResolution;
     header.snapshot = probeSnapshot;

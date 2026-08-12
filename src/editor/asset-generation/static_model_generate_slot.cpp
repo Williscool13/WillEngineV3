@@ -288,7 +288,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                 if (bPng || bJpg) {
                     char indexBuf[16];
                     *std::to_chars(indexBuf, indexBuf + sizeof(indexBuf), i).ptr = '\0';
-                    Core::InlineString<300> relName("textures/");
+                    Core::InlineString<300> relName(".extracted/");
                     relName.Append(gltfPath.Stem());
                     relName.Append("_texture_");
                     relName.Append(indexBuf);
@@ -990,6 +990,10 @@ bool StaticModelGenerateSlot::WriteStaticModel()
                 if (relPath.starts_with(texPrefix)) {
                     relPath = relPath.substr(texPrefix.size());
                 }
+                constexpr std::string_view extractedPrefix = ".extracted/";
+                if (relPath.starts_with(extractedPrefix)) {
+                    relPath = relPath.substr(extractedPrefix.size());
+                }
 
                 const size_t dotPos = relPath.rfind('.');
                 const std::string_view stem = relPath.substr(0, dotPos != std::string_view::npos ? dotPos : relPath.size());
@@ -1012,12 +1016,14 @@ bool StaticModelGenerateSlot::WriteStaticModel()
                 textureIDs[i] = *existing;
             }
             else if (image.data.IsAllocated()) {
-                textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i], Engine::TextureCategory::Model);
+                textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i], Engine::TextureCategory::Model,
+                                                                            modelId, static_cast<uint32_t>(i));
                 seenTextures.Insert(textureOutPath, textureIDs[i]);
             }
             else {
                 const Core::Path fullSourcePath = gltfPath.Parent() / image.sourcePath.c_str();
-                textureIDs[i] = generator->RequestTextureGenerateFromFile(fullSourcePath, textureOutPath, true, preferredImageFormats[i], false, Engine::TextureCategory::Model);
+                textureIDs[i] = generator->RequestTextureGenerateFromFile(fullSourcePath, textureOutPath, true, preferredImageFormats[i], false, Engine::TextureCategory::Model,
+                                                                          modelId, static_cast<uint32_t>(i));
                 seenTextures.Insert(textureOutPath, textureIDs[i]);
             }
         }

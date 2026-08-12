@@ -14,8 +14,8 @@
 
 namespace Engine
 {
-constexpr uint32_t ENV_MAP_MAJOR_VERSION = 0;
-constexpr uint32_t ENV_MAP_MINOR_VERSION = 1;
+constexpr uint32_t ENV_MAP_MAJOR_VERSION = 1;
+constexpr uint32_t ENV_MAP_MINOR_VERSION = 0;
 constexpr size_t WENVMAP_NAME_LENGTH = 128;
 
 struct WEnvMapHeader
@@ -38,10 +38,9 @@ struct WEnvMapHeader
 };
 
 bool WriteWEnvMapHeader(std::ostream& out, const WEnvMapHeader& header);
-
 std::optional<WEnvMapHeader> ReadWEnvMapHeader(std::istream& in);
-
 std::optional<WEnvMapHeader> ReadWEnvMapHeader(const Core::Path& path);
+std::optional<WEnvMapHeader> ReadWEnvMapHeaderAnyVersion(const Core::Path& path);
 } // Engine
 
 #endif //WILL_ENGINE_ENVIRONMENT_MAP_FORMAT_H

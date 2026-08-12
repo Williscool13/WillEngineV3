@@ -14,8 +14,8 @@
 
 namespace Engine
 {
-constexpr uint32_t TEXTURE_MAJOR_VERSION = 0;
-constexpr uint32_t TEXTURE_MINOR_VERSION = 7;
+constexpr uint32_t TEXTURE_MAJOR_VERSION = 1;
+constexpr uint32_t TEXTURE_MINOR_VERSION = 1;
 constexpr size_t WTEXTURE_NAME_LENGTH = 128;
 constexpr size_t WTEXTURE_GEN_SOURCE_LENGTH = 256;
 
@@ -54,13 +54,16 @@ struct WTextureHeader
     bool bGenFlipY{false};
 
     TextureCategory category{TextureCategory::Standalone};
+
+    /** Model-owned textures only */
+    uint64_t ownerModelId{0};
+    uint32_t ownerImageIndex{UINT32_MAX};
 };
 
 bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header);
-
 std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in);
-
 std::optional<WTextureHeader> ReadWTextureHeader(const Core::Path& path);
+std::optional<WTextureHeader> ReadWTextureHeaderAnyVersion(const Core::Path& path);
 } // Engine
 
 #endif //WILL_ENGINE_TEXTURE_FORMAT_H

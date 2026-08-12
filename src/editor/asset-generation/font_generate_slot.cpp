@@ -11,12 +11,12 @@
 #include "core/containers/vector.h"
 
 #include <volk.h>
-#include <ktx.h>
 #include <msdf-atlas-gen/msdf-atlas-gen.h>
 
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/font/font_format.h"
+#include "engine/resources/wimage_format.h"
 #include "platform/file_utils.h"
 
 namespace Editor
@@ -135,41 +135,19 @@ bool FontGenerateSlot::GenerateAndWrite()
         }
     }
 
-    ktxTexture2* ktxTex{nullptr};
-    ktxTextureCreateInfo ktxInfo{};
-    ktxInfo.vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
-    ktxInfo.baseWidth = static_cast<uint32_t>(atlasWidth);
-    ktxInfo.baseHeight = static_cast<uint32_t>(atlasHeight);
-    ktxInfo.baseDepth = 1;
-    ktxInfo.numDimensions = 2;
-    ktxInfo.numLevels = 1;
-    ktxInfo.numLayers = 1;
-    ktxInfo.numFaces = 1;
-    ktxInfo.isArray = KTX_FALSE;
-    ktxInfo.generateMipmaps = KTX_FALSE;
-
-    if (ktxTexture2_Create(&ktxInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &ktxTex) != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to create KTX2 texture for font atlas");
+    const Engine::WImageDesc desc{VK_FORMAT_R8G8B8A8_UNORM, static_cast<uint32_t>(atlasWidth), static_cast<uint32_t>(atlasHeight), 1, 1};
+    const size_t blobSize = Engine::WImageBlobSize(desc);
+    Core::HeapArray<uint8_t> blob(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, blobSize);
+    if (Engine::WImageBlobInit(blob.Data(), blob.Size(), desc) == 0) {
+        LOG_ERROR(Asset, "Failed to lay out font atlas image blob");
         msdfgen::destroyFont(font);
         return false;
     }
+    memcpy(Engine::WImageFaceData(blob.Data(), 0, 0), rgba.Data(), rgba.Size());
 
-    ktxTexture_SetImageFromMemory(ktxTexture(ktxTex), 0, 0, 0, rgba.Data(), rgba.Size());
-
-    ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t ktxSize{0};
-    if (ktxTexture2_WriteToMemory(ktxTex, &ktxBytes, &ktxSize) != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to serialise font atlas KTX2 to memory");
-        ktxTexture_Destroy(ktxTexture(ktxTex));
-        msdfgen::destroyFont(font);
-        return false;
-    }
-    ktxTexture_Destroy(ktxTexture(ktxTex));
-
-    const size_t compressMaxSize = Engine::CompressMaxSize(Engine::DEFAULT_FONT_COMPRESSION, ktxSize);
+    const size_t compressMaxSize = Engine::CompressMaxSize(Engine::DEFAULT_FONT_COMPRESSION, blobSize);
     Core::HeapArray<uint8_t> atlasCompressed(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, compressMaxSize);
-    const size_t compressedSize = Engine::Compress(Engine::DEFAULT_FONT_COMPRESSION, ktxBytes, ktxSize, atlasCompressed.Data(), compressMaxSize);
-    free(ktxBytes);
+    const size_t compressedSize = Engine::Compress(Engine::DEFAULT_FONT_COMPRESSION, blob.Data(), blobSize, atlasCompressed.Data(), compressMaxSize);
 
     // Gather glyph metrics
     const msdf_atlas::FontGeometry::GlyphRange glyphRange = fontGeometry.getGlyphs();
@@ -258,7 +236,7 @@ bool FontGenerateSlot::GenerateAndWrite()
     header.atlasHeight = static_cast<uint32_t>(atlasHeight);
     header.glyphCount = static_cast<uint32_t>(glyphInfos.Size());
     header.atlasDataSize = static_cast<uint64_t>(compressedSize);
-    header.atlasUncompressedSize = static_cast<uint64_t>(ktxSize);
+    header.atlasUncompressedSize = static_cast<uint64_t>(blobSize);
     header.contourGlyphCount = static_cast<uint32_t>(glyphContourRanges.Size());
     header.contourCount = static_cast<uint32_t>(contourRanges.Size());
     header.edgeCount = static_cast<uint32_t>(contourEdges.Size());

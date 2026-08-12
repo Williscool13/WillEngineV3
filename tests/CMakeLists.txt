@@ -4,6 +4,7 @@ add_executable(engine-tests
         containers/container_tests.cpp
         core/string_id_tests.cpp
         core/math_tests.cpp
+        engine/wimage_tests.cpp
 )
 
 target_link_libraries(engine-tests PRIVATE

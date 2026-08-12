@@ -7,6 +7,9 @@
 #include "core/containers/vector.h"
 #include "core/memory/memory_manager.h"
 #include "engine/logging/engine_log.h"
+#include "engine/resources/environment_map/environment_map_format.h"
+#include "engine/resources/font/font_format.h"
+#include "engine/resources/model/model_format.h"
 #include "engine/resources/texture/texture_format.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
@@ -49,7 +52,7 @@ static Core::Path SiblingOutput(const Core::Path& source, const char* wExt)
     return source.Parent() / name.c_str();
 }
 
-static AssetOutputState ComputeOutputState(const Core::Path& source, const Core::Path& output)
+static AssetOutputState ComputeOutputState(AssetSourceKind kind, const Core::Path& source, const Core::Path& output)
 {
     if (output.IsEmpty()) {
         return AssetOutputState::Missing;
@@ -58,7 +61,31 @@ static AssetOutputState ComputeOutputState(const Core::Path& source, const Core:
     if (outputTime == 0) {
         return AssetOutputState::Missing;
     }
-    return Platform::GetFileWriteTime(source) > outputTime ? AssetOutputState::Outdated : AssetOutputState::Current;
+    if (Platform::GetFileWriteTime(source) > outputTime) {
+        return AssetOutputState::Outdated;
+    }
+
+    switch (kind) {
+        case AssetSourceKind::Texture: {
+            auto header = Engine::ReadWTextureHeaderAnyVersion(output);
+            if (!header || header->major != Engine::TEXTURE_MAJOR_VERSION) { return AssetOutputState::Outdated; }
+            break;
+        }
+        case AssetSourceKind::EnvironmentMap: {
+            auto header = Engine::ReadWEnvMapHeaderAnyVersion(output);
+            if (!header || header->major != Engine::ENV_MAP_MAJOR_VERSION) { return AssetOutputState::Outdated; }
+            break;
+        }
+        case AssetSourceKind::Font: {
+            auto header = Engine::ReadWFontHeaderAnyVersion(output);
+            if (!header || header->major != Engine::FONT_MAJOR_VERSION || header->minor > Engine::FONT_MINOR_VERSION) { return AssetOutputState::Outdated; }
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+    return AssetOutputState::Current;
 }
 
 Core::Path AssetSourceCatalog::OutputPathFor(const AssetSourceEntry& entry)
@@ -115,6 +142,14 @@ void AssetSourceCatalog::Scan(Core::MemoryManager& memoryManager)
     const Core::Path assetRoot = Platform::GetAssetPath();
     Core::Vector<Core::Path> paths(&memoryManager.AssetsScratch(), Core::AllocTag::AssetGenerator);
     Platform::RecursiveDirectoryIterator(assetRoot, paths);
+    for (uint32_t i = 0; i < paths.Size();) {
+        if (paths[i].HasHiddenSegment()) {
+            paths.RemoveAt(i);
+        }
+        else {
+            ++i;
+        }
+    }
 
     Core::InlineVector<Core::Path, 64> modelDirs;
     for (const Core::Path& path : paths) {
@@ -136,26 +171,49 @@ void AssetSourceCatalog::Scan(Core::MemoryManager& memoryManager)
         Core::Path output;
     };
     Core::Vector<ClaimedSource> claimed(&memoryManager.AssetsScratch(), Core::AllocTag::AssetGenerator);
+    Core::Vector<uint64_t> staleTextureOwners(&memoryManager.AssetsScratch(), Core::AllocTag::AssetGenerator);
+    staleModelTextureCount = 0;
     for (const Core::Path& path : paths) {
         if (path.Extension() != ".wtexture") {
             continue;
         }
-        auto header = Engine::ReadWTextureHeader(path);
-        if (!header || header->genSource[0] == '\0') {
+        auto header = Engine::ReadWTextureHeaderAnyVersion(path);
+        if (!header) {
+            continue;
+        }
+
+        if (header->major != Engine::TEXTURE_MAJOR_VERSION && header->category == Engine::TextureCategory::Model) {
+            staleModelTextureCount++;
+            if (header->ownerModelId != 0) {
+                staleTextureOwners.PushBack(header->ownerModelId);
+            }
+        }
+        if (header->genSource[0] == '\0') {
             continue;
         }
         const Core::Path resolved = path.Parent() / header->genSource;
         claimed.PushBack({NormalizePathKey(resolved.View()), Core::Path(path)});
     }
 
-    auto push = [this](AssetSourceKind kind, const Core::Path& source, uint8_t externalIndex, const Core::Path& outputOverride = {}) {
+    auto push = [this, &staleTextureOwners](AssetSourceKind kind, const Core::Path& source, uint8_t externalIndex, const Core::Path& outputOverride = {}) {
         if (entries.IsFull()) {
             LOG_WARN(Asset, "Asset source catalog is full ({} entries); {} skipped", entries.Size(), source.c_str());
             return;
         }
         AssetSourceEntry entry{kind, AssetOutputState::Missing, externalIndex, source, outputOverride};
-        entry.state = ComputeOutputState(source, OutputPathFor(entry));
-        if (entry.state == AssetOutputState::Outdated && kind != AssetSourceKind::Font) {
+        const Core::Path output = OutputPathFor(entry);
+        entry.state = ComputeOutputState(kind, source, output);
+        if (kind == AssetSourceKind::Model && entry.state != AssetOutputState::Missing && !staleTextureOwners.IsEmpty()) {
+            if (auto modelHeader = Engine::ReadWStaticModelHeaderAnyVersion(output)) {
+                for (const uint64_t owner : staleTextureOwners) {
+                    if (owner == modelHeader->modelId) {
+                        entry.state = entry.state == AssetOutputState::Outdated ? AssetOutputState::OutdatedAndDerivativeContent : AssetOutputState::DerivativeContentOutdated;
+                        break;
+                    }
+                }
+            }
+        }
+        if (entry.state != AssetOutputState::Current && entry.state != AssetOutputState::Missing && kind != AssetSourceKind::Font) {
             outdatedCount++;
         }
         entries.PushBack(entry);

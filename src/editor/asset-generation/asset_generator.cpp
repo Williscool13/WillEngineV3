@@ -14,6 +14,7 @@
 #include "engine/resources/texture/texture_format.h"
 #include "engine/include/engine_context.h"
 #include "engine/resources/font/font_format.h"
+#include "platform/file_utils.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
 
@@ -123,10 +124,11 @@ void AssetGenerator::ThreadMain()
                     TextureGenerateSlot& task = textureGenerateTasks[slotHandle.index];
                     if (req.sourcePixels.IsAllocated()) {
                         task.LaunchFromMemory(slotHandle, std::move(req.sourcePixels), req.sourceWidth, req.sourceHeight, req.sourceBytesPerPixel, req.outputPath, req.textureId, req.mipmapped,
-                                              req.targetFormat, req.contentVersion, req.category);
+                                              req.targetFormat, req.contentVersion, req.category, req.ownerModelId, req.ownerImageIndex);
                     }
                     else {
-                        task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat, req.contentVersion, req.flipY, req.declaredName, req.recipeSource, req.category);
+                        task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat, req.contentVersion, req.flipY, req.declaredName, req.recipeSource, req.category,
+                                    req.ownerModelId, req.ownerImageIndex);
                     }
                 }
                 else {
@@ -232,57 +234,73 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
     wakeCV.notify_one();
 }
 
-Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat, bool flipY, Engine::TextureCategory category)
+AssetGenerator::RecoveredTextureIdentity AssetGenerator::RecoverTextureIdentity(const Core::Path& outputPath, uint64_t ownerModelId, uint32_t ownerImageIndex)
 {
-    ZoneScoped;
-    Engine::TextureID id{textureIdRng()};
-    uint64_t contentVersion = 1;
-    Core::InlineString<128> declaredName{};
-    Core::InlineString<256> recipeSource{};
+    RecoveredTextureIdentity out{Engine::TextureID{textureIdRng()}};
     if (outputPath.Exists()) {
-        if (auto header = Engine::ReadWTextureHeader(outputPath)) {
-            id = Engine::TextureID{header->textureId};
-            contentVersion = header->contentVersion + 1;
-            declaredName = Core::InlineString<128>(header->name);
-            recipeSource = Core::InlineString<256>(header->genSource);
+        if (auto header = Engine::ReadWTextureHeaderAnyVersion(outputPath)) {
+            out.id = Engine::TextureID{header->textureId};
+            out.contentVersion = header->contentVersion + 1;
+            out.declaredName = Core::InlineString<128>(header->name);
+            out.recipeSource = Core::InlineString<256>(header->genSource);
+        }
+        return out;
+    }
+    if (ownerModelId != 0) {
+        Core::Vector<Core::Path> files(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+        Platform::RecursiveDirectoryIterator(outputPath.Parent(), files);
+        for (const Core::Path& path : files) {
+            if (path.Extension() != ".wtexture") { continue; }
+            auto header = Engine::ReadWTextureHeaderAnyVersion(path);
+            if (header && header->ownerModelId == ownerModelId && header->ownerImageIndex == ownerImageIndex) {
+                out.id = Engine::TextureID{header->textureId};
+                out.contentVersion = header->contentVersion + 1;
+                break;
+            }
         }
     }
+    return out;
+}
+
+Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat, bool flipY, Engine::TextureCategory category,
+                                                                 uint64_t ownerModelId, uint32_t ownerImageIndex)
+{
+    ZoneScoped;
+    const RecoveredTextureIdentity identity = RecoverTextureIdentity(outputPath, ownerModelId, ownerImageIndex);
     TextureGenerateRequest req{};
     req.outputPath = outputPath;
-    req.textureId = id;
+    req.textureId = identity.id;
     req.mipmapped = mipmapped;
     req.flipY = flipY;
     req.targetFormat = targetFormat;
-    req.contentVersion = contentVersion;
-    req.declaredName = declaredName;
-    req.recipeSource = recipeSource;
+    req.contentVersion = identity.contentVersion;
+    req.declaredName = identity.declaredName;
+    req.recipeSource = identity.recipeSource;
     req.category = category;
+    req.ownerModelId = ownerModelId;
+    req.ownerImageIndex = ownerImageIndex;
     req.imagePath = imagePath;
     textureGenerateRequestQueue.enqueue(std::move(req));
     workCounter.fetch_add(1);
     wakeCV.notify_one();
-    return id;
+    return identity.id;
 }
 
 Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
-                                                                   bool mipmapped, DXGI_FORMAT targetFormat, Engine::TextureCategory category)
+                                                                   bool mipmapped, DXGI_FORMAT targetFormat, Engine::TextureCategory category,
+                                                                   uint64_t ownerModelId, uint32_t ownerImageIndex)
 {
     ZoneScoped;
-    Engine::TextureID id{textureIdRng()};
-    uint64_t contentVersion = 1;
-    if (outputPath.Exists()) {
-        if (auto header = Engine::ReadWTextureHeader(outputPath)) {
-            id = Engine::TextureID{header->textureId};
-            contentVersion = header->contentVersion + 1;
-        }
-    }
+    const RecoveredTextureIdentity identity = RecoverTextureIdentity(outputPath, ownerModelId, ownerImageIndex);
     TextureGenerateRequest req{};
     req.outputPath = outputPath;
-    req.textureId = id;
+    req.textureId = identity.id;
     req.mipmapped = mipmapped;
     req.targetFormat = targetFormat;
-    req.contentVersion = contentVersion;
+    req.contentVersion = identity.contentVersion;
     req.category = category;
+    req.ownerModelId = ownerModelId;
+    req.ownerImageIndex = ownerImageIndex;
     req.sourcePixels = std::move(pixels);
     req.sourceWidth = w;
     req.sourceHeight = h;
@@ -290,7 +308,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArr
     textureGenerateRequestQueue.enqueue(std::move(req));
     workCounter.fetch_add(1);
     wakeCV.notify_one();
-    return id;
+    return identity.id;
 }
 
 void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, const Core::Path& outputPath)
@@ -300,7 +318,7 @@ void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, c
     Engine::EnvironmentMapID id{environmentMapIdRng()};
     uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
-        if (auto header = Engine::ReadWEnvMapHeader(outputPath)) {
+        if (auto header = Engine::ReadWEnvMapHeaderAnyVersion(outputPath)) {
             id = Engine::EnvironmentMapID{header->environmentMapId};
             contentVersion = header->contentVersion + 1;
         }
@@ -317,7 +335,7 @@ void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint
     Engine::EnvironmentMapID id{environmentMapIdRng()};
     uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
-        if (auto header = Engine::ReadWProbeHeader(outputPath)) {
+        if (auto header = Engine::ReadWProbeHeaderAnyVersion(outputPath)) {
             id = Engine::EnvironmentMapID{header->environmentMapId};
             contentVersion = header->contentVersion + 1;
         }

@@ -55,10 +55,12 @@ struct TextureGenerateSlot
     );
 
     void Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _flipY = true,
-                const Core::InlineString<128>& _declaredName = {}, const Core::InlineString<256>& _recipeSource = {}, Engine::TextureCategory _category = Engine::TextureCategory::Standalone);
+                const Core::InlineString<128>& _declaredName = {}, const Core::InlineString<256>& _recipeSource = {}, Engine::TextureCategory _category = Engine::TextureCategory::Standalone,
+                uint64_t _ownerModelId = 0, uint32_t _ownerImageIndex = UINT32_MAX);
 
     void LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& _outputPath,
-                          Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, Engine::TextureCategory _category = Engine::TextureCategory::Standalone);
+                          Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, Engine::TextureCategory _category = Engine::TextureCategory::Standalone,
+                          uint64_t _ownerModelId = 0, uint32_t _ownerImageIndex = UINT32_MAX);
 
     void Clear();
 
@@ -99,6 +101,8 @@ private:
     Core::InlineString<128> declaredName{};
     Core::InlineString<256> recipeSource{};
     Engine::TextureCategory category{Engine::TextureCategory::Standalone};
+    uint64_t ownerModelId{0};
+    uint32_t ownerImageIndex{UINT32_MAX};
 
     Core::HeapArray<uint8_t> preloadedPixels;
     uint32_t preloadedWidth{0};

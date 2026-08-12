@@ -9,7 +9,6 @@
 #include <fstream>
 #include "engine/logging/engine_log.h"
 #include <stb/stb_image.h>
-#include <ktx.h>
 #include <tracy/Tracy.hpp>
 
 #include "asset_generation_types.h"
@@ -17,6 +16,7 @@
 #include "core/memory/memory_manager.h"
 #include "engine/compression/compression.h"
 #include "engine/resources/texture/texture_format.h"
+#include "engine/resources/wimage_format.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render/vulkan/vk_context.h"
@@ -55,7 +55,8 @@ void TextureGenerateSlot::Initialize(
 
 void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId,
                                  bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, bool _flipY,
-                                 const Core::InlineString<128>& _declaredName, const Core::InlineString<256>& _recipeSource, Engine::TextureCategory _category)
+                                 const Core::InlineString<128>& _declaredName, const Core::InlineString<256>& _recipeSource, Engine::TextureCategory _category,
+                                 uint64_t _ownerModelId, uint32_t _ownerImageIndex)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
@@ -68,6 +69,8 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Co
     declaredName = _declaredName;
     recipeSource = _recipeSource;
     category = _category;
+    ownerModelId = _ownerModelId;
+    ownerImageIndex = _ownerImageIndex;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -78,7 +81,8 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Co
 }
 
 void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel,
-                                           const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, Engine::TextureCategory _category)
+                                           const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, uint64_t _contentVersion, Engine::TextureCategory _category,
+                                           uint64_t _ownerModelId, uint32_t _ownerImageIndex)
 {
     slotHandle = _slotHandle;
     outputPath = _outputPath;
@@ -94,6 +98,8 @@ void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle
     declaredName = {};
     recipeSource = {};
     category = _category;
+    ownerModelId = _ownerModelId;
+    ownerImageIndex = _ownerImageIndex;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -364,22 +370,11 @@ bool TextureGenerateSlot::WriteWTextureFile()
             break;
     }
 
-    ktxTexture2* texture;
-    ktxTextureCreateInfo createInfo{};
-    createInfo.vkFormat = targetVkFormat;
-    createInfo.baseWidth = sourceImage.extent.width;
-    createInfo.baseHeight = sourceImage.extent.height;
-    createInfo.baseDepth = 1;
-    createInfo.numDimensions = 2;
-    createInfo.numLevels = mipLevels;
-    createInfo.numLayers = 1;
-    createInfo.numFaces = 1;
-    createInfo.isArray = KTX_FALSE;
-    createInfo.generateMipmaps = KTX_FALSE;
-
-    ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
-    if (result != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to create KTX texture");
+    const Engine::WImageDesc desc{targetVkFormat, sourceImage.extent.width, sourceImage.extent.height, mipLevels, 1};
+    const size_t blobSize = Engine::WImageBlobSize(desc);
+    auto blob = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, blobSize);
+    if (Engine::WImageBlobInit(blob.Data(), blob.Size(), desc) == 0) {
+        LOG_ERROR(Asset, "Failed to lay out texture image blob");
         return false;
     } {
         ZoneScopedN("EncodeBC");
@@ -397,7 +392,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
             rdo_bc::rdo_bc_params* params;
             Core::Array<Core::HeapArray<uint8_t>, 13>* mipData;
             VkExtent3D imageExtent;
-            ktxTexture2* texture;
+            uint8_t* blob;
 
             void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override
             {
@@ -420,7 +415,8 @@ bool TextureGenerateSlot::WriteWTextureFile()
                     const void* compressedBlocks = encoder.get_blocks();
                     uint32_t blocksSizeInBytes = encoder.get_total_blocks_size_in_bytes();
 
-                    ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
+                    assert(blocksSizeInBytes == Engine::WImageFaceSize(blob, mip) && "Encoder output does not match blob level size");
+                    memcpy(Engine::WImageFaceData(blob, mip, 0), compressedBlocks, blocksSizeInBytes);
                 }
             }
         };
@@ -429,30 +425,16 @@ bool TextureGenerateSlot::WriteWTextureFile()
         _task.params = &encodeParams;
         _task.mipData = &mipData;
         _task.imageExtent = sourceImage.extent;
-        _task.texture = texture;
+        _task.blob = blob.Data();
         _task.m_SetSize = mipLevels;
 
         scheduler->AddTaskSetToPipe(&_task);
         scheduler->WaitforTask(&_task);
     }
 
-    const char writer[] = "WillEngine";
-    ktxHashList_AddKVPair(&texture->kvDataHead, KTX_WRITER_KEY, sizeof(writer), writer);
-
-    ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t ktxSize{0};
-    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
-    ktxTexture_Destroy(ktxTexture(texture));
-
-    if (result != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to serialise KTX texture to memory");
-        return false;
-    }
-
-    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxSize);
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, blobSize);
     auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
-    free(ktxBytes);
+    size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, blob.Data(), blobSize, compressed.Data(), compressed.Size());
 
     Engine::WTextureHeader header{};
     header.textureId = textureId.id;
@@ -460,7 +442,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
     header.width = sourceImage.extent.width;
     header.height = sourceImage.extent.height;
     header.mipCount = mipLevels;
-    header.uncompressedSize = ktxSize;
+    header.uncompressedSize = blobSize;
     header.dataSize = realCompressedSize;
 
     Core::InlineString<128> stem = declaredName;
@@ -480,6 +462,8 @@ bool TextureGenerateSlot::WriteWTextureFile()
         header.bGenFlipY = flipY;
     }
     header.category = category;
+    header.ownerModelId = ownerModelId;
+    header.ownerImageIndex = ownerImageIndex;
 
     Platform::CreateDirectories(outputPath.Parent().c_str());
     // Temp + rename so a crash mid-write never leaves a truncated .wtexture (an ungenerated stub survives and retries next run)

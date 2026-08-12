@@ -103,10 +103,9 @@ std::optional<WFontHeader> ReadWFontHeader(std::istream& in)
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
-            uint32_t major = 0, minor = 0;
-            auto res = std::from_chars(line + 8, line + LINE_BUF, major);
-            if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, minor); }
-            if (major != FONT_MAJOR_VERSION || minor > FONT_MINOR_VERSION) { return std::nullopt; }
+            auto res = std::from_chars(line + 8, line + LINE_BUF, header.major);
+            if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, header.minor); }
+            if (header.major != FONT_MAJOR_VERSION || header.minor > FONT_MINOR_VERSION) { return std::nullopt; }
         }
         else {
             if (strncmp(line, "atlas_compression ", 18) == 0) { bCompressionSeen = true; }
@@ -149,7 +148,10 @@ std::optional<WFontHeader> ReadWFontHeaderAnyVersion(const Core::Path& path)
             ComputeOffsets(header, static_cast<uint64_t>(in.tellg()));
             return header;
         }
-        if (strncmp(line, "version ", 8) == 0) { std::from_chars(line + 8, line + LINE_BUF, header.major); }
+        if (strncmp(line, "version ", 8) == 0) {
+            auto res = std::from_chars(line + 8, line + LINE_BUF, header.major);
+            if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, header.minor); }
+        }
         else {
             if (strncmp(line, "atlas_compression ", 18) == 0) { bCompressionSeen = true; }
             ParseFontHeaderFields(line, LINE_BUF, header);

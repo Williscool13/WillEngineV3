@@ -2282,7 +2282,6 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     const Engine::Font* uiFont = ctx->assetManager->GetFont(state->uiFont);
-    assert(uiFont);
 
     for (int32_t i = 0; i < renderCommands.length; ++i) {
         const Clay_RenderCommand& cmd = renderCommands.internalArray[i];
@@ -2384,6 +2383,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
             case CLAY_RENDER_COMMAND_TYPE_TEXT:
             {
+                if (!uiFont) { break; }
                 const Clay_BoundingBox& bb = cmd.boundingBox;
                 const Clay_TextRenderData& td = cmd.renderData.text;
                 const float fontSize = td.fontSize;

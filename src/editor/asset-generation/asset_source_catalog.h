@@ -28,6 +28,8 @@ enum class AssetOutputState : uint8_t
 {
     Missing,
     Outdated,
+    DerivativeContentOutdated,
+    OutdatedAndDerivativeContent,
     Current,
 };
 
@@ -48,6 +50,7 @@ struct AssetSourceCatalog
 {
     Core::InlineVector<AssetSourceEntry, 1024> entries;
     uint32_t outdatedCount{0};
+    uint32_t staleModelTextureCount{0};
 
     void Scan(Core::MemoryManager& memoryManager);
     static Core::Path OutputPathFor(const AssetSourceEntry& entry);

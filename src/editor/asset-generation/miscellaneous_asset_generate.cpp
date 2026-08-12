@@ -6,7 +6,6 @@
 
 #include <cstring>
 #include <fstream>
-#include <ktx.h>
 #include <semaphore>
 #include <tracy/Tracy.hpp>
 
@@ -18,6 +17,7 @@
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/texture/texture_format.h"
+#include "engine/resources/wimage_format.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
@@ -31,54 +31,29 @@
 
 namespace Editor
 {
-bool WriteSimpleRGBA8WTexture(Core::MemoryManager* memoryManager, const char* outputPath, Engine::TextureID id, const char* name, uint32_t w, uint32_t h, const uint8_t* rgba)
+bool WriteRawBytesWTexture(Core::MemoryManager* memoryManager, const char* outputPath, Engine::TextureID id, const char* name,
+                           VkFormat format, uint32_t w, uint32_t h, const uint8_t* data, size_t dataBytes)
 {
-    ktxTexture2* texture;
-    ktxTextureCreateInfo createInfo{};
-    createInfo.vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
-    createInfo.baseWidth = w;
-    createInfo.baseHeight = h;
-    createInfo.baseDepth = 1;
-    createInfo.numDimensions = 2;
-    createInfo.numLevels = 1;
-    createInfo.numLayers = 1;
-    createInfo.numFaces = 1;
-    createInfo.isArray = KTX_FALSE;
-    createInfo.generateMipmaps = KTX_FALSE;
-
-    ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
-    if (result != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to create KTX texture for {}", name);
+    const Engine::WImageDesc desc{format, w, h, 1, 1};
+    const size_t blobSize = Engine::WImageBlobSize(desc);
+    auto blob = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, blobSize);
+    if (Engine::WImageBlobInit(blob.Data(), blob.Size(), desc) == 0) {
+        LOG_ERROR(Asset, "Failed to lay out image blob for {}", name);
         return false;
     }
+    assert(dataBytes == Engine::WImageFaceSize(blob.Data(), 0) && "Raw data does not match blob level size");
+    memcpy(Engine::WImageFaceData(blob.Data(), 0, 0), data, dataBytes);
 
-    ktxTexture_SetImageFromMemory(ktxTexture(texture), 0, 0, 0, rgba, w * h * 4);
-
-    constexpr char writer[] = "WillEngine";
-    ktxHashList_AddKVPair(&texture->kvDataHead, KTX_WRITER_KEY, sizeof(writer), writer);
-
-    // todo: remove ktxlib from this whole thing is possible
-    ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t ktxSize{0};
-    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
-    ktxTexture_Destroy(ktxTexture(texture));
-    if (result != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to serialise {} to memory", name);
-        return false;
-    }
-
-    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxSize);
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, blobSize);
     auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
-
-    free(ktxBytes);
+    size_t realSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, blob.Data(), blobSize, compressed.Data(), compressed.Size());
 
     Engine::WTextureHeader header{};
     header.textureId = id.id;
     header.width = w;
     header.height = h;
     header.mipCount = 1;
-    header.uncompressedSize = ktxSize;
+    header.uncompressedSize = blobSize;
     header.dataSize = realSize;
     header.compressionType = Engine::DEFAULT_TEXTURE_COMPRESSION;
     header.category = Engine::TextureCategory::Builtin;
@@ -96,69 +71,9 @@ bool WriteSimpleRGBA8WTexture(Core::MemoryManager* memoryManager, const char* ou
     return true;
 }
 
-bool WriteRawBytesWTexture(Core::MemoryManager* memoryManager, const char* outputPath, Engine::TextureID id, const char* name,
-                           VkFormat format, uint32_t w, uint32_t h, const uint8_t* data, size_t dataBytes)
+bool WriteSimpleRGBA8WTexture(Core::MemoryManager* memoryManager, const char* outputPath, Engine::TextureID id, const char* name, uint32_t w, uint32_t h, const uint8_t* rgba)
 {
-    ktxTexture2* texture;
-    ktxTextureCreateInfo createInfo{};
-    createInfo.vkFormat = format;
-    createInfo.baseWidth = w;
-    createInfo.baseHeight = h;
-    createInfo.baseDepth = 1;
-    createInfo.numDimensions = 2;
-    createInfo.numLevels = 1;
-    createInfo.numLayers = 1;
-    createInfo.numFaces = 1;
-    createInfo.isArray = KTX_FALSE;
-    createInfo.generateMipmaps = KTX_FALSE;
-
-    ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
-    if (result != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to create KTX texture for {}", name);
-        return false;
-    }
-
-    ktxTexture_SetImageFromMemory(ktxTexture(texture), 0, 0, 0, data, dataBytes);
-
-    constexpr char writer[] = "WillEngine";
-    ktxHashList_AddKVPair(&texture->kvDataHead, KTX_WRITER_KEY, sizeof(writer), writer);
-
-    ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t ktxSize{0};
-    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
-    ktxTexture_Destroy(ktxTexture(texture));
-    if (result != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to serialise {} to memory", name);
-        return false;
-    }
-
-    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxSize);
-    auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
-
-    free(ktxBytes);
-
-    Engine::WTextureHeader header{};
-    header.textureId = id.id;
-    header.width = w;
-    header.height = h;
-    header.mipCount = 1;
-    header.uncompressedSize = ktxSize;
-    header.dataSize = realSize;
-    header.compressionType = Engine::DEFAULT_TEXTURE_COMPRESSION;
-    header.category = Engine::TextureCategory::Builtin;
-    strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
-
-    Platform::CreateDirectories(Core::Path(outputPath).Parent().c_str());
-    std::ofstream f(outputPath, std::ios::binary);
-    if (!f || !Engine::WriteWTextureHeader(f, header)) {
-        LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath);
-        return false;
-    }
-    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realSize));
-
-    LOG_INFO(Asset, "Wrote {}", outputPath);
-    return true;
+    return WriteRawBytesWTexture(memoryManager, outputPath, id, name, VK_FORMAT_R8G8B8A8_SRGB, w, h, rgba, static_cast<size_t>(w) * h * 4);
 }
 
 static bool BuiltinUpToDate(const Core::Path& path)
@@ -315,7 +230,7 @@ void CreateBRDFLookupTable(
     vkCmdPipelineBarrier2(graphicsCmd, &depInfo);
 
 
-    // Copy back to CPU for KTX generation
+    // Copy back to CPU for blob serialization
     constexpr VkDeviceSize lutByteSize = LUT_SIZE * LUT_SIZE * sizeof(uint16_t) * 2;
     Render::AllocatedBuffer stagingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, lutByteSize);
     VkBufferImageCopy copyRegion = {};
@@ -331,68 +246,8 @@ void CreateBRDFLookupTable(
     auto lutData = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, lutByteSize);
     memcpy(lutData.Data(), stagingBuffer.allocationInfo.pMappedData, lutByteSize);
 
-
-    // Write to KTX2
-    ktxTexture2* texture;
-    ktxTextureCreateInfo createInfo{};
-    createInfo.vkFormat = VK_FORMAT_R16G16_SFLOAT;
-    createInfo.baseWidth = LUT_SIZE;
-    createInfo.baseHeight = LUT_SIZE;
-    createInfo.baseDepth = 1;
-    createInfo.numDimensions = 2;
-    createInfo.numLevels = 1;
-    createInfo.numLayers = 1;
-    createInfo.numFaces = 1;
-    createInfo.isArray = KTX_FALSE;
-    createInfo.generateMipmaps = KTX_FALSE;
-
-    ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
-    if (result != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to create KTX texture for BRDF LUT");
-        return;
-    }
-
-    ktxTexture_SetImageFromMemory(ktxTexture(texture), 0, 0, 0, lutData.Data(), lutData.Size());
-
-    const char writer[] = "WillEngine";
-    ktxHashList_AddKVPair(&texture->kvDataHead, KTX_WRITER_KEY, sizeof(writer), writer);
-
-    ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t ktxSize{0};
-    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
-    ktxTexture_Destroy(ktxTexture(texture));
-    if (result != KTX_SUCCESS) {
-        LOG_ERROR(Asset, "Failed to serialise BRDF LUT to memory");
-        return;
-    }
-
-    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxSize);
-    auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
-
-    free(ktxBytes);
-
-    Engine::WTextureHeader header{};
-    header.textureId = textureId.id;
-    header.width = LUT_SIZE;
-    header.height = LUT_SIZE;
-    header.mipCount = 1;
-    header.uncompressedSize = ktxSize;
-    header.dataSize = realSize;
-    header.compressionType = Engine::DEFAULT_TEXTURE_COMPRESSION;
-    header.category = Engine::TextureCategory::Builtin;
-    strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, "brdf_lut", Engine::WTEXTURE_NAME_LENGTH - 1);
-
-    Core::Path outputParent = outputPath.Parent();
-    Platform::CreateDirectories(outputParent.c_str());
-    std::ofstream f(outputPath.c_str(), std::ios::binary);
-    if (!f || !Engine::WriteWTextureHeader(f, header)) {
-        LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath.c_str());
-        return;
-    }
-    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realSize));
-
-    LOG_INFO(Asset, "Wrote {}", outputPath.c_str());
+    WriteRawBytesWTexture(memoryManager, outputPath.c_str(), textureId, "brdf_lut",
+                          VK_FORMAT_R16G16_SFLOAT, LUT_SIZE, LUT_SIZE, lutData.Data(), lutByteSize);
 
     vkDestroyFence(context->device, graphicsFence, context->HostAllocCallbacks());
     vkDestroyCommandPool(context->device, graphicsCommandPool, context->HostAllocCallbacks());

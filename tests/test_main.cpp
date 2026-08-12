@@ -3,8 +3,10 @@
 //
 
 #include <catch2/catch_session.hpp>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 #include "core/memory/memory_manager.h"
+#include "engine/logging/log_category.h"
 #include "meshoptimizer/src/meshoptimizer.h"
 #include "par/par_shapes_ext.h"
 #include "asset-load/asset-load-jobs/text3d_geometry.h"
@@ -39,6 +41,10 @@ int main(int argc, char* argv[])
     meshopt_setAllocator(TestMeshoptAlloc, TestMeshoptFree);
     par_shapes_set_allocator(&gTestMemory.AssetsScratch());
     AssetLoad::SetEarcutAllocator(&gTestMemory.AssetsScratch());
+
+    for (const char* name : Engine::kCategoryNames) {
+        spdlog::stdout_color_mt(name);
+    }
 
     return Catch::Session().run(argc, argv);
 }

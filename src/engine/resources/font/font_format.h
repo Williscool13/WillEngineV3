@@ -14,8 +14,8 @@
 
 namespace Engine
 {
-constexpr uint32_t FONT_MAJOR_VERSION = 0;
-constexpr uint32_t FONT_MINOR_VERSION = 4;
+constexpr uint32_t FONT_MAJOR_VERSION = 1;
+constexpr uint32_t FONT_MINOR_VERSION = 0;
 constexpr size_t WFONT_NAME_LENGTH = 128;
 
 /**
@@ -93,9 +93,9 @@ struct WFontHeader
     uint32_t atlasWidth{0};
     uint32_t atlasHeight{0};
     uint32_t glyphCount{0};
-    /** Compressed size of the KTX2 atlas blob as stored on disk. */
+    /** Compressed size of the WImage atlas blob as stored on disk. */
     uint64_t atlasDataSize{0};
-    /** Uncompressed size of the KTX2 atlas blob; used by the texture loader for decompression. */
+    /** Uncompressed size of the WImage atlas blob; used by the texture loader for decompression. */
     uint64_t atlasUncompressedSize{0};
     CompressionType atlasCompressionType{DEFAULT_FONT_COMPRESSION};
 
@@ -109,7 +109,7 @@ struct WFontHeader
 
     /**
      * Byte offsets from file start -- set by the reader after parsing end_header.
-     * Layout: [header text] [glyphCount x WGlyphInfo] [contourGlyphCount x WGlyphContourRange] [contourCount x WContourRange] [edgeCount x WFontEdge] [atlas KTX2 blob]
+     * Layout: [header text] [glyphCount x WGlyphInfo] [contourGlyphCount x WGlyphContourRange] [contourCount x WContourRange] [edgeCount x WFontEdge] [atlas WImage blob]
      */
     uint64_t glyphDataOffset{0};
     uint64_t glyphContourRangeOffset{0};
@@ -119,11 +119,8 @@ struct WFontHeader
 };
 
 bool WriteWFontHeader(std::ostream& out, const WFontHeader& header);
-
 std::optional<WFontHeader> ReadWFontHeader(std::istream& in);
 std::optional<WFontHeader> ReadWFontHeader(const Core::Path& path);
-
-/** Reads header without rejecting on version mismatch. For use by the asset generator to detect stale files. */
 std::optional<WFontHeader> ReadWFontHeaderAnyVersion(const Core::Path& path);
 } // Engine
 

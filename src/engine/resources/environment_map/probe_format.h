@@ -15,8 +15,8 @@
 
 namespace Engine
 {
-constexpr uint32_t PROBE_MAJOR_VERSION = 0;
-constexpr uint32_t PROBE_MINOR_VERSION = 1;
+constexpr uint32_t PROBE_MAJOR_VERSION = 1;
+constexpr uint32_t PROBE_MINOR_VERSION = 0;
 
 /** Baked-state snapshot captured at bake time, used to detect a stale bake against the live component. Rotation is stored w,x,y,z. */
 struct ProbeBakeSnapshot
@@ -52,10 +52,9 @@ struct WProbeHeader
 };
 
 bool WriteWProbeHeader(std::ostream& out, const WProbeHeader& header);
-
 std::optional<WProbeHeader> ReadWProbeHeader(std::istream& in);
-
 std::optional<WProbeHeader> ReadWProbeHeader(const Core::Path& path);
+std::optional<WProbeHeader> ReadWProbeHeaderAnyVersion(const Core::Path& path);
 } // Engine
 
 #endif //WILL_ENGINE_PROBE_FORMAT_H

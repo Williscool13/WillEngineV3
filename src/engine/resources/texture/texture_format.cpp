@@ -33,6 +33,10 @@ bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header)
     else if (header.category == TextureCategory::Builtin) {
         out << "category builtin\n";
     }
+    if (header.ownerModelId != 0) {
+        out << "owner_model " << header.ownerModelId << "\n";
+        out << "owner_image_index " << header.ownerImageIndex << "\n";
+    }
     if (header.genSource[0] != '\0') {
         out << "gen_source " << header.genSource << "\n";
         out << "gen_format " << header.genFormat << "\n";
@@ -43,7 +47,7 @@ bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header)
     return out.good();
 }
 
-std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
+static std::optional<WTextureHeader> ReadWTextureHeaderInternal(std::istream& in, bool bAnyVersion)
 {
     constexpr size_t LINE_BUF = 256;
     char line[LINE_BUF];
@@ -67,9 +71,9 @@ std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
-            uint32_t major = 0;
-            std::from_chars(line + 8, line + LINE_BUF, major);
-            if (major != TEXTURE_MAJOR_VERSION) { return std::nullopt; }
+            auto res = std::from_chars(line + 8, line + LINE_BUF, header.major);
+            if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, header.minor); }
+            if (!bAnyVersion && header.major != TEXTURE_MAJOR_VERSION) { return std::nullopt; }
         }
         else if (strncmp(line, "id ", 3) == 0) {
             std::from_chars(line + 3, line + LINE_BUF, header.textureId);
@@ -100,6 +104,8 @@ std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
             else if (strcmp(value, "builtin") == 0) { header.category = TextureCategory::Builtin; }
             else { header.category = TextureCategory::Standalone; }
         }
+        else if (strncmp(line, "owner_model ", 12) == 0) { std::from_chars(line + 12, line + LINE_BUF, header.ownerModelId); }
+        else if (strncmp(line, "owner_image_index ", 18) == 0) { std::from_chars(line + 18, line + LINE_BUF, header.ownerImageIndex); }
         else if (strncmp(line, "model_owned ", 12) == 0) {
             uint32_t v = 0;
             std::from_chars(line + 12, line + LINE_BUF, v);
@@ -131,9 +137,20 @@ std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
     return std::nullopt;
 }
 
+std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
+{
+    return ReadWTextureHeaderInternal(in, false);
+}
+
 std::optional<WTextureHeader> ReadWTextureHeader(const Core::Path& path)
 {
     std::ifstream f(path.c_str(), std::ios::binary);
     return ReadWTextureHeader(f);
+}
+
+std::optional<WTextureHeader> ReadWTextureHeaderAnyVersion(const Core::Path& path)
+{
+    std::ifstream f(path.c_str(), std::ios::binary);
+    return ReadWTextureHeaderInternal(f, true);
 }
 } // Engine

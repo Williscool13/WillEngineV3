@@ -68,8 +68,8 @@ void CubemapLoadSlot::Clear()
     outputCubemap = nullptr;
     uploadStaging = nullptr;
 
-    ktxData = {};
-    ktxView = {};
+    blobData = {};
+    blobView = {};
 }
 
 void CubemapLoadSlot::LoadCubemapTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
@@ -145,7 +145,7 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
     }
 
     {
-        ZoneScopedN("KTXCreateFromMemory");
+        ZoneScopedN("WImageLoad");
 
         Core::HeapArray<uint8_t> compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->dataSize);
         {
@@ -159,26 +159,26 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
             }
         }
 
-        ktxData = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->uncompressedSize);
+        blobData = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->uncompressedSize);
         {
             ZoneScopedN("Decompress");
-            Engine::Decompress(outputCubemap->compressionType, compressed.Data(), compressed.Size(), ktxData.Data(), outputCubemap->uncompressedSize);
+            Engine::Decompress(outputCubemap->compressionType, compressed.Data(), compressed.Size(), blobData.Data(), outputCubemap->uncompressedSize);
         }
         {
-            ZoneScopedN("KTXParse");
-            if (!ktxView.Parse(ktxData.Data(), ktxData.Size())) {
-                SPDLOG_ERROR("Failed to parse KTX2 cubemap: {}", cubemapPath.c_str());
+            ZoneScopedN("WImageParse");
+            if (!blobView.Parse(blobData.Data(), blobData.Size())) {
+                SPDLOG_ERROR("Failed to parse cubemap image blob: {}", cubemapPath.c_str());
                 return false;
             }
         }
     }
 
-    if (!ktxView.bCubemap) {
+    if (!blobView.bCubemap) {
         SPDLOG_ERROR("Expected cubemap texture: {}", cubemapPath.c_str());
         return false;
     }
 
-    if (ktxView.RowPitch(0) > uploadStaging->GetStagingAllocator().GetCapacity()) {
+    if (blobView.RowPitch(0) > uploadStaging->GetStagingAllocator().GetCapacity()) {
         SPDLOG_ERROR("Cubemap block row too large for staging buffer: {}", cubemapPath.c_str());
         return false;
     }
@@ -189,19 +189,19 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
 bool CubemapLoadSlot::AllocateGPUResources()
 {
     VkExtent3D extent{
-        .width = ktxView.baseWidth,
-        .height = ktxView.baseHeight,
+        .width = blobView.baseWidth,
+        .height = blobView.baseHeight,
         .depth = 1
     };
 
     VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
-        ktxView.vkFormat,
+        blobView.vkFormat,
         extent,
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
     );
     imageCreateInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.mipLevels = ktxView.levelCount;
+    imageCreateInfo.mipLevels = blobView.levelCount;
     imageCreateInfo.arrayLayers = 6;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -214,7 +214,7 @@ bool CubemapLoadSlot::AllocateGPUResources()
     );
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
     viewInfo.subresourceRange.layerCount = 6;
-    viewInfo.subresourceRange.levelCount = ktxView.levelCount;
+    viewInfo.subresourceRange.levelCount = blobView.levelCount;
 
     outputCubemap->imageView = Render::ImageView::CreateImageView(context, viewInfo);
 
@@ -231,7 +231,7 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
     // Pre-copy barrier: UNDEFINED -> TRANSFER_DST_OPTIMAL
     VkImageMemoryBarrier2 preCopyBarrier = Render::VkHelpers::ImageMemoryBarrier(
         outputCubemap->image.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, ktxView.levelCount, 0, 6),
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, blobView.levelCount, 0, 6),
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
     );
@@ -242,18 +242,18 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
     // Upload all mip levels for all 6 faces; faces larger than the staging buffer stream in block-row chunks
-    for (uint32_t mipLevel = 0; mipLevel < ktxView.levelCount; mipLevel++) {
-        uint32_t mipWidth = ktxView.LevelWidth(mipLevel);
-        uint32_t mipHeight = ktxView.LevelHeight(mipLevel);
-        size_t mipSize = ktxView.FaceSize(mipLevel);
-        const size_t rowPitch = ktxView.RowPitch(mipLevel);
+    for (uint32_t mipLevel = 0; mipLevel < blobView.levelCount; mipLevel++) {
+        uint32_t mipWidth = blobView.LevelWidth(mipLevel);
+        uint32_t mipHeight = blobView.LevelHeight(mipLevel);
+        size_t mipSize = blobView.FaceSize(mipLevel);
+        const size_t rowPitch = blobView.RowPitch(mipLevel);
         const uint32_t totalRows = std::max(1u, static_cast<uint32_t>(mipSize / rowPitch));
         const uint32_t texelRowsPerRow = (mipHeight + totalRows - 1) / totalRows;
 
         for (uint32_t face = 0; face < 6; face++) {
             ZoneScopedN("Upload Face");
 
-            const uint8_t* faceData = ktxView.FaceData(mipLevel, face);
+            const uint8_t* faceData = blobView.FaceData(mipLevel, face);
 
             uint32_t rowsDone = 0;
             while (rowsDone < totalRows) {
@@ -305,7 +305,7 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
     // Final barrier: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL with queue family transfer
     VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
         outputCubemap->image.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, ktxView.levelCount, 0, 6),
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, blobView.levelCount, 0, 6),
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
@@ -317,8 +317,8 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
 
     outputCubemap->acquireBarrier = Render::VkHelpers::FromVkBarrier(finalBarrier);
 
-    ktxData = {};
-    ktxView = {};
+    blobData = {};
+    blobView = {};
 }
 
 void CubemapLoadSlot::PostUploadSetup()

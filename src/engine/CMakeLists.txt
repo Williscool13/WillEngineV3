@@ -51,6 +51,8 @@ add_library(engine STATIC
         resources/texture/texture.h
         resources/texture/texture_format.cpp
         resources/texture/texture_format.h
+        resources/wimage_format.cpp
+        resources/wimage_format.h
         resources/scene/scene_format.cpp
         resources/scene/scene_format.h
         resources/sampler/sampler.h

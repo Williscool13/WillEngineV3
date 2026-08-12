@@ -85,6 +85,8 @@ struct TextureGenerateRequest
     Core::InlineString<128> declaredName{};
     Core::InlineString<256> recipeSource{};
     Engine::TextureCategory category{Engine::TextureCategory::Standalone};
+    uint64_t ownerModelId{0};
+    uint32_t ownerImageIndex{UINT32_MAX};
 
     Core::Path imagePath;
 
@@ -165,10 +167,12 @@ public:
     bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
 
     Engine::TextureID RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped = true,
-                                                     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM, bool flipY = true, Engine::TextureCategory category = Engine::TextureCategory::Standalone);
+                                                     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM, bool flipY = true, Engine::TextureCategory category = Engine::TextureCategory::Standalone,
+                                                     uint64_t ownerModelId = 0, uint32_t ownerImageIndex = UINT32_MAX);
 
     Engine::TextureID RequestTextureGenerateFromMemory(Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
-                                                       bool mipmapped = false, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM, Engine::TextureCategory category = Engine::TextureCategory::Standalone);
+                                                       bool mipmapped = false, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM, Engine::TextureCategory category = Engine::TextureCategory::Standalone,
+                                                       uint64_t ownerModelId = 0, uint32_t ownerImageIndex = UINT32_MAX);
 
     bool TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult);
 
@@ -239,6 +243,19 @@ public:
 
 private:
     friend class StaticModelGenerateSlot;
+
+    struct RecoveredTextureIdentity
+    {
+        Engine::TextureID id{};
+        uint64_t contentVersion{1};
+        Core::InlineString<128> declaredName{};
+        Core::InlineString<256> recipeSource{};
+    };
+
+    /**
+     * Stable-identity recovery for a texture about to be regenerated
+     */
+    RecoveredTextureIdentity RecoverTextureIdentity(const Core::Path& outputPath, uint64_t ownerModelId, uint32_t ownerImageIndex);
 
     void ThreadMain();
 

@@ -92,6 +92,15 @@ public:
         return fn;
     }
 
+    /** True when any segment starts with '.' (dot-dir convention: tool-generated intermediates, never authored content). */
+    [[nodiscard]] bool HasHiddenSegment() const
+    {
+        for (size_t i = 0; i < len_; ++i) {
+            if (buf_[i] == '.' && (i == 0 || buf_[i - 1] == '/')) { return true; }
+        }
+        return false;
+    }
+
     [[nodiscard]] bool Exists() const
     {
 #ifdef _WIN32

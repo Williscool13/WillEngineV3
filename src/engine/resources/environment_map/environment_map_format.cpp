@@ -29,7 +29,7 @@ bool WriteWEnvMapHeader(std::ostream& out, const WEnvMapHeader& header)
     return out.good();
 }
 
-std::optional<WEnvMapHeader> ReadWEnvMapHeader(std::istream& in)
+static std::optional<WEnvMapHeader> ReadWEnvMapHeaderInternal(std::istream& in, bool bAnyVersion)
 {
     constexpr size_t LINE_BUF = 256;
     char line[LINE_BUF];
@@ -53,9 +53,9 @@ std::optional<WEnvMapHeader> ReadWEnvMapHeader(std::istream& in)
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
-            uint32_t major = 0;
-            std::from_chars(line + 8, line + LINE_BUF, major);
-            if (major != ENV_MAP_MAJOR_VERSION) { return std::nullopt; }
+            auto res = std::from_chars(line + 8, line + LINE_BUF, header.major);
+            if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, header.minor); }
+            if (!bAnyVersion && header.major != ENV_MAP_MAJOR_VERSION) { return std::nullopt; }
         }
         else if (strncmp(line, "id ", 3) == 0) {
             std::from_chars(line + 3, line + LINE_BUF, header.environmentMapId);
@@ -84,9 +84,20 @@ std::optional<WEnvMapHeader> ReadWEnvMapHeader(std::istream& in)
     return std::nullopt;
 }
 
+std::optional<WEnvMapHeader> ReadWEnvMapHeader(std::istream& in)
+{
+    return ReadWEnvMapHeaderInternal(in, false);
+}
+
 std::optional<WEnvMapHeader> ReadWEnvMapHeader(const Core::Path& path)
 {
     std::ifstream f(path.c_str(), std::ios::binary);
     return ReadWEnvMapHeader(f);
+}
+
+std::optional<WEnvMapHeader> ReadWEnvMapHeaderAnyVersion(const Core::Path& path)
+{
+    std::ifstream f(path.c_str(), std::ios::binary);
+    return ReadWEnvMapHeaderInternal(f, true);
 }
 } // Engine

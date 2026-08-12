@@ -2,8 +2,6 @@ add_library(asset-load STATIC
         asset_load_types.cpp
         asset_load_types.h
         asset_load_config.h
-        ktx2_view.cpp
-        ktx2_view.h
 
         asset-load-jobs/static_model_load_slot.cpp
         asset-load-jobs/static_model_load_slot.h
