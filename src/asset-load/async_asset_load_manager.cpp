@@ -179,7 +179,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             pipelineManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Graphics, cmd, fence, completionSignal);
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Compute, cmd, fence, completionSignal);
             },
             [this](bool success, ProceduralTextureSlotHandle slotHandle) {
                 OnProceduralTextureLoadComplete(success, slotHandle);

@@ -1107,6 +1107,10 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     int32_t proceduralTexturesThisTick{0};
     while (assetLoadManager->TryDequeueProceduralTextureComplete(proceduralTexComplete)) {
         if (proceduralTexComplete.bSuccess) {
+            // Only if generated through compute
+            if (proceduralTexComplete.texture->acquireBarrier.image != 0) {
+                stagingFrameBuffer.imageAcquireOperations.PushBack(proceduralTexComplete.texture->acquireBarrier);
+            }
             proceduralTexComplete.texture->loadState = Texture::LoadState::Loaded;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
                 LOG_TRACE(Asset, "Procedural texture generation succeeded (bindless index: {})", static_cast<uint32_t>(proceduralTexComplete.texture->bindlessHandle.index));

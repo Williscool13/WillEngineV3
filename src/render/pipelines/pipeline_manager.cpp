@@ -680,6 +680,8 @@ void PipelineManager::RegisterPipelines()
                                         sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
     RegisterComputePipelineCustomLayout("domain_warp"_sid, src / "domain_warp.spv", "ComputeDomainWarp",
                                         sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
+    RegisterComputePipelineCustomLayout(SID("procedural_mip_downsample"), src / "procedural_mip_downsample.spv", "ComputeProceduralMipDownsample",
+                                        sizeof(ProceduralMipDownsamplePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
 
 #if WILL_EDITOR
     VkDescriptorSetLayout emapLayout = resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle;

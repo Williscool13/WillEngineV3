@@ -1521,6 +1521,12 @@ SHADER_PUBLIC struct ProceduralTextureBasePushConstant
     SHADER_PUBLIC uint32_t outputIndex;
 };
 
+SHADER_PUBLIC struct ProceduralMipDownsamplePushConstant
+{
+    SHADER_PUBLIC uint32_t srcIndex;
+    SHADER_PUBLIC uint32_t dstIndex;
+};
+
 SHADER_PUBLIC struct SMAAAreaGeneratePushConstant
 {
     SHADER_PUBLIC uint32_t targetIndex;

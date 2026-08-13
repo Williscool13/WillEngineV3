@@ -67,7 +67,7 @@ private:
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
     Render::PipelineManager* pipelineManager{nullptr};
-    SubmitContext graphicsSubmit{};
+    SubmitContext computeSubmit{};
 
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _dispatchCallback;
     Core::InlineFunction<void(bool success, ProceduralTextureSlotHandle slotHandle)> _notifyCallback;

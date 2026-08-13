@@ -20,8 +20,9 @@ struct VulkanContext;
  *   - Binding 0: Sampler array (MAX_SAMPLERS)
  *   - Binding 1: RWTexture2D<float4> storage image array (MAX_RW_TEXTURES)
  *
+ * Binding 1 index convention: slot * MAX_MIPS_PER_SLOT + mip (one storage view per mip, for compute mip downsample).
  * Push constant convention: the first uint32_t field must be outputIndex (binding 1 slot).
- * ProceduralTextureGenerateSlot fills outputIndex = slotHandle.index before dispatch.
+ * ProceduralTextureLoadSlot fills outputIndex = slotHandle.index * MAX_MIPS_PER_SLOT before dispatch.
  */
 class ProceduralTextureGenerateResources
 {
@@ -45,7 +46,9 @@ public:
     [[nodiscard]] VkDescriptorBufferBindingInfoEXT GetBindingInfo() const;
 
     static constexpr uint32_t MAX_SAMPLERS = 4;
-    static constexpr uint32_t MAX_RW_TEXTURES = 4;
+    static constexpr uint32_t MAX_TEXTURE_SLOTS = 8;
+    static constexpr uint32_t MAX_MIPS_PER_SLOT = 14;
+    static constexpr uint32_t MAX_RW_TEXTURES = MAX_TEXTURE_SLOTS * MAX_MIPS_PER_SLOT;
 
 private:
     VulkanContext* context{nullptr};
