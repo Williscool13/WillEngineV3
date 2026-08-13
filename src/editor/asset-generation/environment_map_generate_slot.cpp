@@ -28,7 +28,7 @@ EnvironmentMapGenerateSlot::EnvironmentMapGenerateSlot() = default;
 
 EnvironmentMapGenerateSlot::~EnvironmentMapGenerateSlot()
 {
-    graphicsSubmit.Destroy(context);
+    computeSubmit.Destroy(context);
 }
 
 void EnvironmentMapGenerateSlot::Initialize(
@@ -37,7 +37,7 @@ void EnvironmentMapGenerateSlot::Initialize(
     Render::PipelineManager* _pipelineManager,
     Render::ResourceManager* _resourceManager,
     Core::MemoryManager* _memoryManager,
-    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
     Core::InlineFunction<void(bool success, EnvironmentMapGenerateSlotHandle cubemapSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
@@ -45,7 +45,7 @@ void EnvironmentMapGenerateSlot::Initialize(
     pipelineManager = _pipelineManager;
     resourceManager = _resourceManager;
     memoryManager = _memoryManager;
-    _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
+    _dispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 
     imageStagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE);
@@ -96,7 +96,10 @@ void EnvironmentMapGenerateSlot::Initialize(
     resourceManager->environmentMapGenerateResources.SetSampler(equiSampler.handle, EQUI_IMAGE_SAMPLER_INDEX);
     resourceManager->environmentMapGenerateResources.SetSampler(cubemapSampler.handle, CUBEMAP_IMAGE_SAMPLER_INDEX);
 
-    graphicsSubmit.Initialize(context, context->graphicsQueueFamily);
+    downsampleResources = Render::ProceduralTextureGenerateResources(context);
+
+    const uint32_t submitFamily = context->computeQueue != VK_NULL_HANDLE ? context->computeQueueFamily : context->graphicsQueueFamily;
+    computeSubmit.Initialize(context, submitFamily);
 }
 
 void EnvironmentMapGenerateSlot::Launch(
@@ -183,48 +186,48 @@ void EnvironmentMapGenerateSlot::Clear()
 
 void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
 {
-    VkCommandBuffer graphicsCmd = taskSlot->graphicsSubmit.cmd;
-    VkFence graphicsFence = taskSlot->graphicsSubmit.fence;
+    VkCommandBuffer cmd = taskSlot->computeSubmit.cmd;
+    VkFence fence = taskSlot->computeSubmit.fence;
 
-    auto startGraphicsRecording = [&] {
+    auto startRecording = [&] {
         VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-        VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &beginInfo));
+        VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
     };
 
-    auto graphicsSubmitAndWait = [&](bool restart) {
-        ZoneScopedN("GraphicsSubmitAndWait");
-        VK_CHECK(vkEndCommandBuffer(graphicsCmd));
+    auto submitAndWait = [&](bool restart) {
+        ZoneScopedN("SubmitAndWait");
+        VK_CHECK(vkEndCommandBuffer(cmd));
         std::binary_semaphore done(0);
-        taskSlot->_graphicsDispatchCallback(graphicsCmd, graphicsFence, &done);
+        taskSlot->_dispatchCallback(cmd, fence, &done);
         done.acquire();
-        VK_CHECK(vkResetFences(taskSlot->context->device, 1, &graphicsFence));
-        VK_CHECK(vkResetCommandBuffer(graphicsCmd, 0));
+        VK_CHECK(vkResetFences(taskSlot->context->device, 1, &fence));
+        VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
         if (restart) {
             VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-            VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &beginInfo));
+            VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
         }
     };
 
     bool loadRes = taskSlot->bProbeMode
-        ? taskSlot->AssembleProbeCubemapAndGenerate(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait)
-        : taskSlot->LoadEquirectangularAndGenerate(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait);
+                       ? taskSlot->AssembleProbeCubemapAndGenerate(cmd, startRecording, submitAndWait)
+                       : taskSlot->LoadEquirectangularAndGenerate(cmd, startRecording, submitAndWait);
     if (!loadRes) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
-        taskSlot->graphicsSubmit.Reset(taskSlot->context);
+        taskSlot->computeSubmit.Reset(taskSlot->context);
         return;
     }
 
     const bool bWriteRes = taskSlot->bProbeMode ? taskSlot->WriteWProbeFile() : taskSlot->WriteWEnvMapFile();
     if (!bWriteRes) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
-        taskSlot->graphicsSubmit.Reset(taskSlot->context);
+        taskSlot->computeSubmit.Reset(taskSlot->context);
         return;
     }
 
     taskSlot->_notifyCallback(true, taskSlot->slotHandle);
 
-    taskSlot->graphicsSubmit.Reset(taskSlot->context);
+    taskSlot->computeSubmit.Reset(taskSlot->context);
 }
 
 bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait)
@@ -278,7 +281,7 @@ bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer
     VkImageCreateInfo sourceCreateInfo = Render::VkHelpers::ImageCreateInfo(
         VK_FORMAT_R16G16B16A16_SFLOAT,
         {S, S, 1},
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
     );
     sourceCreateInfo.arrayLayers = 6;
     sourceCreateInfo.mipLevels = sourceMipLevels;
@@ -307,9 +310,51 @@ bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer
         probeSourceImage.handle,
         Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6),
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
     );
     vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    const Render::PipelineEntry resizeEntry = pipelineManager->GetPipelineEntrySnapshot(SID("procedural_resize"));
+    if (resizeEntry.pipeline == VK_NULL_HANDLE) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] procedural_resize pipeline not ready");
+        return false;
+    }
+
+    const uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(R))) + 1;
+
+    // Per-face-per-mip 2D storage views; source block first, cubemap block after.
+    constexpr uint32_t MAX_SOURCE_MIPS = 8;
+    constexpr uint32_t MAX_CUBEMAP_MIPS = 13;
+    assert(sourceMipLevels <= MAX_SOURCE_MIPS && mipLevels <= MAX_CUBEMAP_MIPS);
+    assert(6 * (sourceMipLevels + mipLevels) <= Render::ProceduralTextureGenerateResources::MAX_RW_TEXTURES);
+    Core::Array<Render::ImageView, 6 * MAX_SOURCE_MIPS> sourceFaceViews{};
+    Core::Array<Render::ImageView, 6 * MAX_CUBEMAP_MIPS> cubemapFaceViews{};
+    const uint32_t cubemapBaseIndex = 6 * sourceMipLevels;
+    auto sourceIndex = [&](uint32_t face, uint32_t mip) { return face * sourceMipLevels + mip; };
+    auto cubemapIndex = [&](uint32_t face, uint32_t mip) { return cubemapBaseIndex + face * mipLevels + mip; };
+
+    for (uint32_t face = 0; face < 6; ++face) {
+        for (uint32_t mip = 0; mip < sourceMipLevels; ++mip) {
+            VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(probeSourceImage.handle, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+            viewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, face, 1);
+            sourceFaceViews[sourceIndex(face, mip)] = Render::ImageView::CreateImageView(context, viewInfo);
+            downsampleResources.SetRWTexture({nullptr, sourceFaceViews[sourceIndex(face, mip)].handle, VK_IMAGE_LAYOUT_GENERAL}, sourceIndex(face, mip));
+        }
+    }
+
+    VkDescriptorBufferBindingInfoEXT downsampleBinding = downsampleResources.GetBindingInfo();
+    uint32_t downsampleBindingIndex = 0;
+    VkDeviceSize downsampleBindingOffset = 0;
+    vkCmdBindDescriptorBuffersEXT(cmd, 1, &downsampleBinding);
+    vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resizeEntry.layout, 0, 1, &downsampleBindingIndex, &downsampleBindingOffset);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resizeEntry.pipeline);
+
+    auto dispatchResize = [&](uint32_t srcDescIndex, uint32_t dstDescIndex, uint32_t dstDim) {
+        ProceduralMipDownsamplePushConstant resizePC{srcDescIndex, dstDescIndex};
+        vkCmdPushConstants(cmd, resizeEntry.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ProceduralMipDownsamplePushConstant), &resizePC);
+        const uint32_t groups = (dstDim + PROCEDURAL_TEXTURE_DISPATCH_X - 1) / PROCEDURAL_TEXTURE_DISPATCH_X;
+        vkCmdDispatch(cmd, groups, groups, 1);
+    };
 
     uint32_t sourceDim = S;
     for (uint32_t mip = 1; mip < sourceMipLevels; ++mip) {
@@ -319,41 +364,19 @@ bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer
             probeSourceImage.handle,
             Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6),
             VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
         );
         vkCmdPipelineBarrier2(cmd, &depInfo);
 
         for (uint32_t face = 0; face < 6; ++face) {
-            VkImageBlit2 blitRegion{.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2};
-            blitRegion.srcOffsets[0] = {0, 0, 0};
-            blitRegion.srcOffsets[1] = {static_cast<int32_t>(sourceDim), static_cast<int32_t>(sourceDim), 1};
-            blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blitRegion.srcSubresource.mipLevel = mip - 1;
-            blitRegion.srcSubresource.baseArrayLayer = face;
-            blitRegion.srcSubresource.layerCount = 1;
-            blitRegion.dstOffsets[0] = {0, 0, 0};
-            blitRegion.dstOffsets[1] = {static_cast<int32_t>(nextDim), static_cast<int32_t>(nextDim), 1};
-            blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blitRegion.dstSubresource.mipLevel = mip;
-            blitRegion.dstSubresource.baseArrayLayer = face;
-            blitRegion.dstSubresource.layerCount = 1;
-
-            VkBlitImageInfo2 blitInfo{.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2};
-            blitInfo.srcImage = probeSourceImage.handle;
-            blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            blitInfo.dstImage = probeSourceImage.handle;
-            blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            blitInfo.regionCount = 1;
-            blitInfo.pRegions = &blitRegion;
-            blitInfo.filter = VK_FILTER_LINEAR;
-            vkCmdBlitImage2(cmd, &blitInfo);
+            dispatchResize(sourceIndex(face, mip - 1), sourceIndex(face, mip), nextDim);
         }
 
         barrier = Render::VkHelpers::ImageMemoryBarrier(
             probeSourceImage.handle,
             Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6),
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
         );
         vkCmdPipelineBarrier2(cmd, &depInfo);
 
@@ -361,8 +384,6 @@ bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer
     }
 
     const uint32_t sourceFinalMip = sourceMipLevels - 1;
-
-    const uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(R))) + 1;
 
     VkImageCreateInfo cubemapCreateInfo = Render::VkHelpers::ImageCreateInfo(
         VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -385,110 +406,70 @@ bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer
     bool success = resourceManager->environmentMapGenerateResources.SetCubemap({nullptr, mipmappedCubemapImageView.handle, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 0);
     assert(success);
 
-    barrier = Render::VkHelpers::ImageMemoryBarrier(
-        mipmappedCubemapImage.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 6),
-        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-    );
-    vkCmdPipelineBarrier2(cmd, &depInfo);
-
-    // Final step of the chain: last halved mip (within 2x of R) -> cubemap mip 0 (LINEAR, may be non-integer scale)
     for (uint32_t face = 0; face < 6; ++face) {
-        VkImageBlit2 blitRegion{.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2};
-        blitRegion.srcOffsets[0] = {0, 0, 0};
-        blitRegion.srcOffsets[1] = {static_cast<int32_t>(sourceDim), static_cast<int32_t>(sourceDim), 1};
-        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.srcSubresource.mipLevel = sourceFinalMip;
-        blitRegion.srcSubresource.baseArrayLayer = face;
-        blitRegion.srcSubresource.layerCount = 1;
-        blitRegion.dstOffsets[0] = {0, 0, 0};
-        blitRegion.dstOffsets[1] = {static_cast<int32_t>(R), static_cast<int32_t>(R), 1};
-        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.dstSubresource.mipLevel = 0;
-        blitRegion.dstSubresource.baseArrayLayer = face;
-        blitRegion.dstSubresource.layerCount = 1;
-
-        VkBlitImageInfo2 blitInfo{.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2};
-        blitInfo.srcImage = probeSourceImage.handle;
-        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        blitInfo.dstImage = mipmappedCubemapImage.handle;
-        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        blitInfo.regionCount = 1;
-        blitInfo.pRegions = &blitRegion;
-        blitInfo.filter = VK_FILTER_LINEAR;
-        vkCmdBlitImage2(cmd, &blitInfo);
-    }
-
-    barrier = Render::VkHelpers::ImageMemoryBarrier(
-        mipmappedCubemapImage.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6),
-        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-    );
-    vkCmdPipelineBarrier2(cmd, &depInfo);
-
-    // Build the source mip chain (prefilter/convolve sample it by LOD)
-    {
-        uint32_t mipWidth = R;
-        uint32_t mipHeight = R;
-        for (uint32_t mip = 1; mip < mipLevels; mip++) {
-            uint32_t nextWidth = mipWidth / 2;
-            uint32_t nextHeight = mipHeight / 2;
-
-            for (uint32_t face = 0; face < 6; face++) {
-                VkImageBlit2 blitRegion{.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2};
-                blitRegion.srcOffsets[0] = {0, 0, 0};
-                blitRegion.srcOffsets[1] = {static_cast<int32_t>(mipWidth), static_cast<int32_t>(mipHeight), 1};
-                blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                blitRegion.srcSubresource.mipLevel = mip - 1;
-                blitRegion.srcSubresource.baseArrayLayer = face;
-                blitRegion.srcSubresource.layerCount = 1;
-                blitRegion.dstOffsets[0] = {0, 0, 0};
-                blitRegion.dstOffsets[1] = {static_cast<int32_t>(nextWidth), static_cast<int32_t>(nextHeight), 1};
-                blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                blitRegion.dstSubresource.mipLevel = mip;
-                blitRegion.dstSubresource.baseArrayLayer = face;
-                blitRegion.dstSubresource.layerCount = 1;
-
-                VkBlitImageInfo2 blitInfo{.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2};
-                blitInfo.srcImage = mipmappedCubemapImage.handle;
-                blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                blitInfo.dstImage = mipmappedCubemapImage.handle;
-                blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                blitInfo.regionCount = 1;
-                blitInfo.pRegions = &blitRegion;
-                blitInfo.filter = VK_FILTER_LINEAR;
-                vkCmdBlitImage2(cmd, &blitInfo);
-            }
-
-            if (mip < mipLevels - 1) {
-                barrier = Render::VkHelpers::ImageMemoryBarrier(
-                    mipmappedCubemapImage.handle,
-                    Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6),
-                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-                );
-                vkCmdPipelineBarrier2(cmd, &depInfo);
-            }
-
-            mipWidth = nextWidth;
-            mipHeight = nextHeight;
+        for (uint32_t mip = 0; mip < mipLevels; ++mip) {
+            VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(mipmappedCubemapImage.handle, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+            viewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, face, 1);
+            cubemapFaceViews[face * mipLevels + mip] = Render::ImageView::CreateImageView(context, viewInfo);
+            downsampleResources.SetRWTexture({nullptr, cubemapFaceViews[face * mipLevels + mip].handle, VK_IMAGE_LAYOUT_GENERAL}, cubemapIndex(face, mip));
         }
     }
 
     barrier = Render::VkHelpers::ImageMemoryBarrier(
         mipmappedCubemapImage.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels - 1, 0, 6),
-        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6),
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
     );
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
+    // Final step of the chain: last halved mip (within 2x of R) -> cubemap mip 0 (bilinear, may be non-integer scale)
+    for (uint32_t face = 0; face < 6; ++face) {
+        dispatchResize(sourceIndex(face, sourceFinalMip), cubemapIndex(face, 0), R);
+    }
+
     barrier = Render::VkHelpers::ImageMemoryBarrier(
         mipmappedCubemapImage.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mipLevels - 1, 1, 0, 6),
-        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6),
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
+    );
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    // Build the source mip chain (prefilter/convolve sample it by LOD)
+    {
+        uint32_t mipDim = R;
+        for (uint32_t mip = 1; mip < mipLevels; mip++) {
+            const uint32_t nextDim = mipDim / 2;
+
+            barrier = Render::VkHelpers::ImageMemoryBarrier(
+                mipmappedCubemapImage.handle,
+                Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6),
+                VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
+            );
+            vkCmdPipelineBarrier2(cmd, &depInfo);
+
+            for (uint32_t face = 0; face < 6; face++) {
+                dispatchResize(cubemapIndex(face, mip - 1), cubemapIndex(face, mip), nextDim);
+            }
+
+            barrier = Render::VkHelpers::ImageMemoryBarrier(
+                mipmappedCubemapImage.handle,
+                Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6),
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
+            );
+            vkCmdPipelineBarrier2(cmd, &depInfo);
+
+            mipDim = nextDim;
+        }
+    }
+
+    barrier = Render::VkHelpers::ImageMemoryBarrier(
+        mipmappedCubemapImage.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 6),
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
     vkCmdPipelineBarrier2(cmd, &depInfo);
@@ -628,88 +609,63 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
         submitAndWait(true);
     }
 
+    Core::Array<Render::ImageView, 6 * 13> cubemapFaceViews{};
+
     // Cubemap mipmap generation
     {
         ZoneScopedN("GenerateCubemapMipmaps");
 
-        barrier = Render::VkHelpers::ImageMemoryBarrier(
-            mipmappedCubemapImage.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6),
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-        );
-        vkCmdPipelineBarrier2(cmd, &depInfo);
+        const Render::PipelineEntry resizeEntry = pipelineManager->GetPipelineEntrySnapshot(SID("procedural_resize"));
+        if (resizeEntry.pipeline == VK_NULL_HANDLE) {
+            SPDLOG_ERROR("[EnvironmentMapGenerateSlot] procedural_resize pipeline not ready");
+            return false;
+        }
 
-        barrier = Render::VkHelpers::ImageMemoryBarrier(
-            mipmappedCubemapImage.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, mipLevels - 1, 0, 6),
-            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-        );
-        vkCmdPipelineBarrier2(cmd, &depInfo);
+        constexpr uint32_t MAX_CUBEMAP_MIPS = 13;
+        assert(mipLevels <= MAX_CUBEMAP_MIPS && 6 * mipLevels <= Render::ProceduralTextureGenerateResources::MAX_RW_TEXTURES);
+        for (uint32_t face = 0; face < 6; ++face) {
+            for (uint32_t mip = 0; mip < mipLevels; ++mip) {
+                VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(mipmappedCubemapImage.handle, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+                viewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, face, 1);
+                cubemapFaceViews[face * mipLevels + mip] = Render::ImageView::CreateImageView(context, viewInfo);
+                downsampleResources.SetRWTexture({nullptr, cubemapFaceViews[face * mipLevels + mip].handle, VK_IMAGE_LAYOUT_GENERAL}, face * mipLevels + mip);
+            }
+        }
 
-        uint32_t mipWidth = ENVIRONMENT_MAP_RESOLUTION;
-        uint32_t mipHeight = ENVIRONMENT_MAP_RESOLUTION;
+        VkDescriptorBufferBindingInfoEXT downsampleBinding = downsampleResources.GetBindingInfo();
+        uint32_t downsampleBindingIndex = 0;
+        VkDeviceSize downsampleBindingOffset = 0;
+        vkCmdBindDescriptorBuffersEXT(cmd, 1, &downsampleBinding);
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resizeEntry.layout, 0, 1, &downsampleBindingIndex, &downsampleBindingOffset);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resizeEntry.pipeline);
+
+        uint32_t mipDim = ENVIRONMENT_MAP_RESOLUTION;
 
         for (uint32_t mip = 1; mip < mipLevels; mip++) {
-            uint32_t nextWidth = mipWidth / 2;
-            uint32_t nextHeight = mipHeight / 2;
+            const uint32_t nextDim = mipDim / 2;
+
+            barrier = Render::VkHelpers::ImageMemoryBarrier(
+                mipmappedCubemapImage.handle,
+                Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 1, 0, 6),
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
+            );
+            vkCmdPipelineBarrier2(cmd, &depInfo);
 
             for (uint32_t face = 0; face < 6; face++) {
-                VkImageBlit2 blitRegion{.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2};
-                blitRegion.srcOffsets[0] = {0, 0, 0};
-                blitRegion.srcOffsets[1] = {static_cast<int32_t>(mipWidth), static_cast<int32_t>(mipHeight), 1};
-                blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                blitRegion.srcSubresource.mipLevel = mip - 1;
-                blitRegion.srcSubresource.baseArrayLayer = face;
-                blitRegion.srcSubresource.layerCount = 1;
-
-                blitRegion.dstOffsets[0] = {0, 0, 0};
-                blitRegion.dstOffsets[1] = {static_cast<int32_t>(nextWidth), static_cast<int32_t>(nextHeight), 1};
-                blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                blitRegion.dstSubresource.mipLevel = mip;
-                blitRegion.dstSubresource.baseArrayLayer = face;
-                blitRegion.dstSubresource.layerCount = 1;
-
-                VkBlitImageInfo2 blitInfo{.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2};
-                blitInfo.srcImage = mipmappedCubemapImage.handle;
-                blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                blitInfo.dstImage = mipmappedCubemapImage.handle;
-                blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                blitInfo.regionCount = 1;
-                blitInfo.pRegions = &blitRegion;
-                blitInfo.filter = VK_FILTER_LINEAR;
-
-                vkCmdBlitImage2(cmd, &blitInfo);
+                ProceduralMipDownsamplePushConstant resizePC{face * mipLevels + mip - 1, face * mipLevels + mip};
+                vkCmdPushConstants(cmd, resizeEntry.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ProceduralMipDownsamplePushConstant), &resizePC);
+                const uint32_t groups = (nextDim + PROCEDURAL_TEXTURE_DISPATCH_X - 1) / PROCEDURAL_TEXTURE_DISPATCH_X;
+                vkCmdDispatch(cmd, groups, groups, 1);
             }
 
-            if (mip < mipLevels - 1) {
-                barrier = Render::VkHelpers::ImageMemoryBarrier(
-                    mipmappedCubemapImage.handle,
-                    Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 6),
-                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-                );
-                vkCmdPipelineBarrier2(cmd, &depInfo);
-            }
-
-            mipWidth = nextWidth;
-            mipHeight = nextHeight;
+            mipDim = nextDim;
         }
 
         barrier = Render::VkHelpers::ImageMemoryBarrier(
             mipmappedCubemapImage.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels - 1, 0, 6),
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        );
-        vkCmdPipelineBarrier2(cmd, &depInfo);
-
-        // Transition last mip (currently in DST)
-        barrier = Render::VkHelpers::ImageMemoryBarrier(
-            mipmappedCubemapImage.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mipLevels - 1, 1, 0, 6),
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 6),
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         );
         vkCmdPipelineBarrier2(cmd, &depInfo);

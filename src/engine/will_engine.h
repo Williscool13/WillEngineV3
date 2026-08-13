@@ -135,6 +135,7 @@ private: // Main Systems
     Editor::AssetGenerator* assetGenerator{};
     bool bQuitPendingGeneration{false};
     bool bForceQuitRequested{false};
+    bool bGenPipelineWakeSent{false};
 #endif
 
 private: // Subsystems

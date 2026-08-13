@@ -132,7 +132,8 @@ void CreateBRDFLookupTable(
         return;
     }
 
-    VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->graphicsQueueFamily);
+    const uint32_t submitFamily = context->computeQueue != VK_NULL_HANDLE ? context->computeQueueFamily : context->graphicsQueueFamily;
+    VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(submitFamily);
     VkCommandPool graphicsCommandPool;
     VK_CHECK(vkCreateCommandPool(context->device, &graphicsPoolInfo, context->HostAllocCallbacks(), &graphicsCommandPool));
 

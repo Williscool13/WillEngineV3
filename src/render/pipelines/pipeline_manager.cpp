@@ -684,6 +684,9 @@ void PipelineManager::RegisterPipelines()
                                         sizeof(ProceduralMipDownsamplePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
 
 #if WILL_EDITOR
+    RegisterComputePipelineCustomLayout(SID("procedural_resize"), src / "procedural_mip_downsample.spv", "ComputeProceduralResize",
+                                        sizeof(ProceduralMipDownsamplePushConstant), PipelineCategory::AssetGeneration, Core::Span(&proceduralTexLayout, 1));
+
     VkDescriptorSetLayout emapLayout = resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle;
     RegisterComputePipelineCustomLayout(SID("ibl_equirect_to_cubemap"), src / "ibl_bake.spv", "ComputeEquirectToCubemap",
                                         sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));

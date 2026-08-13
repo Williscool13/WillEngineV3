@@ -19,6 +19,7 @@
 #include "core/memory/memory_manager.h"
 #include "engine/core/environment_map_id.h"
 #include "engine/resources/environment_map/probe_format.h"
+#include "render/descriptors/procedural_texture_generate_resources.h"
 #include "render/shaders/constants_interop.h"
 #include "render/vulkan/vk_resources.h"
 
@@ -45,7 +46,7 @@ struct EnvironmentMapGenerateSlot
         Render::PipelineManager* _pipelineManager,
         Render::ResourceManager* _resourceManager,
         Core::MemoryManager* _memoryManager,
-        Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
+        Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
         Core::InlineFunction<void(bool success, EnvironmentMapGenerateSlotHandle cubemapSlotHandle)> notifyCallback
     );
 
@@ -85,9 +86,10 @@ private:
     Render::VulkanContext* context{nullptr};
     Render::PipelineManager* pipelineManager{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
-    AssetLoad::SubmitContext graphicsSubmit{};
+    AssetLoad::SubmitContext computeSubmit{};
+    Render::ProceduralTextureGenerateResources downsampleResources{};
 
-    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _dispatchCallback;
     Core::InlineFunction<void(bool success, EnvironmentMapGenerateSlotHandle cubemapSlotHandle)> _notifyCallback;
 
     EnvironmentMapGenerateSlotHandle slotHandle{EnvironmentMapGenerateSlotHandle::INVALID};

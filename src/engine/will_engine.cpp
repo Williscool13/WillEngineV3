@@ -1583,6 +1583,10 @@ void WillEngine::Run()
         engineContext->frameStatus.bScreenshotInFlight = renderThread->IsScreenshotInFlight();
 #if WILL_EDITOR
         engineContext->frameStatus.bAssetGenerationPending = assetGenerator->GetTotalTextureGenerateCount() + assetGenerator->GetTotalModelGenerateCount() > 0;
+        if (!bGenPipelineWakeSent && renderThread->GetPipelineManager()->IsCategoryReady(Render::PipelineCategory::AssetGeneration)) {
+            assetGenerator->Wake();
+            bGenPipelineWakeSent = true;
+        }
 #endif
 
         //

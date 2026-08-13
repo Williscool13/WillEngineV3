@@ -19,6 +19,9 @@
 #include "engine/resources/wimage_format.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
+#include "render/pipelines/pipeline_manager.h"
+#include "render/shaders/constants_interop.h"
+#include "render/shaders/push_constant_interop.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
@@ -29,28 +32,33 @@ TextureGenerateSlot::TextureGenerateSlot() = default;
 
 TextureGenerateSlot::~TextureGenerateSlot()
 {
-    graphicsSubmit.Destroy(context);
+    computeSubmit.Destroy(context);
 }
 
 void TextureGenerateSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
+    Render::PipelineManager* _pipelineManager,
     Core::MemoryManager* _memoryManager,
     AssetGenerator* _assetGenerator,
-    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
     Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
+    pipelineManager = _pipelineManager;
     memoryManager = _memoryManager;
     assetGenerator = _assetGenerator;
-    _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
+    _dispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 
     imageStagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, TEXTURE_GENERATION_STAGING_BUFFER_SIZE);
     imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, TEXTURE_GENERATION_STAGING_BUFFER_SIZE);
 
-    graphicsSubmit.Initialize(context, context->graphicsQueueFamily);
+    downsampleResources = Render::ProceduralTextureGenerateResources(context);
+
+    const uint32_t submitFamily = context->computeQueue != VK_NULL_HANDLE ? context->computeQueueFamily : context->graphicsQueueFamily;
+    computeSubmit.Initialize(context, submitFamily);
 }
 
 void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId,
@@ -125,45 +133,45 @@ void TextureGenerateSlot::Clear()
 
 void TextureGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
 {
-    VkCommandBuffer graphicsCmd = taskSlot->graphicsSubmit.cmd;
-    VkFence graphicsFence = taskSlot->graphicsSubmit.fence;
+    VkCommandBuffer cmd = taskSlot->computeSubmit.cmd;
+    VkFence fence = taskSlot->computeSubmit.fence;
 
-    auto startGraphicsRecording = [&] {
+    auto startRecording = [&] {
         VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-        VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &beginInfo));
+        VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
     };
 
-    auto graphicsSubmitAndWait = [&](bool restart) {
-        ZoneScopedN("GraphicsSubmitAndWait");
-        VK_CHECK(vkEndCommandBuffer(graphicsCmd));
+    auto submitAndWait = [&](bool restart) {
+        ZoneScopedN("SubmitAndWait");
+        VK_CHECK(vkEndCommandBuffer(cmd));
         std::binary_semaphore done(0);
-        taskSlot->_graphicsDispatchCallback(graphicsCmd, graphicsFence, &done);
+        taskSlot->_dispatchCallback(cmd, fence, &done);
         done.acquire();
-        VK_CHECK(vkResetFences(taskSlot->context->device, 1, &graphicsFence));
-        VK_CHECK(vkResetCommandBuffer(graphicsCmd, 0));
+        VK_CHECK(vkResetFences(taskSlot->context->device, 1, &fence));
+        VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
         if (restart) {
             VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-            VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &beginInfo));
+            VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
         }
     };
 
-    bool loadRes = taskSlot->LoadImageAndGenerate(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait);
+    bool loadRes = taskSlot->LoadImageAndGenerate(cmd, startRecording, submitAndWait);
     if (!loadRes) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
-        taskSlot->graphicsSubmit.Reset(taskSlot->context);
+        taskSlot->computeSubmit.Reset(taskSlot->context);
         return;
     }
 
     if (!taskSlot->WriteWTextureFile()) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
-        taskSlot->graphicsSubmit.Reset(taskSlot->context);
+        taskSlot->computeSubmit.Reset(taskSlot->context);
         return;
     }
 
     taskSlot->_notifyCallback(true, taskSlot->slotHandle);
 
-    taskSlot->graphicsSubmit.Reset(taskSlot->context);
+    taskSlot->computeSubmit.Reset(taskSlot->context);
 }
 
 bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait)
@@ -208,6 +216,8 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const Core::
         return false;
     }
 
+    Core::Array<Render::ImageView, 13> storageViews{};
+
     startRecording();
 
     char* bufferOffset = static_cast<char*>(imageStagingBuffer.allocationInfo.pMappedData) + allocation;
@@ -216,8 +226,7 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const Core::
         stbi_image_free(stbiData);
     }
 
-    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(VK_FORMAT_R8G8B8A8_UNORM, imagesize,
-                                                                           VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(VK_FORMAT_R8G8B8A8_UNORM, imagesize, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     mipLevels = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(std::max(imgWidth, imgHeight)))) + 1 : 1;
     imageCreateInfo.mipLevels = mipLevels;
 
@@ -246,62 +255,73 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const Core::
     if (mipmapped && mipLevels > 1) {
         ZoneScopedN("GenerateMipmaps");
 
+        const Render::PipelineEntry resizeEntry = pipelineManager->GetPipelineEntrySnapshot(SID("procedural_resize"));
+        if (resizeEntry.pipeline == VK_NULL_HANDLE) {
+            LOG_ERROR(Asset, "procedural_resize pipeline not ready");
+            return false;
+        }
+
+        assert(mipLevels <= 13 && "storageViews/mipData bound");
+        for (uint32_t mip = 0; mip < mipLevels; mip++) {
+            VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(sourceImage.handle, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+            viewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 1);
+            storageViews[mip] = Render::ImageView::CreateImageView(context, viewInfo);
+            downsampleResources.SetRWTexture({nullptr, storageViews[mip].handle, VK_IMAGE_LAYOUT_GENERAL}, mip);
+        }
+
         VkImageMemoryBarrier2 firstBarrier = Render::VkHelpers::ImageMemoryBarrier(
             sourceImage.handle,
             Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
             VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, sourceImage.layout,
-            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
         );
         depInfo.imageMemoryBarrierCount = 1;
         depInfo.pImageMemoryBarriers = &firstBarrier;
         vkCmdPipelineBarrier2(cmd, &depInfo);
 
+        VkDescriptorBufferBindingInfoEXT binding = downsampleResources.GetBindingInfo();
+        uint32_t bindingIndex = 0;
+        VkDeviceSize bindingOffset = 0;
+        vkCmdBindDescriptorBuffersEXT(cmd, 1, &binding);
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resizeEntry.layout, 0, 1, &bindingIndex, &bindingOffset);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resizeEntry.pipeline);
+
         for (uint32_t mip = 1; mip < mipLevels; mip++) {
             VkImageMemoryBarrier2 barriers[2];
-            barriers[0] = Render::VkHelpers::ImageMemoryBarrier(
-                sourceImage.handle,
-                Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 1, 0, 1),
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-            );
-            barriers[1] = Render::VkHelpers::ImageMemoryBarrier(
+            uint32_t barrierCount = 0;
+            if (mip > 1) {
+                barriers[barrierCount++] = Render::VkHelpers::ImageMemoryBarrier(
+                    sourceImage.handle,
+                    Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 1, 0, 1),
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
+                );
+            }
+            barriers[barrierCount++] = Render::VkHelpers::ImageMemoryBarrier(
                 sourceImage.handle,
                 Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 1),
                 VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
-
-            depInfo.imageMemoryBarrierCount = 2;
+            depInfo.imageMemoryBarrierCount = barrierCount;
             depInfo.pImageMemoryBarriers = barriers;
             vkCmdPipelineBarrier2(cmd, &depInfo);
 
-            VkImageBlit blit{};
-            blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 0, 1};
-            blit.srcOffsets[0] = {0, 0, 0};
-            blit.srcOffsets[1] = {std::max(1, imgWidth >> (mip - 1)), std::max(1, imgHeight >> (mip - 1)), 1};
-            blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
-            blit.dstOffsets[0] = {0, 0, 0};
-            blit.dstOffsets[1] = {std::max(1, imgWidth >> mip), std::max(1, imgHeight >> mip), 1};
-
-            vkCmdBlitImage(cmd, sourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           sourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+            ProceduralMipDownsamplePushConstant resizePC{mip - 1, mip};
+            vkCmdPushConstants(cmd, resizeEntry.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ProceduralMipDownsamplePushConstant), &resizePC);
+            const uint32_t mipWidth = static_cast<uint32_t>(std::max(1, imgWidth >> mip));
+            const uint32_t mipHeight = static_cast<uint32_t>(std::max(1, imgHeight >> mip));
+            vkCmdDispatch(cmd, (mipWidth + PROCEDURAL_TEXTURE_DISPATCH_X - 1) / PROCEDURAL_TEXTURE_DISPATCH_X, (mipHeight + PROCEDURAL_TEXTURE_DISPATCH_Y - 1) / PROCEDURAL_TEXTURE_DISPATCH_Y, 1);
         }
 
-        VkImageMemoryBarrier2 finalBarriers[2];
-        finalBarriers[0] = Render::VkHelpers::ImageMemoryBarrier(
+        VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
             sourceImage.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels - 1, 0, 1),
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1),
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
         );
-        finalBarriers[1] = Render::VkHelpers::ImageMemoryBarrier(
-            sourceImage.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mipLevels - 1, 1, 0, 1),
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-        );
-        depInfo.imageMemoryBarrierCount = 2;
-        depInfo.pImageMemoryBarriers = finalBarriers;
+        depInfo.imageMemoryBarrierCount = 1;
+        depInfo.pImageMemoryBarriers = &finalBarrier;
         vkCmdPipelineBarrier2(cmd, &depInfo);
         sourceImage.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     }

@@ -18,6 +18,7 @@
 #include "core/memory/linear_allocator.h"
 #include "engine/core/texture_id.h"
 #include "engine/resources/texture/texture_format.h"
+#include "render/descriptors/procedural_texture_generate_resources.h"
 #include "render/vulkan/vk_resources.h"
 
 namespace Core
@@ -28,6 +29,7 @@ class MemoryManager;
 namespace Render
 {
 struct VulkanContext;
+class PipelineManager;
 }
 
 namespace Editor
@@ -48,9 +50,10 @@ struct TextureGenerateSlot
     void Initialize(
         enki::TaskScheduler* _scheduler,
         Render::VulkanContext* _context,
+        Render::PipelineManager* _pipelineManager,
         Core::MemoryManager* _memoryManager,
         AssetGenerator* _assetGenerator,
-        Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
+        Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
         Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback
     );
 
@@ -88,10 +91,12 @@ private:
 
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
+    Render::PipelineManager* pipelineManager{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
     AssetGenerator* assetGenerator{nullptr};
-    AssetLoad::SubmitContext graphicsSubmit{};
-    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
+    AssetLoad::SubmitContext computeSubmit{};
+    Render::ProceduralTextureGenerateResources downsampleResources{};
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _dispatchCallback;
     Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> _notifyCallback;
 
     TextureGenerateSlotHandle slotHandle{TextureGenerateSlotHandle::INVALID};

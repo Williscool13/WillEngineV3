@@ -16,6 +16,7 @@
 #include "engine/resources/font/font_format.h"
 #include "platform/file_utils.h"
 #include "platform/thread_utils.h"
+#include "render/pipelines/pipeline_manager.h"
 #include "render/render_thread.h"
 
 
@@ -50,10 +51,11 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
         textureGenerateTasks[i].Initialize(
             scheduler,
             vulkanContext,
+            renderThread->GetPipelineManager(),
             &memoryManager,
             this,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
+                ComputeQueueGPUDispatch(cmd, fence, completionSignal);
             },
             [this](bool success, TextureGenerateSlotHandle slotHandle) {
                 OnTextureGenerateComplete(success, slotHandle);
@@ -77,7 +79,7 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
             renderThread->GetResourceManager(),
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
+                ComputeQueueGPUDispatch(cmd, fence, completionSignal);
             },
             [this](bool success, EnvironmentMapGenerateSlotHandle slotHandle) {
                 OnEnvironmentGenerateComplete(success, slotHandle);
@@ -114,8 +116,10 @@ void AssetGenerator::ThreadMain()
             }
         }
 
+        const bool bGenPipelinesReady = renderThread->GetPipelineManager()->IsCategoryReady(Render::PipelineCategory::AssetGeneration);
+
         //
-        {
+        if (bGenPipelinesReady) {
             ZoneScopedN("Process Texture Generation Requests");
             TextureGenerateRequest req{};
             if (textureGenerateRequestQueue.try_dequeue(req)) {
@@ -138,7 +142,7 @@ void AssetGenerator::ThreadMain()
         }
 
         //
-        {
+        if (bGenPipelinesReady) {
             ZoneScopedN("Process Environment Map Generation Requests")
             EnvironmentMapGenerateRequest req{};
             if (environmentMapGenerateRequestQueue.try_dequeue(req)) {
@@ -153,7 +157,7 @@ void AssetGenerator::ThreadMain()
             }
         }
 
-        {
+        if (bGenPipelinesReady) {
             ZoneScopedN("Process Probe Assemble Requests");
             ProbeAssembleRequest req{};
             if (probeAssembleRequestQueue.try_dequeue(req)) {
@@ -189,8 +193,7 @@ void AssetGenerator::ThreadMain()
         else {
             ZoneScopedN("Idle - Waiting for Work");
             std::unique_lock lock(wakeMutex);
-            // Timed wait: slot-full requeues don't bump workCounter, so guarantee a periodic re-poll
-            wakeCV.wait_for(lock, std::chrono::milliseconds(10), [&] {
+            wakeCV.wait(lock, [&] {
                 return workCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
             });
             if (workCounter.load(std::memory_order_acquire) > 0) {
@@ -218,9 +221,9 @@ void AssetGenerator::TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence
     gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, completionSignal);
 }
 
-void AssetGenerator::GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
+void AssetGenerator::ComputeQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
 {
-    gpuDispatcher->Enqueue(Render::DispatchChannel::Graphics, cmd, fence, completionSignal);
+    gpuDispatcher->Enqueue(Render::DispatchChannel::Compute, cmd, fence, completionSignal);
 }
 
 void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath, bool bSkipExistingTextures)
@@ -398,7 +401,7 @@ void AssetGenerator::GenerateBRDFLUT(const Core::Path& outputFile)
 {
     CreateBRDFLookupTable(memoryManager, outputFile, Engine::TextureID(textureIdRng()), vk, renderThread->GetResourceManager(), renderThread->GetPipelineManager(),
                           [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                              GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
+                              ComputeQueueGPUDispatch(cmd, fence, completionSignal);
                           });
 }
 

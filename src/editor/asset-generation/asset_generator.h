@@ -237,6 +237,12 @@ public:
 
     void Join();
 
+    void Wake()
+    {
+        workCounter.fetch_add(1);
+        wakeCV.notify_one();
+    }
+
     bool GetFastMode() const { return bFastMode.load(std::memory_order_relaxed); }
     void SetFastMode(bool value) { bFastMode.store(value, std::memory_order_relaxed); }
 
@@ -268,7 +274,7 @@ private:
 
     void TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
 
-    void GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
+    void ComputeQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
 
     Core::MemoryManager* memoryManager{};
     Engine::EngineContext* ctx;
