@@ -37,11 +37,12 @@ Engine::ComponentEditorResult Component::PlayerSpawnComponent::DrawEditor(Core::
     bool remove = ImGui::SmallButton("X##deleteplayerspawn");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
-        ImGui::DragInt("Priority", &component.priority);
-        ImGui::DragFloat3("Offset", &component.offset.x, 0.1f);
+        modified |= ImGui::DragInt("Priority", &component.priority);
+        modified |= ImGui::DragFloat3("Offset", &component.offset.x, 0.1f);
     }
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 }

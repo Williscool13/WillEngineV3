@@ -20,7 +20,8 @@ struct ViewFamily;
 namespace Engine
 {
 struct ComponentEditorResult {
-    bool requestRemoval{false};
+    bool bRequestRemoval{false};
+    bool bModified{false};
 };
 
 using SerializeFn = void(*)(const entt::registry&, entt::entity, nlohmann::json&);

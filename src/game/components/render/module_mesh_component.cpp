@@ -125,6 +125,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
     bool remove = ImGui::SmallButton("X##deletemodulemesh");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
         bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
@@ -154,6 +155,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
                         component.slotMaterials[slot] = Engine::MaterialID{};
                         registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
                         state->assetLoad.bPendingModelResolve = true;
+                        modified = true;
                     }
                 }
                 for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
@@ -163,6 +165,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
                             component.slotMaterials[slot] = matId;
                             registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
                             state->assetLoad.bPendingModelResolve = true;
+                            modified = true;
                         }
                     }
                 }
@@ -172,6 +175,6 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
         }
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 } // Game

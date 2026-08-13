@@ -199,6 +199,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
     bool remove = ImGui::SmallButton("X##deletesplinemesh");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
         bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
@@ -534,6 +535,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
                         state->assetLoad.bPendingModelResolve = true;
+                        modified = true;
                     }
                 }
                 for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
@@ -543,6 +545,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                             component.material = matId;
                             registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
                             state->assetLoad.bPendingModelResolve = true;
+                            modified = true;
                         }
                     }
                 }
@@ -551,6 +554,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
         }
 
         if (dirty) {
+            modified = true;
             registry.remove<MeshRuntime>(entity);
             registry.remove<SplineMeshLoadingTag>(entity);
             registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
@@ -560,6 +564,6 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
     if (hasGizmoClaim) { state->editor.bExclusiveGizmoActive = true; }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 } // Game

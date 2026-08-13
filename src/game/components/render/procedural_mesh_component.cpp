@@ -599,6 +599,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
     bool remove = ImGui::SmallButton("X##deleteproceduralmesh");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
         bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
@@ -620,6 +621,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 auto selectShape = [&](auto&& params) {
                     component.params = std::move(params);
                     RecreateProceduralMesh(component, registry, entity);
+                    modified = true;
                 };
                 if (ImGui::Selectable("Staircase")) selectShape(Engine::StaircaseParams{});
                 if (ImGui::Selectable("Box")) selectShape(Engine::BoxParams{});
@@ -662,6 +664,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             if (ImGui::SmallButton("X##deselect_shape")) {
                 component.params = std::monostate{};
                 RecreateProceduralMesh(component, registry, entity);
+                modified = true;
             }
             ImGui::PopStyleColor();
 
@@ -1106,6 +1109,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
 
             if (dirty) {
                 RecreateProceduralMesh(component, registry, entity);
+                modified = true;
             }
         }
 
@@ -1123,6 +1127,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
                         state->assetLoad.bPendingModelResolve |= true;
+                        modified = true;
                     }
                 }
                 for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
@@ -1132,6 +1137,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                             component.material = matId;
                             registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
                             state->assetLoad.bPendingModelResolve |= true;
+                            modified = true;
                         }
                     }
                 }
@@ -1174,6 +1180,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         ImGui::TextUnformatted("Offset");
         ImGui::SameLine(labelColW);
         if (drawXYZ("##rox", "##roy", "##roz", &component.renderOffset.x, 0.1f, bEditingOffset)) {
+            modified = true;
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
                 rt->renderOffset = component.renderOffset;
@@ -1187,6 +1194,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         ImGui::TextUnformatted("Rotation");
         ImGui::SameLine(labelColW);
         if (drawXYZ("##rrx", "##rry", "##rrz", &renderEuler.x, 0.5f, bEditingOffset)) {
+            modified = true;
             component.renderRotation = glm::quat(glm::radians(renderEuler));
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
@@ -1233,6 +1241,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             const Quat worldRenderRot = world.rotation * component.renderRotation;
             Mat4 gizmoMat = glm::translate(Mat4(1.0f), pivotWorld) * glm::mat4_cast(worldRenderRot);
             if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), state->editor.currentGizmoOperation, state->editor.currentGizmoMode, glm::value_ptr(gizmoMat), nullptr, snap)) {
+                modified = true;
                 component.renderOffset = Vec3(entityMatInv * Vec4(Vec3(gizmoMat[3]), 1.0f));
                 component.renderRotation = glm::inverse(world.rotation) * glm::quat_cast(Mat3(gizmoMat));
                 auto* rt = registry.try_get<RenderTransformComponent>(entity);
@@ -1248,7 +1257,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         }
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 } // Game

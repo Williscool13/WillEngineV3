@@ -43,10 +43,11 @@ Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamil
     bool remove = ImGui::SmallButton("X##deleterotateinplace");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
-        ImGui::DragFloat3("Axis", &component.axis.x, 0.01f);
-        ImGui::DragFloat("Speed", &component.speedDegrees, 1.0f, -3600.0f, 3600.0f, "%.1f deg/s");
-        ImGui::Checkbox("World Space", &component.bWorldSpace);
+        modified |= ImGui::DragFloat3("Axis", &component.axis.x, 0.01f);
+        modified |= ImGui::DragFloat("Speed", &component.speedDegrees, 1.0f, -3600.0f, 3600.0f, "%.1f deg/s");
+        modified |= ImGui::Checkbox("World Space", &component.bWorldSpace);
 
         auto* transform = registry.try_get<TransformComponent>(entity);
         if (transform) {
@@ -81,6 +82,6 @@ Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamil
         }
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 } // Game::Component

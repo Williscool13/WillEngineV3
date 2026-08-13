@@ -46,16 +46,18 @@ Engine::ComponentEditorResult Component::DebugGizmoComponent::DrawEditor(Core::V
     bool remove = ImGui::SmallButton("X##deletedebuggizmo");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         int current = static_cast<int>(comp.shape);
         if (ImGui::Combo("Shape", &current, SHAPE_NAMES, IM_ARRAYSIZE(SHAPE_NAMES))) {
             comp.shape = static_cast<Component::DebugGizmoShape>(current);
+            modified = true;
         }
-        ImGui::DragFloat3("Extents", &comp.extents.x, 0.01f, 0.0f, 100.0f);
-        ImGui::ColorEdit4("Color", &comp.color.r);
-        ImGui::DragFloat("Line Width", &comp.lineWidth, 0.005f, 0.01f, 1.0f);
+        modified |= ImGui::DragFloat3("Extents", &comp.extents.x, 0.01f, 0.0f, 100.0f);
+        modified |= ImGui::ColorEdit4("Color", &comp.color.r);
+        modified |= ImGui::DragFloat("Line Width", &comp.lineWidth, 0.005f, 0.01f, 1.0f);
     }
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 }

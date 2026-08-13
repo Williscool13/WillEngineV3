@@ -89,25 +89,28 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
     bool remove = ImGui::SmallButton("X##deletereflectionprobe");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& comp = registry.get<ReflectionProbeComponent>(entity);
 
-        ImGui::Checkbox("Enabled##rp", &comp.bEnabled);
+        modified |= ImGui::Checkbox("Enabled##rp", &comp.bEnabled);
 
         static constexpr const char* SHAPE_LABELS[] = {"Box", "Sphere"};
         int shapeIndex = static_cast<int>(comp.shape);
         if (ImGui::Combo("Shape##rp", &shapeIndex, SHAPE_LABELS, 2)) {
             comp.shape = static_cast<Shape>(shapeIndex);
+            modified = true;
         }
 
-        ImGui::DragFloat("Fade Margin##rp", &comp.fadeMargin, 0.02f, 0.0f, 10.0f);
-        ImGui::DragFloat3("Capture Offset##rp", &comp.captureOffset.x, 0.05f);
-        ImGui::Checkbox("Parallax##rp", &comp.bParallax);
+        modified |= ImGui::DragFloat("Fade Margin##rp", &comp.fadeMargin, 0.02f, 0.0f, 10.0f);
+        modified |= ImGui::DragFloat3("Capture Offset##rp", &comp.captureOffset.x, 0.05f);
+        modified |= ImGui::Checkbox("Parallax##rp", &comp.bParallax);
 
         static constexpr const char* RESOLUTION_LABELS[] = {"128", "256"};
         int resolutionIndex = static_cast<int>(comp.resolution);
         if (ImGui::Combo("Resolution##rp", &resolutionIndex, RESOLUTION_LABELS, 2)) {
             comp.resolution = static_cast<Resolution>(resolutionIndex);
+            modified = true;
         }
 
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
@@ -122,6 +125,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
                         comp.contentHandle = Engine::CubemapHandle::INVALID;
                     }
                     comp.standInEnvMap = id;
+                    modified = true;
                     RequestReflectionProbeLoad(registry, entity);
                 }
             }
@@ -242,6 +246,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
             Mat4 gizmoMat = glm::translate(Mat4(1.0f), capturePos) * glm::mat4_cast(rot);
             if (ImGuizmo::Manipulate(glm::value_ptr(vd.view), glm::value_ptr(vd.proj), ImGuizmo::TRANSLATE, state->editor.currentGizmoMode, glm::value_ptr(gizmoMat), nullptr, snap)) {
                 comp.captureOffset = glm::inverse(rot) * (Vec3(gizmoMat[3]) - center);
+                modified = true;
             }
             if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }
             ImGuizmo::PopID();
@@ -267,7 +272,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         }
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 void ReflectionProbeComponent::Serialize(const ReflectionProbeComponent& comp, nlohmann::json& json)

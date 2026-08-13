@@ -171,6 +171,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
     bool remove = ImGui::SmallButton("X##deletestaticmesh");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
         bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
@@ -196,11 +197,12 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     if (ImGui::Selectable(meta.name.c_str(), false)) {
                         component.modelId = key;
                         LoadStaticMesh(component, registry, entity);
+                        modified = true;
                     }
                 }
                 ImGui::EndCombo();
             }
-            return {.requestRemoval = remove};
+            return {.bRequestRemoval = remove, .bModified = modified};
         }
 
         const auto* modelMeta = ctx->assetManager->GetModelMetadata(component.modelId);
@@ -211,22 +213,22 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             component.modelId = Engine::ModelID::INVALID;
             registry.remove<RenderTransformComponent>(entity);
             registry.remove<MultiframeDirtyTransformComponent>(entity);
-            return {.requestRemoval = remove};
+            return {.bRequestRemoval = remove, .bModified = true};
         }
 
         if (!runtime || !runtime->modelHandle.IsValid()) {
             if (registry.any_of<StaticMeshLoadPendingTag, StaticMeshLoadingTag>(entity)) {
                 ImGui::Text("Loading Model...");
-                return {.requestRemoval = remove};
+                return {.bRequestRemoval = remove};
             }
             LOG_WARN(Game, "modelId specified but model handle is invalid, resetting to unset");
             component.modelId = Engine::ModelID::INVALID;
-            return {.requestRemoval = remove};
+            return {.bRequestRemoval = remove, .bModified = true};
         }
         Engine::StaticModel* model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             ImGui::Text("Loading Model...");
-            return {.requestRemoval = remove};
+            return {.bRequestRemoval = remove};
         }
 
         Engine::InstanceStore& store = state->instanceStore;
@@ -240,7 +242,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 component.primitiveBlacklist.Clear();
                 registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
                 state->assetLoad.bPendingModelResolve |= true;
-                return {.requestRemoval = remove};
+                return {.bRequestRemoval = remove, .bModified = true};
             }
         }
 
@@ -266,7 +268,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         }
         if (pendingSplitOrdinal != ~0u) {
             SplitOffMeshPrimitive(state, entity, pendingSplitOrdinal, pendingSplitTransform);
-            return {.requestRemoval = remove};
+            return {.bRequestRemoval = remove, .bModified = true};
         }
 
         if (primCount > 0) {
@@ -337,6 +339,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     component.SetMaterialOverride(static_cast<uint32_t>(pendingChangeIdx), pendingChangeMat);
                     registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
                     state->assetLoad.bPendingModelResolve |= true;
+                    modified = true;
                 }
 
                 ImGui::TreePop();
@@ -389,6 +392,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             if (shaderChanged) {
                 registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
                 state->assetLoad.bPendingModelResolve |= true;
+                modified = true;
             }
         }
 
@@ -427,6 +431,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         ImGui::TextUnformatted("Offset");
         ImGui::SameLine(labelColW);
         if (drawXYZ("##rox", "##roy", "##roz", &component.renderOffset.x, 0.1f, bEditingOffset)) {
+            modified = true;
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
                 rt->renderOffset = component.renderOffset;
@@ -440,6 +445,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         ImGui::TextUnformatted("Rotation");
         ImGui::SameLine(labelColW);
         if (drawXYZ("##rrx", "##rry", "##rrz", &renderEuler.x, 0.5f, bEditingOffset)) {
+            modified = true;
             component.renderRotation = glm::quat(glm::radians(renderEuler));
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
@@ -486,6 +492,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             const Quat worldRenderRot = world.rotation * component.renderRotation;
             Mat4 gizmoMat = glm::translate(Mat4(1.0f), pivotWorld) * glm::mat4_cast(worldRenderRot);
             if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), state->editor.currentGizmoOperation, state->editor.currentGizmoMode, glm::value_ptr(gizmoMat), nullptr, snap)) {
+                modified = true;
                 component.renderOffset = Vec3(entityMatInv * Vec4(Vec3(gizmoMat[3]), 1.0f));
                 component.renderRotation = glm::inverse(world.rotation) * glm::quat_cast(Mat3(gizmoMat));
                 auto* rt = registry.try_get<RenderTransformComponent>(entity);
@@ -501,6 +508,6 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         }
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 } // Game

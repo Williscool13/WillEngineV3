@@ -43,7 +43,7 @@ inline Engine::ComponentEditorResult DefaultDrawComponentEditor(const char* name
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     bool remove = ImGui::SmallButton(Core::InlineString<96>::Format("X##%s", name).c_str());
     ImGui::PopStyleColor();
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove};
 }
 }
 

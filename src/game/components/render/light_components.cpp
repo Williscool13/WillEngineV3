@@ -34,21 +34,23 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
     bool remove = ImGui::SmallButton("X##deletearealight");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& comp = registry.get<AreaLightComponent>(entity);
-        ImGui::ColorEdit3("Color##al", &comp.color.r);
-        ImGui::DragFloat("Intensity##al", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        modified |= ImGui::ColorEdit3("Color##al", &comp.color.r);
+        modified |= ImGui::DragFloat("Intensity##al", &comp.intensity, 0.05f, 0.0f, 100.0f);
         ImGui::BeginDisabled(!bEditing);
         bool extentChanged = false;
         extentChanged |= ImGui::DragFloat("Half Width##al", &comp.halfWidth, 0.05f, 0.01f, 100.0f);
         extentChanged |= ImGui::DragFloat("Half Height##al", &comp.halfHeight, 0.05f, 0.01f, 100.0f);
         if (extentChanged) {
+            modified = true;
             registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); // recompute the emissive quad matrix; extents don't dirty the transform on their own
         }
         ImGui::EndDisabled();
-        ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
-        ImGui::Checkbox("Draw Emissive Surface##al", &comp.drawEmissiveSurface);
-        ImGui::Checkbox("Probe Bake Exclude##al", &comp.bExcludeFromProbeBake);
+        modified |= ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
+        modified |= ImGui::Checkbox("Draw Emissive Surface##al", &comp.drawEmissiveSurface);
+        modified |= ImGui::Checkbox("Probe Bake Exclude##al", &comp.bExcludeFromProbeBake);
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing);
@@ -79,17 +81,17 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         const Vec3 widthPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, right) * right);
         Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 0, center + right * comp.halfWidth * transform->scale.x, widthPlaneNormal,
                           vd.view, vd.proj, viewport, vd.cameraPos, state,
-                          [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
+                          [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); modified = true; },
                           Editor::COLOR_AXIS_X);
 
         const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
         Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 1, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
                           vd.view, vd.proj, viewport, vd.cameraPos, state,
-                          [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); },
+                          [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); modified = true; },
                           Editor::COLOR_AXIS_Y);
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, nlohmann::json& json)
@@ -123,15 +125,16 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
     bool remove = ImGui::SmallButton("X##deletedirlight");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& comp = registry.get<DirectionalLightComponent>(entity);
-        ImGui::ColorEdit3("Color##dl", &comp.color.r);
-        ImGui::DragFloat("Intensity##dl", &comp.intensity, 0.05f, 0.0f, 100.0f);
-        ImGui::DragFloat("Angular Radius (deg)##dl", &comp.angularRadiusDegrees, 0.02f, 0.0f, 30.0f);
-        ImGui::DragInt("Priority##dl", &comp.priority, 1.0f, -100, 100);
+        modified |= ImGui::ColorEdit3("Color##dl", &comp.color.r);
+        modified |= ImGui::DragFloat("Intensity##dl", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        modified |= ImGui::DragFloat("Angular Radius (deg)##dl", &comp.angularRadiusDegrees, 0.02f, 0.0f, 30.0f);
+        modified |= ImGui::DragInt("Priority##dl", &comp.priority, 1.0f, -100, 100);
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 void Component::DirectionalLightComponent::Serialize(const DirectionalLightComponent& comp, nlohmann::json& json)
@@ -192,19 +195,21 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
     bool remove = ImGui::SmallButton("X##deletespherelight");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& comp = registry.get<SphereLightComponent>(entity);
-        ImGui::ColorEdit3("Color##sl", &comp.color.r);
-        ImGui::DragFloat("Intensity##sl", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        modified |= ImGui::ColorEdit3("Color##sl", &comp.color.r);
+        modified |= ImGui::DragFloat("Intensity##sl", &comp.intensity, 0.05f, 0.0f, 100.0f);
         if (ImGui::DragFloat("Radius##sl", &comp.radius, 0.05f, 0.01f, 100.0f)) {
+            modified = true;
             registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); // recompute the emissive mesh matrix; radius doesn't dirty the transform on its own
         }
-        ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
-        ImGui::Checkbox("Draw Emissive Surface##sl", &comp.drawEmissiveSurface);
-        ImGui::Checkbox("Probe Bake Exclude##sl", &comp.bExcludeFromProbeBake);
+        modified |= ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
+        modified |= ImGui::Checkbox("Draw Emissive Surface##sl", &comp.drawEmissiveSurface);
+        modified |= ImGui::Checkbox("Probe Bake Exclude##sl", &comp.bExcludeFromProbeBake);
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 void Component::SphereLightComponent::Serialize(const SphereLightComponent& comp, nlohmann::json& json)
@@ -274,6 +279,7 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
     bool remove = ImGui::SmallButton("X##deleteskybox");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& comp = registry.get<SkyboxComponent>(entity);
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
@@ -292,17 +298,18 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
                         comp.handle = Engine::CubemapHandle::INVALID;
                     }
                     comp.envMap = id;
+                    modified = true;
                 }
             }
             ImGui::EndCombo();
         }
         ImGui::Checkbox("Show Probes In Selection##sky", &bShowProbes);
 
-        ImGui::DragFloat("Intensity##sky", &comp.intensity, 0.05f, 0.0f, 100.0f);
-        ImGui::DragInt("Priority##sky", &comp.priority, 1.0f, -100, 100);
+        modified |= ImGui::DragFloat("Intensity##sky", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        modified |= ImGui::DragInt("Priority##sky", &comp.priority, 1.0f, -100, 100);
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 void Component::SkyboxComponent::Serialize(const SkyboxComponent& comp, nlohmann::json& json)

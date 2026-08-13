@@ -107,11 +107,12 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
     ImGui::PopStyleColor();
 
     if (!open) {
-        return {.requestRemoval = remove};
+        return {.bRequestRemoval = remove};
     }
 
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    bool modified = false;
 
     // Font picker
     const char* fontLabel = "(none)";
@@ -134,6 +135,7 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
                 UnloadTextComponent(comp, registry, entity);
                 comp.fontId = fontId;
                 LoadTextComponent(comp, registry, entity);
+                modified = true;
             }
         }
         ImGui::EndCombo();
@@ -148,12 +150,14 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
         if (ImGui::BeginCombo("Text Material", matLabel)) {
             if (ImGui::Selectable("(none)", !comp.textMaterialId.IsValid())) {
                 comp.textMaterialId = Engine::TextMaterialID::INVALID;
+                modified = true;
             }
             const auto& textMats = ctx->materialManager->GetTextMaterials();
             for (const auto& [matId, mat] : textMats) {
                 bool selected = comp.textMaterialId == matId;
                 if (ImGui::Selectable(mat.name.c_str(), selected)) {
                     comp.textMaterialId = matId;
+                    modified = true;
                 }
             }
             ImGui::EndCombo();
@@ -166,24 +170,27 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
     buf[sizeof(buf) - 1] = '\0';
     if (ImGui::InputText("Text##field", buf, sizeof(buf))) {
         comp.text = Core::InlineString<256>(buf);
+        modified = true;
     }
 
-    ImGui::DragFloat("Size (px)", &comp.renderSizePx, 1.0f, 1.0f, 2048.0f);
-    ImGui::ColorEdit4("Color", glm::value_ptr(comp.color));
+    modified |= ImGui::DragFloat("Size (px)", &comp.renderSizePx, 1.0f, 1.0f, 2048.0f);
+    modified |= ImGui::ColorEdit4("Color", glm::value_ptr(comp.color));
 
     const char* alignLabels[] = {"Left", "Center", "Right"};
     int alignIdx = static_cast<int>(comp.align);
     if (ImGui::Combo("Align", &alignIdx, alignLabels, IM_ARRAYSIZE(alignLabels))) {
         comp.align = static_cast<Engine::Text3DAlign>(alignIdx);
+        modified = true;
     }
 
     const char* anchorLabels[] = {"Baseline", "Top", "Center", "Bottom"};
     int anchorIdx = static_cast<int>(comp.anchor);
     if (ImGui::Combo("Anchor", &anchorIdx, anchorLabels, IM_ARRAYSIZE(anchorLabels))) {
         comp.anchor = static_cast<Engine::Text3DAnchor>(anchorIdx);
+        modified = true;
     }
 
-    ImGui::DragFloat("Wrap Width (px)", &comp.wrapWidthPx, 1.0f, 0.0f, 8192.0f);
+    modified |= ImGui::DragFloat("Wrap Width (px)", &comp.wrapWidthPx, 1.0f, 0.0f, 8192.0f);
 
     if (runtime.fontHandle.IsValid()) {
         Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
@@ -197,6 +204,6 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
         }
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 } // Game::Component

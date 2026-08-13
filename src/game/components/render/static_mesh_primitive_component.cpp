@@ -107,6 +107,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
     bool remove = ImGui::SmallButton("X##deletestaticmeshprimitive");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
         bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
@@ -121,11 +122,12 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                     if (ImGui::Selectable(meta.name.c_str(), false)) {
                         component.modelId = key;
                         LoadStaticMeshPrimitive(component, registry, entity);
+                        modified = true;
                     }
                 }
                 ImGui::EndCombo();
             }
-            return {.requestRemoval = remove};
+            return {.bRequestRemoval = remove, .bModified = modified};
         }
 
         const auto* modelMeta = ctx->assetManager->GetModelMetadata(component.modelId);
@@ -137,7 +139,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             component.primitiveOrdinal = ~0u;
             registry.remove<RenderTransformComponent>(entity);
             registry.remove<MultiframeDirtyTransformComponent>(entity);
-            return {.requestRemoval = remove};
+            return {.bRequestRemoval = remove, .bModified = true};
         }
 
         auto* meshRuntime = registry.try_get<MeshRuntime>(entity);
@@ -172,6 +174,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                     component.primitiveOrdinal = pendingOrdinal;
                     registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
                     state->assetLoad.bPendingModelResolve |= true;
+                    modified = true;
                 }
             }
         }
@@ -202,6 +205,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             component.materialOverride = clear ? Engine::MaterialID::INVALID : pendingMat;
             registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
             state->assetLoad.bPendingModelResolve |= true;
+            modified = true;
         }
 
         ImGui::SeparatorText("Shader Overrides");
@@ -243,6 +247,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             if (shaderChanged) {
                 registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
                 state->assetLoad.bPendingModelResolve |= true;
+                modified = true;
             }
         }
 
@@ -255,6 +260,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                 changedTransform = true;
             }
             if (changedTransform) {
+                modified = true;
                 if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
                     rt->renderOffset = component.renderOffset;
                     rt->renderRotation = component.renderRotation;
@@ -264,6 +270,6 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         }
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 }

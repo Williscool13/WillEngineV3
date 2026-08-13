@@ -35,9 +35,11 @@ Engine::ComponentEditorResult PrefabInstanceComponent::DrawEditor(Core::ViewFami
     bool remove = ImGui::SmallButton("X##deleteprefab");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         ImGui::TextDisabled("ID: %llu", comp.prefabId.id);
         if (ImGui::Checkbox("Master Prefab", &comp.bMasterPrefab)) {
+            modified = true;
             if (comp.bMasterPrefab) {
                 auto view = registry.view<PrefabInstanceComponent>();
                 for (auto e : view) {
@@ -50,7 +52,7 @@ Engine::ComponentEditorResult PrefabInstanceComponent::DrawEditor(Core::ViewFami
             }
         }
     }
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 void NameComponent::Serialize(const NameComponent& comp, nlohmann::json& json)
@@ -68,14 +70,16 @@ Engine::ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFa
     auto& component = registry.get<NameComponent>(entity);
     bool open = ImGui::CollapsingHeader("Name##componentname", ImGuiTreeNodeFlags_DefaultOpen);
 
+    bool modified = false;
     if (open) {
         char buf[256];
         strncpy_s(buf, component.name.c_str(), sizeof(buf) - 1);
         buf[sizeof(buf) - 1] = '\0';
         if (ImGui::InputText("Name", buf, sizeof(buf))) {
             component.name = Core::InlineString<256>(buf);
+            modified = true;
         }
     }
-    return {};
+    return {.bModified = modified};
 }
 } // Game::Component

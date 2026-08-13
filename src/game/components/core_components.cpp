@@ -82,7 +82,7 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
     bool remove = ImGui::SmallButton("X##deletetransform");
     ImGui::PopStyleColor();
 
-    if (!open) { return {.requestRemoval = remove}; }
+    if (!open) { return {.bRequestRemoval = remove}; }
 
     bool dirty = false;
     Engine::EngineState* state = registry.ctx().get<Engine::EngineState*>();
@@ -162,6 +162,6 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
         registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = dirty};
 }
 }

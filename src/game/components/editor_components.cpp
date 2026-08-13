@@ -32,6 +32,7 @@ Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily
     auto& comp = registry.get<EntityFolderComponent>(entity);
     bool open = ImGui::CollapsingHeader("Folder##entityfolder", ImGuiTreeNodeFlags_DefaultOpen);
 
+    bool modified = false;
     if (open) {
         const char* current = "(None)";
         auto anchorView = registry.view<SceneFolderComponent>();
@@ -47,6 +48,7 @@ Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily
         if (ImGui::BeginCombo("##entity_folder", comp.folderId.IsValid() ? current : "(None)")) {
             if (ImGui::Selectable("(None)", !comp.folderId.IsValid())) {
                 comp.folderId = StringID();
+                modified = true;
             }
             for (auto a : anchorView) {
                 const auto& fc = anchorView.get<SceneFolderComponent>(a);
@@ -55,12 +57,13 @@ Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily
                 label.Append(fc.name);
                 if (ImGui::Selectable(label.c_str(), comp.folderId == fc.folderId)) {
                     comp.folderId = fc.folderId;
+                    modified = true;
                 }
             }
             ImGui::EndCombo();
         }
     }
-    return {};
+    return {.bModified = modified};
 }
 
 bool SceneFolderComponent::CanAdd(const entt::registry& registry, entt::entity entity)

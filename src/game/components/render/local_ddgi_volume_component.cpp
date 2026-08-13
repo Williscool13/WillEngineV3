@@ -27,12 +27,14 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
 
     auto* transform = registry.try_get<TransformComponent>(entity);
 
+    bool modified = false;
     if (open) {
         auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
 
-        ImGui::Checkbox("Enabled##lddgi", &comp.bEnabled);
+        modified |= ImGui::Checkbox("Enabled##lddgi", &comp.bEnabled);
         if (ImGui::DragFloat("Probe Spacing##lddgi", &comp.probeSpacing, 0.01f, 0.25f, 2.0f, "%.2f")) {
             comp.probeSpacing = glm::clamp(comp.probeSpacing, 0.25f, 2.0f);
+            modified = true;
         }
 
         const float extent = static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * comp.probeSpacing;
@@ -51,7 +53,7 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
         DEBUG_ADD_BOX(viewFamily.debugBoxes, {(windowMin + windowMax) * 0.5f, (windowMax - windowMin) * 0.5f, Quat{1.0f, 0.0f, 0.0f, 0.0f}, windowColor, lineWidth});
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 
 void LocalDDGIVolumeComponent::Serialize(const LocalDDGIVolumeComponent& comp, nlohmann::json& json)

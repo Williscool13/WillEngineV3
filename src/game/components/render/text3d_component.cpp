@@ -134,7 +134,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     ImGui::PopStyleColor();
 
     if (!open) {
-        return {.requestRemoval = remove};
+        return {.bRequestRemoval = remove};
     }
 
     if (busy) {
@@ -150,6 +150,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
     if (ImGui::Checkbox("Probe Bake Exclude##text3d", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
 
+    bool modified = false;
     ImGui::BeginDisabled(busy);
 
     const char* fontLabel = "(none)";
@@ -164,6 +165,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
                 Component::UnloadText3DFont(registry, entity);
                 comp.fontId = fontId;
                 LoadText3DFont(comp, registry, entity);
+                modified = true;
             }
         }
         ImGui::EndCombo();
@@ -209,6 +211,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     dirty |= ImGui::Checkbox("Smooth Normals", &comp.bSmoothNormals);
 
     if (dirty) {
+        modified = true;
         registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
         state->assetLoad.bPendingModelResolve |= true;
     }
@@ -228,6 +231,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
                 comp.material = Engine::MaterialID{};
                 registry.emplace_or_replace<Text3DLoadingTag>(entity);
                 state->assetLoad.bPendingModelResolve |= true;
+                modified = true;
             }
             for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
                 if (mat.immutable) { continue; }
@@ -235,6 +239,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
                     comp.material = matId;
                     registry.emplace_or_replace<Text3DLoadingTag>(entity);
                     state->assetLoad.bPendingModelResolve |= true;
+                    modified = true;
                 }
             }
             ImGui::EndCombo();
@@ -243,6 +248,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
 
     ImGui::SeparatorText("Render Transform");
     if (ImGui::DragFloat3("Offset", glm::value_ptr(comp.renderOffset), 0.01f)) {
+        modified = true;
         if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
             rt->renderOffset = comp.renderOffset;
             registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
@@ -250,6 +256,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     }
     glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(comp.renderRotation));
     if (ImGui::DragFloat3("Rotation", glm::value_ptr(renderEuler), 0.5f)) {
+        modified = true;
         comp.renderRotation = glm::quat(glm::radians(renderEuler));
         if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
             rt->renderRotation = comp.renderRotation;
@@ -263,6 +270,6 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
         }
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 }

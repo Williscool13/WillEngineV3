@@ -173,32 +173,36 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
     bool remove = ImGui::SmallButton("X##deletepathmover");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         int loopModeInt = static_cast<int>(component.loopMode);
         if (ImGui::Combo("Loop Mode", &loopModeInt, PathLoopModeNames, static_cast<int>(PathLoopMode::COUNT))) {
             component.loopMode = static_cast<PathLoopMode>(loopModeInt);
             component.spline.bClosed = (component.loopMode == PathLoopMode::Loop);
+            modified = true;
         }
 
         int splineModeInt = static_cast<int>(component.spline.mode);
         ImGui::SetNextItemWidth(140.0f);
         if (ImGui::Combo("Spline Mode##pm", &splineModeInt, Engine::SplineModeNames, static_cast<int>(Engine::SplineMode::COUNT))) {
             component.spline.mode = static_cast<Engine::SplineMode>(splineModeInt);
+            modified = true;
         }
 
         ImGui::SeparatorText("Runtime State");
         const int maxSeg = std::max(0, component.spline.SegmentCount() - 1);
-        ImGui::SliderInt("Segment", &component.currentSegment, 0, maxSeg);
-        ImGui::SliderFloat("Progress", &component.progress, 0.0f, 1.0f, "%.3f");
+        modified |= ImGui::SliderInt("Segment", &component.currentSegment, 0, maxSeg);
+        modified |= ImGui::SliderFloat("Progress", &component.progress, 0.0f, 1.0f, "%.3f");
         static const char* dirNames[] = {"Forward", "Backward"};
         int dirIdx = (component.direction >= 0) ? 0 : 1;
         if (ImGui::Combo("Direction", &dirIdx, dirNames, 2)) {
             component.direction = (dirIdx == 0) ? 1 : -1;
+            modified = true;
         }
-        ImGui::Checkbox("Waiting", &component.bIsWaiting);
+        modified |= ImGui::Checkbox("Waiting", &component.bIsWaiting);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(120.0f);
-        ImGui::DragFloat("Wait Timer", &component.waitTimer, 0.05f, 0.0f, 60.0f, "%.2fs");
+        modified |= ImGui::DragFloat("Wait Timer", &component.waitTimer, 0.05f, 0.0f, 60.0f, "%.2fs");
 
         ImGui::SeparatorText("Control Points");
 
@@ -230,7 +234,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
 
             char posLabel[16];
             snprintf(posLabel, sizeof(posLabel), "##pos%d", i);
-            ImGui::DragFloat3(posLabel, &component.spline.points[i].x, 0.01f);
+            modified |= ImGui::DragFloat3(posLabel, &component.spline.points[i].x, 0.01f);
             ImGui::SameLine();
 
             ImGui::BeginDisabled(cpCount <= 1);
@@ -250,17 +254,18 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
                 int easingInt = static_cast<int>(ps.easing);
                 if (ImGui::Combo(easingLabel, &easingInt, EasingTypeNames, static_cast<int>(EasingType::COUNT))) {
                     ps.easing = static_cast<EasingType>(easingInt);
+                    modified = true;
                 }
                 ImGui::SameLine();
                 char speedLabel[24];
                 snprintf(speedLabel, sizeof(speedLabel), "##speed%d", i);
                 ImGui::SetNextItemWidth(80.0f);
-                ImGui::DragFloat(speedLabel, &ps.speed, 0.01f, 0.001f, 100.0f, "spd %.2f");
+                modified |= ImGui::DragFloat(speedLabel, &ps.speed, 0.01f, 0.001f, 100.0f, "spd %.2f");
                 ImGui::SameLine();
                 char waitLabel[24];
                 snprintf(waitLabel, sizeof(waitLabel), "##wait%d", i);
                 ImGui::SetNextItemWidth(80.0f);
-                ImGui::DragFloat(waitLabel, &ps.waitTime, 0.05f, 0.0f, 60.0f, "wait %.1fs");
+                modified |= ImGui::DragFloat(waitLabel, &ps.waitTime, 0.05f, 0.0f, 60.0f, "wait %.1fs");
             }
 
             ImGui::PopID();
@@ -271,8 +276,10 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
             if (pointToRemove < static_cast<int>(component.pointSettings.Size())) {
                 component.pointSettings.RemoveAt(static_cast<size_t>(pointToRemove));
             }
+            modified = true;
         }
         if (pointToSwap >= 0 && pointToSwap + 1 < cpCount) {
+            modified = true;
             std::swap(component.spline.points[pointToSwap], component.spline.points[pointToSwap + 1]);
             if (pointToSwap < static_cast<int>(component.pointSettings.Size()) - 1) {
                 std::swap(component.pointSettings[pointToSwap], component.pointSettings[pointToSwap + 1]);
@@ -283,6 +290,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
 
         ImGui::BeginDisabled(component.spline.points.IsFull());
         if (ImGui::Button("Add Point")) {
+            modified = true;
             PathPointSettings newPs{};
             if (component.spline.points.Size() >= 2) {
                 const glm::vec3& last = component.spline.points.Back();
@@ -326,6 +334,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
                     glm::value_ptr(view), glm::value_ptr(proj),
                     gizmoOp, ImGuizmo::LOCAL,
                     glm::value_ptr(mat))) {
+                    modified = true;
                     component.spline.points[idx] = glm::vec3(entityMatInv * glm::vec4(glm::vec3(mat[3]), 1.0f));
 
                     if (gizmoOp == ImGuizmo::ROTATE && idx < static_cast<int>(component.pointSettings.Size())) {
@@ -393,6 +402,6 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
 
     if (hasGizmoClaim) { state->editor.bExclusiveGizmoActive = true; }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 } // Game::Component

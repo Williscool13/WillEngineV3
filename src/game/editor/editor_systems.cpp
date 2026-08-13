@@ -762,21 +762,16 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
                 if (entry.has(state->registry, entity)) {
                     const bool readOnly = entry.hideInInspector;
 
-                    nlohmann::json before;
-                    entry.serialize(state->registry, entity, before);
-
                     if (readOnly) { ImGui::BeginDisabled(true); }
                     Engine::ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity, entry.name);
                     if (readOnly) { ImGui::EndDisabled(); }
 
-                    if (result.requestRemoval && !entry.hidden) {
+                    if (result.bRequestRemoval && !entry.hidden) {
                         entryToRemove = &entry;
                         if (entityScene) MarkSceneModified(state, entityScene->sceneId);
                     }
-                    else {
-                        nlohmann::json after;
-                        entry.serialize(state->registry, entity, after);
-                        if (before != after && entityScene) MarkSceneModified(state, entityScene->sceneId);
+                    else if (result.bModified && entityScene) {
+                        MarkSceneModified(state, entityScene->sceneId);
                     }
                 }
             }

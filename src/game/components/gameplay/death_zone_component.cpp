@@ -21,6 +21,6 @@ Engine::ComponentEditorResult Component::DeathZoneComponent::DrawEditor(Core::Vi
     if (open) {
         ImGui::TextDisabled("Teleports player to active checkpoint on contact.");
     }
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove};
 }
 } // Game

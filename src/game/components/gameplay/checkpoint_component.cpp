@@ -56,6 +56,7 @@ Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& 
     bool remove = ImGui::SmallButton("X##deletecheckpoint");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         char idLabel[64];
         snprintf(idLabel, sizeof(idLabel), "ID: %llu", component.checkpointId.id);
@@ -64,10 +65,11 @@ Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& 
         if (ImGui::SmallButton("Regenerate")) {
             auto* state = registry.ctx().get<Engine::EngineState*>();
             component.checkpointId = StringID(state->rng());
+            modified = true;
         }
-        ImGui::DragInt("Priority", &component.priority);
-        ImGui::DragFloat3("Spawn Offset", &component.spawnOffset.x, 0.1f);
-        ImGui::DragFloat3("Spawn Rotation", &component.spawnRotation.x, 0.5f);
+        modified |= ImGui::DragInt("Priority", &component.priority);
+        modified |= ImGui::DragFloat3("Spawn Offset", &component.spawnOffset.x, 0.1f);
+        modified |= ImGui::DragFloat3("Spawn Rotation", &component.spawnRotation.x, 0.5f);
     }
 
 #ifdef WDEBUG
@@ -98,7 +100,7 @@ Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& 
     }
 #endif
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 } // Game::Component
 

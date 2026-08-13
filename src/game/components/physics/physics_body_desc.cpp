@@ -786,6 +786,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
     bool remove = ImGui::SmallButton("X");
     ImGui::PopStyleColor();
 
+    bool modified = false;
     if (open) {
         const bool bForbidDynamic = BodyHasConcaveExotic(component);
         const char* motionTypes[] = {"Static", "Kinematic", "Dynamic"};
@@ -799,6 +800,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     if (newMotion != component.motionType) {
                         component.motionType = newMotion;
                         registry.patch<PhysicsBodyDesc>(entity);
+                        modified = true;
                     }
                 }
                 if (bDisabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -809,24 +811,27 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             ImGui::EndCombo();
         }
 
-        ImGui::DragFloat("Mass", &component.mass, 0.1f, 0.001f, 10000.0f);
-        ImGui::DragFloat("Friction", &component.friction, 0.01f, 0.0f, 10.0f);
-        ImGui::DragFloat("Restitution", &component.restitution, 0.01f, 0.0f, 1.0f);
+        modified |= ImGui::DragFloat("Mass", &component.mass, 0.1f, 0.001f, 10000.0f);
+        modified |= ImGui::DragFloat("Friction", &component.friction, 0.01f, 0.0f, 10.0f);
+        modified |= ImGui::DragFloat("Restitution", &component.restitution, 0.01f, 0.0f, 1.0f);
 
         const char* qualityTypes[] = {"Discrete", "LinearCast"};
         int currentQuality = static_cast<int>(component.motionQuality);
-        if (ImGui::Combo("Motion Quality", &currentQuality, qualityTypes, IM_ARRAYSIZE(qualityTypes)))
+        if (ImGui::Combo("Motion Quality", &currentQuality, qualityTypes, IM_ARRAYSIZE(qualityTypes))) {
             component.motionQuality = static_cast<JPH::EMotionQuality>(currentQuality);
+            modified = true;
+        }
 
         int layer = static_cast<int>(component.layerOverride);
         if (layer == 0xFFFF) layer = -1;
         if (ImGui::InputInt("Layer Override", &layer)) {
             component.layerOverride = layer < 0 ? JPH::ObjectLayer(0xFFFF) : JPH::ObjectLayer(layer);
+            modified = true;
         }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("-1 = auto (derived from motion type)"); }
 
-        ImGui::Checkbox("Enhanced Internal Edge Removal", &component.bEnhancedInternalEdgeRemoval);
-        ImGui::Checkbox("Is Sensor", &component.bIsSensor);
+        modified |= ImGui::Checkbox("Enhanced Internal Edge Removal", &component.bEnhancedInternalEdgeRemoval);
+        modified |= ImGui::Checkbox("Is Sensor", &component.bIsSensor);
 
         const glm::mat4 view = viewFamily.mainView.currentViewData.view;
         const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
@@ -898,6 +903,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                             FitMeshShapeToEntity(registry, entity, shape, scale);
                         }
                         registry.patch<PhysicsBodyDesc>(entity);
+                        modified = true;
                     }
                     if (bDisabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                         ImGui::SetTooltip("This concave procedural source only has a triangle-mesh collider; switch the body to Static or Kinematic to use it.");
@@ -907,8 +913,8 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 ImGui::EndCombo();
             }
 
-            ImGui::DragFloat3("Offset", &shape.offset.x, 0.01f);
-            ImGui::DragFloat3("Baked Scale", &shape.bakedScale.x, 0.01f, 0.001f, 100.0f);
+            modified |= ImGui::DragFloat3("Offset", &shape.offset.x, 0.01f);
+            modified |= ImGui::DragFloat3("Baked Scale", &shape.bakedScale.x, 0.01f, 0.001f, 100.0f);
 
             bool bAnyChange = false;
             switch (shape.type) {
@@ -1004,6 +1010,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             }
             if (bAnyChange) {
                 registry.patch<PhysicsBodyDesc>(entity);
+                modified = true;
             }
 
             //
@@ -1019,6 +1026,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         FitPrimitiveShapeToEntity(registry, entity, shape, scale, fitModel->bounds);
                     }
                     registry.patch<PhysicsBodyDesc>(entity);
+                    modified = true;
                 }
                 ImGui::EndDisabled();
             }
@@ -1103,6 +1111,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 Mat4 mat = glm::translate(Mat4(1.0f), shapeCenter);
                 if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE, ImGuizmo::WORLD, glm::value_ptr(mat))) {
                     shape.offset = Vec3(entityMatInv * Vec4(Vec3(mat[3]), 1.0f));
+                    modified = true;
                 }
                 if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }
                 ImGuizmo::PopID();
@@ -1113,6 +1122,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             const bool bGizmoDragging = state->editor.activeDotHandleId != -1 || ImGuizmo::IsUsing();
             if (bGizmoWasDragging && !bGizmoDragging) {
                 registry.patch<PhysicsBodyDesc>(entity);
+                modified = true;
             }
             bGizmoWasDragging = bGizmoDragging;
 
@@ -1209,6 +1219,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             if (shapeToRemove >= 0) {
                 component.shapes.RemoveAt(shapeToRemove);
                 registry.patch<PhysicsBodyDesc>(entity);
+                modified = true;
             }
         }
 
@@ -1218,9 +1229,10 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             desc.box.halfExtents = glm::vec3(0.5f);
             component.shapes.PushBack(desc);
             registry.patch<PhysicsBodyDesc>(entity);
+            modified = true;
         }
     }
 
-    return {.requestRemoval = remove};
+    return {.bRequestRemoval = remove, .bModified = modified};
 }
 }
