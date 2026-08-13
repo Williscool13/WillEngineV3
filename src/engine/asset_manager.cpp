@@ -5,7 +5,6 @@
 #include "asset_manager.h"
 
 #include <chrono>
-#include <fstream>
 
 #include "asset-load/async_asset_load_manager.h"
 #include "resources/environment_map/environment_map_format.h"
@@ -1504,7 +1503,7 @@ void AssetManager::Scan()
                         LOG_CRITICAL(Asset, "2 Models were mounted that contain the same name. This will cause issues for model lookups by name. ({})", path.c_str());
                     }
 
-                    auto optNodes = ReadWStaticModelNodes(path, *optModelHeader, memoryManager->Assets(), memoryManager->AssetsScratch());
+                    auto optNodes = ReadWStaticModelNodes(path, *optModelHeader, memoryManager->Assets());
                     if (!optNodes) { continue; }
 
                     const CachedModelMetadata* prev = modelCache.Find(id);
@@ -2146,38 +2145,30 @@ FontHandle AssetManager::LoadFont(FontID id)
 
     //
     {
-        std::ifstream f(meta.source.c_str(), std::ios::binary);
-        if (!f) {
+        Platform::ScopedFileMapping map(meta.source);
+        if (!map.data || meta.header.glyphDataOffset + meta.header.glyphCount * sizeof(WGlyphInfo) > map.size) {
             LOG_ERROR(Asset, "Failed to open font file: {}", meta.source.c_str());
             fontAllocator.Remove(handle);
             font = {};
             return FontHandle::INVALID;
         }
         font.glyphs = Core::HeapArray<WGlyphInfo>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.glyphCount);
-        f.seekg(static_cast<std::streamoff>(meta.header.glyphDataOffset));
-        f.read(reinterpret_cast<char*>(font.glyphs.Data()), static_cast<std::streamsize>(meta.header.glyphCount * sizeof(WGlyphInfo)));
-        if (!f) {
-            LOG_ERROR(Asset, "Failed to read glyph data for font: {}", meta.name.c_str());
-            fontAllocator.Remove(handle);
-            font = {};
-            return FontHandle::INVALID;
-        }
+        memcpy(font.glyphs.Data(), map.data + meta.header.glyphDataOffset, meta.header.glyphCount * sizeof(WGlyphInfo));
 
         // 3D Text
         if (meta.header.contourGlyphCount != 0) {
-            font.glyphContourRanges = Core::HeapArray<WGlyphContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.contourGlyphCount);
-            font.contourRanges = Core::HeapArray<WContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.contourCount);
-            font.contourEdges = Core::HeapArray<WFontEdge>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.edgeCount);
-            f.seekg(static_cast<std::streamoff>(meta.header.glyphContourRangeOffset));
-            f.read(reinterpret_cast<char*>(font.glyphContourRanges.Data()), static_cast<std::streamsize>(meta.header.contourGlyphCount * sizeof(WGlyphContourRange)));
-            f.read(reinterpret_cast<char*>(font.contourRanges.Data()), static_cast<std::streamsize>(meta.header.contourCount * sizeof(WContourRange)));
-            f.read(reinterpret_cast<char*>(font.contourEdges.Data()), static_cast<std::streamsize>(meta.header.edgeCount * sizeof(WFontEdge)));
-            if (!f) {
+            if (meta.header.edgeDataOffset + meta.header.edgeCount * sizeof(WFontEdge) > map.size) {
                 LOG_ERROR(Asset, "Failed to read contour data for font: {}", meta.name.c_str());
                 fontAllocator.Remove(handle);
                 font = {};
                 return FontHandle::INVALID;
             }
+            font.glyphContourRanges = Core::HeapArray<WGlyphContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.contourGlyphCount);
+            font.contourRanges = Core::HeapArray<WContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.contourCount);
+            font.contourEdges = Core::HeapArray<WFontEdge>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.edgeCount);
+            memcpy(font.glyphContourRanges.Data(), map.data + meta.header.glyphContourRangeOffset, meta.header.contourGlyphCount * sizeof(WGlyphContourRange));
+            memcpy(font.contourRanges.Data(), map.data + meta.header.contourRangeOffset, meta.header.contourCount * sizeof(WContourRange));
+            memcpy(font.contourEdges.Data(), map.data + meta.header.edgeDataOffset, meta.header.edgeCount * sizeof(WFontEdge));
         }
     }
 

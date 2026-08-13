@@ -4,42 +4,40 @@
 
 #include "text_material_format.h"
 
+#include <charconv>
 #include <cstring>
-#include <fstream>
-#include <istream>
-#include <ostream>
+
+#include "engine/serialization/text_parse.h"
+#include "platform/file_utils.h"
 
 namespace Engine
 {
-bool WriteWTextMaterialHeader(std::ostream& out, const WTextMaterialHeader& header)
+bool WriteWTextMaterialHeader(Core::Vector<std::byte>& out, const WTextMaterialHeader& header)
 {
-    out << "wstextmat\n";
-    out << "version " << header.major << " " << header.minor << "\n";
-    out << "id " << header.textMaterialId << "\n";
-    out << "name " << header.name << "\n";
-    out << "end_header\n";
-    return out.good();
+    AppendText(out, "wstextmat\n");
+    AppendTextF(out, "version %u %u\n", header.major, header.minor);
+    AppendTextF(out, "id %llu\n", header.textMaterialId);
+    AppendTextF(out, "name %s\n", header.name);
+    AppendText(out, "end_header\n");
+    return true;
 }
 
-std::optional<WTextMaterialHeader> ReadWTextMaterialHeader(std::istream& in)
+std::optional<WTextMaterialHeader> ReadWTextMaterialHeader(const void* data, uint64_t size)
 {
     constexpr size_t LINE_BUF = 512;
     char line[LINE_BUF];
+    MemLineReader in(data, size);
 
-    auto trimCR = [](char* s) {
-        const size_t len = strlen(s);
-        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
-    };
-
-    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
-    trimCR(line);
+    if (!in.GetLine(line, LINE_BUF)) { return std::nullopt; }
     if (strcmp(line, "wstextmat") != 0) { return std::nullopt; }
 
     WTextMaterialHeader header{};
-    while (in.getline(line, LINE_BUF)) {
-        trimCR(line);
+    while (in.GetLine(line, LINE_BUF)) {
         const char* end = line + strlen(line);
-        if (strcmp(line, "end_header") == 0) { return header; }
+        if (strcmp(line, "end_header") == 0) {
+            header.dataOffset = in.offset;
+            return header;
+        }
         if (strncmp(line, "version ", 8) == 0) {
             uint32_t major = 0;
             std::from_chars(line + 8, end, major);
@@ -58,7 +56,8 @@ std::optional<WTextMaterialHeader> ReadWTextMaterialHeader(std::istream& in)
 
 std::optional<WTextMaterialHeader> ReadWTextMaterialHeader(const Core::Path& path)
 {
-    std::ifstream file(path.c_str());
-    return ReadWTextMaterialHeader(file);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWTextMaterialHeader(map.data, map.size);
 }
 } // Engine

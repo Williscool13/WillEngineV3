@@ -6,50 +6,44 @@
 
 #include <charconv>
 #include <cstring>
-#include <fstream>
-#include <istream>
-#include <ostream>
+
+#include "engine/serialization/text_parse.h"
+#include "platform/file_utils.h"
 
 namespace Engine
 {
-bool WriteWEnvMapHeader(std::ostream& out, const WEnvMapHeader& header)
+bool WriteWEnvMapHeader(Core::Vector<std::byte>& out, const WEnvMapHeader& header)
 {
-    out << "wenvmap\n";
-    out << "version " << header.major << " " << header.minor << "\n";
-    out << "id " << header.environmentMapId << "\n";
-    out << "content_version " << header.contentVersion << "\n";
-    out << "name " << header.name << "\n";
-    out << "width " << header.width << "\n";
-    out << "height " << header.height << "\n";
-    out << "mips " << header.mipCount << "\n";
-    out << "data_size " << header.dataSize << "\n";
-    out << "uncompressed_size " << header.uncompressedSize << "\n";
-    out << "compression " << static_cast<uint32_t>(header.compressionType) << "\n";
-    out << "end_header\n";
-    return out.good();
+    AppendText(out, "wenvmap\n");
+    AppendTextF(out, "version %u %u\n", header.major, header.minor);
+    AppendTextF(out, "id %llu\n", header.environmentMapId);
+    AppendTextF(out, "content_version %llu\n", header.contentVersion);
+    AppendTextF(out, "name %s\n", header.name);
+    AppendTextF(out, "width %u\n", header.width);
+    AppendTextF(out, "height %u\n", header.height);
+    AppendTextF(out, "mips %u\n", header.mipCount);
+    AppendTextF(out, "data_size %llu\n", header.dataSize);
+    AppendTextF(out, "uncompressed_size %llu\n", header.uncompressedSize);
+    AppendTextF(out, "compression %u\n", static_cast<uint32_t>(header.compressionType));
+    AppendText(out, "end_header\n");
+    return true;
 }
 
-static std::optional<WEnvMapHeader> ReadWEnvMapHeaderInternal(std::istream& in, bool bAnyVersion)
+static std::optional<WEnvMapHeader> ReadWEnvMapHeaderInternal(const void* data, uint64_t size, bool bAnyVersion)
 {
     constexpr size_t LINE_BUF = 256;
     char line[LINE_BUF];
+    MemLineReader in(data, size);
 
-    auto trimCR = [](char* s) {
-        const size_t len = strlen(s);
-        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
-    };
-
-    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
-    trimCR(line);
+    if (!in.GetLine(line, LINE_BUF)) { return std::nullopt; }
     if (strcmp(line, "wenvmap") != 0) { return std::nullopt; }
 
     WEnvMapHeader header{};
     bool bCompressionSeen = false;
-    while (in.getline(line, LINE_BUF)) {
-        trimCR(line);
+    while (in.GetLine(line, LINE_BUF)) {
         if (strcmp(line, "end_header") == 0) {
             if (!bCompressionSeen) { return std::nullopt; }
-            header.dataOffset = static_cast<uint64_t>(in.tellg());
+            header.dataOffset = in.offset;
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
@@ -84,20 +78,22 @@ static std::optional<WEnvMapHeader> ReadWEnvMapHeaderInternal(std::istream& in, 
     return std::nullopt;
 }
 
-std::optional<WEnvMapHeader> ReadWEnvMapHeader(std::istream& in)
+std::optional<WEnvMapHeader> ReadWEnvMapHeader(const void* data, uint64_t size)
 {
-    return ReadWEnvMapHeaderInternal(in, false);
+    return ReadWEnvMapHeaderInternal(data, size, false);
 }
 
 std::optional<WEnvMapHeader> ReadWEnvMapHeader(const Core::Path& path)
 {
-    std::ifstream f(path.c_str(), std::ios::binary);
-    return ReadWEnvMapHeader(f);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWEnvMapHeaderInternal(map.data, map.size, false);
 }
 
 std::optional<WEnvMapHeader> ReadWEnvMapHeaderAnyVersion(const Core::Path& path)
 {
-    std::ifstream f(path.c_str(), std::ios::binary);
-    return ReadWEnvMapHeaderInternal(f, true);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWEnvMapHeaderInternal(map.data, map.size, true);
 }
 } // Engine

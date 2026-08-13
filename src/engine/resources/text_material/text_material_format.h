@@ -6,10 +6,10 @@
 #define WILL_ENGINE_TEXT_MATERIAL_FORMAT_H
 
 #include <cstdint>
-#include <iosfwd>
 #include <optional>
 
 #include "core/containers/inline_path.h"
+#include "core/containers/vector.h"
 
 namespace Engine
 {
@@ -23,11 +23,12 @@ struct WTextMaterialHeader
     char name[WTEXT_MATERIAL_NAME_LENGTH]{};
     uint32_t major{TEXT_MATERIAL_MAJOR_VERSION};
     uint32_t minor{TEXT_MATERIAL_MINOR_VERSION};
+    uint64_t dataOffset{0};
 };
 
-bool WriteWTextMaterialHeader(std::ostream& out, const WTextMaterialHeader& header);
+bool WriteWTextMaterialHeader(Core::Vector<std::byte>& out, const WTextMaterialHeader& header);
 
-std::optional<WTextMaterialHeader> ReadWTextMaterialHeader(std::istream& in);
+std::optional<WTextMaterialHeader> ReadWTextMaterialHeader(const void* data, uint64_t size);
 
 std::optional<WTextMaterialHeader> ReadWTextMaterialHeader(const Core::Path& path);
 } // Engine

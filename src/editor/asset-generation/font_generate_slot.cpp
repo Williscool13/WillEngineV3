@@ -4,7 +4,6 @@
 
 #include "font_generate_slot.h"
 
-#include <fstream>
 #include <vector>
 
 #include "core/containers/heap_array.h"
@@ -17,6 +16,7 @@
 #include "engine/logging/engine_log.h"
 #include "engine/resources/font/font_format.h"
 #include "engine/resources/wimage_format.h"
+#include "engine/serialization/serialization.h"
 #include "platform/file_utils.h"
 
 namespace Editor
@@ -246,25 +246,20 @@ bool FontGenerateSlot::GenerateAndWrite()
     memcpy(header.name, stem.c_str(), copyLen);
     header.name[copyLen] = '\0';
 
-    Platform::CreateDirectories(outputPath.Parent().c_str());
-    std::ofstream f(outputPath.c_str(), std::ios::binary);
-    if (!f) {
-        LOG_ERROR(Asset, "Failed to open font output file: {}", outputPath.c_str());
+    Core::Vector<std::byte> out(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+    Engine::WriteWFontHeader(out, header);
+    Engine::AppendRaw(out, glyphInfos.Data(), glyphInfos.Size() * sizeof(Engine::WGlyphInfo));
+    Engine::AppendRaw(out, glyphContourRanges.Data(), glyphContourRanges.Size() * sizeof(Engine::WGlyphContourRange));
+    Engine::AppendRaw(out, contourRanges.Data(), contourRanges.Size() * sizeof(Engine::WContourRange));
+    Engine::AppendRaw(out, contourEdges.Data(), contourEdges.Size() * sizeof(Engine::WFontEdge));
+    Engine::AppendRaw(out, atlasCompressed.Data(), compressedSize);
+
+    if (!Platform::WriteFile(outputPath, out.Data(), out.Size())) {
+        LOG_ERROR(Asset, "Failed to write font output file: {}", outputPath.c_str());
         return false;
     }
-
-    if (!Engine::WriteWFontHeader(f, header)) {
-        LOG_ERROR(Asset, "Failed to write font header: {}", outputPath.c_str());
-        return false;
-    }
-
-    f.write(reinterpret_cast<const char*>(glyphInfos.Data()), static_cast<std::streamsize>(glyphInfos.Size() * sizeof(Engine::WGlyphInfo)));
-    f.write(reinterpret_cast<const char*>(glyphContourRanges.Data()), static_cast<std::streamsize>(glyphContourRanges.Size() * sizeof(Engine::WGlyphContourRange)));
-    f.write(reinterpret_cast<const char*>(contourRanges.Data()), static_cast<std::streamsize>(contourRanges.Size() * sizeof(Engine::WContourRange)));
-    f.write(reinterpret_cast<const char*>(contourEdges.Data()), static_cast<std::streamsize>(contourEdges.Size() * sizeof(Engine::WFontEdge)));
-    f.write(reinterpret_cast<const char*>(atlasCompressed.Data()), static_cast<std::streamsize>(compressedSize));
 
     LOG_INFO(Asset, "Wrote font {}", outputPath.c_str());
-    return f.good();
+    return true;
 }
 } // namespace Editor

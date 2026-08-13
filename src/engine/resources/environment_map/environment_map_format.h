@@ -6,10 +6,10 @@
 #define WILL_ENGINE_ENVIRONMENT_MAP_FORMAT_H
 
 #include <cstdint>
-#include <iosfwd>
 #include <optional>
 
 #include "core/containers/inline_path.h"
+#include "core/containers/vector.h"
 #include "engine/compression/compression.h"
 
 namespace Engine
@@ -37,8 +37,8 @@ struct WEnvMapHeader
     CompressionType compressionType{DEFAULT_ENV_MAP_COMPRESSION};
 };
 
-bool WriteWEnvMapHeader(std::ostream& out, const WEnvMapHeader& header);
-std::optional<WEnvMapHeader> ReadWEnvMapHeader(std::istream& in);
+bool WriteWEnvMapHeader(Core::Vector<std::byte>& out, const WEnvMapHeader& header);
+std::optional<WEnvMapHeader> ReadWEnvMapHeader(const void* data, uint64_t size);
 std::optional<WEnvMapHeader> ReadWEnvMapHeader(const Core::Path& path);
 std::optional<WEnvMapHeader> ReadWEnvMapHeaderAnyVersion(const Core::Path& path);
 } // Engine

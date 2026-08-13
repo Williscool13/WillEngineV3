@@ -4,9 +4,8 @@
 
 #include "vk_helpers.h"
 
-#include <fstream>
-
 #include "core/containers/heap_array.h"
+#include "platform/file_utils.h"
 #include "vk_context.h"
 
 namespace Render
@@ -258,50 +257,14 @@ VkImageViewCreateInfo VkHelpers::ImageViewCreateInfo(VkImage image, VkFormat for
     };
 }
 
-bool VkHelpers::LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::Path& filePath, VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks, VkShaderModule* outShaderModule)
+bool VkHelpers::LoadShaderModule(const Core::Path& filePath, VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks, VkShaderModule* outShaderModule)
 {
-    // open the file. With cursor at the end
-    std::ifstream file(filePath.c_str(), std::ios::ate | std::ios::binary);
-
-
-    if (!file.is_open()) {
+    // Map view is page-aligned, satisfying the uint32 alignment SPIR-V requires
+    Platform::ScopedFileMapping map(filePath);
+    if (!map.data) {
         return false;
     }
-
-    // find what the size of the file is by looking up the location of the cursor
-    // because the cursor is at the end, it gives the size directly in bytes
-    size_t fileSize = (size_t) file.tellg();
-
-    // spirv expects the buffer to be on uint32, so make sure to reserve a int
-    // vector big enough for the entire file
-    Core::HeapArray<uint32_t> buffer{assetScratch, Core::AllocTag::AssetModel, fileSize / sizeof(uint32_t)};
-
-    // put file cursor at beginning
-    file.seekg(0);
-
-    // load the entire file into the buffer
-    file.read((char*) buffer.Data(), fileSize);
-
-    // now that the file is loaded into the buffer, we can close it
-    file.close();
-
-    // create a new shader module, using the buffer we loaded
-    VkShaderModuleCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.pNext = nullptr;
-
-    // codeSize has to be in bytes, so multply the ints in the buffer by size of
-    // int to know the real size of the buffer
-    createInfo.codeSize = buffer.Size() * sizeof(uint32_t);
-    createInfo.pCode = buffer.Data();
-
-    // check that the creation goes well.
-    VkShaderModule shaderModule;
-    if (vkCreateShaderModule(device, &createInfo, hostAllocCallbacks, &shaderModule) != VK_SUCCESS) {
-        return false;
-    }
-    *outShaderModule = shaderModule;
-    return true;
+    return LoadShaderModuleFromBlob(map.data, map.size & ~size_t{3}, device, hostAllocCallbacks, outShaderModule);
 }
 
 bool VkHelpers::LoadShaderModuleFromBlob(const void* spirvData, size_t spirvSize, VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks, VkShaderModule* outShaderModule)

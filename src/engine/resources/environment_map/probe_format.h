@@ -6,7 +6,6 @@
 #define WILL_ENGINE_PROBE_FORMAT_H
 
 #include <cstdint>
-#include <iosfwd>
 #include <optional>
 
 #include "core/containers/inline_path.h"
@@ -51,8 +50,8 @@ struct WProbeHeader
     ProbeBakeSnapshot snapshot{};
 };
 
-bool WriteWProbeHeader(std::ostream& out, const WProbeHeader& header);
-std::optional<WProbeHeader> ReadWProbeHeader(std::istream& in);
+bool WriteWProbeHeader(Core::Vector<std::byte>& out, const WProbeHeader& header);
+std::optional<WProbeHeader> ReadWProbeHeader(const void* data, uint64_t size);
 std::optional<WProbeHeader> ReadWProbeHeader(const Core::Path& path);
 std::optional<WProbeHeader> ReadWProbeHeaderAnyVersion(const Core::Path& path);
 } // Engine

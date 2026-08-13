@@ -6,8 +6,6 @@
 
 #include "pipeline_config.h"
 
-#include <fstream>
-
 #include "graphics_pipeline_builder.h"
 #include "core/containers/vector.h"
 #include "core/containers/string.h"
@@ -36,21 +34,14 @@ PipelineManager::PipelineManager(VulkanContext* context, ResourceManager* resour
 {
     Core::Path cachePath = Platform::GetCachePath() / "pipeline.cache";
 
-    Core::Vector<char> cacheData(&assetScratchAlloc, Core::AllocTag::Render);
-    if (cachePath.Exists()) {
-        std::ifstream file(cachePath.c_str(), std::ios::binary | std::ios::ate);
-        if (file) {
-            size_t fileSize = file.tellg();
-            file.seekg(0);
-            cacheData.Resize(fileSize);
-            file.read(cacheData.Data(), fileSize);
-            LOG_INFO(Renderer, "Loaded pipeline cache: {} bytes", fileSize);
-        }
+    Platform::ScopedFileMapping map(cachePath);
+    if (map.data) {
+        LOG_INFO(Renderer, "Loaded pipeline cache: {} bytes", map.size);
     }
 
     VkPipelineCacheCreateInfo cacheInfo{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-    cacheInfo.initialDataSize = cacheData.Size();
-    cacheInfo.pInitialData = cacheData.Data();
+    cacheInfo.initialDataSize = map.data ? map.size : 0;
+    cacheInfo.pInitialData = map.data;
 
     VK_CHECK(vkCreatePipelineCache(context->device, &cacheInfo, context->HostAllocCallbacks(), &pipelineCache));
 }
@@ -67,9 +58,7 @@ PipelineManager::~PipelineManager()
             vkGetPipelineCacheData(context->device, pipelineCache, &cacheSize, cacheData.Data());
 
             Core::Path cachePath = Platform::GetCachePath() / "pipeline.cache";
-            std::ofstream file(cachePath.c_str(), std::ios::binary);
-            if (file) {
-                file.write(cacheData.Data(), cacheSize);
+            if (Platform::WriteFile(cachePath, cacheData.Data(), cacheSize)) {
                 LOG_INFO(Renderer, "Saved pipeline cache: {} bytes", cacheSize);
             }
         }

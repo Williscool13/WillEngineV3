@@ -5,7 +5,6 @@
 #include "crash_context.h"
 
 #include <cstdio>
-#include <fstream>
 #include <chrono>
 
 #include <Windows.h>

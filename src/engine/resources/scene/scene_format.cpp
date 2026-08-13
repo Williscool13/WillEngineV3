@@ -6,43 +6,37 @@
 
 #include <charconv>
 #include <cstring>
-#include <fstream>
-#include <istream>
-#include <ostream>
+
+#include "engine/serialization/text_parse.h"
+#include "platform/file_utils.h"
 
 namespace Engine
 {
-bool WriteWSceneHeader(std::ostream& out, const WSceneHeader& header)
+bool WriteWSceneHeader(Core::Vector<std::byte>& out, const WSceneHeader& header)
 {
-    out << "wscene\n";
-    out << "version " << header.major << " " << header.minor << "\n";
-    out << "id " << header.sceneId << "\n";
-    out << "content_version " << header.contentVersion << "\n";
-    out << "name " << header.name << "\n";
-    out << "entity_count " << header.entityCount << "\n";
-    out << "end_header\n";
-    return out.good();
+    AppendText(out, "wscene\n");
+    AppendTextF(out, "version %u %u\n", header.major, header.minor);
+    AppendTextF(out, "id %llu\n", header.sceneId);
+    AppendTextF(out, "content_version %llu\n", header.contentVersion);
+    AppendTextF(out, "name %s\n", header.name);
+    AppendTextF(out, "entity_count %u\n", header.entityCount);
+    AppendText(out, "end_header\n");
+    return true;
 }
 
-std::optional<WSceneHeader> ReadWSceneHeader(std::istream& in)
+std::optional<WSceneHeader> ReadWSceneHeader(const void* data, uint64_t size)
 {
     constexpr size_t LINE_BUF = 256;
     char line[LINE_BUF];
+    MemLineReader in(data, size);
 
-    auto trimCR = [](char* s) {
-        const size_t len = strlen(s);
-        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
-    };
-
-    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
-    trimCR(line);
+    if (!in.GetLine(line, LINE_BUF)) { return std::nullopt; }
     if (strcmp(line, "wscene") != 0) { return std::nullopt; }
 
     WSceneHeader header{};
-    while (in.getline(line, LINE_BUF)) {
-        trimCR(line);
+    while (in.GetLine(line, LINE_BUF)) {
         if (strcmp(line, "end_header") == 0) {
-            header.dataOffset = static_cast<uint64_t>(in.tellg());
+            header.dataOffset = in.offset;
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
@@ -65,7 +59,8 @@ std::optional<WSceneHeader> ReadWSceneHeader(std::istream& in)
 
 std::optional<WSceneHeader> ReadWSceneHeader(const Core::Path& path)
 {
-    std::ifstream f(path.c_str(), std::ios::binary);
-    return ReadWSceneHeader(f);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWSceneHeader(map.data, map.size);
 }
 } // Engine

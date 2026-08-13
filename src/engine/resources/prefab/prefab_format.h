@@ -6,12 +6,12 @@
 #define WILL_ENGINE_PREFAB_FORMAT_H
 
 #include <cstdint>
-#include <iosfwd>
 #include <optional>
 
 #include <json/nlohmann/json.hpp>
 
 #include "core/containers/inline_path.h"
+#include "core/containers/vector.h"
 
 namespace Engine
 {
@@ -33,9 +33,9 @@ struct WPrefabHeader
     uint64_t dataOffset{0};
 };
 
-bool WriteWPrefabHeader(std::ostream& out, const WPrefabHeader& header);
+bool WriteWPrefabHeader(Core::Vector<std::byte>& out, const WPrefabHeader& header);
 
-std::optional<WPrefabHeader> ReadWPrefabHeader(std::istream& in);
+std::optional<WPrefabHeader> ReadWPrefabHeader(const void* data, uint64_t size);
 
 std::optional<WPrefabHeader> ReadWPrefabHeader(const Core::Path& path);
 

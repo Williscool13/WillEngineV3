@@ -6,10 +6,10 @@
 #define WILL_ENGINE_MATERIAL_FORMAT_H
 
 #include <cstdint>
-#include <iosfwd>
 #include <optional>
 
 #include "core/containers/inline_path.h"
+#include "core/containers/vector.h"
 
 
 namespace Engine
@@ -27,9 +27,9 @@ struct WMaterialHeader
     uint64_t dataOffset{0};
 };
 
-bool WriteWMaterialHeader(std::ostream& out, const WMaterialHeader& header);
+bool WriteWMaterialHeader(Core::Vector<std::byte>& out, const WMaterialHeader& header);
 
-std::optional<WMaterialHeader> ReadWMaterialHeader(std::istream& in);
+std::optional<WMaterialHeader> ReadWMaterialHeader(const void* data, uint64_t size);
 
 std::optional<WMaterialHeader> ReadWMaterialHeader(const Core::Path& path);
 } // Engine

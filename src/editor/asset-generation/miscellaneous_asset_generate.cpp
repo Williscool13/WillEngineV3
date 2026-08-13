@@ -5,7 +5,6 @@
 #include "miscellaneous_asset_generate.h"
 
 #include <cstring>
-#include <fstream>
 #include <semaphore>
 #include <tracy/Tracy.hpp>
 
@@ -59,13 +58,14 @@ bool WriteRawBytesWTexture(Core::MemoryManager* memoryManager, const char* outpu
     header.category = Engine::TextureCategory::Builtin;
     strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
 
-    Platform::CreateDirectories(Core::Path(outputPath).Parent().c_str());
-    std::ofstream f(outputPath, std::ios::binary);
-    if (!f || !Engine::WriteWTextureHeader(f, header)) {
+    const Core::Path path(outputPath);
+    Core::Vector<std::byte> headerOut(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+    Engine::WriteWTextureHeader(headerOut, header);
+    if (!Platform::WriteFile(path, headerOut.Data(), headerOut.Size()) ||
+        !Platform::AppendFile(path, compressed.Data(), realSize)) {
         LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath);
         return false;
     }
-    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realSize));
 
     LOG_INFO(Asset, "Wrote {}", outputPath);
     return true;

@@ -5,7 +5,6 @@
 #include "static_model_generate_slot.h"
 
 #include <cstring>
-#include <fstream>
 
 #include <cgltf/cgltf.h>
 #include <spdlog/spdlog.h>
@@ -1104,7 +1103,6 @@ bool StaticModelGenerateSlot::WriteStaticModel()
     // Write Output
     {
         ZoneScopedN("WriteStaticModelFile");
-        std::ofstream file(outputPath.c_str(), std::ios::binary);
         Engine::WStaticModelHeader header{};
         header.modelId = modelId;
         header.contentVersion = contentVersion;
@@ -1169,10 +1167,15 @@ bool StaticModelGenerateSlot::WriteStaticModel()
             Engine::WriteNode(nodeSection, node);
         }
 
-        Engine::WriteWStaticModelHeader(file, header);
-        file.write(reinterpret_cast<const char*>(compressedBody.Data()), static_cast<std::streamsize>(realCompressedSize));
-        file.write(reinterpret_cast<const char*>(nodeSection.Data()), static_cast<std::streamsize>(nodeSection.Size()));
-        file.write(reinterpret_cast<const char*>(&rawModel.modelBounds), sizeof(Engine::ModelBounds));
+        auto headerOut = Core::Vector<std::byte>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, 0);
+        Engine::WriteWStaticModelHeader(headerOut, header);
+        Engine::AppendRaw(nodeSection, &rawModel.modelBounds, sizeof(Engine::ModelBounds));
+        if (!Platform::WriteFile(outputPath, headerOut.Data(), headerOut.Size()) ||
+            !Platform::AppendFile(outputPath, compressedBody.Data(), realCompressedSize) ||
+            !Platform::AppendFile(outputPath, nodeSection.Data(), nodeSection.Size())) {
+            LOG_ERROR(Asset, "Failed to write static model file: {}", outputPath.c_str());
+            return false;
+        }
     }
 
     progress->value.store(100, std::memory_order_release);

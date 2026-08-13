@@ -6,10 +6,10 @@
 #define WILL_ENGINE_TEXTURE_FORMAT_H
 
 #include <cstdint>
-#include <iosfwd>
 #include <optional>
 
 #include "core/containers/inline_path.h"
+#include "core/containers/vector.h"
 #include "engine/compression/compression.h"
 
 namespace Engine
@@ -60,8 +60,8 @@ struct WTextureHeader
     uint32_t ownerImageIndex{UINT32_MAX};
 };
 
-bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header);
-std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in);
+bool WriteWTextureHeader(Core::Vector<std::byte>& out, const WTextureHeader& header);
+std::optional<WTextureHeader> ReadWTextureHeader(const void* data, uint64_t size);
 std::optional<WTextureHeader> ReadWTextureHeader(const Core::Path& path);
 std::optional<WTextureHeader> ReadWTextureHeaderAnyVersion(const Core::Path& path);
 } // Engine

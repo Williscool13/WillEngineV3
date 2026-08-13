@@ -6,10 +6,10 @@
 #define WILL_ENGINE_FONT_FORMAT_H
 
 #include <cstdint>
-#include <iosfwd>
 #include <optional>
 
 #include "core/containers/inline_path.h"
+#include "core/containers/vector.h"
 #include "engine/compression/compression.h"
 
 namespace Engine
@@ -118,8 +118,8 @@ struct WFontHeader
     uint64_t atlasDataOffset{0};
 };
 
-bool WriteWFontHeader(std::ostream& out, const WFontHeader& header);
-std::optional<WFontHeader> ReadWFontHeader(std::istream& in);
+bool WriteWFontHeader(Core::Vector<std::byte>& out, const WFontHeader& header);
+std::optional<WFontHeader> ReadWFontHeader(const void* data, uint64_t size);
 std::optional<WFontHeader> ReadWFontHeader(const Core::Path& path);
 std::optional<WFontHeader> ReadWFontHeaderAnyVersion(const Core::Path& path);
 } // Engine

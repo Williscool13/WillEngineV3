@@ -4,70 +4,63 @@
 
 #include "texture_format.h"
 
-#include "engine/compression/compression.h"
-
 #include <charconv>
 #include <cstring>
-#include <fstream>
-#include <istream>
-#include <ostream>
+
+#include "engine/compression/compression.h"
+#include "engine/serialization/text_parse.h"
+#include "platform/file_utils.h"
 
 namespace Engine
 {
-bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header)
+bool WriteWTextureHeader(Core::Vector<std::byte>& out, const WTextureHeader& header)
 {
-    out << "wtexture\n";
-    out << "version " << header.major << " " << header.minor << "\n";
-    out << "id " << header.textureId << "\n";
-    out << "content_version " << header.contentVersion << "\n";
-    out << "name " << header.name << "\n";
-    out << "width " << header.width << "\n";
-    out << "height " << header.height << "\n";
-    out << "mips " << header.mipCount << "\n";
-    out << "data_size " << header.dataSize << "\n";
-    out << "uncompressed_size " << header.uncompressedSize << "\n";
-    out << "compression " << static_cast<uint32_t>(header.compressionType) << "\n";
+    AppendText(out, "wtexture\n");
+    AppendTextF(out, "version %u %u\n", header.major, header.minor);
+    AppendTextF(out, "id %llu\n", header.textureId);
+    AppendTextF(out, "content_version %llu\n", header.contentVersion);
+    AppendTextF(out, "name %s\n", header.name);
+    AppendTextF(out, "width %u\n", header.width);
+    AppendTextF(out, "height %u\n", header.height);
+    AppendTextF(out, "mips %u\n", header.mipCount);
+    AppendTextF(out, "data_size %llu\n", header.dataSize);
+    AppendTextF(out, "uncompressed_size %llu\n", header.uncompressedSize);
+    AppendTextF(out, "compression %u\n", static_cast<uint32_t>(header.compressionType));
     if (header.category == TextureCategory::Model) {
-        out << "category model\n";
+        AppendText(out, "category model\n");
     }
     else if (header.category == TextureCategory::Builtin) {
-        out << "category builtin\n";
+        AppendText(out, "category builtin\n");
     }
     if (header.ownerModelId != 0) {
-        out << "owner_model " << header.ownerModelId << "\n";
-        out << "owner_image_index " << header.ownerImageIndex << "\n";
+        AppendTextF(out, "owner_model %llu\n", header.ownerModelId);
+        AppendTextF(out, "owner_image_index %u\n", header.ownerImageIndex);
     }
     if (header.genSource[0] != '\0') {
-        out << "gen_source " << header.genSource << "\n";
-        out << "gen_format " << header.genFormat << "\n";
-        out << "gen_mips " << (header.bGenMips ? 1 : 0) << "\n";
-        out << "gen_flip_y " << (header.bGenFlipY ? 1 : 0) << "\n";
+        AppendTextF(out, "gen_source %s\n", header.genSource);
+        AppendTextF(out, "gen_format %u\n", header.genFormat);
+        AppendTextF(out, "gen_mips %u\n", header.bGenMips ? 1 : 0);
+        AppendTextF(out, "gen_flip_y %u\n", header.bGenFlipY ? 1 : 0);
     }
-    out << "end_header\n";
-    return out.good();
+    AppendText(out, "end_header\n");
+    return true;
 }
 
-static std::optional<WTextureHeader> ReadWTextureHeaderInternal(std::istream& in, bool bAnyVersion)
+static std::optional<WTextureHeader> ReadWTextureHeaderInternal(const void* data, uint64_t size, bool bAnyVersion)
 {
-    constexpr size_t LINE_BUF = 256;
+    constexpr size_t LINE_BUF = 512;
     char line[LINE_BUF];
+    MemLineReader in(data, size);
 
-    auto trimCR = [](char* s) {
-        const size_t len = strlen(s);
-        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
-    };
-
-    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
-    trimCR(line);
+    if (!in.GetLine(line, LINE_BUF)) { return std::nullopt; }
     if (strcmp(line, "wtexture") != 0) { return std::nullopt; }
 
     WTextureHeader header{};
     bool bCompressionSeen = false;
-    while (in.getline(line, LINE_BUF)) {
-        trimCR(line);
+    while (in.GetLine(line, LINE_BUF)) {
         if (strcmp(line, "end_header") == 0) {
             if (!bCompressionSeen) { return std::nullopt; }
-            header.dataOffset = static_cast<uint64_t>(in.tellg());
+            header.dataOffset = in.offset;
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
@@ -137,20 +130,22 @@ static std::optional<WTextureHeader> ReadWTextureHeaderInternal(std::istream& in
     return std::nullopt;
 }
 
-std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
+std::optional<WTextureHeader> ReadWTextureHeader(const void* data, uint64_t size)
 {
-    return ReadWTextureHeaderInternal(in, false);
+    return ReadWTextureHeaderInternal(data, size, false);
 }
 
 std::optional<WTextureHeader> ReadWTextureHeader(const Core::Path& path)
 {
-    std::ifstream f(path.c_str(), std::ios::binary);
-    return ReadWTextureHeader(f);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWTextureHeaderInternal(map.data, map.size, false);
 }
 
 std::optional<WTextureHeader> ReadWTextureHeaderAnyVersion(const Core::Path& path)
 {
-    std::ifstream f(path.c_str(), std::ios::binary);
-    return ReadWTextureHeaderInternal(f, true);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWTextureHeaderInternal(map.data, map.size, true);
 }
 } // Engine

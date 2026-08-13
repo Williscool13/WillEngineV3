@@ -5,7 +5,6 @@
 #include "input_config.h"
 
 #include <cstdio>
-#include <fstream>
 
 #include <json/nlohmann/json.hpp>
 
@@ -95,10 +94,10 @@ static InputConfig InputConfigFromJson(const nlohmann::json& j)
 static InputConfig ReadInputConfig()
 {
     const Core::Path path = GetInputConfigPath();
-    std::ifstream file(path.c_str());
-    if (!file.is_open()) { return InputConfig{}; }
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return InputConfig{}; }
 
-    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    nlohmann::json j = nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
     if (j.is_discarded()) { return InputConfig{}; }
 
     return InputConfigFromJson(j);
@@ -106,12 +105,8 @@ static InputConfig ReadInputConfig()
 
 static bool WriteInputConfig(const InputConfig& config)
 {
-    const Core::Path path = GetInputConfigPath();
-    std::ofstream file(path.c_str());
-    if (!file.is_open()) { return false; }
-
-    file << InputConfigToJson(config).dump(2);
-    return file.good();
+    const std::string dump = InputConfigToJson(config).dump(2);
+    return Platform::WriteFile(GetInputConfigPath(), std::string_view(dump));
 }
 
 static Core::Path InputProfilesDir()
@@ -141,10 +136,10 @@ uint32_t ListInputProfiles(ProfileName* outNames, uint32_t maxNames)
 
 bool LoadInputProfile(const char* name, InputConfig& out)
 {
-    std::ifstream file(InputProfilePath(name).c_str());
-    if (!file.is_open()) { return false; }
+    Platform::ScopedFileMapping map(InputProfilePath(name));
+    if (!map.data) { return false; }
 
-    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    nlohmann::json j = nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
     if (!j.is_object()) { return false; }
 
     out = InputConfigFromJson(j);

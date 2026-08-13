@@ -17,7 +17,7 @@ bool ComputePipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMan
     loadingLastModified = GetLatestShaderWriteTime();
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
-    if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPath, context->device, context->HostAllocCallbacks(), &shaderModule)) {
+    if (!VkHelpers::LoadShaderModule(shaderPath, context->device, context->HostAllocCallbacks(), &shaderModule)) {
         SPDLOG_ERROR("Failed to load shader: {}", shaderPath.c_str());
         return false;
     }
@@ -85,7 +85,7 @@ bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryMa
 
     Core::Array<VkShaderModule, MAX_SHADER_STAGES> shaderModules{};
     for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
-        if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPaths[i], context->device, context->HostAllocCallbacks(), &shaderModules[i])) {
+        if (!VkHelpers::LoadShaderModule(shaderPaths[i], context->device, context->HostAllocCallbacks(), &shaderModules[i])) {
             SPDLOG_ERROR("Failed to load shader: {}", shaderPaths[i].c_str());
             for (uint32_t j = 0; j < i; ++j) {
                 if (shaderModules[j] != VK_NULL_HANDLE) {

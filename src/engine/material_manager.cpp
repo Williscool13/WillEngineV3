@@ -11,11 +11,10 @@
 
 #include "asset_manager_config.h"
 
-#include <fstream>
-
 #include <json/nlohmann/json.hpp>
 
 #include "core/containers/vector.h"
+#include "engine/serialization/text_parse.h"
 #include "resources/material/material_format.h"
 #include "engine/include/engine_context.h"
 #include "render/interface/render_interface.h"
@@ -27,6 +26,24 @@
 
 namespace Engine
 {
+static bool SaveMaterialFile(Core::TlsfAllocator* scratch, const Core::Path& path, const WMaterialHeader& header, const nlohmann::json& body)
+{
+    Core::Vector<std::byte> out(scratch, Core::AllocTag::AssetManager);
+    WriteWMaterialHeader(out, header);
+    const std::string dump = body.dump(4);
+    AppendText(out, dump.c_str());
+    return Platform::WriteFile(path, out.Data(), out.Size());
+}
+
+static bool SaveTextMaterialFile(Core::TlsfAllocator* scratch, const Core::Path& path, const WTextMaterialHeader& header, const nlohmann::json& body)
+{
+    Core::Vector<std::byte> out(scratch, Core::AllocTag::AssetManager);
+    WriteWTextMaterialHeader(out, header);
+    const std::string dump = body.dump(4);
+    AppendText(out, dump.c_str());
+    return Platform::WriteFile(path, out.Data(), out.Size());
+}
+
 MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, AssetManager* assetManager)
     : ctx(ctx),
       memoryManager(&memoryManager),
@@ -231,9 +248,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
         memcpy(header.name, mat.name.c_str(), nameLen);
         header.name[nameLen] = '\0';
 
-        std::ofstream file(mat.sourcePath.c_str());
-        WriteWMaterialHeader(file, header);
-        file << SerializeMaterial(mat).dump(4);
+        SaveMaterialFile(&memoryManager->AssetsScratch(), mat.sourcePath, header, SerializeMaterial(mat));
     };
 
     // Save old resolved indices before overwriting props (caller doesn't know bindless indices)
@@ -413,9 +428,7 @@ bool MaterialManager::RenameMutableMaterial(MaterialID id, std::string_view newN
         memcpy(header.name, newName.data(), nameLen);
         header.name[nameLen] = '\0';
 
-        std::ofstream file(newPath.c_str());
-        WriteWMaterialHeader(file, header);
-        file << SerializeMaterial(*mat).dump(4);
+        SaveMaterialFile(&memoryManager->AssetsScratch(), newPath, header, SerializeMaterial(*mat));
     }
 
     nameToMaterialMap[newSid] = id;
@@ -446,9 +459,7 @@ void MaterialManager::CreateMaterial(std::string_view name)
     memcpy(header.name, name.data(), nameLen);
     header.name[nameLen] = '\0';
 
-    std::ofstream file(matPath.c_str());
-    WriteWMaterialHeader(file, header);
-    file << SerializeMaterial(mat).dump(4);
+    SaveMaterialFile(&memoryManager->AssetsScratch(), matPath, header, SerializeMaterial(mat));
 
     ctx->rescan.bMaterials.store(true, std::memory_order_release);
 }
@@ -462,27 +473,29 @@ void MaterialManager::Scan()
 
         for (uint32_t i = 0; i < paths.Size(); ++i) {
             if (paths[i].Extension() == ".wmaterial") {
-                std::ifstream file(paths[i].c_str());
-                auto header = ReadWMaterialHeader(file);
+                Platform::ScopedFileMapping map(paths[i]);
+                if (!map.data) { continue; }
+                auto header = ReadWMaterialHeader(map.data, map.size);
                 if (!header) { continue; }
 
                 StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
                 if (nameToMaterialMap.Contains(sid)) { continue; }
 
-                const nlohmann::json j = nlohmann::json::parse(file);
+                const nlohmann::json j = nlohmann::json::parse(map.data + header->dataOffset, map.data + map.size);
                 Material mat = DeserializeMaterial(j, paths[i]);
                 materials[mat.id] = mat;
                 nameToMaterialMap[sid] = mat.id;
             }
             else if (paths[i].Extension() == ".wtextmaterial") {
-                std::ifstream file(paths[i].c_str());
-                auto header = ReadWTextMaterialHeader(file);
+                Platform::ScopedFileMapping map(paths[i]);
+                if (!map.data) { continue; }
+                auto header = ReadWTextMaterialHeader(map.data, map.size);
                 if (!header) { continue; }
 
                 StringID sid(header->name, strnlen(header->name, WTEXT_MATERIAL_NAME_LENGTH));
                 if (nameToTextMaterialMap.Contains(sid)) { continue; }
 
-                const nlohmann::json j = nlohmann::json::parse(file);
+                const nlohmann::json j = nlohmann::json::parse(map.data + header->dataOffset, map.data + map.size);
                 TextMaterial mat = DeserializeTextMaterial(j, paths[i]);
                 textMaterials[mat.id] = mat;
                 nameToTextMaterialMap[sid] = mat.id;
@@ -498,27 +511,27 @@ void MaterialManager::LoadMutableMaterials()
 
     for (uint32_t i = 0; i < paths.Size(); ++i) {
         if (paths[i].Extension() == ".wmaterial") {
-            std::ifstream file(paths[i].c_str());
-            auto header = ReadWMaterialHeader(file);
+            Platform::ScopedFileMapping map(paths[i]);
+            auto header = map.data ? ReadWMaterialHeader(map.data, map.size) : std::nullopt;
             if (!header) {
                 LOG_WARN(Asset, "Skipping {} - missing or invalid wmaterial header", paths[i].c_str());
                 continue;
             }
             StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
-            const nlohmann::json j = nlohmann::json::parse(file);
+            const nlohmann::json j = nlohmann::json::parse(map.data + header->dataOffset, map.data + map.size);
             Material mat = DeserializeMaterial(j, paths[i]);
             materials[mat.id] = mat;
             nameToMaterialMap[sid] = mat.id;
         }
         else if (paths[i].Extension() == ".wtextmaterial") {
-            std::ifstream file(paths[i].c_str());
-            auto header = ReadWTextMaterialHeader(file);
+            Platform::ScopedFileMapping map(paths[i]);
+            auto header = map.data ? ReadWTextMaterialHeader(map.data, map.size) : std::nullopt;
             if (!header) {
                 LOG_WARN(Asset, "Skipping {} - missing or invalid wstextmat header", paths[i].c_str());
                 continue;
             }
             StringID sid(header->name, strnlen(header->name, WTEXT_MATERIAL_NAME_LENGTH));
-            const nlohmann::json j = nlohmann::json::parse(file);
+            const nlohmann::json j = nlohmann::json::parse(map.data + header->dataOffset, map.data + map.size);
             TextMaterial mat = DeserializeTextMaterial(j, paths[i]);
             textMaterials[mat.id] = mat;
             nameToTextMaterialMap[sid] = mat.id;
@@ -545,9 +558,7 @@ void MaterialManager::CreateTextMaterial(std::string_view name)
     memcpy(header.name, name.data(), nameLen);
     header.name[nameLen] = '\0';
 
-    std::ofstream file(matPath.c_str());
-    WriteWTextMaterialHeader(file, header);
-    file << SerializeTextMaterial(mat).dump(4);
+    SaveTextMaterialFile(&memoryManager->AssetsScratch(), matPath, header, SerializeTextMaterial(mat));
 
     StringID sid(mat.name.c_str(), mat.name.Size());
     textMaterials[mat.id] = mat;
@@ -575,9 +586,7 @@ void MaterialManager::UpdateTextMaterial(TextMaterialID id, const TextMaterial& 
         memcpy(header.name, mat->name.c_str(), nameLen);
         header.name[nameLen] = '\0';
 
-        std::ofstream file(mat->sourcePath.c_str());
-        WriteWTextMaterialHeader(file, header);
-        file << SerializeTextMaterial(*mat).dump(4);
+        SaveTextMaterialFile(&memoryManager->AssetsScratch(), mat->sourcePath, header, SerializeTextMaterial(*mat));
     }
 }
 
@@ -624,9 +633,7 @@ bool MaterialManager::RenameTextMaterial(TextMaterialID id, std::string_view new
         memcpy(header.name, newName.data(), nameLen);
         header.name[nameLen] = '\0';
 
-        std::ofstream file(newPath.c_str());
-        WriteWTextMaterialHeader(file, header);
-        file << SerializeTextMaterial(*mat).dump(4);
+        SaveTextMaterialFile(&memoryManager->AssetsScratch(), newPath, header, SerializeTextMaterial(*mat));
     }
 
     nameToTextMaterialMap[newSid] = id;

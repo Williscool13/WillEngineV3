@@ -6,41 +6,35 @@
 
 #include <charconv>
 #include <cstring>
-#include <fstream>
-#include <istream>
-#include <ostream>
+
+#include "engine/serialization/text_parse.h"
+#include "platform/file_utils.h"
 
 namespace Engine
 {
-bool WriteWMaterialHeader(std::ostream& out, const WMaterialHeader& header)
+bool WriteWMaterialHeader(Core::Vector<std::byte>& out, const WMaterialHeader& header)
 {
-    out << "wmaterial\n";
-    out << "version " << header.major << " " << header.minor << "\n";
-    out << "id " << header.materialId << "\n";
-    out << "name " << header.name << "\n";
-    out << "end_header\n";
-    return out.good();
+    AppendText(out, "wmaterial\n");
+    AppendTextF(out, "version %u %u\n", header.major, header.minor);
+    AppendTextF(out, "id %llu\n", header.materialId);
+    AppendTextF(out, "name %s\n", header.name);
+    AppendText(out, "end_header\n");
+    return true;
 }
 
-std::optional<WMaterialHeader> ReadWMaterialHeader(std::istream& in)
+std::optional<WMaterialHeader> ReadWMaterialHeader(const void* data, uint64_t size)
 {
     constexpr size_t LINE_BUF = 256;
     char line[LINE_BUF];
+    MemLineReader in(data, size);
 
-    auto trimCR = [](char* s) {
-        const size_t len = strlen(s);
-        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
-    };
-
-    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
-    trimCR(line);
+    if (!in.GetLine(line, LINE_BUF)) { return std::nullopt; }
     if (strcmp(line, "wmaterial") != 0) { return std::nullopt; }
 
     WMaterialHeader header{};
-    while (in.getline(line, LINE_BUF)) {
-        trimCR(line);
+    while (in.GetLine(line, LINE_BUF)) {
         if (strcmp(line, "end_header") == 0) {
-            header.dataOffset = static_cast<uint64_t>(in.tellg());
+            header.dataOffset = in.offset;
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
@@ -61,7 +55,8 @@ std::optional<WMaterialHeader> ReadWMaterialHeader(std::istream& in)
 
 std::optional<WMaterialHeader> ReadWMaterialHeader(const Core::Path& path)
 {
-    std::ifstream file(path.c_str());
-    return ReadWMaterialHeader(file);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWMaterialHeader(map.data, map.size);
 }
 } // Engine

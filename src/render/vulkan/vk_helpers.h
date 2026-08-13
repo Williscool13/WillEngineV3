@@ -55,7 +55,7 @@ VkImageCreateInfo ImageCreateInfo(VkFormat format, VkExtent3D extent, VkFlags us
 
 VkImageViewCreateInfo ImageViewCreateInfo(VkImage image, VkFormat format, VkFlags aspectFlags);
 
-bool LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::Path& filePath, VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks, VkShaderModule* outShaderModule);
+bool LoadShaderModule(const Core::Path& filePath, VkDevice device, const VkAllocationCallbacks* hostAllocCallbacks, VkShaderModule* outShaderModule);
 
 /**
  * Creates a shader module from an in-memory SPIR-V blob (e.g. NRD embedded shaders).

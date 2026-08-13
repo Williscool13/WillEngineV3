@@ -4,7 +4,6 @@
 
 #include "cubemap_load_slot.h"
 
-#include <fstream>
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
@@ -12,6 +11,7 @@
 #include "core/memory/memory_manager.h"
 #include "engine/compression/compression.h"
 #include "engine/resources/environment_map/environment_map_format.h"
+#include "platform/file_utils.h"
 #include "render/resource_manager.h"
 #include "render/types/cubemap_asset.h"
 #include "render/vulkan/vk_context.h"
@@ -147,22 +147,16 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
     {
         ZoneScopedN("WImageLoad");
 
-        Core::HeapArray<uint8_t> compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->dataSize);
-        {
-            ZoneScopedN("FileRead");
-            std::ifstream f(cubemapPath.c_str(), std::ios::binary);
-            f.seekg(static_cast<std::streamoff>(outputCubemap->dataOffset));
-            f.read(reinterpret_cast<char*>(compressed.Data()), static_cast<std::streamsize>(outputCubemap->dataSize));
-            if (!f) {
-                SPDLOG_ERROR("Failed to read .wenvmap data: {}", cubemapPath.c_str());
-                return false;
-            }
+        Platform::ScopedFileMapping map(cubemapPath);
+        if (!map.data || outputCubemap->dataOffset + outputCubemap->dataSize > map.size) {
+            SPDLOG_ERROR("Failed to read .wenvmap data: {}", cubemapPath.c_str());
+            return false;
         }
 
         blobData = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->uncompressedSize);
         {
             ZoneScopedN("Decompress");
-            Engine::Decompress(outputCubemap->compressionType, compressed.Data(), compressed.Size(), blobData.Data(), outputCubemap->uncompressedSize);
+            Engine::Decompress(outputCubemap->compressionType, map.data + outputCubemap->dataOffset, outputCubemap->dataSize, blobData.Data(), outputCubemap->uncompressedSize);
         }
         {
             ZoneScopedN("WImageParse");

@@ -124,7 +124,7 @@ uint64_t GetFileSize(const Core::Path& path) { return GetFileSize(path.c_str());
 FileMapping MapFileReadOnly(const Core::Path& path)
 {
     FileMapping mapping{};
-    HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) { return mapping; }
     LARGE_INTEGER size{};
     if (!GetFileSizeEx(file, &size) || size.QuadPart == 0) {

@@ -6,10 +6,10 @@
 #define WILL_ENGINE_SCENE_FORMAT_H
 
 #include <cstdint>
-#include <iosfwd>
 #include <optional>
 
 #include "core/containers/inline_path.h"
+#include "core/containers/vector.h"
 
 namespace Engine
 {
@@ -31,9 +31,9 @@ struct WSceneHeader
     uint64_t dataOffset{0};
 };
 
-bool WriteWSceneHeader(std::ostream& out, const WSceneHeader& header);
+bool WriteWSceneHeader(Core::Vector<std::byte>& out, const WSceneHeader& header);
 
-std::optional<WSceneHeader> ReadWSceneHeader(std::istream& in);
+std::optional<WSceneHeader> ReadWSceneHeader(const void* data, uint64_t size);
 
 std::optional<WSceneHeader> ReadWSceneHeader(const Core::Path& path);
 } // Engine

@@ -4,7 +4,6 @@
 
 #include "environment_map_generate_slot.h"
 
-#include <fstream>
 #include <spdlog/spdlog.h>
 #include <stb/stb_image.h>
 #include <tracy/Tracy.hpp>
@@ -855,18 +854,13 @@ bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
     memcpy(header.name, stem.c_str(), copyLen);
     header.name[copyLen] = '\0';
 
-    Platform::CreateDirectories(outputPath.Parent().c_str());
-    std::ofstream f(outputPath.c_str(), std::ios::binary);
-    if (!f) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to open output file: {}", outputPath.c_str());
+    Core::Vector<std::byte> headerOut(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+    Engine::WriteWEnvMapHeader(headerOut, header);
+    if (!Platform::WriteFile(outputPath, headerOut.Data(), headerOut.Size()) ||
+        !Platform::AppendFile(outputPath, compressed.Data(), realCompressedSize)) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to write output file: {}", outputPath.c_str());
         return false;
     }
-
-    if (!Engine::WriteWEnvMapHeader(f, header)) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to write header: {}", outputPath.c_str());
-        return false;
-    }
-    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realCompressedSize));
 
     SPDLOG_INFO("[EnvironmentMapGenerateSlot] Wrote {}", outputPath.c_str());
     return true;
@@ -910,18 +904,13 @@ bool EnvironmentMapGenerateSlot::WriteWProbeFile()
     memcpy(header.name, stem.c_str(), copyLen);
     header.name[copyLen] = '\0';
 
-    Platform::CreateDirectories(outputPath.Parent().c_str());
-    std::ofstream f(outputPath.c_str(), std::ios::binary);
-    if (!f) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to open output file: {}", outputPath.c_str());
+    Core::Vector<std::byte> headerOut(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+    Engine::WriteWProbeHeader(headerOut, header);
+    if (!Platform::WriteFile(outputPath, headerOut.Data(), headerOut.Size()) ||
+        !Platform::AppendFile(outputPath, compressed.Data(), realCompressedSize)) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to write output file: {}", outputPath.c_str());
         return false;
     }
-
-    if (!Engine::WriteWProbeHeader(f, header)) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to write probe header: {}", outputPath.c_str());
-        return false;
-    }
-    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realCompressedSize));
 
     SPDLOG_INFO("[EnvironmentMapGenerateSlot] Wrote {}", outputPath.c_str());
     return true;

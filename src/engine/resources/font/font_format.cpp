@@ -6,36 +6,36 @@
 
 #include <charconv>
 #include <cstring>
-#include <fstream>
-#include <istream>
-#include <ostream>
+
+#include "engine/serialization/text_parse.h"
+#include "platform/file_utils.h"
 
 namespace Engine
 {
-bool WriteWFontHeader(std::ostream& out, const WFontHeader& header)
+bool WriteWFontHeader(Core::Vector<std::byte>& out, const WFontHeader& header)
 {
-    out << "wsfont\n";
-    out << "version " << header.major << " " << header.minor << "\n";
-    out << "id " << header.fontId << "\n";
-    out << "content_version " << header.contentVersion << "\n";
-    out << "name " << header.name << "\n";
-    out << "source_size_px " << header.sourceSizePx << "\n";
-    out << "sdf_spread " << header.sdfSpread << "\n";
-    out << "em_size " << header.emSize << "\n";
-    out << "ascender " << header.ascender << "\n";
-    out << "descender " << header.descender << "\n";
-    out << "line_height " << header.lineHeight << "\n";
-    out << "atlas_width " << header.atlasWidth << "\n";
-    out << "atlas_height " << header.atlasHeight << "\n";
-    out << "glyph_count " << header.glyphCount << "\n";
-    out << "atlas_data_size " << header.atlasDataSize << "\n";
-    out << "atlas_uncompressed_size " << header.atlasUncompressedSize << "\n";
-    out << "atlas_compression " << static_cast<uint32_t>(header.atlasCompressionType) << "\n";
-    out << "contour_glyph_count " << header.contourGlyphCount << "\n";
-    out << "contour_count " << header.contourCount << "\n";
-    out << "edge_count " << header.edgeCount << "\n";
-    out << "end_header\n";
-    return out.good();
+    AppendText(out, "wsfont\n");
+    AppendTextF(out, "version %u %u\n", header.major, header.minor);
+    AppendTextF(out, "id %llu\n", header.fontId);
+    AppendTextF(out, "content_version %llu\n", header.contentVersion);
+    AppendTextF(out, "name %s\n", header.name);
+    AppendTextF(out, "source_size_px %u\n", header.sourceSizePx);
+    AppendTextF(out, "sdf_spread %u\n", header.sdfSpread);
+    AppendTextF(out, "em_size %.9g\n", header.emSize);
+    AppendTextF(out, "ascender %.9g\n", header.ascender);
+    AppendTextF(out, "descender %.9g\n", header.descender);
+    AppendTextF(out, "line_height %.9g\n", header.lineHeight);
+    AppendTextF(out, "atlas_width %u\n", header.atlasWidth);
+    AppendTextF(out, "atlas_height %u\n", header.atlasHeight);
+    AppendTextF(out, "glyph_count %u\n", header.glyphCount);
+    AppendTextF(out, "atlas_data_size %llu\n", header.atlasDataSize);
+    AppendTextF(out, "atlas_uncompressed_size %llu\n", header.atlasUncompressedSize);
+    AppendTextF(out, "atlas_compression %u\n", static_cast<uint32_t>(header.atlasCompressionType));
+    AppendTextF(out, "contour_glyph_count %u\n", header.contourGlyphCount);
+    AppendTextF(out, "contour_count %u\n", header.contourCount);
+    AppendTextF(out, "edge_count %u\n", header.edgeCount);
+    AppendText(out, "end_header\n");
+    return true;
 }
 
 static void ComputeOffsets(WFontHeader& header, uint64_t headerEnd)
@@ -79,33 +79,27 @@ static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& h
     return true;
 }
 
-std::optional<WFontHeader> ReadWFontHeader(std::istream& in)
+static std::optional<WFontHeader> ReadWFontHeaderInternal(const void* data, uint64_t size, bool bAnyVersion)
 {
     constexpr size_t LINE_BUF = 256;
     char line[LINE_BUF];
+    MemLineReader in(data, size);
 
-    auto trimCR = [](char* s) {
-        const size_t len = strlen(s);
-        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
-    };
-
-    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
-    trimCR(line);
+    if (!in.GetLine(line, LINE_BUF)) { return std::nullopt; }
     if (strcmp(line, "wsfont") != 0) { return std::nullopt; }
 
     WFontHeader header{};
     bool bCompressionSeen = false;
-    while (in.getline(line, LINE_BUF)) {
-        trimCR(line);
+    while (in.GetLine(line, LINE_BUF)) {
         if (strcmp(line, "end_header") == 0) {
             if (!bCompressionSeen) { return std::nullopt; }
-            ComputeOffsets(header, static_cast<uint64_t>(in.tellg()));
+            ComputeOffsets(header, in.offset);
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
             auto res = std::from_chars(line + 8, line + LINE_BUF, header.major);
             if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, header.minor); }
-            if (header.major != FONT_MAJOR_VERSION || header.minor > FONT_MINOR_VERSION) { return std::nullopt; }
+            if (!bAnyVersion && (header.major != FONT_MAJOR_VERSION || header.minor > FONT_MINOR_VERSION)) { return std::nullopt; }
         }
         else {
             if (strncmp(line, "atlas_compression ", 18) == 0) { bCompressionSeen = true; }
@@ -113,50 +107,24 @@ std::optional<WFontHeader> ReadWFontHeader(std::istream& in)
         }
     }
     return std::nullopt;
+}
+
+std::optional<WFontHeader> ReadWFontHeader(const void* data, uint64_t size)
+{
+    return ReadWFontHeaderInternal(data, size, false);
 }
 
 std::optional<WFontHeader> ReadWFontHeader(const Core::Path& path)
 {
-    std::ifstream file(path.c_str(), std::ios::binary);
-    if (!file) { return std::nullopt; }
-    return ReadWFontHeader(file);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWFontHeaderInternal(map.data, map.size, false);
 }
 
 std::optional<WFontHeader> ReadWFontHeaderAnyVersion(const Core::Path& path)
 {
-    constexpr size_t LINE_BUF = 256;
-    char line[LINE_BUF];
-
-    std::ifstream in(path.c_str(), std::ios::binary);
-    if (!in) { return std::nullopt; }
-
-    auto trimCR = [](char* s) {
-        const size_t len = strlen(s);
-        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
-    };
-
-    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
-    trimCR(line);
-    if (strcmp(line, "wsfont") != 0) { return std::nullopt; }
-
-    WFontHeader header{};
-    bool bCompressionSeen = false;
-    while (in.getline(line, LINE_BUF)) {
-        trimCR(line);
-        if (strcmp(line, "end_header") == 0) {
-            if (!bCompressionSeen) { return std::nullopt; }
-            ComputeOffsets(header, static_cast<uint64_t>(in.tellg()));
-            return header;
-        }
-        if (strncmp(line, "version ", 8) == 0) {
-            auto res = std::from_chars(line + 8, line + LINE_BUF, header.major);
-            if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, header.minor); }
-        }
-        else {
-            if (strncmp(line, "atlas_compression ", 18) == 0) { bCompressionSeen = true; }
-            ParseFontHeaderFields(line, LINE_BUF, header);
-        }
-    }
-    return std::nullopt;
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWFontHeaderInternal(map.data, map.size, true);
 }
 } // Engine

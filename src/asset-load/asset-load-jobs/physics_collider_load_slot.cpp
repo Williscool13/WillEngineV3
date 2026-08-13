@@ -4,8 +4,6 @@
 
 #include "physics_collider_load_slot.h"
 
-#include <fstream>
-
 #include <tracy/Tracy.hpp>
 
 #include "meshoptimizer/src/meshoptimizer.h"
@@ -21,6 +19,7 @@
 #include "engine/resources/physics/collider_generation.h"
 #include "engine/resources/physics/physics_collider_asset.h"
 #include "engine/spline/spline_frames.h"
+#include "platform/file_utils.h"
 #include "procedural_geometry.h"
 #include "text3d_geometry.h"
 
@@ -73,18 +72,16 @@ static bool ReadModelColliderGeometry(const Core::Path& source, Core::MemoryMana
     Core::HeapArray<Primitive> primitives{};
 
     {
-        std::ifstream file(source.c_str(), std::ios::binary);
-        if (!file) { return false; }
-        auto optHeader = Engine::ReadWStaticModelHeader(file);
+        Platform::ScopedFileMapping map(source);
+        if (!map.data) { return false; }
+        auto optHeader = Engine::ReadWStaticModelHeader(map.data, map.size);
         if (!optHeader) { return false; }
         header = *optHeader;
 
-        Core::HeapArray<uint8_t> compressedBody(&mm->AssetsScratch(), Core::AllocTag::Physics, header.compressedBodySize);
-        file.seekg(static_cast<std::streamoff>(header.dataOffset));
-        file.read(reinterpret_cast<char*>(compressedBody.Data()), static_cast<std::streamsize>(header.compressedBodySize));
+        if (header.dataOffset + header.compressedBodySize > map.size) { return false; }
 
         Core::HeapArray<uint8_t> body(&mm->AssetsScratch(), Core::AllocTag::Physics, header.uncompressedBodySize);
-        Engine::Decompress(header.compressionType, compressedBody.Data(), header.compressedBodySize, body.Data(), header.uncompressedBodySize);
+        Engine::Decompress(header.compressionType, map.data + header.dataOffset, header.compressedBodySize, body.Data(), header.uncompressedBodySize);
 
         auto readArray = [&]<typename T>(Core::HeapArray<T>& vec, uint32_t offset, uint32_t count) {
             if (count > 0) {

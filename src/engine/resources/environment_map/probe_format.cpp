@@ -6,9 +6,9 @@
 
 #include <charconv>
 #include <cstring>
-#include <fstream>
-#include <istream>
-#include <ostream>
+
+#include "engine/serialization/text_parse.h"
+#include "platform/file_utils.h"
 
 namespace Engine
 {
@@ -23,52 +23,45 @@ static const char* ParseFloats(const char* s, const char* end, float* out, int32
     return s;
 }
 
-bool WriteWProbeHeader(std::ostream& out, const WProbeHeader& header)
+bool WriteWProbeHeader(Core::Vector<std::byte>& out, const WProbeHeader& header)
 {
-    out.precision(9);
-    out << "wprobe\n";
-    out << "version " << header.major << " " << header.minor << "\n";
-    out << "probe_id " << header.probeId << "\n";
-    out << "id " << header.environmentMapId << "\n";
-    out << "content_version " << header.contentVersion << "\n";
-    out << "name " << header.name << "\n";
-    out << "width " << header.width << "\n";
-    out << "height " << header.height << "\n";
-    out << "mips " << header.mipCount << "\n";
-    out << "data_size " << header.dataSize << "\n";
-    out << "uncompressed_size " << header.uncompressedSize << "\n";
-    out << "compression " << static_cast<uint32_t>(header.compressionType) << "\n";
-    out << "resolution " << header.resolution << "\n";
-    out << "translation " << header.snapshot.translation[0] << " " << header.snapshot.translation[1] << " " << header.snapshot.translation[2] << "\n";
-    out << "rotation " << header.snapshot.rotation[0] << " " << header.snapshot.rotation[1] << " " << header.snapshot.rotation[2] << " " << header.snapshot.rotation[3] << "\n";
-    out << "scale " << header.snapshot.scale[0] << " " << header.snapshot.scale[1] << " " << header.snapshot.scale[2] << "\n";
-    out << "capture_offset " << header.snapshot.captureOffset[0] << " " << header.snapshot.captureOffset[1] << " " << header.snapshot.captureOffset[2] << "\n";
-    out << "end_header\n";
-    return out.good();
+    AppendText(out, "wprobe\n");
+    AppendTextF(out, "version %u %u\n", header.major, header.minor);
+    AppendTextF(out, "probe_id %llu\n", header.probeId);
+    AppendTextF(out, "id %llu\n", header.environmentMapId);
+    AppendTextF(out, "content_version %llu\n", header.contentVersion);
+    AppendTextF(out, "name %s\n", header.name);
+    AppendTextF(out, "width %u\n", header.width);
+    AppendTextF(out, "height %u\n", header.height);
+    AppendTextF(out, "mips %u\n", header.mipCount);
+    AppendTextF(out, "data_size %llu\n", header.dataSize);
+    AppendTextF(out, "uncompressed_size %llu\n", header.uncompressedSize);
+    AppendTextF(out, "compression %u\n", static_cast<uint32_t>(header.compressionType));
+    AppendTextF(out, "resolution %u\n", header.resolution);
+    AppendTextF(out, "translation %.9g %.9g %.9g\n", header.snapshot.translation[0], header.snapshot.translation[1], header.snapshot.translation[2]);
+    AppendTextF(out, "rotation %.9g %.9g %.9g %.9g\n", header.snapshot.rotation[0], header.snapshot.rotation[1], header.snapshot.rotation[2], header.snapshot.rotation[3]);
+    AppendTextF(out, "scale %.9g %.9g %.9g\n", header.snapshot.scale[0], header.snapshot.scale[1], header.snapshot.scale[2]);
+    AppendTextF(out, "capture_offset %.9g %.9g %.9g\n", header.snapshot.captureOffset[0], header.snapshot.captureOffset[1], header.snapshot.captureOffset[2]);
+    AppendText(out, "end_header\n");
+    return true;
 }
 
-static std::optional<WProbeHeader> ReadWProbeHeaderInternal(std::istream& in, bool bAnyVersion)
+static std::optional<WProbeHeader> ReadWProbeHeaderInternal(const void* data, uint64_t size, bool bAnyVersion)
 {
     constexpr size_t LINE_BUF = 256;
     char line[LINE_BUF];
+    MemLineReader in(data, size);
 
-    auto trimCR = [](char* s) {
-        const size_t len = strlen(s);
-        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
-    };
-
-    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
-    trimCR(line);
+    if (!in.GetLine(line, LINE_BUF)) { return std::nullopt; }
     if (strcmp(line, "wprobe") != 0) { return std::nullopt; }
 
     WProbeHeader header{};
     bool bCompressionSeen = false;
-    while (in.getline(line, LINE_BUF)) {
-        trimCR(line);
+    while (in.GetLine(line, LINE_BUF)) {
         const char* lineEnd = line + strlen(line);
         if (strcmp(line, "end_header") == 0) {
             if (!bCompressionSeen) { return std::nullopt; }
-            header.dataOffset = static_cast<uint64_t>(in.tellg());
+            header.dataOffset = in.offset;
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
@@ -105,20 +98,22 @@ static std::optional<WProbeHeader> ReadWProbeHeaderInternal(std::istream& in, bo
     return std::nullopt;
 }
 
-std::optional<WProbeHeader> ReadWProbeHeader(std::istream& in)
+std::optional<WProbeHeader> ReadWProbeHeader(const void* data, uint64_t size)
 {
-    return ReadWProbeHeaderInternal(in, false);
+    return ReadWProbeHeaderInternal(data, size, false);
 }
 
 std::optional<WProbeHeader> ReadWProbeHeader(const Core::Path& path)
 {
-    std::ifstream f(path.c_str(), std::ios::binary);
-    return ReadWProbeHeader(f);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWProbeHeaderInternal(map.data, map.size, false);
 }
 
 std::optional<WProbeHeader> ReadWProbeHeaderAnyVersion(const Core::Path& path)
 {
-    std::ifstream f(path.c_str(), std::ios::binary);
-    return ReadWProbeHeaderInternal(f, true);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWProbeHeaderInternal(map.data, map.size, true);
 }
 } // Engine

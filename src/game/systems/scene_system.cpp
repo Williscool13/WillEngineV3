@@ -7,7 +7,6 @@
 #include <tracy/Tracy.hpp>
 
 #include <algorithm>
-#include <fstream>
 #include <limits>
 
 #include <json/nlohmann/json.hpp>
@@ -20,6 +19,7 @@
 #include "engine/resources/scene/scene.h"
 #include "engine/resources/prefab/prefab_format.h"
 #include "engine/resources/scene/scene_format.h"
+#include "engine/serialization/text_parse.h"
 #include "game/components/camera_components.h"
 #include "game/components/common_components.h"
 #include "game/components/common/stable_id_component.h"
@@ -247,9 +247,6 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
         }
     }
 
-    Platform::CreateDirectories(path.Parent().c_str());
-    std::ofstream file(path.c_str());
-
     Engine::WSceneHeader sceneHeader{};
     sceneHeader.sceneId = sceneID.id;
     sceneHeader.contentVersion = contentVersion;
@@ -257,9 +254,15 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
     memcpy(sceneHeader.name, sceneName.data(), nameLen);
     sceneHeader.name[nameLen] = '\0';
     sceneHeader.entityCount = static_cast<uint32_t>(s.content["entities"].size());
-    Engine::WriteWSceneHeader(file, sceneHeader);
 
-    file << s.content.dump(2);
+    Core::Vector<std::byte> out(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    Engine::WriteWSceneHeader(out, sceneHeader);
+    const std::string dump = s.content.dump(2);
+    Engine::AppendText(out, dump.c_str());
+    if (!Platform::WriteFile(path, out.Data(), out.Size())) {
+        LOG_ERROR(Game, "Failed to write scene file '{}'", path.c_str());
+        return;
+    }
 
     assetManager->UpdateSceneCachePath(sceneID, path, sceneHeader.entityCount);
 
@@ -282,20 +285,20 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
 
     const Core::InlineString<128> sceneName = it->sceneName;
     const Core::Path& path = it->source;
-    std::ifstream file(path.c_str());
-    if (!file.is_open()) {
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) {
         LOG_ERROR(Game, "Failed to open scene file '{}'", path.c_str());
         return {false, sceneId, sceneName};
     }
 
-    auto header = Engine::ReadWSceneHeader(file);
+    auto header = Engine::ReadWSceneHeader(map.data, map.size);
     if (!header) {
         LOG_ERROR(Game, "Failed to read scene header from '{}'", path.c_str());
         return {false, sceneId, sceneName};
     }
 
     Engine::Scene s;
-    s.content = nlohmann::json::parse(file);
+    s.content = nlohmann::json::parse(map.data + header->dataOffset, map.data + map.size);
     StringID loadedId = LoadScene(state->componentRegistry, state->registry, s);
     assert(loadedId == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
     uint64_t maxSortOrder = 0; {
@@ -625,9 +628,6 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
         }
     }
 
-    Platform::CreateDirectories(path.Parent().c_str());
-    std::ofstream file(path.c_str());
-
     Engine::WPrefabHeader header{};
     header.prefabId = prefabId;
     header.contentVersion = contentVersion;
@@ -635,9 +635,15 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
     memcpy(header.name, prefabName.data(), nameLen);
     header.name[nameLen] = '\0';
     header.componentCount = componentCount;
-    Engine::WriteWPrefabHeader(file, header);
 
-    file << entityJson.dump(2);
+    Core::Vector<std::byte> out(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    Engine::WriteWPrefabHeader(out, header);
+    const std::string dump = entityJson.dump(2);
+    Engine::AppendText(out, dump.c_str());
+    if (!Platform::WriteFile(path, out.Data(), out.Size())) {
+        LOG_ERROR(Game, "Failed to write prefab file '{}'", path.c_str());
+        return;
+    }
 
     state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, StringID{prefabId});
 

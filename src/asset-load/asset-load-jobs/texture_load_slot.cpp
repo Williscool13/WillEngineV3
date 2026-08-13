@@ -4,7 +4,6 @@
 
 #include "texture_load_slot.h"
 
-#include <fstream>
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
@@ -12,6 +11,7 @@
 #include "engine/logging/engine_log.h"
 #include "core/memory/memory_manager.h"
 #include "engine/resources/texture/texture.h"
+#include "platform/file_utils.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
@@ -146,18 +146,14 @@ bool TextureLoadSlot::LoadTextureFromDisk()
     } {
         ZoneScopedN("WImageParse");
 
-        std::ifstream f(texturePath.c_str(), std::ios::binary);
-
-        Core::HeapArray<uint8_t> compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputTexture->dataSize);
-        f.seekg(outputTexture->dataOffset);
-        f.read(reinterpret_cast<char*>(compressed.Data()), static_cast<std::streamsize>(outputTexture->dataSize));
-        if (!f) {
+        Platform::ScopedFileMapping map(texturePath);
+        if (!map.data || outputTexture->dataOffset + outputTexture->dataSize > map.size) {
             LOG_ERROR(Asset, "Failed to read .wtexture data: {}", texturePath.c_str());
             return false;
         }
 
         blobData = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputTexture->uncompressedSize);
-        Engine::Decompress(outputTexture->compressionType, compressed.Data(), compressed.Size(), blobData.Data(), outputTexture->uncompressedSize);
+        Engine::Decompress(outputTexture->compressionType, map.data + outputTexture->dataOffset, outputTexture->dataSize, blobData.Data(), outputTexture->uncompressedSize);
 
         if (!blobView.Parse(blobData.Data(), blobData.Size())) {
             LOG_ERROR(Asset, "Failed to parse texture image blob: {}", texturePath.c_str());

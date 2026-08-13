@@ -5,9 +5,9 @@
 #ifndef WILL_ENGINE_MODEL_FORMAT_H
 #define WILL_ENGINE_MODEL_FORMAT_H
 
-#include <iosfwd>
 #include <optional>
 
+#include "core/containers/vector.h"
 #include "model_types.h"
 #include "static_model.h"
 #include "engine/compression/compression.h"
@@ -64,9 +64,9 @@ struct WStaticModelData
     ModelBounds bounds{};
 };
 
-bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header);
+bool WriteWStaticModelHeader(Core::Vector<std::byte>& out, const WStaticModelHeader& header);
 
-std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in);
+std::optional<WStaticModelHeader> ReadWStaticModelHeader(const void* data, uint64_t size);
 std::optional<WStaticModelHeader> ReadWStaticModelHeader(const Core::Path& path);
 
 /** Reads header without rejecting on version mismatch. For use by the asset generator to detect stale files. */
@@ -78,10 +78,9 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeaderAnyVersion(const Core::P
  * @param path
  * @param header
  * @param allocator
- * @param scratchAllocator
  * @return
  */
-std::optional<WStaticModelData> ReadWStaticModelNodes(const Core::Path& path, const WStaticModelHeader& header, Core::TlsfAllocator& allocator, Core::TlsfAllocator& scratchAllocator);
+std::optional<WStaticModelData> ReadWStaticModelNodes(const Core::Path& path, const WStaticModelHeader& header, Core::TlsfAllocator& allocator);
 } // Engine
 
 #endif //WILL_ENGINE_MODEL_FORMAT_H

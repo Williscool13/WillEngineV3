@@ -6,45 +6,39 @@
 
 #include <charconv>
 #include <cstring>
-#include <fstream>
-#include <istream>
-#include <ostream>
 
 #include <json/nlohmann/json.hpp>
 
+#include "engine/serialization/text_parse.h"
+#include "platform/file_utils.h"
+
 namespace Engine
 {
-bool WriteWPrefabHeader(std::ostream& out, const WPrefabHeader& header)
+bool WriteWPrefabHeader(Core::Vector<std::byte>& out, const WPrefabHeader& header)
 {
-    out << "wprefab\n";
-    out << "version " << header.major << " " << header.minor << "\n";
-    out << "id " << header.prefabId << "\n";
-    out << "content_version " << header.contentVersion << "\n";
-    out << "name " << header.name << "\n";
-    out << "component_count " << header.componentCount << "\n";
-    out << "end_header\n";
-    return out.good();
+    AppendText(out, "wprefab\n");
+    AppendTextF(out, "version %u %u\n", header.major, header.minor);
+    AppendTextF(out, "id %llu\n", header.prefabId);
+    AppendTextF(out, "content_version %llu\n", header.contentVersion);
+    AppendTextF(out, "name %s\n", header.name);
+    AppendTextF(out, "component_count %u\n", header.componentCount);
+    AppendText(out, "end_header\n");
+    return true;
 }
 
-std::optional<WPrefabHeader> ReadWPrefabHeader(std::istream& in)
+std::optional<WPrefabHeader> ReadWPrefabHeader(const void* data, uint64_t size)
 {
     constexpr size_t LINE_BUF = 256;
     char line[LINE_BUF];
+    MemLineReader in(data, size);
 
-    auto trimCR = [](char* s) {
-        const size_t len = strlen(s);
-        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
-    };
-
-    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
-    trimCR(line);
+    if (!in.GetLine(line, LINE_BUF)) { return std::nullopt; }
     if (strcmp(line, "wprefab") != 0) { return std::nullopt; }
 
     WPrefabHeader header{};
-    while (in.getline(line, LINE_BUF)) {
-        trimCR(line);
+    while (in.GetLine(line, LINE_BUF)) {
         if (strcmp(line, "end_header") == 0) {
-            header.dataOffset = static_cast<uint64_t>(in.tellg());
+            header.dataOffset = in.offset;
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
@@ -67,23 +61,24 @@ std::optional<WPrefabHeader> ReadWPrefabHeader(std::istream& in)
 
 std::optional<WPrefabHeader> ReadWPrefabHeader(const Core::Path& path)
 {
-    std::ifstream f(path.c_str(), std::ios::binary);
-    return ReadWPrefabHeader(f);
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) { return std::nullopt; }
+    return ReadWPrefabHeader(map.data, map.size);
 }
 
 std::optional<WPrefabData> ReadWPrefab(const char* path)
 {
-    std::ifstream f(path);
-    if (!f.is_open()) {
+    Platform::ScopedFileMapping map{Core::Path(path)};
+    if (!map.data) {
         return std::nullopt;
     }
 
-    auto header = ReadWPrefabHeader(f);
+    auto header = ReadWPrefabHeader(map.data, map.size);
     if (!header) {
         return std::nullopt;
     }
 
-    auto json = nlohmann::json::parse(f, nullptr, false);
+    auto json = nlohmann::json::parse(map.data + header->dataOffset, map.data + map.size, nullptr, false);
     if (json.is_discarded()) {
         return std::nullopt;
     }

@@ -4,10 +4,9 @@
 
 #include "project_config.h"
 
-#include <fstream>
-
 #include <json/nlohmann/json.hpp>
 
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "engine/serialization/config_serialization.h"
 
@@ -23,12 +22,12 @@ ProjectConfig ReadProjectConfig()
     ProjectConfig config{};
 
     const Core::Path path = GetProjectConfigPath();
-    std::ifstream file(path.c_str());
-    if (!file.is_open()) {
+    Platform::ScopedFileMapping map(path);
+    if (!map.data) {
         return config;
     }
 
-    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    nlohmann::json j = nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
     if (j.is_discarded()) {
         return config;
     }
@@ -139,12 +138,6 @@ ProjectConfig ReadProjectConfig()
 
 bool WriteProjectConfig(const ProjectConfig& config)
 {
-    const Core::Path path = GetProjectConfigPath();
-    std::ofstream file(path.c_str());
-    if (!file.is_open()) {
-        return false;
-    }
-
     nlohmann::json j;
     j["defaultScene"] = std::string_view(config.defaultScene.c_str(), config.defaultScene.Size());
     j["bLimitFps"] = config.bLimitFps;
@@ -184,7 +177,7 @@ bool WriteProjectConfig(const ProjectConfig& config)
     }
     j["cameraPresets"] = presets;
 
-    file << j.dump(2);
-    return file.good();
+    const std::string dump = j.dump(2);
+    return Platform::WriteFile(GetProjectConfigPath(), std::string_view(dump));
 }
 } // Engine

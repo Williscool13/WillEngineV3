@@ -6,7 +6,6 @@
 
 #include "asset_generator.h"
 
-#include <fstream>
 #include "engine/logging/engine_log.h"
 #include <stb/stb_image.h>
 #include <tracy/Tracy.hpp>
@@ -489,19 +488,11 @@ bool TextureGenerateSlot::WriteWTextureFile()
     // Temp + rename so a crash mid-write never leaves a truncated .wtexture (an ungenerated stub survives and retries next run)
     const Core::Path tmpPath(Core::InlineString<512>::Format("%s.tmp", outputPath.c_str()).c_str());
     {
-        std::ofstream f(tmpPath.c_str(), std::ios::binary);
-        if (!f) {
-            LOG_ERROR(Asset, "Failed to open output file: {}", tmpPath.c_str());
-            return false;
-        }
-
-        if (!Engine::WriteWTextureHeader(f, header)) {
-            LOG_ERROR(Asset, "Failed to write header: {}", tmpPath.c_str());
-            return false;
-        }
-        f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realCompressedSize));
-        if (!f.good()) {
-            LOG_ERROR(Asset, "Failed to write body: {}", tmpPath.c_str());
+        Core::Vector<std::byte> headerOut(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+        Engine::WriteWTextureHeader(headerOut, header);
+        if (!Platform::WriteFile(tmpPath, headerOut.Data(), headerOut.Size()) ||
+            !Platform::AppendFile(tmpPath, compressed.Data(), realCompressedSize)) {
+            LOG_ERROR(Asset, "Failed to write output file: {}", tmpPath.c_str());
             return false;
         }
     }

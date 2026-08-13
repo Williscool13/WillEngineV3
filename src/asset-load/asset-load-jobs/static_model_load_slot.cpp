@@ -4,11 +4,11 @@
 
 #include "static_model_load_slot.h"
 
-#include <fstream>
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
 #include "asset-load/asset_load_utils.h"
+#include "platform/file_utils.h"
 #include "core/containers/fixed_vector.h"
 #include "core/containers/heap_array.h"
 #include "core/memory/memory_manager.h"
@@ -186,34 +186,30 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
     //
     {
         ZoneScopedN("ReadFile");
-        std::ifstream file(outputModel->source.c_str(), std::ios::binary);
-        if (!file) {
+        Platform::ScopedFileMapping map(outputModel->source);
+        if (!map.data) {
             SPDLOG_ERROR("Failed to open static model - {}", outputModel->name.c_str());
             return false;
         }
-        auto optHeader = Engine::ReadWStaticModelHeader(file);
+        auto optHeader = Engine::ReadWStaticModelHeader(map.data, map.size);
         if (!optHeader) {
             SPDLOG_ERROR("Failed to read static model header - {}", outputModel->name.c_str());
             return false;
         }
         header = *optHeader;
 
-        Core::HeapArray<uint8_t> compressedBody(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, header.compressedBodySize);
-        file.seekg(static_cast<std::streamoff>(header.dataOffset));
-        file.read(reinterpret_cast<char*>(compressedBody.Data()), static_cast<std::streamsize>(header.compressedBodySize));
+        if (header.dataOffset + header.compressedBodySize > map.size) {
+            SPDLOG_ERROR("Static model body out of range - {}", outputModel->name.c_str());
+            return false;
+        }
 
         body = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, header.uncompressedBodySize);
-        Engine::Decompress(header.compressionType, compressedBody.Data(), header.compressedBodySize, body.Data(), header.uncompressedBodySize);
-        compressedBody.Reset();
+        Engine::Decompress(header.compressionType, map.data + header.dataOffset, header.compressedBodySize, body.Data(), header.uncompressedBodySize);
 
-        file.seekg(0, std::ios::end);
-        const size_t fileSize = file.tellg();
         const size_t nodeDataStart = header.dataOffset + header.compressedBodySize;
-
-        size_t nodesSize = fileSize - nodeDataStart;
+        const size_t nodesSize = map.size - nodeDataStart;
         nodeData = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, nodesSize);
-        file.seekg(static_cast<std::streamoff>(nodeDataStart));
-        file.read(reinterpret_cast<char*>(nodeData.Data()), static_cast<std::streamsize>(nodesSize));
+        memcpy(nodeData.Data(), map.data + nodeDataStart, nodesSize);
     }
 
     //

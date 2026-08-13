@@ -4,8 +4,6 @@
 
 #include "capture_shot_system.h"
 
-#include <fstream>
-
 #include <json/nlohmann/json.hpp>
 
 #include "ddgi_converge_boost.h"
@@ -16,6 +14,7 @@
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/logging/engine_log.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "game/components/core_components.h"
 #include "game/components/camera_components.h"
@@ -50,12 +49,12 @@ static size_t CountLoadingEntities(Engine::EngineState* state)
 
 static bool LoadShotList(const char* path, Core::InlineVector<CaptureShotSystem::Shot, 64>& outShots)
 {
-    std::ifstream file(path);
-    if (!file.is_open()) {
+    Platform::ScopedFileMapping map{Core::Path(path)};
+    if (!map.data) {
         LOG_ERROR(Game, "Capture run: cannot open shot list '{}'", path);
         return false;
     }
-    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    nlohmann::json j = nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
     if (j.is_discarded() || !j.contains("shots") || !j["shots"].is_array()) {
         LOG_ERROR(Game, "Capture run: '{}' is not a valid shot list (expected {{\"shots\": [...]}})", path);
         return false;

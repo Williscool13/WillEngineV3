@@ -5,7 +5,6 @@
 #include "profile_library.h"
 
 #include <cstdio>
-#include <fstream>
 
 #include <json/nlohmann/json.hpp>
 
@@ -44,11 +43,11 @@ static uint32_t ListProfiles(const char* subdir, ProfileName* outNames, uint32_t
 
 static nlohmann::json ReadProfileJson(const char* subdir, const char* name)
 {
-    std::ifstream file(ProfilePath(subdir, name).c_str());
-    if (!file.is_open()) {
+    Platform::ScopedFileMapping map(ProfilePath(subdir, name));
+    if (!map.data) {
         return {};
     }
-    return nlohmann::json::parse(file, nullptr, false);
+    return nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
 }
 
 static bool WriteProfileJson(const char* subdir, const char* name, const nlohmann::json& j)
