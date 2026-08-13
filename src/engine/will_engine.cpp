@@ -36,6 +36,7 @@
 #include "platform/thread_utils.h"
 #include "profiles/profile_library.h"
 #include "render/render_thread.h"
+#include "render/gpu_dispatcher.h"
 #include "render/resource_manager.h"
 #include "render/pipelines/pipeline_manager.h"
 
@@ -302,14 +303,17 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     //
     {
         ZoneScopedN("CreateAssetLoadThread");
+        gpuDispatcher = new(memoryManager.PersistentAllocRaw(sizeof(Render::GPUDispatcher), Core::AllocTag::RenderThread)) Render::GPUDispatcher(
+            renderThread->GetVulkanContext(), scheduler);
         asyncAssetLoadManager = new(memoryManager.PersistentAllocRaw(sizeof(AssetLoad::AsyncAssetLoadManager), Core::AllocTag::AsyncAssetLoadManager)) AssetLoad::AsyncAssetLoadManager(
             memoryManager,
             renderThread->GetVulkanContext(),
             renderThread->GetResourceManager(),
             renderThread->GetPipelineManager(),
             renderThread->GetPipelineManager()->GetPipelineCache(),
+            gpuDispatcher,
             scheduler);
-        renderThread->InitializePipelineManager(asyncAssetLoadManager);
+        renderThread->InitializePipelineManager(asyncAssetLoadManager, gpuDispatcher);
     }
 
     //
@@ -339,7 +343,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     {
         ZoneScopedN("CreateModelGenerator");
         assetGenerator = new(memoryManager.PersistentAllocRaw(sizeof(Editor::AssetGenerator), Core::AllocTag::AssetGenerator)) Editor::AssetGenerator(
-            memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager, scheduler);
+            memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, gpuDispatcher, scheduler);
     }
 
     // Script-declared texture stub generate on startup with their declared id/name
@@ -1435,7 +1439,6 @@ void WillEngine::Run()
         }
 
         if (inputManager->IsQuitRequested() || renderThread->IsShutdownRequestedByRender() || engineState->requests.bRequestedQuit) {
-            renderThread->RequestShutdown();
             break;
         }
 
@@ -1706,7 +1709,14 @@ void WillEngine::PrepareImgui(ImDrawDataSnapshot* imguiSnapshot)
 
 void WillEngine::Cleanup()
 {
+#if WILL_EDITOR
+    assetGenerator->Join();
+#endif
+    asyncAssetLoadManager->Join();
     scheduler->WaitforAll();
+    gpuDispatcher->Shutdown();
+    renderThread->RequestShutdown();
+    renderThread->Join();
 
     gameFunctions.gameUnload(engineContext, engineState);
     gameFunctions.gameShutdown(engineContext, engineState);
@@ -1722,7 +1732,6 @@ void WillEngine::Cleanup()
     inputManager->~InputManager();
 
 #if WILL_EDITOR
-    assetGenerator->Join();
     assetGenerator->~AssetGenerator();
 #endif
 
@@ -1730,14 +1739,13 @@ void WillEngine::Cleanup()
     materialManager->~MaterialManager();
     assetManager->~AssetManager();
 
-    asyncAssetLoadManager->Join();
     asyncAssetLoadManager->~AsyncAssetLoadManager();
+    gpuDispatcher->~GPUDispatcher();
 
     audioManager->~AudioManager();
 
     engineRenderSynchronization->~FrameSync();
 
-    renderThread->Join();
     renderThread->~RenderThread();
 
     scheduler->~TaskScheduler();

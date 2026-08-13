@@ -42,6 +42,10 @@ struct VulkanContext
     VmaAllocator allocator{};
     VkDebugUtilsMessengerEXT debugMessenger{};
 
+    // May be null
+    VkQueue computeQueue{};
+    uint32_t computeQueueFamily{UINT32_MAX};
+
     // Optional Extensions
     bool bMaintenance9Enabled{false};
     bool bMeshShaderQueriesEnabled{false};

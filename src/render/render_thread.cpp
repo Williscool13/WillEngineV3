@@ -13,6 +13,7 @@
 
 #include "renderer.h"
 #include "render_utils.h"
+#include "gpu_dispatcher.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_render_extents.h"
@@ -110,9 +111,9 @@ RenderThread::~RenderThread()
     context->~VulkanContext();
 }
 
-void RenderThread::InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager)
+void RenderThread::InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager, GPUDispatcher* _gpuDispatcher)
 {
-    asyncAssetLoadManager = _asyncAssetLoadManager;
+    gpuDispatcher = _gpuDispatcher;
     pipelineManager->SetAssetLoadThread(_asyncAssetLoadManager);
     pipelineManager->RegisterPipelines();
 }
@@ -212,36 +213,13 @@ void RenderThread::ThreadMain()
 
             FrameMark;
             engineRenderSynchronization->gameFrames.fetch_add(1, std::memory_order_release);
-        } {
-            AssetLoad::GPUDispatchRequest req{};
-            while (asyncAssetLoadManager->graphicsDispatchQueue.try_dequeue(req)) {
-                VkCommandBufferSubmitInfo cmdSubmitInfo = Render::VkHelpers::CommandBufferSubmitInfo(req.cmd);
-                VkSemaphoreSubmitInfo waitInfo = Render::VkHelpers::SemaphoreSubmitInfo(req.waitSemaphore, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
-                VkSemaphoreSubmitInfo signalInfo = Render::VkHelpers::SemaphoreSubmitInfo(req.signalSemaphore, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
-                const VkSemaphoreSubmitInfo* pWaitInfo = req.waitSemaphore != VK_NULL_HANDLE ? &waitInfo : nullptr;
-                const VkSemaphoreSubmitInfo* pSignalInfo = req.signalSemaphore != VK_NULL_HANDLE ? &signalInfo : nullptr;
-                VkSubmitInfo2 submitInfo = Render::VkHelpers::SubmitInfo(&cmdSubmitInfo, pWaitInfo, pSignalInfo);
-                VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, req.fence));
-                VK_CHECK(vkWaitForFences(context->device, 1, &req.fence, VK_TRUE, UINT64_MAX));
-                req.completionSignal->release();
-            }
         }
-#ifdef WILL_EDITOR
-        {
-            AssetLoad::GPUDispatchRequest req{};
-            while (editorGPUDispatchQueue.try_dequeue(req)) {
-                VkCommandBufferSubmitInfo cmdSubmitInfo = Render::VkHelpers::CommandBufferSubmitInfo(req.cmd);
-                VkSemaphoreSubmitInfo waitInfo = Render::VkHelpers::SemaphoreSubmitInfo(req.waitSemaphore, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
-                VkSemaphoreSubmitInfo signalInfo = Render::VkHelpers::SemaphoreSubmitInfo(req.signalSemaphore, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
-                const VkSemaphoreSubmitInfo* pWaitInfo = req.waitSemaphore != VK_NULL_HANDLE ? &waitInfo : nullptr;
-                const VkSemaphoreSubmitInfo* pSignalInfo = req.signalSemaphore != VK_NULL_HANDLE ? &signalInfo : nullptr;
-                VkSubmitInfo2 submitInfo = Render::VkHelpers::SubmitInfo(&cmdSubmitInfo, pWaitInfo, pSignalInfo);
-                VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, req.fence));
-                VK_CHECK(vkWaitForFences(context->device, 1, &req.fence, VK_TRUE, UINT64_MAX));
-                req.completionSignal->release();
-            }
-        }
-#endif
+
+        gpuDispatcher->DrainGraphics();
+    }
+
+    while (!gpuDispatcher->IsGraphicsIdle()) {
+        gpuDispatcher->DrainGraphics();
     }
 
     vkDeviceWaitIdle(context->device);

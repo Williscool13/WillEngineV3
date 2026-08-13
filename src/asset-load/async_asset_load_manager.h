@@ -24,6 +24,11 @@
 #include "core/memory/lock_free_handle_allocator.h"
 #include "engine/resources/sampler/sampler.h"
 
+namespace Render
+{
+class GPUDispatcher;
+}
+
 namespace AssetLoad
 {
 class AsyncAssetLoadManager
@@ -34,6 +39,7 @@ public:
                           Render::ResourceManager* resourceManager,
                           Render::PipelineManager* pipelineManager,
                           VkPipelineCache pipelineCache,
+                          Render::GPUDispatcher* gpuDispatcher,
                           enki::TaskScheduler* scheduler);
 
     ~AsyncAssetLoadManager();
@@ -47,8 +53,6 @@ public:
     AsyncAssetLoadManager& operator=(AsyncAssetLoadManager&&) = delete;
 
     void ThreadMain();
-
-    void GPUDispatchThreadMain();
 
     void Join();
 
@@ -139,10 +143,6 @@ public:
         return proceduralTextureLoadAllocator.GetCount();
     }
 
-    void QueueTransferDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore);
-
-    void QueueGraphicsDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore);
-
     /** Slack knob: raise for loading screens, lower for gameplay; floored at UPLOAD_STAGING_MAX_SIZE. Wakes the load thread so requeued requests re-attempt under the new budget. */
     void SetUploadStagingBudget(uint64_t budgetBytes)
     {
@@ -151,9 +151,6 @@ public:
         wakeCV.notify_one();
     }
 
-    // Drained by RenderThread each frame on the graphics queue
-    moodycamel::ConcurrentQueue<GPUDispatchRequest> graphicsDispatchQueue;
-
 private:
     enki::TaskScheduler* scheduler{};
     Core::MemoryManager* memoryManager{};
@@ -161,17 +158,13 @@ private:
     Render::ResourceManager* resourceManager;
     Render::PipelineManager* pipelineManager;
     VkPipelineCache pipelineCache;
+    Render::GPUDispatcher* gpuDispatcher{};
     std::atomic<bool> bShouldExit{false};
 
     std::jthread thisThread;
     std::atomic<uint32_t> workCounter{0};
     std::mutex wakeMutex;
     std::condition_variable wakeCV;
-
-    std::jthread gpuDispatchThread;
-    std::atomic<uint32_t> gpuDispatchWorkCounter{0};
-    std::mutex gpuDispatchWakeMutex;
-    std::condition_variable gpuDispatchWakeCV;
 
     // Audio loading
     Core::LockFreeHandleAllocator<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadAllocator;
@@ -225,8 +218,6 @@ private:
     moodycamel::ConcurrentQueue<ProceduralTextureLoadRequest> proceduralTextureRequestQueue;
     moodycamel::ConcurrentQueue<ProceduralTextureLoadComplete> proceduralTextureCompleteQueue;
 
-    // GPU Uploads (transfer queue)
-    moodycamel::ConcurrentQueue<GPUDispatchRequest> gpuDispatchQueue;
     UploadStagingDepot stagingDepot{};
 
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);

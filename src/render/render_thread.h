@@ -36,6 +36,7 @@ class GpuAssetUploadThread;
 
 namespace Render
 {
+class GPUDispatcher;
 class NrdDenoiser;
 class PipelineManager;
 class RenderGraph;
@@ -97,7 +98,7 @@ public:
 
     ~RenderThread();
 
-    void InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager);
+    void InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager, GPUDispatcher* _gpuDispatcher);
 
     void Start();
 
@@ -160,18 +161,13 @@ private:
     void RegisterDebugReadbacks();
 #endif
 
-public:
-#if WILL_EDITOR
-    moodycamel::ConcurrentQueue<AssetLoad::GPUDispatchRequest> editorGPUDispatchQueue;
-#endif
-
 private:
     // Non-owning
     Core::MemoryManager* memoryManager{};
     SDL_Window* window{};
     Core::FrameSync* engineRenderSynchronization{};
     enki::TaskScheduler* scheduler{};
-    AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{};
+    GPUDispatcher* gpuDispatcher{};
 
     // Threading
     std::atomic<bool> bShouldExit{false};

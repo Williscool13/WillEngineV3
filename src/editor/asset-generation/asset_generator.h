@@ -33,12 +33,8 @@ struct EngineContext;
 
 namespace Render
 {
+class GPUDispatcher;
 class RenderThread;
-}
-
-namespace AssetLoad
-{
-class AsyncAssetLoadManager;
 }
 
 namespace Editor
@@ -157,7 +153,7 @@ public:
         Engine::EngineContext* ctx,
         Render::VulkanContext* vulkanContext,
         Render::RenderThread* renderThread,
-        AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager,
+        Render::GPUDispatcher* gpuDispatcher,
         enki::TaskScheduler* scheduler
     );
 
@@ -276,7 +272,7 @@ private:
     Engine::EngineContext* ctx;
     Render::VulkanContext* vk;
     Render::RenderThread* renderThread;
-    AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager;
+    Render::GPUDispatcher* gpuDispatcher;
     enki::TaskScheduler* scheduler{};
 
     std::mt19937_64 modelIdRng{std::random_device{}()};

@@ -201,6 +201,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR pipelineExecutablePropertiesFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR};
 #endif
 
+    uint32_t computeQueueIndex = 0;
+
     // --- Physical Device Selection ---
     {
         Core::InlineVector<const char*, 12> requiredDeviceExtensions;
@@ -234,6 +236,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
 #endif
         uint32_t selectedGraphicsFamily = UINT32_MAX;
         uint32_t selectedTransferFamily = UINT32_MAX;
+        uint32_t selectedComputeFamily = UINT32_MAX;
+        uint32_t selectedComputeQueueIndex = 0;
 
         for (uint32_t i = 0; i < deviceCount; i++) {
             VkPhysicalDevice pd = pdCandidates[i];
@@ -353,14 +357,47 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                 }
             }
 
+            // Prefer a transfer-only (DMA) family so compute-capable families stay free for the compute queue
             for (uint32_t j = 0; j < qfCount; j++) {
                 if (j == graphicsFamily) {
                     continue;
                 }
-                if ((queueFamilyProperties[j].queueFlags & VK_QUEUE_TRANSFER_BIT) && !(queueFamilyProperties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
+                const VkQueueFlags flags = queueFamilyProperties[j].queueFlags;
+                if ((flags & VK_QUEUE_TRANSFER_BIT) && !(flags & VK_QUEUE_GRAPHICS_BIT) && !(flags & VK_QUEUE_COMPUTE_BIT)) {
                     transferFamily = j;
                     break;
                 }
+            }
+            if (transferFamily == UINT32_MAX) {
+                for (uint32_t j = 0; j < qfCount; j++) {
+                    if (j == graphicsFamily) {
+                        continue;
+                    }
+                    if ((queueFamilyProperties[j].queueFlags & VK_QUEUE_TRANSFER_BIT) && !(queueFamilyProperties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
+                        transferFamily = j;
+                        break;
+                    }
+                }
+            }
+
+            uint32_t computeFamily = UINT32_MAX;
+            uint32_t computeQueueIndexForFamily = 0;
+            for (uint32_t j = 0; j < qfCount; j++) {
+                if (j == graphicsFamily || j == transferFamily) {
+                    continue;
+                }
+                if (queueFamilyProperties[j].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+                    computeFamily = j;
+                    break;
+                }
+            }
+
+            // Transfer landed on a compute-capable family (no DMA-only family): take its second queue if it has one
+            if (computeFamily == UINT32_MAX && transferFamily != UINT32_MAX
+                && (queueFamilyProperties[transferFamily].queueFlags & VK_QUEUE_COMPUTE_BIT)
+                && queueFamilyProperties[transferFamily].queueCount >= 2) {
+                computeFamily = transferFamily;
+                computeQueueIndexForFamily = 1;
             }
 
             if (graphicsFamily == UINT32_MAX || transferFamily == UINT32_MAX) {
@@ -390,6 +427,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                 selected = pd;
                 selectedGraphicsFamily = graphicsFamily;
                 selectedTransferFamily = transferFamily;
+                selectedComputeFamily = computeFamily;
+                selectedComputeQueueIndex = computeQueueIndexForFamily;
                 selectedMaintenance9 = hasMaintenance9;
                 selectedMeshShaderQueries = static_cast<bool>(qMesh.meshShaderQueries);
                 selectedIsDiscrete = isDiscrete;
@@ -407,6 +446,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         physicalDevice = selected;
         graphicsQueueFamily = selectedGraphicsFamily;
         transferQueueFamily = selectedTransferFamily;
+        computeQueueFamily = selectedComputeFamily;
+        computeQueueIndex = selectedComputeQueueIndex;
         bMaintenance9Enabled = selectedMaintenance9;
         bMeshShaderQueriesEnabled = selectedMeshShaderQueries;
 #ifdef ENABLE_VULKAN_VALIDATION
@@ -513,11 +554,14 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         }
 #endif
 
-        float queuePriority = 1.0f;
-        Core::Array<VkDeviceQueueCreateInfo, 2> queueInfos = {
-            VkDeviceQueueCreateInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, nullptr, 0, graphicsQueueFamily, 1, &queuePriority},
-            VkDeviceQueueCreateInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, nullptr, 0, transferQueueFamily, 1, &queuePriority},
-        };
+        float queuePriorities[2] = {1.0f, 1.0f};
+        const uint32_t transferQueueCount = computeQueueFamily == transferQueueFamily ? 2u : 1u;
+        Core::InlineVector<VkDeviceQueueCreateInfo, 3> queueInfos;
+        queueInfos.PushBack(VkDeviceQueueCreateInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, nullptr, 0, graphicsQueueFamily, 1, queuePriorities});
+        queueInfos.PushBack(VkDeviceQueueCreateInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, nullptr, 0, transferQueueFamily, transferQueueCount, queuePriorities});
+        if (computeQueueFamily != UINT32_MAX && computeQueueFamily != transferQueueFamily) {
+            queueInfos.PushBack(VkDeviceQueueCreateInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, nullptr, 0, computeQueueFamily, 1, queuePriorities});
+        }
 
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -538,6 +582,9 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
 
     vkGetDeviceQueue(device, graphicsQueueFamily, 0, &graphicsQueue);
     vkGetDeviceQueue(device, transferQueueFamily, 0, &transferQueue);
+    if (computeQueueFamily != UINT32_MAX) {
+        vkGetDeviceQueue(device, computeQueueFamily, computeQueueIndex, &computeQueue);
+    }
 
     if (graphicsQueueFamily == transferQueueFamily) {
         LOG_ERROR(Engine, "Graphics and transfer queue families are the same ({})", graphicsQueueFamily);
@@ -615,7 +662,12 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
              VK_VERSION_MAJOR(deviceInfo.properties.properties.driverVersion),
              VK_VERSION_MINOR(deviceInfo.properties.properties.driverVersion),
              VK_VERSION_PATCH(deviceInfo.properties.properties.driverVersion));
-    LOG_INFO(Engine, "Queue Families - Graphics: {} | Transfer: {}", graphicsQueueFamily, transferQueueFamily);
+    if (computeQueue != VK_NULL_HANDLE) {
+        LOG_INFO(Engine, "Queue Families - Graphics: {} | Transfer: {} | Compute: {} (queue {})", graphicsQueueFamily, transferQueueFamily, computeQueueFamily, computeQueueIndex);
+    }
+    else {
+        LOG_INFO(Engine, "Queue Families - Graphics: {} | Transfer: {} | Compute: none, aliased to graphics", graphicsQueueFamily, transferQueueFamily);
+    }
     LOG_INFO(Engine, "Max Push Constant Size: {}", deviceInfo.properties.properties.limits.maxPushConstantsSize);
     LOG_INFO(Engine, "Max Descriptor Buffer Bindings: {}", deviceInfo.descriptorBufferProps.maxDescriptorBufferBindings);
     LOG_INFO(Engine, "Mesh Shader Support - Max Task Workgroups: {}", deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0]);

@@ -63,6 +63,7 @@ class InputManager;
 
 namespace Render
 {
+class GPUDispatcher;
 class RenderThread;
 }
 
@@ -122,6 +123,7 @@ private: // Main Systems
 #endif
     enki::TaskScheduler* scheduler{};
     Render::RenderThread* renderThread{};
+    Render::GPUDispatcher* gpuDispatcher{};
     Core::FrameSync* engineRenderSynchronization{};
     Audio::AudioManager* audioManager{};
 

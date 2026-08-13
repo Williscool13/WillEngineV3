@@ -8,7 +8,7 @@
 #include <tracy/Tracy.hpp>
 
 #include "miscellaneous_asset_generate.h"
-#include "asset-load/async_asset_load_manager.h"
+#include "render/gpu_dispatcher.h"
 #include "engine/resources/environment_map/environment_map_format.h"
 #include "engine/resources/model/model_format.h"
 #include "engine/resources/texture/texture_format.h"
@@ -25,13 +25,13 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
                                Engine::EngineContext* ctx,
                                Render::VulkanContext* vulkanContext,
                                Render::RenderThread* renderThread,
-                               AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager,
+                               Render::GPUDispatcher* gpuDispatcher,
                                enki::TaskScheduler* scheduler)
     : memoryManager(&memoryManager),
       ctx(ctx),
       vk(vulkanContext),
       renderThread(renderThread),
-      asyncAssetLoadManager(asyncAssetLoadManager),
+      gpuDispatcher(gpuDispatcher),
       scheduler(scheduler)
 {
     for (int32_t i = 0; i < MODEL_GENERATION_JOB_COUNT; ++i) {
@@ -189,7 +189,8 @@ void AssetGenerator::ThreadMain()
         else {
             ZoneScopedN("Idle - Waiting for Work");
             std::unique_lock lock(wakeMutex);
-            wakeCV.wait(lock, [&] {
+            // Timed wait: slot-full requeues don't bump workCounter, so guarantee a periodic re-poll
+            wakeCV.wait_for(lock, std::chrono::milliseconds(10), [&] {
                 return workCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
             });
             if (workCounter.load(std::memory_order_acquire) > 0) {
@@ -209,18 +210,21 @@ void AssetGenerator::Join()
 
 void AssetGenerator::TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
 {
-    asyncAssetLoadManager->QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
+    gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, completionSignal);
 }
 
 void AssetGenerator::GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
 {
-    renderThread->editorGPUDispatchQueue.enqueue({cmd, fence, completionSignal, VK_NULL_HANDLE, VK_NULL_HANDLE});
+    gpuDispatcher->Enqueue(Render::DispatchChannel::Graphics, cmd, fence, completionSignal);
 }
 
 void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath, bool bSkipExistingTextures)
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     uint64_t modelId = modelIdRng();
     uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
@@ -266,6 +270,9 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Pat
                                                                  uint64_t ownerModelId, uint32_t ownerImageIndex)
 {
     ZoneScoped;
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return {};
+    }
     const RecoveredTextureIdentity identity = RecoverTextureIdentity(outputPath, ownerModelId, ownerImageIndex);
     TextureGenerateRequest req{};
     req.outputPath = outputPath;
@@ -291,6 +298,9 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArr
                                                                    uint64_t ownerModelId, uint32_t ownerImageIndex)
 {
     ZoneScoped;
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return {};
+    }
     const RecoveredTextureIdentity identity = RecoverTextureIdentity(outputPath, ownerModelId, ownerImageIndex);
     TextureGenerateRequest req{};
     req.outputPath = outputPath;
@@ -315,6 +325,9 @@ void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, c
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     Engine::EnvironmentMapID id{environmentMapIdRng()};
     uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
@@ -332,6 +345,9 @@ void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     Engine::EnvironmentMapID id{environmentMapIdRng()};
     uint64_t contentVersion = 1;
     if (outputPath.Exists()) {
@@ -480,6 +496,9 @@ Engine::FontID AssetGenerator::RequestFontGenerate(const Core::Path& ttfPath, co
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return {};
+    }
     Engine::FontID id{fontIdRng()};
     uint64_t contentVersion = 1;
     if (outputPath.Exists()) {

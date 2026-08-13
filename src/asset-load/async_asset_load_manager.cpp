@@ -18,6 +18,7 @@
 #include "engine/resources/sampler/sampler.h"
 #include "engine/resources/texture/texture.h"
 #include "par/par_shapes_ext.h"
+#include "render/gpu_dispatcher.h"
 #include "render/resource_manager.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/types/cubemap_asset.h"
@@ -63,13 +64,15 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
                                              Render::ResourceManager* resourceManager,
                                              Render::PipelineManager* pipelineManager,
                                              VkPipelineCache pipelineCache,
+                                             Render::GPUDispatcher* gpuDispatcher,
                                              enki::TaskScheduler* scheduler)
     : scheduler(scheduler),
       memoryManager(&memoryManager),
       context(context),
       resourceManager(resourceManager),
       pipelineManager(pipelineManager),
-      pipelineCache(pipelineCache)
+      pipelineCache(pipelineCache),
+      gpuDispatcher(gpuDispatcher)
 {
     par_shapes_set_allocator(&memoryManager.AssetsScratch());
     SetEarcutAllocator(&memoryManager.AssetsScratch());
@@ -100,10 +103,10 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore) {
-                QueueTransferDispatch(cmd, fence, completionSignal, signalSemaphore);
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, completionSignal, signalSemaphore);
             },
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore) {
-                QueueGraphicsDispatch(cmd, fence, completionSignal, waitSemaphore);
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Graphics, cmd, fence, completionSignal, VK_NULL_HANDLE, waitSemaphore);
             },
             [this](bool success, ModelSlotHandle modelSlotHandle) {
                 OnModelLoadComplete(success, modelSlotHandle);
@@ -118,10 +121,10 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore) {
-                QueueTransferDispatch(cmd, fence, completionSignal, signalSemaphore);
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, completionSignal, signalSemaphore);
             },
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore) {
-                QueueGraphicsDispatch(cmd, fence, completionSignal, waitSemaphore);
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Graphics, cmd, fence, completionSignal, VK_NULL_HANDLE, waitSemaphore);
             },
             [this](bool success, ProceduralModelSlotHandle slotHandle) {
                 OnProceduralModelLoadComplete(success, slotHandle);
@@ -146,7 +149,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, completionSignal);
             },
             [this](bool success, TextureSlotHandle textureSlotHandle) {
                 OnTextureLoadComplete(success, textureSlotHandle);
@@ -161,7 +164,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueTransferDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, completionSignal);
             },
             [this](bool success, CubemapSlotHandle cubemapSlotHandle) {
                 OnCubemapComplete(success, cubemapSlotHandle);
@@ -176,7 +179,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             pipelineManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueGraphicsDispatch(cmd, fence, completionSignal, VK_NULL_HANDLE);
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Graphics, cmd, fence, completionSignal);
             },
             [this](bool success, ProceduralTextureSlotHandle slotHandle) {
                 OnProceduralTextureLoadComplete(success, slotHandle);
@@ -185,7 +188,6 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
     }
 
     thisThread = std::jthread([this] { ThreadMain(); });
-    gpuDispatchThread = std::jthread([this] { GPUDispatchThreadMain(); });
 }
 
 AsyncAssetLoadManager::~AsyncAssetLoadManager() = default;
@@ -369,7 +371,8 @@ void AsyncAssetLoadManager::ThreadMain()
         else {
             ZoneScopedN("Idle - Waiting for Work");
             std::unique_lock lock(wakeMutex);
-            wakeCV.wait(lock, [&] {
+            // Timed wait: requeued requests (staging exhausted / slots full) don't bump workCounter, so guarantee a periodic re-poll
+            wakeCV.wait_for(lock, std::chrono::milliseconds(10), [&] {
                 return workCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
             });
             if (workCounter.load(std::memory_order_acquire) > 0) {
@@ -379,64 +382,9 @@ void AsyncAssetLoadManager::ThreadMain()
     }
 }
 
-void AsyncAssetLoadManager::GPUDispatchThreadMain()
-{
-    ZoneScoped;
-    tracy::SetThreadName("AsyncGPUDispatcherMain");
-    Platform::SetThreadName("AsyncGPUDispatcherMain");
-
-    scheduler->RegisterExternalTaskThread();
-
-    while (!bShouldExit.load(std::memory_order_acquire)) {
-        {
-            ZoneScopedN("Dispatch GPU Requests");
-            constexpr size_t MAX_BATCH = 16;
-            GPUDispatchRequest batch[MAX_BATCH];
-            VkFence fenceBuf[MAX_BATCH];
-
-            size_t count = gpuDispatchQueue.try_dequeue_bulk(batch, MAX_BATCH);
-            if (count > 0) {
-                for (size_t i = 0; i < count; ++i) {
-                    VkCommandBufferSubmitInfo cmdSubmitInfo = Render::VkHelpers::CommandBufferSubmitInfo(batch[i].cmd);
-                    VkSemaphoreSubmitInfo waitInfo = Render::VkHelpers::SemaphoreSubmitInfo(batch[i].waitSemaphore, VK_PIPELINE_STAGE_2_COPY_BIT);
-                    VkSemaphoreSubmitInfo signalInfo = Render::VkHelpers::SemaphoreSubmitInfo(batch[i].signalSemaphore, VK_PIPELINE_STAGE_2_COPY_BIT);
-                    const VkSemaphoreSubmitInfo* pWaitInfo = batch[i].waitSemaphore != VK_NULL_HANDLE ? &waitInfo : nullptr;
-                    const VkSemaphoreSubmitInfo* pSignalInfo = batch[i].signalSemaphore != VK_NULL_HANDLE ? &signalInfo : nullptr;
-                    VkSubmitInfo2 submitInfo = Render::VkHelpers::SubmitInfo(&cmdSubmitInfo, pWaitInfo, pSignalInfo);
-                    VK_CHECK(vkQueueSubmit2(this->context->transferQueue, 1, &submitInfo, batch[i].fence));
-                    fenceBuf[i] = batch[i].fence;
-                }
-
-                VK_CHECK(vkWaitForFences(context->device, static_cast<uint32_t>(count), fenceBuf, VK_TRUE, UINT64_MAX));
-                for (size_t i = 0; i < count; ++i) {
-                    batch[i].completionSignal->release();
-                }
-            }
-        }
-
-        if (gpuDispatchWorkCounter.load(std::memory_order_acquire) > 0) {
-            gpuDispatchWorkCounter.fetch_sub(1);
-        }
-        else {
-            ZoneScopedN("Idle - Waiting for Work");
-            std::unique_lock lock(gpuDispatchWakeMutex);
-            gpuDispatchWakeCV.wait(lock, [&] {
-                return gpuDispatchWorkCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
-            });
-            if (gpuDispatchWorkCounter.load(std::memory_order_acquire) > 0) {
-                gpuDispatchWorkCounter.fetch_sub(1);
-            }
-        }
-    }
-}
-
 void AsyncAssetLoadManager::Join()
 {
     bShouldExit.store(true, std::memory_order_release);
-
-    gpuDispatchWorkCounter.fetch_add(1);
-    gpuDispatchWakeCV.notify_one();
-    gpuDispatchThread.join();
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();
@@ -447,6 +395,9 @@ void AsyncAssetLoadManager::RequestAudioLoad(Audio::WillAudio* audioEntry)
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     if (!audioEntry) {
         LOG_ERROR(Asset, "RequestAudioLoad called with null audioEntry");
         return;
@@ -466,6 +417,9 @@ void AsyncAssetLoadManager::RequestPipelineLoad(Render::PipelineData* pipelineDa
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     if (!pipelineData) {
         LOG_ERROR(Asset, "RequestPipelineLoad called with null pipelineData");
         return;
@@ -485,6 +439,9 @@ void AsyncAssetLoadManager::RequestModelLoad(Engine::StaticModel* model)
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     if (!model) {
         LOG_ERROR(Asset, "RequestModelLoad called with null model");
         return;
@@ -504,6 +461,9 @@ void AsyncAssetLoadManager::RequestProceduralModelLoad(Engine::StaticModel* mode
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     if (!model) {
         LOG_ERROR(Asset, "RequestProceduralModelLoad called with null model");
         return;
@@ -523,6 +483,9 @@ void AsyncAssetLoadManager::RequestPhysicsColliderLoad(Engine::PhysicsColliderAs
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     if (!collider) {
         LOG_ERROR(Asset, "RequestPhysicsColliderLoad called with null collider");
         return;
@@ -542,6 +505,9 @@ void AsyncAssetLoadManager::RequestTextureLoad(Engine::Texture* texture)
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     if (!texture) {
         LOG_ERROR(Asset, "RequestTextureLoad called with null texture");
         return;
@@ -560,6 +526,9 @@ bool AsyncAssetLoadManager::TryDequeueTextureComplete(TextureLoadComplete& outRe
 void AsyncAssetLoadManager::RequestCubemapLoad(Render::Cubemap* cubemap)
 {
     ZoneScoped;
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     if (!cubemap) {
         LOG_ERROR(Asset, "RequestCubemapLoad called with null cubemap");
         return;
@@ -578,6 +547,9 @@ void AsyncAssetLoadManager::RequestSamplerLoad(Engine::Sampler* sampler)
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     if (!sampler) {
         LOG_ERROR(Asset, "RequestSamplerLoad called with null sampler");
         return;
@@ -593,22 +565,13 @@ bool AsyncAssetLoadManager::TryDequeueSamplerComplete(SamplerLoadComplete& outRe
     return samplerLoadCompleteQueue.try_dequeue(outResult);
 }
 
-void AsyncAssetLoadManager::QueueTransferDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore)
-{
-    gpuDispatchQueue.enqueue({cmd, fence, completionSignal, signalSemaphore, VK_NULL_HANDLE});
-    gpuDispatchWorkCounter.fetch_add(1);
-    gpuDispatchWakeCV.notify_one();
-}
-
-void AsyncAssetLoadManager::QueueGraphicsDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore waitSemaphore)
-{
-    graphicsDispatchQueue.enqueue({cmd, fence, completionSignal, VK_NULL_HANDLE, waitSemaphore});
-}
-
 void AsyncAssetLoadManager::RequestProceduralTextureLoad(Engine::Texture* texture, StringID pipelineId)
 {
     ZoneScoped;
 
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
     if (!texture) {
         LOG_ERROR(Asset, "RequestProceduralTextureLoad called with null texture");
         return;
