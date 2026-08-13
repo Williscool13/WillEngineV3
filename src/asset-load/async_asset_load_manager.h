@@ -54,6 +54,8 @@ public:
 
     void ThreadMain();
 
+    void BeginShutdown();
+
     void Join();
 
     // Audio Loading

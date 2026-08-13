@@ -233,6 +233,8 @@ public:
         return fontGenerateAllocator.GetCount();
     }
 
+    void BeginShutdown();
+
     void Join();
 
     bool GetFastMode() const { return bFastMode.load(std::memory_order_relaxed); }

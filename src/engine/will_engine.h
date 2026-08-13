@@ -133,6 +133,8 @@ private: // Main Systems
     Physics::PhysicsSystem* physicsSystem{};
 #if WILL_EDITOR
     Editor::AssetGenerator* assetGenerator{};
+    bool bQuitPendingGeneration{false};
+    bool bForceQuitRequested{false};
 #endif
 
 private: // Subsystems

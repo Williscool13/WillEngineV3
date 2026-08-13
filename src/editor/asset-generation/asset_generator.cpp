@@ -200,11 +200,16 @@ void AssetGenerator::ThreadMain()
     }
 }
 
-void AssetGenerator::Join()
+void AssetGenerator::BeginShutdown()
 {
     bShouldExit.store(true, std::memory_order_release);
     workCounter.fetch_add(1);
     wakeCV.notify_one();
+}
+
+void AssetGenerator::Join()
+{
+    BeginShutdown();
     thisThread.join();
 }
 

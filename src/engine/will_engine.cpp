@@ -630,6 +630,16 @@ static void DrawCategoryGroupTree(const char* tableId, const double* leafValues,
 }
 #endif
 
+#if WILL_EDITOR
+static uint32_t PendingGenerationCount(const Editor::AssetGenerator* gen, bool bActiveOnly)
+{
+    if (bActiveOnly) {
+        return gen->GetActiveModelGenerateCount() + gen->GetActiveTextureGenerateCount() + gen->GetActiveEnvironmentMapGenerateCount() + gen->GetActiveFontGenerateCount();
+    }
+    return gen->GetTotalModelGenerateCount() + gen->GetTotalTextureGenerateCount() + gen->GetTotalEnvironmentMapGenerateCount() + gen->GetTotalFontGenerateCount();
+}
+#endif
+
 void WillEngine::EditorImgui()
 {
 #if WILL_EDITOR
@@ -672,6 +682,25 @@ void WillEngine::EditorImgui()
         }
     }
 
+    const uint32_t activeGeneration = PendingGenerationCount(assetGenerator, bForceQuitRequested);
+    if (activeGeneration > 0) {
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos({vp->WorkPos.x + vp->WorkSize.x - 12.0f, vp->WorkPos.y + 12.0f}, ImGuiCond_Always, {1.0f, 0.0f});
+        ImGui::SetNextWindowBgAlpha(0.65f);
+        constexpr ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs;
+        if (ImGui::Begin("##GenerationIndicator", nullptr, overlayFlags)) {
+            if (bForceQuitRequested) {
+                ImGui::Text("Exiting - finishing %u in-flight bakes, new work refused", activeGeneration);
+            }
+            else if (bQuitPendingGeneration) {
+                ImGui::Text("Generating assets (%u remaining) - exiting when finished", activeGeneration);
+            }
+            else {
+                ImGui::Text("Generating assets (%u remaining)", activeGeneration);
+            }
+        }
+        ImGui::End();
+    }
 
     if (ImGui::Begin("Editor")) {
 #if !GAME_STATIC
@@ -1404,6 +1433,16 @@ void WillEngine::Run()
         while (SDL_PollEvent(&e) != 0) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             switch (e.type) {
+#if WILL_EDITOR
+                case SDL_EVENT_QUIT:
+                    // Second quit while waiting on generation
+                    if (bQuitPendingGeneration && !bForceQuitRequested) {
+                        bForceQuitRequested = true;
+                        assetGenerator->BeginShutdown();
+                        asyncAssetLoadManager->BeginShutdown();
+                    }
+                    break;
+#endif
                 case SDL_EVENT_WINDOW_MINIMIZED:
                     bMinimized = true;
                     bRequireSwapchainRecreate = true;
@@ -1439,7 +1478,14 @@ void WillEngine::Run()
         }
 
         if (inputManager->IsQuitRequested() || renderThread->IsShutdownRequestedByRender() || engineState->requests.bRequestedQuit) {
+#if WILL_EDITOR
+            bQuitPendingGeneration = PendingGenerationCount(assetGenerator, bForceQuitRequested) > 0 && !renderThread->IsShutdownRequestedByRender();
+            if (!bQuitPendingGeneration) {
+                break;
+            }
+#else
             break;
+#endif
         }
 
         audioManager->Update();

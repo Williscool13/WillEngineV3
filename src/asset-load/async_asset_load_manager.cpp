@@ -382,12 +382,16 @@ void AsyncAssetLoadManager::ThreadMain()
     }
 }
 
-void AsyncAssetLoadManager::Join()
+void AsyncAssetLoadManager::BeginShutdown()
 {
     bShouldExit.store(true, std::memory_order_release);
-
     workCounter.fetch_add(1);
     wakeCV.notify_one();
+}
+
+void AsyncAssetLoadManager::Join()
+{
+    BeginShutdown();
     thisThread.join();
 }
 
