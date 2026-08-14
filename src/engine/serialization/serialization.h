@@ -7,28 +7,11 @@
 
 #include <cstddef>
 
-#include <json/nlohmann/json.hpp>
-
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
 #include "core/containers/vector.h"
 #include "engine/resources/material/material.h"
 #include "engine/resources/model/model_types.h"
-
-namespace Core
-{
-template<size_t N>
-void to_json(nlohmann::json& j, const InlineString<N>& str)
-{
-    j = std::string_view(str.c_str(), str.Size());
-}
-
-template<size_t N>
-void from_json(const nlohmann::json& j, InlineString<N>& str)
-{
-    str = InlineString<N>(j.get<std::string_view>());
-}
-} // Core
 
 namespace Engine
 {

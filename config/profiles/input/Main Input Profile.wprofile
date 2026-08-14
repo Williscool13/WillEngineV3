@@ -1,12 +1,7 @@
-{
-  "overrides": [
-    {
-      "action": 1559503217776223661,
-      "row": 2,
-      "source": {
-        "type": 0,
-        "value": 23
-      }
-    }
-  ]
-}
+overrides|1
+o
+action|1559503217776223661
+row|2
+type|0
+value|23
+;

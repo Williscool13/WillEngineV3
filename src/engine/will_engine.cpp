@@ -230,7 +230,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 #else
     constexpr size_t ASSETS_SCRATCH_BUDGET = 512ull * 1024 * 1024;
 #endif
-    // The only things that alloc now are SDL startup, EnTT, Tracy, and nlohmann::json.
+    // The only things that alloc now are SDL startup, EnTT, and Tracy.
     memoryManager.Init({
         .persistentSize = 16ull * 1024 * 1024,
         .physicsPoolSize = 32ull * 1024 * 1024,
@@ -1658,7 +1658,7 @@ void WillEngine::Run()
             PollCapture(engineState->input, currentInput);
             ResolveInputActions(currentInput, engineState->inputContext, engineState->input);
             if (engineState->input.bBindingsDirty) {
-                SaveInputConfig(engineState->input, engineState->projectConfig);
+                SaveInputConfig(engineState->input, engineState->projectConfig, engineState->allocator);
                 engineState->input.bBindingsDirty = false;
             }
             engineState->timeFrame = &timeManager->GetTime();

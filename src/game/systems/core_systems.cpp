@@ -18,7 +18,7 @@ static void LoadLightingProfile(Engine::EngineState* state, const char* name)
     if (Engine::Profiles::LoadLightingProfile(name, bundle)) {
         Engine::Profiles::ApplyLightingProfile(*state, bundle);
         state->projectConfig.activeLightingProfile = Core::InlineString<64>(name);
-        Engine::WriteProjectConfig(state->projectConfig);
+        Engine::WriteProjectConfig(state->projectConfig, state->allocator);
     }
 }
 

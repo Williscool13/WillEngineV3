@@ -4,13 +4,12 @@
 
 #include "input_config.h"
 
-#include <cstdio>
-
-#include <json/nlohmann/json.hpp>
-
+#include "core/containers/vector.h"
 #include "platform/paths.h"
 #include "platform/file_utils.h"
 #include "engine/input/input_rebinding.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
 namespace Engine
 {
@@ -19,75 +18,47 @@ static Core::Path GetInputConfigPath()
     return Platform::GetConfigPath() / "input.wconfig";
 }
 
-static nlohmann::json BindingSourceToJson(const BindingSource& source)
+static void InputConfigToText(const InputConfig& config, TextWriter& w)
 {
-    nlohmann::json j;
-    j["type"] = source.type;
-    switch (source.type) {
-        case BindingSourceType::Key: j["value"] = source.key; break;
-        case BindingSourceType::MouseButton: j["value"] = source.mouseButton; break;
-        case BindingSourceType::GamepadButton: j["value"] = source.gamepadButton; break;
-        case BindingSourceType::GamepadAxis: j["value"] = source.gamepadAxis; break;
-    }
-    return j;
-}
-
-static bool BindingSourceFromJson(const nlohmann::json& j, BindingSource& outSource)
-{
-    if (!j.contains("type") || !j["type"].is_number_integer()) { return false; }
-    if (!j.contains("value") || !j["value"].is_number_integer()) { return false; }
-
-    const auto type = static_cast<BindingSourceType>(j["type"].get<int32_t>());
-    const auto value = j["value"].get<uint32_t>();
-    switch (type) {
-        case BindingSourceType::Key: outSource = BindingSource::FromKey(static_cast<Core::Key>(value)); return true;
-        case BindingSourceType::MouseButton: outSource = BindingSource::FromMouse(static_cast<Core::MouseButton>(value)); return true;
-        case BindingSourceType::GamepadButton: outSource = BindingSource::FromGamepadButton(static_cast<Core::GamepadButton>(value)); return true;
-        case BindingSourceType::GamepadAxis: outSource = BindingSource::FromGamepadAxis(static_cast<Core::GamepadAxis>(value)); return true;
-    }
-    return false;
-}
-
-static nlohmann::json InputConfigToJson(const InputConfig& config)
-{
-    nlohmann::json overrides = nlohmann::json::array();
+    w.Count("overrides", static_cast<uint32_t>(config.overrides.Size()));
     for (size_t i = 0; i < config.overrides.Size(); ++i) {
         const InputBindingOverride& o = config.overrides[i];
-        overrides.push_back({
-            {"action", o.action.id},
-            {"row", o.bindingRowInDefault},
-            {"source", BindingSourceToJson(o.source)}
-        });
+        w.BeginBlock("o");
+        w.Key("action", o.action.id);
+        w.Key("row", static_cast<uint64_t>(o.bindingRowInDefault));
+        w.Key("type", static_cast<uint32_t>(o.source.type));
+        switch (o.source.type) {
+            case BindingSourceType::Key: w.Key("value", static_cast<uint32_t>(o.source.key)); break;
+            case BindingSourceType::MouseButton: w.Key("value", static_cast<uint32_t>(o.source.mouseButton)); break;
+            case BindingSourceType::GamepadButton: w.Key("value", static_cast<uint32_t>(o.source.gamepadButton)); break;
+            case BindingSourceType::GamepadAxis: w.Key("value", static_cast<uint32_t>(o.source.gamepadAxis)); break;
+            default: return;
+        }
+        w.EndBlock();
     }
-
-    nlohmann::json j;
-    j["overrides"] = overrides;
-    return j;
 }
 
-static InputConfig InputConfigFromJson(const nlohmann::json& j)
+static InputConfig InputConfigFromText(const TextReader& r)
 {
     InputConfig config{};
-    if (!j.is_object() || !j.contains("overrides") || !j["overrides"].is_array()) {
-        return config;
-    }
-
-    for (const auto& entry : j["overrides"]) {
-        if (!entry.is_object()) { continue; }
-        if (!entry.contains("action") || !entry["action"].is_number_unsigned()) { continue; }
-        if (!entry.contains("row") || !entry["row"].is_number_unsigned()) { continue; }
-        if (!entry.contains("source") || !entry["source"].is_object()) { continue; }
-
+    r.ForEachRecord("overrides", [&](const TextReader& e) {
+        if (config.overrides.IsFull()) { return; }
+        const auto type = static_cast<BindingSourceType>(e.UInt("type"));
+        const uint32_t value = e.UInt("value");
         BindingSource source{};
-        if (!BindingSourceFromJson(entry["source"], source)) { continue; }
-
+        switch (type) {
+            case BindingSourceType::Key: source = BindingSource::FromKey(static_cast<Core::Key>(value)); break;
+            case BindingSourceType::MouseButton: source = BindingSource::FromMouse(static_cast<Core::MouseButton>(value)); break;
+            case BindingSourceType::GamepadButton: source = BindingSource::FromGamepadButton(static_cast<Core::GamepadButton>(value)); break;
+            case BindingSourceType::GamepadAxis: source = BindingSource::FromGamepadAxis(static_cast<Core::GamepadAxis>(value)); break;
+            default: return;
+        }
         config.overrides.PushBack({
-            ActionHandle(entry["action"].get<uint64_t>()),
-            entry["row"].get<size_t>(),
+            ActionHandle(e.U64("action")),
+            static_cast<size_t>(e.U64("row")),
             source
         });
-    }
-
+    });
     return config;
 }
 
@@ -97,16 +68,15 @@ static InputConfig ReadInputConfig()
     Platform::ScopedFileMapping map(path);
     if (!map.data) { return InputConfig{}; }
 
-    nlohmann::json j = nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
-    if (j.is_discarded()) { return InputConfig{}; }
-
-    return InputConfigFromJson(j);
+    return InputConfigFromText(TextReader(map.data, map.size));
 }
 
-static bool WriteInputConfig(const InputConfig& config)
+static bool WriteInputConfig(const InputConfig& config, Core::TlsfAllocator* alloc)
 {
-    const std::string dump = InputConfigToJson(config).dump(2);
-    return Platform::WriteFile(GetInputConfigPath(), std::string_view(dump));
+    Core::Vector<std::byte> body(alloc, Core::AllocTag::EngineState);
+    TextWriter w(body);
+    InputConfigToText(config, w);
+    return Platform::WriteFile(GetInputConfigPath(), body.Data(), body.Size());
 }
 
 static Core::Path InputProfilesDir()
@@ -116,9 +86,8 @@ static Core::Path InputProfilesDir()
 
 static Core::Path InputProfilePath(const char* name)
 {
-    char fileName[128];
-    std::snprintf(fileName, sizeof(fileName), "%s.wprofile", name);
-    return InputProfilesDir() / fileName;
+    const auto fileName = Core::InlineString<128>::Format("%s.wprofile", name);
+    return InputProfilesDir() / fileName.c_str();
 }
 
 namespace Profiles
@@ -139,17 +108,16 @@ bool LoadInputProfile(const char* name, InputConfig& out)
     Platform::ScopedFileMapping map(InputProfilePath(name));
     if (!map.data) { return false; }
 
-    nlohmann::json j = nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
-    if (!j.is_object()) { return false; }
-
-    out = InputConfigFromJson(j);
+    out = InputConfigFromText(TextReader(map.data, map.size));
     return true;
 }
 
-bool SaveInputProfile(const char* name, const InputConfig& config)
+bool SaveInputProfile(const char* name, const InputConfig& config, Core::TlsfAllocator* alloc)
 {
-    const std::string dump = InputConfigToJson(config).dump(2);
-    return Platform::WriteFile(InputProfilePath(name), std::string_view(dump));
+    Core::Vector<std::byte> body(alloc, Core::AllocTag::EngineState);
+    TextWriter w(body);
+    InputConfigToText(config, w);
+    return Platform::WriteFile(InputProfilePath(name), body.Data(), body.Size());
 }
 
 bool DeleteInputProfile(const char* name)
@@ -200,14 +168,14 @@ void LoadAndApplyInputConfig(InputState& input, const ProjectConfig& projectConf
     ApplyInputOverrides(input, config);
 }
 
-void SaveInputConfig(const InputState& input, const ProjectConfig& projectConfig)
+void SaveInputConfig(const InputState& input, const ProjectConfig& projectConfig, Core::TlsfAllocator* alloc)
 {
     const InputConfig config = BuildInputConfigFromState(input);
     if (!projectConfig.activeInputProfile.IsEmpty()) {
-        Profiles::SaveInputProfile(projectConfig.activeInputProfile.c_str(), config);
+        Profiles::SaveInputProfile(projectConfig.activeInputProfile.c_str(), config, alloc);
     }
     else {
-        WriteInputConfig(config);
+        WriteInputConfig(config, alloc);
     }
 }
 } // Engine

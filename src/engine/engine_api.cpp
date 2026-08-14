@@ -111,7 +111,8 @@ InputState::InputState(Core::TlsfAllocator* allocator)
 {}
 
 EngineState::EngineState(Core::TlsfAllocator* allocator)
-    : stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
+    : allocator(allocator),
+      stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
       componentRegistry(allocator),
       physics(allocator),
       editor(allocator),

@@ -33,12 +33,12 @@ namespace Profiles
 {
 uint32_t ListInputProfiles(ProfileName* outNames, uint32_t maxNames);
 bool LoadInputProfile(const char* name, InputConfig& out);
-bool SaveInputProfile(const char* name, const InputConfig& config);
+bool SaveInputProfile(const char* name, const InputConfig& config, Core::TlsfAllocator* alloc);
 bool DeleteInputProfile(const char* name);
 } // Profiles
 
 void LoadAndApplyInputConfig(InputState& input, const ProjectConfig& projectConfig);
-void SaveInputConfig(const InputState& input, const ProjectConfig& projectConfig);
+void SaveInputConfig(const InputState& input, const ProjectConfig& projectConfig, Core::TlsfAllocator* alloc);
 } // Engine
 
 #endif //WILL_ENGINE_INPUT_CONFIG_H

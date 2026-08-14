@@ -1,205 +1,203 @@
-{
-  "ddgi": {
-    "bApplyToLighting": true,
-    "bCascadeSampling": true,
-    "bClassification": true,
-    "bEnabled": true,
-    "bFinalGather": true,
-    "bFinalGatherChromaDenoise": false,
-    "bFinalGatherDenoise": true,
-    "bFinalGatherTemporal": true,
-    "bGatherSkipRay": false,
-    "bInfiniteBounce": true,
-    "bLocalVolumes": true,
-    "bRelocation": true,
-    "bScaleBiasPerCascade": true,
-    "bounceIntensity": 0.5,
-    "brightnessThreshold": 0.10000000149011612,
-    "cascadeCount": 6,
-    "distanceExponent": 50.0,
-    "edgeBlendCells": 3.0,
-    "gatherChromaDenoisePasses": 1,
-    "gatherChromaLumaPower": 2.0,
-    "gatherRaysPerPixel": 2,
-    "hysteresis": 0.9700000286102295,
-    "irradianceGamma": 5.0,
-    "irradianceThreshold": 0.25,
-    "maxRayRadiance": 20.0,
-    "maxResidentWorldVolumes": 100,
-    "minFrontfaceDistance": 0.20000000298023224,
-    "normalBias": 0.19732441008090973,
-    "outerRaysPerProbe": 40,
-    "probeCountX": 16,
-    "probeCountY": 16,
-    "probeCountZ": 16,
-    "probeSpacing": 1.5,
-    "radianceCacheAccumCap": 16,
-    "radianceCacheShadeInterval": 8,
-    "raysPerProbe": 80,
-    "viewBias": 0.24749164283275604,
-    "visibilityHysteresis": 0.9700000286102295,
-    "worldVolumeWarmupBoost": 1
-  },
-  "gtao": {
-    "bEnabled": true,
-    "denoiseBlurBeta": 1.2000000476837158,
-    "denoisePasses": 2.0,
-    "depthMipSamplingOffset": 3.299999952316284,
-    "effectFalloffRange": 0.6161616444587708,
-    "effectRadius": 0.15000000596046448,
-    "finalValuePower": 2.200000047683716,
-    "radiusMultiplier": 1.4570000171661377,
-    "sampleDistributionPower": 2.0,
-    "sliceCount": 3.0,
-    "stepsPerSlice": 3.0,
-    "thinOccluderCompensation": 0.0
-  },
-  "iblIntensity": 1.0,
-  "indirectIntensity": 0.699999988079071,
-  "lightingMode": 1,
-  "lightingShaderOverride": 7554520945661456859,
-  "reflection": {
-    "bEnabled": false,
-    "bMergedDenoise": true,
-    "bScreenSpaceLighting": false,
-    "bScreenSpaceTrace": false,
-    "intensity": 1.0,
-    "lightSpecularFromReflectionsMax": 0.0,
-    "ssrMaxSteps": 64,
-    "ssrThickness": 0.30000001192092896,
-    "sunMode": 0,
-    "tracedRoughnessMax": 1.0
-  },
-  "reflectionProbe": {
-    "bBruteForcePick": false,
-    "bDebugDraw": false,
-    "bEnabled": true,
-    "bakedDiffuseClampK": 4.0,
-    "intensity": 1.0
-  },
-  "restir": {
-    "adaptiveSpatialBoost": 3.0,
-    "antilagStrength": 0.8971193432807922,
-    "atrous": {
-      "iterations": 4,
-      "sigmaDepth": 0.009999999776482582,
-      "sigmaLuminance": 2.0,
-      "sigmaNormal": 128.0
-    },
-    "bAdaptiveSpatial": false,
-    "bCheckerboard": true,
-    "bCheckerboardFullRateResolve": true,
-    "bEmissiveTriangleLights": true,
-    "bEnableAntilag": true,
-    "bEnableConfidence": false,
-    "bEnableTemporal": true,
-    "bInitialVisibility": true,
-    "bPermutationSampling": false,
-    "bSunLight": true,
-    "boilingFilterStrength": 0.20000000298023224,
-    "confidenceBlurRadius": 6,
-    "confidenceDarknessBias": 0.22558923065662384,
-    "confidenceHistoryLength": 4.0,
-    "confidenceSensitivity": 0.5,
-    "confidenceStrength": 0.14814814925193787,
-    "denoiserMode": 3,
-    "emissiveTriMaxPerPrimitive": 256,
-    "emissiveTriRangeMultiplier": 8.0,
-    "lightProposal": 0,
-    "reblur": {
-      "antilagLuminanceSensitivity": 3.0,
-      "antilagLuminanceSigmaScale": 2.0,
-      "bChromaAtrous": true,
-      "chromaAtrousIterations": 2,
-      "chromaLumaPower": 2.0,
-      "convergenceB": 0.20000000298023224,
-      "convergenceP": 0.800000011920929,
-      "convergenceS": 1.0,
-      "denoisingRange": 3473.208984375,
-      "diffusePrepassBlurRadius": 30.0,
-      "disocclusionThreshold": 0.009999999776482582,
-      "disocclusionThresholdAlternate": 0.05000000074505806,
-      "enableAntiFirefly": true,
-      "enablePrepass": true,
-      "enableStabilizationFireflyCleanup": true,
-      "enableTemporalStabilization": true,
-      "fastHistoryClampingSigmaScale": 2.0,
-      "fireflySuppressorMinRelativeScale": 2.0,
-      "historyFixBasePixelStride": 14.0,
-      "historyFixFrameNum": 28.059701919555664,
-      "hitDistA": 3.0,
-      "hitDistB": 0.10000000149011612,
-      "hitDistC": 20.0,
-      "hitDistD": -25.0,
-      "hitDistanceReconstructionMode": 0,
-      "lobeAngleFraction": 0.15000000596046448,
-      "maxAccumulatedFrameNum": 30.0,
-      "maxBlurRadius": 30.0,
-      "maxFastAccumulatedFrameNum": 6.0,
-      "maxStabilizedFrameNum": 30.0,
-      "minBlurRadius": 1.0,
-      "minHitDistanceWeight": 0.10000000149011612,
-      "planeDistanceSensitivity": 0.019999999552965164,
-      "roughnessFraction": 0.15000000596046448,
-      "specProbThresholdMvHigh": 0.8999999761581421,
-      "specProbThresholdMvLow": 0.5,
-      "specularPrepassBlurRadius": 50.0,
-      "stabilizationStrength": 1.0
-    },
-    "regirWClamp": 0.0,
-    "relax": {
-      "atrousIterations": 4,
-      "bChromaAtrous": true,
-      "chromaAtrousIterations": 1,
-      "chromaLumaPower": 4.0,
-      "denoisingRange": 2000.0,
-      "depthThreshold": 0.003000000026077032,
-      "diffBlurRadius": 30.0,
-      "diffMaxAccumFrames": 32.0,
-      "diffMaxFastAccumFrames": 6.0,
-      "diffMaxLuminanceRelativeDifference": 100.0,
-      "diffPhiLuminance": 2.0,
-      "disocclusionThreshold": 0.009999999776482582,
-      "enableAntiFirefly": true,
-      "enablePrepass": false,
-      "fastHistoryClampingSigmaScale": 1.0,
-      "historyAccelerationAmount": 1.0,
-      "historyFixBasePixelStride": 14.0,
-      "historyFixEdgeStoppingNormalPower": 8.0,
-      "historyFixFrameNum": 4.0,
-      "historyResetAmount": 0.800000011920929,
-      "historyResetSpatialSigmaScale": 1.0,
-      "historyResetTemporalSigmaScale": 2.0,
-      "lobeAngleFraction": 0.5,
-      "luminanceEdgeStoppingRelaxation": 1.0,
-      "minHitDistanceWeight": 0.0,
-      "normalEdgeStoppingRelaxation": 0.30000001192092896,
-      "roughnessEdgeStoppingEnabled": true,
-      "roughnessEdgeStoppingRelaxation": 1.0,
-      "roughnessFraction": 0.15000000596046448,
-      "specBlurRadius": 50.0,
-      "specLobeAngleSlack": 0.15000000596046448,
-      "specMaxAccumFrames": 32.0,
-      "specMaxFastAccumFrames": 6.0,
-      "specMaxLuminanceRelativeDifference": 100.0,
-      "specPhiLuminance": 1.0,
-      "specVarianceBoost": 0.0
-    },
-    "remodulateOutput": 0,
-    "restirWClamp": 0.0,
-    "spatialMCap": 2000,
-    "spatialNeighbors": 1,
-    "spatialPasses": 1,
-    "spatialRadius": 20,
-    "svgf": {
-      "alphaMin": 0.10000000149011612,
-      "atrousIterations": 4,
-      "gradientThreshold": 0.0,
-      "sigmaDepth": 0.05000000074505806,
-      "sigmaLuminance": 4.0,
-      "sigmaNormal": 64.0
-    },
-    "temporalMCap": 20
-  },
-  "shadingShaderOverride": 11262630175972558216
-}
+ddgi
+bApplyToLighting|1
+bCascadeSampling|1
+bClassification|1
+bEnabled|1
+bFinalGather|1
+bFinalGatherChromaDenoise|0
+bFinalGatherDenoise|1
+bFinalGatherTemporal|1
+bGatherSkipRay|0
+bInfiniteBounce|1
+bLocalVolumes|1
+bRelocation|1
+bScaleBiasPerCascade|1
+bounceIntensity|0x3f000000
+brightnessThreshold|0x3dcccccd
+cascadeCount|6
+distanceExponent|0x42480000
+edgeBlendCells|0x40400000
+gatherChromaDenoisePasses|1
+gatherChromaLumaPower|0x40000000
+gatherRaysPerPixel|2
+hysteresis|0x3f7851ec
+irradianceGamma|0x40a00000
+irradianceThreshold|0x3e800000
+maxRayRadiance|0x41a00000
+maxResidentWorldVolumes|100
+minFrontfaceDistance|0x3e4ccccd
+normalBias|0x3e4a0f69
+outerRaysPerProbe|40
+probeCountX|16
+probeCountY|16
+probeCountZ|16
+probeSpacing|0x3fc00000
+radianceCacheAccumCap|16
+radianceCacheShadeInterval|8
+raysPerProbe|80
+viewBias|0x3e7d6e73
+visibilityHysteresis|0x3f7851ec
+worldVolumeWarmupBoost|1
+;
+gtao
+bEnabled|1
+denoiseBlurBeta|0x3f99999a
+denoisePasses|0x40000000
+depthMipSamplingOffset|0x40533333
+effectFalloffRange|0x3f1dbcc5
+effectRadius|0x3e19999a
+finalValuePower|0x400ccccd
+radiusMultiplier|0x3fba7efa
+sampleDistributionPower|0x40000000
+sliceCount|0x40400000
+stepsPerSlice|0x40400000
+thinOccluderCompensation|0x00000000
+;
+iblIntensity|0x3f800000
+indirectIntensity|0x3f333333
+lightingMode|1
+lightingShaderOverride|7554520945661456859
+reflection
+bEnabled|0
+bMergedDenoise|1
+bScreenSpaceLighting|0
+bScreenSpaceTrace|0
+intensity|0x3f800000
+lightSpecularFromReflectionsMax|0x00000000
+ssrMaxSteps|64
+ssrThickness|0x3e99999a
+sunMode|0
+tracedRoughnessMax|0x3f800000
+;
+reflectionProbe
+bBruteForcePick|0
+bDebugDraw|0
+bEnabled|1
+bakedDiffuseClampK|0x40800000
+intensity|0x3f800000
+;
+restir
+adaptiveSpatialBoost|0x40400000
+antilagStrength|0x3f65a99d
+atrous
+iterations|4
+sigmaDepth|0x3c23d70a
+sigmaLuminance|0x40000000
+sigmaNormal|0x43000000
+;
+bAdaptiveSpatial|0
+bCheckerboard|1
+bCheckerboardFullRateResolve|1
+bEmissiveTriangleLights|1
+bEnableAntilag|1
+bEnableConfidence|0
+bEnableTemporal|1
+bInitialVisibility|1
+bPermutationSampling|0
+bSunLight|1
+boilingFilterStrength|0x3e4ccccd
+confidenceBlurRadius|6
+confidenceDarknessBias|0x3e6700dd
+confidenceHistoryLength|0x40800000
+confidenceSensitivity|0x3f000000
+confidenceStrength|0x3e17b426
+denoiserMode|3
+emissiveTriMaxPerPrimitive|256
+emissiveTriRangeMultiplier|0x41000000
+lightProposal|0
+reblur
+antilagLuminanceSensitivity|0x40400000
+antilagLuminanceSigmaScale|0x40000000
+bChromaAtrous|1
+chromaAtrousIterations|2
+chromaLumaPower|0x40000000
+convergenceB|0x3e4ccccd
+convergenceP|0x3f4ccccd
+convergenceS|0x3f800000
+denoisingRange|0x45591358
+diffusePrepassBlurRadius|0x41f00000
+disocclusionThreshold|0x3c23d70a
+disocclusionThresholdAlternate|0x3d4ccccd
+enableAntiFirefly|1
+enablePrepass|1
+enableStabilizationFireflyCleanup|1
+enableTemporalStabilization|1
+fastHistoryClampingSigmaScale|0x40000000
+fireflySuppressorMinRelativeScale|0x40000000
+historyFixBasePixelStride|0x41600000
+historyFixFrameNum|0x41e07a45
+hitDistA|0x40400000
+hitDistB|0x3dcccccd
+hitDistC|0x41a00000
+hitDistD|0xc1c80000
+hitDistanceReconstructionMode|0
+lobeAngleFraction|0x3e19999a
+maxAccumulatedFrameNum|0x41f00000
+maxBlurRadius|0x41f00000
+maxFastAccumulatedFrameNum|0x40c00000
+maxStabilizedFrameNum|0x41f00000
+minBlurRadius|0x3f800000
+minHitDistanceWeight|0x3dcccccd
+planeDistanceSensitivity|0x3ca3d70a
+roughnessFraction|0x3e19999a
+specProbThresholdMvHigh|0x3f666666
+specProbThresholdMvLow|0x3f000000
+specularPrepassBlurRadius|0x42480000
+stabilizationStrength|0x3f800000
+;
+regirWClamp|0x00000000
+relax
+atrousIterations|4
+bChromaAtrous|1
+chromaAtrousIterations|1
+chromaLumaPower|0x40800000
+denoisingRange|0x44fa0000
+depthThreshold|0x3b449ba6
+diffBlurRadius|0x41f00000
+diffMaxAccumFrames|0x42000000
+diffMaxFastAccumFrames|0x40c00000
+diffMaxLuminanceRelativeDifference|0x42c80000
+diffPhiLuminance|0x40000000
+disocclusionThreshold|0x3c23d70a
+enableAntiFirefly|1
+enablePrepass|0
+fastHistoryClampingSigmaScale|0x3f800000
+historyAccelerationAmount|0x3f800000
+historyFixBasePixelStride|0x41600000
+historyFixEdgeStoppingNormalPower|0x41000000
+historyFixFrameNum|0x40800000
+historyResetAmount|0x3f4ccccd
+historyResetSpatialSigmaScale|0x3f800000
+historyResetTemporalSigmaScale|0x40000000
+lobeAngleFraction|0x3f000000
+luminanceEdgeStoppingRelaxation|0x3f800000
+minHitDistanceWeight|0x00000000
+normalEdgeStoppingRelaxation|0x3e99999a
+roughnessEdgeStoppingEnabled|1
+roughnessEdgeStoppingRelaxation|0x3f800000
+roughnessFraction|0x3e19999a
+specBlurRadius|0x42480000
+specLobeAngleSlack|0x3e19999a
+specMaxAccumFrames|0x42000000
+specMaxFastAccumFrames|0x40c00000
+specMaxLuminanceRelativeDifference|0x42c80000
+specPhiLuminance|0x3f800000
+specVarianceBoost|0x00000000
+;
+remodulateOutput|0
+restirWClamp|0x00000000
+spatialMCap|2000
+spatialNeighbors|1
+spatialPasses|1
+spatialRadius|20
+svgf
+alphaMin|0x3dcccccd
+atrousIterations|4
+gradientThreshold|0x00000000
+sigmaDepth|0x3d4ccccd
+sigmaLuminance|0x40800000
+sigmaNormal|0x42800000
+;
+temporalMCap|20
+;
+shadingShaderOverride|11262630175972558216

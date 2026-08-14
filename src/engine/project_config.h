@@ -9,6 +9,11 @@
 #include "core/types/math.h"
 #include "render/interface/render_interface.h"
 
+namespace Core
+{
+class TlsfAllocator;
+}
+
 namespace Engine
 {
 static constexpr int MAX_CAMERA_PRESETS = 8;
@@ -86,9 +91,10 @@ ProjectConfig ReadProjectConfig();
 /**
  * Writes project.wconfig to the project root (parent of assets/).
  * @param config
+ * @param alloc backs the transient text buffer for the save
  * @return Returns true on success.
  */
-bool WriteProjectConfig(const ProjectConfig& config);
+bool WriteProjectConfig(const ProjectConfig& config, Core::TlsfAllocator* alloc);
 } // Engine
 
 #endif //WILL_ENGINE_PROJECT_CONFIG_H

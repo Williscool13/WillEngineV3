@@ -45,7 +45,7 @@ static void DrawInputProfiles(Engine::EngineState* state)
         if (ImGui::Selectable("Default", cfg.activeInputProfile.IsEmpty())) {
             cfg.activeInputProfile = Core::InlineString<64>();
             Engine::LoadAndApplyInputConfig(state->input, cfg);
-            Engine::WriteProjectConfig(cfg);
+            Engine::WriteProjectConfig(cfg, state->allocator);
         }
 
         Engine::Profiles::ProfileName names[Engine::Profiles::MAX_PROFILES];
@@ -56,7 +56,7 @@ static void DrawInputProfiles(Engine::EngineState* state)
                 Engine::InputConfig loaded{};
                 Engine::Profiles::LoadInputProfile(names[i].c_str(), loaded);
                 Engine::ApplyInputOverrides(state->input, loaded);
-                Engine::WriteProjectConfig(cfg);
+                Engine::WriteProjectConfig(cfg, state->allocator);
             }
         }
         ImGui::EndCombo();
@@ -66,8 +66,8 @@ static void DrawInputProfiles(Engine::EngineState* state)
     if (ImGui::Button("Delete##inputprofile")) {
         Engine::Profiles::DeleteInputProfile(cfg.activeInputProfile.c_str());
         cfg.activeInputProfile = Core::InlineString<64>();
-        Engine::SaveInputConfig(state->input, cfg);
-        Engine::WriteProjectConfig(cfg);
+        Engine::SaveInputConfig(state->input, cfg, state->allocator);
+        Engine::WriteProjectConfig(cfg, state->allocator);
     }
     ImGui::EndDisabled();
 
@@ -76,9 +76,9 @@ static void DrawInputProfiles(Engine::EngineState* state)
     ImGui::InputText("##inputnewname", inputNewName, sizeof(inputNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##inputprofile") && inputNewName[0] != '\0') {
-        Engine::Profiles::SaveInputProfile(inputNewName, Engine::BuildInputConfigFromState(state->input));
+        Engine::Profiles::SaveInputProfile(inputNewName, Engine::BuildInputConfigFromState(state->input), state->allocator);
         cfg.activeInputProfile = Core::InlineString<64>(inputNewName);
-        Engine::WriteProjectConfig(cfg);
+        Engine::WriteProjectConfig(cfg, state->allocator);
         inputNewName[0] = '\0';
     }
 }

@@ -14,6 +14,7 @@
 namespace Core
 {
 struct PostProcessConfiguration;
+class TlsfAllocator;
 }
 
 namespace Engine
@@ -55,12 +56,12 @@ void ApplyLightingProfile(EngineState& state, const LightingProfileBundle& bundl
 
 /** Overwrites only the members the stored profile contains, so seed @p bundle with CaptureLightingProfile first. */
 bool LoadLightingProfile(const char* name, LightingProfileBundle& bundle);
-bool SaveLightingProfile(const char* name, const LightingProfileBundle& bundle);
+bool SaveLightingProfile(const char* name, const LightingProfileBundle& bundle, Core::TlsfAllocator* alloc);
 bool DeleteLightingProfile(const char* name);
 
 uint32_t ListPostProcessProfiles(ProfileName* outNames, uint32_t maxNames);
 bool LoadPostProcessProfile(const char* name, Core::PostProcessConfiguration& pp);
-bool SavePostProcessProfile(const char* name, const Core::PostProcessConfiguration& pp);
+bool SavePostProcessProfile(const char* name, const Core::PostProcessConfiguration& pp, Core::TlsfAllocator* alloc);
 bool DeletePostProcessProfile(const char* name);
 }
 

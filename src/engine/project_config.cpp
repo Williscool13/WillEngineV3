@@ -4,11 +4,12 @@
 
 #include "project_config.h"
 
-#include <json/nlohmann/json.hpp>
-
+#include "core/containers/vector.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "engine/serialization/config_serialization.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
 namespace Engine
 {
@@ -27,157 +28,96 @@ ProjectConfig ReadProjectConfig()
         return config;
     }
 
-    nlohmann::json j = nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
-    if (j.is_discarded()) {
-        return config;
-    }
+    const TextReader r(map.data, map.size);
 
-    if (j.contains("defaultScene") && j["defaultScene"].is_string()) {
-        config.defaultScene = Core::InlineString<256>(j["defaultScene"].get<std::string_view>());
-    }
+    r.Str("defaultScene", config.defaultScene);
 
-    if (j.contains("bLimitFps") && j["bLimitFps"].is_boolean()) {
-        config.bLimitFps = j["bLimitFps"].get<bool>();
-    }
-    if (j.contains("frameLimitTarget") && j["frameLimitTarget"].is_number_integer()) {
-        config.frameLimitTarget = j["frameLimitTarget"].get<int32_t>();
-    }
+    config.bLimitFps = r.Bool("bLimitFps", config.bLimitFps);
+    config.frameLimitTarget = r.Int("frameLimitTarget", config.frameLimitTarget);
 
-    if (j.contains("bAutoSaveProjectConfig") && j["bAutoSaveProjectConfig"].is_boolean()) {
-        config.bAutoSaveProjectConfig = j["bAutoSaveProjectConfig"].get<bool>();
-    }
-    if (j.contains("bAutoSaveLighting") && j["bAutoSaveLighting"].is_boolean()) {
-        config.bAutoSaveLighting = j["bAutoSaveLighting"].get<bool>();
-    }
-    if (j.contains("bAutoSavePostProcess") && j["bAutoSavePostProcess"].is_boolean()) {
-        config.bAutoSavePostProcess = j["bAutoSavePostProcess"].get<bool>();
-    }
-    if (j.contains("activeLightingProfile") && j["activeLightingProfile"].is_string()) {
-        config.activeLightingProfile = Core::InlineString<64>(j["activeLightingProfile"].get<std::string_view>());
-    }
-    if (j.contains("activePostProcessProfile") && j["activePostProcessProfile"].is_string()) {
-        config.activePostProcessProfile = Core::InlineString<64>(j["activePostProcessProfile"].get<std::string_view>());
-    }
-    if (j.contains("activeInputProfile") && j["activeInputProfile"].is_string()) {
-        config.activeInputProfile = Core::InlineString<64>(j["activeInputProfile"].get<std::string_view>());
-    }
+    config.bAutoSaveProjectConfig = r.Bool("bAutoSaveProjectConfig", config.bAutoSaveProjectConfig);
+    config.bAutoSaveLighting = r.Bool("bAutoSaveLighting", config.bAutoSaveLighting);
+    config.bAutoSavePostProcess = r.Bool("bAutoSavePostProcess", config.bAutoSavePostProcess);
+    r.Str("activeLightingProfile", config.activeLightingProfile);
+    r.Str("activePostProcessProfile", config.activePostProcessProfile);
+    r.Str("activeInputProfile", config.activeInputProfile);
 
-    if (j.contains("aa") && j["aa"].is_object()) {
-        ConfigSerialization::FromJson(j["aa"], config.aaConfig);
-    }
+    ConfigSerialization::Deserialize(r.Block("aa"), config.aaConfig);
 
-    if (j.contains("resolutionScale") && j["resolutionScale"].is_number()) {
-        config.resolutionScale = j["resolutionScale"].get<float>();
-    }
+    config.resolutionScale = r.Float("resolutionScale", config.resolutionScale);
+    config.reflectionProbeLineWidth = r.Float("reflectionProbeLineWidth", config.reflectionProbeLineWidth);
 
-    if (j.contains("reflectionProbeLineWidth") && j["reflectionProbeLineWidth"].is_number()) {
-        config.reflectionProbeLineWidth = j["reflectionProbeLineWidth"].get<float>();
-    }
+    config.gameCameraFovDegrees = r.Float("gameCameraFovDegrees", config.gameCameraFovDegrees);
+    config.gameCameraNearPlane = r.Float("gameCameraNearPlane", config.gameCameraNearPlane);
+    config.editorCameraFovDegrees = r.Float("editorCameraFovDegrees", config.editorCameraFovDegrees);
+    config.editorCameraNearPlane = r.Float("editorCameraNearPlane", config.editorCameraNearPlane);
+    config.gameCameraLockAspect = r.Bool("gameCameraLockAspect", config.gameCameraLockAspect);
+    config.gameCameraAspect = r.Vec2("gameCameraAspect", config.gameCameraAspect);
 
-    if (j.contains("gameCameraFovDegrees") && j["gameCameraFovDegrees"].is_number()) {
-        config.gameCameraFovDegrees = j["gameCameraFovDegrees"].get<float>();
-    }
-    if (j.contains("gameCameraNearPlane") && j["gameCameraNearPlane"].is_number()) {
-        config.gameCameraNearPlane = j["gameCameraNearPlane"].get<float>();
-    }
-    if (j.contains("editorCameraFovDegrees") && j["editorCameraFovDegrees"].is_number()) {
-        config.editorCameraFovDegrees = j["editorCameraFovDegrees"].get<float>();
-    }
-    if (j.contains("editorCameraNearPlane") && j["editorCameraNearPlane"].is_number()) {
-        config.editorCameraNearPlane = j["editorCameraNearPlane"].get<float>();
-    }
-    if (j.contains("gameCameraLockAspect") && j["gameCameraLockAspect"].is_boolean()) {
-        config.gameCameraLockAspect = j["gameCameraLockAspect"].get<bool>();
-    }
-    if (j.contains("gameCameraAspect") && j["gameCameraAspect"].is_array() && j["gameCameraAspect"].size() == 2) {
-        config.gameCameraAspect = Vec2(j["gameCameraAspect"][0].get<float>(), j["gameCameraAspect"][1].get<float>());
-    }
+    const TextReader b = r.Block("probeBake");
+    config.probeBake.settleFrames = b.Int("settleFrames", config.probeBake.settleFrames);
+    config.probeBake.captureSize = b.Int("captureSize", config.probeBake.captureSize);
+    config.probeBake.bAutoConverge = b.Bool("bAutoConverge", config.probeBake.bAutoConverge);
+    config.probeBake.bAutoFreeze = b.Bool("bAutoFreeze", config.probeBake.bAutoFreeze);
+    config.probeBake.bGroundTruth = b.Bool("bGroundTruth", config.probeBake.bGroundTruth);
+    config.probeBake.groundTruthSpp = b.Int("groundTruthSpp", config.probeBake.groundTruthSpp);
 
-    if (j.contains("probeBake") && j["probeBake"].is_object()) {
-        const nlohmann::json& b = j["probeBake"];
-        if (b.contains("settleFrames") && b["settleFrames"].is_number_integer()) {
-            config.probeBake.settleFrames = b["settleFrames"].get<int32_t>();
-        }
-        if (b.contains("captureSize") && b["captureSize"].is_number_integer()) {
-            config.probeBake.captureSize = b["captureSize"].get<int32_t>();
-        }
-        if (b.contains("bAutoConverge") && b["bAutoConverge"].is_boolean()) {
-            config.probeBake.bAutoConverge = b["bAutoConverge"].get<bool>();
-        }
-        if (b.contains("bAutoFreeze") && b["bAutoFreeze"].is_boolean()) {
-            config.probeBake.bAutoFreeze = b["bAutoFreeze"].get<bool>();
-        }
-        if (b.contains("bGroundTruth") && b["bGroundTruth"].is_boolean()) {
-            config.probeBake.bGroundTruth = b["bGroundTruth"].get<bool>();
-        }
-        if (b.contains("groundTruthSpp") && b["groundTruthSpp"].is_number_integer()) {
-            config.probeBake.groundTruthSpp = b["groundTruthSpp"].get<int32_t>();
-        }
-    }
-
-    if (j.contains("cameraPresets") && j["cameraPresets"].is_array()) {
-        const nlohmann::json& presets = j["cameraPresets"];
-        const size_t count = presets.size() < MAX_CAMERA_PRESETS ? presets.size() : MAX_CAMERA_PRESETS;
-        for (size_t i = 0; i < count; ++i) {
-            const nlohmann::json& e = presets[i];
-            CameraPreset& p = config.cameraPresets[i];
-            if (e.contains("set") && e["set"].is_boolean()) {
-                p.bSet = e["set"].get<bool>();
-            }
-            if (e.contains("t") && e["t"].is_array() && e["t"].size() == 3) {
-                p.translation = Vec3(e["t"][0].get<float>(), e["t"][1].get<float>(), e["t"][2].get<float>());
-            }
-            if (e.contains("r") && e["r"].is_array() && e["r"].size() == 4) {
-                p.rotation = Quat(e["r"][3].get<float>(), e["r"][0].get<float>(), e["r"][1].get<float>(), e["r"][2].get<float>());
-            }
-        }
-    }
+    size_t presetIndex = 0;
+    r.ForEachRecord("cameraPresets", [&](const TextReader& e) {
+        if (presetIndex >= MAX_CAMERA_PRESETS) { return; }
+        CameraPreset& p = config.cameraPresets[presetIndex++];
+        p.bSet = e.Bool("set", p.bSet);
+        p.translation = e.Vec3("t", p.translation);
+        p.rotation = e.Quat("r", p.rotation);
+    });
 
     return config;
 }
 
-bool WriteProjectConfig(const ProjectConfig& config)
+bool WriteProjectConfig(const ProjectConfig& config, Core::TlsfAllocator* alloc)
 {
-    nlohmann::json j;
-    j["defaultScene"] = std::string_view(config.defaultScene.c_str(), config.defaultScene.Size());
-    j["bLimitFps"] = config.bLimitFps;
-    j["frameLimitTarget"] = config.frameLimitTarget;
-    j["bAutoSaveProjectConfig"] = config.bAutoSaveProjectConfig;
-    j["bAutoSaveLighting"] = config.bAutoSaveLighting;
-    j["bAutoSavePostProcess"] = config.bAutoSavePostProcess;
-    j["activeLightingProfile"] = std::string_view(config.activeLightingProfile.c_str(), config.activeLightingProfile.Size());
-    j["activePostProcessProfile"] = std::string_view(config.activePostProcessProfile.c_str(), config.activePostProcessProfile.Size());
-    j["activeInputProfile"] = std::string_view(config.activeInputProfile.c_str(), config.activeInputProfile.Size());
-    j["aa"] = ConfigSerialization::ToJson(config.aaConfig);
-    j["resolutionScale"] = config.resolutionScale;
-    j["reflectionProbeLineWidth"] = config.reflectionProbeLineWidth;
-    j["gameCameraFovDegrees"] = config.gameCameraFovDegrees;
-    j["gameCameraNearPlane"] = config.gameCameraNearPlane;
-    j["editorCameraFovDegrees"] = config.editorCameraFovDegrees;
-    j["editorCameraNearPlane"] = config.editorCameraNearPlane;
-    j["gameCameraLockAspect"] = config.gameCameraLockAspect;
-    j["gameCameraAspect"] = {config.gameCameraAspect.x, config.gameCameraAspect.y};
+    Core::Vector<std::byte> body(alloc, Core::AllocTag::EngineState);
+    TextWriter w(body);
 
-    j["probeBake"] = {
-        {"settleFrames", config.probeBake.settleFrames},
-        {"captureSize", config.probeBake.captureSize},
-        {"bAutoConverge", config.probeBake.bAutoConverge},
-        {"bAutoFreeze", config.probeBake.bAutoFreeze},
-        {"bGroundTruth", config.probeBake.bGroundTruth},
-        {"groundTruthSpp", config.probeBake.groundTruthSpp},
-    };
+    w.KeyStr("defaultScene", config.defaultScene.View());
+    w.Key("bLimitFps", config.bLimitFps);
+    w.Key("frameLimitTarget", config.frameLimitTarget);
+    w.Key("bAutoSaveProjectConfig", config.bAutoSaveProjectConfig);
+    w.Key("bAutoSaveLighting", config.bAutoSaveLighting);
+    w.Key("bAutoSavePostProcess", config.bAutoSavePostProcess);
+    w.KeyStr("activeLightingProfile", config.activeLightingProfile.View());
+    w.KeyStr("activePostProcessProfile", config.activePostProcessProfile.View());
+    w.KeyStr("activeInputProfile", config.activeInputProfile.View());
+    w.BeginBlock("aa");
+    ConfigSerialization::Serialize(config.aaConfig, w);
+    w.EndBlock();
+    w.Key("resolutionScale", config.resolutionScale);
+    w.Key("reflectionProbeLineWidth", config.reflectionProbeLineWidth);
+    w.Key("gameCameraFovDegrees", config.gameCameraFovDegrees);
+    w.Key("gameCameraNearPlane", config.gameCameraNearPlane);
+    w.Key("editorCameraFovDegrees", config.editorCameraFovDegrees);
+    w.Key("editorCameraNearPlane", config.editorCameraNearPlane);
+    w.Key("gameCameraLockAspect", config.gameCameraLockAspect);
+    w.Key("gameCameraAspect", config.gameCameraAspect);
 
-    nlohmann::json presets = nlohmann::json::array();
+    w.BeginBlock("probeBake");
+    w.Key("settleFrames", config.probeBake.settleFrames);
+    w.Key("captureSize", config.probeBake.captureSize);
+    w.Key("bAutoConverge", config.probeBake.bAutoConverge);
+    w.Key("bAutoFreeze", config.probeBake.bAutoFreeze);
+    w.Key("bGroundTruth", config.probeBake.bGroundTruth);
+    w.Key("groundTruthSpp", config.probeBake.groundTruthSpp);
+    w.EndBlock();
+
+    w.Count("cameraPresets", MAX_CAMERA_PRESETS);
     for (const CameraPreset& p : config.cameraPresets) {
-        nlohmann::json e;
-        e["set"] = p.bSet;
-        e["t"] = {p.translation.x, p.translation.y, p.translation.z};
-        e["r"] = {p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w};
-        presets.push_back(e);
+        w.BeginBlock("p");
+        w.Key("set", p.bSet);
+        w.Key("t", p.translation);
+        w.Key("r", p.rotation);
+        w.EndBlock();
     }
-    j["cameraPresets"] = presets;
 
-    const std::string dump = j.dump(2);
-    return Platform::WriteFile(GetProjectConfigPath(), std::string_view(dump));
+    return Platform::WriteFile(GetProjectConfigPath(), body.Data(), body.Size());
 }
 } // Engine

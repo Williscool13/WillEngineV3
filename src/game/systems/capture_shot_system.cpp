@@ -4,8 +4,6 @@
 
 #include "capture_shot_system.h"
 
-#include <json/nlohmann/json.hpp>
-
 #include "ddgi_converge_boost.h"
 #include "probe_bake_system.h"
 #include "core/math/constants.h"
@@ -14,6 +12,7 @@
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/logging/engine_log.h"
+#include "engine/serialization/text_reader.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "game/components/core_components.h"
@@ -54,30 +53,25 @@ static bool LoadShotList(const char* path, Core::InlineVector<CaptureShotSystem:
         LOG_ERROR(Game, "Capture run: cannot open shot list '{}'", path);
         return false;
     }
-    nlohmann::json j = nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
-    if (j.is_discarded() || !j.contains("shots") || !j["shots"].is_array()) {
-        LOG_ERROR(Game, "Capture run: '{}' is not a valid shot list (expected {{\"shots\": [...]}})", path);
-        return false;
-    }
-    for (const auto& e : j["shots"]) {
+    const Engine::TextReader r(map.data, map.size);
+    r.ForEachRecord("shots", [&](const Engine::TextReader& e) {
         if (outShots.IsFull()) {
             LOG_WARN(Game, "Capture run: shot list truncated to {}", outShots.Size());
-            break;
-        }
-        if (!e.contains("name") || !e["name"].is_string() ||
-            !e.contains("translation") || !e["translation"].is_array() || e["translation"].size() != 3 ||
-            !e.contains("rotation") || !e["rotation"].is_array() || e["rotation"].size() != 4) {
-            LOG_ERROR(Game, "Capture run: malformed shot entry in '{}' (need name, translation[3], rotation[wxyz])", path);
-            return false;
+            return;
         }
         CaptureShotSystem::Shot shot{};
-        shot.name = Core::InlineString<64>(e["name"].get<std::string_view>());
-        shot.translation = {e["translation"][0].get<float>(), e["translation"][1].get<float>(), e["translation"][2].get<float>()};
-        shot.rotation = glm::quat(e["rotation"][0].get<float>(), e["rotation"][1].get<float>(), e["rotation"][2].get<float>(), e["rotation"][3].get<float>());
-        if (e.contains("settleFrames") && e["settleFrames"].is_number_integer()) {
-            shot.settleFrames = e["settleFrames"].get<int32_t>();
+        if (!e.Str("name", shot.name)) {
+            LOG_ERROR(Game, "Capture run: unnamed shot entry in '{}', skipped", path);
+            return;
         }
+        shot.translation = e.Vec3("translation");
+        shot.rotation = e.Quat("rotation");
+        shot.settleFrames = e.Int("settleFrames", shot.settleFrames);
         outShots.PushBack(shot);
+    });
+    if (outShots.IsEmpty()) {
+        LOG_ERROR(Game, "Capture run: '{}' is not a valid shot list (expected `shots|N` + records)", path);
+        return false;
     }
     return true;
 }

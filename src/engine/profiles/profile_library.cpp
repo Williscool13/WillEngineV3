@@ -4,19 +4,18 @@
 
 #include "profile_library.h"
 
-#include <cstdio>
-
-#include <json/nlohmann/json.hpp>
-
+#include "core/containers/vector.h"
 #include "platform/paths.h"
 #include "platform/file_utils.h"
 #include "engine/engine_api.h"
 #include "engine/serialization/config_serialization.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "render/interface/render_interface.h"
 
 namespace Engine::Profiles
 {
-static constexpr const char* kExtension = ".wprofile";
+static constexpr const char* PROFILE_EXTENSION = ".wprofile";
 
 static Core::Path ProfilesDir(const char* subdir)
 {
@@ -25,15 +24,14 @@ static Core::Path ProfilesDir(const char* subdir)
 
 static Core::Path ProfilePath(const char* subdir, const char* name)
 {
-    char fileName[128];
-    std::snprintf(fileName, sizeof(fileName), "%s%s", name, kExtension);
-    return ProfilesDir(subdir) / fileName;
+    const auto fileName = Core::InlineString<128>::Format("%s%s", name, PROFILE_EXTENSION);
+    return ProfilesDir(subdir) / fileName.c_str();
 }
 
 static uint32_t ListProfiles(const char* subdir, ProfileName* outNames, uint32_t maxNames)
 {
     Core::Path paths[MAX_PROFILES];
-    const uint32_t found = Platform::FindFilesByExtension(ProfilesDir(subdir), kExtension, paths, MAX_PROFILES);
+    const uint32_t found = Platform::FindFilesByExtension(ProfilesDir(subdir), PROFILE_EXTENSION, paths, MAX_PROFILES);
     const uint32_t count = found < maxNames ? found : maxNames;
     for (uint32_t i = 0; i < count; ++i) {
         outNames[i] = ProfileName(paths[i].Stem());
@@ -41,74 +39,47 @@ static uint32_t ListProfiles(const char* subdir, ProfileName* outNames, uint32_t
     return count;
 }
 
-static nlohmann::json ReadProfileJson(const char* subdir, const char* name)
+static bool WriteProfileText(const char* subdir, const char* name, const Core::Vector<std::byte>& body)
 {
-    Platform::ScopedFileMapping map(ProfilePath(subdir, name));
-    if (!map.data) {
-        return {};
-    }
-    return nlohmann::json::parse(map.data, map.data + map.size, nullptr, false);
+    return Platform::WriteFile(ProfilePath(subdir, name), body.Data(), body.Size());
 }
 
-static bool WriteProfileJson(const char* subdir, const char* name, const nlohmann::json& j)
+static void ApplyLightingBundle(const TextReader& r, LightingProfileBundle& bundle)
 {
-    const std::string dump = j.dump(2);
-    return Platform::WriteFile(ProfilePath(subdir, name), std::string_view(dump));
+    bundle.lightingMode = static_cast<Core::LightingMode>(r.UInt("lightingMode", static_cast<uint32_t>(bundle.lightingMode)));
+    ConfigSerialization::Deserialize(r.Block("restir"), bundle.restir);
+    ConfigSerialization::Deserialize(r.Block("ddgi"), bundle.ddgi);
+    ConfigSerialization::Deserialize(r.Block("reflection"), bundle.reflection);
+    ConfigSerialization::Deserialize(r.Block("reflectionProbe"), bundle.reflectionProbe);
+    ConfigSerialization::Deserialize(r.Block("gtao"), bundle.gtao);
+    bundle.iblIntensity = r.Float("iblIntensity", bundle.iblIntensity);
+    bundle.indirectIntensity = r.Float("indirectIntensity", bundle.indirectIntensity);
+    bundle.shadingOverride = StringID(r.U64("shadingShaderOverride", 0));
+    bundle.lightingOverride = StringID(r.U64("lightingShaderOverride", 0));
 }
 
-static bool ApplyLightingBundle(const nlohmann::json& j, LightingProfileBundle& bundle)
+static void BuildLightingBundle(const LightingProfileBundle& bundle, TextWriter& w)
 {
-    if (!j.is_object()) {
-        return false;
-    }
-    if (j.contains("lightingMode") && j["lightingMode"].is_number_integer()) {
-        uint32_t storedMode = j["lightingMode"].get<uint32_t>();
-        bundle.lightingMode = static_cast<Core::LightingMode>(storedMode);
-    }
-    if (j.contains("restir") && j["restir"].is_object()) {
-        ConfigSerialization::FromJson(j["restir"], bundle.restir);
-    }
-    if (j.contains("ddgi") && j["ddgi"].is_object()) {
-        ConfigSerialization::FromJson(j["ddgi"], bundle.ddgi);
-    }
-    if (j.contains("reflection") && j["reflection"].is_object()) {
-        ConfigSerialization::FromJson(j["reflection"], bundle.reflection);
-    }
-    if (j.contains("reflectionProbe") && j["reflectionProbe"].is_object()) {
-        ConfigSerialization::FromJson(j["reflectionProbe"], bundle.reflectionProbe);
-    }
-    if (j.contains("gtao") && j["gtao"].is_object()) {
-        ConfigSerialization::FromJson(j["gtao"], bundle.gtao);
-    }
-    // Migration: iblIntensity used to live inside the restir blob.
-    if (j.contains("iblIntensity") && j["iblIntensity"].is_number()) {
-        bundle.iblIntensity = j["iblIntensity"].get<float>();
-    }
-    else if (j.contains("restir") && j["restir"].is_object() && j["restir"].contains("iblIntensity") && j["restir"]["iblIntensity"].is_number()) {
-        bundle.iblIntensity = j["restir"]["iblIntensity"].get<float>();
-    }
-    if (j.contains("indirectIntensity") && j["indirectIntensity"].is_number()) {
-        bundle.indirectIntensity = j["indirectIntensity"].get<float>();
-    }
-    bundle.shadingOverride = j.contains("shadingShaderOverride") ? StringID(j["shadingShaderOverride"].get<uint64_t>()) : StringID{};
-    bundle.lightingOverride = j.contains("lightingShaderOverride") ? StringID(j["lightingShaderOverride"].get<uint64_t>()) : StringID{};
-    return true;
-}
-
-static nlohmann::json BuildLightingBundle(const LightingProfileBundle& bundle)
-{
-    nlohmann::json j;
-    j["lightingMode"] = static_cast<uint32_t>(bundle.lightingMode);
-    j["restir"] = ConfigSerialization::ToJson(bundle.restir);
-    j["ddgi"] = ConfigSerialization::ToJson(bundle.ddgi);
-    j["reflection"] = ConfigSerialization::ToJson(bundle.reflection);
-    j["reflectionProbe"] = ConfigSerialization::ToJson(bundle.reflectionProbe);
-    j["gtao"] = ConfigSerialization::ToJson(bundle.gtao);
-    j["iblIntensity"] = bundle.iblIntensity;
-    j["indirectIntensity"] = bundle.indirectIntensity;
-    if (bundle.shadingOverride) { j["shadingShaderOverride"] = bundle.shadingOverride.id; }
-    if (bundle.lightingOverride) { j["lightingShaderOverride"] = bundle.lightingOverride.id; }
-    return j;
+    w.Key("lightingMode", static_cast<uint32_t>(bundle.lightingMode));
+    w.BeginBlock("restir");
+    ConfigSerialization::Serialize(bundle.restir, w);
+    w.EndBlock();
+    w.BeginBlock("ddgi");
+    ConfigSerialization::Serialize(bundle.ddgi, w);
+    w.EndBlock();
+    w.BeginBlock("reflection");
+    ConfigSerialization::Serialize(bundle.reflection, w);
+    w.EndBlock();
+    w.BeginBlock("reflectionProbe");
+    ConfigSerialization::Serialize(bundle.reflectionProbe, w);
+    w.EndBlock();
+    w.BeginBlock("gtao");
+    ConfigSerialization::Serialize(bundle.gtao, w);
+    w.EndBlock();
+    w.Key("iblIntensity", bundle.iblIntensity);
+    w.Key("indirectIntensity", bundle.indirectIntensity);
+    if (bundle.shadingOverride) { w.Key("shadingShaderOverride", bundle.shadingOverride.id); }
+    if (bundle.lightingOverride) { w.Key("lightingShaderOverride", bundle.lightingOverride.id); }
 }
 
 uint32_t ListLightingProfiles(ProfileName* outNames, uint32_t maxNames)
@@ -148,12 +119,20 @@ void ApplyLightingProfile(EngineState& state, const LightingProfileBundle& bundl
 
 bool LoadLightingProfile(const char* name, LightingProfileBundle& bundle)
 {
-    return ApplyLightingBundle(ReadProfileJson("lighting", name), bundle);
+    Platform::ScopedFileMapping map(ProfilePath("lighting", name));
+    if (!map.data) {
+        return false;
+    }
+    ApplyLightingBundle(TextReader(map.data, map.size), bundle);
+    return true;
 }
 
-bool SaveLightingProfile(const char* name, const LightingProfileBundle& bundle)
+bool SaveLightingProfile(const char* name, const LightingProfileBundle& bundle, Core::TlsfAllocator* alloc)
 {
-    return WriteProfileJson("lighting", name, BuildLightingBundle(bundle));
+    Core::Vector<std::byte> body(alloc, Core::AllocTag::EngineState);
+    TextWriter w(body);
+    BuildLightingBundle(bundle, w);
+    return WriteProfileText("lighting", name, body);
 }
 
 bool DeleteLightingProfile(const char* name)
@@ -168,21 +147,23 @@ uint32_t ListPostProcessProfiles(ProfileName* outNames, uint32_t maxNames)
 
 bool LoadPostProcessProfile(const char* name, Core::PostProcessConfiguration& pp)
 {
-    const nlohmann::json j = ReadProfileJson("postprocess", name);
-    if (!j.is_object()) {
+    Platform::ScopedFileMapping map(ProfilePath("postprocess", name));
+    if (!map.data) {
         return false;
     }
-    if (j.contains("postProcess") && j["postProcess"].is_object()) {
-        ConfigSerialization::FromJson(j["postProcess"], pp);
-    }
+    const TextReader r(map.data, map.size);
+    ConfigSerialization::Deserialize(r.Block("postProcess"), pp);
     return true;
 }
 
-bool SavePostProcessProfile(const char* name, const Core::PostProcessConfiguration& pp)
+bool SavePostProcessProfile(const char* name, const Core::PostProcessConfiguration& pp, Core::TlsfAllocator* alloc)
 {
-    nlohmann::json j;
-    j["postProcess"] = ConfigSerialization::ToJson(pp);
-    return WriteProfileJson("postprocess", name, j);
+    Core::Vector<std::byte> body(alloc, Core::AllocTag::EngineState);
+    TextWriter w(body);
+    w.BeginBlock("postProcess");
+    ConfigSerialization::Serialize(pp, w);
+    w.EndBlock();
+    return WriteProfileText("postprocess", name, body);
 }
 
 bool DeletePostProcessProfile(const char* name)

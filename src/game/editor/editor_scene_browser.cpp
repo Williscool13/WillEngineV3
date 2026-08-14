@@ -137,7 +137,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         ImGui::BeginDisabled(!hasScene);
         if (ImGui::Button("Set Default")) {
             state->projectConfig.defaultScene = Core::InlineString<256>(state->scene.currentSceneName.View());
-            Engine::WriteProjectConfig(state->projectConfig);
+            Engine::WriteProjectConfig(state->projectConfig, state->allocator);
         }
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && hasScene) {

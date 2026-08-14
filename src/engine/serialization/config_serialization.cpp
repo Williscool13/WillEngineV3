@@ -4,695 +4,642 @@
 
 #include "config_serialization.h"
 
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "render/interface/render_interface.h"
 
 namespace Engine::ConfigSerialization
 {
-static nlohmann::json RelaxToJson(const Core::RELAXParams& rx)
+static void SerializeRelax(const Core::RELAXParams& rx, TextWriter& w)
 {
-    return {
-        {"denoisingRange", rx.denoisingRange},
-        {"disocclusionThreshold", rx.disocclusionThreshold},
-        {"depthThreshold", rx.depthThreshold},
-        {"specMaxAccumFrames", rx.specMaxAccumFrames},
-        {"specMaxFastAccumFrames", rx.specMaxFastAccumFrames},
-        {"diffMaxAccumFrames", rx.diffMaxAccumFrames},
-        {"diffMaxFastAccumFrames", rx.diffMaxFastAccumFrames},
-        {"historyAccelerationAmount", rx.historyAccelerationAmount},
-        {"diffBlurRadius", rx.diffBlurRadius},
-        {"specBlurRadius", rx.specBlurRadius},
-        {"minHitDistanceWeight", rx.minHitDistanceWeight},
-        {"atrousIterations", rx.atrousIterations},
-        {"lobeAngleFraction", rx.lobeAngleFraction},
-        {"roughnessFraction", rx.roughnessFraction},
-        {"specLobeAngleSlack", rx.specLobeAngleSlack},
-        {"specPhiLuminance", rx.specPhiLuminance},
-        {"diffPhiLuminance", rx.diffPhiLuminance},
-        {"diffMaxLuminanceRelativeDifference", rx.diffMaxLuminanceRelativeDifference},
-        {"specMaxLuminanceRelativeDifference", rx.specMaxLuminanceRelativeDifference},
-        {"luminanceEdgeStoppingRelaxation", rx.luminanceEdgeStoppingRelaxation},
-        {"normalEdgeStoppingRelaxation", rx.normalEdgeStoppingRelaxation},
-        {"roughnessEdgeStoppingRelaxation", rx.roughnessEdgeStoppingRelaxation},
-        {"specVarianceBoost", rx.specVarianceBoost},
-        {"roughnessEdgeStoppingEnabled", rx.roughnessEdgeStoppingEnabled},
-        {"historyFixEdgeStoppingNormalPower", rx.historyFixEdgeStoppingNormalPower},
-        {"historyFixFrameNum", rx.historyFixFrameNum},
-        {"historyFixBasePixelStride", rx.historyFixBasePixelStride},
-        {"fastHistoryClampingSigmaScale", rx.fastHistoryClampingSigmaScale},
-        {"historyResetTemporalSigmaScale", rx.historyResetTemporalSigmaScale},
-        {"historyResetSpatialSigmaScale", rx.historyResetSpatialSigmaScale},
-        {"historyResetAmount", rx.historyResetAmount},
-        {"enablePrepass", rx.enablePrepass},
-        {"enableAntiFirefly", rx.enableAntiFirefly},
-        {"bChromaAtrous", rx.bChromaAtrous},
-        {"chromaAtrousIterations", rx.chromaAtrousIterations},
-        {"chromaLumaPower", rx.chromaLumaPower},
-    };
+    w.Key("denoisingRange", rx.denoisingRange);
+    w.Key("disocclusionThreshold", rx.disocclusionThreshold);
+    w.Key("depthThreshold", rx.depthThreshold);
+    w.Key("specMaxAccumFrames", rx.specMaxAccumFrames);
+    w.Key("specMaxFastAccumFrames", rx.specMaxFastAccumFrames);
+    w.Key("diffMaxAccumFrames", rx.diffMaxAccumFrames);
+    w.Key("diffMaxFastAccumFrames", rx.diffMaxFastAccumFrames);
+    w.Key("historyAccelerationAmount", rx.historyAccelerationAmount);
+    w.Key("diffBlurRadius", rx.diffBlurRadius);
+    w.Key("specBlurRadius", rx.specBlurRadius);
+    w.Key("minHitDistanceWeight", rx.minHitDistanceWeight);
+    w.Key("atrousIterations", rx.atrousIterations);
+    w.Key("lobeAngleFraction", rx.lobeAngleFraction);
+    w.Key("roughnessFraction", rx.roughnessFraction);
+    w.Key("specLobeAngleSlack", rx.specLobeAngleSlack);
+    w.Key("specPhiLuminance", rx.specPhiLuminance);
+    w.Key("diffPhiLuminance", rx.diffPhiLuminance);
+    w.Key("diffMaxLuminanceRelativeDifference", rx.diffMaxLuminanceRelativeDifference);
+    w.Key("specMaxLuminanceRelativeDifference", rx.specMaxLuminanceRelativeDifference);
+    w.Key("luminanceEdgeStoppingRelaxation", rx.luminanceEdgeStoppingRelaxation);
+    w.Key("normalEdgeStoppingRelaxation", rx.normalEdgeStoppingRelaxation);
+    w.Key("roughnessEdgeStoppingRelaxation", rx.roughnessEdgeStoppingRelaxation);
+    w.Key("specVarianceBoost", rx.specVarianceBoost);
+    w.Key("roughnessEdgeStoppingEnabled", rx.roughnessEdgeStoppingEnabled);
+    w.Key("historyFixEdgeStoppingNormalPower", rx.historyFixEdgeStoppingNormalPower);
+    w.Key("historyFixFrameNum", rx.historyFixFrameNum);
+    w.Key("historyFixBasePixelStride", rx.historyFixBasePixelStride);
+    w.Key("fastHistoryClampingSigmaScale", rx.fastHistoryClampingSigmaScale);
+    w.Key("historyResetTemporalSigmaScale", rx.historyResetTemporalSigmaScale);
+    w.Key("historyResetSpatialSigmaScale", rx.historyResetSpatialSigmaScale);
+    w.Key("historyResetAmount", rx.historyResetAmount);
+    w.Key("enablePrepass", rx.enablePrepass);
+    w.Key("enableAntiFirefly", rx.enableAntiFirefly);
+    w.Key("bChromaAtrous", rx.bChromaAtrous);
+    w.Key("chromaAtrousIterations", rx.chromaAtrousIterations);
+    w.Key("chromaLumaPower", rx.chromaLumaPower);
 }
 
-static void RelaxFromJson(const nlohmann::json& r, Core::RELAXParams& p)
+static void DeserializeRelax(const TextReader& r, Core::RELAXParams& p)
 {
-    auto getBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
-    auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
-    auto getFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
-
-    p.denoisingRange = getFloat("denoisingRange", p.denoisingRange);
-    p.disocclusionThreshold = getFloat("disocclusionThreshold", p.disocclusionThreshold);
-    p.depthThreshold = getFloat("depthThreshold", p.depthThreshold);
-    p.specMaxAccumFrames = getFloat("specMaxAccumFrames", p.specMaxAccumFrames);
-    p.specMaxFastAccumFrames = getFloat("specMaxFastAccumFrames", p.specMaxFastAccumFrames);
-    p.diffMaxAccumFrames = getFloat("diffMaxAccumFrames", p.diffMaxAccumFrames);
-    p.diffMaxFastAccumFrames = getFloat("diffMaxFastAccumFrames", p.diffMaxFastAccumFrames);
-    p.historyAccelerationAmount = getFloat("historyAccelerationAmount", p.historyAccelerationAmount);
-    p.diffBlurRadius = getFloat("diffBlurRadius", p.diffBlurRadius);
-    p.specBlurRadius = getFloat("specBlurRadius", p.specBlurRadius);
-    p.minHitDistanceWeight = getFloat("minHitDistanceWeight", p.minHitDistanceWeight);
-    p.atrousIterations = getInt("atrousIterations", p.atrousIterations);
-    p.lobeAngleFraction = getFloat("lobeAngleFraction", p.lobeAngleFraction);
-    p.roughnessFraction = getFloat("roughnessFraction", p.roughnessFraction);
-    p.specLobeAngleSlack = getFloat("specLobeAngleSlack", p.specLobeAngleSlack);
-    p.specPhiLuminance = getFloat("specPhiLuminance", p.specPhiLuminance);
-    p.diffPhiLuminance = getFloat("diffPhiLuminance", p.diffPhiLuminance);
-    p.diffMaxLuminanceRelativeDifference = getFloat("diffMaxLuminanceRelativeDifference", p.diffMaxLuminanceRelativeDifference);
-    p.specMaxLuminanceRelativeDifference = getFloat("specMaxLuminanceRelativeDifference", p.specMaxLuminanceRelativeDifference);
-    p.luminanceEdgeStoppingRelaxation = getFloat("luminanceEdgeStoppingRelaxation", p.luminanceEdgeStoppingRelaxation);
-    p.normalEdgeStoppingRelaxation = getFloat("normalEdgeStoppingRelaxation", p.normalEdgeStoppingRelaxation);
-    p.roughnessEdgeStoppingRelaxation = getFloat("roughnessEdgeStoppingRelaxation", p.roughnessEdgeStoppingRelaxation);
-    p.specVarianceBoost = getFloat("specVarianceBoost", p.specVarianceBoost);
-    p.roughnessEdgeStoppingEnabled = getBool("roughnessEdgeStoppingEnabled", p.roughnessEdgeStoppingEnabled);
-    p.historyFixEdgeStoppingNormalPower = getFloat("historyFixEdgeStoppingNormalPower", p.historyFixEdgeStoppingNormalPower);
-    p.historyFixFrameNum = getFloat("historyFixFrameNum", p.historyFixFrameNum);
-    p.historyFixBasePixelStride = getFloat("historyFixBasePixelStride", p.historyFixBasePixelStride);
-    p.fastHistoryClampingSigmaScale = getFloat("fastHistoryClampingSigmaScale", p.fastHistoryClampingSigmaScale);
-    p.historyResetTemporalSigmaScale = getFloat("historyResetTemporalSigmaScale", p.historyResetTemporalSigmaScale);
-    p.historyResetSpatialSigmaScale = getFloat("historyResetSpatialSigmaScale", p.historyResetSpatialSigmaScale);
-    p.historyResetAmount = getFloat("historyResetAmount", p.historyResetAmount);
-    p.enablePrepass = getBool("enablePrepass", p.enablePrepass);
-    p.enableAntiFirefly = getBool("enableAntiFirefly", p.enableAntiFirefly);
-    p.bChromaAtrous = getBool("bChromaAtrous", p.bChromaAtrous);
-    p.chromaAtrousIterations = getInt("chromaAtrousIterations", p.chromaAtrousIterations);
-    p.chromaLumaPower = getFloat("chromaLumaPower", p.chromaLumaPower);
+    p.denoisingRange = r.Float("denoisingRange", p.denoisingRange);
+    p.disocclusionThreshold = r.Float("disocclusionThreshold", p.disocclusionThreshold);
+    p.depthThreshold = r.Float("depthThreshold", p.depthThreshold);
+    p.specMaxAccumFrames = r.Float("specMaxAccumFrames", p.specMaxAccumFrames);
+    p.specMaxFastAccumFrames = r.Float("specMaxFastAccumFrames", p.specMaxFastAccumFrames);
+    p.diffMaxAccumFrames = r.Float("diffMaxAccumFrames", p.diffMaxAccumFrames);
+    p.diffMaxFastAccumFrames = r.Float("diffMaxFastAccumFrames", p.diffMaxFastAccumFrames);
+    p.historyAccelerationAmount = r.Float("historyAccelerationAmount", p.historyAccelerationAmount);
+    p.diffBlurRadius = r.Float("diffBlurRadius", p.diffBlurRadius);
+    p.specBlurRadius = r.Float("specBlurRadius", p.specBlurRadius);
+    p.minHitDistanceWeight = r.Float("minHitDistanceWeight", p.minHitDistanceWeight);
+    p.atrousIterations = r.Int("atrousIterations", p.atrousIterations);
+    p.lobeAngleFraction = r.Float("lobeAngleFraction", p.lobeAngleFraction);
+    p.roughnessFraction = r.Float("roughnessFraction", p.roughnessFraction);
+    p.specLobeAngleSlack = r.Float("specLobeAngleSlack", p.specLobeAngleSlack);
+    p.specPhiLuminance = r.Float("specPhiLuminance", p.specPhiLuminance);
+    p.diffPhiLuminance = r.Float("diffPhiLuminance", p.diffPhiLuminance);
+    p.diffMaxLuminanceRelativeDifference = r.Float("diffMaxLuminanceRelativeDifference", p.diffMaxLuminanceRelativeDifference);
+    p.specMaxLuminanceRelativeDifference = r.Float("specMaxLuminanceRelativeDifference", p.specMaxLuminanceRelativeDifference);
+    p.luminanceEdgeStoppingRelaxation = r.Float("luminanceEdgeStoppingRelaxation", p.luminanceEdgeStoppingRelaxation);
+    p.normalEdgeStoppingRelaxation = r.Float("normalEdgeStoppingRelaxation", p.normalEdgeStoppingRelaxation);
+    p.roughnessEdgeStoppingRelaxation = r.Float("roughnessEdgeStoppingRelaxation", p.roughnessEdgeStoppingRelaxation);
+    p.specVarianceBoost = r.Float("specVarianceBoost", p.specVarianceBoost);
+    p.roughnessEdgeStoppingEnabled = r.Bool("roughnessEdgeStoppingEnabled", p.roughnessEdgeStoppingEnabled);
+    p.historyFixEdgeStoppingNormalPower = r.Float("historyFixEdgeStoppingNormalPower", p.historyFixEdgeStoppingNormalPower);
+    p.historyFixFrameNum = r.Float("historyFixFrameNum", p.historyFixFrameNum);
+    p.historyFixBasePixelStride = r.Float("historyFixBasePixelStride", p.historyFixBasePixelStride);
+    p.fastHistoryClampingSigmaScale = r.Float("fastHistoryClampingSigmaScale", p.fastHistoryClampingSigmaScale);
+    p.historyResetTemporalSigmaScale = r.Float("historyResetTemporalSigmaScale", p.historyResetTemporalSigmaScale);
+    p.historyResetSpatialSigmaScale = r.Float("historyResetSpatialSigmaScale", p.historyResetSpatialSigmaScale);
+    p.historyResetAmount = r.Float("historyResetAmount", p.historyResetAmount);
+    p.enablePrepass = r.Bool("enablePrepass", p.enablePrepass);
+    p.enableAntiFirefly = r.Bool("enableAntiFirefly", p.enableAntiFirefly);
+    p.bChromaAtrous = r.Bool("bChromaAtrous", p.bChromaAtrous);
+    p.chromaAtrousIterations = r.Int("chromaAtrousIterations", p.chromaAtrousIterations);
+    p.chromaLumaPower = r.Float("chromaLumaPower", p.chromaLumaPower);
 }
 
-static nlohmann::json ReblurToJson(const Core::ReBLURParams& rb)
+static void SerializeReblur(const Core::ReBLURParams& rb, TextWriter& w)
 {
-    return {
-        {"denoisingRange", rb.denoisingRange},
-        {"disocclusionThreshold", rb.disocclusionThreshold},
-        {"disocclusionThresholdAlternate", rb.disocclusionThresholdAlternate},
-        {"planeDistanceSensitivity", rb.planeDistanceSensitivity},
-        {"lobeAngleFraction", rb.lobeAngleFraction},
-        {"roughnessFraction", rb.roughnessFraction},
-        {"hitDistA", rb.hitDistA},
-        {"hitDistB", rb.hitDistB},
-        {"hitDistC", rb.hitDistC},
-        {"hitDistD", rb.hitDistD},
-        {"maxAccumulatedFrameNum", rb.maxAccumulatedFrameNum},
-        {"maxFastAccumulatedFrameNum", rb.maxFastAccumulatedFrameNum},
-        {"maxStabilizedFrameNum", rb.maxStabilizedFrameNum},
-        {"historyFixFrameNum", rb.historyFixFrameNum},
-        {"historyFixBasePixelStride", rb.historyFixBasePixelStride},
-        {"fastHistoryClampingSigmaScale", rb.fastHistoryClampingSigmaScale},
-        {"diffusePrepassBlurRadius", rb.diffusePrepassBlurRadius},
-        {"specularPrepassBlurRadius", rb.specularPrepassBlurRadius},
-        {"minBlurRadius", rb.minBlurRadius},
-        {"maxBlurRadius", rb.maxBlurRadius},
-        {"minHitDistanceWeight", rb.minHitDistanceWeight},
-        {"antilagLuminanceSigmaScale", rb.antilagLuminanceSigmaScale},
-        {"antilagLuminanceSensitivity", rb.antilagLuminanceSensitivity},
-        {"stabilizationStrength", rb.stabilizationStrength},
-        {"fireflySuppressorMinRelativeScale", rb.fireflySuppressorMinRelativeScale},
-        {"specProbThresholdMvLow", rb.specProbThresholdMvLow},
-        {"specProbThresholdMvHigh", rb.specProbThresholdMvHigh},
-        {"convergenceS", rb.convergenceS},
-        {"convergenceB", rb.convergenceB},
-        {"convergenceP", rb.convergenceP},
-        {"hitDistanceReconstructionMode", rb.hitDistanceReconstructionMode},
-        {"enablePrepass", rb.enablePrepass},
-        {"enableAntiFirefly", rb.enableAntiFirefly},
-        {"enableStabilizationFireflyCleanup", rb.enableStabilizationFireflyCleanup},
-        {"enableTemporalStabilization", rb.enableTemporalStabilization},
-        {"bChromaAtrous", rb.bChromaAtrous},
-        {"chromaAtrousIterations", rb.chromaAtrousIterations},
-        {"chromaLumaPower", rb.chromaLumaPower},
-    };
+    w.Key("denoisingRange", rb.denoisingRange);
+    w.Key("disocclusionThreshold", rb.disocclusionThreshold);
+    w.Key("disocclusionThresholdAlternate", rb.disocclusionThresholdAlternate);
+    w.Key("planeDistanceSensitivity", rb.planeDistanceSensitivity);
+    w.Key("lobeAngleFraction", rb.lobeAngleFraction);
+    w.Key("roughnessFraction", rb.roughnessFraction);
+    w.Key("hitDistA", rb.hitDistA);
+    w.Key("hitDistB", rb.hitDistB);
+    w.Key("hitDistC", rb.hitDistC);
+    w.Key("hitDistD", rb.hitDistD);
+    w.Key("maxAccumulatedFrameNum", rb.maxAccumulatedFrameNum);
+    w.Key("maxFastAccumulatedFrameNum", rb.maxFastAccumulatedFrameNum);
+    w.Key("maxStabilizedFrameNum", rb.maxStabilizedFrameNum);
+    w.Key("historyFixFrameNum", rb.historyFixFrameNum);
+    w.Key("historyFixBasePixelStride", rb.historyFixBasePixelStride);
+    w.Key("fastHistoryClampingSigmaScale", rb.fastHistoryClampingSigmaScale);
+    w.Key("diffusePrepassBlurRadius", rb.diffusePrepassBlurRadius);
+    w.Key("specularPrepassBlurRadius", rb.specularPrepassBlurRadius);
+    w.Key("minBlurRadius", rb.minBlurRadius);
+    w.Key("maxBlurRadius", rb.maxBlurRadius);
+    w.Key("minHitDistanceWeight", rb.minHitDistanceWeight);
+    w.Key("antilagLuminanceSigmaScale", rb.antilagLuminanceSigmaScale);
+    w.Key("antilagLuminanceSensitivity", rb.antilagLuminanceSensitivity);
+    w.Key("stabilizationStrength", rb.stabilizationStrength);
+    w.Key("fireflySuppressorMinRelativeScale", rb.fireflySuppressorMinRelativeScale);
+    w.Key("specProbThresholdMvLow", rb.specProbThresholdMvLow);
+    w.Key("specProbThresholdMvHigh", rb.specProbThresholdMvHigh);
+    w.Key("convergenceS", rb.convergenceS);
+    w.Key("convergenceB", rb.convergenceB);
+    w.Key("convergenceP", rb.convergenceP);
+    w.Key("hitDistanceReconstructionMode", rb.hitDistanceReconstructionMode);
+    w.Key("enablePrepass", rb.enablePrepass);
+    w.Key("enableAntiFirefly", rb.enableAntiFirefly);
+    w.Key("enableStabilizationFireflyCleanup", rb.enableStabilizationFireflyCleanup);
+    w.Key("enableTemporalStabilization", rb.enableTemporalStabilization);
+    w.Key("bChromaAtrous", rb.bChromaAtrous);
+    w.Key("chromaAtrousIterations", rb.chromaAtrousIterations);
+    w.Key("chromaLumaPower", rb.chromaLumaPower);
 }
 
-static void ReblurFromJson(const nlohmann::json& r, Core::ReBLURParams& p)
+static void DeserializeReblur(const TextReader& r, Core::ReBLURParams& p)
 {
-    auto getBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
-    auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
-    auto getFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
-
-    p.denoisingRange = getFloat("denoisingRange", p.denoisingRange);
-    p.disocclusionThreshold = getFloat("disocclusionThreshold", p.disocclusionThreshold);
-    p.disocclusionThresholdAlternate = getFloat("disocclusionThresholdAlternate", p.disocclusionThresholdAlternate);
-    p.planeDistanceSensitivity = getFloat("planeDistanceSensitivity", p.planeDistanceSensitivity);
-    p.lobeAngleFraction = getFloat("lobeAngleFraction", p.lobeAngleFraction);
-    p.roughnessFraction = getFloat("roughnessFraction", p.roughnessFraction);
-    p.hitDistA = getFloat("hitDistA", p.hitDistA);
-    p.hitDistB = getFloat("hitDistB", p.hitDistB);
-    p.hitDistC = getFloat("hitDistC", p.hitDistC);
-    p.hitDistD = getFloat("hitDistD", p.hitDistD);
-    p.maxAccumulatedFrameNum = getFloat("maxAccumulatedFrameNum", p.maxAccumulatedFrameNum);
-    p.maxFastAccumulatedFrameNum = getFloat("maxFastAccumulatedFrameNum", p.maxFastAccumulatedFrameNum);
-    p.maxStabilizedFrameNum = getFloat("maxStabilizedFrameNum", p.maxStabilizedFrameNum);
-    p.historyFixFrameNum = getFloat("historyFixFrameNum", p.historyFixFrameNum);
-    p.historyFixBasePixelStride = getFloat("historyFixBasePixelStride", p.historyFixBasePixelStride);
-    p.fastHistoryClampingSigmaScale = getFloat("fastHistoryClampingSigmaScale", p.fastHistoryClampingSigmaScale);
-    p.diffusePrepassBlurRadius = getFloat("diffusePrepassBlurRadius", p.diffusePrepassBlurRadius);
-    p.specularPrepassBlurRadius = getFloat("specularPrepassBlurRadius", p.specularPrepassBlurRadius);
-    p.minBlurRadius = getFloat("minBlurRadius", p.minBlurRadius);
-    p.maxBlurRadius = getFloat("maxBlurRadius", p.maxBlurRadius);
-    p.minHitDistanceWeight = getFloat("minHitDistanceWeight", p.minHitDistanceWeight);
-    p.antilagLuminanceSigmaScale = getFloat("antilagLuminanceSigmaScale", p.antilagLuminanceSigmaScale);
-    p.antilagLuminanceSensitivity = getFloat("antilagLuminanceSensitivity", p.antilagLuminanceSensitivity);
-    p.stabilizationStrength = getFloat("stabilizationStrength", p.stabilizationStrength);
-    p.fireflySuppressorMinRelativeScale = getFloat("fireflySuppressorMinRelativeScale", p.fireflySuppressorMinRelativeScale);
-    p.specProbThresholdMvLow = getFloat("specProbThresholdMvLow", p.specProbThresholdMvLow);
-    p.specProbThresholdMvHigh = getFloat("specProbThresholdMvHigh", p.specProbThresholdMvHigh);
-    p.convergenceS = getFloat("convergenceS", p.convergenceS);
-    p.convergenceB = getFloat("convergenceB", p.convergenceB);
-    p.convergenceP = getFloat("convergenceP", p.convergenceP);
-    p.hitDistanceReconstructionMode = getInt("hitDistanceReconstructionMode", p.hitDistanceReconstructionMode);
-    p.enablePrepass = getBool("enablePrepass", p.enablePrepass);
-    p.enableAntiFirefly = getBool("enableAntiFirefly", p.enableAntiFirefly);
-    p.enableStabilizationFireflyCleanup = getBool("enableStabilizationFireflyCleanup", p.enableStabilizationFireflyCleanup);
-    p.enableTemporalStabilization = getBool("enableTemporalStabilization", p.enableTemporalStabilization);
-    p.bChromaAtrous = getBool("bChromaAtrous", p.bChromaAtrous);
-    p.chromaAtrousIterations = getInt("chromaAtrousIterations", p.chromaAtrousIterations);
-    p.chromaLumaPower = getFloat("chromaLumaPower", p.chromaLumaPower);
+    p.denoisingRange = r.Float("denoisingRange", p.denoisingRange);
+    p.disocclusionThreshold = r.Float("disocclusionThreshold", p.disocclusionThreshold);
+    p.disocclusionThresholdAlternate = r.Float("disocclusionThresholdAlternate", p.disocclusionThresholdAlternate);
+    p.planeDistanceSensitivity = r.Float("planeDistanceSensitivity", p.planeDistanceSensitivity);
+    p.lobeAngleFraction = r.Float("lobeAngleFraction", p.lobeAngleFraction);
+    p.roughnessFraction = r.Float("roughnessFraction", p.roughnessFraction);
+    p.hitDistA = r.Float("hitDistA", p.hitDistA);
+    p.hitDistB = r.Float("hitDistB", p.hitDistB);
+    p.hitDistC = r.Float("hitDistC", p.hitDistC);
+    p.hitDistD = r.Float("hitDistD", p.hitDistD);
+    p.maxAccumulatedFrameNum = r.Float("maxAccumulatedFrameNum", p.maxAccumulatedFrameNum);
+    p.maxFastAccumulatedFrameNum = r.Float("maxFastAccumulatedFrameNum", p.maxFastAccumulatedFrameNum);
+    p.maxStabilizedFrameNum = r.Float("maxStabilizedFrameNum", p.maxStabilizedFrameNum);
+    p.historyFixFrameNum = r.Float("historyFixFrameNum", p.historyFixFrameNum);
+    p.historyFixBasePixelStride = r.Float("historyFixBasePixelStride", p.historyFixBasePixelStride);
+    p.fastHistoryClampingSigmaScale = r.Float("fastHistoryClampingSigmaScale", p.fastHistoryClampingSigmaScale);
+    p.diffusePrepassBlurRadius = r.Float("diffusePrepassBlurRadius", p.diffusePrepassBlurRadius);
+    p.specularPrepassBlurRadius = r.Float("specularPrepassBlurRadius", p.specularPrepassBlurRadius);
+    p.minBlurRadius = r.Float("minBlurRadius", p.minBlurRadius);
+    p.maxBlurRadius = r.Float("maxBlurRadius", p.maxBlurRadius);
+    p.minHitDistanceWeight = r.Float("minHitDistanceWeight", p.minHitDistanceWeight);
+    p.antilagLuminanceSigmaScale = r.Float("antilagLuminanceSigmaScale", p.antilagLuminanceSigmaScale);
+    p.antilagLuminanceSensitivity = r.Float("antilagLuminanceSensitivity", p.antilagLuminanceSensitivity);
+    p.stabilizationStrength = r.Float("stabilizationStrength", p.stabilizationStrength);
+    p.fireflySuppressorMinRelativeScale = r.Float("fireflySuppressorMinRelativeScale", p.fireflySuppressorMinRelativeScale);
+    p.specProbThresholdMvLow = r.Float("specProbThresholdMvLow", p.specProbThresholdMvLow);
+    p.specProbThresholdMvHigh = r.Float("specProbThresholdMvHigh", p.specProbThresholdMvHigh);
+    p.convergenceS = r.Float("convergenceS", p.convergenceS);
+    p.convergenceB = r.Float("convergenceB", p.convergenceB);
+    p.convergenceP = r.Float("convergenceP", p.convergenceP);
+    p.hitDistanceReconstructionMode = r.Int("hitDistanceReconstructionMode", p.hitDistanceReconstructionMode);
+    p.enablePrepass = r.Bool("enablePrepass", p.enablePrepass);
+    p.enableAntiFirefly = r.Bool("enableAntiFirefly", p.enableAntiFirefly);
+    p.enableStabilizationFireflyCleanup = r.Bool("enableStabilizationFireflyCleanup", p.enableStabilizationFireflyCleanup);
+    p.enableTemporalStabilization = r.Bool("enableTemporalStabilization", p.enableTemporalStabilization);
+    p.bChromaAtrous = r.Bool("bChromaAtrous", p.bChromaAtrous);
+    p.chromaAtrousIterations = r.Int("chromaAtrousIterations", p.chromaAtrousIterations);
+    p.chromaLumaPower = r.Float("chromaLumaPower", p.chromaLumaPower);
 }
 
-nlohmann::json ToJson(const Core::ReSTIRParams& p)
+void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
 {
-    return {
-        {"spatialPasses", p.spatialPasses},
-        {"bPermutationSampling", p.bPermutationSampling},
-        {"bAdaptiveSpatial", p.bAdaptiveSpatial},
-        {"adaptiveSpatialBoost", p.adaptiveSpatialBoost},
-        {"bEnableAntilag", p.bEnableAntilag},
-        {"antilagStrength", p.antilagStrength},
-        {"spatialRadius", p.spatialRadius},
-        {"spatialNeighbors", p.spatialNeighbors},
-        {"spatialMCap", p.spatialMCap},
-        {"bEnableTemporal", p.bEnableTemporal},
-        {"temporalMCap", p.temporalMCap},
-        {"bCheckerboard", p.bCheckerboard},
-        {"bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve},
-        {"boilingFilterStrength", p.boilingFilterStrength},
-        {"bInitialVisibility", p.bInitialVisibility},
-        {"bSunLight", p.bSunLight},
-        {"regirWClamp", p.regirWClamp},
-        {"restirWClamp", p.restirWClamp},
-        {"lightProposal", static_cast<uint32_t>(p.lightProposal)},
-        {"bEmissiveTriangleLights", p.bEmissiveTriangleLights},
-        {"emissiveTriRangeMultiplier", p.emissiveTriRangeMultiplier},
-        {"emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive},
-        {"bEnableConfidence", p.bEnableConfidence},
-        {"confidenceStrength", p.confidenceStrength},
-        {"confidenceSensitivity", p.confidenceSensitivity},
-        {"confidenceDarknessBias", p.confidenceDarknessBias},
-        {"confidenceHistoryLength", p.confidenceHistoryLength},
-        {"confidenceBlurRadius", p.confidenceBlurRadius},
-        {"denoiserMode", static_cast<int32_t>(p.denoiserMode)},
-        {"remodulateOutput", static_cast<int32_t>(p.remodulateOutput)},
-        {"atrous", nlohmann::json{{"iterations", p.atrous.iterations}, {"sigmaLuminance", p.atrous.sigmaLuminance}, {"sigmaNormal", p.atrous.sigmaNormal}, {"sigmaDepth", p.atrous.sigmaDepth}}},
-        {"svgf", nlohmann::json{{"alphaMin", p.svgf.alphaMin}, {"gradientThreshold", p.svgf.gradientThreshold}, {"sigmaLuminance", p.svgf.sigmaLuminance}, {"sigmaNormal", p.svgf.sigmaNormal}, {"sigmaDepth", p.svgf.sigmaDepth}, {"atrousIterations", p.svgf.atrousIterations}}},
-        {"relax", RelaxToJson(p.relax)},
-        {"reblur", ReblurToJson(p.reblur)},
-    };
+    w.Key("spatialPasses", p.spatialPasses);
+    w.Key("bPermutationSampling", p.bPermutationSampling);
+    w.Key("bAdaptiveSpatial", p.bAdaptiveSpatial);
+    w.Key("adaptiveSpatialBoost", p.adaptiveSpatialBoost);
+    w.Key("bEnableAntilag", p.bEnableAntilag);
+    w.Key("antilagStrength", p.antilagStrength);
+    w.Key("spatialRadius", p.spatialRadius);
+    w.Key("spatialNeighbors", p.spatialNeighbors);
+    w.Key("spatialMCap", p.spatialMCap);
+    w.Key("bEnableTemporal", p.bEnableTemporal);
+    w.Key("temporalMCap", p.temporalMCap);
+    w.Key("bCheckerboard", p.bCheckerboard);
+    w.Key("bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve);
+    w.Key("boilingFilterStrength", p.boilingFilterStrength);
+    w.Key("bInitialVisibility", p.bInitialVisibility);
+    w.Key("bSunLight", p.bSunLight);
+    w.Key("regirWClamp", p.regirWClamp);
+    w.Key("restirWClamp", p.restirWClamp);
+    w.Key("lightProposal", static_cast<uint32_t>(p.lightProposal));
+    w.Key("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
+    w.Key("emissiveTriRangeMultiplier", p.emissiveTriRangeMultiplier);
+    w.Key("emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive);
+    w.Key("bEnableConfidence", p.bEnableConfidence);
+    w.Key("confidenceStrength", p.confidenceStrength);
+    w.Key("confidenceSensitivity", p.confidenceSensitivity);
+    w.Key("confidenceDarknessBias", p.confidenceDarknessBias);
+    w.Key("confidenceHistoryLength", p.confidenceHistoryLength);
+    w.Key("confidenceBlurRadius", p.confidenceBlurRadius);
+    w.Key("denoiserMode", static_cast<int32_t>(p.denoiserMode));
+    w.Key("remodulateOutput", static_cast<int32_t>(p.remodulateOutput));
+    w.BeginBlock("atrous");
+    w.Key("iterations", p.atrous.iterations);
+    w.Key("sigmaLuminance", p.atrous.sigmaLuminance);
+    w.Key("sigmaNormal", p.atrous.sigmaNormal);
+    w.Key("sigmaDepth", p.atrous.sigmaDepth);
+    w.EndBlock();
+    w.BeginBlock("svgf");
+    w.Key("alphaMin", p.svgf.alphaMin);
+    w.Key("gradientThreshold", p.svgf.gradientThreshold);
+    w.Key("sigmaLuminance", p.svgf.sigmaLuminance);
+    w.Key("sigmaNormal", p.svgf.sigmaNormal);
+    w.Key("sigmaDepth", p.svgf.sigmaDepth);
+    w.Key("atrousIterations", p.svgf.atrousIterations);
+    w.EndBlock();
+    w.BeginBlock("relax");
+    SerializeRelax(p.relax, w);
+    w.EndBlock();
+    w.BeginBlock("reblur");
+    SerializeReblur(p.reblur, w);
+    w.EndBlock();
 }
 
-void FromJson(const nlohmann::json& r, Core::ReSTIRParams& p)
+void Deserialize(const TextReader& r, Core::ReSTIRParams& p)
 {
-    auto getBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
-    auto getUint = [&](const char* k, uint32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<uint32_t>() : def; };
-    auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
-
-    p.spatialPasses = getUint("spatialPasses", getBool("bSpatial2", false) ? 2u : p.spatialPasses);
-    p.bPermutationSampling = getBool("bPermutationSampling", p.bPermutationSampling);
-    p.bAdaptiveSpatial = getBool("bAdaptiveSpatial", p.bAdaptiveSpatial);
-    p.adaptiveSpatialBoost = r.contains("adaptiveSpatialBoost") && r["adaptiveSpatialBoost"].is_number() ? r["adaptiveSpatialBoost"].get<float>() : p.adaptiveSpatialBoost;
-    p.bEnableAntilag = getBool("bEnableAntilag", p.bEnableAntilag);
-    p.antilagStrength = r.contains("antilagStrength") && r["antilagStrength"].is_number() ? r["antilagStrength"].get<float>() : p.antilagStrength;
-    p.spatialRadius = getUint("spatialRadius", p.spatialRadius);
-    p.spatialNeighbors = getUint("spatialNeighbors", p.spatialNeighbors);
-    p.spatialMCap = getUint("spatialMCap", p.spatialMCap);
-    p.bEnableTemporal = getBool("bEnableTemporal", p.bEnableTemporal);
-    p.temporalMCap = getUint("temporalMCap", p.temporalMCap);
-    p.bCheckerboard = getBool("bCheckerboard", p.bCheckerboard);
-    p.bCheckerboardFullRateResolve = getBool("bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve);
-    p.boilingFilterStrength = r.contains("boilingFilterStrength") && r["boilingFilterStrength"].is_number() ? r["boilingFilterStrength"].get<float>() : p.boilingFilterStrength;
-    p.bInitialVisibility = getBool("bInitialVisibility", p.bInitialVisibility);
-    p.bSunLight = getBool("bSunLight", p.bSunLight);
-    p.regirWClamp = r.contains("regirWClamp") && r["regirWClamp"].is_number() ? r["regirWClamp"].get<float>() : p.regirWClamp;
-    p.restirWClamp = r.contains("restirWClamp") && r["restirWClamp"].is_number() ? r["restirWClamp"].get<float>() : p.restirWClamp;
-    p.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(getUint("lightProposal", static_cast<uint32_t>(p.lightProposal)));
-    p.bEmissiveTriangleLights = getBool("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
-    p.emissiveTriRangeMultiplier = r.contains("emissiveTriRangeMultiplier") && r["emissiveTriRangeMultiplier"].is_number() ? r["emissiveTriRangeMultiplier"].get<float>() : p.emissiveTriRangeMultiplier;
-    p.emissiveTriMaxPerPrimitive = getInt("emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive);
-    p.bEnableConfidence = getBool("bEnableConfidence", p.bEnableConfidence);
-    p.confidenceStrength = r.contains("confidenceStrength") && r["confidenceStrength"].is_number() ? r["confidenceStrength"].get<float>() : p.confidenceStrength;
-    p.confidenceSensitivity = r.contains("confidenceSensitivity") && r["confidenceSensitivity"].is_number() ? r["confidenceSensitivity"].get<float>() : p.confidenceSensitivity;
-    p.confidenceDarknessBias = r.contains("confidenceDarknessBias") && r["confidenceDarknessBias"].is_number() ? r["confidenceDarknessBias"].get<float>() : p.confidenceDarknessBias;
-    p.confidenceHistoryLength = r.contains("confidenceHistoryLength") && r["confidenceHistoryLength"].is_number() ? r["confidenceHistoryLength"].get<float>() : p.confidenceHistoryLength;
-    p.confidenceBlurRadius = getUint("confidenceBlurRadius", p.confidenceBlurRadius);
-    p.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(getInt("denoiserMode", static_cast<int32_t>(p.denoiserMode)));
-    p.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(getInt("remodulateOutput", static_cast<int32_t>(p.remodulateOutput)));
-    if (r.contains("atrous") && r["atrous"].is_object()) {
-        const auto& o = r["atrous"];
-        auto oInt = [&](const char* k, int32_t def) { return o.contains(k) && o[k].is_number() ? o[k].get<int32_t>() : def; };
-        auto oFloat = [&](const char* k, float def) { return o.contains(k) && o[k].is_number() ? o[k].get<float>() : def; };
-        p.atrous.iterations = oInt("iterations", p.atrous.iterations);
-        p.atrous.sigmaLuminance = oFloat("sigmaLuminance", p.atrous.sigmaLuminance);
-        p.atrous.sigmaNormal = oFloat("sigmaNormal", p.atrous.sigmaNormal);
-        p.atrous.sigmaDepth = oFloat("sigmaDepth", p.atrous.sigmaDepth);
-    }
-    if (r.contains("svgf") && r["svgf"].is_object()) {
-        const auto& o = r["svgf"];
-        auto oInt = [&](const char* k, int32_t def) { return o.contains(k) && o[k].is_number() ? o[k].get<int32_t>() : def; };
-        auto oFloat = [&](const char* k, float def) { return o.contains(k) && o[k].is_number() ? o[k].get<float>() : def; };
-        p.svgf.alphaMin = oFloat("alphaMin", p.svgf.alphaMin);
-        p.svgf.gradientThreshold = oFloat("gradientThreshold", p.svgf.gradientThreshold);
-        p.svgf.sigmaLuminance = oFloat("sigmaLuminance", p.svgf.sigmaLuminance);
-        p.svgf.sigmaNormal = oFloat("sigmaNormal", p.svgf.sigmaNormal);
-        p.svgf.sigmaDepth = oFloat("sigmaDepth", p.svgf.sigmaDepth);
-        p.svgf.atrousIterations = oInt("atrousIterations", p.svgf.atrousIterations);
-    }
-    if (r.contains("relax") && r["relax"].is_object()) {
-        RelaxFromJson(r["relax"], p.relax);
-    }
-    if (r.contains("reblur") && r["reblur"].is_object()) {
-        ReblurFromJson(r["reblur"], p.reblur);
-    }
+    p.spatialPasses = r.UInt("spatialPasses", p.spatialPasses);
+    p.bPermutationSampling = r.Bool("bPermutationSampling", p.bPermutationSampling);
+    p.bAdaptiveSpatial = r.Bool("bAdaptiveSpatial", p.bAdaptiveSpatial);
+    p.adaptiveSpatialBoost = r.Float("adaptiveSpatialBoost", p.adaptiveSpatialBoost);
+    p.bEnableAntilag = r.Bool("bEnableAntilag", p.bEnableAntilag);
+    p.antilagStrength = r.Float("antilagStrength", p.antilagStrength);
+    p.spatialRadius = r.UInt("spatialRadius", p.spatialRadius);
+    p.spatialNeighbors = r.UInt("spatialNeighbors", p.spatialNeighbors);
+    p.spatialMCap = r.UInt("spatialMCap", p.spatialMCap);
+    p.bEnableTemporal = r.Bool("bEnableTemporal", p.bEnableTemporal);
+    p.temporalMCap = r.UInt("temporalMCap", p.temporalMCap);
+    p.bCheckerboard = r.Bool("bCheckerboard", p.bCheckerboard);
+    p.bCheckerboardFullRateResolve = r.Bool("bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve);
+    p.boilingFilterStrength = r.Float("boilingFilterStrength", p.boilingFilterStrength);
+    p.bInitialVisibility = r.Bool("bInitialVisibility", p.bInitialVisibility);
+    p.bSunLight = r.Bool("bSunLight", p.bSunLight);
+    p.regirWClamp = r.Float("regirWClamp", p.regirWClamp);
+    p.restirWClamp = r.Float("restirWClamp", p.restirWClamp);
+    p.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(r.UInt("lightProposal", static_cast<uint32_t>(p.lightProposal)));
+    p.bEmissiveTriangleLights = r.Bool("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
+    p.emissiveTriRangeMultiplier = r.Float("emissiveTriRangeMultiplier", p.emissiveTriRangeMultiplier);
+    p.emissiveTriMaxPerPrimitive = r.Int("emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive);
+    p.bEnableConfidence = r.Bool("bEnableConfidence", p.bEnableConfidence);
+    p.confidenceStrength = r.Float("confidenceStrength", p.confidenceStrength);
+    p.confidenceSensitivity = r.Float("confidenceSensitivity", p.confidenceSensitivity);
+    p.confidenceDarknessBias = r.Float("confidenceDarknessBias", p.confidenceDarknessBias);
+    p.confidenceHistoryLength = r.Float("confidenceHistoryLength", p.confidenceHistoryLength);
+    p.confidenceBlurRadius = r.UInt("confidenceBlurRadius", p.confidenceBlurRadius);
+    p.denoiserMode = static_cast<Core::ReSTIRParams::DenoiserMode>(r.Int("denoiserMode", static_cast<int32_t>(p.denoiserMode)));
+    p.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(r.Int("remodulateOutput", static_cast<int32_t>(p.remodulateOutput)));
+    const TextReader atrous = r.Block("atrous");
+    p.atrous.iterations = atrous.Int("iterations", p.atrous.iterations);
+    p.atrous.sigmaLuminance = atrous.Float("sigmaLuminance", p.atrous.sigmaLuminance);
+    p.atrous.sigmaNormal = atrous.Float("sigmaNormal", p.atrous.sigmaNormal);
+    p.atrous.sigmaDepth = atrous.Float("sigmaDepth", p.atrous.sigmaDepth);
+    const TextReader svgf = r.Block("svgf");
+    p.svgf.alphaMin = svgf.Float("alphaMin", p.svgf.alphaMin);
+    p.svgf.gradientThreshold = svgf.Float("gradientThreshold", p.svgf.gradientThreshold);
+    p.svgf.sigmaLuminance = svgf.Float("sigmaLuminance", p.svgf.sigmaLuminance);
+    p.svgf.sigmaNormal = svgf.Float("sigmaNormal", p.svgf.sigmaNormal);
+    p.svgf.sigmaDepth = svgf.Float("sigmaDepth", p.svgf.sigmaDepth);
+    p.svgf.atrousIterations = svgf.Int("atrousIterations", p.svgf.atrousIterations);
+    DeserializeRelax(r.Block("relax"), p.relax);
+    DeserializeReblur(r.Block("reblur"), p.reblur);
 }
 
-nlohmann::json ToJson(const Core::DDGIParams& p)
+void Serialize(const Core::DDGIParams& p, TextWriter& w)
 {
-    return {
-        {"bEnabled", p.bEnabled},
-        {"probeCountX", p.probeCountX},
-        {"probeCountY", p.probeCountY},
-        {"probeCountZ", p.probeCountZ},
-        {"probeSpacing", p.probeSpacing},
-        {"cascadeCount", p.cascadeCount},
-        {"edgeBlendCells", p.edgeBlendCells},
-        {"bScaleBiasPerCascade", p.bScaleBiasPerCascade},
-        {"bLocalVolumes", p.bLocalVolumes},
-        {"bCascadeSampling", p.bCascadeSampling},
-        {"bWorldVolumeGridCull", p.bWorldVolumeGridCull},
-        {"maxResidentWorldVolumes", p.maxResidentWorldVolumes},
-        {"worldVolumeWarmupBoost", p.worldVolumeWarmupBoost},
-        {"raysPerProbe", p.raysPerProbe},
-        {"outerRaysPerProbe", p.outerRaysPerProbe},
-        {"bClassification", p.bClassification},
-        {"bInfiniteBounce", p.bInfiniteBounce},
-        {"bounceIntensity", p.bounceIntensity},
-        {"maxRayRadiance", p.maxRayRadiance},
-        {"radianceCacheShadeInterval", p.radianceCacheShadeInterval},
-        {"radianceCacheAccumCap", p.radianceCacheAccumCap},
-        {"hysteresis", p.hysteresis},
-        {"visibilityHysteresis", p.visibilityHysteresis},
-        {"irradianceGamma", p.irradianceGamma},
-        {"irradianceThreshold", p.irradianceThreshold},
-        {"brightnessThreshold", p.brightnessThreshold},
-        {"distanceExponent", p.distanceExponent},
-        {"bApplyToLighting", p.bApplyToLighting},
-        {"bFinalGather", p.bFinalGather},
-        {"bFinalGatherDenoise", p.bFinalGatherDenoise},
-        {"bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise},
-        {"gatherChromaDenoisePasses", p.gatherChromaDenoisePasses},
-        {"gatherChromaLumaPower", p.gatherChromaLumaPower},
-        {"bFinalGatherTemporal", p.bFinalGatherTemporal},
-        {"bGatherSkipRay", p.bGatherSkipRay},
-        {"gatherRaysPerPixel", p.gatherRaysPerPixel},
-        {"normalBias", p.normalBias},
-        {"viewBias", p.viewBias},
-        {"bRelocation", p.bRelocation},
-        {"minFrontfaceDistance", p.minFrontfaceDistance},
-    };
+    w.Key("bEnabled", p.bEnabled);
+    w.Key("probeCountX", p.probeCountX);
+    w.Key("probeCountY", p.probeCountY);
+    w.Key("probeCountZ", p.probeCountZ);
+    w.Key("probeSpacing", p.probeSpacing);
+    w.Key("cascadeCount", p.cascadeCount);
+    w.Key("edgeBlendCells", p.edgeBlendCells);
+    w.Key("bScaleBiasPerCascade", p.bScaleBiasPerCascade);
+    w.Key("bLocalVolumes", p.bLocalVolumes);
+    w.Key("bCascadeSampling", p.bCascadeSampling);
+    w.Key("bWorldVolumeGridCull", p.bWorldVolumeGridCull);
+    w.Key("maxResidentWorldVolumes", p.maxResidentWorldVolumes);
+    w.Key("worldVolumeWarmupBoost", p.worldVolumeWarmupBoost);
+    w.Key("raysPerProbe", p.raysPerProbe);
+    w.Key("outerRaysPerProbe", p.outerRaysPerProbe);
+    w.Key("bClassification", p.bClassification);
+    w.Key("bInfiniteBounce", p.bInfiniteBounce);
+    w.Key("bounceIntensity", p.bounceIntensity);
+    w.Key("maxRayRadiance", p.maxRayRadiance);
+    w.Key("radianceCacheShadeInterval", p.radianceCacheShadeInterval);
+    w.Key("radianceCacheAccumCap", p.radianceCacheAccumCap);
+    w.Key("hysteresis", p.hysteresis);
+    w.Key("visibilityHysteresis", p.visibilityHysteresis);
+    w.Key("irradianceGamma", p.irradianceGamma);
+    w.Key("irradianceThreshold", p.irradianceThreshold);
+    w.Key("brightnessThreshold", p.brightnessThreshold);
+    w.Key("distanceExponent", p.distanceExponent);
+    w.Key("bApplyToLighting", p.bApplyToLighting);
+    w.Key("bFinalGather", p.bFinalGather);
+    w.Key("bFinalGatherDenoise", p.bFinalGatherDenoise);
+    w.Key("bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise);
+    w.Key("gatherChromaDenoisePasses", p.gatherChromaDenoisePasses);
+    w.Key("gatherChromaLumaPower", p.gatherChromaLumaPower);
+    w.Key("bFinalGatherTemporal", p.bFinalGatherTemporal);
+    w.Key("bGatherSkipRay", p.bGatherSkipRay);
+    w.Key("gatherRaysPerPixel", p.gatherRaysPerPixel);
+    w.Key("normalBias", p.normalBias);
+    w.Key("viewBias", p.viewBias);
+    w.Key("bRelocation", p.bRelocation);
+    w.Key("minFrontfaceDistance", p.minFrontfaceDistance);
 }
 
-void FromJson(const nlohmann::json& d, Core::DDGIParams& p)
+void Deserialize(const TextReader& r, Core::DDGIParams& p)
 {
-    auto dBool = [&](const char* k, bool def) { return d.contains(k) && d[k].is_boolean() ? d[k].get<bool>() : def; };
-    auto dInt = [&](const char* k, int32_t def) { return d.contains(k) && d[k].is_number() ? d[k].get<int32_t>() : def; };
-    auto dUint = [&](const char* k, uint32_t def) { return d.contains(k) && d[k].is_number() ? d[k].get<uint32_t>() : def; };
-    auto dFloat = [&](const char* k, float def) { return d.contains(k) && d[k].is_number() ? d[k].get<float>() : def; };
-
-    p.bEnabled = dBool("bEnabled", p.bEnabled);
-    p.probeCountX = dInt("probeCountX", p.probeCountX);
-    p.probeCountY = dInt("probeCountY", p.probeCountY);
-    p.probeCountZ = dInt("probeCountZ", p.probeCountZ);
-    p.probeSpacing = dFloat("probeSpacing", p.probeSpacing);
-    p.cascadeCount = dUint("cascadeCount", p.cascadeCount);
-    p.edgeBlendCells = dFloat("edgeBlendCells", p.edgeBlendCells);
-    p.bScaleBiasPerCascade = dBool("bScaleBiasPerCascade", p.bScaleBiasPerCascade);
-    p.bLocalVolumes = dBool("bLocalVolumes", p.bLocalVolumes);
-    p.bCascadeSampling = dBool("bCascadeSampling", p.bCascadeSampling);
-    p.bWorldVolumeGridCull = dBool("bWorldVolumeGridCull", p.bWorldVolumeGridCull);
-    p.maxResidentWorldVolumes = dInt("maxResidentWorldVolumes", p.maxResidentWorldVolumes);
-    p.worldVolumeWarmupBoost = dInt("worldVolumeWarmupBoost", p.worldVolumeWarmupBoost);
-    p.raysPerProbe = dUint("raysPerProbe", p.raysPerProbe);
-    p.outerRaysPerProbe = dUint("outerRaysPerProbe", p.outerRaysPerProbe);
-    p.bClassification = dBool("bClassification", p.bClassification);
-    p.bInfiniteBounce = dBool("bInfiniteBounce", p.bInfiniteBounce);
-    p.bounceIntensity = dFloat("bounceIntensity", p.bounceIntensity);
-    p.maxRayRadiance = dFloat("maxRayRadiance", p.maxRayRadiance);
-    p.radianceCacheShadeInterval = dUint("radianceCacheShadeInterval", p.radianceCacheShadeInterval);
-    p.radianceCacheAccumCap = dUint("radianceCacheAccumCap", p.radianceCacheAccumCap);
-    p.hysteresis = dFloat("hysteresis", p.hysteresis);
-    p.visibilityHysteresis = dFloat("visibilityHysteresis", p.visibilityHysteresis);
-    p.irradianceGamma = dFloat("irradianceGamma", p.irradianceGamma);
-    p.irradianceThreshold = dFloat("irradianceThreshold", p.irradianceThreshold);
-    p.brightnessThreshold = dFloat("brightnessThreshold", p.brightnessThreshold);
-    p.distanceExponent = dFloat("distanceExponent", p.distanceExponent);
-    p.bApplyToLighting = dBool("bApplyToLighting", p.bApplyToLighting);
-    p.bFinalGather = dBool("bFinalGather", p.bFinalGather);
-    p.bFinalGatherDenoise = dBool("bFinalGatherDenoise", p.bFinalGatherDenoise);
-    p.bFinalGatherChromaDenoise = dBool("bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise);
-    p.gatherChromaDenoisePasses = dUint("gatherChromaDenoisePasses", p.gatherChromaDenoisePasses);
-    p.gatherChromaLumaPower = dFloat("gatherChromaLumaPower", p.gatherChromaLumaPower);
-    p.bFinalGatherTemporal = dBool("bFinalGatherTemporal", p.bFinalGatherTemporal);
-    p.gatherRaysPerPixel = dUint("gatherRaysPerPixel", p.gatherRaysPerPixel);
-    p.bGatherSkipRay = dBool("bGatherSkipRay", p.bGatherSkipRay);
-    p.normalBias = dFloat("normalBias", p.normalBias);
-    p.viewBias = dFloat("viewBias", p.viewBias);
-    p.bRelocation = dBool("bRelocation", p.bRelocation);
-    p.minFrontfaceDistance = dFloat("minFrontfaceDistance", p.minFrontfaceDistance);
+    p.bEnabled = r.Bool("bEnabled", p.bEnabled);
+    p.probeCountX = r.Int("probeCountX", p.probeCountX);
+    p.probeCountY = r.Int("probeCountY", p.probeCountY);
+    p.probeCountZ = r.Int("probeCountZ", p.probeCountZ);
+    p.probeSpacing = r.Float("probeSpacing", p.probeSpacing);
+    p.cascadeCount = r.UInt("cascadeCount", p.cascadeCount);
+    p.edgeBlendCells = r.Float("edgeBlendCells", p.edgeBlendCells);
+    p.bScaleBiasPerCascade = r.Bool("bScaleBiasPerCascade", p.bScaleBiasPerCascade);
+    p.bLocalVolumes = r.Bool("bLocalVolumes", p.bLocalVolumes);
+    p.bCascadeSampling = r.Bool("bCascadeSampling", p.bCascadeSampling);
+    p.bWorldVolumeGridCull = r.Bool("bWorldVolumeGridCull", p.bWorldVolumeGridCull);
+    p.maxResidentWorldVolumes = r.Int("maxResidentWorldVolumes", p.maxResidentWorldVolumes);
+    p.worldVolumeWarmupBoost = r.Int("worldVolumeWarmupBoost", p.worldVolumeWarmupBoost);
+    p.raysPerProbe = r.UInt("raysPerProbe", p.raysPerProbe);
+    p.outerRaysPerProbe = r.UInt("outerRaysPerProbe", p.outerRaysPerProbe);
+    p.bClassification = r.Bool("bClassification", p.bClassification);
+    p.bInfiniteBounce = r.Bool("bInfiniteBounce", p.bInfiniteBounce);
+    p.bounceIntensity = r.Float("bounceIntensity", p.bounceIntensity);
+    p.maxRayRadiance = r.Float("maxRayRadiance", p.maxRayRadiance);
+    p.radianceCacheShadeInterval = r.UInt("radianceCacheShadeInterval", p.radianceCacheShadeInterval);
+    p.radianceCacheAccumCap = r.UInt("radianceCacheAccumCap", p.radianceCacheAccumCap);
+    p.hysteresis = r.Float("hysteresis", p.hysteresis);
+    p.visibilityHysteresis = r.Float("visibilityHysteresis", p.visibilityHysteresis);
+    p.irradianceGamma = r.Float("irradianceGamma", p.irradianceGamma);
+    p.irradianceThreshold = r.Float("irradianceThreshold", p.irradianceThreshold);
+    p.brightnessThreshold = r.Float("brightnessThreshold", p.brightnessThreshold);
+    p.distanceExponent = r.Float("distanceExponent", p.distanceExponent);
+    p.bApplyToLighting = r.Bool("bApplyToLighting", p.bApplyToLighting);
+    p.bFinalGather = r.Bool("bFinalGather", p.bFinalGather);
+    p.bFinalGatherDenoise = r.Bool("bFinalGatherDenoise", p.bFinalGatherDenoise);
+    p.bFinalGatherChromaDenoise = r.Bool("bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise);
+    p.gatherChromaDenoisePasses = r.UInt("gatherChromaDenoisePasses", p.gatherChromaDenoisePasses);
+    p.gatherChromaLumaPower = r.Float("gatherChromaLumaPower", p.gatherChromaLumaPower);
+    p.bFinalGatherTemporal = r.Bool("bFinalGatherTemporal", p.bFinalGatherTemporal);
+    p.gatherRaysPerPixel = r.UInt("gatherRaysPerPixel", p.gatherRaysPerPixel);
+    p.bGatherSkipRay = r.Bool("bGatherSkipRay", p.bGatherSkipRay);
+    p.normalBias = r.Float("normalBias", p.normalBias);
+    p.viewBias = r.Float("viewBias", p.viewBias);
+    p.bRelocation = r.Bool("bRelocation", p.bRelocation);
+    p.minFrontfaceDistance = r.Float("minFrontfaceDistance", p.minFrontfaceDistance);
 }
 
-nlohmann::json ToJson(const Core::ReflectionConfiguration& p)
+void Serialize(const Core::ReflectionConfiguration& p, TextWriter& w)
 {
-    return {
-        {"bEnabled", p.bEnabled},
-        {"bMergedDenoise", p.bMergedDenoise},
-        {"bScreenSpaceLighting", p.bScreenSpaceLighting},
-        {"bScreenSpaceTrace", p.bScreenSpaceTrace},
-        {"sunMode", static_cast<int32_t>(p.sunMode)},
-        {"tracedRoughnessMax", p.tracedRoughnessMax},
-        {"lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax},
-        {"intensity", p.intensity},
-        {"ssrThickness", p.ssrThickness},
-        {"ssrMaxSteps", p.ssrMaxSteps},
-    };
+    w.Key("bEnabled", p.bEnabled);
+    w.Key("bMergedDenoise", p.bMergedDenoise);
+    w.Key("bScreenSpaceLighting", p.bScreenSpaceLighting);
+    w.Key("bScreenSpaceTrace", p.bScreenSpaceTrace);
+    w.Key("sunMode", static_cast<int32_t>(p.sunMode));
+    w.Key("tracedRoughnessMax", p.tracedRoughnessMax);
+    w.Key("lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax);
+    w.Key("intensity", p.intensity);
+    w.Key("ssrThickness", p.ssrThickness);
+    w.Key("ssrMaxSteps", p.ssrMaxSteps);
 }
 
-void FromJson(const nlohmann::json& r, Core::ReflectionConfiguration& p)
+void Deserialize(const TextReader& r, Core::ReflectionConfiguration& p)
 {
-    auto rBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
-    auto rFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
-    auto rInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number_integer() ? r[k].get<int32_t>() : def; };
-    p.bEnabled = rBool("bEnabled", p.bEnabled);
-    p.bMergedDenoise = rBool("bMergedDenoise", p.bMergedDenoise);
-    p.bScreenSpaceLighting = rBool("bScreenSpaceLighting", p.bScreenSpaceLighting);
-    p.bScreenSpaceTrace = rBool("bScreenSpaceTrace", p.bScreenSpaceTrace);
-    const int32_t sunModeRaw = rInt("sunMode", static_cast<int32_t>(p.sunMode));
+    p.bEnabled = r.Bool("bEnabled", p.bEnabled);
+    p.bMergedDenoise = r.Bool("bMergedDenoise", p.bMergedDenoise);
+    p.bScreenSpaceLighting = r.Bool("bScreenSpaceLighting", p.bScreenSpaceLighting);
+    p.bScreenSpaceTrace = r.Bool("bScreenSpaceTrace", p.bScreenSpaceTrace);
+    const int32_t sunModeRaw = r.Int("sunMode", static_cast<int32_t>(p.sunMode));
     p.sunMode = static_cast<Core::ReflectionConfiguration::SunMode>(sunModeRaw < 0 ? 0 : (sunModeRaw > 2 ? 2 : sunModeRaw));
-    p.tracedRoughnessMax = rFloat("tracedRoughnessMax", p.tracedRoughnessMax);
-    p.lightSpecularFromReflectionsMax = rFloat("lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax);
-    p.intensity = rFloat("intensity", p.intensity);
-    p.ssrThickness = rFloat("ssrThickness", p.ssrThickness);
-    p.ssrMaxSteps = rInt("ssrMaxSteps", p.ssrMaxSteps);
+    p.tracedRoughnessMax = r.Float("tracedRoughnessMax", p.tracedRoughnessMax);
+    p.lightSpecularFromReflectionsMax = r.Float("lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax);
+    p.intensity = r.Float("intensity", p.intensity);
+    p.ssrThickness = r.Float("ssrThickness", p.ssrThickness);
+    p.ssrMaxSteps = r.Int("ssrMaxSteps", p.ssrMaxSteps);
 }
 
-nlohmann::json ToJson(const Core::ReflectionProbeConfiguration& p)
+void Serialize(const Core::ReflectionProbeConfiguration& p, TextWriter& w)
 {
-    return {
-        {"bEnabled", p.bEnabled},
-        {"intensity", p.intensity},
-        {"bDebugDraw", p.bDebugDraw},
-        {"bakedDiffuseClampK", p.bakedDiffuseClampK},
-        {"bBruteForcePick", p.bBruteForcePick},
-    };
+    w.Key("bEnabled", p.bEnabled);
+    w.Key("intensity", p.intensity);
+    w.Key("bDebugDraw", p.bDebugDraw);
+    w.Key("bakedDiffuseClampK", p.bakedDiffuseClampK);
+    w.Key("bBruteForcePick", p.bBruteForcePick);
 }
 
-void FromJson(const nlohmann::json& r, Core::ReflectionProbeConfiguration& p)
+void Deserialize(const TextReader& r, Core::ReflectionProbeConfiguration& p)
 {
-    auto rBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
-    auto rFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
-    p.bEnabled = rBool("bEnabled", p.bEnabled);
-    p.intensity = rFloat("intensity", p.intensity);
-    p.bDebugDraw = rBool("bDebugDraw", p.bDebugDraw);
-    p.bakedDiffuseClampK = rFloat("bakedDiffuseClampK", p.bakedDiffuseClampK);
-    p.bBruteForcePick = rBool("bBruteForcePick", p.bBruteForcePick);
+    p.bEnabled = r.Bool("bEnabled", p.bEnabled);
+    p.intensity = r.Float("intensity", p.intensity);
+    p.bDebugDraw = r.Bool("bDebugDraw", p.bDebugDraw);
+    p.bakedDiffuseClampK = r.Float("bakedDiffuseClampK", p.bakedDiffuseClampK);
+    p.bBruteForcePick = r.Bool("bBruteForcePick", p.bBruteForcePick);
 }
 
-nlohmann::json ToJson(const Core::GTAOConfiguration& p)
+void Serialize(const Core::GTAOConfiguration& p, TextWriter& w)
 {
-    return {
-        {"bEnabled", p.bEnabled},
-        {"effectRadius", p.effectRadius},
-        {"radiusMultiplier", p.radiusMultiplier},
-        {"effectFalloffRange", p.effectFalloffRange},
-        {"sampleDistributionPower", p.sampleDistributionPower},
-        {"thinOccluderCompensation", p.thinOccluderCompensation},
-        {"finalValuePower", p.finalValuePower},
-        {"depthMipSamplingOffset", p.depthMipSamplingOffset},
-        {"sliceCount", p.sliceCount},
-        {"stepsPerSlice", p.stepsPerSlice},
-        {"denoiseBlurBeta", p.denoiseBlurBeta},
-        {"denoisePasses", p.denoisePasses},
-    };
+    w.Key("bEnabled", p.bEnabled);
+    w.Key("effectRadius", p.effectRadius);
+    w.Key("radiusMultiplier", p.radiusMultiplier);
+    w.Key("effectFalloffRange", p.effectFalloffRange);
+    w.Key("sampleDistributionPower", p.sampleDistributionPower);
+    w.Key("thinOccluderCompensation", p.thinOccluderCompensation);
+    w.Key("finalValuePower", p.finalValuePower);
+    w.Key("depthMipSamplingOffset", p.depthMipSamplingOffset);
+    w.Key("sliceCount", p.sliceCount);
+    w.Key("stepsPerSlice", p.stepsPerSlice);
+    w.Key("denoiseBlurBeta", p.denoiseBlurBeta);
+    w.Key("denoisePasses", p.denoisePasses);
 }
 
-void FromJson(const nlohmann::json& g, Core::GTAOConfiguration& p)
+void Deserialize(const TextReader& r, Core::GTAOConfiguration& p)
 {
-    auto gBool = [&](const char* k, bool def) { return g.contains(k) && g[k].is_boolean() ? g[k].get<bool>() : def; };
-    auto gFloat = [&](const char* k, float def) { return g.contains(k) && g[k].is_number() ? g[k].get<float>() : def; };
-    p.bEnabled = gBool("bEnabled", p.bEnabled);
-    p.effectRadius = gFloat("effectRadius", p.effectRadius);
-    p.radiusMultiplier = gFloat("radiusMultiplier", p.radiusMultiplier);
-    p.effectFalloffRange = gFloat("effectFalloffRange", p.effectFalloffRange);
-    p.sampleDistributionPower = gFloat("sampleDistributionPower", p.sampleDistributionPower);
-    p.thinOccluderCompensation = gFloat("thinOccluderCompensation", p.thinOccluderCompensation);
-    p.finalValuePower = gFloat("finalValuePower", p.finalValuePower);
-    p.depthMipSamplingOffset = gFloat("depthMipSamplingOffset", p.depthMipSamplingOffset);
-    p.sliceCount = gFloat("sliceCount", p.sliceCount);
-    p.stepsPerSlice = gFloat("stepsPerSlice", p.stepsPerSlice);
-    p.denoiseBlurBeta = gFloat("denoiseBlurBeta", p.denoiseBlurBeta);
-    p.denoisePasses = gFloat("denoisePasses", p.denoisePasses);
+    p.bEnabled = r.Bool("bEnabled", p.bEnabled);
+    p.effectRadius = r.Float("effectRadius", p.effectRadius);
+    p.radiusMultiplier = r.Float("radiusMultiplier", p.radiusMultiplier);
+    p.effectFalloffRange = r.Float("effectFalloffRange", p.effectFalloffRange);
+    p.sampleDistributionPower = r.Float("sampleDistributionPower", p.sampleDistributionPower);
+    p.thinOccluderCompensation = r.Float("thinOccluderCompensation", p.thinOccluderCompensation);
+    p.finalValuePower = r.Float("finalValuePower", p.finalValuePower);
+    p.depthMipSamplingOffset = r.Float("depthMipSamplingOffset", p.depthMipSamplingOffset);
+    p.sliceCount = r.Float("sliceCount", p.sliceCount);
+    p.stepsPerSlice = r.Float("stepsPerSlice", p.stepsPerSlice);
+    p.denoiseBlurBeta = r.Float("denoiseBlurBeta", p.denoiseBlurBeta);
+    p.denoisePasses = r.Float("denoisePasses", p.denoisePasses);
 }
 
-nlohmann::json ToJson(const Core::SMAAConfiguration& p)
+void Serialize(const Core::SMAAConfiguration& p, TextWriter& w)
 {
-    return {
-        {"edgeDetectionMode", static_cast<int32_t>(p.edgeDetectionMode)},
-        {"threshold", p.threshold},
-        {"localContrastAdaptation", p.localContrastAdaptation},
-        {"maxSearchSteps", p.maxSearchSteps},
-        {"maxSearchStepsDiag", p.maxSearchStepsDiag},
-    };
+    w.Key("edgeDetectionMode", static_cast<int32_t>(p.edgeDetectionMode));
+    w.Key("threshold", p.threshold);
+    w.Key("localContrastAdaptation", p.localContrastAdaptation);
+    w.Key("maxSearchSteps", p.maxSearchSteps);
+    w.Key("maxSearchStepsDiag", p.maxSearchStepsDiag);
 }
 
-void FromJson(const nlohmann::json& s, Core::SMAAConfiguration& p)
+void Deserialize(const TextReader& r, Core::SMAAConfiguration& p)
 {
-    auto sInt = [&](const char* k, int32_t def) { return s.contains(k) && s[k].is_number() ? s[k].get<int32_t>() : def; };
-    auto sFloat = [&](const char* k, float def) { return s.contains(k) && s[k].is_number() ? s[k].get<float>() : def; };
-    p.edgeDetectionMode = static_cast<Core::SMAAEdgeDetectionMode>(sInt("edgeDetectionMode", static_cast<int32_t>(p.edgeDetectionMode)));
-    p.threshold = sFloat("threshold", p.threshold);
-    p.localContrastAdaptation = sFloat("localContrastAdaptation", p.localContrastAdaptation);
-    p.maxSearchSteps = sInt("maxSearchSteps", p.maxSearchSteps);
-    p.maxSearchStepsDiag = sInt("maxSearchStepsDiag", p.maxSearchStepsDiag);
+    p.edgeDetectionMode = static_cast<Core::SMAAEdgeDetectionMode>(r.Int("edgeDetectionMode", static_cast<int32_t>(p.edgeDetectionMode)));
+    p.threshold = r.Float("threshold", p.threshold);
+    p.localContrastAdaptation = r.Float("localContrastAdaptation", p.localContrastAdaptation);
+    p.maxSearchSteps = r.Int("maxSearchSteps", p.maxSearchSteps);
+    p.maxSearchStepsDiag = r.Int("maxSearchStepsDiag", p.maxSearchStepsDiag);
 }
 
-nlohmann::json ToJson(const Core::TAAConfiguration& p)
+void Serialize(const Core::TAAConfiguration& p, TextWriter& w)
 {
-    return {
-        {"baseBlendAlpha", p.baseBlendAlpha},
-        {"disocclusionThreshold", p.disocclusionThreshold},
-        {"varianceGammaLuma", p.varianceGammaLuma},
-        {"varianceGammaChroma", p.varianceGammaChroma},
-        {"karisStrength", p.karisStrength},
-        {"invalidHistoryBlend", p.invalidHistoryBlend},
-        {"lumaBoostCap", p.lumaBoostCap},
-        {"grazingTurnoverStrength", p.grazingTurnoverStrength},
-    };
+    w.Key("baseBlendAlpha", p.baseBlendAlpha);
+    w.Key("disocclusionThreshold", p.disocclusionThreshold);
+    w.Key("varianceGammaLuma", p.varianceGammaLuma);
+    w.Key("varianceGammaChroma", p.varianceGammaChroma);
+    w.Key("karisStrength", p.karisStrength);
+    w.Key("invalidHistoryBlend", p.invalidHistoryBlend);
+    w.Key("lumaBoostCap", p.lumaBoostCap);
+    w.Key("grazingTurnoverStrength", p.grazingTurnoverStrength);
 }
 
-void FromJson(const nlohmann::json& t, Core::TAAConfiguration& p)
+void Deserialize(const TextReader& r, Core::TAAConfiguration& p)
 {
-    auto tFloat = [&](const char* k, float def) { return t.contains(k) && t[k].is_number() ? t[k].get<float>() : def; };
-    p.baseBlendAlpha = tFloat("baseBlendAlpha", p.baseBlendAlpha);
-    p.disocclusionThreshold = tFloat("disocclusionThreshold", p.disocclusionThreshold);
-    p.varianceGammaLuma = tFloat("varianceGammaLuma", p.varianceGammaLuma);
-    p.varianceGammaChroma = tFloat("varianceGammaChroma", p.varianceGammaChroma);
-    p.karisStrength = tFloat("karisStrength", p.karisStrength);
-    p.invalidHistoryBlend = tFloat("invalidHistoryBlend", p.invalidHistoryBlend);
-    p.lumaBoostCap = tFloat("lumaBoostCap", p.lumaBoostCap);
-    p.grazingTurnoverStrength = tFloat("grazingTurnoverStrength", p.grazingTurnoverStrength);
+    p.baseBlendAlpha = r.Float("baseBlendAlpha", p.baseBlendAlpha);
+    p.disocclusionThreshold = r.Float("disocclusionThreshold", p.disocclusionThreshold);
+    p.varianceGammaLuma = r.Float("varianceGammaLuma", p.varianceGammaLuma);
+    p.varianceGammaChroma = r.Float("varianceGammaChroma", p.varianceGammaChroma);
+    p.karisStrength = r.Float("karisStrength", p.karisStrength);
+    p.invalidHistoryBlend = r.Float("invalidHistoryBlend", p.invalidHistoryBlend);
+    p.lumaBoostCap = r.Float("lumaBoostCap", p.lumaBoostCap);
+    p.grazingTurnoverStrength = r.Float("grazingTurnoverStrength", p.grazingTurnoverStrength);
 }
 
-nlohmann::json ToJson(const Core::DonutTAAConfiguration& p)
+void Serialize(const Core::DonutTAAConfiguration& p, TextWriter& w)
 {
-    return {
-        {"clampingFactor", p.clampingFactor},
-        {"newFrameWeight", p.newFrameWeight},
-        {"maxRadiance", p.maxRadiance},
-        {"bUseCatmullRom", p.bUseCatmullRom},
-        {"bUseHistoryClampRelax", p.bUseHistoryClampRelax},
-    };
+    w.Key("clampingFactor", p.clampingFactor);
+    w.Key("newFrameWeight", p.newFrameWeight);
+    w.Key("maxRadiance", p.maxRadiance);
+    w.Key("bUseCatmullRom", p.bUseCatmullRom);
+    w.Key("bUseHistoryClampRelax", p.bUseHistoryClampRelax);
 }
 
-void FromJson(const nlohmann::json& t, Core::DonutTAAConfiguration& p)
+void Deserialize(const TextReader& r, Core::DonutTAAConfiguration& p)
 {
-    auto tFloat = [&](const char* k, float def) { return t.contains(k) && t[k].is_number() ? t[k].get<float>() : def; };
-    auto tBool = [&](const char* k, bool def) { return t.contains(k) && t[k].is_boolean() ? t[k].get<bool>() : def; };
-    p.clampingFactor = tFloat("clampingFactor", p.clampingFactor);
-    p.newFrameWeight = tFloat("newFrameWeight", p.newFrameWeight);
-    p.maxRadiance = tFloat("maxRadiance", p.maxRadiance);
-    p.bUseCatmullRom = tBool("bUseCatmullRom", p.bUseCatmullRom);
-    p.bUseHistoryClampRelax = tBool("bUseHistoryClampRelax", p.bUseHistoryClampRelax);
+    p.clampingFactor = r.Float("clampingFactor", p.clampingFactor);
+    p.newFrameWeight = r.Float("newFrameWeight", p.newFrameWeight);
+    p.maxRadiance = r.Float("maxRadiance", p.maxRadiance);
+    p.bUseCatmullRom = r.Bool("bUseCatmullRom", p.bUseCatmullRom);
+    p.bUseHistoryClampRelax = r.Bool("bUseHistoryClampRelax", p.bUseHistoryClampRelax);
 }
 
-nlohmann::json ToJson(const Core::AntiAliasingConfiguration& p)
+void Serialize(const Core::AntiAliasingConfiguration& p, TextWriter& w)
 {
-    return {
-        {"mode", static_cast<int32_t>(p.mode)},
-        {"smaa", ToJson(p.smaa)},
-        {"taa", ToJson(p.taa)},
-        {"donutTaa", ToJson(p.donutTaa)},
-    };
+    w.Key("mode", static_cast<int32_t>(p.mode));
+    w.BeginBlock("smaa");
+    Serialize(p.smaa, w);
+    w.EndBlock();
+    w.BeginBlock("taa");
+    Serialize(p.taa, w);
+    w.EndBlock();
+    w.BeginBlock("donutTaa");
+    Serialize(p.donutTaa, w);
+    w.EndBlock();
 }
 
-void FromJson(const nlohmann::json& j, Core::AntiAliasingConfiguration& p)
+void Deserialize(const TextReader& r, Core::AntiAliasingConfiguration& p)
 {
-    if (j.contains("mode") && j["mode"].is_number()) {
-        p.mode = static_cast<Core::AntiAliasingMode>(j["mode"].get<int32_t>());
-    }
-    if (j.contains("smaa") && j["smaa"].is_object()) {
-        FromJson(j["smaa"], p.smaa);
-    }
-    if (j.contains("taa") && j["taa"].is_object()) {
-        FromJson(j["taa"], p.taa);
-    }
-    if (j.contains("donutTaa") && j["donutTaa"].is_object()) {
-        FromJson(j["donutTaa"], p.donutTaa);
-    }
+    p.mode = static_cast<Core::AntiAliasingMode>(r.Int("mode", static_cast<int32_t>(p.mode)));
+    Deserialize(r.Block("smaa"), p.smaa);
+    Deserialize(r.Block("taa"), p.taa);
+    Deserialize(r.Block("donutTaa"), p.donutTaa);
 }
 
-nlohmann::json ToJson(const Core::PostProcessConfiguration& p)
+void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w)
 {
-    return {
-        {"bExposureEnabled", p.bExposureEnabled},
-        {"exposureTargetLuminance", p.exposureTargetLuminance},
-        {"exposureSpeedBrighten", p.exposureSpeedBrighten},
-        {"exposureSpeedDarken", p.exposureSpeedDarken},
-        {"exposureMinGainEV", p.exposureMinGainEV},
-        {"exposureMaxGainEV", p.exposureMaxGainEV},
-        {"exposureLowPercentile", p.exposureLowPercentile},
-        {"exposureHighPercentile", p.exposureHighPercentile},
-        {"bBloomEnabled", p.bBloomEnabled},
-        {"bloomThreshold", p.bloomThreshold},
-        {"bloomSoftThreshold", p.bloomSoftThreshold},
-        {"bloomRadius", p.bloomRadius},
-        {"bloomIntensity", p.bloomIntensity},
-        {"bloomClamp", p.bloomClamp},
-        {"tonemapOperator", p.tonemapOperator},
-        {"uchimuraP", p.uchimuraParams.P},
-        {"uchimuraA", p.uchimuraParams.a},
-        {"uchimuraM", p.uchimuraParams.m},
-        {"uchimuraL", p.uchimuraParams.l},
-        {"uchimuraC", p.uchimuraParams.c},
-        {"uchimuraB", p.uchimuraParams.b},
-        {"hableWhitePoint", p.hableParams.whitePoint},
-        {"reinhardWhitePoint", p.reinhardParams.whitePoint},
-        {"agxMinEV", p.agxParams.minEV},
-        {"agxMaxEV", p.agxParams.maxEV},
-        {"khronosStartCompression", p.khronosParams.startCompression},
-        {"khronosDesaturation", p.khronosParams.desaturation},
-        {"bMotionBlurEnabled", p.bMotionBlurEnabled},
-        {"bMotionBlurObjectOnly", p.bMotionBlurObjectOnly},
-        {"motionBlurVelocityScale", p.motionBlurVelocityScale},
-        {"motionBlurTargetFps", p.motionBlurTargetFps},
-        {"motionBlurDepthScale", p.motionBlurDepthScale},
-        {"bColorGradingEnabled", p.bColorGradingEnabled},
-        {"colorGradingExposure", p.colorGradingExposure},
-        {"colorGradingContrast", p.colorGradingContrast},
-        {"colorGradingSaturation", p.colorGradingSaturation},
-        {"colorGradingTemperature", p.colorGradingTemperature},
-        {"colorGradingTint", p.colorGradingTint},
-        {"bVignetteEnabled", p.bVignetteEnabled},
-        {"vignetteStrength", p.vignetteStrength},
-        {"vignetteRadius", p.vignetteRadius},
-        {"vignetteSmoothness", p.vignetteSmoothness},
-        {"vignetteRoundness", p.vignetteRoundness},
-        {"bChromaticAberrationEnabled", p.bChromaticAberrationEnabled},
-        {"chromaticAberrationStrength", p.chromaticAberrationStrength},
-        {"bSharpeningEnabled", p.bSharpeningEnabled},
-        {"sharpeningStrength", p.sharpeningStrength},
-        {"bPaniniEnabled", p.bPaniniEnabled},
-        {"paniniStrength", p.paniniStrength},
-        {"bFilmGrainEnabled", p.bFilmGrainEnabled},
-        {"grainStrength", p.grainStrength},
-        {"grainSize", p.grainSize},
-        {"grainResponse", p.grainResponse},
-        {"bDitherEnabled", p.bDitherEnabled},
-        {"ditherStrength", p.ditherStrength},
-    };
+    w.Key("bExposureEnabled", p.bExposureEnabled);
+    w.Key("exposureTargetLuminance", p.exposureTargetLuminance);
+    w.Key("exposureSpeedBrighten", p.exposureSpeedBrighten);
+    w.Key("exposureSpeedDarken", p.exposureSpeedDarken);
+    w.Key("exposureMinGainEV", p.exposureMinGainEV);
+    w.Key("exposureMaxGainEV", p.exposureMaxGainEV);
+    w.Key("exposureLowPercentile", p.exposureLowPercentile);
+    w.Key("exposureHighPercentile", p.exposureHighPercentile);
+    w.Key("bBloomEnabled", p.bBloomEnabled);
+    w.Key("bloomThreshold", p.bloomThreshold);
+    w.Key("bloomSoftThreshold", p.bloomSoftThreshold);
+    w.Key("bloomRadius", p.bloomRadius);
+    w.Key("bloomIntensity", p.bloomIntensity);
+    w.Key("bloomClamp", p.bloomClamp);
+    w.Key("tonemapOperator", p.tonemapOperator);
+    w.Key("uchimuraP", p.uchimuraParams.P);
+    w.Key("uchimuraA", p.uchimuraParams.a);
+    w.Key("uchimuraM", p.uchimuraParams.m);
+    w.Key("uchimuraL", p.uchimuraParams.l);
+    w.Key("uchimuraC", p.uchimuraParams.c);
+    w.Key("uchimuraB", p.uchimuraParams.b);
+    w.Key("hableWhitePoint", p.hableParams.whitePoint);
+    w.Key("reinhardWhitePoint", p.reinhardParams.whitePoint);
+    w.Key("agxMinEV", p.agxParams.minEV);
+    w.Key("agxMaxEV", p.agxParams.maxEV);
+    w.Key("khronosStartCompression", p.khronosParams.startCompression);
+    w.Key("khronosDesaturation", p.khronosParams.desaturation);
+    w.Key("bMotionBlurEnabled", p.bMotionBlurEnabled);
+    w.Key("bMotionBlurObjectOnly", p.bMotionBlurObjectOnly);
+    w.Key("motionBlurVelocityScale", p.motionBlurVelocityScale);
+    w.Key("motionBlurTargetFps", p.motionBlurTargetFps);
+    w.Key("motionBlurDepthScale", p.motionBlurDepthScale);
+    w.Key("bColorGradingEnabled", p.bColorGradingEnabled);
+    w.Key("colorGradingExposure", p.colorGradingExposure);
+    w.Key("colorGradingContrast", p.colorGradingContrast);
+    w.Key("colorGradingSaturation", p.colorGradingSaturation);
+    w.Key("colorGradingTemperature", p.colorGradingTemperature);
+    w.Key("colorGradingTint", p.colorGradingTint);
+    w.Key("bVignetteEnabled", p.bVignetteEnabled);
+    w.Key("vignetteStrength", p.vignetteStrength);
+    w.Key("vignetteRadius", p.vignetteRadius);
+    w.Key("vignetteSmoothness", p.vignetteSmoothness);
+    w.Key("vignetteRoundness", p.vignetteRoundness);
+    w.Key("bChromaticAberrationEnabled", p.bChromaticAberrationEnabled);
+    w.Key("chromaticAberrationStrength", p.chromaticAberrationStrength);
+    w.Key("bSharpeningEnabled", p.bSharpeningEnabled);
+    w.Key("sharpeningStrength", p.sharpeningStrength);
+    w.Key("bPaniniEnabled", p.bPaniniEnabled);
+    w.Key("paniniStrength", p.paniniStrength);
+    w.Key("bFilmGrainEnabled", p.bFilmGrainEnabled);
+    w.Key("grainStrength", p.grainStrength);
+    w.Key("grainSize", p.grainSize);
+    w.Key("grainResponse", p.grainResponse);
+    w.Key("bDitherEnabled", p.bDitherEnabled);
+    w.Key("ditherStrength", p.ditherStrength);
 }
 
-void FromJson(const nlohmann::json& r, Core::PostProcessConfiguration& p)
+void Deserialize(const TextReader& r, Core::PostProcessConfiguration& p)
 {
-    auto getBool = [&](const char* k, bool def) { return r.contains(k) && r[k].is_boolean() ? r[k].get<bool>() : def; };
-    auto getInt = [&](const char* k, int32_t def) { return r.contains(k) && r[k].is_number() ? r[k].get<int32_t>() : def; };
-    auto getFloat = [&](const char* k, float def) { return r.contains(k) && r[k].is_number() ? r[k].get<float>() : def; };
-
-    p.bExposureEnabled = getBool("bExposureEnabled", p.bExposureEnabled);
-    p.exposureTargetLuminance = getFloat("exposureTargetLuminance", p.exposureTargetLuminance);
-    p.exposureSpeedBrighten = getFloat("exposureSpeedBrighten", p.exposureSpeedBrighten);
-    p.exposureSpeedDarken = getFloat("exposureSpeedDarken", p.exposureSpeedDarken);
-    p.exposureMinGainEV = getFloat("exposureMinGainEV", p.exposureMinGainEV);
-    p.exposureMaxGainEV = getFloat("exposureMaxGainEV", p.exposureMaxGainEV);
-    p.exposureLowPercentile = getFloat("exposureLowPercentile", p.exposureLowPercentile);
-    p.exposureHighPercentile = getFloat("exposureHighPercentile", p.exposureHighPercentile);
-    p.bBloomEnabled = getBool("bBloomEnabled", p.bBloomEnabled);
-    p.bloomThreshold = getFloat("bloomThreshold", p.bloomThreshold);
-    p.bloomSoftThreshold = getFloat("bloomSoftThreshold", p.bloomSoftThreshold);
-    p.bloomRadius = getFloat("bloomRadius", p.bloomRadius);
-    p.bloomIntensity = getFloat("bloomIntensity", p.bloomIntensity);
-    p.bloomClamp = getFloat("bloomClamp", p.bloomClamp);
-    p.tonemapOperator = getInt("tonemapOperator", p.tonemapOperator);
-    p.uchimuraParams.P = getFloat("uchimuraP", p.uchimuraParams.P);
-    p.uchimuraParams.a = getFloat("uchimuraA", p.uchimuraParams.a);
-    p.uchimuraParams.m = getFloat("uchimuraM", p.uchimuraParams.m);
-    p.uchimuraParams.l = getFloat("uchimuraL", p.uchimuraParams.l);
-    p.uchimuraParams.c = getFloat("uchimuraC", p.uchimuraParams.c);
-    p.uchimuraParams.b = getFloat("uchimuraB", p.uchimuraParams.b);
-    p.hableParams.whitePoint = getFloat("hableWhitePoint", p.hableParams.whitePoint);
-    p.reinhardParams.whitePoint = getFloat("reinhardWhitePoint", p.reinhardParams.whitePoint);
-    p.agxParams.minEV = getFloat("agxMinEV", p.agxParams.minEV);
-    p.agxParams.maxEV = getFloat("agxMaxEV", p.agxParams.maxEV);
-    p.khronosParams.startCompression = getFloat("khronosStartCompression", p.khronosParams.startCompression);
-    p.khronosParams.desaturation = getFloat("khronosDesaturation", p.khronosParams.desaturation);
-    p.bMotionBlurEnabled = getBool("bMotionBlurEnabled", p.bMotionBlurEnabled);
-    p.bMotionBlurObjectOnly = getBool("bMotionBlurObjectOnly", p.bMotionBlurObjectOnly);
-    p.motionBlurVelocityScale = getFloat("motionBlurVelocityScale", p.motionBlurVelocityScale);
-    p.motionBlurTargetFps = getFloat("motionBlurTargetFps", p.motionBlurTargetFps);
-    p.motionBlurDepthScale = getFloat("motionBlurDepthScale", p.motionBlurDepthScale);
-    p.bColorGradingEnabled = getBool("bColorGradingEnabled", p.bColorGradingEnabled);
-    p.colorGradingExposure = getFloat("colorGradingExposure", p.colorGradingExposure);
-    p.colorGradingContrast = getFloat("colorGradingContrast", p.colorGradingContrast);
-    p.colorGradingSaturation = getFloat("colorGradingSaturation", p.colorGradingSaturation);
-    p.colorGradingTemperature = getFloat("colorGradingTemperature", p.colorGradingTemperature);
-    p.colorGradingTint = getFloat("colorGradingTint", p.colorGradingTint);
-    p.bVignetteEnabled = getBool("bVignetteEnabled", p.bVignetteEnabled);
-    p.vignetteStrength = getFloat("vignetteStrength", p.vignetteStrength);
-    p.vignetteRadius = getFloat("vignetteRadius", p.vignetteRadius);
-    p.vignetteSmoothness = getFloat("vignetteSmoothness", p.vignetteSmoothness);
-    p.vignetteRoundness = getFloat("vignetteRoundness", p.vignetteRoundness);
-    p.bChromaticAberrationEnabled = getBool("bChromaticAberrationEnabled", p.bChromaticAberrationEnabled);
-    p.chromaticAberrationStrength = getFloat("chromaticAberrationStrength", p.chromaticAberrationStrength);
-    p.bSharpeningEnabled = getBool("bSharpeningEnabled", p.bSharpeningEnabled);
-    p.sharpeningStrength = getFloat("sharpeningStrength", p.sharpeningStrength);
-    p.bPaniniEnabled = getBool("bPaniniEnabled", p.bPaniniEnabled);
-    p.paniniStrength = getFloat("paniniStrength", p.paniniStrength);
-    p.bFilmGrainEnabled = getBool("bFilmGrainEnabled", p.bFilmGrainEnabled);
-    p.grainStrength = getFloat("grainStrength", p.grainStrength);
-    p.grainSize = getFloat("grainSize", p.grainSize);
-    p.grainResponse = getFloat("grainResponse", p.grainResponse);
-    p.bDitherEnabled = getBool("bDitherEnabled", p.bDitherEnabled);
-    p.ditherStrength = getFloat("ditherStrength", p.ditherStrength);
+    p.bExposureEnabled = r.Bool("bExposureEnabled", p.bExposureEnabled);
+    p.exposureTargetLuminance = r.Float("exposureTargetLuminance", p.exposureTargetLuminance);
+    p.exposureSpeedBrighten = r.Float("exposureSpeedBrighten", p.exposureSpeedBrighten);
+    p.exposureSpeedDarken = r.Float("exposureSpeedDarken", p.exposureSpeedDarken);
+    p.exposureMinGainEV = r.Float("exposureMinGainEV", p.exposureMinGainEV);
+    p.exposureMaxGainEV = r.Float("exposureMaxGainEV", p.exposureMaxGainEV);
+    p.exposureLowPercentile = r.Float("exposureLowPercentile", p.exposureLowPercentile);
+    p.exposureHighPercentile = r.Float("exposureHighPercentile", p.exposureHighPercentile);
+    p.bBloomEnabled = r.Bool("bBloomEnabled", p.bBloomEnabled);
+    p.bloomThreshold = r.Float("bloomThreshold", p.bloomThreshold);
+    p.bloomSoftThreshold = r.Float("bloomSoftThreshold", p.bloomSoftThreshold);
+    p.bloomRadius = r.Float("bloomRadius", p.bloomRadius);
+    p.bloomIntensity = r.Float("bloomIntensity", p.bloomIntensity);
+    p.bloomClamp = r.Float("bloomClamp", p.bloomClamp);
+    p.tonemapOperator = r.Int("tonemapOperator", p.tonemapOperator);
+    p.uchimuraParams.P = r.Float("uchimuraP", p.uchimuraParams.P);
+    p.uchimuraParams.a = r.Float("uchimuraA", p.uchimuraParams.a);
+    p.uchimuraParams.m = r.Float("uchimuraM", p.uchimuraParams.m);
+    p.uchimuraParams.l = r.Float("uchimuraL", p.uchimuraParams.l);
+    p.uchimuraParams.c = r.Float("uchimuraC", p.uchimuraParams.c);
+    p.uchimuraParams.b = r.Float("uchimuraB", p.uchimuraParams.b);
+    p.hableParams.whitePoint = r.Float("hableWhitePoint", p.hableParams.whitePoint);
+    p.reinhardParams.whitePoint = r.Float("reinhardWhitePoint", p.reinhardParams.whitePoint);
+    p.agxParams.minEV = r.Float("agxMinEV", p.agxParams.minEV);
+    p.agxParams.maxEV = r.Float("agxMaxEV", p.agxParams.maxEV);
+    p.khronosParams.startCompression = r.Float("khronosStartCompression", p.khronosParams.startCompression);
+    p.khronosParams.desaturation = r.Float("khronosDesaturation", p.khronosParams.desaturation);
+    p.bMotionBlurEnabled = r.Bool("bMotionBlurEnabled", p.bMotionBlurEnabled);
+    p.bMotionBlurObjectOnly = r.Bool("bMotionBlurObjectOnly", p.bMotionBlurObjectOnly);
+    p.motionBlurVelocityScale = r.Float("motionBlurVelocityScale", p.motionBlurVelocityScale);
+    p.motionBlurTargetFps = r.Float("motionBlurTargetFps", p.motionBlurTargetFps);
+    p.motionBlurDepthScale = r.Float("motionBlurDepthScale", p.motionBlurDepthScale);
+    p.bColorGradingEnabled = r.Bool("bColorGradingEnabled", p.bColorGradingEnabled);
+    p.colorGradingExposure = r.Float("colorGradingExposure", p.colorGradingExposure);
+    p.colorGradingContrast = r.Float("colorGradingContrast", p.colorGradingContrast);
+    p.colorGradingSaturation = r.Float("colorGradingSaturation", p.colorGradingSaturation);
+    p.colorGradingTemperature = r.Float("colorGradingTemperature", p.colorGradingTemperature);
+    p.colorGradingTint = r.Float("colorGradingTint", p.colorGradingTint);
+    p.bVignetteEnabled = r.Bool("bVignetteEnabled", p.bVignetteEnabled);
+    p.vignetteStrength = r.Float("vignetteStrength", p.vignetteStrength);
+    p.vignetteRadius = r.Float("vignetteRadius", p.vignetteRadius);
+    p.vignetteSmoothness = r.Float("vignetteSmoothness", p.vignetteSmoothness);
+    p.vignetteRoundness = r.Float("vignetteRoundness", p.vignetteRoundness);
+    p.bChromaticAberrationEnabled = r.Bool("bChromaticAberrationEnabled", p.bChromaticAberrationEnabled);
+    p.chromaticAberrationStrength = r.Float("chromaticAberrationStrength", p.chromaticAberrationStrength);
+    p.bSharpeningEnabled = r.Bool("bSharpeningEnabled", p.bSharpeningEnabled);
+    p.sharpeningStrength = r.Float("sharpeningStrength", p.sharpeningStrength);
+    p.bPaniniEnabled = r.Bool("bPaniniEnabled", p.bPaniniEnabled);
+    p.paniniStrength = r.Float("paniniStrength", p.paniniStrength);
+    p.bFilmGrainEnabled = r.Bool("bFilmGrainEnabled", p.bFilmGrainEnabled);
+    p.grainStrength = r.Float("grainStrength", p.grainStrength);
+    p.grainSize = r.Float("grainSize", p.grainSize);
+    p.grainResponse = r.Float("grainResponse", p.grainResponse);
+    p.bDitherEnabled = r.Bool("bDitherEnabled", p.bDitherEnabled);
+    p.ditherStrength = r.Float("ditherStrength", p.ditherStrength);
 }
 }

@@ -5,8 +5,6 @@
 #ifndef WILL_ENGINE_CONFIG_SERIALIZATION_H
 #define WILL_ENGINE_CONFIG_SERIALIZATION_H
 
-#include <json/nlohmann/json.hpp>
-
 namespace Core
 {
 struct ReSTIRParams;
@@ -21,40 +19,46 @@ struct AntiAliasingConfiguration;
 struct PostProcessConfiguration;
 }
 
+namespace Engine
+{
+class TextWriter;
+class TextReader;
+}
+
 namespace Engine::ConfigSerialization
 {
 /**
- * Per-config JSON (de)serialization shared by the project config and profile files. FromJson reads field-by-field with the passed-in struct supplying defaults, so missing keys keep their current value; ToJson(ReSTIRParams) nests its relax/atrous/svgf objects.
+ * Per-config text (de)serialization shared by the project config and profile files. Deserialize reads field-by-field with the passed-in struct supplying defaults, so missing keys keep their current value; ReSTIRParams nests its atrous/svgf/relax/reblur blocks.
  */
-nlohmann::json ToJson(const Core::ReSTIRParams& p);
-void FromJson(const nlohmann::json& j, Core::ReSTIRParams& p);
+void Serialize(const Core::ReSTIRParams& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::ReSTIRParams& p);
 
-nlohmann::json ToJson(const Core::DDGIParams& p);
-void FromJson(const nlohmann::json& j, Core::DDGIParams& p);
+void Serialize(const Core::DDGIParams& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::DDGIParams& p);
 
-nlohmann::json ToJson(const Core::ReflectionConfiguration& p);
-void FromJson(const nlohmann::json& j, Core::ReflectionConfiguration& p);
+void Serialize(const Core::ReflectionConfiguration& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::ReflectionConfiguration& p);
 
-nlohmann::json ToJson(const Core::ReflectionProbeConfiguration& p);
-void FromJson(const nlohmann::json& j, Core::ReflectionProbeConfiguration& p);
+void Serialize(const Core::ReflectionProbeConfiguration& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::ReflectionProbeConfiguration& p);
 
-nlohmann::json ToJson(const Core::GTAOConfiguration& p);
-void FromJson(const nlohmann::json& j, Core::GTAOConfiguration& p);
+void Serialize(const Core::GTAOConfiguration& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::GTAOConfiguration& p);
 
-nlohmann::json ToJson(const Core::SMAAConfiguration& p);
-void FromJson(const nlohmann::json& j, Core::SMAAConfiguration& p);
+void Serialize(const Core::SMAAConfiguration& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::SMAAConfiguration& p);
 
-nlohmann::json ToJson(const Core::TAAConfiguration& p);
-void FromJson(const nlohmann::json& j, Core::TAAConfiguration& p);
+void Serialize(const Core::TAAConfiguration& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::TAAConfiguration& p);
 
-nlohmann::json ToJson(const Core::DonutTAAConfiguration& p);
-void FromJson(const nlohmann::json& j, Core::DonutTAAConfiguration& p);
+void Serialize(const Core::DonutTAAConfiguration& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::DonutTAAConfiguration& p);
 
-nlohmann::json ToJson(const Core::AntiAliasingConfiguration& p);
-void FromJson(const nlohmann::json& j, Core::AntiAliasingConfiguration& p);
+void Serialize(const Core::AntiAliasingConfiguration& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::AntiAliasingConfiguration& p);
 
-nlohmann::json ToJson(const Core::PostProcessConfiguration& p);
-void FromJson(const nlohmann::json& j, Core::PostProcessConfiguration& p);
+void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::PostProcessConfiguration& p);
 }
 
 #endif //WILL_ENGINE_CONFIG_SERIALIZATION_H

@@ -1,59 +1,57 @@
-{
-  "postProcess": {
-    "agxMaxEV": 4.026069164276123,
-    "agxMinEV": -12.473930358886719,
-    "bBloomEnabled": true,
-    "bChromaticAberrationEnabled": false,
-    "bColorGradingEnabled": false,
-    "bDitherEnabled": true,
-    "bExposureEnabled": false,
-    "bFilmGrainEnabled": true,
-    "bMotionBlurEnabled": false,
-    "bMotionBlurObjectOnly": true,
-    "bPaniniEnabled": false,
-    "bSharpeningEnabled": true,
-    "bVignetteEnabled": false,
-    "bloomClamp": 10.0,
-    "bloomIntensity": 0.25,
-    "bloomRadius": 1.0,
-    "bloomSoftThreshold": 0.5,
-    "bloomThreshold": 1.0,
-    "chromaticAberrationStrength": 1.5,
-    "colorGradingContrast": 1.100000023841858,
-    "colorGradingExposure": 0.4000000059604645,
-    "colorGradingSaturation": 1.100000023841858,
-    "colorGradingTemperature": 0.0,
-    "colorGradingTint": 0.0,
-    "ditherStrength": 1.0,
-    "exposureHighPercentile": 0.8999999761581421,
-    "exposureLowPercentile": 0.5,
-    "exposureMaxGainEV": 1.0,
-    "exposureMinGainEV": -6.0,
-    "exposureSpeedBrighten": 2.0,
-    "exposureSpeedDarken": 6.0,
-    "exposureTargetLuminance": 0.18000000715255737,
-    "grainResponse": 1.0,
-    "grainSize": 1.5,
-    "grainStrength": 0.009999999776482582,
-    "hableWhitePoint": 11.199999809265137,
-    "khronosDesaturation": 0.15000000596046448,
-    "khronosStartCompression": 0.7599999904632568,
-    "motionBlurDepthScale": 1.0,
-    "motionBlurTargetFps": 60.0,
-    "motionBlurVelocityScale": 0.800000011920929,
-    "paniniStrength": 0.0,
-    "reinhardWhitePoint": 4.0,
-    "sharpeningStrength": 0.4000000059604645,
-    "tonemapOperator": 9,
-    "uchimuraA": 1.0,
-    "uchimuraB": 0.0,
-    "uchimuraC": 1.3300000429153442,
-    "uchimuraL": 0.4000000059604645,
-    "uchimuraM": 0.2199999988079071,
-    "uchimuraP": 1.0,
-    "vignetteRadius": 0.800000011920929,
-    "vignetteRoundness": 0.0,
-    "vignetteSmoothness": 0.5,
-    "vignetteStrength": 0.20000000298023224
-  }
-}
+postProcess
+agxMaxEV|0x4080d58f
+agxMinEV|0xc1479538
+bBloomEnabled|1
+bChromaticAberrationEnabled|0
+bColorGradingEnabled|0
+bDitherEnabled|1
+bExposureEnabled|0
+bFilmGrainEnabled|1
+bMotionBlurEnabled|0
+bMotionBlurObjectOnly|1
+bPaniniEnabled|0
+bSharpeningEnabled|1
+bVignetteEnabled|0
+bloomClamp|0x41200000
+bloomIntensity|0x3e800000
+bloomRadius|0x3f800000
+bloomSoftThreshold|0x3f000000
+bloomThreshold|0x3f800000
+chromaticAberrationStrength|0x3fc00000
+colorGradingContrast|0x3f8ccccd
+colorGradingExposure|0x3ecccccd
+colorGradingSaturation|0x3f8ccccd
+colorGradingTemperature|0x00000000
+colorGradingTint|0x00000000
+ditherStrength|0x3f800000
+exposureHighPercentile|0x3f666666
+exposureLowPercentile|0x3f000000
+exposureMaxGainEV|0x3f800000
+exposureMinGainEV|0xc0c00000
+exposureSpeedBrighten|0x40000000
+exposureSpeedDarken|0x40c00000
+exposureTargetLuminance|0x3e3851ec
+grainResponse|0x3f800000
+grainSize|0x3fc00000
+grainStrength|0x3c23d70a
+hableWhitePoint|0x41333333
+khronosDesaturation|0x3e19999a
+khronosStartCompression|0x3f428f5c
+motionBlurDepthScale|0x3f800000
+motionBlurTargetFps|0x42700000
+motionBlurVelocityScale|0x3f4ccccd
+paniniStrength|0x00000000
+reinhardWhitePoint|0x40800000
+sharpeningStrength|0x3ecccccd
+tonemapOperator|9
+uchimuraA|0x3f800000
+uchimuraB|0x00000000
+uchimuraC|0x3faa3d71
+uchimuraL|0x3ecccccd
+uchimuraM|0x3e6147ae
+uchimuraP|0x3f800000
+vignetteRadius|0x3f4ccccd
+vignetteRoundness|0x00000000
+vignetteSmoothness|0x3f000000
+vignetteStrength|0x3e4ccccd
+;

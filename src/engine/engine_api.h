@@ -168,6 +168,9 @@ struct EngineState
 
     const Core::TimeFrame* timeFrame{nullptr};
 
+    /** The allocator this state was constructed with */
+    Core::TlsfAllocator* allocator{nullptr};
+
     /**
      * Accumulated across game ticks since the last render-prepare; drained and reset each render frame.
      * Note: Do not use directly, timeFrame will be replaced with this in the render frame function.

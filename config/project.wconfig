@@ -1,171 +1,93 @@
-{
-  "aa": {
-    "donutTaa": {
-      "bUseCatmullRom": true,
-      "bUseHistoryClampRelax": false,
-      "clampingFactor": 1.0,
-      "maxRadiance": 1000.0,
-      "newFrameWeight": 0.10000000149011612
-    },
-    "mode": 5,
-    "smaa": {
-      "edgeDetectionMode": 1,
-      "localContrastAdaptation": 2.0,
-      "maxSearchSteps": 32,
-      "maxSearchStepsDiag": 8,
-      "threshold": 0.05000000074505806
-    },
-    "taa": {
-      "baseBlendAlpha": 0.009999999776482582,
-      "disocclusionThreshold": 0.10000000149011612,
-      "grazingTurnoverStrength": 30.0,
-      "invalidHistoryBlend": 0.5,
-      "karisStrength": 1.0,
-      "lumaBoostCap": 0.5,
-      "varianceGammaChroma": 2.5,
-      "varianceGammaLuma": 1.0
-    }
-  },
-  "activeInputProfile": "",
-  "activeLightingProfile": "ReSTIR",
-  "activePostProcessProfile": "main_post_process",
-  "bAutoSaveLighting": false,
-  "bAutoSavePostProcess": true,
-  "bAutoSaveProjectConfig": false,
-  "bLimitFps": false,
-  "cameraPresets": [
-    {
-      "r": [
-        -0.00545102683827281,
-        0.9617809653282166,
-        0.01930011808872223,
-        0.2730848789215088
-      ],
-      "set": true,
-      "t": [
-        -17.39868927001953,
-        -3.6741974353790283,
-        -54.03533935546875
-      ]
-    },
-    {
-      "r": [
-        -0.0028216997161507607,
-        -0.9945855140686035,
-        -0.10010068118572235,
-        0.02777676284313202
-      ],
-      "set": true,
-      "t": [
-        -31.84471321105957,
-        -3.0920989513397217,
-        -50.61861038208008
-      ]
-    },
-    {
-      "r": [
-        -0.0002814134059008211,
-        -0.9993292689323425,
-        -0.03576864302158356,
-        0.007847622036933899
-      ],
-      "set": true,
-      "t": [
-        -13.945211410522461,
-        3.96000075340271,
-        21.30006980895996
-      ]
-    },
-    {
-      "r": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ],
-      "set": false,
-      "t": [
-        0.0,
-        0.0,
-        0.0
-      ]
-    },
-    {
-      "r": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ],
-      "set": false,
-      "t": [
-        0.0,
-        0.0,
-        0.0
-      ]
-    },
-    {
-      "r": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ],
-      "set": false,
-      "t": [
-        0.0,
-        0.0,
-        0.0
-      ]
-    },
-    {
-      "r": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ],
-      "set": false,
-      "t": [
-        0.0,
-        0.0,
-        0.0
-      ]
-    },
-    {
-      "r": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ],
-      "set": false,
-      "t": [
-        0.0,
-        0.0,
-        0.0
-      ]
-    }
-  ],
-  "defaultScene": "military_sandbox",
-  "editorCameraFovDegrees": 70.0,
-  "editorCameraNearPlane": 0.10000000149011612,
-  "frameLimitTarget": 60,
-  "gameCameraAspect": [
-    16.0,
-    9.0
-  ],
-  "gameCameraFovDegrees": 70.0,
-  "gameCameraLockAspect": false,
-  "gameCameraNearPlane": 0.10000000149011612,
-  "probeBake": {
-    "bAutoConverge": true,
-    "bAutoFreeze": true,
-    "bGroundTruth": true,
-    "captureSize": 1024,
-    "groundTruthSpp": 8,
-    "settleFrames": 240
-  },
-  "reflectionProbeLineWidth": 0.019999999552965164,
-  "resolutionScale": 0.75
-}
+aa
+donutTaa
+bUseCatmullRom|1
+bUseHistoryClampRelax|0
+clampingFactor|0x3f800000
+maxRadiance|0x447a0000
+newFrameWeight|0x3dcccccd
+;
+mode|5
+smaa
+edgeDetectionMode|1
+localContrastAdaptation|0x40000000
+maxSearchSteps|32
+maxSearchStepsDiag|8
+threshold|0x3d4ccccd
+;
+taa
+baseBlendAlpha|0x3c23d70a
+disocclusionThreshold|0x3dcccccd
+grazingTurnoverStrength|0x41f00000
+invalidHistoryBlend|0x3f000000
+karisStrength|0x3f800000
+lumaBoostCap|0x3f000000
+varianceGammaChroma|0x40200000
+varianceGammaLuma|0x3f800000
+;
+;
+activeInputProfile|
+activeLightingProfile|ReSTIR
+activePostProcessProfile|main_post_process
+bAutoSaveLighting|0
+bAutoSavePostProcess|1
+bAutoSaveProjectConfig|0
+bLimitFps|0
+cameraPresets|8
+p
+set|1
+t|0xc18b3084|0xc06b260d|0xc2582430
+r|0x3e8bd1c8|0xbbb29e87|0x3f763747|0x3c9e1b48
+;
+p
+set|1
+t|0xc1fec1f9|0xc045e4f3|0xc24a7975
+r|0x3ce38c18|0xbb38ec44|0xbf7e9d28|0xbdcd0196
+;
+p
+set|1
+t|0xc15f1f96|0x407d70a7|0x41aa668b
+r|0x3c009350|0xb9938aab|0xbf7fd40b|0xbd128224
+;
+p
+set|0
+t|0x00000000|0x00000000|0x00000000
+r|0x3f800000|0x00000000|0x00000000|0x00000000
+;
+p
+set|0
+t|0x00000000|0x00000000|0x00000000
+r|0x3f800000|0x00000000|0x00000000|0x00000000
+;
+p
+set|0
+t|0x00000000|0x00000000|0x00000000
+r|0x3f800000|0x00000000|0x00000000|0x00000000
+;
+p
+set|0
+t|0x00000000|0x00000000|0x00000000
+r|0x3f800000|0x00000000|0x00000000|0x00000000
+;
+p
+set|0
+t|0x00000000|0x00000000|0x00000000
+r|0x3f800000|0x00000000|0x00000000|0x00000000
+;
+defaultScene|military_sandbox
+editorCameraFovDegrees|0x428c0000
+editorCameraNearPlane|0x3dcccccd
+frameLimitTarget|60
+gameCameraAspect|0x41800000|0x41100000
+gameCameraFovDegrees|0x428c0000
+gameCameraLockAspect|0
+gameCameraNearPlane|0x3dcccccd
+probeBake
+bAutoConverge|1
+bAutoFreeze|1
+bGroundTruth|1
+captureSize|1024
+groundTruthSpp|8
+settleFrames|240
+;
+reflectionProbeLineWidth|0x3ca3d70a
+resolutionScale|0x3f400000

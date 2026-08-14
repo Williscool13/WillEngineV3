@@ -38,25 +38,25 @@ static void SaveProjectConfigTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     cfg.aaConfig = state->lighting.aaConfig;
-    Engine::WriteProjectConfig(cfg);
+    Engine::WriteProjectConfig(cfg, state->allocator);
 }
 
 static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), Engine::Profiles::CaptureLightingProfile(*state));
+        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), Engine::Profiles::CaptureLightingProfile(*state), state->allocator);
     }
-    Engine::WriteProjectConfig(cfg);
+    Engine::WriteProjectConfig(cfg, state->allocator);
 }
 
 static void SavePostProcessTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activePostProcessProfile.IsEmpty()) {
-        Engine::Profiles::SavePostProcessProfile(cfg.activePostProcessProfile.c_str(), state->lighting.postProcess);
+        Engine::Profiles::SavePostProcessProfile(cfg.activePostProcessProfile.c_str(), state->lighting.postProcess, state->allocator);
     }
-    Engine::WriteProjectConfig(cfg);
+    Engine::WriteProjectConfig(cfg, state->allocator);
 }
 
 static void DrawLightingProfiles(Engine::EngineState* state)
@@ -73,7 +73,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
                 if (Engine::Profiles::LoadLightingProfile(names[i].c_str(), bundle)) {
                     Engine::Profiles::ApplyLightingProfile(*state, bundle);
                 }
-                Engine::WriteProjectConfig(cfg);
+                Engine::WriteProjectConfig(cfg, state->allocator);
             }
         }
         ImGui::EndCombo();
@@ -83,7 +83,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     if (ImGui::Button("Delete##lightingprofile")) {
         Engine::Profiles::DeleteLightingProfile(cfg.activeLightingProfile.c_str());
         cfg.activeLightingProfile = Core::InlineString<64>();
-        Engine::WriteProjectConfig(cfg);
+        Engine::WriteProjectConfig(cfg, state->allocator);
     }
     ImGui::EndDisabled();
 
@@ -92,9 +92,9 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     ImGui::InputText("##lightingnewname", lightingNewName, sizeof(lightingNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
-        Engine::Profiles::SaveLightingProfile(lightingNewName, Engine::Profiles::CaptureLightingProfile(*state));
+        Engine::Profiles::SaveLightingProfile(lightingNewName, Engine::Profiles::CaptureLightingProfile(*state), state->allocator);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
-        Engine::WriteProjectConfig(cfg);
+        Engine::WriteProjectConfig(cfg, state->allocator);
         lightingNewName[0] = '\0';
     }
 }
@@ -110,7 +110,7 @@ static void DrawPostProcessProfiles(Engine::EngineState* state)
             if (ImGui::Selectable(names[i].c_str(), cfg.activePostProcessProfile == names[i])) {
                 cfg.activePostProcessProfile = names[i];
                 Engine::Profiles::LoadPostProcessProfile(names[i].c_str(), state->lighting.postProcess);
-                Engine::WriteProjectConfig(cfg);
+                Engine::WriteProjectConfig(cfg, state->allocator);
             }
         }
         ImGui::EndCombo();
@@ -120,7 +120,7 @@ static void DrawPostProcessProfiles(Engine::EngineState* state)
     if (ImGui::Button("Delete##ppprofile")) {
         Engine::Profiles::DeletePostProcessProfile(cfg.activePostProcessProfile.c_str());
         cfg.activePostProcessProfile = Core::InlineString<64>();
-        Engine::WriteProjectConfig(cfg);
+        Engine::WriteProjectConfig(cfg, state->allocator);
     }
     ImGui::EndDisabled();
 
@@ -129,9 +129,9 @@ static void DrawPostProcessProfiles(Engine::EngineState* state)
     ImGui::InputText("##ppnewname", ppNewName, sizeof(ppNewName));
     ImGui::SameLine();
     if (ImGui::Button("Save As##ppprofile") && ppNewName[0] != '\0') {
-        Engine::Profiles::SavePostProcessProfile(ppNewName, state->lighting.postProcess);
+        Engine::Profiles::SavePostProcessProfile(ppNewName, state->lighting.postProcess, state->allocator);
         cfg.activePostProcessProfile = Core::InlineString<64>(ppNewName);
-        Engine::WriteProjectConfig(cfg);
+        Engine::WriteProjectConfig(cfg, state->allocator);
         ppNewName[0] = '\0';
     }
 }
@@ -884,7 +884,7 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
     }
     if (Widgets::SliderInt("GT Samples/Frame##bake", &probeBake.groundTruthSpp, 1, 32, {.tooltip = "Path-traced samples per pixel per frame during a Ground Truth bake. Higher converges each face in fewer frames at the same total cost; too high risks GPU timeout at large capture sizes. Default 8.", .reset = true, .resetTo = 8.0})) { bakeChanged = true; }
     if (bakeChanged) {
-        Engine::WriteProjectConfig(state->projectConfig);
+        Engine::WriteProjectConfig(state->projectConfig, state->allocator);
     }
 
     ImGui::Checkbox("Freeze##bake", &state->debug.bGIFreeze);
