@@ -16,8 +16,11 @@ static const char* ParseFloats(const char* s, const char* end, float* out, int32
 {
     for (int32_t i = 0; i < count; ++i) {
         while (s < end && (*s == ' ' || *s == '\t')) { ++s; }
-        auto result = std::from_chars(s, end, out[i]);
+        if (end - s > 1 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { s += 2; }
+        uint32_t bits = 0;
+        auto result = std::from_chars(s, end, bits, 16);
         if (result.ec != std::errc{}) { return nullptr; }
+        out[i] = std::bit_cast<float>(bits);
         s = result.ptr;
     }
     return s;
@@ -38,10 +41,10 @@ bool WriteWProbeHeader(Core::Vector<std::byte>& out, const WProbeHeader& header)
     AppendTextF(out, "uncompressed_size %llu\n", header.uncompressedSize);
     AppendTextF(out, "compression %u\n", static_cast<uint32_t>(header.compressionType));
     AppendTextF(out, "resolution %u\n", header.resolution);
-    AppendTextF(out, "translation %.9g %.9g %.9g\n", header.snapshot.translation[0], header.snapshot.translation[1], header.snapshot.translation[2]);
-    AppendTextF(out, "rotation %.9g %.9g %.9g %.9g\n", header.snapshot.rotation[0], header.snapshot.rotation[1], header.snapshot.rotation[2], header.snapshot.rotation[3]);
-    AppendTextF(out, "scale %.9g %.9g %.9g\n", header.snapshot.scale[0], header.snapshot.scale[1], header.snapshot.scale[2]);
-    AppendTextF(out, "capture_offset %.9g %.9g %.9g\n", header.snapshot.captureOffset[0], header.snapshot.captureOffset[1], header.snapshot.captureOffset[2]);
+    AppendTextF(out, "translation 0x%08x 0x%08x 0x%08x\n", FloatBits(header.snapshot.translation[0]), FloatBits(header.snapshot.translation[1]), FloatBits(header.snapshot.translation[2]));
+    AppendTextF(out, "rotation 0x%08x 0x%08x 0x%08x 0x%08x\n", FloatBits(header.snapshot.rotation[0]), FloatBits(header.snapshot.rotation[1]), FloatBits(header.snapshot.rotation[2]), FloatBits(header.snapshot.rotation[3]));
+    AppendTextF(out, "scale 0x%08x 0x%08x 0x%08x\n", FloatBits(header.snapshot.scale[0]), FloatBits(header.snapshot.scale[1]), FloatBits(header.snapshot.scale[2]));
+    AppendTextF(out, "capture_offset 0x%08x 0x%08x 0x%08x\n", FloatBits(header.snapshot.captureOffset[0]), FloatBits(header.snapshot.captureOffset[1]), FloatBits(header.snapshot.captureOffset[2]));
     AppendText(out, "end_header\n");
     return true;
 }

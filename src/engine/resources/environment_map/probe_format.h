@@ -14,7 +14,7 @@
 
 namespace Engine
 {
-constexpr uint32_t PROBE_MAJOR_VERSION = 1;
+constexpr uint32_t PROBE_MAJOR_VERSION = 2;
 constexpr uint32_t PROBE_MINOR_VERSION = 0;
 
 /** Baked-state snapshot captured at bake time, used to detect a stale bake against the live component. Rotation is stored w,x,y,z. */

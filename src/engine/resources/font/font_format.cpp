@@ -21,10 +21,10 @@ bool WriteWFontHeader(Core::Vector<std::byte>& out, const WFontHeader& header)
     AppendTextF(out, "name %s\n", header.name);
     AppendTextF(out, "source_size_px %u\n", header.sourceSizePx);
     AppendTextF(out, "sdf_spread %u\n", header.sdfSpread);
-    AppendTextF(out, "em_size %.9g\n", header.emSize);
-    AppendTextF(out, "ascender %.9g\n", header.ascender);
-    AppendTextF(out, "descender %.9g\n", header.descender);
-    AppendTextF(out, "line_height %.9g\n", header.lineHeight);
+    AppendTextF(out, "em_size 0x%08x\n", FloatBits(header.emSize));
+    AppendTextF(out, "ascender 0x%08x\n", FloatBits(header.ascender));
+    AppendTextF(out, "descender 0x%08x\n", FloatBits(header.descender));
+    AppendTextF(out, "line_height 0x%08x\n", FloatBits(header.lineHeight));
     AppendTextF(out, "atlas_width %u\n", header.atlasWidth);
     AppendTextF(out, "atlas_height %u\n", header.atlasHeight);
     AppendTextF(out, "glyph_count %u\n", header.glyphCount);
@@ -59,10 +59,10 @@ static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& h
     }
     else if (strncmp(line, "source_size_px ", 15) == 0) { std::from_chars(line + 15, line + lineBufSize, header.sourceSizePx); }
     else if (strncmp(line, "sdf_spread ", 11) == 0) { std::from_chars(line + 11, line + lineBufSize, header.sdfSpread); }
-    else if (strncmp(line, "em_size ", 8) == 0) { std::from_chars(line + 8, line + lineBufSize, header.emSize); }
-    else if (strncmp(line, "ascender ", 9) == 0) { std::from_chars(line + 9, line + lineBufSize, header.ascender); }
-    else if (strncmp(line, "descender ", 10) == 0) { std::from_chars(line + 10, line + lineBufSize, header.descender); }
-    else if (strncmp(line, "line_height ", 12) == 0) { std::from_chars(line + 12, line + lineBufSize, header.lineHeight); }
+    else if (strncmp(line, "em_size ", 8) == 0) { header.emSize = ParseHexFloat(line + 8, line + lineBufSize); }
+    else if (strncmp(line, "ascender ", 9) == 0) { header.ascender = ParseHexFloat(line + 9, line + lineBufSize); }
+    else if (strncmp(line, "descender ", 10) == 0) { header.descender = ParseHexFloat(line + 10, line + lineBufSize); }
+    else if (strncmp(line, "line_height ", 12) == 0) { header.lineHeight = ParseHexFloat(line + 12, line + lineBufSize); }
     else if (strncmp(line, "atlas_width ", 12) == 0) { std::from_chars(line + 12, line + lineBufSize, header.atlasWidth); }
     else if (strncmp(line, "atlas_height ", 13) == 0) { std::from_chars(line + 13, line + lineBufSize, header.atlasHeight); }
     else if (strncmp(line, "glyph_count ", 12) == 0) { std::from_chars(line + 12, line + lineBufSize, header.glyphCount); }

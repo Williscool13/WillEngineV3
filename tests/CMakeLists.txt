@@ -5,6 +5,7 @@ add_executable(engine-tests
         core/string_id_tests.cpp
         core/math_tests.cpp
         engine/wimage_tests.cpp
+        engine/text_format_tests.cpp
 )
 
 target_link_libraries(engine-tests PRIVATE

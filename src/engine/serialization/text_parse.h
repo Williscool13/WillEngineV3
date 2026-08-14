@@ -5,6 +5,8 @@
 #ifndef WILL_ENGINE_TEXT_PARSE_H
 #define WILL_ENGINE_TEXT_PARSE_H
 
+#include <bit>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -14,6 +16,18 @@
 
 namespace Engine
 {
+/** IEEE-754 bits of v, for hex-float text fields ("0x%08x"). */
+inline uint32_t FloatBits(float v) { return std::bit_cast<uint32_t>(v); }
+
+/** Parses a float stored as hex bits ("0x3f800000"; bare hex digits accepted). Stops at the first non-hex character. */
+inline float ParseHexFloat(const char* s, const char* end)
+{
+    if (end - s > 1 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { s += 2; }
+    uint32_t bits = 0;
+    std::from_chars(s, end, bits, 16);
+    return std::bit_cast<float>(bits);
+}
+
 /**
  * Line reader over an in-memory buffer, mirroring istream::getline semantics: consumes up to and including '\n', strips a trailing '\r', null-terminates into buf.
  * Returns false at end of data or when a line exceeds bufSize - 1. offset after a GetLine that hit end_header is the byte offset of the following data.

@@ -1,0 +1,16 @@
+# .wsfont Format Changelist
+#
+# Magic: "wsfont". Header: WFontHeader in font_format.h
+# Loader rejects major != FONT_MAJOR_VERSION or minor > FONT_MINOR_VERSION.
+# Stale major -> Outdated -> regenerated at startup.
+
+================================================================================
+VERSION 2.0  (current)
+================================================================================
+- Header floats (em_size, ascender, descender, line_height) now hex bits ("0x%08x").
+- 3.0 reserved for Slug re-bake.
+
+================================================================================
+VERSION 1.0
+================================================================================
+- Pre-changelist. See git history.

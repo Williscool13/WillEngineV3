@@ -1,0 +1,19 @@
+# .wenvmap / .wprobe Format Changelist
+#
+# Magic: "wenvmap" (WEnvMapHeader) / "wprobe" (WProbeHeader)
+# Loaders reject major != *_MAJOR_VERSION. Stale .wprobe requires re-bake.
+
+================================================================================
+.wprobe VERSION 2.0  (current)
+================================================================================
+- Header snapshot floats now hex bits ("0x%08x").
+
+================================================================================
+.wprobe VERSION 1.0
+================================================================================
+- Pre-changelist. See git history.
+
+================================================================================
+.wenvmap VERSION 1.0  (current)
+================================================================================
+- Pre-changelist. Integer-only header. See git history.
