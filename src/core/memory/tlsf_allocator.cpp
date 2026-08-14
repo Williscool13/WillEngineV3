@@ -38,8 +38,10 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::EngineLogger: return "EngineLogger";
         case AllocTag::EngineContext: return "EngineContext";
         case AllocTag::EngineState: return "EngineState";
+        case AllocTag::GameState: return "GameState";
         case AllocTag::InputManager: return "InputManager";
         case AllocTag::TimeManager: return "TimeManager";
+        case AllocTag::FrameSync: return "FrameSync";
         case AllocTag::FrameSync0: return "FrameSync0";
         case AllocTag::FrameSync1: return "FrameSync1";
         case AllocTag::FrameSync2: return "FrameSync2";
@@ -54,6 +56,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::Vulkan: return "Vulkan";
         case AllocTag::ParShapes: return "ParShapes";
         case AllocTag::Earcut: return "Earcut";
+        case AllocTag::Queue: return "Queue";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";

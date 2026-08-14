@@ -20,7 +20,7 @@ namespace Core
  * typed regions. All engine systems suballocate from this manager — no additional new/delete.
  *
  * Layout (contiguous):
- *   [persistentPool | generalPool | assetsPool | physicsPool | renderPool | arenaPool]
+ *   [persistentPool | physicsPool | arenaPool]  (general/assets/assetsScratch/render/vulkan are growable, own their chunks)
  *
  * Regions:
  *   - Persistent TLSF: individual allocs that live for the entire process lifetime.
@@ -40,16 +40,20 @@ public:
     struct Layout
     {
         size_t persistentSize;
-        size_t assetsPoolSize;
         size_t physicsPoolSize;
-        size_t renderPoolSize;
         size_t arenaPoolSize;
 
         // Growables (heap allocated)
         size_t generalPoolSize;
         size_t generalPoolBudget;
+        size_t assetsPoolSize;
+        size_t assetsPoolBudget;
         size_t assetsScratchPoolSize;
         size_t assetsScratchBudget;
+        size_t renderPoolSize;
+        size_t renderPoolBudget;
+        size_t vulkanPoolSize;
+        size_t vulkanPoolBudget;
     };
 
     struct Stats
@@ -61,6 +65,7 @@ public:
         TlsfAllocator::Stats assets;
         TlsfAllocator::Stats physics;
         TlsfAllocator::Stats render;
+        TlsfAllocator::Stats vulkan;
 
         struct
         {
@@ -109,6 +114,7 @@ public:
     TlsfAllocator& Assets() { return tlsfAssets; }
     TlsfAllocator& Physics() { return tlsfPhysics; }
     TlsfAllocator& Render() { return tlsfRender; }
+    TlsfAllocator& Vulkan() { return tlsfVulkan; }
     /**
      * General per-frame arena. Cleared at the end of each game frame.
      * Access from game thread only.
@@ -133,6 +139,7 @@ private:
     TlsfAllocator tlsfAssets;
     TlsfAllocator tlsfPhysics;
     TlsfAllocator tlsfRender;
+    TlsfAllocator tlsfVulkan;
     ArenaSuballocator arenaPool;
 
     std::atomic<uint32_t> deviceAllocCount{0};

@@ -156,7 +156,7 @@ private:
     char buf_[N]{};
     size_t len_{};
 };
-using Path = InlinePath<1024>;
+using Path = InlinePath<256>;
 } // namespace Core
 
 #endif // WILL_ENGINE_INLINE_PATH_H

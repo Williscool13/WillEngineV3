@@ -48,6 +48,7 @@
 #include "meshoptimizer/src/meshoptimizer.h"
 #include "par/par_shapes_ext.h"
 #include "asset-load/asset-load-jobs/text3d_geometry.h"
+#include "core/memory/concurrent_queue_traits.h"
 #include "core/memory/memory_manager.h"
 
 static Core::MemoryManager* gDllMemory = nullptr;
@@ -79,6 +80,7 @@ static void RegisterDllEngineHooks(Engine::EngineContext* ctx)
     meshopt_setAllocator(DllMeshoptAlloc, DllMeshoptFree);
     par_shapes_set_allocator(&ctx->memoryManager->AssetsScratch());
     AssetLoad::SetEarcutAllocator(&ctx->memoryManager->AssetsScratch());
+    Core::SetConcurrentQueueAllocator(&ctx->memoryManager->General());
 }
 #endif
 

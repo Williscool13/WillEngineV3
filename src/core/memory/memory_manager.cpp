@@ -23,9 +23,10 @@ void MemoryManager::Init(const Layout& layout)
     const size_t assetsSz = AlignUp(layout.assetsPoolSize, kAlign);
     const size_t physicsSz = AlignUp(layout.physicsPoolSize, kAlign);
     const size_t renderSz = AlignUp(layout.renderPoolSize, kAlign);
+    const size_t vulkanSz = AlignUp(layout.vulkanPoolSize, kAlign);
     const size_t arenaPoolSz = AlignUp(layout.arenaPoolSize, kAlign);
 
-    totalSize = persistentSz + assetsSz + physicsSz + renderSz + arenaPoolSz;
+    totalSize = persistentSz + physicsSz + arenaPoolSz;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
@@ -35,20 +36,22 @@ void MemoryManager::Init(const Layout& layout)
     tlsfPersistent.Init(cursor, persistentSz, true, "Persistent");
     cursor += persistentSz;
     tlsfGeneral.InitGrowable(generalSz, layout.generalPoolBudget, true, "General", generalSz);
-    tlsfAssets.Init(cursor, assetsSz, true, "Assets");
-    cursor += assetsSz;
+    tlsfAssets.InitGrowable(assetsSz, layout.assetsPoolBudget, true, "Assets", assetsSz);
     tlsfAssetsScratch.InitGrowable(assetsScratchSz, layout.assetsScratchBudget, true, "AssetsScratch");
     tlsfPhysics.Init(cursor, physicsSz, true, "Physics");
     cursor += physicsSz;
-    tlsfRender.Init(cursor, renderSz, false, "Render");
-    cursor += renderSz;
+    tlsfRender.InitGrowable(renderSz, layout.renderPoolBudget, false, "Render", renderSz);
+    tlsfVulkan.InitGrowable(vulkanSz, layout.vulkanPoolBudget, true, "Vulkan", vulkanSz);
     arenaPool.Init(cursor, arenaPoolSz, "ArenaPool");
 }
 
 MemoryManager::~MemoryManager()
 {
     tlsfAssetsScratch.Shutdown();
+    tlsfAssets.Shutdown();
     tlsfGeneral.Shutdown();
+    tlsfRender.Shutdown();
+    tlsfVulkan.Shutdown();
     free(megaBuffer);
     megaBuffer = nullptr;
 }
@@ -139,6 +142,7 @@ MemoryManager::Stats MemoryManager::GetStats()
         tlsfAssets.GetStats(),
         tlsfPhysics.GetStats(),
         tlsfRender.GetStats(),
+        tlsfVulkan.GetStats(),
     };
 #ifdef WDEBUG
     s.deviceMemory.allocationCount = deviceAllocCount.load(std::memory_order_relaxed);

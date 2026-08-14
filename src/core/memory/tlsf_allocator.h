@@ -57,6 +57,7 @@ enum class AllocTag : uint32_t
     Vulkan,
     ParShapes,
     Earcut,
+    Queue,
 
     Count
 };

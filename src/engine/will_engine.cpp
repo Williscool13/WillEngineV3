@@ -28,6 +28,7 @@
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
+#include "core/memory/concurrent_queue_traits.h"
 #include "logging/engine_assert.h"
 #include "logging/engine_logger.h"
 #include "physics/physics_system.h"
@@ -169,6 +170,49 @@ static void ImGuiFree(void* ptr, void* userData)
     static_cast<Core::MemoryManager*>(userData)->GeneralFree(ptr);
 }
 
+static void DumpMemoryBreakdown(Core::MemoryManager& memoryManager)
+{
+    struct PoolRef
+    {
+        const char* name;
+        Core::TlsfAllocator& alloc;
+    };
+    const PoolRef pools[] = {
+        {"Persistent", memoryManager.Persistent()},
+        {"General", memoryManager.General()},
+        {"AssetsScratch", memoryManager.AssetsScratch()},
+        {"Assets", memoryManager.Assets()},
+        {"Physics", memoryManager.Physics()},
+        {"Render", memoryManager.Render()},
+        {"Vulkan", memoryManager.Vulkan()},
+    };
+    constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
+    constexpr auto tagCount = static_cast<size_t>(Core::AllocTag::Count);
+    Core::Array<Core::TlsfAllocator::TagStats, tagCount> tags{};
+
+    LOG_INFO(Engine, "[MemDump] ================ Memory Breakdown ================");
+    for (const PoolRef& pool : pools) {
+        const Core::TlsfAllocator::Stats s = pool.alloc.GetStats();
+        LOG_INFO(Engine, "[MemDump] {}: used {:.2f} / {:.2f} MB, highwater {:.2f} MB, allocs {}", pool.name, s.usedBytes * kToMB, s.totalBytes * kToMB, s.highWaterBytes * kToMB, s.allocCount);
+        pool.alloc.GetTagStats(tags.Data());
+        for (size_t i = 0; i < tagCount; ++i) {
+            if (tags[i].count == 0) { continue; }
+            LOG_INFO(Engine, "[MemDump]     {}: {} allocs, {:.1f} KB", Core::AllocTagName(tags[i].tag), tags[i].count, static_cast<float>(tags[i].usedBytes) / 1024.0f);
+        }
+    }
+
+    const Core::ArenaSuballocator::Stats as = memoryManager.ArenaPool().GetStats();
+    LOG_INFO(Engine, "[MemDump] ArenaPool: used {:.2f} / {:.2f} MB, {} live chunks", as.usedBytes * kToMB, as.totalBytes * kToMB, as.activeChunks);
+    memoryManager.ArenaPool().GetTagStats(tags.Data());
+    for (size_t i = 0; i < tagCount; ++i) {
+        if (tags[i].count == 0) { continue; }
+        LOG_INFO(Engine, "[MemDump]     {}: {} allocs, {:.1f} KB", Core::AllocTagName(tags[i].tag), tags[i].count, static_cast<float>(tags[i].usedBytes) / 1024.0f);
+    }
+
+    const Core::MemoryManager::Stats ms = memoryManager.GetStats();
+    LOG_INFO(Engine, "[MemDump] Device: {} allocs, {:.2f} MB", static_cast<size_t>(ms.deviceMemory.allocationCount), static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
+}
+
 WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
     : crashHandler(crashHandler_)
 {}
@@ -179,16 +223,25 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 {
     ZoneScoped;
 
+#if WILL_EDITOR
+    constexpr size_t ASSETS_SCRATCH_BUDGET = 4096ull * 1024 * 1024; // For baking
+#else
+    constexpr size_t ASSETS_SCRATCH_BUDGET = 512ull * 1024 * 1024;
+#endif
     memoryManager.Init({
-        .persistentSize = 48ull * 1024 * 1024, // 64 MB
-        .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
-        .physicsPoolSize = 32ull * 1024 * 1024, // 64 MB
-        .renderPoolSize = 8ull * 1024 * 1024, // 4 MB
-        .arenaPoolSize = 256ull * 1024 * 1024, // 256 MB
-        .generalPoolSize = 64ull * 1024 * 1024,
+        .persistentSize = 16ull * 1024 * 1024,
+        .physicsPoolSize = 32ull * 1024 * 1024,
+        .arenaPoolSize = 256ull * 1024 * 1024,
+        .generalPoolSize = 32ull * 1024 * 1024,
         .generalPoolBudget = 512ull * 1024 * 1024,
+        .assetsPoolSize = 32ull * 1024 * 1024,
+        .assetsPoolBudget = 256ull * 1024 * 1024,
         .assetsScratchPoolSize = 128ull * 1024 * 1024,
-        .assetsScratchBudget = 4096ull * 1024 * 1024,
+        .assetsScratchBudget = ASSETS_SCRATCH_BUDGET,
+        .renderPoolSize = 8ull * 1024 * 1024,
+        .renderPoolBudget = 64ull * 1024 * 1024,
+        .vulkanPoolSize = 48ull * 1024 * 1024,
+        .vulkanPoolBudget = 512ull * 1024 * 1024,
     });
 
 #if LOGGING_ENABLED
@@ -239,6 +292,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         gMemory = &memoryManager;
         SDL_SetMemoryFunctions(SdlMalloc, SdlCalloc, SdlRealloc, SdlFree);
         meshopt_setAllocator(MeshoptAlloc, MeshoptFree);
+        Core::SetConcurrentQueueAllocator(&memoryManager.General());
         bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD);
         if (!sdlInitSuccess) {
             SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());
@@ -737,6 +791,10 @@ void WillEngine::EditorImgui()
                 static float refreshTimer = 1.0f; // triggers immediately on first open
                 static int selectedPool = 0;
 
+                if (ImGui::SmallButton("Dump To Log")) {
+                    DumpMemoryBreakdown(memoryManager);
+                }
+
                 refreshTimer += ImGui::GetIO().DeltaTime;
                 if (refreshTimer >= 1.0f) {
                     memoryManager.Persistent().GetTagStats(cachedPersistentTags.Data());
@@ -745,6 +803,7 @@ void WillEngine::EditorImgui()
                     memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
                     memoryManager.Physics().GetTagStats(cachedPhysicsTags.Data());
                     memoryManager.Render().GetTagStats(cachedRenderTags.Data());
+                    memoryManager.Vulkan().GetTagStats(cachedVulkanTags.Data());
                     memoryManager.ArenaPool().GetTagStats(cachedArenaPoolTags.Data());
                     refreshTimer = 0.0f;
                 }
@@ -777,9 +836,8 @@ void WillEngine::EditorImgui()
                     }
                 };
 
-                // Growable pool bar: fill/gradient against the BUDGET (committed shrinks per frame, so used/committed would jump around); overlay shows used / committed / budget
                 auto drawGrowableBar = [&](const char* label, const Core::TlsfAllocator::Stats& s) {
-                    const float fraction = s.budgetBytes > 0 ? static_cast<float>(s.usedBytes) / static_cast<float>(s.budgetBytes) : 0.0f;
+                    const float fraction = s.totalBytes > 0 ? static_cast<float>(s.usedBytes) / static_cast<float>(s.totalBytes) : 0.0f;
                     const float r = fraction < 0.5f ? fraction * 2.0f : 1.0f;
                     const float g = fraction < 0.5f ? 1.0f : (1.0f - (fraction - 0.5f) * 2.0f);
                     const auto overlay = Core::InlineString<64>::Format("%.2f / %.0f cmt / %.0f MB",
@@ -824,11 +882,11 @@ void WillEngine::EditorImgui()
                 // Grand total across all TLSF pools
                 {
                     const size_t tlsfUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assetsScratch.usedBytes
-                                            + ms.assets.usedBytes + ms.physics.usedBytes + ms.render.usedBytes;
+                                            + ms.assets.usedBytes + ms.physics.usedBytes + ms.render.usedBytes + ms.vulkan.usedBytes;
                     const size_t tlsfTotal = ms.persistent.totalBytes + ms.general.totalBytes + ms.assetsScratch.totalBytes
-                                             + ms.assets.totalBytes + ms.physics.totalBytes + ms.render.totalBytes;
+                                             + ms.assets.totalBytes + ms.physics.totalBytes + ms.render.totalBytes + ms.vulkan.totalBytes;
                     const size_t tlsfAllocs = ms.persistent.allocCount + ms.general.allocCount + ms.assetsScratch.allocCount
-                                              + ms.assets.allocCount + ms.physics.allocCount + ms.render.allocCount;
+                                              + ms.assets.allocCount + ms.physics.allocCount + ms.render.allocCount + ms.vulkan.allocCount;
                     ImGui::SeparatorText("TLSF Total");
                     drawMemBar("All Pools", tlsfUsed, tlsfTotal, tlsfAllocs);
                 }
@@ -836,13 +894,14 @@ void WillEngine::EditorImgui()
                 ImGui::SeparatorText("General");
                 drawMemBar("General", ms.general.usedBytes, ms.general.totalBytes, ms.general.allocCount);
                 drawGrowableBar("Assets Scratch", ms.assetsScratch);
-                drawMemBar("Assets", ms.assets.usedBytes, ms.assets.totalBytes, ms.assets.allocCount);
+                drawGrowableBar("Assets", ms.assets);
 
                 ImGui::SeparatorText("Physics");
                 drawMemBar("Physics", ms.physics.usedBytes, ms.physics.totalBytes, ms.physics.allocCount);
 
                 ImGui::SeparatorText("Render");
-                drawMemBar("Render", ms.render.usedBytes, ms.render.totalBytes, ms.render.allocCount);
+                drawGrowableBar("Render", ms.render);
+                drawGrowableBar("Vulkan", ms.vulkan);
 
                 ImGui::SeparatorText("Engine");
                 drawMemBar("Persistent", ms.persistent.usedBytes, ms.persistent.totalBytes, ms.persistent.allocCount);
@@ -1037,8 +1096,9 @@ void WillEngine::EditorImgui()
                     {"Assets", cachedAssetsTags.Data()},
                     {"Physics", cachedPhysicsTags.Data()},
                     {"Render", cachedRenderTags.Data()},
+                    {"Vulkan", cachedVulkanTags.Data()},
                 };
-                constexpr int kPoolCount = 6;
+                constexpr int kPoolCount = 7;
 
                 for (int i = 0; i < kPoolCount; ++i) {
                     if (i > 0) { ImGui::SameLine(); }
@@ -1503,7 +1563,6 @@ void WillEngine::Run()
         assetManager->KickOffRetires();
         const bool assetsReclaimed = assetManager->ResolveUnloads();
 
-        // Chunks are 256MB mallocs; releasing mid-burst thrashes when a load straddles the baseline, so only release after the loaders have been quiet for a while
         {
             constexpr uint32_t SCRATCH_RELEASE_QUIET_FRAMES = 120;
             const uint32_t activeScratchLoads = asyncAssetLoadManager->GetActiveModelLoadCount() + asyncAssetLoadManager->GetActiveProceduralModelLoadCount()

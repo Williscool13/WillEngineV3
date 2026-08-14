@@ -24,17 +24,17 @@ DeviceInfo VulkanContext::deviceInfo{};
 static void* VKAPI_PTR VkHostAlloc(void* pUserData, size_t size, size_t alignment, VkSystemAllocationScope)
 {
     if (size == 0) { return nullptr; }
-    return static_cast<Core::MemoryManager*>(pUserData)->General().AlignedAlloc(size, alignment, Core::AllocTag::Vulkan);
+    return static_cast<Core::MemoryManager*>(pUserData)->Vulkan().AlignedAlloc(size, alignment, Core::AllocTag::Vulkan);
 }
 
 static void* VKAPI_PTR VkHostRealloc(void* pUserData, void* pOriginal, size_t size, size_t alignment, VkSystemAllocationScope)
 {
-    return static_cast<Core::MemoryManager*>(pUserData)->General().AlignedRealloc(pOriginal, size, alignment, Core::AllocTag::Vulkan);
+    return static_cast<Core::MemoryManager*>(pUserData)->Vulkan().AlignedRealloc(pOriginal, size, alignment, Core::AllocTag::Vulkan);
 }
 
 static void VKAPI_PTR VkHostFree(void* pUserData, void* pMemory)
 {
-    static_cast<Core::MemoryManager*>(pUserData)->General().AlignedFree(pMemory);
+    static_cast<Core::MemoryManager*>(pUserData)->Vulkan().AlignedFree(pMemory);
 }
 
 #ifdef WDEBUG

@@ -7,9 +7,9 @@
 #include <random>
 #include <semaphore>
 #include <thread>
-#include <concurrentqueue/concurrentqueue.h>
 
 #include "core/containers/inline_path.h"
+#include "core/memory/concurrent_queue_traits.h"
 #include "engine/core/environment_map_id.h"
 #include "engine/core/model_id.h"
 #include "engine/core/texture_id.h"
@@ -300,18 +300,18 @@ private:
     Core::Array<FontGenerateSlot, FONT_GENERATION_JOB_COUNT> fontGenerateTasks;
     Core::LockFreeHandleAllocator<FontGenerateSlot, FONT_GENERATION_JOB_COUNT> fontGenerateAllocator;
 
-    moodycamel::ConcurrentQueue<ModelGenerateRequest> modelGenerateRequestQueue;
-    moodycamel::ConcurrentQueue<ModelGenerateComplete> modelGenerateCompleteQueue;
+    Core::ConcurrentQueue<ModelGenerateRequest> modelGenerateRequestQueue;
+    Core::ConcurrentQueue<ModelGenerateComplete> modelGenerateCompleteQueue;
 
-    moodycamel::ConcurrentQueue<TextureGenerateRequest> textureGenerateRequestQueue;
-    moodycamel::ConcurrentQueue<TextureGenerateComplete> textureGenerateCompleteQueue;
+    Core::ConcurrentQueue<TextureGenerateRequest> textureGenerateRequestQueue;
+    Core::ConcurrentQueue<TextureGenerateComplete> textureGenerateCompleteQueue;
 
-    moodycamel::ConcurrentQueue<EnvironmentMapGenerateRequest> environmentMapGenerateRequestQueue;
-    moodycamel::ConcurrentQueue<EnvironmentMapGenerateComplete> environmentMapGenerateCompleteQueue;
-    moodycamel::ConcurrentQueue<ProbeAssembleRequest> probeAssembleRequestQueue;
+    Core::ConcurrentQueue<EnvironmentMapGenerateRequest> environmentMapGenerateRequestQueue;
+    Core::ConcurrentQueue<EnvironmentMapGenerateComplete> environmentMapGenerateCompleteQueue;
+    Core::ConcurrentQueue<ProbeAssembleRequest> probeAssembleRequestQueue;
 
-    moodycamel::ConcurrentQueue<FontGenerateRequest> fontGenerateRequestQueue;
-    moodycamel::ConcurrentQueue<FontGenerateComplete> fontGenerateCompleteQueue;
+    Core::ConcurrentQueue<FontGenerateRequest> fontGenerateRequestQueue;
+    Core::ConcurrentQueue<FontGenerateComplete> fontGenerateCompleteQueue;
 
     std::atomic<bool> bFastMode{true};
     std::atomic<bool> bShouldExit{false};

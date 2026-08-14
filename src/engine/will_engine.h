@@ -172,6 +172,7 @@ private: // Debugging
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedAssetsTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedPhysicsTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedRenderTags{};
+    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedVulkanTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedArenaPoolTags{};
     Core::Array<Core::ArenaSuballocator::LiveArenaStats, Core::ArenaSuballocator::kMaxTracked> cachedLiveArenaStats{};
     size_t cachedLiveArenaCount{0};

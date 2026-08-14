@@ -12,9 +12,9 @@
 #include <thread>
 
 #include <volk.h>
-#include <concurrentqueue/concurrentqueue.h>
 
 #include "core/containers/inline_vector.h"
+#include "core/memory/concurrent_queue_traits.h"
 
 namespace enki
 {
@@ -82,7 +82,7 @@ private:
 
     struct WorkerChannel
     {
-        moodycamel::ConcurrentQueue<GPUDispatchRequest> requests;
+        Core::ConcurrentQueue<GPUDispatchRequest> requests;
         std::jthread thread;
         std::atomic<uint32_t> workCounter{0};
         std::mutex wakeMutex;
@@ -101,7 +101,7 @@ private:
     WorkerChannel transferWorker;
     WorkerChannel computeWorker;
 
-    moodycamel::ConcurrentQueue<GPUDispatchRequest> graphicsRequests;
+    Core::ConcurrentQueue<GPUDispatchRequest> graphicsRequests;
 
     // Render Thread only
     Core::InlineVector<PendingGraphicsDispatch, 32> pendingGraphics;

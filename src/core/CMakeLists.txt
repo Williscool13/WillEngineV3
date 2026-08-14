@@ -39,6 +39,8 @@ add_library(core STATIC
         memory/tlsf_allocator.h
         memory/range_allocator.cpp
         memory/range_allocator.h
+        memory/concurrent_queue_traits.cpp
+        memory/concurrent_queue_traits.h
 
         types/math.h
         types/transform.h

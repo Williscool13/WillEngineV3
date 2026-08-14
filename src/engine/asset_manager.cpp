@@ -24,20 +24,20 @@ namespace Engine
 {
 AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
     : memoryManager(&memoryManager), ctx(ctx), assetLoadManager(assetLoadManager), resourceManager(resourceManager),
-      modelNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
-      modelCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
-      textureNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
-      textureRegistry(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
-      staticProceduralRegistry(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_STATIC_PROCEDURAL_TEXTURES),
-      cubemapNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
-      cubemapCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
-      probeRegistry(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_PROBES),
-      sceneCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
-      prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS),
-      fontNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
-      fontCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
-      deferredTextureBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXTURES),
-      deferredCubemapBindingReleases(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_CUBEMAPS)
+      modelNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
+      modelCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
+      textureNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
+      textureRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
+      staticProceduralRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_STATIC_PROCEDURAL_TEXTURES),
+      cubemapNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
+      cubemapCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
+      probeRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PROBES),
+      sceneCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
+      prefabCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS),
+      fontNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
+      fontCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
+      deferredTextureBindingReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_TEXTURES),
+      deferredCubemapBindingReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_CUBEMAPS)
 {
     for (uint32_t i = MAX_LOADED_MODULE_MODELS; i > 0; i--) {
         moduleParamsFreeList.PushBack(i - 1);
