@@ -47,79 +47,81 @@
 #endif
 
 #if PROFILER_ENABLED
+static constexpr int TRACY_ALLOC_CALLSTACK_DEPTH = 12;
+
 void* operator new(std::size_t count)
 {
     auto ptr = malloc(count);
-    TracyAlloc(ptr, count);
+    TracyAllocS(ptr, count, TRACY_ALLOC_CALLSTACK_DEPTH);
     return ptr;
 }
 
 void* operator new[](std::size_t count)
 {
     auto ptr = malloc(count);
-    TracyAlloc(ptr, count);
+    TracyAllocS(ptr, count, TRACY_ALLOC_CALLSTACK_DEPTH);
     return ptr;
 }
 
 void* operator new(std::size_t count, std::align_val_t align)
 {
     auto ptr = _aligned_malloc(count, static_cast<std::size_t>(align));
-    TracyAlloc(ptr, count);
+    TracyAllocS(ptr, count, TRACY_ALLOC_CALLSTACK_DEPTH);
     return ptr;
 }
 
 void* operator new[](std::size_t count, std::align_val_t align)
 {
     auto ptr = _aligned_malloc(count, static_cast<std::size_t>(align));
-    TracyAlloc(ptr, count);
+    TracyAllocS(ptr, count, TRACY_ALLOC_CALLSTACK_DEPTH);
     return ptr;
 }
 
 void operator delete(void* ptr) noexcept
 {
-    TracyFree(ptr);
+    TracyFreeS(ptr, TRACY_ALLOC_CALLSTACK_DEPTH);
     free(ptr);
 }
 
 void operator delete(void* ptr, std::size_t) noexcept
 {
-    TracyFree(ptr);
+    TracyFreeS(ptr, TRACY_ALLOC_CALLSTACK_DEPTH);
     free(ptr);
 }
 
 void operator delete[](void* ptr) noexcept
 {
-    TracyFree(ptr);
+    TracyFreeS(ptr, TRACY_ALLOC_CALLSTACK_DEPTH);
     free(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t) noexcept
 {
-    TracyFree(ptr);
+    TracyFreeS(ptr, TRACY_ALLOC_CALLSTACK_DEPTH);
     free(ptr);
 }
 
 void operator delete(void* ptr, std::align_val_t) noexcept
 {
-    TracyFree(ptr);
+    TracyFreeS(ptr, TRACY_ALLOC_CALLSTACK_DEPTH);
     _aligned_free(ptr);
 }
 
 void operator delete(void* ptr, std::size_t, std::align_val_t) noexcept
 {
-    TracyFree(ptr);
+    TracyFreeS(ptr, TRACY_ALLOC_CALLSTACK_DEPTH);
     _aligned_free(ptr);
 }
 
 void operator delete[](void* ptr, std::align_val_t) noexcept
 {
-    TracyFree(ptr);
+    TracyFreeS(ptr, TRACY_ALLOC_CALLSTACK_DEPTH);
     _aligned_free(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t, std::align_val_t) noexcept
 {
-    TracyFree(ptr);
+    TracyFreeS(ptr, TRACY_ALLOC_CALLSTACK_DEPTH);
     _aligned_free(ptr);
 }
 
@@ -228,6 +230,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 #else
     constexpr size_t ASSETS_SCRATCH_BUDGET = 512ull * 1024 * 1024;
 #endif
+    // The only things that alloc now are SDL startup, EnTT, Tracy, and nlohmann::json.
     memoryManager.Init({
         .persistentSize = 16ull * 1024 * 1024,
         .physicsPoolSize = 32ull * 1024 * 1024,

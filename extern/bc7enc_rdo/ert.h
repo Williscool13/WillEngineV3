@@ -9,6 +9,7 @@
 #include <time.h>
 #include <vector>
 #include <string>
+#include "bc_allocator.h"
 
 namespace ert
 {
@@ -76,6 +77,6 @@ namespace ert
 		uint32_t total_block_stride_in_bytes, uint32_t block_size_to_optimize_in_bytes, uint32_t block_width, uint32_t block_height, uint32_t num_comps,
 		const color_rgba* pBlock_pixels, const reduce_entropy_params& params, uint32_t& total_modified,
 		pUnpack_block_func pUnpack_block_func, void* pUnpack_block_func_user_data,
-		std::vector<float>* pBlock_mse_scales = nullptr);
+		bc_alloc::vector<float>* pBlock_mse_scales = nullptr);
 
 } // namespace ert

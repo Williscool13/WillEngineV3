@@ -18,6 +18,7 @@
 #include <utility>
 #include <limits.h>
 #include "dds_defs.h"
+#include "bc_allocator.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -1399,13 +1400,13 @@ typedef vec<4, double> vec4D;
 typedef vec<1, float> vec1F;
 
 typedef vec<2, float> vec2F;
-typedef std::vector<vec2F> vec2F_array;
+typedef bc_alloc::vector<vec2F> vec2F_array;
 
 typedef vec<3, float> vec3F;
-typedef std::vector<vec3F> vec3F_array;
+typedef bc_alloc::vector<vec3F> vec3F_array;
 
 typedef vec<4, float> vec4F;
-typedef std::vector<vec4F> vec4F_array;
+typedef bc_alloc::vector<vec4F> vec4F_array;
 
 typedef vec<2, uint32_t> vec2U;
 typedef vec<3, uint32_t> vec3U;
@@ -1744,7 +1745,7 @@ struct color_quad_u8
 		return (r == rhs.r) && (g == rhs.g) && (b == rhs.b);
 	}
 };
-typedef std::vector<color_quad_u8> color_quad_u8_vec;
+typedef bc_alloc::vector<color_quad_u8> color_quad_u8_vec;
 
 inline uint32_t color_distance(bool perceptual, const color_quad_u8& e1, const color_quad_u8& e2, bool alpha)
 {
@@ -1991,7 +1992,7 @@ public:
 		pixel_coord(uint32_t x, uint32_t y) : m_x((uint16_t)x), m_y((uint16_t)y) { }
 	};
 		
-	uint32_t flood_fill(int x, int y, const color_quad_u8& c, const color_quad_u8& b, std::vector<pixel_coord>* pSet_pixels = nullptr);
+	uint32_t flood_fill(int x, int y, const color_quad_u8& c, const color_quad_u8& b, bc_alloc::vector<pixel_coord>* pSet_pixels = nullptr);
 
 	void draw_line(int xs, int ys, int xe, int ye, const color_quad_u8& color);
 		
@@ -2364,14 +2365,14 @@ struct block8
 	uint64_t m_vals[1];
 };
 
-typedef std::vector<block8> block8_vec;
+typedef bc_alloc::vector<block8> block8_vec;
 
 struct block16
 {
 	uint64_t m_vals[2];
 };
 
-typedef std::vector<block16> block16_vec;
+typedef bc_alloc::vector<block16> block16_vec;
 
 bool save_dds(const char* pFilename, uint32_t width, uint32_t height, const void* pBlocks, uint32_t pixel_format_bpp, DXGI_FORMAT dxgi_format, bool srgb, bool force_dx10_header);
 
@@ -2590,7 +2591,7 @@ public:
 		if (!m_num)
 			return 0.0f;
 
-		std::vector<double> sorted_vals(m_vals);
+		bc_alloc::vector<double> sorted_vals(m_vals);
 		std::sort(sorted_vals.begin(), sorted_vals.end());
 		
 		return sorted_vals[sorted_vals.size() / 2];
@@ -2605,7 +2606,7 @@ private:
 	double m_min;
 	double m_max;
 
-	mutable std::vector<double> m_vals;
+	mutable bc_alloc::vector<double> m_vals;
 };
 
 uint32_t get_deflate_size(const void* pData, size_t data_size);

@@ -3,20 +3,32 @@
 #include "lodepng.h"
 #include "miniz.h"
 
-namespace utils 
+namespace bc_alloc
+{
+alloc_fn g_alloc = nullptr;
+free_fn g_free = nullptr;
+
+void bc7enc_set_allocator(alloc_fn a, free_fn f)
+{
+	g_alloc = a;
+	g_free = f;
+}
+}
+
+namespace utils
 {
 		
 #define FLOOD_PUSH(y, xl, xr, dy) if (((y + (dy)) >= 0) && ((y + (dy)) < (int)m_height)) { stack.push_back(fill_segment(y, xl, xr, dy)); }
 
 // See http://www.realtimerendering.com/resources/GraphicsGems/gems/SeedFill.c
-uint32_t image_u8::flood_fill(int x, int y, const color_quad_u8& c, const color_quad_u8& b, std::vector<pixel_coord>* pSet_pixels)
+uint32_t image_u8::flood_fill(int x, int y, const color_quad_u8& c, const color_quad_u8& b, bc_alloc::vector<pixel_coord>* pSet_pixels)
 {
 	uint32_t total_set = 0;
 
 	if (!flood_fill_is_inside(x, y, b))
 		return 0;
 
-	std::vector<fill_segment> stack;
+	bc_alloc::vector<fill_segment> stack;
 	stack.reserve(64);
 
 	FLOOD_PUSH(y, x, x, 1);
@@ -280,7 +292,7 @@ void gaussian_filter(imagef& dst, const imagef& orig_img, uint32_t odd_filter_wi
 	assert(odd_filter_width && (odd_filter_width & 1));
 	odd_filter_width |= 1;
 
-	std::vector<float> kernel(odd_filter_width * odd_filter_width);
+	bc_alloc::vector<float> kernel(odd_filter_width * odd_filter_width);
 	compute_gaussian_kernel(&kernel[0], odd_filter_width, odd_filter_width, sigma_sqr, cComputeGaussianFlagNormalize);
 
 	const int dst_width = orig_img.get_width() / width_divisor;

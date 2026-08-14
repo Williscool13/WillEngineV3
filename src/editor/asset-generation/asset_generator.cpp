@@ -9,6 +9,7 @@
 
 #include "miscellaneous_asset_generate.h"
 #include "stb_impl.h"
+#include "bc7enc_rdo/bc_allocator.h"
 #include "render/gpu_dispatcher.h"
 #include "engine/resources/environment_map/environment_map_format.h"
 #include "engine/resources/model/model_format.h"
@@ -23,6 +24,18 @@
 
 namespace Editor
 {
+static Core::TlsfAllocator* gBc7encAllocator = nullptr;
+
+static void* Bc7encAlloc(size_t size)
+{
+    return gBc7encAllocator->Alloc(size, Core::AllocTag::Bc7enc);
+}
+
+static void Bc7encFree(void* ptr)
+{
+    gBc7encAllocator->Free(ptr);
+}
+
 AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
                                Engine::EngineContext* ctx,
                                Render::VulkanContext* vulkanContext,
@@ -37,6 +50,8 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
       scheduler(scheduler)
 {
     SetStbImageAllocator(&memoryManager.AssetsScratch());
+    gBc7encAllocator = &memoryManager.AssetsScratch();
+    bc_alloc::bc7enc_set_allocator(Bc7encAlloc, Bc7encFree);
 
     for (int32_t i = 0; i < MODEL_GENERATION_JOB_COUNT; ++i) {
         modelGenerateTasks[i].Initialize(

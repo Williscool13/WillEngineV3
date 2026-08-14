@@ -58,6 +58,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::Earcut: return "Earcut";
         case AllocTag::Queue: return "Queue";
         case AllocTag::Stbi: return "Stbi";
+        case AllocTag::Bc7enc: return "Bc7enc";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";

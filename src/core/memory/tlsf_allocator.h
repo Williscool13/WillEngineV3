@@ -59,6 +59,7 @@ enum class AllocTag : uint32_t
     Earcut,
     Queue,
     Stbi,
+    Bc7enc,
 
     Count
 };
