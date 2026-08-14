@@ -8,6 +8,7 @@
 #include <tracy/Tracy.hpp>
 
 #include "miscellaneous_asset_generate.h"
+#include "stb_impl.h"
 #include "render/gpu_dispatcher.h"
 #include "engine/resources/environment_map/environment_map_format.h"
 #include "engine/resources/model/model_format.h"
@@ -35,6 +36,8 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
       gpuDispatcher(gpuDispatcher),
       scheduler(scheduler)
 {
+    SetStbImageAllocator(&memoryManager.AssetsScratch());
+
     for (int32_t i = 0; i < MODEL_GENERATION_JOB_COUNT; ++i) {
         modelGenerateTasks[i].Initialize(
             &memoryManager,

@@ -57,6 +57,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::ParShapes: return "ParShapes";
         case AllocTag::Earcut: return "Earcut";
         case AllocTag::Queue: return "Queue";
+        case AllocTag::Stbi: return "Stbi";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";

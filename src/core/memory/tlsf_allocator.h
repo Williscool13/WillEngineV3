@@ -58,6 +58,7 @@ enum class AllocTag : uint32_t
     ParShapes,
     Earcut,
     Queue,
+    Stbi,
 
     Count
 };
