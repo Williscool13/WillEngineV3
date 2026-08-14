@@ -555,6 +555,8 @@ struct FrameBuffer
 
     ManagedArena frameArena{};
 
+    bool bArenaPeakWarned{false};
+
     ViewFamilyWatermarks viewFamilyWatermarks{};
     ViewFamily mainViewFamily{};
 

@@ -74,11 +74,14 @@ void TlsfAllocator::Init(void* pool, size_t bytes, bool bUseMutex, const char* n
 
 void TlsfAllocator::InitGrowable(size_t baselineBytes, size_t budgetBytes, bool bUseMutex, const char* name, size_t growChunkBytes)
 {
-    assert(baselineBytes > tlsf_size() && "baseline too small for TLSF control structure");
+    controlMem_ = malloc(tlsf_size());
+    assert(controlMem_ != nullptr && "growable TLSF control allocation failed");
+    tlsf = tlsf_create(controlMem_);
     void* mem = malloc(baselineBytes);
     assert(mem != nullptr && "growable TLSF baseline allocation failed");
-    tlsf = tlsf_create_with_pool(mem, baselineBytes);
-    chunks_[0] = {mem, tlsf_get_pool(tlsf), baselineBytes};
+    void* pool = tlsf_add_pool(tlsf, mem, baselineBytes);
+    assert(pool != nullptr && "baseline too small for TLSF pool");
+    chunks_[0] = {mem, pool, baselineBytes};
     chunkCount_ = 1;
     poolBytes = baselineBytes;
     budgetBytes_ = budgetBytes;
@@ -114,10 +117,10 @@ bool TlsfAllocator::Grow(size_t minBytes)
 
 void TlsfAllocator::ReleaseEmptyChunks()
 {
-    if (!bGrowable_ || chunkCount_ <= 1) { return; }
+    if (!bGrowable_ || chunkCount_ == 0) { return; }
     std::unique_lock lock(mutex_, std::defer_lock);
     if (bUseMutex_) { lock.lock(); }
-    for (size_t i = chunkCount_; i-- > 1;) {
+    for (size_t i = chunkCount_; i-- > 0;) {
         bool bUsed = false;
         tlsf_walk_pool(chunks_[i].pool, UsedBlockWalker, &bUsed);
         if (!bUsed) {
@@ -134,6 +137,8 @@ void TlsfAllocator::Shutdown()
 {
     if (!bGrowable_) { return; }
     for (size_t i = 0; i < chunkCount_; ++i) { free(chunks_[i].mem); }
+    free(controlMem_);
+    controlMem_ = nullptr;
     chunkCount_ = 0;
     poolBytes = 0;
     tlsf = nullptr;

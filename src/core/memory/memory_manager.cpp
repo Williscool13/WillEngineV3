@@ -37,7 +37,7 @@ void MemoryManager::Init(const Layout& layout)
     cursor += persistentSz;
     tlsfGeneral.InitGrowable(generalSz, layout.generalPoolBudget, true, "General", generalSz);
     tlsfAssets.InitGrowable(assetsSz, layout.assetsPoolBudget, true, "Assets", assetsSz);
-    tlsfAssetsScratch.InitGrowable(assetsScratchSz, layout.assetsScratchBudget, true, "AssetsScratch");
+    tlsfAssetsScratch.InitGrowable(assetsScratchSz, layout.assetsScratchBudget, true, "AssetsScratch", assetsScratchSz);
     tlsfPhysics.Init(cursor, physicsSz, true, "Physics");
     cursor += physicsSz;
     tlsfRender.InitGrowable(renderSz, layout.renderPoolBudget, false, "Render", renderSz);

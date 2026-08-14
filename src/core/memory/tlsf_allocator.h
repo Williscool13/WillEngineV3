@@ -176,6 +176,7 @@ private:
 
     Chunk chunks_[MAX_CHUNKS]{};
     size_t chunkCount_{0};
+    void* controlMem_{nullptr};
     size_t budgetBytes_{0};
     size_t growChunkBytes_{0};
     bool bGrowable_{false};

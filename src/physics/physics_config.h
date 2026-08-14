@@ -18,7 +18,7 @@ enum class CollisionEventType : uint8_t
 inline constexpr float PHYSICS_TIMESTEP = 1 / 60.0f;
 inline constexpr uint32_t PHYSICS_COLLISION_STEPS = 1;
 
-inline constexpr uint32_t PHYSICS_TEMP_ALLOCATOR_SIZE = 32 * 1024 * 1024; // 32 MB
+inline constexpr uint32_t PHYSICS_TEMP_ALLOCATOR_SIZE = 8 * 1024 * 1024;
 
 inline constexpr int32_t MAX_PHYSICS_JOBS = 2048;
 inline constexpr uint64_t TASK_BUFFER = 64;

@@ -4,6 +4,8 @@
 
 #include "render_interface.h"
 
+#include "engine/logging/engine_log.h"
+
 namespace Core
 {
 ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
@@ -46,7 +48,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
 
 void FrameBuffer::Initialize(ArenaSuballocator& pool, AllocTag tag)
 {
-    frameArena = ManagedArena(pool, 32ull * 1024 * 1024, tag);
+    frameArena = ManagedArena(pool, 16ull * 1024 * 1024, tag);
     mainViewFamily = ViewFamily(frameArena.Get());
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);
@@ -75,6 +77,12 @@ void FrameBuffer::Reinitialize()
     viewFamilyWatermarks.textDrawCalls = std::max(viewFamilyWatermarks.textDrawCalls, vf.textDrawCalls.Size());
     viewFamilyWatermarks.sprites = std::max(viewFamilyWatermarks.sprites, vf.sprites.Size());
     viewFamilyWatermarks.spriteBatches = std::max(viewFamilyWatermarks.spriteBatches, vf.spriteBatches.Size());
+
+    const Arena::Stats arenaStats = frameArena.Get().GetStats();
+    if (!bArenaPeakWarned && arenaStats.peakBytes * 4 > arenaStats.totalBytes * 3) {
+        LOG_WARN(Renderer, "Frame arena peak {:.1f} MB crossed 75% of {:.0f} MB capacity", arenaStats.peakBytes / (1024.0f * 1024.0f), arenaStats.totalBytes / (1024.0f * 1024.0f));
+        bArenaPeakWarned = true;
+    }
 
     mainViewFamily = ViewFamily{};
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>{};
