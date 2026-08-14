@@ -7,8 +7,6 @@
 #include <charconv>
 #include <cstring>
 
-#include <json/nlohmann/json.hpp>
-
 #include "engine/serialization/text_parse.h"
 #include "platform/file_utils.h"
 
@@ -66,7 +64,7 @@ std::optional<WPrefabHeader> ReadWPrefabHeader(const Core::Path& path)
     return ReadWPrefabHeader(map.data, map.size);
 }
 
-std::optional<WPrefabData> ReadWPrefab(const char* path)
+std::optional<WPrefabData> ReadWPrefab(const char* path, Core::TlsfAllocator* alloc)
 {
     Platform::ScopedFileMapping map{Core::Path(path)};
     if (!map.data) {
@@ -78,11 +76,9 @@ std::optional<WPrefabData> ReadWPrefab(const char* path)
         return std::nullopt;
     }
 
-    auto json = nlohmann::json::parse(map.data + header->dataOffset, map.data + map.size, nullptr, false);
-    if (json.is_discarded()) {
-        return std::nullopt;
-    }
-
-    return WPrefabData{.header = *header, .componentJson = std::move(json)};
+    WPrefabData data{.header = *header, .body = Core::Vector<std::byte>(alloc, Core::AllocTag::AssetManager)};
+    const auto* bodyBegin = reinterpret_cast<const std::byte*>(map.data + header->dataOffset);
+    data.body.Append(bodyBegin, bodyBegin + (map.size - header->dataOffset));
+    return data;
 }
 } // Engine

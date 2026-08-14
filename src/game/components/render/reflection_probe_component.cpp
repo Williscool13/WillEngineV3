@@ -7,9 +7,10 @@
 #include <imgui.h>
 #include <glm/glm.hpp>
 
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
-#include "game/component-registry/json_helpers.h"
 #include "game/components/core_components.h"
 #include "game/systems/probe_bake_system.h"
 #include "engine/include/engine_context.h"
@@ -275,29 +276,29 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
     return {.bRequestRemoval = remove, .bModified = modified};
 }
 
-void ReflectionProbeComponent::Serialize(const ReflectionProbeComponent& comp, nlohmann::json& json)
+void ReflectionProbeComponent::Serialize(const ReflectionProbeComponent& comp, Engine::TextWriter& w)
 {
-    json["probeId"] = comp.probeId;
-    json["bEnabled"] = comp.bEnabled;
-    json["shape"] = static_cast<uint32_t>(comp.shape);
-    json["fadeMargin"] = comp.fadeMargin;
-    json["captureOffset"] = {comp.captureOffset.x, comp.captureOffset.y, comp.captureOffset.z};
-    json["bParallax"] = comp.bParallax;
-    json["resolution"] = static_cast<uint32_t>(comp.resolution);
-    json["standInEnvMap"] = comp.standInEnvMap.id;
+    static const ReflectionProbeComponent DEF{};
+    w.KeyOpt("probeId", comp.probeId, DEF.probeId);
+    w.KeyOpt("bEnabled", comp.bEnabled, DEF.bEnabled);
+    w.KeyOpt("shape", static_cast<uint32_t>(comp.shape), static_cast<uint32_t>(DEF.shape));
+    w.KeyOpt("fadeMargin", comp.fadeMargin, DEF.fadeMargin);
+    w.KeyOpt("captureOffset", comp.captureOffset, DEF.captureOffset);
+    w.KeyOpt("bParallax", comp.bParallax, DEF.bParallax);
+    w.KeyOpt("resolution", static_cast<uint32_t>(comp.resolution), static_cast<uint32_t>(DEF.resolution));
+    w.KeyOpt("standInEnvMap", comp.standInEnvMap.id, DEF.standInEnvMap.id);
 }
 
-void ReflectionProbeComponent::Deserialize(ReflectionProbeComponent& comp, const nlohmann::json& json)
+void ReflectionProbeComponent::Deserialize(ReflectionProbeComponent& comp, const Engine::TextReader& r)
 {
-    if (!json.is_object()) { return; }
-    comp.probeId = json.value("probeId", uint64_t{0});
-    comp.bEnabled = json.value("bEnabled", true);
-    comp.shape = static_cast<Shape>(json.value("shape", static_cast<uint32_t>(Shape::Box)));
-    comp.fadeMargin = json.value("fadeMargin", 0.5f);
-    comp.captureOffset = json.contains("captureOffset") ? json["captureOffset"].get<Vec3>() : Vec3{0.0f, 0.0f, 0.0f};
-    comp.bParallax = json.value("bParallax", true);
-    comp.resolution = static_cast<Resolution>(json.value("resolution", static_cast<uint32_t>(Resolution::Res256)));
-    comp.standInEnvMap = Engine::EnvironmentMapID{json.value("standInEnvMap", uint64_t{0})};
+    comp.probeId = r.U64("probeId", comp.probeId);
+    comp.bEnabled = r.Bool("bEnabled", comp.bEnabled);
+    comp.shape = static_cast<Shape>(r.UInt("shape", static_cast<uint32_t>(comp.shape)));
+    comp.fadeMargin = r.Float("fadeMargin", comp.fadeMargin);
+    comp.captureOffset = r.Vec3("captureOffset", comp.captureOffset);
+    comp.bParallax = r.Bool("bParallax", comp.bParallax);
+    comp.resolution = static_cast<Resolution>(r.UInt("resolution", static_cast<uint32_t>(comp.resolution)));
+    comp.standInEnvMap = Engine::EnvironmentMapID{r.U64("standInEnvMap", comp.standInEnvMap.id)};
 }
 
 void ReflectionProbeComponent::OnConstruct(entt::registry& registry, entt::entity entity)

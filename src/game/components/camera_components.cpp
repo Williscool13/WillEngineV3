@@ -4,16 +4,18 @@
 
 #include "camera_components.h"
 
-#include <json/nlohmann/json.hpp>
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
-void Game::Component::FreeCameraComponent::Serialize(const FreeCameraComponent& comp, nlohmann::json& json)
+void Game::Component::FreeCameraComponent::Serialize(const FreeCameraComponent& comp, Engine::TextWriter& w)
 {
-    json["moveSpeed"] = comp.moveSpeed;
-    json["lookSpeed"] = comp.lookSpeed;
+    static const FreeCameraComponent DEF{};
+    w.KeyOpt("moveSpeed", comp.moveSpeed, DEF.moveSpeed);
+    w.KeyOpt("lookSpeed", comp.lookSpeed, DEF.lookSpeed);
 }
 
-void Game::Component::FreeCameraComponent::Deserialize(FreeCameraComponent& comp, const nlohmann::json& json)
+void Game::Component::FreeCameraComponent::Deserialize(FreeCameraComponent& comp, const Engine::TextReader& r)
 {
-    comp.moveSpeed = json["moveSpeed"].get<float>();
-    comp.lookSpeed = json["lookSpeed"].get<float>();
+    comp.moveSpeed = r.Float("moveSpeed", comp.moveSpeed);
+    comp.lookSpeed = r.Float("lookSpeed", comp.lookSpeed);
 }

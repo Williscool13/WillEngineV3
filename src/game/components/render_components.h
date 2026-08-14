@@ -9,7 +9,6 @@
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/containers/inline_vector.h"
 #include "engine/material_manager.h"
@@ -45,8 +44,8 @@ struct RenderFlagsComponent
         else { flags &= ~bit; }
     }
 
-    static void Serialize(const RenderFlagsComponent& comp, nlohmann::json& json);
-    static void Deserialize(RenderFlagsComponent& comp, const nlohmann::json& json);
+    static void Serialize(const RenderFlagsComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(RenderFlagsComponent& comp, const Engine::TextReader& r);
 };
 
 struct RenderTransformComponent

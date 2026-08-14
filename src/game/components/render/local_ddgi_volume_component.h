@@ -6,7 +6,6 @@
 #define WILL_ENGINE_LOCAL_DDGI_VOLUME_COMPONENT_H
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/engine_api.h"
 
@@ -32,9 +31,9 @@ struct LocalDDGIVolumeComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
-    static void Serialize(const LocalDDGIVolumeComponent& comp, nlohmann::json& json);
+    static void Serialize(const LocalDDGIVolumeComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(LocalDDGIVolumeComponent& comp, const nlohmann::json& json);
+    static void Deserialize(LocalDDGIVolumeComponent& comp, const Engine::TextReader& r);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 };

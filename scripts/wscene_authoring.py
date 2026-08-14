@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 Helper library for hand-authoring .wscene files without parsing an existing
-scene's JSON by hand each time. Component-type keys are computed, not copied:
+scene by hand each time. Helpers build the historical dict shapes; write_scene
+renders them to the v2 text body via wtext_serialize.py. Component-type keys
+are computed, not copied:
 they are fnv1a64 of the name each component is registered under in
 component_registry.cpp (see component_key() below). Any registered component is
 therefore writable from here. Field schemas per key are noted inline.
@@ -847,10 +849,21 @@ def shot(name, pos, target, settle_frames=None):
 
 
 def write_shots(path, shots):
-    """Shot-list JSON for `will-engine.exe --shots <path>` (capture_shot_system.cpp). Rotation
-    is [w,x,y,z] like everything else in this file; build entries with shot()."""
+    """Shot-list text body for `will-engine.exe --shots <path>` (capture_shot_system.cpp).
+    Rotation is [w,x,y,z] like everything else in this file; build entries with shot()."""
+    import wtext_serialize
+    shots = list(shots)
+    lines = ["shots|%d" % len(shots)]
+    for e in shots:
+        lines.append("s")
+        lines.append("name|" + str(e["name"]).replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n"))
+        lines.append("translation|" + "|".join(wtext_serialize.hx(v) for v in e["translation"]))
+        lines.append("rotation|" + "|".join(wtext_serialize.hx(v) for v in e["rotation"]))
+        if "settleFrames" in e:
+            lines.append("settleFrames|%d" % e["settleFrames"])
+        lines.append(";")
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        json.dump({"shots": list(shots)}, f, indent=2)
+        f.write("\n".join(lines) + "\n")
     return path
 
 
@@ -860,29 +873,45 @@ def write_shots(path, shots):
 def write_scene(path, entities, scene_id, scene_name, editor_camera=None):
     if editor_camera is None:
         # editor_camera rotation is [w,x,y,z] -- SAME as entity quats, NOT [x,y,z,w].
-        # (scene_system.cpp:233 writes {w,x,y,z}; :320 reads glm::quat(w,x,y,z).)
         # [1,0,0,0] = identity/upright. A stray w=0 here flips the camera upside-down.
         editor_camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 4.0, 12.0]}
+    # Entities stay the JSON-shaped dicts every add_* helper builds; wtext_serialize
+    # renders them into the v2 text body (docs/serialization/text_format.md).
+    import wtext_serialize
     body = {"editor_camera": editor_camera, "entities": entities, "scene_id": scene_id, "scene_name": scene_name}
-    header = f"wscene\nversion 1 0\nid {scene_id}\nname {scene_name}\nentity_count {len(entities)}\nend_header\n"
-    with open(path, "w", encoding="utf-8") as f:
+    header = f"wscene\nversion 2 0\nid {scene_id}\nname {scene_name}\nentity_count {len(entities)}\nend_header\n"
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(header)
-        f.write(json.dumps(body, indent=2))
+        f.write(wtext_serialize.scene_body(body))
     # sanity re-parse
-    with open(path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    hdr_end = next(i for i, l in enumerate(lines) if l.strip() == "end_header")
-    reparsed = json.loads("".join(lines[hdr_end + 1:]))
+    _, reparsed = read_scene(path)
     assert len(reparsed["entities"]) == len(entities)
     return path
 
 
 def read_scene(path):
-    """Parse an existing .wscene into (header_dict, body_dict) for inspection/reuse
-    (e.g. copying a fontId, checking what component keys a scene actually uses)."""
+    """Parse an existing v2 .wscene into (header_lines, body_dict) for inspection.
+    Generic: field lines become {key: value-or-list-of-strings}, blocks nest as
+    {"_open": opener, ...fields, "_blocks": [children]}; entities collect under body["entities"]."""
     with open(path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    hdr_end = next(i for i, l in enumerate(lines) if l.strip() == "end_header")
-    header_lines = [l.strip() for l in lines[:hdr_end]]
-    body = json.loads("".join(lines[hdr_end + 1:]))
-    return header_lines, body
+        lines = [l.rstrip("\n").rstrip("\r") for l in f.readlines()]
+    hdr_end = next(i for i, l in enumerate(lines) if l == "end_header")
+    header_lines = lines[:hdr_end]
+
+    root = {"_blocks": []}
+    stack = [root]
+    for line in lines[hdr_end + 1:]:
+        if line == "":
+            continue
+        if "|" in line:
+            key, _, rest = line.partition("|")
+            vals = rest.split("|")
+            stack[-1][key] = vals[0] if len(vals) == 1 else vals
+        elif line == ";":
+            stack.pop()
+        else:
+            child = {"_open": line, "_blocks": []}
+            stack[-1]["_blocks"].append(child)
+            stack.append(child)
+    root["entities"] = [b for b in root["_blocks"] if b["_open"] == "entity"]
+    return header_lines, root

@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
-#include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
 #include "ImGuizmo.h"
@@ -17,6 +16,8 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/spline/spline.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/components/component_types.h"
 #include "game/components/core_components.h"
@@ -85,80 +86,86 @@ bool Component::SplineMeshComponent::CanAdd(const entt::registry& registry, entt
     return !registry.any_of<Component::StaticMeshComponent, Component::ProceduralMeshComponent, Component::Text3DComponent>(entity);
 }
 
-void Component::SplineMeshComponent::Serialize(const SplineMeshComponent& comp, nlohmann::json& json)
+void Component::SplineMeshComponent::Serialize(const SplineMeshComponent& comp, Engine::TextWriter& w)
 {
-    Engine::Spline::Serialize(comp.spline, json["spline"]);
-    json["radius"] = comp.radius;
-    json["rollAngle"] = comp.rollAngle;
-    json["sides"] = comp.sides;
-    json["segmentsPerSpan"] = comp.segmentsPerSpan;
-    json["bCaps"] = comp.bCaps;
-    json["bCrossPlanks"] = comp.bCrossPlanks;
-    json["crossPlankInterval"] = comp.crossPlankInterval;
-    json["crossPlankHeight"] = comp.crossPlankHeight;
-    json["crossPlankThickness"] = comp.crossPlankThickness;
-    json["crossPlankLength"] = comp.crossPlankLength;
-    json["profileType"] = static_cast<int32_t>(comp.profile.type);
-    json["profileWidth"] = comp.profile.width;
-    json["profileHeight"] = comp.profile.height;
-    json["profileCornerRadius"] = comp.profile.cornerRadius;
-    json["profileCornerSegments"] = comp.profile.cornerSegments;
-    json["profileThickness"] = comp.profile.thickness;
-    json["railingEnabled"] = comp.railing.bEnabled;
-    json["railingPosts"] = comp.railing.bPosts;
-    json["railingPostInterval"] = comp.railing.postInterval;
-    json["railingPostBottom"] = comp.railing.postBottom;
-    json["railingPostTop"] = comp.railing.postTop;
-    json["railingPostSizeX"] = comp.railing.postSize.x;
-    json["railingPostSizeY"] = comp.railing.postSize.y;
-    json["railingPostLateral"] = comp.railing.postLateral;
-    json["railingLateralOffset"] = comp.railing.lateralOffset;
-    auto& lanesJson = json["railingLanes"] = nlohmann::json::array();
-    for (int i = 0; i < static_cast<int>(comp.railing.lanes.Size()); i++) {
-        lanesJson.push_back({comp.railing.lanes[i].x, comp.railing.lanes[i].y});
-    }
-    json["material"] = comp.material.id;
-}
-
-void Component::SplineMeshComponent::Deserialize(SplineMeshComponent& comp, const nlohmann::json& json)
-{
-    if (json.contains("spline")) {
-        Engine::Spline::Deserialize(comp.spline, json["spline"]);
-    }
-
-    comp.radius = json.value("radius", 0.5f);
-    comp.rollAngle = json.value("rollAngle", 0.0f);
-    comp.sides = json.value("sides", 8);
-    comp.segmentsPerSpan = json.value("segmentsPerSpan", 8);
-    comp.bCaps = json.value("bCaps", true);
-    comp.bCrossPlanks = json.value("bCrossPlanks", false);
-    comp.crossPlankInterval = json.value("crossPlankInterval", 4);
-    comp.crossPlankHeight = json.value("crossPlankHeight", 0.0f);
-    comp.crossPlankThickness = json.value("crossPlankThickness", 0.1f);
-    comp.crossPlankLength = json.value("crossPlankLength", 0.3f);
-    comp.profile.type = static_cast<Engine::SplineProfileType>(json.value("profileType", 0));
-    comp.profile.width = json.value("profileWidth", 0.4f);
-    comp.profile.height = json.value("profileHeight", 0.4f);
-    comp.profile.cornerRadius = json.value("profileCornerRadius", 0.08f);
-    comp.profile.cornerSegments = json.value("profileCornerSegments", 3);
-    comp.profile.thickness = json.value("profileThickness", 0.05f);
-    comp.railing.bEnabled = json.value("railingEnabled", false);
-    comp.railing.bPosts = json.value("railingPosts", true);
-    comp.railing.postInterval = json.value("railingPostInterval", 4);
-    comp.railing.postBottom = json.value("railingPostBottom", 0.0f);
-    comp.railing.postTop = json.value("railingPostTop", 1.0f);
-    comp.railing.postSize.x = json.value("railingPostSizeX", 0.05f);
-    comp.railing.postSize.y = json.value("railingPostSizeY", 0.05f);
-    comp.railing.postLateral = json.value("railingPostLateral", 0.0f);
-    comp.railing.lateralOffset = json.value("railingLateralOffset", 0.0f);
-    comp.railing.lanes.Clear();
-    if (json.contains("railingLanes")) {
-        for (const auto& e : json["railingLanes"]) {
-            if (comp.railing.lanes.Size() >= 8) { break; }
-            comp.railing.lanes.PushBack(Vec2{e[0].get<float>(), e[1].get<float>()});
+    w.BeginBlock("spline");
+    Engine::Spline::Serialize(comp.spline, w);
+    w.EndBlock();
+    w.Key("radius", comp.radius);
+    w.Key("rollAngle", comp.rollAngle);
+    w.Key("sides", comp.sides);
+    w.Key("segmentsPerSpan", comp.segmentsPerSpan);
+    w.Key("bCaps", comp.bCaps);
+    w.Key("bCrossPlanks", comp.bCrossPlanks);
+    w.Key("crossPlankInterval", comp.crossPlankInterval);
+    w.Key("crossPlankHeight", comp.crossPlankHeight);
+    w.Key("crossPlankThickness", comp.crossPlankThickness);
+    w.Key("crossPlankLength", comp.crossPlankLength);
+    w.Key("profileType", static_cast<int32_t>(comp.profile.type));
+    w.Key("profileWidth", comp.profile.width);
+    w.Key("profileHeight", comp.profile.height);
+    w.Key("profileCornerRadius", comp.profile.cornerRadius);
+    w.Key("profileCornerSegments", comp.profile.cornerSegments);
+    w.Key("profileThickness", comp.profile.thickness);
+    w.Key("railingEnabled", comp.railing.bEnabled);
+    w.Key("railingPosts", comp.railing.bPosts);
+    w.Key("railingPostInterval", comp.railing.postInterval);
+    w.Key("railingPostBottom", comp.railing.postBottom);
+    w.Key("railingPostTop", comp.railing.postTop);
+    w.Key("railingPostSize", glm::vec2(comp.railing.postSize.x, comp.railing.postSize.y));
+    w.Key("railingPostLateral", comp.railing.postLateral);
+    w.Key("railingLateralOffset", comp.railing.lateralOffset);
+    if (!comp.railing.lanes.IsEmpty()) {
+        w.Count("railingLanes", static_cast<uint32_t>(comp.railing.lanes.Size()));
+        for (int i = 0; i < static_cast<int>(comp.railing.lanes.Size()); i++) {
+            w.BeginBlock("l");
+            w.Key("lane", glm::vec2(comp.railing.lanes[i].x, comp.railing.lanes[i].y));
+            w.EndBlock();
         }
     }
-    comp.material = Engine::MaterialID(json.value("material", uint64_t(0)));
+    w.Key("material", comp.material.id);
+}
+
+void Component::SplineMeshComponent::Deserialize(SplineMeshComponent& comp, const Engine::TextReader& r)
+{
+    const Engine::TextReader spline = r.Block("spline");
+    if (spline.IsValid()) {
+        Engine::Spline::Deserialize(comp.spline, spline);
+    }
+
+    comp.radius = r.Float("radius", 0.5f);
+    comp.rollAngle = r.Float("rollAngle", 0.0f);
+    comp.sides = r.Int("sides", 8);
+    comp.segmentsPerSpan = r.Int("segmentsPerSpan", 8);
+    comp.bCaps = r.Bool("bCaps", true);
+    comp.bCrossPlanks = r.Bool("bCrossPlanks", false);
+    comp.crossPlankInterval = r.Int("crossPlankInterval", 4);
+    comp.crossPlankHeight = r.Float("crossPlankHeight", 0.0f);
+    comp.crossPlankThickness = r.Float("crossPlankThickness", 0.1f);
+    comp.crossPlankLength = r.Float("crossPlankLength", 0.3f);
+    comp.profile.type = static_cast<Engine::SplineProfileType>(r.Int("profileType", 0));
+    comp.profile.width = r.Float("profileWidth", 0.4f);
+    comp.profile.height = r.Float("profileHeight", 0.4f);
+    comp.profile.cornerRadius = r.Float("profileCornerRadius", 0.08f);
+    comp.profile.cornerSegments = r.Int("profileCornerSegments", 3);
+    comp.profile.thickness = r.Float("profileThickness", 0.05f);
+    comp.railing.bEnabled = r.Bool("railingEnabled", false);
+    comp.railing.bPosts = r.Bool("railingPosts", true);
+    comp.railing.postInterval = r.Int("railingPostInterval", 4);
+    comp.railing.postBottom = r.Float("railingPostBottom", 0.0f);
+    comp.railing.postTop = r.Float("railingPostTop", 1.0f);
+    const glm::vec2 postSize = r.Vec2("railingPostSize", glm::vec2(0.05f, 0.05f));
+    comp.railing.postSize.x = postSize.x;
+    comp.railing.postSize.y = postSize.y;
+    comp.railing.postLateral = r.Float("railingPostLateral", 0.0f);
+    comp.railing.lateralOffset = r.Float("railingLateralOffset", 0.0f);
+    comp.railing.lanes.Clear();
+    r.ForEachRecord("railingLanes", [&](const Engine::TextReader& l) {
+        if (comp.railing.lanes.Size() >= 8) { return; }
+        const glm::vec2 lane = l.Vec2("lane");
+        comp.railing.lanes.PushBack(Vec2{lane.x, lane.y});
+    });
+    comp.material = Engine::MaterialID(r.U64("material", 0));
 
     if (comp.spline.points.Size() < 2) {
         comp.spline.points.Clear();

@@ -4,7 +4,11 @@
 #ifndef WILL_ENGINE_DEBUG_COMPONENTS_H
 #define WILL_ENGINE_DEBUG_COMPONENTS_H
 
-#include <json/nlohmann/json_fwd.hpp>
+namespace Engine
+{
+class TextWriter;
+class TextReader;
+}
 
 namespace Game::Component
 {
@@ -14,8 +18,8 @@ struct MotionBlurMovementComponent
 
     bool bIsHorizontal{false};
 
-    static void Serialize(const MotionBlurMovementComponent& comp, nlohmann::json& json);
-    static void Deserialize(MotionBlurMovementComponent& comp, const nlohmann::json& json);
+    static void Serialize(const MotionBlurMovementComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(MotionBlurMovementComponent& comp, const Engine::TextReader& r);
 };
 struct AntiGravityTag
 {

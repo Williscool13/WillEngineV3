@@ -4,25 +4,23 @@
 
 #include "player_spawn_component.h"
 
-#include <json/nlohmann/json.hpp>
-
 #include "imgui.h"
 
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 
-void Game::Component::PlayerSpawnComponent::Serialize(const PlayerSpawnComponent& comp, nlohmann::json& json)
+void Game::Component::PlayerSpawnComponent::Serialize(const PlayerSpawnComponent& comp, Engine::TextWriter& w)
 {
-    json["priority"] = comp.priority;
-    json["offset"] = {comp.offset.x, comp.offset.y, comp.offset.z};
+    static const PlayerSpawnComponent DEF{};
+    w.KeyOpt("priority", comp.priority, DEF.priority);
+    w.KeyOpt("offset", comp.offset, DEF.offset);
 }
 
-void Game::Component::PlayerSpawnComponent::Deserialize(PlayerSpawnComponent& comp, const nlohmann::json& json)
+void Game::Component::PlayerSpawnComponent::Deserialize(PlayerSpawnComponent& comp, const Engine::TextReader& r)
 {
-    comp.priority = json["priority"].get<int32_t>();
-    if (json.contains("offset")) {
-        const auto& o = json["offset"];
-        comp.offset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
-    }
+    comp.priority = r.Int("priority", comp.priority);
+    comp.offset = r.Vec3("offset", comp.offset);
 }
 
 namespace Game

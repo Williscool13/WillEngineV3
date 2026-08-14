@@ -8,14 +8,13 @@
 #include <cstdint>
 #include <optional>
 
-#include <json/nlohmann/json.hpp>
-
 #include "core/containers/inline_path.h"
 #include "core/containers/vector.h"
+#include "engine/serialization/text_reader.h"
 
 namespace Engine
 {
-constexpr uint32_t PREFAB_MAJOR_VERSION = 1;
+constexpr uint32_t PREFAB_MAJOR_VERSION = 2;
 constexpr uint32_t PREFAB_MINOR_VERSION = 0;
 constexpr size_t WPREFAB_NAME_LENGTH = 128;
 
@@ -42,10 +41,13 @@ std::optional<WPrefabHeader> ReadWPrefabHeader(const Core::Path& path);
 struct WPrefabData
 {
     WPrefabHeader header;
-    nlohmann::json componentJson;
+    Core::Vector<std::byte> body;
+
+    /** Reader over the text body: one top-level block per component, opener = decimal typeId. */
+    TextReader Body() const { return {body.Data(), body.Size()}; }
 };
 
-std::optional<WPrefabData> ReadWPrefab(const char* path);
+std::optional<WPrefabData> ReadWPrefab(const char* path, Core::TlsfAllocator* alloc);
 } // Engine
 
 #endif //WILL_ENGINE_PREFAB_FORMAT_H

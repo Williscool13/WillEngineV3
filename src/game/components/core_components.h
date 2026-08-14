@@ -10,8 +10,6 @@
 #include <glm/gtc/quaternion.hpp>
 #include <entt/entt.hpp>
 
-#include <json/nlohmann/json_fwd.hpp>
-
 #include "core/string_id.h"
 #include "core/types/transform.h"
 #include "engine/component_registry.h"
@@ -45,9 +43,9 @@ struct TransformComponent
         return *this;
     }
 
-    static void Serialize(const TransformComponent& comp, nlohmann::json& json);
+    static void Serialize(const TransformComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(TransformComponent& comp, const nlohmann::json& json);
+    static void Deserialize(TransformComponent& comp, const Engine::TextReader& r);
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
@@ -98,9 +96,9 @@ struct HierarchyComponent
     StringID parentStableId;
     uint16_t depth{0};
 
-    static void Serialize(const HierarchyComponent& comp, nlohmann::json& json);
+    static void Serialize(const HierarchyComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(HierarchyComponent& comp, const nlohmann::json& json);
+    static void Deserialize(HierarchyComponent& comp, const Engine::TextReader& r);
 };
 
 inline Transform ComposeWorldTransform(const Transform& parent, const Transform& local)

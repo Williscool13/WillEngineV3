@@ -6,7 +6,6 @@
 #define WILL_ENGINE_LIGHT_COMPONENTS_H
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/engine_api.h"
 #include "engine/asset_manager_types.h"
@@ -39,9 +38,9 @@ struct AreaLightComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
-    static void Serialize(const AreaLightComponent& comp, nlohmann::json& json);
+    static void Serialize(const AreaLightComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(AreaLightComponent& comp, const nlohmann::json& json);
+    static void Deserialize(AreaLightComponent& comp, const Engine::TextReader& r);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 
@@ -72,9 +71,9 @@ struct SphereLightComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
-    static void Serialize(const SphereLightComponent& comp, nlohmann::json& json);
+    static void Serialize(const SphereLightComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(SphereLightComponent& comp, const nlohmann::json& json);
+    static void Deserialize(SphereLightComponent& comp, const Engine::TextReader& r);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 
@@ -112,9 +111,9 @@ struct DirectionalLightComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
-    static void Serialize(const DirectionalLightComponent& comp, nlohmann::json& json);
+    static void Serialize(const DirectionalLightComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(DirectionalLightComponent& comp, const nlohmann::json& json);
+    static void Deserialize(DirectionalLightComponent& comp, const Engine::TextReader& r);
 };
 
 /**
@@ -133,9 +132,9 @@ struct SkyboxComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 
-    static void Serialize(const SkyboxComponent& comp, nlohmann::json& json);
+    static void Serialize(const SkyboxComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(SkyboxComponent& comp, const nlohmann::json& json);
+    static void Deserialize(SkyboxComponent& comp, const Engine::TextReader& r);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 

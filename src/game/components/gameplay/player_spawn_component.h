@@ -7,7 +7,6 @@
 
 #include <glm/vec3.hpp>
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/component_registry.h"
 
@@ -22,8 +21,8 @@ struct PlayerSpawnComponent
     int32_t priority{0};
     glm::vec3 offset{0.0f, 0.0f, 0.0f};
 
-    static void Serialize(const PlayerSpawnComponent& comp, nlohmann::json& json);
-    static void Deserialize(PlayerSpawnComponent& comp, const nlohmann::json& json);
+    static void Serialize(const PlayerSpawnComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(PlayerSpawnComponent& comp, const Engine::TextReader& r);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }

@@ -9,13 +9,14 @@
 
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
 #include "ImGuizmo.h"
 
 #include "render/interface/render_interface.h"
 #include "engine/engine_api.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/components/core_components.h"
@@ -88,51 +89,53 @@ void EvaluatePath(const Engine::Spline& spline, const Core::InlineVector<PathPoi
     outRot = glm::slerp(srcRot, tgtRot, easedT);
 }
 
-void PathMoverComponent::Serialize(const PathMoverComponent& comp, nlohmann::json& json)
+void PathMoverComponent::Serialize(const PathMoverComponent& comp, Engine::TextWriter& w)
 {
-    json["loopMode"] = comp.loopMode;
-    Engine::Spline::Serialize(comp.spline, json["spline"]);
+    static const PathPointSettings DEF_PS{};
+    w.Key("loopMode", static_cast<uint32_t>(comp.loopMode));
+    w.BeginBlock("spline");
+    Engine::Spline::Serialize(comp.spline, w);
+    w.EndBlock();
 
-    json["pointSettings"] = nlohmann::json::array();
-    for (size_t i = 0; i < comp.pointSettings.Size(); i++) {
-        const auto& ps = comp.pointSettings[i];
-        nlohmann::json psJson;
-        psJson["rotation"] = {ps.rotation.x, ps.rotation.y, ps.rotation.z, ps.rotation.w};
-        psJson["easing"] = ps.easing;
-        psJson["speed"] = ps.speed;
-        psJson["waitTime"] = ps.waitTime;
-        json["pointSettings"].push_back(psJson);
+    if (!comp.pointSettings.IsEmpty()) {
+        w.Count("pointSettings", static_cast<uint32_t>(comp.pointSettings.Size()));
+        for (size_t i = 0; i < comp.pointSettings.Size(); i++) {
+            const auto& ps = comp.pointSettings[i];
+            w.BeginBlock("p");
+            w.KeyOpt("rotation", ps.rotation, DEF_PS.rotation);
+            w.KeyOpt("easing", static_cast<uint32_t>(ps.easing), static_cast<uint32_t>(DEF_PS.easing));
+            w.KeyOpt("speed", ps.speed, DEF_PS.speed);
+            w.KeyOpt("waitTime", ps.waitTime, DEF_PS.waitTime);
+            w.EndBlock();
+        }
     }
 
-    json["currentSegment"] = comp.currentSegment;
-    json["progress"] = comp.progress;
-    json["direction"] = comp.direction;
-    json["bIsWaiting"] = comp.bIsWaiting;
-    json["waitTimer"] = comp.waitTimer;
+    w.KeyOpt("currentSegment", comp.currentSegment, 0);
+    w.KeyOpt("progress", comp.progress, 0.0f);
+    w.KeyOpt("direction", comp.direction, 1);
+    w.KeyOpt("bIsWaiting", comp.bIsWaiting, false);
+    w.KeyOpt("waitTimer", comp.waitTimer, 0.0f);
 }
 
-void PathMoverComponent::Deserialize(PathMoverComponent& comp, const nlohmann::json& json)
+void PathMoverComponent::Deserialize(PathMoverComponent& comp, const Engine::TextReader& r)
 {
-    comp.loopMode = static_cast<PathLoopMode>(json.value("loopMode", 0));
+    comp.loopMode = static_cast<PathLoopMode>(r.UInt("loopMode", 0));
 
-    if (json.contains("spline")) {
-        Engine::Spline::Deserialize(comp.spline, json["spline"]);
+    const Engine::TextReader spline = r.Block("spline");
+    if (spline.IsValid()) {
+        Engine::Spline::Deserialize(comp.spline, spline);
     }
     comp.spline.bClosed = (comp.loopMode == PathLoopMode::Loop);
 
-    if (json.contains("pointSettings")) {
-        for (const auto& psJson : json["pointSettings"]) {
-            PathPointSettings ps{};
-            if (psJson.contains("rotation")) {
-                const auto& r = psJson["rotation"];
-                ps.rotation = glm::quat(r[3].get<float>(), r[0].get<float>(), r[1].get<float>(), r[2].get<float>());
-            }
-            ps.easing = static_cast<EasingType>(psJson.value("easing", 0));
-            ps.speed = psJson.value("speed", 1.0f);
-            ps.waitTime = psJson.value("waitTime", 0.0f);
-            comp.pointSettings.PushBack(ps);
-        }
-    }
+    r.ForEachRecord("pointSettings", [&](const Engine::TextReader& p) {
+        if (comp.pointSettings.IsFull()) { return; }
+        PathPointSettings ps{};
+        ps.rotation = p.Quat("rotation", ps.rotation);
+        ps.easing = static_cast<EasingType>(p.UInt("easing", 0));
+        ps.speed = p.Float("speed", ps.speed);
+        ps.waitTime = p.Float("waitTime", ps.waitTime);
+        comp.pointSettings.PushBack(ps);
+    });
 
     while (comp.pointSettings.Size() < comp.spline.points.Size()) {
         comp.pointSettings.PushBack({});
@@ -143,11 +146,11 @@ void PathMoverComponent::Deserialize(PathMoverComponent& comp, const nlohmann::j
         comp.pointSettings.PushBack({});
     }
 
-    comp.currentSegment = json.value("currentSegment", 0);
-    comp.progress = json.value("progress", 0.0f);
-    comp.direction = json.value("direction", 1);
-    comp.bIsWaiting = json.value("bIsWaiting", false);
-    comp.waitTimer = json.value("waitTimer", 0.0f);
+    comp.currentSegment = r.Int("currentSegment", 0);
+    comp.progress = r.Float("progress", 0.0f);
+    comp.direction = r.Int("direction", 1);
+    comp.bIsWaiting = r.Bool("bIsWaiting", false);
+    comp.waitTimer = r.Float("waitTimer", 0.0f);
 }
 
 Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

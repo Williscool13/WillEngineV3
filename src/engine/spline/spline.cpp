@@ -5,7 +5,9 @@
 #include "spline.h"
 
 #include <algorithm>
-#include <json/nlohmann/json.hpp>
+
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
 namespace Engine
 {
@@ -89,38 +91,31 @@ int32_t Spline::SegmentCount() const
     return bClosed ? static_cast<int32_t>(points.Size()) : std::max(0, static_cast<int32_t>(points.Size()) - 1);
 }
 
-void Spline::Serialize(const Spline& spline, nlohmann::json& json)
+void Spline::Serialize(const Spline& spline, TextWriter& w)
 {
-    json["points"] = nlohmann::json::array();
-    for (const auto& p : spline.points) {
-        json["points"].push_back({p.x, p.y, p.z});
+    w.KeyOpt("mode", static_cast<uint32_t>(spline.mode), static_cast<uint32_t>(SplineMode::CatmullRom));
+    w.KeyOpt("bClosed", spline.bClosed, false);
+    if (!spline.points.IsEmpty()) {
+        w.Count("points", static_cast<uint32_t>(spline.points.Size()));
+        for (size_t i = 0; i < spline.points.Size(); i++) {
+            w.BeginBlock("p");
+            w.Key("pos", spline.points[i]);
+            w.KeyOpt("roll", i < spline.rolls.Size() ? spline.rolls[i] : 0.0f, 0.0f);
+            w.EndBlock();
+        }
     }
-    json["rolls"] = nlohmann::json::array();
-    for (float r : spline.rolls) {
-        json["rolls"].push_back(r);
-    }
-    json["mode"] = static_cast<uint8_t>(spline.mode);
-    json["bClosed"] = spline.bClosed;
 }
 
-void Spline::Deserialize(Spline& spline, const nlohmann::json& json)
+void Spline::Deserialize(Spline& spline, const TextReader& r)
 {
     spline.points.Clear();
-    if (json.contains("points")) {
-        for (const auto& pJson : json["points"]) {
-            spline.points.PushBack({pJson[0].get<float>(), pJson[1].get<float>(), pJson[2].get<float>()});
-        }
-    }
     spline.rolls.Clear();
-    if (json.contains("rolls")) {
-        for (const auto& r : json["rolls"]) {
-            spline.rolls.PushBack(r.get<float>());
-        }
-    }
-    while (spline.rolls.Size() < spline.points.Size()) {
-        spline.rolls.PushBack(0.0f);
-    }
-    spline.mode = static_cast<SplineMode>(json.value("mode", static_cast<uint8_t>(SplineMode::CatmullRom)));
-    spline.bClosed = json.value("bClosed", false);
+    r.ForEachRecord("points", [&](const TextReader& p) {
+        if (spline.points.Size() >= MaxPoints) { return; }
+        spline.points.PushBack(p.Vec3("pos"));
+        spline.rolls.PushBack(p.Float("roll", 0.0f));
+    });
+    spline.mode = static_cast<SplineMode>(r.UInt("mode", static_cast<uint32_t>(SplineMode::CatmullRom)));
+    spline.bClosed = r.Bool("bClosed", false);
 }
 }

@@ -40,8 +40,8 @@ struct SplineMeshComponent
     Engine::MaterialID material{};
     glm::vec3 renderOffset{0.0f};
 
-    static void Serialize(const SplineMeshComponent& comp, nlohmann::json& json);
-    static void Deserialize(SplineMeshComponent& comp, const nlohmann::json& json);
+    static void Serialize(const SplineMeshComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(SplineMeshComponent& comp, const Engine::TextReader& r);
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);

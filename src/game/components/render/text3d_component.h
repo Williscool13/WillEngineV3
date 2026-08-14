@@ -7,7 +7,6 @@
 
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/material_manager.h"
 #include "core/containers/inline_string.h"
@@ -44,8 +43,8 @@ struct Text3DComponent
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
-    static void Serialize(const Text3DComponent& comp, nlohmann::json& json);
-    static void Deserialize(Text3DComponent& comp, const nlohmann::json& json);
+    static void Serialize(const Text3DComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(Text3DComponent& comp, const Engine::TextReader& r);
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);

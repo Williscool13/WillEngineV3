@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <limits>
 
-#include <json/nlohmann/json.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 
 #include "core/containers/arena_array.h"
@@ -20,6 +19,8 @@
 #include "engine/resources/prefab/prefab_format.h"
 #include "engine/resources/scene/scene_format.h"
 #include "engine/serialization/text_parse.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/components/camera_components.h"
 #include "game/components/common_components.h"
 #include "game/components/common/stable_id_component.h"
@@ -40,39 +41,49 @@ namespace Game
 {
 Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName)
 {
-    Engine::Scene outScene{};
-    nlohmann::json& scene = outScene.content;
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    Core::TlsfAllocator* alloc = &ctx->memoryManager->AssetsScratch();
 
-    scene["scene_id"] = sceneId.id;
-    scene["scene_name"] = sceneName;
-    scene["entities"] = nlohmann::json::array();
+    Engine::Scene outScene(alloc);
+    Engine::TextWriter w(outScene.content);
+
+    w.Key("scene_id", sceneId.id);
+    w.KeyStr("scene_name", sceneName);
 
     auto view = registry.view<Component::SceneComponent>();
     const StringID prefabTypeId = TypeSID<Component::PrefabInstanceComponent>();
 
-    // Cache prefab JSON per-prefab so we only read each file once
-    Core::InlineMap<StringID, nlohmann::json, 512> prefabJsonCache;
+    auto shouldSerialize = [&](entt::entity entity) {
+        return view.get<Component::SceneComponent>(entity).sceneId == sceneId && !registry.all_of<Component::DoNotSerializeTag>(entity);
+    };
 
     for (auto entity : view) {
-        auto& tag = view.get<Component::SceneComponent>(entity);
-        if (tag.sceneId != sceneId) {
-            continue;
-        }
-        if (registry.all_of<Component::DoNotSerializeTag>(entity)) {
+        if (shouldSerialize(entity)) { outScene.entityCount++; }
+    }
+    if (outScene.entityCount == 0) {
+        return outScene;
+    }
+    w.Count("entities", outScene.entityCount);
+
+    // Cache prefab bodies per-prefab so we only read each file once
+    Core::InlineMap<StringID, Engine::WPrefabData, 512> prefabCache;
+
+    Core::Vector<std::byte> fragment(alloc, Core::AllocTag::AssetManager);
+    for (auto entity : view) {
+        if (!shouldSerialize(entity)) {
             continue;
         }
 
-        nlohmann::json entityJson;
         const auto* prefabInst = registry.try_get<Component::PrefabInstanceComponent>(entity);
 
-        const nlohmann::json* prefabRef = nullptr;
+        const Engine::WPrefabData* prefabRef = nullptr;
         if (prefabInst) {
-            auto cacheIt = prefabJsonCache.Find(prefabInst->prefabId);
-            if (cacheIt) {
+            auto cacheIt = prefabCache.Find(prefabInst->prefabId);
+            if (!cacheIt) {
                 if (const auto* meta = assetManager->GetPrefabMetadata(prefabInst->prefabId)) {
-                    auto prefabData = Engine::ReadWPrefab(meta->source.c_str());
+                    auto prefabData = Engine::ReadWPrefab(meta->source.c_str(), alloc);
                     if (prefabData) {
-                        cacheIt = &prefabJsonCache.Emplace(prefabInst->prefabId, std::move(prefabData->componentJson));
+                        cacheIt = &prefabCache.Emplace(prefabInst->prefabId, std::move(*prefabData));
                     }
                 }
             }
@@ -81,49 +92,48 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::regi
             }
         }
 
+        w.BeginBlock("entity");
         for (Engine::ComponentEntry& entry : componentRegistry.registry) {
             if (!entry.has(registry, entity)) {
                 continue;
             }
 
-            nlohmann::json compJson;
-            entry.serialize(registry, entity, compJson);
+            fragment.Clear();
+            Engine::TextWriter fw(fragment);
+            entry.serialize(registry, entity, fw);
+            const std::string_view fragView(reinterpret_cast<const char*>(fragment.Data()), fragment.Size());
 
-            auto s = Core::ShortString::Format("%llu", entry.typeId.id);
-            if (prefabRef) {
-                if (entry.typeId == prefabTypeId) {
-                    entityJson[s.c_str()] = compJson;
-                }
-                else {
-                    auto it = prefabRef->find(s.c_str());
-                    if (it == prefabRef->end() || *it != compJson) {
-                        entityJson[s.c_str()] = compJson;
-                    }
+            if (prefabRef && entry.typeId != prefabTypeId) {
+                auto s = Core::ShortString::Format("%llu", entry.typeId.id);
+                const Engine::TextReader prefabFrag = prefabRef->Body().Block(s.c_str());
+                if (prefabFrag.IsValid() && prefabFrag.Span() == fragView) {
+                    continue;
                 }
             }
-            else {
-                entityJson[s.c_str()] = compJson;
-            }
+
+            w.BeginBlock(entry.typeId.id);
+            w.Raw(fragment.Data(), fragment.Size());
+            w.EndBlock();
         }
-
-        scene["entities"].push_back(entityJson);
+        w.EndBlock();
     }
 
     return outScene;
 }
 
-StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene)
+StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, const Engine::TextReader& scene)
 {
-    auto sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
+    auto sceneId = StringID(scene.U64("scene_id"));
 
-    for (auto& entityJson : scene.content["entities"]) {
+    scene.ForEachRecord("entities", [&](const Engine::TextReader& entityReader) {
         auto entity = registry.create();
-        for (auto& [key, compJson] : entityJson.items()) {
-            uint64_t typeId = std::stoull(key);
+        entityReader.ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
+            uint64_t typeId = 0;
+            std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
             bool bFound = false;
             for (Engine::ComponentEntry& entry : componentRegistry.registry) {
                 if (entry.typeId.id == typeId) {
-                    entry.deserialize(registry, entity, compJson);
+                    entry.deserialize(registry, entity, compReader);
                     bFound = true;
                     break;
                 }
@@ -131,9 +141,9 @@ StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry&
             if (!bFound) {
                 LOG_WARN(Game, "Scene component key {} matches no registered component; dropped on load", typeId);
             }
-        }
+        });
         registry.emplace<Component::SceneComponent>(entity, sceneId);
-    }
+    });
 
     return sceneId;
 }
@@ -152,7 +162,7 @@ Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& com
 void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots)
 {
     for (Engine::Scene& scene : snapshots) {
-        StringID loadedId = LoadScene(state->componentRegistry, state->registry, scene);
+        StringID loadedId = LoadScene(state->componentRegistry, state->registry, Engine::TextReader(scene.content.Data(), scene.content.Size()));
         uint64_t maxSortOrder = 0;
         auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
         for (auto entity : sortView) {
@@ -234,9 +244,11 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
             const auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
-            nlohmann::json& camJson = s.content["editor_camera"];
-            camJson["translation"] = {transform.translation.x, transform.translation.y, transform.translation.z};
-            camJson["rotation"] = {transform.rotation.w, transform.rotation.x, transform.rotation.y, transform.rotation.z};
+            Engine::TextWriter camWriter(s.content);
+            camWriter.BeginBlock("editor_camera");
+            camWriter.Key("translation", transform.translation);
+            camWriter.Key("rotation", transform.rotation);
+            camWriter.EndBlock();
         }
     }
 
@@ -253,12 +265,11 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
     const auto nameLen = std::min(sceneName.size(), Engine::WSCENE_NAME_LENGTH - 1);
     memcpy(sceneHeader.name, sceneName.data(), nameLen);
     sceneHeader.name[nameLen] = '\0';
-    sceneHeader.entityCount = static_cast<uint32_t>(s.content["entities"].size());
+    sceneHeader.entityCount = s.entityCount;
 
     Core::Vector<std::byte> out(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
     Engine::WriteWSceneHeader(out, sceneHeader);
-    const std::string dump = s.content.dump(2);
-    Engine::AppendText(out, dump.c_str());
+    out.Append(s.content.Data(), s.content.Data() + s.content.Size());
     if (!Platform::WriteFile(path, out.Data(), out.Size())) {
         LOG_ERROR(Game, "Failed to write scene file '{}'", path.c_str());
         return;
@@ -297,9 +308,8 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
         return {false, sceneId, sceneName};
     }
 
-    Engine::Scene s;
-    s.content = nlohmann::json::parse(map.data + header->dataOffset, map.data + map.size);
-    StringID loadedId = LoadScene(state->componentRegistry, state->registry, s);
+    const Engine::TextReader sceneReader(map.data + header->dataOffset, map.size - header->dataOffset);
+    StringID loadedId = LoadScene(state->componentRegistry, state->registry, sceneReader);
     assert(loadedId == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
     uint64_t maxSortOrder = 0; {
         auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
@@ -325,16 +335,14 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
     ResolvePrefabLoads(state, assetManager);
     ResolveHierarchyLinks(state);
 
-    if (s.content.contains("editor_camera")) {
+    const Engine::TextReader camReader = sceneReader.Block("editor_camera");
+    if (camReader.IsValid()) {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
-            const auto& camJson = s.content["editor_camera"];
             auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
-            const auto& t = camJson["translation"];
-            transform.translation = glm::vec3(t[0].get<float>(), t[1].get<float>(), t[2].get<float>());
-            const auto& r = camJson["rotation"];
-            transform.rotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
+            transform.translation = camReader.Vec3("translation", transform.translation);
+            transform.rotation = camReader.Quat("rotation", transform.rotation);
         }
     }
 
@@ -585,15 +593,15 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
 {
     // todo: Fix this to:
     //  Compare all existing prefabs and check their components. If their component fields are precisely the same as the src prefab, then replace it with new
-    nlohmann::json entityJson;
+    Core::Vector<std::byte> body(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    Engine::TextWriter w(body);
     uint32_t componentCount = 0;
 
     for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
         if (entry.has(state->registry, entity)) {
-            nlohmann::json compJson;
-            entry.serialize(state->registry, entity, compJson);
-            auto s = Core::ShortString::Format("%llu", entry.typeId.id);
-            entityJson[s.c_str()] = compJson;
+            w.BeginBlock(entry.typeId.id);
+            entry.serialize(state->registry, entity, w);
+            w.EndBlock();
             componentCount++;
         }
     }
@@ -638,8 +646,7 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
 
     Core::Vector<std::byte> out(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
     Engine::WriteWPrefabHeader(out, header);
-    const std::string dump = entityJson.dump(2);
-    Engine::AppendText(out, dump.c_str());
+    out.Append(body.Data(), body.Data() + body.Size());
     if (!Platform::WriteFile(path, out.Data(), out.Size())) {
         LOG_ERROR(Game, "Failed to write prefab file '{}'", path.c_str());
         return;
@@ -661,19 +668,21 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
         return entt::null;
     }
 
-    auto prefabData = Engine::ReadWPrefab(meta->source.c_str());
+    auto* ctx = state->registry.ctx().get<Engine::EngineContext*>();
+    auto prefabData = Engine::ReadWPrefab(meta->source.c_str(), &ctx->memoryManager->AssetsScratch());
     if (!prefabData) {
         LOG_ERROR(Game, "Failed to read prefab file '{}'", meta->source.c_str());
         return entt::null;
     }
 
     entt::entity entity = state->registry.create();
-    for (auto& [key, compJson] : prefabData->componentJson.items()) {
-        uint64_t typeId = std::stoull(key);
+    prefabData->Body().ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
+        uint64_t typeId = 0;
+        std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
         bool bFound = false;
         for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
             if (entry.typeId.id == typeId) {
-                entry.deserialize(state->registry, entity, compJson);
+                entry.deserialize(state->registry, entity, compReader);
                 bFound = true;
                 break;
             }
@@ -681,7 +690,7 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
         if (!bFound) {
             LOG_WARN(Game, "Prefab component key {} matches no registered component; dropped on spawn", typeId);
         }
-    }
+    });
 
     if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
         transform->translation = spawnPosition;
@@ -700,8 +709,10 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
 
 void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager)
 {
-    // Cache parsed prefab JSON so each file is read once even with many instances
-    Core::InlineMap<StringID, nlohmann::json, 512> prefabJsonCache;
+    auto* ctx = state->registry.ctx().get<Engine::EngineContext*>();
+
+    // Cache prefab bodies so each file is read once even with many instances
+    Core::InlineMap<StringID, Engine::WPrefabData, 512> prefabCache;
 
     auto view = state->registry.view<Component::PrefabInstanceComponent>();
     for (auto entity : view) {
@@ -713,23 +724,24 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
             continue;
         }
 
-        auto cacheIt = prefabJsonCache.Find(prefabInst.prefabId);
+        auto cacheIt = prefabCache.Find(prefabInst.prefabId);
         if (cacheIt == nullptr) {
-            auto prefabData = Engine::ReadWPrefab(meta->source.c_str());
+            auto prefabData = Engine::ReadWPrefab(meta->source.c_str(), &ctx->memoryManager->AssetsScratch());
             if (!prefabData) {
                 LOG_WARN(Game, "Failed to read prefab file '{}'", meta->source.c_str());
                 continue;
             }
-            cacheIt = &prefabJsonCache.Emplace(prefabInst.prefabId, std::move(prefabData->componentJson));
+            cacheIt = &prefabCache.Emplace(prefabInst.prefabId, std::move(*prefabData));
         }
 
-        for (auto& [key, compJson] : cacheIt->items()) {
-            uint64_t typeId = std::stoull(key);
+        cacheIt->Body().ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
+            uint64_t typeId = 0;
+            std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
             bool bFound = false;
             for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.typeId.id == typeId) {
                     if (!entry.has(state->registry, entity)) {
-                        entry.deserialize(state->registry, entity, compJson);
+                        entry.deserialize(state->registry, entity, compReader);
                     }
                     bFound = true;
                     break;
@@ -738,7 +750,7 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
             if (!bFound) {
                 LOG_WARN(Game, "Prefab component key {} matches no registered component; skipped", typeId);
             }
-        }
+        });
     }
 }
 

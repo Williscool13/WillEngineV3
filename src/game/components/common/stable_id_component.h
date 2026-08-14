@@ -8,7 +8,6 @@
 #include <random>
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/string_id.h"
 #include "engine/component_registry.h"
@@ -39,8 +38,8 @@ struct StableIdComponent
         return StringID(rng());
     }
 
-    static void Serialize(const StableIdComponent& comp, nlohmann::json& json);
-    static void Deserialize(StableIdComponent& comp, const nlohmann::json& json);
+    static void Serialize(const StableIdComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(StableIdComponent& comp, const Engine::TextReader& r);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);

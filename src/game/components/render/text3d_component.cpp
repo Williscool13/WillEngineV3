@@ -5,7 +5,6 @@
 #include "text3d_component.h"
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "imgui.h"
 
@@ -16,6 +15,8 @@
 #include "engine/asset_manager.h"
 #include "engine/material_manager.h"
 #include "engine/engine_api.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
@@ -78,46 +79,43 @@ bool Component::Text3DComponent::CanAdd(const entt::registry& registry, entt::en
     return !registry.any_of<Component::StaticMeshComponent, Component::SplineMeshComponent, Component::ProceduralMeshComponent>(entity);
 }
 
-void Component::Text3DComponent::Serialize(const Text3DComponent& comp, nlohmann::json& json)
+void Component::Text3DComponent::Serialize(const Text3DComponent& comp, Engine::TextWriter& w)
 {
-    json["fontId"] = comp.fontId.id;
-    json["text"] = comp.text.c_str();
-    json["depth"] = comp.depth;
-    json["flatness"] = comp.flatness;
-    json["tracking"] = comp.tracking;
-    json["scale"] = comp.scale;
-    json["wrapWidth"] = comp.wrapWidth;
-    json["bendRadius"] = comp.bendRadius;
-    json["smoothNormals"] = comp.bSmoothNormals;
-    json["align"] = static_cast<uint8_t>(comp.align);
-    json["anchor"] = static_cast<uint8_t>(comp.anchor);
-    json["material"] = comp.material.id;
-    json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
-    json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
+    static const Text3DComponent DEF{};
+    w.Key("fontId", comp.fontId.id);
+    if (!comp.text.IsEmpty()) {
+        w.KeyStr("text", comp.text.View());
+    }
+    w.KeyOpt("depth", comp.depth, DEF.depth);
+    w.KeyOpt("flatness", comp.flatness, DEF.flatness);
+    w.KeyOpt("tracking", comp.tracking, DEF.tracking);
+    w.KeyOpt("scale", comp.scale, DEF.scale);
+    w.KeyOpt("wrapWidth", comp.wrapWidth, DEF.wrapWidth);
+    w.KeyOpt("bendRadius", comp.bendRadius, DEF.bendRadius);
+    w.KeyOpt("smoothNormals", comp.bSmoothNormals, DEF.bSmoothNormals);
+    w.KeyOpt("align", static_cast<uint32_t>(comp.align), static_cast<uint32_t>(DEF.align));
+    w.KeyOpt("anchor", static_cast<uint32_t>(comp.anchor), static_cast<uint32_t>(DEF.anchor));
+    w.Key("material", comp.material.id);
+    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
+    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
 }
 
-void Component::Text3DComponent::Deserialize(Text3DComponent& comp, const nlohmann::json& json)
+void Component::Text3DComponent::Deserialize(Text3DComponent& comp, const Engine::TextReader& r)
 {
-    comp.fontId = Engine::FontID(json["fontId"].get<uint64_t>());
-    comp.text = Core::InlineString<256>(json["text"].get<std::string_view>());
-    comp.depth = json["depth"].get<float>();
-    comp.flatness = json["flatness"].get<float>();
-    comp.tracking = json["tracking"].get<float>();
-    comp.scale = json["scale"].get<float>();
-    if (json.contains("wrapWidth")) { comp.wrapWidth = json["wrapWidth"].get<float>(); }
-    if (json.contains("bendRadius")) { comp.bendRadius = json["bendRadius"].get<float>(); }
-    if (json.contains("smoothNormals")) { comp.bSmoothNormals = json["smoothNormals"].get<bool>(); }
-    if (json.contains("align")) { comp.align = static_cast<Engine::Text3DAlign>(json["align"].get<uint8_t>()); }
-    if (json.contains("anchor")) { comp.anchor = static_cast<Engine::Text3DAnchor>(json["anchor"].get<uint8_t>()); }
-    comp.material = Engine::MaterialID(json["material"].get<uint64_t>());
-    if (json.contains("renderOffset")) {
-        const auto& o = json["renderOffset"];
-        comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
-    }
-    if (json.contains("renderRotation")) {
-        const auto& r = json["renderRotation"];
-        comp.renderRotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
-    }
+    comp.fontId = Engine::FontID(r.U64("fontId", comp.fontId.id));
+    r.Str("text", comp.text);
+    comp.depth = r.Float("depth", comp.depth);
+    comp.flatness = r.Float("flatness", comp.flatness);
+    comp.tracking = r.Float("tracking", comp.tracking);
+    comp.scale = r.Float("scale", comp.scale);
+    comp.wrapWidth = r.Float("wrapWidth", comp.wrapWidth);
+    comp.bendRadius = r.Float("bendRadius", comp.bendRadius);
+    comp.bSmoothNormals = r.Bool("smoothNormals", comp.bSmoothNormals);
+    comp.align = static_cast<Engine::Text3DAlign>(r.UInt("align", static_cast<uint32_t>(comp.align)));
+    comp.anchor = static_cast<Engine::Text3DAnchor>(r.UInt("anchor", static_cast<uint32_t>(comp.anchor)));
+    comp.material = Engine::MaterialID(r.U64("material", comp.material.id));
+    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
+    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
 }
 
 Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

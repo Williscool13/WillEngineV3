@@ -4,10 +4,10 @@
 
 #include "debug_gizmo_component.h"
 
-#include <json/nlohmann/json.hpp>
-
 #include "imgui.h"
 
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 
 namespace
@@ -16,22 +16,21 @@ constexpr const char* SHAPE_NAMES[] = {"None", "Sphere", "Box"};
 static_assert(std::size(SHAPE_NAMES) == static_cast<size_t>(Game::Component::DebugGizmoShape::Count));
 }
 
-void Game::Component::DebugGizmoComponent::Serialize(const DebugGizmoComponent& comp, nlohmann::json& json)
+void Game::Component::DebugGizmoComponent::Serialize(const DebugGizmoComponent& comp, Engine::TextWriter& w)
 {
-    json["shape"] = static_cast<uint8_t>(comp.shape);
-    json["extents"] = {comp.extents.x, comp.extents.y, comp.extents.z};
-    json["color"] = {comp.color.r, comp.color.g, comp.color.b, comp.color.a};
-    json["lineWidth"] = comp.lineWidth;
+    static const DebugGizmoComponent DEF{};
+    w.KeyOpt("shape", static_cast<uint32_t>(comp.shape), static_cast<uint32_t>(DEF.shape));
+    w.KeyOpt("extents", comp.extents, DEF.extents);
+    w.KeyOpt("color", comp.color, DEF.color);
+    w.KeyOpt("lineWidth", comp.lineWidth, DEF.lineWidth);
 }
 
-void Game::Component::DebugGizmoComponent::Deserialize(DebugGizmoComponent& comp, const nlohmann::json& json)
+void Game::Component::DebugGizmoComponent::Deserialize(DebugGizmoComponent& comp, const Engine::TextReader& r)
 {
-    comp.shape = static_cast<DebugGizmoShape>(json["shape"].get<uint8_t>());
-    const auto& e = json["extents"];
-    comp.extents = glm::vec3(e[0].get<float>(), e[1].get<float>(), e[2].get<float>());
-    const auto& c = json["color"];
-    comp.color = glm::vec4(c[0].get<float>(), c[1].get<float>(), c[2].get<float>(), c[3].get<float>());
-    comp.lineWidth = json["lineWidth"].get<float>();
+    comp.shape = static_cast<DebugGizmoShape>(r.UInt("shape", static_cast<uint32_t>(comp.shape)));
+    comp.extents = r.Vec3("extents", comp.extents);
+    comp.color = r.Vec4("color", comp.color);
+    comp.lineWidth = r.Float("lineWidth", comp.lineWidth);
 }
 
 namespace Game

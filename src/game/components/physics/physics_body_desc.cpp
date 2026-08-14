@@ -5,7 +5,6 @@
 #include "physics_body_desc.h"
 
 #include <glm/gtc/type_ptr.hpp>
-#include <json/nlohmann/json.hpp>
 
 #include "physics_body_component.h"
 #include "physics_components.h"
@@ -17,6 +16,8 @@
 #include "engine/asset_manager.h"
 #include "engine/resources/physics/collider_generation.h"
 #include "engine/engine_api.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/components/core_components.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
@@ -149,615 +150,213 @@ void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
 
 namespace Game
 {
-void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann::json& json)
+void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, Engine::TextWriter& w)
 {
-    json["motionType"] = comp.motionType;
-    json["mass"] = comp.mass;
-    json["friction"] = comp.friction;
-    json["restitution"] = comp.restitution;
-    json["motionQuality"] = static_cast<uint8_t>(comp.motionQuality);
-    json["layerOverride"] = comp.layerOverride;
-    json["enhancedInternalEdgeRemoval"] = comp.bEnhancedInternalEdgeRemoval;
-    json["isSensor"] = comp.bIsSensor;
-    json["shapes"] = nlohmann::json::array();
+    w.Key("motionType", static_cast<uint32_t>(comp.motionType));
+    w.Key("mass", comp.mass);
+    w.Key("friction", comp.friction);
+    w.Key("restitution", comp.restitution);
+    w.Key("motionQuality", static_cast<uint32_t>(comp.motionQuality));
+    w.Key("layerOverride", static_cast<uint32_t>(comp.layerOverride));
+    w.Key("enhancedInternalEdgeRemoval", comp.bEnhancedInternalEdgeRemoval);
+    w.Key("isSensor", comp.bIsSensor);
 
+    if (comp.shapes.IsEmpty()) {
+        return;
+    }
+    w.Count("shapes", static_cast<uint32_t>(comp.shapes.Size()));
     for (const auto& shape : comp.shapes) {
-        nlohmann::json shapeJson;
-        shapeJson["type"] = shape.type;
-        shapeJson["offset"] = {shape.offset.x, shape.offset.y, shape.offset.z};
-        shapeJson["rotation"] = {shape.rotation.w, shape.rotation.x, shape.rotation.y, shape.rotation.z};
-        shapeJson["bakedScaleX"] = shape.bakedScale.x;
-        shapeJson["bakedScaleY"] = shape.bakedScale.y;
-        shapeJson["bakedScaleZ"] = shape.bakedScale.z;
+        w.BeginBlock("shape");
+        w.Key("type", static_cast<uint32_t>(shape.type));
+        w.Key("offset", shape.offset);
+        w.Key("rotation", shape.rotation);
+        w.Key("bakedScale", shape.bakedScale);
 
         switch (shape.type) {
             case Component::PhysicsShapeType::Box:
-                shapeJson["halfExtents"] = {shape.box.halfExtents.x, shape.box.halfExtents.y, shape.box.halfExtents.z};
+                w.Key("halfExtents", shape.box.halfExtents);
                 break;
             case Component::PhysicsShapeType::Sphere:
-                shapeJson["radius"] = shape.sphere.radius;
+                w.Key("radius", shape.sphere.radius);
                 break;
             case Component::PhysicsShapeType::Capsule:
-                shapeJson["radius"] = shape.capsule.radius;
-                shapeJson["halfHeight"] = shape.capsule.halfHeight;
+                w.Key("radius", shape.capsule.radius);
+                w.Key("halfHeight", shape.capsule.halfHeight);
                 break;
             case Component::PhysicsShapeType::Collider:
-                shapeJson["meshSourceModelId"] = shape.meshSourceModelId.id;
-                shapeJson["meshPrecise"] = shape.bMeshPrecise;
-                shapeJson["proceduralType"] = shape.proceduralParams.index();
+                w.Key("meshSourceModelId", shape.meshSourceModelId.id);
+                w.Key("meshPrecise", shape.bMeshPrecise);
+                w.Key("proceduralType", static_cast<uint32_t>(shape.proceduralParams.index()));
                 if (!shape.splineParams.spline.points.IsEmpty()) {
-                    nlohmann::json sp;
-                    Engine::Spline::Serialize(shape.splineParams.spline, sp["spline"]);
-                    sp["radius"] = shape.splineParams.radius;
-                    sp["rollAngle"] = shape.splineParams.rollAngle;
-                    sp["sides"] = shape.splineParams.sides;
-                    sp["segmentsPerSpan"] = shape.splineParams.segmentsPerSpan;
-                    sp["bCaps"] = shape.splineParams.bCaps;
-                    sp["bCrossPlanks"] = shape.splineParams.bCrossPlanks;
-                    sp["crossPlankInterval"] = shape.splineParams.crossPlankInterval;
-                    sp["crossPlankHeight"] = shape.splineParams.crossPlankHeight;
-                    sp["crossPlankThickness"] = shape.splineParams.crossPlankThickness;
-                    sp["crossPlankLength"] = shape.splineParams.crossPlankLength;
-                    sp["profileType"] = static_cast<int32_t>(shape.splineParams.profile.type);
-                    sp["profileWidth"] = shape.splineParams.profile.width;
-                    sp["profileHeight"] = shape.splineParams.profile.height;
-                    sp["profileCornerRadius"] = shape.splineParams.profile.cornerRadius;
-                    sp["profileCornerSegments"] = shape.splineParams.profile.cornerSegments;
-                    sp["profileThickness"] = shape.splineParams.profile.thickness;
-                    sp["railingEnabled"] = shape.splineParams.railing.bEnabled;
-                    sp["railingPosts"] = shape.splineParams.railing.bPosts;
-                    sp["railingPostInterval"] = shape.splineParams.railing.postInterval;
-                    sp["railingPostBottom"] = shape.splineParams.railing.postBottom;
-                    sp["railingPostTop"] = shape.splineParams.railing.postTop;
-                    sp["railingPostSizeX"] = shape.splineParams.railing.postSize.x;
-                    sp["railingPostSizeY"] = shape.splineParams.railing.postSize.y;
-                    sp["railingPostLateral"] = shape.splineParams.railing.postLateral;
-                    sp["railingLateralOffset"] = shape.splineParams.railing.lateralOffset;
-                    auto& laneArr = sp["railingLanes"] = nlohmann::json::array();
-                    for (int li = 0; li < static_cast<int>(shape.splineParams.railing.lanes.Size()); li++) {
-                        laneArr.push_back({shape.splineParams.railing.lanes[li].x, shape.splineParams.railing.lanes[li].y});
-                    }
-                    shapeJson["splineParams"] = sp;
-                }
-                if (shape.text3DSource.IsValid()) {
-                    nlohmann::json t3;
-                    t3["fontId"] = shape.text3DSource.fontId.id;
-                    t3["text"] = shape.text3DSource.text.c_str();
-                    t3["depth"] = shape.text3DSource.depth;
-                    t3["flatness"] = shape.text3DSource.flatness;
-                    t3["tracking"] = shape.text3DSource.tracking;
-                    t3["scale"] = shape.text3DSource.scale;
-                    t3["wrapWidth"] = shape.text3DSource.wrapWidth;
-                    t3["bendRadius"] = shape.text3DSource.bendRadius;
-                    t3["smoothNormals"] = shape.text3DSource.bSmoothNormals;
-                    t3["align"] = static_cast<uint8_t>(shape.text3DSource.align);
-                    t3["anchor"] = static_cast<uint8_t>(shape.text3DSource.anchor);
-                    t3["precise"] = shape.text3DSource.bPrecise;
-                    shapeJson["text3DSource"] = t3;
-                }
-                std::visit([&shapeJson](const auto& p) {
-                    using T = std::decay_t<decltype(p)>;
-                    if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
-                        shapeJson["stepCount"] = p.stepCount;
-                        shapeJson["width"] = p.width;
-                        shapeJson["totalDepth"] = p.totalDepth;
-                        shapeJson["totalHeight"] = p.totalHeight;
-                        shapeJson["bSpecifyStepHeight"] = p.bSpecifyStepHeight;
-                        shapeJson["stepHeight"] = p.stepHeight;
-                        shapeJson["bIsClosed"] = p.bIsClosed;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::BoxParams>) {
-                        shapeJson["sizeX"] = p.sizeX;
-                        shapeJson["sizeY"] = p.sizeY;
-                        shapeJson["sizeZ"] = p.sizeZ;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
-                        shapeJson["radius"] = p.radius;
-                        shapeJson["height"] = p.height;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["bCapped"] = p.bCapped;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::CapsuleParams>) {
-                        shapeJson["radius"] = p.radius;
-                        shapeJson["height"] = p.height;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["rings"] = p.rings;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::TorusParams>) {
-                        shapeJson["ringRadius"] = p.ringRadius;
-                        shapeJson["tubeRadius"] = p.tubeRadius;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["stacks"] = p.stacks;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::ArchParams>) {
-                        shapeJson["width"] = p.width;
-                        shapeJson["height"] = p.height;
-                        shapeJson["depth"] = p.depth;
-                        shapeJson["thickness"] = p.thickness;
-                        shapeJson["sides"] = p.sides;
-                        shapeJson["bFillCorners"] = p.bFillCorners;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::WedgeParams>) {
-                        shapeJson["sizeX"] = p.sizeX;
-                        shapeJson["sizeY"] = p.sizeY;
-                        shapeJson["sizeZ"] = p.sizeZ;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::ConeParams>) {
-                        shapeJson["radius"] = p.radius;
-                        shapeJson["height"] = p.height;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["bCapped"] = p.bCapped;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::DoorParams>) {
-                        shapeJson["width"] = p.width;
-                        shapeJson["height"] = p.height;
-                        shapeJson["depth"] = p.depth;
-                        shapeJson["archHeight"] = p.archHeight;
-                        shapeJson["gap"] = p.gap;
-                        shapeJson["sides"] = p.sides;
-                        shapeJson["bHalf"] = p.bHalf;
-                        shapeJson["bFlip"] = p.bFlip;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::PlaneParams>) {
-                        shapeJson["sizeX"] = p.sizeX;
-                        shapeJson["sizeZ"] = p.sizeZ;
-                        shapeJson["tilesX"] = p.tilesX;
-                        shapeJson["tilesZ"] = p.tilesZ;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::SphereParams>) {
-                        shapeJson["radius"] = p.radius;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["stacks"] = p.stacks;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::SubdividedSphereParams>) {
-                        shapeJson["radius"] = p.radius;
-                        shapeJson["subdivisions"] = p.subdivisions;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::HemisphereParams>) {
-                        shapeJson["radius"] = p.radius;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["stacks"] = p.stacks;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::PipeParams>) {
-                        shapeJson["outerRadius"] = p.outerRadius;
-                        shapeJson["innerRadius"] = p.innerRadius;
-                        shapeJson["height"] = p.height;
-                        shapeJson["slices"] = p.slices;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::TetrahedronParams> ||
-                                       std::is_same_v<T, Engine::OctahedronParams> ||
-                                       std::is_same_v<T, Engine::IcosahedronParams> ||
-                                       std::is_same_v<T, Engine::DodecahedronParams>) {
-                        shapeJson["radius"] = p.radius;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::KleinBottleParams>) {
-                        shapeJson["scale"] = p.scale;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["stacks"] = p.stacks;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::TrefoilKnotParams>) {
-                        shapeJson["scale"] = p.scale;
-                        shapeJson["tubeRadius"] = p.tubeRadius;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["stacks"] = p.stacks;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::CurvedRampParams>) {
-                        shapeJson["width"] = p.width;
-                        shapeJson["height"] = p.height;
-                        shapeJson["radius"] = p.radius;
-                        shapeJson["segments"] = p.segments;
-                        shapeJson["bHalfPipe"] = p.bHalfPipe;
-                        shapeJson["flatLength"] = p.flatLength;
-                        shapeJson["lipHeight"] = p.lipHeight;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::BowlParams>) {
-                        shapeJson["radius"] = p.radius;
-                        shapeJson["height"] = p.height;
-                        shapeJson["curveRadius"] = p.curveRadius;
-                        shapeJson["flatRadius"] = p.flatRadius;
-                        shapeJson["lipHeight"] = p.lipHeight;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["segments"] = p.segments;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::SpiralStaircaseParams>) {
-                        shapeJson["stepCount"] = p.stepCount;
-                        shapeJson["stepHeight"] = p.stepHeight;
-                        shapeJson["totalHeight"] = p.totalHeight;
-                        shapeJson["bSpecifyStepHeight"] = p.bSpecifyStepHeight;
-                        shapeJson["outerRadius"] = p.outerRadius;
-                        shapeJson["centerColumnRadius"] = p.centerColumnRadius;
-                        shapeJson["treadThickness"] = p.treadThickness;
-                        shapeJson["degreesPerStep"] = p.degreesPerStep;
-                        shapeJson["totalSweep"] = p.totalSweep;
-                        shapeJson["bSpecifyDegreesPerStep"] = p.bSpecifyDegreesPerStep;
-                        shapeJson["arcSegments"] = p.arcSegments;
-                        shapeJson["bShowCenterColumn"] = p.bShowCenterColumn;
-                        shapeJson["bRamp"] = p.bRamp;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::RingParams>) {
-                        shapeJson["outerRadius"] = p.outerRadius;
-                        shapeJson["innerRadius"] = p.innerRadius;
-                        shapeJson["slices"] = p.slices;
-                        shapeJson["bDoubleSided"] = p.bDoubleSided;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::WallParams>) {
-                        shapeJson["sizeX"] = p.sizeX;
-                        shapeJson["sizeY"] = p.sizeY;
-                        shapeJson["sizeZ"] = p.sizeZ;
-                        shapeJson["openings"] = nlohmann::json::array();
-                        const int32_t n = glm::clamp(p.openingCount, 0, Engine::WallParams::MAX_OPENINGS);
-                        for (int32_t i = 0; i < n; i++) {
-                            shapeJson["openings"].push_back({p.openings[i].x, p.openings[i].y, p.openings[i].w, p.openings[i].h});
+                    w.BeginBlock("splineParams");
+                    w.BeginBlock("spline");
+                    Engine::Spline::Serialize(shape.splineParams.spline, w);
+                    w.EndBlock();
+                    w.Key("radius", shape.splineParams.radius);
+                    w.Key("rollAngle", shape.splineParams.rollAngle);
+                    w.Key("sides", shape.splineParams.sides);
+                    w.Key("segmentsPerSpan", shape.splineParams.segmentsPerSpan);
+                    w.Key("bCaps", shape.splineParams.bCaps);
+                    w.Key("bCrossPlanks", shape.splineParams.bCrossPlanks);
+                    w.Key("crossPlankInterval", shape.splineParams.crossPlankInterval);
+                    w.Key("crossPlankHeight", shape.splineParams.crossPlankHeight);
+                    w.Key("crossPlankThickness", shape.splineParams.crossPlankThickness);
+                    w.Key("crossPlankLength", shape.splineParams.crossPlankLength);
+                    w.Key("profileType", static_cast<int32_t>(shape.splineParams.profile.type));
+                    w.Key("profileWidth", shape.splineParams.profile.width);
+                    w.Key("profileHeight", shape.splineParams.profile.height);
+                    w.Key("profileCornerRadius", shape.splineParams.profile.cornerRadius);
+                    w.Key("profileCornerSegments", shape.splineParams.profile.cornerSegments);
+                    w.Key("profileThickness", shape.splineParams.profile.thickness);
+                    w.Key("railingEnabled", shape.splineParams.railing.bEnabled);
+                    w.Key("railingPosts", shape.splineParams.railing.bPosts);
+                    w.Key("railingPostInterval", shape.splineParams.railing.postInterval);
+                    w.Key("railingPostBottom", shape.splineParams.railing.postBottom);
+                    w.Key("railingPostTop", shape.splineParams.railing.postTop);
+                    w.Key("railingPostSize", glm::vec2(shape.splineParams.railing.postSize.x, shape.splineParams.railing.postSize.y));
+                    w.Key("railingPostLateral", shape.splineParams.railing.postLateral);
+                    w.Key("railingLateralOffset", shape.splineParams.railing.lateralOffset);
+                    if (!shape.splineParams.railing.lanes.IsEmpty()) {
+                        w.Count("railingLanes", static_cast<uint32_t>(shape.splineParams.railing.lanes.Size()));
+                        for (int li = 0; li < static_cast<int>(shape.splineParams.railing.lanes.Size()); li++) {
+                            w.BeginBlock("l");
+                            w.Key("lane", glm::vec2(shape.splineParams.railing.lanes[li].x, shape.splineParams.railing.lanes[li].y));
+                            w.EndBlock();
                         }
                     }
-                    else if constexpr (std::is_same_v<T, Engine::LatticeParams>) {
-                        shapeJson["sizeX"] = p.sizeX;
-                        shapeJson["sizeY"] = p.sizeY;
-                        shapeJson["sizeZ"] = p.sizeZ;
-                        shapeJson["chordSize"] = p.chordSize;
-                        shapeJson["braceSize"] = p.braceSize;
-                        shapeJson["bayCount"] = p.bayCount;
-                        shapeJson["pattern"] = p.pattern;
-                    }
-                    else if constexpr (std::is_same_v<T, Engine::CorrugatedPanelParams>) {
-                        shapeJson["sizeX"] = p.sizeX;
-                        shapeJson["sizeY"] = p.sizeY;
-                        shapeJson["sizeZ"] = p.sizeZ;
-                        shapeJson["ribDepth"] = p.ribDepth;
-                        shapeJson["ribWidth"] = p.ribWidth;
-                        shapeJson["ribCount"] = p.ribCount;
-                    }
-                }, shape.proceduralParams);
+                    w.EndBlock();
+                }
+                if (shape.text3DSource.IsValid()) {
+                    w.BeginBlock("text3DSource");
+                    w.Key("fontId", shape.text3DSource.fontId.id);
+                    w.KeyStr("text", shape.text3DSource.text.View());
+                    w.Key("depth", shape.text3DSource.depth);
+                    w.Key("flatness", shape.text3DSource.flatness);
+                    w.Key("tracking", shape.text3DSource.tracking);
+                    w.Key("scale", shape.text3DSource.scale);
+                    w.Key("wrapWidth", shape.text3DSource.wrapWidth);
+                    w.Key("bendRadius", shape.text3DSource.bendRadius);
+                    w.Key("smoothNormals", shape.text3DSource.bSmoothNormals);
+                    w.Key("align", static_cast<uint32_t>(shape.text3DSource.align));
+                    w.Key("anchor", static_cast<uint32_t>(shape.text3DSource.anchor));
+                    w.Key("precise", shape.text3DSource.bPrecise);
+                    w.EndBlock();
+                }
+                Component::SerializeProceduralShape(shape.proceduralParams, w);
                 break;
         }
 
-        json["shapes"].push_back(shapeJson);
+        w.EndBlock();
     }
 }
 
-void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& json)
+void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const Engine::TextReader& r)
 {
-    comp.motionType = static_cast<PhysicsMotionType>(json["motionType"].get<uint8_t>());
-    comp.mass = json["mass"].get<float>();
-    comp.friction = json.value<float>("friction", 0.0f);
-    comp.restitution = json.value<float>("restitution", 0.0f);
-    comp.motionQuality = static_cast<JPH::EMotionQuality>(json.value<uint8_t>("motionQuality", 0));
-    comp.layerOverride = json.value<JPH::ObjectLayer>("layerOverride", 0xFFFF);
-    comp.bEnhancedInternalEdgeRemoval = json.value<bool>("enhancedInternalEdgeRemoval", false);
-    comp.bIsSensor = json.value<bool>("isSensor", false);
+    comp.motionType = static_cast<PhysicsMotionType>(r.UInt("motionType", 0));
+    comp.mass = r.Float("mass", comp.mass);
+    comp.friction = r.Float("friction", 0.0f);
+    comp.restitution = r.Float("restitution", 0.0f);
+    comp.motionQuality = static_cast<JPH::EMotionQuality>(r.UInt("motionQuality", 0));
+    comp.layerOverride = static_cast<JPH::ObjectLayer>(r.UInt("layerOverride", 0xFFFF));
+    comp.bEnhancedInternalEdgeRemoval = r.Bool("enhancedInternalEdgeRemoval", false);
+    comp.bIsSensor = r.Bool("isSensor", false);
     comp.shapes.Clear();
 
-    for (const auto& shapeJson : json["shapes"]) {
+    r.ForEachRecord("shapes", [&](const Engine::TextReader& s) {
+        if (comp.shapes.IsFull()) { return; }
         PhysicsShapeDesc shape{};
         // Legacy migration: ConvexHull(3)/TriangleMesh(4)/Compound(5) collapsed into Collider(3)
-        const uint8_t rawType = shapeJson["type"].get<uint8_t>();
-        shape.type = rawType >= static_cast<uint8_t>(PhysicsShapeType::Collider) ? PhysicsShapeType::Collider : static_cast<PhysicsShapeType>(rawType);
+        const uint32_t rawType = s.UInt("type", 0);
+        shape.type = rawType >= static_cast<uint32_t>(PhysicsShapeType::Collider) ? PhysicsShapeType::Collider : static_cast<PhysicsShapeType>(rawType);
 
-        auto& o = shapeJson["offset"];
-        shape.offset = {o[0].get<float>(), o[1].get<float>(), o[2].get<float>()};
-
-        auto& r = shapeJson["rotation"];
-        shape.rotation = {r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>()};
-
-        shape.bakedScale = {
-            shapeJson.value("bakedScaleX", 1.0f),
-            shapeJson.value("bakedScaleY", 1.0f),
-            shapeJson.value("bakedScaleZ", 1.0f)
-        };
+        shape.offset = s.Vec3("offset", shape.offset);
+        shape.rotation = s.Quat("rotation", shape.rotation);
+        shape.bakedScale = s.Vec3("bakedScale", shape.bakedScale);
 
         switch (shape.type) {
             case PhysicsShapeType::Box:
             {
-                auto& h = shapeJson["halfExtents"];
-                shape.box.halfExtents = {h[0].get<float>(), h[1].get<float>(), h[2].get<float>()};
+                shape.box.halfExtents = s.Vec3("halfExtents", glm::vec3(0.5f));
                 break;
             }
             case PhysicsShapeType::Sphere:
-                shape.sphere.radius = shapeJson["radius"].get<float>();
+            {
+                shape.sphere.radius = s.Float("radius", 0.5f);
                 break;
+            }
             case PhysicsShapeType::Capsule:
-                shape.capsule.radius = shapeJson["radius"].get<float>();
-                shape.capsule.halfHeight = shapeJson["halfHeight"].get<float>();
+            {
+                shape.capsule.radius = s.Float("radius", 0.5f);
+                shape.capsule.halfHeight = s.Float("halfHeight", 0.5f);
                 break;
+            }
             case PhysicsShapeType::Collider:
-                if (shapeJson.contains("meshSourceModelId")) {
-                    shape.meshSourceModelId = Engine::ModelID(shapeJson["meshSourceModelId"].get<uint64_t>());
-                }
-                shape.bMeshPrecise = shapeJson.value("meshPrecise", false);
-                if (shapeJson.contains("proceduralType")) {
-                    const int32_t ptype = shapeJson["proceduralType"].get<int32_t>();
-                    if (ptype == 1) {
-                        Engine::StaircaseParams p{};
-                        p.stepCount = shapeJson["stepCount"].get<int32_t>();
-                        p.width = shapeJson["width"].get<float>();
-                        p.totalDepth = shapeJson["totalDepth"].get<float>();
-                        p.totalHeight = shapeJson["totalHeight"].get<float>();
-                        p.bSpecifyStepHeight = shapeJson.value("bSpecifyStepHeight", false);
-                        p.stepHeight = shapeJson.value("stepHeight", p.totalHeight / static_cast<float>(std::max(p.stepCount, 1)));
-                        p.bIsClosed = shapeJson.value("bIsClosed", true);
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 2) {
-                        Engine::BoxParams p{};
-                        p.sizeX = shapeJson["sizeX"].get<float>();
-                        p.sizeY = shapeJson["sizeY"].get<float>();
-                        p.sizeZ = shapeJson["sizeZ"].get<float>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 3) {
-                        Engine::CylinderParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        p.height = shapeJson["height"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.bCapped = shapeJson["bCapped"].get<bool>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 4) {
-                        Engine::CapsuleParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        p.height = shapeJson["height"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.rings = shapeJson["rings"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 5) {
-                        Engine::TorusParams p{};
-                        p.ringRadius = shapeJson["ringRadius"].get<float>();
-                        p.tubeRadius = shapeJson["tubeRadius"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.stacks = shapeJson["stacks"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 6) {
-                        Engine::ArchParams p{};
-                        p.width = shapeJson["width"].get<float>();
-                        p.height = shapeJson["height"].get<float>();
-                        p.depth = shapeJson["depth"].get<float>();
-                        p.thickness = shapeJson["thickness"].get<float>();
-                        p.sides = shapeJson["sides"].get<int32_t>();
-                        p.bFillCorners = shapeJson.value("bFillCorners", false);
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 7) {
-                        Engine::WedgeParams p{};
-                        p.sizeX = shapeJson["sizeX"].get<float>();
-                        p.sizeY = shapeJson["sizeY"].get<float>();
-                        p.sizeZ = shapeJson["sizeZ"].get<float>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 8) {
-                        Engine::ConeParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        p.height = shapeJson["height"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.bCapped = shapeJson["bCapped"].get<bool>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 9) {
-                        Engine::DoorParams p{};
-                        p.width = shapeJson["width"].get<float>();
-                        p.height = shapeJson["height"].get<float>();
-                        p.depth = shapeJson["depth"].get<float>();
-                        p.archHeight = shapeJson.value("archHeight", 0.5f);
-                        p.gap = shapeJson.value("gap", 0.0f);
-                        p.sides = shapeJson["sides"].get<int32_t>();
-                        p.bHalf = shapeJson["bHalf"].get<bool>();
-                        p.bFlip = shapeJson.value("bFlip", false);
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 10) {
-                        Engine::PlaneParams p{};
-                        p.sizeX = shapeJson["sizeX"].get<float>();
-                        p.sizeZ = shapeJson["sizeZ"].get<float>();
-                        p.tilesX = shapeJson["tilesX"].get<int32_t>();
-                        p.tilesZ = shapeJson["tilesZ"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 11) {
-                        Engine::SphereParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.stacks = shapeJson["stacks"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 12) {
-                        Engine::SubdividedSphereParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        p.subdivisions = glm::clamp(shapeJson["subdivisions"].get<int32_t>(), 0, 4);
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 13) {
-                        Engine::HemisphereParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.stacks = shapeJson["stacks"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 14) {
-                        Engine::PipeParams p{};
-                        p.outerRadius = shapeJson["outerRadius"].get<float>();
-                        p.innerRadius = shapeJson["innerRadius"].get<float>();
-                        p.height = shapeJson["height"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 15) {
-                        Engine::TetrahedronParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 16) {
-                        Engine::OctahedronParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 17) {
-                        Engine::IcosahedronParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 18) {
-                        Engine::DodecahedronParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 19) {
-                        Engine::KleinBottleParams p{};
-                        p.scale = shapeJson["scale"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.stacks = shapeJson["stacks"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 20) {
-                        Engine::TrefoilKnotParams p{};
-                        p.scale = shapeJson["scale"].get<float>();
-                        p.tubeRadius = shapeJson["tubeRadius"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.stacks = shapeJson["stacks"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 21) {
-                        Engine::CurvedRampParams p{};
-                        p.width = shapeJson["width"].get<float>();
-                        p.height = shapeJson["height"].get<float>();
-                        p.radius = shapeJson["radius"].get<float>();
-                        p.segments = shapeJson["segments"].get<int32_t>();
-                        p.bHalfPipe = shapeJson.value("bHalfPipe", false);
-                        p.flatLength = shapeJson.value("flatLength", 1.0f);
-                        p.lipHeight = shapeJson.value("lipHeight", 0.02f);
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 22) {
-                        Engine::BowlParams p{};
-                        p.radius = shapeJson["radius"].get<float>();
-                        p.height = shapeJson["height"].get<float>();
-                        p.curveRadius = shapeJson["curveRadius"].get<float>();
-                        p.flatRadius = shapeJson.value("flatRadius", 0.0f);
-                        p.lipHeight = shapeJson.value("lipHeight", 0.02f);
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.segments = shapeJson["segments"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 23) {
-                        Engine::SpiralStaircaseParams p{};
-                        p.stepCount = shapeJson["stepCount"].get<int32_t>();
-                        p.stepHeight = shapeJson["stepHeight"].get<float>();
-                        p.totalHeight = shapeJson.value("totalHeight", p.stepHeight * static_cast<float>(std::max(p.stepCount, 1)));
-                        p.bSpecifyStepHeight = shapeJson.value("bSpecifyStepHeight", false);
-                        p.outerRadius = shapeJson["outerRadius"].get<float>();
-                        p.centerColumnRadius = shapeJson["centerColumnRadius"].get<float>();
-                        p.treadThickness = shapeJson.value("treadThickness", 0.08f);
-                        p.degreesPerStep = shapeJson.value("degreesPerStep", 30.0f);
-                        p.totalSweep = shapeJson.value("totalSweep", p.degreesPerStep * static_cast<float>(std::max(p.stepCount, 1)));
-                        p.bSpecifyDegreesPerStep = shapeJson.value("bSpecifyDegreesPerStep", false);
-                        p.arcSegments = shapeJson.value("arcSegments", 6);
-                        p.bShowCenterColumn = shapeJson.value("bShowCenterColumn", true);
-                        p.bRamp = shapeJson.value("bRamp", false);
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 24) {
-                        Engine::RingParams p{};
-                        p.outerRadius = shapeJson["outerRadius"].get<float>();
-                        p.innerRadius = shapeJson["innerRadius"].get<float>();
-                        p.slices = shapeJson["slices"].get<int32_t>();
-                        p.bDoubleSided = shapeJson.value("bDoubleSided", true);
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 25) {
-                        Engine::WallParams p{};
-                        p.sizeX = shapeJson["sizeX"].get<float>();
-                        p.sizeY = shapeJson["sizeY"].get<float>();
-                        p.sizeZ = shapeJson["sizeZ"].get<float>();
-                        if (shapeJson.contains("openings")) {
-                            for (const auto& e : shapeJson["openings"]) {
-                                if (p.openingCount >= Engine::WallParams::MAX_OPENINGS) { break; }
-                                p.openings[p.openingCount++] = {e[0].get<float>(), e[1].get<float>(), e[2].get<float>(), e[3].get<float>()};
-                            }
-                        }
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 26) {
-                        Engine::LatticeParams p{};
-                        p.sizeX = shapeJson["sizeX"].get<float>();
-                        p.sizeY = shapeJson["sizeY"].get<float>();
-                        p.sizeZ = shapeJson["sizeZ"].get<float>();
-                        p.chordSize = shapeJson["chordSize"].get<float>();
-                        p.braceSize = shapeJson["braceSize"].get<float>();
-                        p.bayCount = shapeJson["bayCount"].get<int32_t>();
-                        p.pattern = shapeJson.value("pattern", 0);
-                        shape.proceduralParams = p;
-                    }
-                    else if (ptype == 27) {
-                        Engine::CorrugatedPanelParams p{};
-                        p.sizeX = shapeJson["sizeX"].get<float>();
-                        p.sizeY = shapeJson["sizeY"].get<float>();
-                        p.sizeZ = shapeJson["sizeZ"].get<float>();
-                        p.ribDepth = shapeJson["ribDepth"].get<float>();
-                        p.ribWidth = shapeJson["ribWidth"].get<float>();
-                        p.ribCount = shapeJson["ribCount"].get<int32_t>();
-                        shape.proceduralParams = p;
-                    }
-                }
-                if (shapeJson.contains("splineParams")) {
-                    const auto& sp = shapeJson["splineParams"];
+            {
+                shape.meshSourceModelId = Engine::ModelID(s.U64("meshSourceModelId", 0));
+                shape.bMeshPrecise = s.Bool("meshPrecise", false);
+                shape.proceduralParams = Component::DeserializeProceduralShape(s.Int("proceduralType", 0), s);
+                const Engine::TextReader sp = s.Block("splineParams");
+                if (sp.IsValid()) {
                     Engine::SplineParams spline{};
-                    if (sp.contains("spline")) { Engine::Spline::Deserialize(spline.spline, sp["spline"]); }
-                    spline.radius = sp.value("radius", 0.5f);
-                    spline.rollAngle = sp.value("rollAngle", 0.0f);
-                    spline.sides = sp.value("sides", 8);
-                    spline.segmentsPerSpan = sp.value("segmentsPerSpan", 8);
-                    spline.bCaps = sp.value("bCaps", true);
-                    spline.bCrossPlanks = sp.value("bCrossPlanks", false);
-                    spline.crossPlankInterval = sp.value("crossPlankInterval", 4);
-                    spline.crossPlankHeight = sp.value("crossPlankHeight", 0.0f);
-                    spline.crossPlankThickness = sp.value("crossPlankThickness", 0.1f);
-                    spline.crossPlankLength = sp.value("crossPlankLength", 0.3f);
-                    spline.profile.type = static_cast<Engine::SplineProfileType>(sp.value("profileType", 0));
-                    spline.profile.width = sp.value("profileWidth", 0.4f);
-                    spline.profile.height = sp.value("profileHeight", 0.4f);
-                    spline.profile.cornerRadius = sp.value("profileCornerRadius", 0.08f);
-                    spline.profile.cornerSegments = sp.value("profileCornerSegments", 3);
-                    spline.profile.thickness = sp.value("profileThickness", 0.05f);
-                    spline.railing.bEnabled = sp.value("railingEnabled", false);
-                    spline.railing.bPosts = sp.value("railingPosts", true);
-                    spline.railing.postInterval = sp.value("railingPostInterval", 4);
-                    spline.railing.postBottom = sp.value("railingPostBottom", 0.0f);
-                    spline.railing.postTop = sp.value("railingPostTop", 1.0f);
-                    spline.railing.postSize.x = sp.value("railingPostSizeX", 0.05f);
-                    spline.railing.postSize.y = sp.value("railingPostSizeY", 0.05f);
-                    spline.railing.postLateral = sp.value("railingPostLateral", 0.0f);
-                    spline.railing.lateralOffset = sp.value("railingLateralOffset", 0.0f);
+                    const Engine::TextReader sr = sp.Block("spline");
+                    if (sr.IsValid()) { Engine::Spline::Deserialize(spline.spline, sr); }
+                    spline.radius = sp.Float("radius", 0.5f);
+                    spline.rollAngle = sp.Float("rollAngle", 0.0f);
+                    spline.sides = sp.Int("sides", 8);
+                    spline.segmentsPerSpan = sp.Int("segmentsPerSpan", 8);
+                    spline.bCaps = sp.Bool("bCaps", true);
+                    spline.bCrossPlanks = sp.Bool("bCrossPlanks", false);
+                    spline.crossPlankInterval = sp.Int("crossPlankInterval", 4);
+                    spline.crossPlankHeight = sp.Float("crossPlankHeight", 0.0f);
+                    spline.crossPlankThickness = sp.Float("crossPlankThickness", 0.1f);
+                    spline.crossPlankLength = sp.Float("crossPlankLength", 0.3f);
+                    spline.profile.type = static_cast<Engine::SplineProfileType>(sp.Int("profileType", 0));
+                    spline.profile.width = sp.Float("profileWidth", 0.4f);
+                    spline.profile.height = sp.Float("profileHeight", 0.4f);
+                    spline.profile.cornerRadius = sp.Float("profileCornerRadius", 0.08f);
+                    spline.profile.cornerSegments = sp.Int("profileCornerSegments", 3);
+                    spline.profile.thickness = sp.Float("profileThickness", 0.05f);
+                    spline.railing.bEnabled = sp.Bool("railingEnabled", false);
+                    spline.railing.bPosts = sp.Bool("railingPosts", true);
+                    spline.railing.postInterval = sp.Int("railingPostInterval", 4);
+                    spline.railing.postBottom = sp.Float("railingPostBottom", 0.0f);
+                    spline.railing.postTop = sp.Float("railingPostTop", 1.0f);
+                    const glm::vec2 postSize = sp.Vec2("railingPostSize", glm::vec2(0.05f, 0.05f));
+                    spline.railing.postSize.x = postSize.x;
+                    spline.railing.postSize.y = postSize.y;
+                    spline.railing.postLateral = sp.Float("railingPostLateral", 0.0f);
+                    spline.railing.lateralOffset = sp.Float("railingLateralOffset", 0.0f);
                     spline.railing.lanes.Clear();
-                    if (sp.contains("railingLanes")) {
-                        for (const auto& e : sp["railingLanes"]) {
-                            if (spline.railing.lanes.Size() >= 8) { break; }
-                            spline.railing.lanes.PushBack(Vec2{e[0].get<float>(), e[1].get<float>()});
-                        }
-                    }
+                    sp.ForEachRecord("railingLanes", [&](const Engine::TextReader& l) {
+                        if (spline.railing.lanes.Size() >= 8) { return; }
+                        const glm::vec2 lane = l.Vec2("lane");
+                        spline.railing.lanes.PushBack(Vec2{lane.x, lane.y});
+                    });
                     shape.splineParams = spline;
                 }
-                if (shapeJson.contains("text3DSource")) {
-                    const auto& t3 = shapeJson["text3DSource"];
+                const Engine::TextReader t3 = s.Block("text3DSource");
+                if (t3.IsValid()) {
                     Text3DShapeSource src{};
-                    src.fontId = Engine::FontID(t3["fontId"].get<uint64_t>());
-                    src.text = Core::InlineString<256>(t3["text"].get<std::string_view>());
-                    src.depth = t3.value("depth", 0.2f);
-                    src.flatness = t3.value("flatness", 0.005f);
-                    src.tracking = t3.value("tracking", 0.0f);
-                    src.scale = t3.value("scale", 1.0f);
-                    src.wrapWidth = t3.value("wrapWidth", 0.0f);
-                    src.bendRadius = t3.value("bendRadius", 0.0f);
-                    src.bSmoothNormals = t3.value("smoothNormals", true);
-                    src.align = static_cast<Engine::Text3DAlign>(t3.value("align", static_cast<uint8_t>(Engine::Text3DAlign::Left)));
-                    src.anchor = static_cast<Engine::Text3DAnchor>(t3.value("anchor", static_cast<uint8_t>(Engine::Text3DAnchor::Baseline)));
-                    src.bPrecise = t3.value("precise", false);
+                    src.fontId = Engine::FontID(t3.U64("fontId", 0));
+                    t3.Str("text", src.text);
+                    src.depth = t3.Float("depth", 0.2f);
+                    src.flatness = t3.Float("flatness", 0.005f);
+                    src.tracking = t3.Float("tracking", 0.0f);
+                    src.scale = t3.Float("scale", 1.0f);
+                    src.wrapWidth = t3.Float("wrapWidth", 0.0f);
+                    src.bendRadius = t3.Float("bendRadius", 0.0f);
+                    src.bSmoothNormals = t3.Bool("smoothNormals", true);
+                    src.align = static_cast<Engine::Text3DAlign>(t3.UInt("align", static_cast<uint32_t>(Engine::Text3DAlign::Left)));
+                    src.anchor = static_cast<Engine::Text3DAnchor>(t3.UInt("anchor", static_cast<uint32_t>(Engine::Text3DAnchor::Baseline)));
+                    src.bPrecise = t3.Bool("precise", false);
                     shape.text3DSource = src;
                 }
                 break;
+            }
         }
 
         comp.shapes.PushBack(shape);
-    }
+    });
 }
 
 Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,

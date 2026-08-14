@@ -7,7 +7,6 @@
 #include <array>
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/containers/inline_string.h"
 #include "core/string_id.h"
@@ -27,8 +26,8 @@ struct EntityFolderComponent
      */
     StringID folderId;
 
-    static void Serialize(const EntityFolderComponent& comp, nlohmann::json& json);
-    static void Deserialize(EntityFolderComponent& comp, const nlohmann::json& json);
+    static void Serialize(const EntityFolderComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(EntityFolderComponent& comp, const Engine::TextReader& r);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
@@ -45,8 +44,8 @@ struct SceneFolderComponent
     Core::ShortString name;
 
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
-    static void Serialize(const SceneFolderComponent& comp, nlohmann::json& json);
-    static void Deserialize(SceneFolderComponent& comp, const nlohmann::json& json);
+    static void Serialize(const SceneFolderComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(SceneFolderComponent& comp, const Engine::TextReader& r);
 };
 }
 

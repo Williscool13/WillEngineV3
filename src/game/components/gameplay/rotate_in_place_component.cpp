@@ -6,31 +6,30 @@
 
 #include <glm/gtc/constants.hpp>
 #include <glm/geometric.hpp>
-#include <json/nlohmann/json.hpp>
 #include <imgui.h>
 
 #include "render/interface/render_interface.h"
 #include "engine/component_registry.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/components/core_components.h"
 
 namespace Game::Component
 {
-void RotateInPlaceComponent::Serialize(const RotateInPlaceComponent& comp, nlohmann::json& json)
+void RotateInPlaceComponent::Serialize(const RotateInPlaceComponent& comp, Engine::TextWriter& w)
 {
-    json["axis"] = {comp.axis.x, comp.axis.y, comp.axis.z};
-    json["speedDegrees"] = comp.speedDegrees;
-    json["bWorldSpace"] = comp.bWorldSpace;
+    static const RotateInPlaceComponent DEF{};
+    w.KeyOpt("axis", comp.axis, DEF.axis);
+    w.KeyOpt("speedDegrees", comp.speedDegrees, DEF.speedDegrees);
+    w.KeyOpt("bWorldSpace", comp.bWorldSpace, DEF.bWorldSpace);
 }
 
-void RotateInPlaceComponent::Deserialize(RotateInPlaceComponent& comp, const nlohmann::json& json)
+void RotateInPlaceComponent::Deserialize(RotateInPlaceComponent& comp, const Engine::TextReader& r)
 {
-    if (json.contains("axis")) {
-        const auto& a = json["axis"];
-        comp.axis = glm::vec3(a[0].get<float>(), a[1].get<float>(), a[2].get<float>());
-    }
-    comp.speedDegrees = json.value("speedDegrees", 45.0f);
-    comp.bWorldSpace = json.value("bWorldSpace", false);
+    comp.axis = r.Vec3("axis", comp.axis);
+    comp.speedDegrees = r.Float("speedDegrees", comp.speedDegrees);
+    comp.bWorldSpace = r.Bool("bWorldSpace", comp.bWorldSpace);
 }
 
 Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

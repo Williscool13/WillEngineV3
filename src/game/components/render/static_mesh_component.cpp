@@ -5,7 +5,6 @@
 #include "static_mesh_component.h"
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
 #include <glm/gtc/type_ptr.hpp>
@@ -14,6 +13,8 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include <ImGuizmo.h>
@@ -99,53 +100,43 @@ bool Component::StaticMeshComponent::CanAdd(const entt::registry& registry, entt
     return !registry.any_of<ProceduralMeshComponent, SplineMeshComponent, Text3DComponent>(entity);
 }
 
-void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, nlohmann::json& json)
+void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, Engine::TextWriter& w)
 {
-    json["modelId"] = comp.modelId.id;
+    static const StaticMeshComponent DEF{};
+    w.Key("modelId", comp.modelId.id);
 
-    nlohmann::json overrides = nlohmann::json::object();
-    for (const auto& ov : comp.materialOverrides) {
-        auto s = Core::ShortString::Format("%u", ov.slot);
-        overrides[s.c_str()] = ov.id.id;
-    }
-    if (!overrides.empty()) {
-        json["materialOverrides"] = std::move(overrides);
+    if (!comp.materialOverrides.IsEmpty()) {
+        w.Count("materialOverrides", static_cast<uint32_t>(comp.materialOverrides.Size()));
+        for (const auto& ov : comp.materialOverrides) {
+            w.BeginBlock("m");
+            w.Key("slot", ov.slot);
+            w.Key("id", ov.id.id);
+            w.EndBlock();
+        }
     }
     if (!comp.primitiveBlacklist.IsEmpty()) {
-        nlohmann::json blacklist = nlohmann::json::array();
-        for (uint32_t ord : comp.primitiveBlacklist) { blacklist.push_back(ord); }
-        json["primitiveBlacklist"] = std::move(blacklist);
+        w.KeyUInts("primitiveBlacklist", comp.primitiveBlacklist.Data(), comp.primitiveBlacklist.Size());
     }
-    if (comp.shadingShaderOverride) { json["shadingShaderOverride"] = comp.shadingShaderOverride.id; }
-    if (comp.lightingShaderOverride) { json["lightingShaderOverride"] = comp.lightingShaderOverride.id; }
-    json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
-    json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
+    w.KeyOpt("shadingShaderOverride", comp.shadingShaderOverride.id, uint64_t{0});
+    w.KeyOpt("lightingShaderOverride", comp.lightingShaderOverride.id, uint64_t{0});
+    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
+    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
 }
 
-void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, const nlohmann::json& json)
+void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, const Engine::TextReader& r)
 {
-    comp.modelId = Engine::ModelID(json["modelId"].get<uint64_t>());
+    comp.modelId = Engine::ModelID(r.U64("modelId", comp.modelId.id));
 
-    if (json.contains("materialOverrides")) {
-        for (const auto& [key, val] : json["materialOverrides"].items()) {
-            comp.SetMaterialOverride(static_cast<uint32_t>(std::stoul(key)), Engine::MaterialID(val.get<uint64_t>()));
-        }
-    }
-    if (json.contains("primitiveBlacklist")) {
-        for (const auto& v : json["primitiveBlacklist"]) {
-            if (comp.primitiveBlacklist.Size() < StaticMeshComponent::MaxBlacklist) { comp.primitiveBlacklist.PushBack(v.get<uint32_t>()); }
-        }
-    }
-    if (json.contains("shadingShaderOverride")) { comp.shadingShaderOverride = StringID(json["shadingShaderOverride"].get<uint64_t>()); }
-    if (json.contains("lightingShaderOverride")) { comp.lightingShaderOverride = StringID(json["lightingShaderOverride"].get<uint64_t>()); }
-    if (json.contains("renderOffset")) {
-        const auto& o = json["renderOffset"];
-        comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
-    }
-    if (json.contains("renderRotation")) {
-        const auto& r = json["renderRotation"];
-        comp.renderRotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
-    }
+    r.ForEachRecord("materialOverrides", [&](const Engine::TextReader& m) {
+        comp.SetMaterialOverride(m.UInt("slot"), Engine::MaterialID(m.U64("id")));
+    });
+    r.ForEachUInt("primitiveBlacklist", [&](uint32_t ord) {
+        if (comp.primitiveBlacklist.Size() < MaxBlacklist) { comp.primitiveBlacklist.PushBack(ord); }
+    });
+    comp.shadingShaderOverride = StringID(r.U64("shadingShaderOverride", comp.shadingShaderOverride.id));
+    comp.lightingShaderOverride = StringID(r.U64("lightingShaderOverride", comp.lightingShaderOverride.id));
+    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
+    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
 }
 
 Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,

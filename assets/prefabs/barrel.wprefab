@@ -1,79 +1,47 @@
 wprefab
-version 1 0
+version 2 0
 id 16907205951425301799
 name Barrel
 component_count 8
 end_header
-{
-  "16978062943051320070": {
-    "material": 4805580789092568935,
-    "sizeX": 1.0,
-    "sizeY": 1.0,
-    "sizeZ": 1.0,
-    "type": 2
-  },
-  "9797664509068339094": {
-    "rotation": [
-      1.0,
-      0.0,
-      0.0,
-      0.0
-    ],
-    "scale": [
-      1.0,
-      1.0,
-      1.0
-    ],
-    "translation": [
-      -43.5,
-      45.5,
-      -85.0
-    ]
-  },
-  "14686032712917849647": {
-    "prefabId": 16907205951425301799
-  },
-  "7205334411763290517": {
-    "name": "Barrel"
-  },
-  "17292893464993520385": {
-    "folderHierarchyNames": [
-      "First Area",
-      ""
-    ]
-  },
-  "7545503278036722503": {
-    "enhancedInternalEdgeRemoval": false,
-    "friction": 0.5,
-    "layerOverride": 65535,
-    "mass": 10.0,
-    "motionQuality": 0,
-    "motionType": 2,
-    "restitution": 0.0,
-    "shapes": [
-      {
-        "bakedScaleX": 1.0,
-        "bakedScaleY": 1.0,
-        "bakedScaleZ": 1.0,
-        "halfHeight": 0.25,
-        "offset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "radius": 0.5,
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "type": 2
-      }
-    ]
-  },
-  "5268930226829884326": null,
-  "13305479425752038259": {
-    "flags": 7
-  }
-}
+16978062943051320070
+type|2
+material|4805580789092568935
+sizeX|0x3f800000
+sizeY|0x3f800000
+sizeZ|0x3f800000
+;
+9797664509068339094
+translation|0xc22e0000|0x42360000|0xc2aa0000
+;
+14686032712917849647
+prefabId|16907205951425301799
+;
+7205334411763290517
+name|Barrel
+;
+17292893464993520385
+;
+7545503278036722503
+motionType|2
+mass|0x41200000
+friction|0x3f000000
+restitution|0x00000000
+motionQuality|0
+layerOverride|65535
+enhancedInternalEdgeRemoval|0
+isSensor|0
+shapes|1
+shape
+type|2
+offset|0x00000000|0x00000000|0x00000000
+rotation|0x3f800000|0x00000000|0x00000000|0x00000000
+bakedScale|0x3f800000|0x3f800000|0x3f800000
+radius|0x3f000000
+halfHeight|0x3e800000
+;
+;
+5268930226829884326
+;
+13305479425752038259
+;

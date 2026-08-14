@@ -1,0 +1,16 @@
+# .wprefab Format Changelist
+#
+# Magic: "wprefab". Header: WPrefabHeader in prefab_format.h
+# Loader rejects major != PREFAB_MAJOR_VERSION.
+
+================================================================================
+VERSION 2.0  (current)
+================================================================================
+- Body is the bespoke text format (docs/serialization/text_format.md), was JSON.
+  One top-level block per component, opener = decimal typeId. Scene prefab-diff
+  byte-compares these blocks against instance fragments.
+
+================================================================================
+VERSION 1.0
+================================================================================
+- Pre-changelist. Text header + JSON body. See git history.

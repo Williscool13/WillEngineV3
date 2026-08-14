@@ -7,9 +7,8 @@
 
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
-#include "../../../engine/material_manager.h"
+#include "engine/material_manager.h"
 #include "engine/resources/model/model_types.h"
 #include "engine/component_registry.h"
 #include "game/components/component_types.h"
@@ -28,8 +27,8 @@ struct ProceduralMeshComponent
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
-    static void Serialize(const ProceduralMeshComponent& comp, nlohmann::json& json);
-    static void Deserialize(ProceduralMeshComponent& comp, const nlohmann::json& json);
+    static void Serialize(const ProceduralMeshComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(ProceduralMeshComponent& comp, const Engine::TextReader& r);
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
@@ -47,8 +46,8 @@ struct ProceduralMeshLoadingTag
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);
 
 /** Flat shape-field (de)serialization shared with ModuleMeshComponent parts; "type" (variant index) is written by the caller. */
-void SerializeProceduralShape(const Engine::ProceduralParams& params, nlohmann::json& json);
-Engine::ProceduralParams DeserializeProceduralShape(int32_t type, const nlohmann::json& json);
+void SerializeProceduralShape(const Engine::ProceduralParams& params, Engine::TextWriter& w);
+Engine::ProceduralParams DeserializeProceduralShape(int32_t type, const Engine::TextReader& r);
 }
 
 #endif //WILL_ENGINE_PROCEDURAL_MESH_COMPONENT_H

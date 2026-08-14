@@ -33,8 +33,8 @@ struct ModuleMeshComponent
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
-    static void Serialize(const ModuleMeshComponent& comp, nlohmann::json& json);
-    static void Deserialize(ModuleMeshComponent& comp, const nlohmann::json& json);
+    static void Serialize(const ModuleMeshComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(ModuleMeshComponent& comp, const Engine::TextReader& r);
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);

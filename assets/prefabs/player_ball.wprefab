@@ -1,91 +1,50 @@
 wprefab
-version 1 0
+version 2 0
 id 4933586796549546436
 name Player Ball
 component_count 8
 end_header
-{
-  "16978062943051320070": {
-    "material": 15322811231333375334,
-    "radius": 0.5,
-    "renderOffset": [
-      0.0,
-      0.0,
-      0.0
-    ],
-    "renderRotation": [
-      1.0,
-      0.0,
-      0.0,
-      0.0
-    ],
-    "slices": 64,
-    "stacks": 64,
-    "type": 11
-  },
-  "9797664509068339094": {
-    "rotation": [
-      1.0,
-      0.0,
-      0.0,
-      0.0
-    ],
-    "scale": [
-      1.0,
-      1.0,
-      1.0
-    ],
-    "translation": [
-      5.887678146362305,
-      -2.246159553527832,
-      -51.675785064697266
-    ]
-  },
-  "14686032712917849647": {
-    "bMasterPrefab": true,
-    "prefabId": 4933586796549546436
-  },
-  "7205334411763290517": {
-    "name": "[PLAYER] Ball"
-  },
-  "17292893464993520385": {
-    "folderId": 0
-  },
-  "7545503278036722503": {
-    "enhancedInternalEdgeRemoval": true,
-    "friction": 2.0,
-    "isSensor": false,
-    "layerOverride": 2,
-    "mass": 23.0,
-    "motionQuality": 1,
-    "motionType": 2,
-    "restitution": 0.20000000298023224,
-    "shapes": [
-      {
-        "bakedScaleX": 1.0,
-        "bakedScaleY": 1.0,
-        "bakedScaleZ": 1.0,
-        "offset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "radius": 0.5,
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "type": 1
-      }
-    ]
-  },
-  "5268930226829884326": {
-    "id": 7821607683974761419,
-    "sortOrder": 18204
-  },
-  "13305479425752038259": {
-    "flags": 3
-  }
-}
+16978062943051320070
+type|11
+material|15322811231333375334
+radius|0x3f000000
+slices|64
+stacks|64
+;
+9797664509068339094
+translation|0x40bc67dc|0xc00fc114|0xc24eb401
+;
+14686032712917849647
+prefabId|4933586796549546436
+bMasterPrefab|1
+;
+7205334411763290517
+name|[PLAYER] Ball
+;
+17292893464993520385
+;
+7545503278036722503
+motionType|2
+mass|0x41b80000
+friction|0x40000000
+restitution|0x3e4ccccd
+motionQuality|1
+layerOverride|2
+enhancedInternalEdgeRemoval|1
+isSensor|0
+shapes|1
+shape
+type|1
+offset|0x00000000|0x00000000|0x00000000
+rotation|0x3f800000|0x00000000|0x00000000|0x00000000
+bakedScale|0x3f800000|0x3f800000|0x3f800000
+radius|0x3f000000
+;
+;
+5268930226829884326
+id|7821607683974761419
+sortOrder|18204
+;
+13305479425752038259
+flags|3
+;

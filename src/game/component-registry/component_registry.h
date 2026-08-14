@@ -5,7 +5,6 @@
 #ifndef WILL_ENGINE_COMPONENT_REGISTRY_H
 #define WILL_ENGINE_COMPONENT_REGISTRY_H
 #include <entt/entt.hpp>
-#include <json/nlohmann/json.hpp>
 
 #include "component_editor.h"
 #include "core/string_id.h"
@@ -30,15 +29,15 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, bool hidden
     componentRegistry.registry.PushBack({
         typeId,
         T::COMPONENT_NAME,
-        [](const entt::registry& reg, entt::entity e, nlohmann::json& json) {
+        [](const entt::registry& reg, entt::entity e, Engine::TextWriter& w) {
             if constexpr (HasSerialize<T>) {
-                T::Serialize(reg.get<T>(e), json);
+                T::Serialize(reg.get<T>(e), w);
             }
         },
-        [](entt::registry& reg, entt::entity e, const nlohmann::json& json) {
+        [](entt::registry& reg, entt::entity e, const Engine::TextReader& r) {
             T comp{};
             if constexpr (HasDeserialize<T>) {
-                T::Deserialize(comp, json);
+                T::Deserialize(comp, r);
             }
             reg.emplace_or_replace<T>(e, std::move(comp));
         },
@@ -86,8 +85,8 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, bool hidden
     componentRegistry.registry.PushBack({
         typeId,
         T::COMPONENT_NAME,
-        [](const entt::registry&, entt::entity, nlohmann::json&) {},
-        [](entt::registry& reg, entt::entity e, const nlohmann::json&) {
+        [](const entt::registry&, entt::entity, Engine::TextWriter&) {},
+        [](entt::registry& reg, entt::entity e, const Engine::TextReader&) {
             (void) reg.get_or_emplace<T>(e);
         },
         [](const entt::registry& reg, entt::entity e) -> bool {

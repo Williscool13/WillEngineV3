@@ -53,6 +53,16 @@ public:
         PushChar('\n');
     }
 
+    /** Variable-length uint list on one line: `key|v0|v1|...`. Omit entirely for an empty list. */
+    void KeyUInts(const char* key, const uint32_t* v, size_t n)
+    {
+        AppendText(*out, key);
+        for (size_t i = 0; i < n; ++i) {
+            AppendTextF(*out, "|%u", v[i]);
+        }
+        PushChar('\n');
+    }
+
     /** Writes nothing when v equals def; the reader restores def for the absent key. */
     template<typename T>
     void KeyOpt(const char* key, const T& v, const T& def)
@@ -62,6 +72,13 @@ public:
 
     /** Array count field; follow with exactly n record blocks. Omit entirely for an empty array. */
     void Count(const char* key, uint32_t n) { Key(key, n); }
+
+    /** Splices pre-serialized fragment bytes verbatim (e.g. a component fragment written through another TextWriter). */
+    void Raw(const void* data, size_t n)
+    {
+        const auto* p = static_cast<const std::byte*>(data);
+        out->Append(p, p + n);
+    }
 
     void BeginBlock(const char* token) { AppendTextF(*out, "%s\n", token); }
     void BeginBlock(uint64_t token) { AppendTextF(*out, "%llu\n", static_cast<unsigned long long>(token)); }

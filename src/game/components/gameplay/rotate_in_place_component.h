@@ -7,7 +7,6 @@
 
 #include <glm/vec3.hpp>
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/component_registry.h"
 #include "game/components/component_types.h"
@@ -24,9 +23,9 @@ struct RotateInPlaceComponent
     float speedDegrees{45.0f};
     bool bWorldSpace{false};
 
-    static void Serialize(const RotateInPlaceComponent& comp, nlohmann::json& json);
+    static void Serialize(const RotateInPlaceComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(RotateInPlaceComponent& comp, const nlohmann::json& json);
+    static void Deserialize(RotateInPlaceComponent& comp, const Engine::TextReader& r);
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };

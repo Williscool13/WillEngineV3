@@ -6,7 +6,6 @@
 #define WILL_ENGINE_REFLECTION_PROBE_COMPONENT_H
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/engine_api.h"
 #include "engine/asset_manager_types.h"
@@ -69,9 +68,9 @@ struct ReflectionProbeComponent
     /** True when the live world transform, captureOffset, or resolution no longer matches the .wprobe bake snapshot; shading uses the snapshot until rebaked. */
     static bool IsBakeStale(const WorldTransformComponent& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snapshot, uint32_t bakedResolutionPx);
 
-    static void Serialize(const ReflectionProbeComponent& comp, nlohmann::json& json);
+    static void Serialize(const ReflectionProbeComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(ReflectionProbeComponent& comp, const nlohmann::json& json);
+    static void Deserialize(ReflectionProbeComponent& comp, const Engine::TextReader& r);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 

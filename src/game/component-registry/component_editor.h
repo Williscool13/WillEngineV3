@@ -6,7 +6,6 @@
 #define WILL_ENGINE_COMPONENT_EDITOR_H
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 #include "imgui.h"
 #include "core/containers/inline_string.h"
 
@@ -22,13 +21,13 @@ concept HasDrawEditor = requires(Core::ViewFamily& vf, entt::registry& r, entt::
 };
 
 template<typename T>
-concept HasSerialize = requires(const T& comp, nlohmann::json& json) {
-    { T::Serialize(comp, json) } -> std::same_as<void>;
+concept HasSerialize = requires(const T& comp, Engine::TextWriter& w) {
+    { T::Serialize(comp, w) } -> std::same_as<void>;
 };
 
 template<typename T>
-concept HasDeserialize = requires(T& comp, const nlohmann::json& json) {
-    { T::Deserialize(comp, json) } -> std::same_as<void>;
+concept HasDeserialize = requires(T& comp, const Engine::TextReader& r) {
+    { T::Deserialize(comp, r) } -> std::same_as<void>;
 };
 
 template<typename T>

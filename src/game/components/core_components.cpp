@@ -5,34 +5,30 @@
 #include "core_components.h"
 
 #include <glm/gtc/type_ptr.hpp>
-#include <json/nlohmann/json.hpp>
 #include <imgui.h>
 #include <ImGuizmo.h>
 
 #include "engine/engine_api.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/components/render_components.h"
 
-void Game::Component::TransformComponent::Serialize(const TransformComponent& comp, nlohmann::json& json)
+void Game::Component::TransformComponent::Serialize(const TransformComponent& comp, Engine::TextWriter& w)
 {
-    json["translation"] = {comp.translation.x, comp.translation.y, comp.translation.z};
-    json["rotation"] = {comp.rotation.w, comp.rotation.x, comp.rotation.y, comp.rotation.z};
-    json["scale"] = {comp.scale.x, comp.scale.y, comp.scale.z};
+    static const TransformComponent DEF{};
+    w.KeyOpt("translation", comp.translation, DEF.translation);
+    w.KeyOpt("rotation", comp.rotation, DEF.rotation);
+    w.KeyOpt("scale", comp.scale, DEF.scale);
 }
 
-void Game::Component::TransformComponent::Deserialize(TransformComponent& comp, const nlohmann::json& json)
+void Game::Component::TransformComponent::Deserialize(TransformComponent& comp, const Engine::TextReader& r)
 {
-    const auto& t = json["translation"];
-    comp.translation = glm::vec3(t[0].get<float>(), t[1].get<float>(), t[2].get<float>());
-
-    // glm::quat constructor order: (w, x, y, z)
-    const auto& r = json["rotation"];
-    comp.rotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
-
-    const auto& s = json["scale"];
-    comp.scale = glm::vec3(s[0].get<float>(), s[1].get<float>(), s[2].get<float>());
+    comp.translation = r.Vec3("translation", comp.translation);
+    comp.rotation = r.Quat("rotation", comp.rotation);
+    comp.scale = r.Vec3("scale", comp.scale);
 }
 
 void Game::Component::TransformComponent::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -57,16 +53,14 @@ Transform Game::Component::ComputeWorldTransform(const entt::registry& registry,
     return ComposeWorldTransform(ComputeWorldTransform(registry, node->parent), local);
 }
 
-void Game::Component::HierarchyComponent::Serialize(const HierarchyComponent& comp, nlohmann::json& json)
+void Game::Component::HierarchyComponent::Serialize(const HierarchyComponent& comp, Engine::TextWriter& w)
 {
-    json["parentStableId"] = comp.parentStableId.id;
+    w.KeyOpt("parentStableId", comp.parentStableId.id, uint64_t{0});
 }
 
-void Game::Component::HierarchyComponent::Deserialize(HierarchyComponent& comp, const nlohmann::json& json)
+void Game::Component::HierarchyComponent::Deserialize(HierarchyComponent& comp, const Engine::TextReader& r)
 {
-    if (json.contains("parentStableId")) {
-        comp.parentStableId = StringID(json["parentStableId"].get<uint64_t>());
-    }
+    comp.parentStableId = StringID(r.U64("parentStableId", comp.parentStableId.id));
     comp.parent = entt::null;
 }
 

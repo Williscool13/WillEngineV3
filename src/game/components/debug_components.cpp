@@ -4,14 +4,15 @@
 
 #include "debug_components.h"
 
-#include <json/nlohmann/json.hpp>
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
-void Game::Component::MotionBlurMovementComponent::Serialize(const MotionBlurMovementComponent& comp, nlohmann::json& json)
+void Game::Component::MotionBlurMovementComponent::Serialize(const MotionBlurMovementComponent& comp, Engine::TextWriter& w)
 {
-    json["bIsHorizontal"] = comp.bIsHorizontal;
+    w.KeyOpt("bIsHorizontal", comp.bIsHorizontal, false);
 }
 
-void Game::Component::MotionBlurMovementComponent::Deserialize(MotionBlurMovementComponent& comp, const nlohmann::json& json)
+void Game::Component::MotionBlurMovementComponent::Deserialize(MotionBlurMovementComponent& comp, const Engine::TextReader& r)
 {
-    comp.bIsHorizontal = json["bIsHorizontal"].get<bool>();
+    comp.bIsHorizontal = r.Bool("bIsHorizontal", comp.bIsHorizontal);
 }

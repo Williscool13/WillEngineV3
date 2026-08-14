@@ -4,11 +4,12 @@
 
 #include "checkpoint_component.h"
 
-#include <json/nlohmann/json.hpp>
 #include <imgui.h>
 #include <glm/gtc/quaternion.hpp>
 
 #include "engine/engine_api.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/components/core_components.h"
 
@@ -23,28 +24,21 @@ void CheckpointComponent::OnConstruct(entt::registry& registry, entt::entity ent
     }
 }
 
-void CheckpointComponent::Serialize(const CheckpointComponent& comp, nlohmann::json& json)
+void CheckpointComponent::Serialize(const CheckpointComponent& comp, Engine::TextWriter& w)
 {
-    json["checkpointId"] = comp.checkpointId.id;
-    json["priority"] = comp.priority;
-    json["spawnOffset"] = {comp.spawnOffset.x, comp.spawnOffset.y, comp.spawnOffset.z};
-    json["spawnRotation"] = {comp.spawnRotation.x, comp.spawnRotation.y, comp.spawnRotation.z};
+    static const CheckpointComponent DEF{};
+    w.KeyOpt("checkpointId", comp.checkpointId.id, uint64_t{0});
+    w.KeyOpt("priority", comp.priority, DEF.priority);
+    w.KeyOpt("spawnOffset", comp.spawnOffset, DEF.spawnOffset);
+    w.KeyOpt("spawnRotation", comp.spawnRotation, DEF.spawnRotation);
 }
 
-void CheckpointComponent::Deserialize(CheckpointComponent& comp, const nlohmann::json& json)
+void CheckpointComponent::Deserialize(CheckpointComponent& comp, const Engine::TextReader& r)
 {
-    comp.checkpointId = StringID(json["checkpointId"].get<uint64_t>());
-    if (json.contains("priority")) {
-        comp.priority = json["priority"].get<int32_t>();
-    }
-    if (json.contains("spawnOffset")) {
-        const auto& o = json["spawnOffset"];
-        comp.spawnOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
-    }
-    if (json.contains("spawnRotation")) {
-        const auto& r = json["spawnRotation"];
-        comp.spawnRotation = glm::vec3(r[0].get<float>(), r[1].get<float>(), r[2].get<float>());
-    }
+    comp.checkpointId = StringID(r.U64("checkpointId", comp.checkpointId.id));
+    comp.priority = r.Int("priority", comp.priority);
+    comp.spawnOffset = r.Vec3("spawnOffset", comp.spawnOffset);
+    comp.spawnRotation = r.Vec3("spawnRotation", comp.spawnRotation);
 }
 
 Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

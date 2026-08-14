@@ -7,9 +7,10 @@
 #include <imgui.h>
 #include <glm/glm.hpp>
 
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
-#include "game/component-registry/json_helpers.h"
 #include "game/components/core_components.h"
 #include "engine/include/engine_context.h"
 #include "game/input/game_actions.h"
@@ -56,19 +57,19 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
     return {.bRequestRemoval = remove, .bModified = modified};
 }
 
-void LocalDDGIVolumeComponent::Serialize(const LocalDDGIVolumeComponent& comp, nlohmann::json& json)
+void LocalDDGIVolumeComponent::Serialize(const LocalDDGIVolumeComponent& comp, Engine::TextWriter& w)
 {
-    json["volumeId"] = comp.volumeId;
-    json["bEnabled"] = comp.bEnabled;
-    json["probeSpacing"] = comp.probeSpacing;
+    static const LocalDDGIVolumeComponent DEF{};
+    w.KeyOpt("volumeId", comp.volumeId, DEF.volumeId);
+    w.KeyOpt("bEnabled", comp.bEnabled, DEF.bEnabled);
+    w.KeyOpt("probeSpacing", comp.probeSpacing, DEF.probeSpacing);
 }
 
-void LocalDDGIVolumeComponent::Deserialize(LocalDDGIVolumeComponent& comp, const nlohmann::json& json)
+void LocalDDGIVolumeComponent::Deserialize(LocalDDGIVolumeComponent& comp, const Engine::TextReader& r)
 {
-    if (!json.is_object()) { return; }
-    comp.volumeId = json.value("volumeId", uint64_t{0});
-    comp.bEnabled = json.value("bEnabled", true);
-    comp.probeSpacing = json.value("probeSpacing", 0.5f);
+    comp.volumeId = r.U64("volumeId", comp.volumeId);
+    comp.bEnabled = r.Bool("bEnabled", comp.bEnabled);
+    comp.probeSpacing = r.Float("probeSpacing", comp.probeSpacing);
 }
 
 void LocalDDGIVolumeComponent::OnConstruct(entt::registry& registry, entt::entity entity)

@@ -6,9 +6,10 @@
 
 #include <imgui.h>
 #include <glm/glm.hpp>
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
-#include "game/component-registry/json_helpers.h"
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
 #include "engine/include/engine_context.h"
@@ -94,27 +95,27 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
     return {.bRequestRemoval = remove, .bModified = modified};
 }
 
-void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, nlohmann::json& json)
+void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, Engine::TextWriter& w)
 {
-    json["color"] = comp.color;
-    json["intensity"] = comp.intensity;
-    json["halfWidth"] = comp.halfWidth;
-    json["halfHeight"] = comp.halfHeight;
-    json["range"] = comp.range;
-    json["drawEmissiveSurface"] = comp.drawEmissiveSurface;
-    json["bExcludeFromProbeBake"] = comp.bExcludeFromProbeBake;
+    static const AreaLightComponent DEF{};
+    w.KeyOpt("color", comp.color, DEF.color);
+    w.KeyOpt("intensity", comp.intensity, DEF.intensity);
+    w.KeyOpt("halfWidth", comp.halfWidth, DEF.halfWidth);
+    w.KeyOpt("halfHeight", comp.halfHeight, DEF.halfHeight);
+    w.KeyOpt("range", comp.range, DEF.range);
+    w.KeyOpt("drawEmissiveSurface", comp.drawEmissiveSurface, DEF.drawEmissiveSurface);
+    w.KeyOpt("bExcludeFromProbeBake", comp.bExcludeFromProbeBake, DEF.bExcludeFromProbeBake);
 }
 
-void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const nlohmann::json& json)
+void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const Engine::TextReader& r)
 {
-    if (!json.is_object()) { return; }
-    comp.color = json.contains("color") ? json["color"].get<Vec3>() : Vec3{1.0f, 1.0f, 1.0f};
-    comp.intensity = json.value("intensity", 1.0f);
-    comp.halfWidth = json.value("halfWidth", 1.0f);
-    comp.halfHeight = json.value("halfHeight", 1.0f);
-    comp.range = json.value("range", 10.0f);
-    comp.drawEmissiveSurface = json.value("drawEmissiveSurface", true);
-    comp.bExcludeFromProbeBake = json.value("bExcludeFromProbeBake", false);
+    comp.color = r.Vec3("color", comp.color);
+    comp.intensity = r.Float("intensity", comp.intensity);
+    comp.halfWidth = r.Float("halfWidth", comp.halfWidth);
+    comp.halfHeight = r.Float("halfHeight", comp.halfHeight);
+    comp.range = r.Float("range", comp.range);
+    comp.drawEmissiveSurface = r.Bool("drawEmissiveSurface", comp.drawEmissiveSurface);
+    comp.bExcludeFromProbeBake = r.Bool("bExcludeFromProbeBake", comp.bExcludeFromProbeBake);
 }
 
 Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -137,21 +138,21 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
     return {.bRequestRemoval = remove, .bModified = modified};
 }
 
-void Component::DirectionalLightComponent::Serialize(const DirectionalLightComponent& comp, nlohmann::json& json)
+void Component::DirectionalLightComponent::Serialize(const DirectionalLightComponent& comp, Engine::TextWriter& w)
 {
-    json["color"] = comp.color;
-    json["intensity"] = comp.intensity;
-    json["priority"] = comp.priority;
-    json["angularRadiusDegrees"] = comp.angularRadiusDegrees;
+    static const DirectionalLightComponent DEF{};
+    w.KeyOpt("color", comp.color, DEF.color);
+    w.KeyOpt("intensity", comp.intensity, DEF.intensity);
+    w.KeyOpt("priority", comp.priority, DEF.priority);
+    w.KeyOpt("angularRadiusDegrees", comp.angularRadiusDegrees, DEF.angularRadiusDegrees);
 }
 
-void Component::DirectionalLightComponent::Deserialize(DirectionalLightComponent& comp, const nlohmann::json& json)
+void Component::DirectionalLightComponent::Deserialize(DirectionalLightComponent& comp, const Engine::TextReader& r)
 {
-    if (!json.is_object()) { return; }
-    comp.color = json.contains("color") ? json["color"].get<Vec3>() : Vec3{1.0f, 1.0f, 1.0f};
-    comp.intensity = json.value("intensity", 2.0f);
-    comp.priority = json.value("priority", 0);
-    comp.angularRadiusDegrees = json.value("angularRadiusDegrees", 1.0f);
+    comp.color = r.Vec3("color", comp.color);
+    comp.intensity = r.Float("intensity", comp.intensity);
+    comp.priority = r.Int("priority", comp.priority);
+    comp.angularRadiusDegrees = r.Float("angularRadiusDegrees", comp.angularRadiusDegrees);
 }
 
 glm::mat4 Component::ComputeAreaLightQuadMatrix(const TransformComponent& transform, const AreaLightComponent& light)
@@ -212,25 +213,25 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
     return {.bRequestRemoval = remove, .bModified = modified};
 }
 
-void Component::SphereLightComponent::Serialize(const SphereLightComponent& comp, nlohmann::json& json)
+void Component::SphereLightComponent::Serialize(const SphereLightComponent& comp, Engine::TextWriter& w)
 {
-    json["color"] = comp.color;
-    json["intensity"] = comp.intensity;
-    json["radius"] = comp.radius;
-    json["range"] = comp.range;
-    json["drawEmissiveSurface"] = comp.drawEmissiveSurface;
-    json["bExcludeFromProbeBake"] = comp.bExcludeFromProbeBake;
+    static const SphereLightComponent DEF{};
+    w.KeyOpt("color", comp.color, DEF.color);
+    w.KeyOpt("intensity", comp.intensity, DEF.intensity);
+    w.KeyOpt("radius", comp.radius, DEF.radius);
+    w.KeyOpt("range", comp.range, DEF.range);
+    w.KeyOpt("drawEmissiveSurface", comp.drawEmissiveSurface, DEF.drawEmissiveSurface);
+    w.KeyOpt("bExcludeFromProbeBake", comp.bExcludeFromProbeBake, DEF.bExcludeFromProbeBake);
 }
 
-void Component::SphereLightComponent::Deserialize(SphereLightComponent& comp, const nlohmann::json& json)
+void Component::SphereLightComponent::Deserialize(SphereLightComponent& comp, const Engine::TextReader& r)
 {
-    if (!json.is_object()) { return; }
-    comp.color = json.contains("color") ? json["color"].get<Vec3>() : Vec3{1.0f, 1.0f, 1.0f};
-    comp.intensity = json.value("intensity", 1.0f);
-    comp.radius = json.value("radius", 0.5f);
-    comp.range = json.value("range", 10.0f);
-    comp.drawEmissiveSurface = json.value("drawEmissiveSurface", true);
-    comp.bExcludeFromProbeBake = json.value("bExcludeFromProbeBake", false);
+    comp.color = r.Vec3("color", comp.color);
+    comp.intensity = r.Float("intensity", comp.intensity);
+    comp.radius = r.Float("radius", comp.radius);
+    comp.range = r.Float("range", comp.range);
+    comp.drawEmissiveSurface = r.Bool("drawEmissiveSurface", comp.drawEmissiveSurface);
+    comp.bExcludeFromProbeBake = r.Bool("bExcludeFromProbeBake", comp.bExcludeFromProbeBake);
 }
 
 glm::mat4 Component::ComputeSphereLightMatrix(const TransformComponent& transform, const SphereLightComponent& light)
@@ -312,19 +313,19 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
     return {.bRequestRemoval = remove, .bModified = modified};
 }
 
-void Component::SkyboxComponent::Serialize(const SkyboxComponent& comp, nlohmann::json& json)
+void Component::SkyboxComponent::Serialize(const SkyboxComponent& comp, Engine::TextWriter& w)
 {
-    json["envMap"] = comp.envMap.id;
-    json["intensity"] = comp.intensity;
-    json["priority"] = comp.priority;
+    static const SkyboxComponent DEF{};
+    w.KeyOpt("envMap", comp.envMap.id, DEF.envMap.id);
+    w.KeyOpt("intensity", comp.intensity, DEF.intensity);
+    w.KeyOpt("priority", comp.priority, DEF.priority);
 }
 
-void Component::SkyboxComponent::Deserialize(SkyboxComponent& comp, const nlohmann::json& json)
+void Component::SkyboxComponent::Deserialize(SkyboxComponent& comp, const Engine::TextReader& r)
 {
-    if (!json.is_object()) { return; }
-    comp.envMap = Engine::EnvironmentMapID{json.value("envMap", uint64_t{0})};
-    comp.intensity = json.value("intensity", 1.0f);
-    comp.priority = json.value("priority", 0);
+    comp.envMap = Engine::EnvironmentMapID{r.U64("envMap", comp.envMap.id)};
+    comp.intensity = r.Float("intensity", comp.intensity);
+    comp.priority = r.Int("priority", comp.priority);
 }
 
 void Component::SkyboxComponent::OnConstruct(entt::registry& registry, entt::entity entity)

@@ -4,14 +4,14 @@
 
 #include "procedural_mesh_component.h"
 
-#include <json/nlohmann/json.hpp>
-
 #include "spline_mesh_component.h"
 #include "static_mesh_component.h"
 #include "text3d_component.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/components/common_components.h"
 #include "game/components/core_components.h"
@@ -66,440 +66,438 @@ bool Component::ProceduralMeshComponent::CanAdd(const entt::registry& registry, 
     return !registry.any_of<Component::StaticMeshComponent, Component::SplineMeshComponent, Component::Text3DComponent>(entity);
 }
 
-void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent& comp, nlohmann::json& json)
+void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent& comp, Engine::TextWriter& w)
 {
-    json["type"] = comp.params.index();
-    json["material"] = comp.material.id;
-    json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
-    json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
+    static const ProceduralMeshComponent DEF{};
+    w.Key("type", static_cast<uint32_t>(comp.params.index()));
+    w.Key("material", comp.material.id);
+    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
+    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
 
-    SerializeProceduralShape(comp.params, json);
+    SerializeProceduralShape(comp.params, w);
 }
 
-void Component::SerializeProceduralShape(const Engine::ProceduralParams& params, nlohmann::json& json)
+void Component::SerializeProceduralShape(const Engine::ProceduralParams& params, Engine::TextWriter& w)
 {
-    std::visit([&json](const auto& p) {
+    std::visit([&w](const auto& p) {
         using T = std::decay_t<decltype(p)>;
         if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
-            json["stepCount"] = p.stepCount;
-            json["width"] = p.width;
-            json["totalDepth"] = p.totalDepth;
-            json["totalHeight"] = p.totalHeight;
-            json["bSpecifyStepHeight"] = p.bSpecifyStepHeight;
-            json["stepHeight"] = p.stepHeight;
-            json["bIsClosed"] = p.bIsClosed;
+            w.Key("stepCount", p.stepCount);
+            w.Key("width", p.width);
+            w.Key("totalDepth", p.totalDepth);
+            w.Key("totalHeight", p.totalHeight);
+            w.Key("bSpecifyStepHeight", p.bSpecifyStepHeight);
+            w.Key("stepHeight", p.stepHeight);
+            w.Key("bIsClosed", p.bIsClosed);
         }
         else if constexpr (std::is_same_v<T, Engine::BoxParams>) {
-            json["sizeX"] = p.sizeX;
-            json["sizeY"] = p.sizeY;
-            json["sizeZ"] = p.sizeZ;
+            w.Key("sizeX", p.sizeX);
+            w.Key("sizeY", p.sizeY);
+            w.Key("sizeZ", p.sizeZ);
         }
         else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
-            json["radius"] = p.radius;
-            json["height"] = p.height;
-            json["slices"] = p.slices;
-            json["bCapped"] = p.bCapped;
+            w.Key("radius", p.radius);
+            w.Key("height", p.height);
+            w.Key("slices", p.slices);
+            w.Key("bCapped", p.bCapped);
         }
         else if constexpr (std::is_same_v<T, Engine::CapsuleParams>) {
-            json["radius"] = p.radius;
-            json["height"] = p.height;
-            json["slices"] = p.slices;
-            json["rings"] = p.rings;
+            w.Key("radius", p.radius);
+            w.Key("height", p.height);
+            w.Key("slices", p.slices);
+            w.Key("rings", p.rings);
         }
         else if constexpr (std::is_same_v<T, Engine::TorusParams>) {
-            json["ringRadius"] = p.ringRadius;
-            json["tubeRadius"] = p.tubeRadius;
-            json["slices"] = p.slices;
-            json["stacks"] = p.stacks;
+            w.Key("ringRadius", p.ringRadius);
+            w.Key("tubeRadius", p.tubeRadius);
+            w.Key("slices", p.slices);
+            w.Key("stacks", p.stacks);
         }
         else if constexpr (std::is_same_v<T, Engine::ArchParams>) {
-            json["width"] = p.width;
-            json["height"] = p.height;
-            json["depth"] = p.depth;
-            json["thickness"] = p.thickness;
-            json["sides"] = p.sides;
-            json["bFillCorners"] = p.bFillCorners;
+            w.Key("width", p.width);
+            w.Key("height", p.height);
+            w.Key("depth", p.depth);
+            w.Key("thickness", p.thickness);
+            w.Key("sides", p.sides);
+            w.Key("bFillCorners", p.bFillCorners);
         }
         else if constexpr (std::is_same_v<T, Engine::WedgeParams>) {
-            json["sizeX"] = p.sizeX;
-            json["sizeY"] = p.sizeY;
-            json["sizeZ"] = p.sizeZ;
+            w.Key("sizeX", p.sizeX);
+            w.Key("sizeY", p.sizeY);
+            w.Key("sizeZ", p.sizeZ);
         }
         else if constexpr (std::is_same_v<T, Engine::ConeParams>) {
-            json["radius"] = p.radius;
-            json["height"] = p.height;
-            json["slices"] = p.slices;
-            json["bCapped"] = p.bCapped;
+            w.Key("radius", p.radius);
+            w.Key("height", p.height);
+            w.Key("slices", p.slices);
+            w.Key("bCapped", p.bCapped);
         }
         else if constexpr (std::is_same_v<T, Engine::DoorParams>) {
-            json["width"] = p.width;
-            json["height"] = p.height;
-            json["depth"] = p.depth;
-            json["archHeight"] = p.archHeight;
-            json["gap"] = p.gap;
-            json["sides"] = p.sides;
-            json["bHalf"] = p.bHalf;
-            json["bFlip"] = p.bFlip;
+            w.Key("width", p.width);
+            w.Key("height", p.height);
+            w.Key("depth", p.depth);
+            w.Key("archHeight", p.archHeight);
+            w.Key("gap", p.gap);
+            w.Key("sides", p.sides);
+            w.Key("bHalf", p.bHalf);
+            w.Key("bFlip", p.bFlip);
         }
         else if constexpr (std::is_same_v<T, Engine::PlaneParams>) {
-            json["sizeX"] = p.sizeX;
-            json["sizeZ"] = p.sizeZ;
-            json["tilesX"] = p.tilesX;
-            json["tilesZ"] = p.tilesZ;
+            w.Key("sizeX", p.sizeX);
+            w.Key("sizeZ", p.sizeZ);
+            w.Key("tilesX", p.tilesX);
+            w.Key("tilesZ", p.tilesZ);
         }
         else if constexpr (std::is_same_v<T, Engine::SphereParams>) {
-            json["radius"] = p.radius;
-            json["slices"] = p.slices;
-            json["stacks"] = p.stacks;
+            w.Key("radius", p.radius);
+            w.Key("slices", p.slices);
+            w.Key("stacks", p.stacks);
         }
         else if constexpr (std::is_same_v<T, Engine::SubdividedSphereParams>) {
-            json["radius"] = p.radius;
-            json["subdivisions"] = p.subdivisions;
+            w.Key("radius", p.radius);
+            w.Key("subdivisions", p.subdivisions);
         }
         else if constexpr (std::is_same_v<T, Engine::HemisphereParams>) {
-            json["radius"] = p.radius;
-            json["slices"] = p.slices;
-            json["stacks"] = p.stacks;
+            w.Key("radius", p.radius);
+            w.Key("slices", p.slices);
+            w.Key("stacks", p.stacks);
         }
         else if constexpr (std::is_same_v<T, Engine::PipeParams>) {
-            json["outerRadius"] = p.outerRadius;
-            json["innerRadius"] = p.innerRadius;
-            json["height"] = p.height;
-            json["slices"] = p.slices;
+            w.Key("outerRadius", p.outerRadius);
+            w.Key("innerRadius", p.innerRadius);
+            w.Key("height", p.height);
+            w.Key("slices", p.slices);
         }
         else if constexpr (std::is_same_v<T, Engine::TetrahedronParams> ||
                            std::is_same_v<T, Engine::OctahedronParams> ||
                            std::is_same_v<T, Engine::IcosahedronParams> ||
                            std::is_same_v<T, Engine::DodecahedronParams>) {
-            json["radius"] = p.radius;
+            w.Key("radius", p.radius);
         }
         else if constexpr (std::is_same_v<T, Engine::KleinBottleParams>) {
-            json["scale"] = p.scale;
-            json["slices"] = p.slices;
-            json["stacks"] = p.stacks;
+            w.Key("scale", p.scale);
+            w.Key("slices", p.slices);
+            w.Key("stacks", p.stacks);
         }
         else if constexpr (std::is_same_v<T, Engine::TrefoilKnotParams>) {
-            json["scale"] = p.scale;
-            json["tubeRadius"] = p.tubeRadius;
-            json["slices"] = p.slices;
-            json["stacks"] = p.stacks;
+            w.Key("scale", p.scale);
+            w.Key("tubeRadius", p.tubeRadius);
+            w.Key("slices", p.slices);
+            w.Key("stacks", p.stacks);
         }
         else if constexpr (std::is_same_v<T, Engine::CurvedRampParams>) {
-            json["width"] = p.width;
-            json["height"] = p.height;
-            json["radius"] = p.radius;
-            json["segments"] = p.segments;
-            json["bHalfPipe"] = p.bHalfPipe;
-            json["flatLength"] = p.flatLength;
-            json["lipHeight"] = p.lipHeight;
+            w.Key("width", p.width);
+            w.Key("height", p.height);
+            w.Key("radius", p.radius);
+            w.Key("segments", p.segments);
+            w.Key("bHalfPipe", p.bHalfPipe);
+            w.Key("flatLength", p.flatLength);
+            w.Key("lipHeight", p.lipHeight);
         }
         else if constexpr (std::is_same_v<T, Engine::BowlParams>) {
-            json["radius"] = p.radius;
-            json["height"] = p.height;
-            json["curveRadius"] = p.curveRadius;
-            json["flatRadius"] = p.flatRadius;
-            json["lipHeight"] = p.lipHeight;
-            json["slices"] = p.slices;
-            json["segments"] = p.segments;
+            w.Key("radius", p.radius);
+            w.Key("height", p.height);
+            w.Key("curveRadius", p.curveRadius);
+            w.Key("flatRadius", p.flatRadius);
+            w.Key("lipHeight", p.lipHeight);
+            w.Key("slices", p.slices);
+            w.Key("segments", p.segments);
         }
         else if constexpr (std::is_same_v<T, Engine::SpiralStaircaseParams>) {
-            json["stepCount"] = p.stepCount;
-            json["stepHeight"] = p.stepHeight;
-            json["totalHeight"] = p.totalHeight;
-            json["bSpecifyStepHeight"] = p.bSpecifyStepHeight;
-            json["outerRadius"] = p.outerRadius;
-            json["centerColumnRadius"] = p.centerColumnRadius;
-            json["treadThickness"] = p.treadThickness;
-            json["degreesPerStep"] = p.degreesPerStep;
-            json["totalSweep"] = p.totalSweep;
-            json["bSpecifyDegreesPerStep"] = p.bSpecifyDegreesPerStep;
-            json["arcSegments"] = p.arcSegments;
-            json["bShowCenterColumn"] = p.bShowCenterColumn;
-            json["bRamp"] = p.bRamp;
+            w.Key("stepCount", p.stepCount);
+            w.Key("stepHeight", p.stepHeight);
+            w.Key("totalHeight", p.totalHeight);
+            w.Key("bSpecifyStepHeight", p.bSpecifyStepHeight);
+            w.Key("outerRadius", p.outerRadius);
+            w.Key("centerColumnRadius", p.centerColumnRadius);
+            w.Key("treadThickness", p.treadThickness);
+            w.Key("degreesPerStep", p.degreesPerStep);
+            w.Key("totalSweep", p.totalSweep);
+            w.Key("bSpecifyDegreesPerStep", p.bSpecifyDegreesPerStep);
+            w.Key("arcSegments", p.arcSegments);
+            w.Key("bShowCenterColumn", p.bShowCenterColumn);
+            w.Key("bRamp", p.bRamp);
         }
         else if constexpr (std::is_same_v<T, Engine::RingParams>) {
-            json["outerRadius"] = p.outerRadius;
-            json["innerRadius"] = p.innerRadius;
-            json["slices"] = p.slices;
-            json["bDoubleSided"] = p.bDoubleSided;
+            w.Key("outerRadius", p.outerRadius);
+            w.Key("innerRadius", p.innerRadius);
+            w.Key("slices", p.slices);
+            w.Key("bDoubleSided", p.bDoubleSided);
         }
         else if constexpr (std::is_same_v<T, Engine::WallParams>) {
-            json["sizeX"] = p.sizeX;
-            json["sizeY"] = p.sizeY;
-            json["sizeZ"] = p.sizeZ;
-            json["openings"] = nlohmann::json::array();
+            w.Key("sizeX", p.sizeX);
+            w.Key("sizeY", p.sizeY);
+            w.Key("sizeZ", p.sizeZ);
             const int32_t n = glm::clamp(p.openingCount, 0, Engine::WallParams::MAX_OPENINGS);
-            for (int32_t i = 0; i < n; i++) {
-                json["openings"].push_back({p.openings[i].x, p.openings[i].y, p.openings[i].w, p.openings[i].h});
+            if (n > 0) {
+                w.Count("openings", static_cast<uint32_t>(n));
+                for (int32_t i = 0; i < n; i++) {
+                    w.BeginBlock("o");
+                    w.Key("rect", glm::vec4(p.openings[i].x, p.openings[i].y, p.openings[i].w, p.openings[i].h));
+                    w.EndBlock();
+                }
             }
         }
         else if constexpr (std::is_same_v<T, Engine::LatticeParams>) {
-            json["sizeX"] = p.sizeX;
-            json["sizeY"] = p.sizeY;
-            json["sizeZ"] = p.sizeZ;
-            json["chordSize"] = p.chordSize;
-            json["braceSize"] = p.braceSize;
-            json["bayCount"] = p.bayCount;
-            json["pattern"] = p.pattern;
+            w.Key("sizeX", p.sizeX);
+            w.Key("sizeY", p.sizeY);
+            w.Key("sizeZ", p.sizeZ);
+            w.Key("chordSize", p.chordSize);
+            w.Key("braceSize", p.braceSize);
+            w.Key("bayCount", p.bayCount);
+            w.Key("pattern", p.pattern);
         }
         else if constexpr (std::is_same_v<T, Engine::CorrugatedPanelParams>) {
-            json["sizeX"] = p.sizeX;
-            json["sizeY"] = p.sizeY;
-            json["sizeZ"] = p.sizeZ;
-            json["ribDepth"] = p.ribDepth;
-            json["ribWidth"] = p.ribWidth;
-            json["ribCount"] = p.ribCount;
+            w.Key("sizeX", p.sizeX);
+            w.Key("sizeY", p.sizeY);
+            w.Key("sizeZ", p.sizeZ);
+            w.Key("ribDepth", p.ribDepth);
+            w.Key("ribWidth", p.ribWidth);
+            w.Key("ribCount", p.ribCount);
         }
     }, params);
 }
 
-void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& comp, const nlohmann::json& json)
+void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& comp, const Engine::TextReader& r)
 {
-    comp.material = Engine::MaterialID(json["material"].get<uint64_t>());
-    if (json.contains("renderOffset")) {
-        const auto& o = json["renderOffset"];
-        comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
-    }
-    if (json.contains("renderRotation")) {
-        const auto& r = json["renderRotation"];
-        comp.renderRotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
-    }
+    comp.material = Engine::MaterialID(r.U64("material", comp.material.id));
+    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
+    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
 
-    comp.params = DeserializeProceduralShape(json["type"].get<int32_t>(), json);
+    comp.params = DeserializeProceduralShape(r.Int("type", 0), r);
 }
 
-Engine::ProceduralParams Component::DeserializeProceduralShape(int32_t type, const nlohmann::json& json)
+Engine::ProceduralParams Component::DeserializeProceduralShape(int32_t type, const Engine::TextReader& r)
 {
     Engine::ProceduralParams params{};
     if (type == 1) {
         Engine::StaircaseParams p{};
-        p.stepCount = json["stepCount"].get<int32_t>();
-        p.width = json["width"].get<float>();
-        p.totalDepth = json["totalDepth"].get<float>();
-        p.totalHeight = json["totalHeight"].get<float>();
-        p.bSpecifyStepHeight = json.value("bSpecifyStepHeight", false);
-        p.stepHeight = json.value("stepHeight", p.totalHeight / static_cast<float>(std::max(p.stepCount, 1)));
-        p.bIsClosed = json.value("bIsClosed", true);
+        p.stepCount = r.Int("stepCount", p.stepCount);
+        p.width = r.Float("width", p.width);
+        p.totalDepth = r.Float("totalDepth", p.totalDepth);
+        p.totalHeight = r.Float("totalHeight", p.totalHeight);
+        p.bSpecifyStepHeight = r.Bool("bSpecifyStepHeight", false);
+        p.stepHeight = r.Float("stepHeight", p.totalHeight / static_cast<float>(std::max(p.stepCount, 1)));
+        p.bIsClosed = r.Bool("bIsClosed", true);
         params = p;
     }
     else if (type == 2) {
         Engine::BoxParams p{};
-        p.sizeX = json["sizeX"].get<float>();
-        p.sizeY = json["sizeY"].get<float>();
-        p.sizeZ = json["sizeZ"].get<float>();
+        p.sizeX = r.Float("sizeX", p.sizeX);
+        p.sizeY = r.Float("sizeY", p.sizeY);
+        p.sizeZ = r.Float("sizeZ", p.sizeZ);
         params = p;
     }
     else if (type == 3) {
         Engine::CylinderParams p{};
-        p.radius = json["radius"].get<float>();
-        p.height = json["height"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
-        p.bCapped = json["bCapped"].get<bool>();
+        p.radius = r.Float("radius", p.radius);
+        p.height = r.Float("height", p.height);
+        p.slices = r.Int("slices", p.slices);
+        p.bCapped = r.Bool("bCapped", p.bCapped);
         params = p;
     }
     else if (type == 4) {
         Engine::CapsuleParams p{};
-        p.radius = json["radius"].get<float>();
-        p.height = json["height"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
-        p.rings = json["rings"].get<int32_t>();
+        p.radius = r.Float("radius", p.radius);
+        p.height = r.Float("height", p.height);
+        p.slices = r.Int("slices", p.slices);
+        p.rings = r.Int("rings", p.rings);
         params = p;
     }
     else if (type == 5) {
         Engine::TorusParams p{};
-        p.ringRadius = json["ringRadius"].get<float>();
-        p.tubeRadius = json["tubeRadius"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
-        p.stacks = json["stacks"].get<int32_t>();
+        p.ringRadius = r.Float("ringRadius", p.ringRadius);
+        p.tubeRadius = r.Float("tubeRadius", p.tubeRadius);
+        p.slices = r.Int("slices", p.slices);
+        p.stacks = r.Int("stacks", p.stacks);
         params = p;
     }
     else if (type == 6) {
         Engine::ArchParams p{};
-        p.width = json["width"].get<float>();
-        p.height = json["height"].get<float>();
-        p.depth = json["depth"].get<float>();
-        p.thickness = json["thickness"].get<float>();
-        p.sides = json["sides"].get<int32_t>();
-        p.bFillCorners = json.value("bFillCorners", false);
+        p.width = r.Float("width", p.width);
+        p.height = r.Float("height", p.height);
+        p.depth = r.Float("depth", p.depth);
+        p.thickness = r.Float("thickness", p.thickness);
+        p.sides = r.Int("sides", p.sides);
+        p.bFillCorners = r.Bool("bFillCorners", false);
         params = p;
     }
     else if (type == 7) {
         Engine::WedgeParams p{};
-        p.sizeX = json["sizeX"].get<float>();
-        p.sizeY = json["sizeY"].get<float>();
-        p.sizeZ = json["sizeZ"].get<float>();
+        p.sizeX = r.Float("sizeX", p.sizeX);
+        p.sizeY = r.Float("sizeY", p.sizeY);
+        p.sizeZ = r.Float("sizeZ", p.sizeZ);
         params = p;
     }
     else if (type == 8) {
         Engine::ConeParams p{};
-        p.radius = json["radius"].get<float>();
-        p.height = json["height"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
-        p.bCapped = json["bCapped"].get<bool>();
+        p.radius = r.Float("radius", p.radius);
+        p.height = r.Float("height", p.height);
+        p.slices = r.Int("slices", p.slices);
+        p.bCapped = r.Bool("bCapped", p.bCapped);
         params = p;
     }
     else if (type == 9) {
         Engine::DoorParams p{};
-        p.width = json["width"].get<float>();
-        p.height = json["height"].get<float>();
-        p.depth = json["depth"].get<float>();
-        p.archHeight = json.value("archHeight", 0.5f);
-        p.gap = json.value("gap", 0.0f);
-        p.sides = json["sides"].get<int32_t>();
-        p.bHalf = json["bHalf"].get<bool>();
-        p.bFlip = json.value("bFlip", false);
+        p.width = r.Float("width", p.width);
+        p.height = r.Float("height", p.height);
+        p.depth = r.Float("depth", p.depth);
+        p.archHeight = r.Float("archHeight", 0.5f);
+        p.gap = r.Float("gap", 0.0f);
+        p.sides = r.Int("sides", p.sides);
+        p.bHalf = r.Bool("bHalf", p.bHalf);
+        p.bFlip = r.Bool("bFlip", false);
         params = p;
     }
     else if (type == 10) {
         Engine::PlaneParams p{};
-        p.sizeX = json["sizeX"].get<float>();
-        p.sizeZ = json["sizeZ"].get<float>();
-        p.tilesX = json["tilesX"].get<int32_t>();
-        p.tilesZ = json["tilesZ"].get<int32_t>();
+        p.sizeX = r.Float("sizeX", p.sizeX);
+        p.sizeZ = r.Float("sizeZ", p.sizeZ);
+        p.tilesX = r.Int("tilesX", p.tilesX);
+        p.tilesZ = r.Int("tilesZ", p.tilesZ);
         params = p;
     }
     else if (type == 11) {
         Engine::SphereParams p{};
-        p.radius = json["radius"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
-        p.stacks = json["stacks"].get<int32_t>();
+        p.radius = r.Float("radius", p.radius);
+        p.slices = r.Int("slices", p.slices);
+        p.stacks = r.Int("stacks", p.stacks);
         params = p;
     }
     else if (type == 12) {
         Engine::SubdividedSphereParams p{};
-        p.radius = json["radius"].get<float>();
-        p.subdivisions = glm::clamp(json["subdivisions"].get<int32_t>(), 0, 4);
+        p.radius = r.Float("radius", p.radius);
+        p.subdivisions = glm::clamp(r.Int("subdivisions", p.subdivisions), 0, 4);
         params = p;
     }
     else if (type == 13) {
         Engine::HemisphereParams p{};
-        p.radius = json["radius"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
-        p.stacks = json["stacks"].get<int32_t>();
+        p.radius = r.Float("radius", p.radius);
+        p.slices = r.Int("slices", p.slices);
+        p.stacks = r.Int("stacks", p.stacks);
         params = p;
     }
     else if (type == 14) {
         Engine::PipeParams p{};
-        p.outerRadius = json["outerRadius"].get<float>();
-        p.innerRadius = json["innerRadius"].get<float>();
-        p.height = json["height"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
+        p.outerRadius = r.Float("outerRadius", p.outerRadius);
+        p.innerRadius = r.Float("innerRadius", p.innerRadius);
+        p.height = r.Float("height", p.height);
+        p.slices = r.Int("slices", p.slices);
         params = p;
     }
     else if (type == 15) {
         Engine::TetrahedronParams p{};
-        p.radius = json["radius"].get<float>();
+        p.radius = r.Float("radius", p.radius);
         params = p;
     }
     else if (type == 16) {
         Engine::OctahedronParams p{};
-        p.radius = json["radius"].get<float>();
+        p.radius = r.Float("radius", p.radius);
         params = p;
     }
     else if (type == 17) {
         Engine::IcosahedronParams p{};
-        p.radius = json["radius"].get<float>();
+        p.radius = r.Float("radius", p.radius);
         params = p;
     }
     else if (type == 18) {
         Engine::DodecahedronParams p{};
-        p.radius = json["radius"].get<float>();
+        p.radius = r.Float("radius", p.radius);
         params = p;
     }
     else if (type == 19) {
         Engine::KleinBottleParams p{};
-        p.scale = json["scale"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
-        p.stacks = json["stacks"].get<int32_t>();
+        p.scale = r.Float("scale", p.scale);
+        p.slices = r.Int("slices", p.slices);
+        p.stacks = r.Int("stacks", p.stacks);
         params = p;
     }
     else if (type == 20) {
         Engine::TrefoilKnotParams p{};
-        p.scale = json["scale"].get<float>();
-        p.tubeRadius = json["tubeRadius"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
-        p.stacks = json["stacks"].get<int32_t>();
+        p.scale = r.Float("scale", p.scale);
+        p.tubeRadius = r.Float("tubeRadius", p.tubeRadius);
+        p.slices = r.Int("slices", p.slices);
+        p.stacks = r.Int("stacks", p.stacks);
         params = p;
     }
     else if (type == 21) {
         Engine::CurvedRampParams p{};
-        p.width = json["width"].get<float>();
-        p.height = json["height"].get<float>();
-        p.radius = json["radius"].get<float>();
-        p.segments = json["segments"].get<int32_t>();
-        p.bHalfPipe = json.value("bHalfPipe", false);
-        p.flatLength = json.value("flatLength", 1.0f);
-        p.lipHeight = json.value("lipHeight", 0.02f);
+        p.width = r.Float("width", p.width);
+        p.height = r.Float("height", p.height);
+        p.radius = r.Float("radius", p.radius);
+        p.segments = r.Int("segments", p.segments);
+        p.bHalfPipe = r.Bool("bHalfPipe", false);
+        p.flatLength = r.Float("flatLength", 1.0f);
+        p.lipHeight = r.Float("lipHeight", 0.02f);
         params = p;
     }
     else if (type == 22) {
         Engine::BowlParams p{};
-        p.radius = json["radius"].get<float>();
-        p.height = json["height"].get<float>();
-        p.curveRadius = json["curveRadius"].get<float>();
-        p.flatRadius = json.value("flatRadius", 0.0f);
-        p.lipHeight = json.value("lipHeight", 0.02f);
-        p.slices = json["slices"].get<int32_t>();
-        p.segments = json["segments"].get<int32_t>();
+        p.radius = r.Float("radius", p.radius);
+        p.height = r.Float("height", p.height);
+        p.curveRadius = r.Float("curveRadius", p.curveRadius);
+        p.flatRadius = r.Float("flatRadius", 0.0f);
+        p.lipHeight = r.Float("lipHeight", 0.02f);
+        p.slices = r.Int("slices", p.slices);
+        p.segments = r.Int("segments", p.segments);
         params = p;
     }
     else if (type == 23) {
         Engine::SpiralStaircaseParams p{};
-        p.stepCount = json["stepCount"].get<int32_t>();
-        p.stepHeight = json["stepHeight"].get<float>();
-        p.totalHeight = json.value("totalHeight", p.stepHeight * static_cast<float>(std::max(p.stepCount, 1)));
-        p.bSpecifyStepHeight = json.value("bSpecifyStepHeight", false);
-        p.outerRadius = json["outerRadius"].get<float>();
-        p.centerColumnRadius = json["centerColumnRadius"].get<float>();
-        p.treadThickness = json.value("treadThickness", 0.08f);
-        p.degreesPerStep = json.value("degreesPerStep", 30.0f);
-        p.totalSweep = json.value("totalSweep", p.degreesPerStep * static_cast<float>(std::max(p.stepCount, 1)));
-        p.bSpecifyDegreesPerStep = json.value("bSpecifyDegreesPerStep", false);
-        p.arcSegments = json.value("arcSegments", 6);
-        p.bShowCenterColumn = json.value("bShowCenterColumn", true);
-        p.bRamp = json.value("bRamp", false);
+        p.stepCount = r.Int("stepCount", p.stepCount);
+        p.stepHeight = r.Float("stepHeight", p.stepHeight);
+        p.totalHeight = r.Float("totalHeight", p.stepHeight * static_cast<float>(std::max(p.stepCount, 1)));
+        p.bSpecifyStepHeight = r.Bool("bSpecifyStepHeight", false);
+        p.outerRadius = r.Float("outerRadius", p.outerRadius);
+        p.centerColumnRadius = r.Float("centerColumnRadius", p.centerColumnRadius);
+        p.treadThickness = r.Float("treadThickness", 0.08f);
+        p.degreesPerStep = r.Float("degreesPerStep", 30.0f);
+        p.totalSweep = r.Float("totalSweep", p.degreesPerStep * static_cast<float>(std::max(p.stepCount, 1)));
+        p.bSpecifyDegreesPerStep = r.Bool("bSpecifyDegreesPerStep", false);
+        p.arcSegments = r.Int("arcSegments", 6);
+        p.bShowCenterColumn = r.Bool("bShowCenterColumn", true);
+        p.bRamp = r.Bool("bRamp", false);
         params = p;
     }
     else if (type == 24) {
         Engine::RingParams p{};
-        p.outerRadius = json["outerRadius"].get<float>();
-        p.innerRadius = json["innerRadius"].get<float>();
-        p.slices = json["slices"].get<int32_t>();
-        p.bDoubleSided = json.value("bDoubleSided", true);
+        p.outerRadius = r.Float("outerRadius", p.outerRadius);
+        p.innerRadius = r.Float("innerRadius", p.innerRadius);
+        p.slices = r.Int("slices", p.slices);
+        p.bDoubleSided = r.Bool("bDoubleSided", true);
         params = p;
     }
     else if (type == 25) {
         Engine::WallParams p{};
-        p.sizeX = json["sizeX"].get<float>();
-        p.sizeY = json["sizeY"].get<float>();
-        p.sizeZ = json["sizeZ"].get<float>();
-        if (json.contains("openings")) {
-            for (const auto& e : json["openings"]) {
-                if (p.openingCount >= Engine::WallParams::MAX_OPENINGS) { break; }
-                p.openings[p.openingCount++] = {e[0].get<float>(), e[1].get<float>(), e[2].get<float>(), e[3].get<float>()};
-            }
-        }
+        p.sizeX = r.Float("sizeX", p.sizeX);
+        p.sizeY = r.Float("sizeY", p.sizeY);
+        p.sizeZ = r.Float("sizeZ", p.sizeZ);
+        r.ForEachRecord("openings", [&](const Engine::TextReader& o) {
+            if (p.openingCount >= Engine::WallParams::MAX_OPENINGS) { return; }
+            const glm::vec4 rect = o.Vec4("rect");
+            p.openings[p.openingCount++] = {rect.x, rect.y, rect.z, rect.w};
+        });
         params = p;
     }
     else if (type == 26) {
         Engine::LatticeParams p{};
-        p.sizeX = json["sizeX"].get<float>();
-        p.sizeY = json["sizeY"].get<float>();
-        p.sizeZ = json["sizeZ"].get<float>();
-        p.chordSize = json["chordSize"].get<float>();
-        p.braceSize = json["braceSize"].get<float>();
-        p.bayCount = json["bayCount"].get<int32_t>();
-        p.pattern = json.value("pattern", 0);
+        p.sizeX = r.Float("sizeX", p.sizeX);
+        p.sizeY = r.Float("sizeY", p.sizeY);
+        p.sizeZ = r.Float("sizeZ", p.sizeZ);
+        p.chordSize = r.Float("chordSize", p.chordSize);
+        p.braceSize = r.Float("braceSize", p.braceSize);
+        p.bayCount = r.Int("bayCount", p.bayCount);
+        p.pattern = r.Int("pattern", 0);
         params = p;
     }
     else if (type == 27) {
         Engine::CorrugatedPanelParams p{};
-        p.sizeX = json["sizeX"].get<float>();
-        p.sizeY = json["sizeY"].get<float>();
-        p.sizeZ = json["sizeZ"].get<float>();
-        p.ribDepth = json["ribDepth"].get<float>();
-        p.ribWidth = json["ribWidth"].get<float>();
-        p.ribCount = json["ribCount"].get<int32_t>();
+        p.sizeX = r.Float("sizeX", p.sizeX);
+        p.sizeY = r.Float("sizeY", p.sizeY);
+        p.sizeZ = r.Float("sizeZ", p.sizeZ);
+        p.ribDepth = r.Float("ribDepth", p.ribDepth);
+        p.ribWidth = r.Float("ribWidth", p.ribWidth);
+        p.ribCount = r.Int("ribCount", p.ribCount);
         params = p;
     }
     return params;

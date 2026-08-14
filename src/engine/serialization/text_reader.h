@@ -31,6 +31,9 @@ public:
 
     bool IsValid() const { return begin != nullptr; }
 
+    /** This reader's full text span; serialization is deterministic, so equal spans mean equal content (prefab diff). */
+    std::string_view Span() const { return {begin, static_cast<size_t>(end - begin)}; }
+
     bool Has(const char* key) const { return FindValue(key).data() != nullptr; }
     bool HasBlock(const char* key) const { return Block(key).IsValid(); }
 
@@ -109,6 +112,22 @@ public:
             outStr.Append(&c, 1);
         }
         return true;
+    }
+
+    /** Variable-length uint list `key|v0|v1|...`: invokes fn(uint32_t) per value. Absent key invokes nothing. */
+    template<typename Fn>
+    void ForEachUInt(const char* key, Fn&& fn) const
+    {
+        std::string_view v = FindValue(key);
+        while (v.data()) {
+            const size_t bar = v.find('|');
+            const std::string_view c = bar == std::string_view::npos ? v : v.substr(0, bar);
+            uint32_t value = 0;
+            std::from_chars(c.data(), c.data() + c.size(), value);
+            fn(value);
+            if (bar == std::string_view::npos) { break; }
+            v = v.substr(bar + 1);
+        }
     }
 
     /** Raw value text after the first '|' (still escaped); data() is null when absent. */

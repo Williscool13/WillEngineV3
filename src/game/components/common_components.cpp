@@ -4,25 +4,25 @@
 
 #include "common_components.h"
 
-#include <json/nlohmann/json.hpp>
-
 #include "imgui.h"
 
 #include "engine/component_registry.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 
 namespace Game::Component
 {
-void PrefabInstanceComponent::Serialize(const PrefabInstanceComponent& comp, nlohmann::json& json)
+void PrefabInstanceComponent::Serialize(const PrefabInstanceComponent& comp, Engine::TextWriter& w)
 {
-    json["prefabId"] = comp.prefabId.id;
-    json["bMasterPrefab"] = comp.bMasterPrefab;
+    w.KeyOpt("prefabId", comp.prefabId.id, uint64_t{0});
+    w.KeyOpt("bMasterPrefab", comp.bMasterPrefab, false);
 }
 
-void PrefabInstanceComponent::Deserialize(PrefabInstanceComponent& comp, const nlohmann::json& json)
+void PrefabInstanceComponent::Deserialize(PrefabInstanceComponent& comp, const Engine::TextReader& r)
 {
-    comp.prefabId = StringID(json["prefabId"].get<uint64_t>());
-    comp.bMasterPrefab = json.value("bMasterPrefab", false);
+    comp.prefabId = StringID(r.U64("prefabId", comp.prefabId.id));
+    comp.bMasterPrefab = r.Bool("bMasterPrefab", comp.bMasterPrefab);
 }
 
 Engine::ComponentEditorResult PrefabInstanceComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -55,14 +55,16 @@ Engine::ComponentEditorResult PrefabInstanceComponent::DrawEditor(Core::ViewFami
     return {.bRequestRemoval = remove, .bModified = modified};
 }
 
-void NameComponent::Serialize(const NameComponent& comp, nlohmann::json& json)
+void NameComponent::Serialize(const NameComponent& comp, Engine::TextWriter& w)
 {
-    json["name"] = comp.name.c_str();
+    if (!comp.name.IsEmpty()) {
+        w.KeyStr("name", comp.name.View());
+    }
 }
 
-void NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
+void NameComponent::Deserialize(NameComponent& comp, const Engine::TextReader& r)
 {
-    comp.name = Core::InlineString<256>(json["name"].get<std::string_view>());
+    r.Str("name", comp.name);
 }
 
 Engine::ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

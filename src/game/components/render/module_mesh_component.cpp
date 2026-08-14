@@ -4,8 +4,6 @@
 
 #include "module_mesh_component.h"
 
-#include <json/nlohmann/json.hpp>
-
 #include "imgui.h"
 
 #include "procedural_mesh_component.h"
@@ -15,6 +13,8 @@
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/components/core_components.h"
 
 namespace Game::Component
@@ -52,65 +52,54 @@ bool Component::ModuleMeshComponent::CanAdd(const entt::registry& registry, entt
     return !registry.any_of<Component::StaticMeshComponent, Component::ProceduralMeshComponent, Component::SplineMeshComponent, Component::Text3DComponent>(entity);
 }
 
-void Component::ModuleMeshComponent::Serialize(const ModuleMeshComponent& comp, nlohmann::json& json)
+void Component::ModuleMeshComponent::Serialize(const ModuleMeshComponent& comp, Engine::TextWriter& w)
 {
-    json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
-    json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
+    static const ModuleMeshComponent DEF{};
+    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
+    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
 
-    nlohmann::json mats = nlohmann::json::array();
+    w.Count("slotMaterials", Engine::MAX_MODULE_SLOTS);
     for (int32_t slot = 0; slot < Engine::MAX_MODULE_SLOTS; slot++) {
-        mats.push_back(comp.slotMaterials[slot].id);
+        w.BeginBlock("s");
+        w.KeyOpt("id", comp.slotMaterials[slot].id, Engine::MaterialID::INVALID.id);
+        w.EndBlock();
     }
-    json["slotMaterials"] = std::move(mats);
 
-    nlohmann::json parts = nlohmann::json::array();
-    for (const Engine::ModulePart& part : comp.params.parts) {
-        nlohmann::json pj;
-        pj["type"] = part.shape.index();
-        SerializeProceduralShape(part.shape, pj);
-        pj["offset"] = {part.offset.x, part.offset.y, part.offset.z};
-        pj["rotation"] = {part.rotation.w, part.rotation.x, part.rotation.y, part.rotation.z};
-        pj["slot"] = part.materialSlot;
-        parts.push_back(std::move(pj));
+    if (!comp.params.parts.IsEmpty()) {
+        w.Count("parts", static_cast<uint32_t>(comp.params.parts.Size()));
+        for (const Engine::ModulePart& part : comp.params.parts) {
+            w.BeginBlock("p");
+            w.Key("type", static_cast<uint32_t>(part.shape.index()));
+            SerializeProceduralShape(part.shape, w);
+            w.Key("offset", part.offset);
+            w.Key("rotation", part.rotation);
+            w.Key("slot", part.materialSlot);
+            w.EndBlock();
+        }
     }
-    json["parts"] = std::move(parts);
 }
 
-void Component::ModuleMeshComponent::Deserialize(ModuleMeshComponent& comp, const nlohmann::json& json)
+void Component::ModuleMeshComponent::Deserialize(ModuleMeshComponent& comp, const Engine::TextReader& r)
 {
-    if (json.contains("renderOffset")) {
-        const auto& o = json["renderOffset"];
-        comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
-    }
-    if (json.contains("renderRotation")) {
-        const auto& r = json["renderRotation"];
-        comp.renderRotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
-    }
-    if (json.contains("slotMaterials")) {
-        int32_t slot = 0;
-        for (const auto& m : json["slotMaterials"]) {
-            if (slot >= Engine::MAX_MODULE_SLOTS) { break; }
-            comp.slotMaterials[slot++] = Engine::MaterialID(m.get<uint64_t>());
-        }
-    }
+    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
+    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
+
+    int32_t slot = 0;
+    r.ForEachRecord("slotMaterials", [&](const Engine::TextReader& s) {
+        if (slot >= Engine::MAX_MODULE_SLOTS) { return; }
+        comp.slotMaterials[slot++] = Engine::MaterialID(s.U64("id", Engine::MaterialID::INVALID.id));
+    });
+
     comp.params.parts.Clear();
-    if (json.contains("parts")) {
-        for (const auto& pj : json["parts"]) {
-            if (comp.params.parts.IsFull()) { break; }
-            Engine::ModulePart part{};
-            part.shape = DeserializeProceduralShape(pj["type"].get<int32_t>(), pj);
-            if (pj.contains("offset")) {
-                const auto& o = pj["offset"];
-                part.offset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
-            }
-            if (pj.contains("rotation")) {
-                const auto& r = pj["rotation"];
-                part.rotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
-            }
-            part.materialSlot = glm::clamp(pj.value("slot", 0), 0, Engine::MAX_MODULE_SLOTS - 1);
-            comp.params.parts.PushBack(part);
-        }
-    }
+    r.ForEachRecord("parts", [&](const Engine::TextReader& p) {
+        if (comp.params.parts.IsFull()) { return; }
+        Engine::ModulePart part{};
+        part.shape = DeserializeProceduralShape(p.Int("type", 0), p);
+        part.offset = p.Vec3("offset", part.offset);
+        part.rotation = p.Quat("rotation", part.rotation);
+        part.materialSlot = glm::clamp(p.Int("slot", 0), 0, Engine::MAX_MODULE_SLOTS - 1);
+        comp.params.parts.PushBack(part);
+    });
 }
 
 Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

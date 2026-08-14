@@ -5,25 +5,24 @@
 #include "editor_components.h"
 
 #include <fmt/format.h>
-#include <json/nlohmann/json.hpp>
 
 #include "component_types.h"
 #include "core/containers/arena_vector.h"
 #include "engine/include/engine_context.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 
 namespace Game::Component
 {
-void EntityFolderComponent::Serialize(const EntityFolderComponent& comp, nlohmann::json& json)
+void EntityFolderComponent::Serialize(const EntityFolderComponent& comp, Engine::TextWriter& w)
 {
-    json["folderId"] = comp.folderId.id;
+    w.KeyOpt("folderId", comp.folderId.id, uint64_t{0});
 }
 
-void EntityFolderComponent::Deserialize(EntityFolderComponent& comp, const nlohmann::json& json)
+void EntityFolderComponent::Deserialize(EntityFolderComponent& comp, const Engine::TextReader& r)
 {
-    if (json.contains("folderId")) {
-        comp.folderId = StringID(json["folderId"].get<uint64_t>());
-    }
+    comp.folderId = StringID(r.U64("folderId", comp.folderId.id));
 }
 
 Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
@@ -71,23 +70,19 @@ bool SceneFolderComponent::CanAdd(const entt::registry& registry, entt::entity e
     return false;
 }
 
-void SceneFolderComponent::Serialize(const SceneFolderComponent& comp, nlohmann::json& json)
+void SceneFolderComponent::Serialize(const SceneFolderComponent& comp, Engine::TextWriter& w)
 {
-    json["folderId"] = comp.folderId.id;
-    json["parentFolder"] = comp.parentFolder.id;
-    json["name"] = comp.name.c_str();
+    w.KeyOpt("folderId", comp.folderId.id, uint64_t{0});
+    w.KeyOpt("parentFolder", comp.parentFolder.id, uint64_t{0});
+    if (!comp.name.IsEmpty()) {
+        w.KeyStr("name", comp.name.View());
+    }
 }
 
-void SceneFolderComponent::Deserialize(SceneFolderComponent& comp, const nlohmann::json& json)
+void SceneFolderComponent::Deserialize(SceneFolderComponent& comp, const Engine::TextReader& r)
 {
-    if (json.contains("folderId")) {
-        comp.folderId = StringID(json["folderId"].get<uint64_t>());
-    }
-    if (json.contains("parentFolder")) {
-        comp.parentFolder = StringID(json["parentFolder"].get<uint64_t>());
-    }
-    if (json.contains("name")) {
-        comp.name = Core::ShortString(json["name"].get<std::string_view>());
-    }
+    comp.folderId = StringID(r.U64("folderId", comp.folderId.id));
+    comp.parentFolder = StringID(r.U64("parentFolder", comp.parentFolder.id));
+    r.Str("name", comp.name);
 }
 } // Game::Component

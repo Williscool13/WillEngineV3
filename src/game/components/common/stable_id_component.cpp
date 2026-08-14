@@ -4,28 +4,24 @@
 
 #include "stable_id_component.h"
 
-#include <json/nlohmann/json.hpp>
-
 #include "engine/engine_api.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
 namespace Game::Component
 {
 
-void StableIdComponent::Serialize(const StableIdComponent& comp, nlohmann::json& json)
+void StableIdComponent::Serialize(const StableIdComponent& comp, Engine::TextWriter& w)
 {
-    json["id"] = comp.id.id;
-    json["sortOrder"] = comp.sortOrder;
+    w.KeyOpt("id", comp.id.id, uint64_t{0});
+    w.KeyOpt("sortOrder", comp.sortOrder, uint64_t{0});
 }
 
-void StableIdComponent::Deserialize(StableIdComponent& comp, const nlohmann::json& json)
+void StableIdComponent::Deserialize(StableIdComponent& comp, const Engine::TextReader& r)
 {
-    if (json.contains("id")) {
-        comp.id = StringID(json["id"].get<uint64_t>());
-    }
-    // else id remains 0, OnConstruct will generate a new one
-    if (json.contains("sortOrder")) {
-        comp.sortOrder = json["sortOrder"].get<uint64_t>();
-    }
+    // id 0 stays 0; OnConstruct generates a new one
+    comp.id = StringID(r.U64("id", comp.id.id));
+    comp.sortOrder = r.U64("sortOrder", comp.sortOrder);
 }
 void StableIdComponent::OnUpdate(entt::registry& registry, entt::entity entity)
 {

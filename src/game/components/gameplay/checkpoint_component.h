@@ -7,7 +7,6 @@
 
 #include <glm/vec3.hpp>
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/string_id.h"
 #include "engine/component_registry.h"
@@ -27,8 +26,8 @@ struct CheckpointComponent
     glm::vec3 spawnRotation{0.0f, 0.0f, 0.0f};
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void Serialize(const CheckpointComponent& comp, nlohmann::json& json);
-    static void Deserialize(CheckpointComponent& comp, const nlohmann::json& json);
+    static void Serialize(const CheckpointComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(CheckpointComponent& comp, const Engine::TextReader& r);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }

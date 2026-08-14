@@ -7,7 +7,6 @@
 
 #include <array>
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/core/model_id.h"
 #include "engine/material_manager.h"
@@ -39,8 +38,8 @@ struct StaticMeshComponent
     [[nodiscard]] Engine::MaterialID GetMaterialOverride(uint32_t slot) const;
     void SetMaterialOverride(uint32_t slot, Engine::MaterialID id);
 
-    static void Serialize(const StaticMeshComponent& comp, nlohmann::json& json);
-    static void Deserialize(StaticMeshComponent& comp, const nlohmann::json& json);
+    static void Serialize(const StaticMeshComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(StaticMeshComponent& comp, const Engine::TextReader& r);
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);

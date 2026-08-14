@@ -5,7 +5,6 @@
 #include "static_mesh_primitive_component.h"
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
 #include <glm/gtc/quaternion.hpp>
@@ -15,6 +14,8 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/components/core_components.h"
 #include "game/components/render/static_mesh_component.h"
@@ -67,32 +68,27 @@ bool StaticMeshPrimitiveComponent::CanAdd(const entt::registry& registry, entt::
     return !registry.any_of<StaticMeshComponent>(entity);
 }
 
-void StaticMeshPrimitiveComponent::Serialize(const StaticMeshPrimitiveComponent& comp, nlohmann::json& json)
+void StaticMeshPrimitiveComponent::Serialize(const StaticMeshPrimitiveComponent& comp, Engine::TextWriter& w)
 {
-    json["modelId"] = comp.modelId.id;
-    json["primitiveOrdinal"] = comp.primitiveOrdinal;
-    if (comp.materialOverride.IsValid()) { json["materialOverride"] = comp.materialOverride.id; }
-    if (comp.shadingShaderOverride) { json["shadingShaderOverride"] = comp.shadingShaderOverride.id; }
-    if (comp.lightingShaderOverride) { json["lightingShaderOverride"] = comp.lightingShaderOverride.id; }
-    json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
-    json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
+    static const StaticMeshPrimitiveComponent DEF{};
+    w.Key("modelId", comp.modelId.id);
+    w.Key("primitiveOrdinal", comp.primitiveOrdinal);
+    w.KeyOpt("materialOverride", comp.materialOverride.id, Engine::MaterialID::INVALID.id);
+    w.KeyOpt("shadingShaderOverride", comp.shadingShaderOverride.id, uint64_t{0});
+    w.KeyOpt("lightingShaderOverride", comp.lightingShaderOverride.id, uint64_t{0});
+    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
+    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
 }
 
-void StaticMeshPrimitiveComponent::Deserialize(StaticMeshPrimitiveComponent& comp, const nlohmann::json& json)
+void StaticMeshPrimitiveComponent::Deserialize(StaticMeshPrimitiveComponent& comp, const Engine::TextReader& r)
 {
-    comp.modelId = Engine::ModelID(json["modelId"].get<uint64_t>());
-    comp.primitiveOrdinal = json["primitiveOrdinal"].get<uint32_t>();
-    if (json.contains("materialOverride")) { comp.materialOverride = Engine::MaterialID(json["materialOverride"].get<uint64_t>()); }
-    if (json.contains("shadingShaderOverride")) { comp.shadingShaderOverride = StringID(json["shadingShaderOverride"].get<uint64_t>()); }
-    if (json.contains("lightingShaderOverride")) { comp.lightingShaderOverride = StringID(json["lightingShaderOverride"].get<uint64_t>()); }
-    if (json.contains("renderOffset")) {
-        const auto& o = json["renderOffset"];
-        comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
-    }
-    if (json.contains("renderRotation")) {
-        const auto& r = json["renderRotation"];
-        comp.renderRotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
-    }
+    comp.modelId = Engine::ModelID(r.U64("modelId", comp.modelId.id));
+    comp.primitiveOrdinal = r.UInt("primitiveOrdinal", comp.primitiveOrdinal);
+    comp.materialOverride = Engine::MaterialID(r.U64("materialOverride", comp.materialOverride.id));
+    comp.shadingShaderOverride = StringID(r.U64("shadingShaderOverride", comp.shadingShaderOverride.id));
+    comp.lightingShaderOverride = StringID(r.U64("lightingShaderOverride", comp.lightingShaderOverride.id));
+    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
+    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
 }
 
 Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

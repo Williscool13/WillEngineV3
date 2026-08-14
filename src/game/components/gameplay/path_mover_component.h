@@ -8,7 +8,6 @@
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/spline/spline.h"
 #include "engine/component_registry.h"
@@ -99,9 +98,9 @@ struct PathMoverComponent
     bool bIsWaiting{false};
     float waitTimer{0.0f};
 
-    static void Serialize(const PathMoverComponent& comp, nlohmann::json& json);
+    static void Serialize(const PathMoverComponent& comp, Engine::TextWriter& w);
 
-    static void Deserialize(PathMoverComponent& comp, const nlohmann::json& json);
+    static void Deserialize(PathMoverComponent& comp, const Engine::TextReader& r);
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };

@@ -6,7 +6,6 @@
 #define WILL_ENGINE_ENGINE_COMPONENT_REGISTRY_H
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json.hpp>
 
 #include "core/containers/map.h"
 #include "core/containers/vector.h"
@@ -19,13 +18,16 @@ struct ViewFamily;
 
 namespace Engine
 {
+class TextWriter;
+class TextReader;
+
 struct ComponentEditorResult {
     bool bRequestRemoval{false};
     bool bModified{false};
 };
 
-using SerializeFn = void(*)(const entt::registry&, entt::entity, nlohmann::json&);
-using DeserializeFn = void(*)(entt::registry&, entt::entity, const nlohmann::json&);
+using SerializeFn = void(*)(const entt::registry&, entt::entity, TextWriter&);
+using DeserializeFn = void(*)(entt::registry&, entt::entity, const TextReader&);
 using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
 using CanAddComponentFn = bool(*)(const entt::registry&, entt::entity);
 using EmplaceDefaultFn = void(*)(entt::registry&, entt::entity);

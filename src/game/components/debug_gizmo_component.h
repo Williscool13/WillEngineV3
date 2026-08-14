@@ -10,7 +10,6 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/component_registry.h"
 #include "game/components/component_types.h"
@@ -36,8 +35,8 @@ struct DebugGizmoComponent
     glm::vec4 color{0.0f, 1.0f, 0.0f, 1.0f};
     float lineWidth{0.05f};
 
-    static void Serialize(const DebugGizmoComponent& comp, nlohmann::json& json);
-    static void Deserialize(DebugGizmoComponent& comp, const nlohmann::json& json);
+    static void Serialize(const DebugGizmoComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(DebugGizmoComponent& comp, const Engine::TextReader& r);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }

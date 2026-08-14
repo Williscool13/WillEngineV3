@@ -7,11 +7,13 @@
 
 #include <cstdint>
 #include <glm/glm.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 #include "core/containers/inline_vector.h"
 
 namespace Engine
 {
+class TextWriter;
+class TextReader;
+
 enum class SplineMode : uint8_t
 {
     Linear,
@@ -58,8 +60,8 @@ struct Spline
      */
     [[nodiscard]] int32_t SegmentCount() const;
 
-    static void Serialize(const Spline& spline, nlohmann::json& json);
-    static void Deserialize(Spline& spline, const nlohmann::json& json);
+    static void Serialize(const Spline& spline, TextWriter& w);
+    static void Deserialize(Spline& spline, const TextReader& r);
 };
 }
 

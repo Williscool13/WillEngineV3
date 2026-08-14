@@ -6,7 +6,6 @@
 #define WILL_ENGINE_TEXT_COMPONENT_H
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/containers/inline_string.h"
 #include "engine/asset_manager_types.h"
@@ -31,8 +30,8 @@ struct TextComponent
     Engine::Text3DAnchor anchor{Engine::Text3DAnchor::Baseline};
     float wrapWidthPx{0.0f};
 
-    static void Serialize(const TextComponent& comp, nlohmann::json& json);
-    static void Deserialize(TextComponent& comp, const nlohmann::json& json);
+    static void Serialize(const TextComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(TextComponent& comp, const Engine::TextReader& r);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);

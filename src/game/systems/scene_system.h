@@ -17,6 +17,7 @@
 #include "engine/core/model_id.h"
 #include "engine/engine_api.h"
 #include "engine/resources/scene/scene.h"
+#include "engine/serialization/text_reader.h"
 
 namespace Engine
 {
@@ -28,7 +29,7 @@ namespace Game
 {
 Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName);
 
-StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene);
+StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, const Engine::TextReader& scene);
 
 Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager,
                                                   Core::Span<Engine::RuntimeSceneMetadata> loadedScenes);

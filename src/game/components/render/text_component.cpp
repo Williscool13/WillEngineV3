@@ -6,7 +6,6 @@
 #include "text_component.h"
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "imgui.h"
 
@@ -14,6 +13,8 @@
 #include "engine/asset_manager.h"
 #include "engine/material_manager.h"
 #include "engine/engine_api.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
@@ -61,39 +62,31 @@ void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
     registry.remove<MultiframeDirtyTransformComponent>(entity);
 }
 
-void TextComponent::Serialize(const TextComponent& comp, nlohmann::json& json)
+void TextComponent::Serialize(const TextComponent& comp, Engine::TextWriter& w)
 {
-    json["fontId"] = comp.fontId.id;
-    json["textMaterialId"] = comp.textMaterialId.id;
-    json["text"] = comp.text.c_str();
-    json["renderSizePx"] = comp.renderSizePx;
-    json["color"] = {comp.color.r, comp.color.g, comp.color.b, comp.color.a};
-    json["align"] = static_cast<uint8_t>(comp.align);
-    json["anchor"] = static_cast<uint8_t>(comp.anchor);
-    json["wrapWidthPx"] = comp.wrapWidthPx;
+    static const TextComponent DEF{};
+    w.Key("fontId", comp.fontId.id);
+    w.KeyOpt("textMaterialId", comp.textMaterialId.id, DEF.textMaterialId.id);
+    if (!comp.text.IsEmpty()) {
+        w.KeyStr("text", comp.text.View());
+    }
+    w.KeyOpt("renderSizePx", comp.renderSizePx, DEF.renderSizePx);
+    w.KeyOpt("color", comp.color, DEF.color);
+    w.KeyOpt("align", static_cast<uint32_t>(comp.align), static_cast<uint32_t>(DEF.align));
+    w.KeyOpt("anchor", static_cast<uint32_t>(comp.anchor), static_cast<uint32_t>(DEF.anchor));
+    w.KeyOpt("wrapWidthPx", comp.wrapWidthPx, DEF.wrapWidthPx);
 }
 
-void TextComponent::Deserialize(TextComponent& comp, const nlohmann::json& json)
+void TextComponent::Deserialize(TextComponent& comp, const Engine::TextReader& r)
 {
-    comp.fontId = Engine::FontID(json["fontId"].get<uint64_t>());
-    if (json.contains("textMaterialId")) {
-        comp.textMaterialId = Engine::TextMaterialID(json["textMaterialId"].get<uint64_t>());
-    }
-    comp.text = Core::InlineString<256>(json["text"].get<std::string_view>());
-    comp.renderSizePx = json["renderSizePx"].get<float>();
-    if (json.contains("color")) {
-        const auto& c = json["color"];
-        comp.color = glm::vec4(c[0].get<float>(), c[1].get<float>(), c[2].get<float>(), c[3].get<float>());
-    }
-    if (json.contains("align")) {
-        comp.align = static_cast<Engine::Text3DAlign>(json["align"].get<uint8_t>());
-    }
-    if (json.contains("anchor")) {
-        comp.anchor = static_cast<Engine::Text3DAnchor>(json["anchor"].get<uint8_t>());
-    }
-    if (json.contains("wrapWidthPx")) {
-        comp.wrapWidthPx = json["wrapWidthPx"].get<float>();
-    }
+    comp.fontId = Engine::FontID(r.U64("fontId", comp.fontId.id));
+    comp.textMaterialId = Engine::TextMaterialID(r.U64("textMaterialId", comp.textMaterialId.id));
+    r.Str("text", comp.text);
+    comp.renderSizePx = r.Float("renderSizePx", comp.renderSizePx);
+    comp.color = r.Vec4("color", comp.color);
+    comp.align = static_cast<Engine::Text3DAlign>(r.UInt("align", static_cast<uint32_t>(comp.align)));
+    comp.anchor = static_cast<Engine::Text3DAnchor>(r.UInt("anchor", static_cast<uint32_t>(comp.anchor)));
+    comp.wrapWidthPx = r.Float("wrapWidthPx", comp.wrapWidthPx);
 }
 
 Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
