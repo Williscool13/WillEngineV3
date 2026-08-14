@@ -59,7 +59,7 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, T
         .materialID = fill.material,
         .blasDeviceAddress = primitive.blasDeviceAddress,
         .modelSpaceTransform = fill.modelSpaceTransform,
-        .triLightRange = bEmissive ? triLightStore->AllocateForPrimitive(*model, primitive.index) : TriLightStore::Range{},
+        .triLightRange = bEmissive && triLightStore ? triLightStore->AllocateForPrimitive(*model, primitive.index) : TriLightStore::Range{},
     };
 }
 

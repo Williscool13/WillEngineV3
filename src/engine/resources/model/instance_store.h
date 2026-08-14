@@ -69,10 +69,10 @@ public:
 
     void Free(Range range) { ranges_.Free(range); }
 
-    /** Range over model mesh[0]'s primitives with a uniform material (acquired per entry), identity transforms, a shared ModelStore slot, and a tri-light range per emissive primitive. Invalid range on an empty model or full store. */
+    /** Range over model mesh[0]'s primitives with a uniform material (acquired per entry), identity transforms, a shared ModelStore slot, and a tri-light range per emissive primitive. Invalid range on an empty model or full store. Null triLightStore suppresses tri-light allocation (light proxy surfaces resolve BRDF hits via their analytic light). */
     Range AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot);
 
-    /** The single writer for InstanceSource entries: acquires the material, stamps the stable material index, and allocates the primitive's tri-light range. */
+    /** The single writer for InstanceSource entries: acquires the material, stamps the stable material index, and allocates the primitive's tri-light range (skipped when triLightStore is null). */
     void FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill);
 
     /** Releases each entry's material ref and tri-light range, frees the range, and invalidates it. No-op on an invalid range. */

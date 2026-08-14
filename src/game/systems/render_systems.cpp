@@ -480,7 +480,7 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             resolved.PushBack(entity);
             continue;
         }
-        const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, materialID, modelRange.offset);
+        const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, nullptr, model, materialID, modelRange.offset);
         if (!range.IsValid()) {
             state->modelStore.Free(modelRange);
             resolved.PushBack(entity);

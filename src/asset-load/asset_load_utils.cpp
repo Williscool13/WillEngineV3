@@ -11,7 +11,7 @@
 
 namespace AssetLoad
 {
-static constexpr uint32_t kEmissiveTriExtractCap = 16384;
+static constexpr uint32_t kEmissiveTriExtractCap = 8192;
 
 static bool IsEmissiveMaterial(const MaterialProperties& props)
 {
