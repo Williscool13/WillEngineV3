@@ -4,9 +4,6 @@
 
 #ifndef WILL_ENGINE_MATERIALS_H
 #define WILL_ENGINE_MATERIALS_H
-#include <string>
-#include <json/nlohmann/json.hpp>
-
 #include "core/string_id.h"
 #include "core/containers/inline_path.h"
 #include "core/containers/inline_string.h"
@@ -56,11 +53,14 @@ struct RenderMaterial
     StringID lightingShader{};
 };
 
+class TextWriter;
+class TextReader;
+
 MaterialID HashMaterial(const Material& m);
 
-nlohmann::json SerializeMaterial(const Material& mat);
+void SerializeMaterial(const Material& mat, TextWriter& w);
 
-Material DeserializeMaterial(const nlohmann::json& j, const Core::Path& sourcePath);
+Material DeserializeMaterial(const TextReader& r, const Core::Path& sourcePath);
 } // Engine
 
 #endif //WILL_ENGINE_MATERIALS_H

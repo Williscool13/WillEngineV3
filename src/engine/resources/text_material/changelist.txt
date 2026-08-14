@@ -1,0 +1,14 @@
+# .wtextmaterial Format Changelist
+#
+# Magic: "wstextmat". Header: WTextMaterialHeader in text_material_format.h
+# Loader rejects major != TEXT_MATERIAL_MAJOR_VERSION.
+
+================================================================================
+VERSION 2.0  (current)
+================================================================================
+- Body is the bespoke text format (docs/serialization/text_format.md), was JSON.
+
+================================================================================
+VERSION 1.0
+================================================================================
+- Pre-changelist. Text header + JSON body. See git history.

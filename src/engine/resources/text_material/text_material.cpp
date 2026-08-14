@@ -4,46 +4,36 @@
 
 #include "text_material.h"
 
-#include "engine/serialization/serialization.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
 namespace Engine
 {
-nlohmann::json SerializeTextMaterial(const TextMaterial& mat)
+void SerializeTextMaterial(const TextMaterial& mat, TextWriter& w)
 {
-    nlohmann::json j;
-    j["name"] = mat.name;
-    j["id"] = mat.id.id;
-    j["colorTint"] = {mat.colorTint.x, mat.colorTint.y, mat.colorTint.z, mat.colorTint.w};
-    j["outlineColor"] = {mat.outlineColor.x, mat.outlineColor.y, mat.outlineColor.z, mat.outlineColor.w};
-    j["outlineWidth"] = mat.outlineWidth;
-    j["shadowSoftness"] = mat.shadowSoftness;
-    j["shadowOffset"] = {mat.shadowOffset.x, mat.shadowOffset.y};
-    j["shadowColor"] = {mat.shadowColor.x, mat.shadowColor.y, mat.shadowColor.z, mat.shadowColor.w};
-    return j;
+    w.KeyStr("name", mat.name.View());
+    w.Key("id", mat.id.id);
+    w.Key("colorTint", mat.colorTint);
+    w.Key("outlineColor", mat.outlineColor);
+    w.Key("outlineWidth", mat.outlineWidth);
+    w.Key("shadowSoftness", mat.shadowSoftness);
+    w.Key("shadowOffset", mat.shadowOffset);
+    w.Key("shadowColor", mat.shadowColor);
 }
 
-TextMaterial DeserializeTextMaterial(const nlohmann::json& j, const Core::Path& sourcePath)
+TextMaterial DeserializeTextMaterial(const TextReader& r, const Core::Path& sourcePath)
 {
     TextMaterial mat{};
-    mat.name = j["name"].get<Core::InlineString<128>>();
-    mat.id = TextMaterialID(j["id"].get<uint64_t>());
+    r.Str("name", mat.name);
+    mat.id = TextMaterialID(r.U64("id"));
     mat.sourcePath = sourcePath;
 
-    auto readF4 = [&](const char* key, float4& v) {
-        const auto& a = j[key];
-        v = {a[0].get<float>(), a[1].get<float>(), a[2].get<float>(), a[3].get<float>()};
-    };
-    auto readF2 = [&](const char* key, float2& v) {
-        const auto& a = j[key];
-        v = {a[0].get<float>(), a[1].get<float>()};
-    };
-
-    readF4("colorTint", mat.colorTint);
-    readF4("outlineColor", mat.outlineColor);
-    mat.outlineWidth = j["outlineWidth"].get<float>();
-    mat.shadowSoftness = j["shadowSoftness"].get<float>();
-    readF2("shadowOffset", mat.shadowOffset);
-    readF4("shadowColor", mat.shadowColor);
+    mat.colorTint = r.Vec4("colorTint", mat.colorTint);
+    mat.outlineColor = r.Vec4("outlineColor", mat.outlineColor);
+    mat.outlineWidth = r.Float("outlineWidth", mat.outlineWidth);
+    mat.shadowSoftness = r.Float("shadowSoftness", mat.shadowSoftness);
+    mat.shadowOffset = r.Vec2("shadowOffset", mat.shadowOffset);
+    mat.shadowColor = r.Vec4("shadowColor", mat.shadowColor);
 
     return mat;
 }

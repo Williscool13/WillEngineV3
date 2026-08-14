@@ -4,7 +4,8 @@
 
 #include "material.h"
 
-#include "engine/serialization/serialization.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
 namespace Engine
 {
@@ -48,110 +49,92 @@ MaterialID HashMaterial(const Material& m)
     return MaterialID(fnv1a64(reinterpret_cast<const uint8_t*>(&key), sizeof(StableKey)));
 }
 
-nlohmann::json SerializeMaterial(const Material& mat)
+void SerializeMaterial(const Material& mat, TextWriter& w)
 {
     assert(!mat.immutable);
-    nlohmann::json j;
+    static const SamplerDesc DEFAULT_SAMPLER{};
 
-    j["name"] = mat.name;
-    j["id"] = mat.id.id;
-    j["fragmentShader"] = mat.fragmentShader.id;
-    j["lightingShader"] = mat.lightingShader.id;
+    w.KeyStr("name", mat.name.View());
+    w.Key("id", mat.id.id);
+    w.Key("fragmentShader", mat.fragmentShader.id);
+    w.Key("lightingShader", mat.lightingShader.id);
 
-    j["colorFactor"] = {mat.props.colorFactor.x, mat.props.colorFactor.y, mat.props.colorFactor.z, mat.props.colorFactor.w};
-    j["metalRoughFactors"] = {mat.props.metalRoughFactors.x, mat.props.metalRoughFactors.y, mat.props.metalRoughFactors.z, mat.props.metalRoughFactors.w};
-    j["textureImageIndices"] = {mat.props.textureImageIndices.x, mat.props.textureImageIndices.y, mat.props.textureImageIndices.z, mat.props.textureImageIndices.w};
-    j["textureSamplerIndices"] = {mat.props.textureSamplerIndices.x, mat.props.textureSamplerIndices.y, mat.props.textureSamplerIndices.z, mat.props.textureSamplerIndices.w};
-    j["textureImageIndices2"] = {mat.props.textureImageIndices2.x, mat.props.textureImageIndices2.y, mat.props.textureImageIndices2.z, mat.props.textureImageIndices2.w};
-    j["textureSamplerIndices2"] = {mat.props.textureSamplerIndices2.x, mat.props.textureSamplerIndices2.y, mat.props.textureSamplerIndices2.z, mat.props.textureSamplerIndices2.w};
-    j["colorUvTransform"] = {mat.props.colorUvTransform.x, mat.props.colorUvTransform.y, mat.props.colorUvTransform.z, mat.props.colorUvTransform.w};
-    j["metalRoughUvTransform"] = {mat.props.metalRoughUvTransform.x, mat.props.metalRoughUvTransform.y, mat.props.metalRoughUvTransform.z, mat.props.metalRoughUvTransform.w};
-    j["normalUvTransform"] = {mat.props.normalUvTransform.x, mat.props.normalUvTransform.y, mat.props.normalUvTransform.z, mat.props.normalUvTransform.w};
-    j["emissiveUvTransform"] = {mat.props.emissiveUvTransform.x, mat.props.emissiveUvTransform.y, mat.props.emissiveUvTransform.z, mat.props.emissiveUvTransform.w};
-    j["occlusionUvTransform"] = {mat.props.occlusionUvTransform.x, mat.props.occlusionUvTransform.y, mat.props.occlusionUvTransform.z, mat.props.occlusionUvTransform.w};
-    j["emissiveFactor"] = {mat.props.emissiveFactor.x, mat.props.emissiveFactor.y, mat.props.emissiveFactor.z, mat.props.emissiveFactor.w};
-    j["alphaProperties"] = {mat.props.alphaProperties.x, mat.props.alphaProperties.y, mat.props.alphaProperties.z, mat.props.alphaProperties.w};
-    j["physicalProperties"] = {mat.props.physicalProperties.x, mat.props.physicalProperties.y, mat.props.physicalProperties.z, mat.props.physicalProperties.w};
+    const MaterialProperties& p = mat.props;
+    w.Key("colorFactor", p.colorFactor);
+    w.Key("metalRoughFactors", p.metalRoughFactors);
+    w.Key("colorUvTransform", p.colorUvTransform);
+    w.Key("metalRoughUvTransform", p.metalRoughUvTransform);
+    w.Key("normalUvTransform", p.normalUvTransform);
+    w.Key("emissiveUvTransform", p.emissiveUvTransform);
+    w.Key("occlusionUvTransform", p.occlusionUvTransform);
+    w.Key("emissiveFactor", p.emissiveFactor);
+    w.Key("alphaProperties", p.alphaProperties);
+    w.Key("physicalProperties", p.physicalProperties);
 
-    for (int i = 0; i < 6; ++i) {
-        j["textureRefs"][i] = mat.textureRefs[i].id;
+    w.Count("samplers", 6);
+    for (int32_t i = 0; i < 6; ++i) {
         const SamplerDesc& s = mat.samplerDesc[i];
-        j["samplerDesc"][i] = {
-            {"magFilter",      static_cast<int>(s.magFilter)},
-            {"minFilter",      static_cast<int>(s.minFilter)},
-            {"mipmapMode",     static_cast<int>(s.mipmapMode)},
-            {"addressModeU",   static_cast<int>(s.addressModeU)},
-            {"addressModeV",   static_cast<int>(s.addressModeV)},
-            {"addressModeW",   static_cast<int>(s.addressModeW)},
-            {"mipLodBias",     s.mipLodBias},
-            {"minLod",         s.minLod},
-            {"maxLod",         s.maxLod},
-            {"anisotropyEnable", s.anisotropyEnable},
-            {"maxAnisotropy",  s.maxAnisotropy},
-        };
+        w.BeginBlock("s");
+        w.KeyOpt("textureRef", mat.textureRefs[i].id, TextureID::INVALID.id);
+        w.KeyOpt("magFilter", static_cast<int32_t>(s.magFilter), static_cast<int32_t>(DEFAULT_SAMPLER.magFilter));
+        w.KeyOpt("minFilter", static_cast<int32_t>(s.minFilter), static_cast<int32_t>(DEFAULT_SAMPLER.minFilter));
+        w.KeyOpt("mipmapMode", static_cast<int32_t>(s.mipmapMode), static_cast<int32_t>(DEFAULT_SAMPLER.mipmapMode));
+        w.KeyOpt("addressModeU", static_cast<int32_t>(s.addressModeU), static_cast<int32_t>(DEFAULT_SAMPLER.addressModeU));
+        w.KeyOpt("addressModeV", static_cast<int32_t>(s.addressModeV), static_cast<int32_t>(DEFAULT_SAMPLER.addressModeV));
+        w.KeyOpt("addressModeW", static_cast<int32_t>(s.addressModeW), static_cast<int32_t>(DEFAULT_SAMPLER.addressModeW));
+        w.KeyOpt("mipLodBias", s.mipLodBias, DEFAULT_SAMPLER.mipLodBias);
+        w.KeyOpt("minLod", s.minLod, DEFAULT_SAMPLER.minLod);
+        w.KeyOpt("maxLod", s.maxLod, DEFAULT_SAMPLER.maxLod);
+        w.KeyOpt("anisotropyEnable", static_cast<uint32_t>(s.anisotropyEnable), static_cast<uint32_t>(DEFAULT_SAMPLER.anisotropyEnable));
+        w.KeyOpt("maxAnisotropy", s.maxAnisotropy, DEFAULT_SAMPLER.maxAnisotropy);
+        w.EndBlock();
     }
-
-    return j;
 }
 
-Material DeserializeMaterial(const nlohmann::json& j, const Core::Path& sourcePath)
+Material DeserializeMaterial(const TextReader& r, const Core::Path& sourcePath)
 {
     Material mat{};
-    mat.name = j["name"].get<Core::InlineString<128>>();
-    mat.id = MaterialID(j["id"].get<uint64_t>());
-    if (j.contains("fragmentShader")) {
-        mat.fragmentShader = StringID(j["fragmentShader"].get<uint64_t>());
-    }
-    if (j.contains("lightingShader")) {
-        mat.lightingShader = StringID(j["lightingShader"].get<uint64_t>());
-    }
-
-    auto readF4 = [&](const char* key, glm::vec4& v) {
-        const auto& a = j[key];
-        v = {a[0].get<float>(), a[1].get<float>(), a[2].get<float>(), a[3].get<float>()};
-    };
-    auto readI4 = [&](const char* key, glm::ivec4& v) {
-        const auto& a = j[key];
-        v = {a[0].get<int32_t>(), a[1].get<int32_t>(), a[2].get<int32_t>(), a[3].get<int32_t>()};
-    };
+    r.Str("name", mat.name);
+    mat.id = MaterialID(r.U64("id"));
+    if (r.Has("fragmentShader")) { mat.fragmentShader = StringID(r.U64("fragmentShader")); }
+    if (r.Has("lightingShader")) { mat.lightingShader = StringID(r.U64("lightingShader")); }
 
     MaterialProperties& p = mat.props;
-    readF4("colorFactor", p.colorFactor);
-    readF4("metalRoughFactors", p.metalRoughFactors);
-    readI4("textureImageIndices", p.textureImageIndices);
-    readI4("textureSamplerIndices", p.textureSamplerIndices);
-    readI4("textureImageIndices2", p.textureImageIndices2);
-    readI4("textureSamplerIndices2", p.textureSamplerIndices2);
-    readF4("colorUvTransform", p.colorUvTransform);
-    readF4("metalRoughUvTransform", p.metalRoughUvTransform);
-    readF4("normalUvTransform", p.normalUvTransform);
-    readF4("emissiveUvTransform", p.emissiveUvTransform);
-    readF4("occlusionUvTransform", p.occlusionUvTransform);
-    readF4("emissiveFactor", p.emissiveFactor);
-    readF4("alphaProperties", p.alphaProperties);
-    readF4("physicalProperties", p.physicalProperties);
+    p.colorFactor = r.Vec4("colorFactor");
+    p.metalRoughFactors = r.Vec4("metalRoughFactors");
+    p.colorUvTransform = r.Vec4("colorUvTransform");
+    p.metalRoughUvTransform = r.Vec4("metalRoughUvTransform");
+    p.normalUvTransform = r.Vec4("normalUvTransform");
+    p.emissiveUvTransform = r.Vec4("emissiveUvTransform");
+    p.occlusionUvTransform = r.Vec4("occlusionUvTransform");
+    p.emissiveFactor = r.Vec4("emissiveFactor");
+    p.alphaProperties = r.Vec4("alphaProperties");
+    p.physicalProperties = r.Vec4("physicalProperties");
 
-    if (j.contains("textureRefs")) {
-        for (int i = 0; i < 6; ++i) {
-            mat.textureRefs[i] = TextureID(j["textureRefs"][i].get<uint64_t>());
-        }
-    }
-    if (j.contains("samplerDesc")) {
-        for (int i = 0; i < 6; ++i) {
-            const auto& s = j["samplerDesc"][i];
-            mat.samplerDesc[i].magFilter      = static_cast<VkFilter>(s["magFilter"].get<int>());
-            mat.samplerDesc[i].minFilter      = static_cast<VkFilter>(s["minFilter"].get<int>());
-            mat.samplerDesc[i].mipmapMode     = static_cast<VkSamplerMipmapMode>(s["mipmapMode"].get<int>());
-            mat.samplerDesc[i].addressModeU   = static_cast<VkSamplerAddressMode>(s["addressModeU"].get<int>());
-            mat.samplerDesc[i].addressModeV   = static_cast<VkSamplerAddressMode>(s["addressModeV"].get<int>());
-            mat.samplerDesc[i].addressModeW   = static_cast<VkSamplerAddressMode>(s["addressModeW"].get<int>());
-            mat.samplerDesc[i].mipLodBias     = s["mipLodBias"].get<float>();
-            mat.samplerDesc[i].minLod         = s["minLod"].get<float>();
-            mat.samplerDesc[i].maxLod         = s["maxLod"].get<float>();
-            mat.samplerDesc[i].anisotropyEnable = s["anisotropyEnable"].get<uint32_t>();
-            mat.samplerDesc[i].maxAnisotropy  = s["maxAnisotropy"].get<float>();
-        }
-    }
+    // Runtime properties
+    p.textureImageIndices = {-1, -1, -1, -1};
+    p.textureSamplerIndices = {-1, -1, -1, -1};
+    p.textureImageIndices2 = {-1, -1, -1, -1};
+    p.textureSamplerIndices2 = {-1, -1, -1, -1};
+
+    int32_t slot = 0;
+    r.ForEachRecord("samplers", [&](const TextReader& s) {
+        if (slot >= 6) { return; }
+        SamplerDesc& d = mat.samplerDesc[slot];
+        mat.textureRefs[slot] = TextureID(s.U64("textureRef", TextureID::INVALID.id));
+        d.magFilter = static_cast<VkFilter>(s.Int("magFilter", static_cast<int32_t>(d.magFilter)));
+        d.minFilter = static_cast<VkFilter>(s.Int("minFilter", static_cast<int32_t>(d.minFilter)));
+        d.mipmapMode = static_cast<VkSamplerMipmapMode>(s.Int("mipmapMode", static_cast<int32_t>(d.mipmapMode)));
+        d.addressModeU = static_cast<VkSamplerAddressMode>(s.Int("addressModeU", static_cast<int32_t>(d.addressModeU)));
+        d.addressModeV = static_cast<VkSamplerAddressMode>(s.Int("addressModeV", static_cast<int32_t>(d.addressModeV)));
+        d.addressModeW = static_cast<VkSamplerAddressMode>(s.Int("addressModeW", static_cast<int32_t>(d.addressModeW)));
+        d.mipLodBias = s.Float("mipLodBias", d.mipLodBias);
+        d.minLod = s.Float("minLod", d.minLod);
+        d.maxLod = s.Float("maxLod", d.maxLod);
+        d.anisotropyEnable = s.UInt("anisotropyEnable", d.anisotropyEnable);
+        d.maxAnisotropy = s.Float("maxAnisotropy", d.maxAnisotropy);
+        ++slot;
+    });
 
     mat.immutable = false;
     mat.sourcePath = sourcePath;

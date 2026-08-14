@@ -14,7 +14,7 @@
 
 namespace Engine
 {
-constexpr uint32_t MATERIAL_MAJOR_VERSION = 1;
+constexpr uint32_t MATERIAL_MAJOR_VERSION = 2;
 constexpr uint32_t MATERIAL_MINOR_VERSION = 0;
 constexpr size_t WMATERIAL_NAME_LENGTH = 128;
 

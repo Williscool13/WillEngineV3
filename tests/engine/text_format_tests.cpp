@@ -11,9 +11,11 @@
 #include <memory>
 #include <string_view>
 
+#include "core/string_id.h"
 #include "core/memory/tlsf_allocator.h"
 #include "engine/resources/environment_map/probe_format.h"
 #include "engine/resources/font/font_format.h"
+#include "engine/resources/material/material.h"
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
 
@@ -277,6 +279,46 @@ TEST_CASE_METHOD(TextFormatFixture, "ForEachBlock: scene-style entity/component 
         ++entityCount;
     });
     CHECK(entityCount == 2);
+}
+
+TEST_CASE_METHOD(TextFormatFixture, "Material: full round-trip, deterministic re-serialize", "[textformat]")
+{
+    Engine::Material mat{};
+    mat.name = Core::InlineString<128>("lab_dark");
+    mat.id = Engine::MaterialID(3230886024858855801ull);
+    mat.fragmentShader = Core::StringID("frag", 4);
+    mat.lightingShader = Core::StringID("lit", 3);
+    mat.props.colorFactor = {0.02f, 0.02f, 0.02f, 1.0f};
+    mat.props.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
+    mat.props.textureImageIndices = {-1, -1, -1, -1};
+    mat.props.emissiveFactor = {1.0f, 0.5f, 0.25f, 500.0f};
+    mat.textureRefs[2] = Engine::TextureID(77);
+    mat.samplerDesc[2].addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    mat.samplerDesc[2].maxAnisotropy = 8.0f;
+
+    Core::Vector<std::byte> a(&alloc, Core::AllocTag::Unknown);
+    Engine::TextWriter wa(a);
+    Engine::SerializeMaterial(mat, wa);
+
+    const Engine::Material back = Engine::DeserializeMaterial(Reader(a), Core::Path());
+    CHECK(back.name == mat.name);
+    CHECK(back.id == mat.id);
+    CHECK(back.fragmentShader == mat.fragmentShader);
+    CHECK(back.lightingShader == mat.lightingShader);
+    CHECK(back.props.colorFactor == mat.props.colorFactor);
+    CHECK(back.props.textureImageIndices == mat.props.textureImageIndices);
+    CHECK(Engine::FloatBits(back.props.emissiveFactor.w) == Engine::FloatBits(500.0f));
+    CHECK(back.textureRefs[2] == mat.textureRefs[2]);
+    CHECK(back.textureRefs[0] == Engine::TextureID{});
+    CHECK(back.samplerDesc[2].addressModeU == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+    CHECK(Engine::FloatBits(back.samplerDesc[2].maxAnisotropy) == Engine::FloatBits(8.0f));
+    CHECK(back.samplerDesc[0].magFilter == VK_FILTER_LINEAR);
+    CHECK(Engine::FloatBits(back.samplerDesc[0].maxLod) == Engine::FloatBits(VK_LOD_CLAMP_NONE));
+
+    Core::Vector<std::byte> b(&alloc, Core::AllocTag::Unknown);
+    Engine::TextWriter wb(b);
+    Engine::SerializeMaterial(back, wb);
+    CHECK(View(a) == View(b));
 }
 
 TEST_CASE_METHOD(TextFormatFixture, "Font header: hex-float metrics round-trip bit-exactly, version 1 rejected", "[textformat]")

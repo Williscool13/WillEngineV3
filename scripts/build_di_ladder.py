@@ -98,10 +98,7 @@ def write_emissive_material(name, rgb, strength):
         "textureSamplerIndices": [2, 2, 2, 2],
         "textureSamplerIndices2": [2, 2, -1, -1],
     }
-    header = f"wmaterial\nversion 1 0\nid {mid}\nname {name}\nend_header\n"
-    with open(os.path.join(MAT_DIR, name + ".wmaterial"), "w", encoding="utf-8") as f:
-        f.write(header)
-        f.write(json.dumps(body, indent=4))
+    wa.write_material_file(name, mid, body, MAT_DIR)
     return mid
 
 # =============================================================================

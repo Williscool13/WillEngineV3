@@ -1,0 +1,15 @@
+# .wmaterial Format Changelist
+#
+# Magic: "wmaterial". Header: WMaterialHeader in material_format.h
+# Loader rejects major != MATERIAL_MAJOR_VERSION.
+
+================================================================================
+VERSION 2.0  (current)
+================================================================================
+- Body is the bespoke text format (docs/serialization/text_format.md), was JSON.
+- textureRefs + samplerDesc merged into a `samplers|6` record array, fields omit-default.
+
+================================================================================
+VERSION 1.0
+================================================================================
+- Pre-changelist. Text header + JSON body. See git history.

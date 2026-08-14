@@ -16,6 +16,7 @@ import json
 import math
 import os
 import re
+import struct
 
 def _fnv1a64(text):
     h = 0xCBF29CE484222325
@@ -728,6 +729,57 @@ _MAT_SAMPLER = {"addressModeU": 0, "addressModeV": 0, "addressModeW": 0, "anisot
                 "magFilter": 1, "maxAnisotropy": 1.0, "maxLod": 1000.0, "minFilter": 1,
                 "minLod": 0.0, "mipLodBias": 0.0, "mipmapMode": 1}
 
+def _hex_f32(v):
+    """IEEE-754 bits as 0x%08x, the engine text format's float encoding (text_format.md)."""
+    return "0x%08x" % struct.unpack("<I", struct.pack("<f", float(v)))[0]
+
+# Bindless index vectors (textureImageIndices etc.) are runtime caches, not serialized in v2
+_MAT_PROP_ORDER = ["colorFactor", "metalRoughFactors",
+                   "colorUvTransform", "metalRoughUvTransform", "normalUvTransform",
+                   "emissiveUvTransform", "occlusionUvTransform",
+                   "emissiveFactor", "alphaProperties", "physicalProperties"]
+_MAT_IVEC4_KEYS = set()
+_MAT_SAMPLER_INT_KEYS = {"magFilter", "minFilter", "mipmapMode", "addressModeU", "addressModeV", "addressModeW", "anisotropyEnable"}
+
+def material_body_v2(body):
+    """.wmaterial v2 text body from the legacy body dict shape (mirrors material.cpp SerializeMaterial:
+    key order, hex floats, samplers|6 records with omit-default fields)."""
+    lines = ["name|" + body["name"].replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r"),
+             "id|%d" % body["id"],
+             "fragmentShader|%d" % body["fragmentShader"],
+             "lightingShader|%d" % body["lightingShader"]]
+    for key in _MAT_PROP_ORDER:
+        if key in _MAT_IVEC4_KEYS:
+            lines.append(key + "|" + "|".join("%d" % v for v in body[key]))
+        else:
+            lines.append(key + "|" + "|".join(_hex_f32(v) for v in body[key]))
+    lines.append("samplers|6")
+    refs = body.get("textureRefs", [0] * 6)
+    descs = body.get("samplerDesc", [dict(_MAT_SAMPLER) for _ in range(6)])
+    for i in range(6):
+        lines.append("s")
+        if refs[i] != 0:
+            lines.append("textureRef|%d" % refs[i])
+        for key, default in _MAT_SAMPLER.items():
+            v = descs[i][key]
+            if key in _MAT_SAMPLER_INT_KEYS:
+                if int(v) != default:
+                    lines.append("%s|%d" % (key, int(v)))
+            elif _hex_f32(v) != _hex_f32(default):
+                lines.append("%s|%s" % (key, _hex_f32(v)))
+        lines.append(";")
+    return "\n".join(lines) + "\n"
+
+def write_material_file(name, mid, body, out_dir):
+    """Writes a v2 .wmaterial (text header + material_body_v2 body). Returns the path."""
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, name + ".wmaterial")
+    header = f"wmaterial\nversion 2 0\nid {mid}\nname {name}\nend_header\n"
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(header)
+        f.write(material_body_v2(body))
+    return path
+
 def write_material(name, base_color=(1.0, 1.0, 1.0, 1.0), metallic=0.0, roughness=1.0,
                    emissive=(0.0, 0.0, 0.0, 0.0),
                    albedo_tex=0, metal_rough_tex=0, normal_tex=0, emissive_tex=0, occlusion_tex=0,
@@ -765,11 +817,7 @@ def write_material(name, base_color=(1.0, 1.0, 1.0, 1.0), metallic=0.0, roughnes
         "textureSamplerIndices": [2, 2, 2, 2],
         "textureSamplerIndices2": [2, 2, -1, -1],
     }
-    header = f"wmaterial\nversion 1 0\nid {mid}\nname {name}\nend_header\n"
-    os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, name + ".wmaterial"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(header)
-        f.write(json.dumps(body, indent=4))
+    write_material_file(name, mid, body, out_dir)
     return mid
 
 # =============================================================================

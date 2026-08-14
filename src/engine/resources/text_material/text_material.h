@@ -5,8 +5,6 @@
 #ifndef WILL_ENGINE_TEXT_MATERIAL_H
 #define WILL_ENGINE_TEXT_MATERIAL_H
 
-#include <json/nlohmann/json.hpp>
-
 #include "core/containers/inline_path.h"
 #include "core/containers/inline_string.h"
 #include "engine/core/text_material_id.h"
@@ -28,9 +26,12 @@ struct TextMaterial
     float4 shadowColor{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
-nlohmann::json SerializeTextMaterial(const TextMaterial& mat);
+class TextWriter;
+class TextReader;
 
-TextMaterial DeserializeTextMaterial(const nlohmann::json& j, const Core::Path& sourcePath);
+void SerializeTextMaterial(const TextMaterial& mat, TextWriter& w);
+
+TextMaterial DeserializeTextMaterial(const TextReader& r, const Core::Path& sourcePath);
 } // Engine
 
 #endif //WILL_ENGINE_TEXT_MATERIAL_H

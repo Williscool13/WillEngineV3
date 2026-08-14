@@ -7,6 +7,8 @@
 
 #include <cstddef>
 
+#include <json/nlohmann/json.hpp>
+
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
 #include "core/containers/vector.h"
