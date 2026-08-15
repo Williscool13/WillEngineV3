@@ -18,7 +18,7 @@ enum class CollisionEventType : uint8_t
 inline constexpr float PHYSICS_TIMESTEP = 1 / 60.0f;
 inline constexpr uint32_t PHYSICS_COLLISION_STEPS = 1;
 
-inline constexpr uint32_t PHYSICS_TEMP_ALLOCATOR_SIZE = 8 * 1024 * 1024;
+inline constexpr uint32_t PHYSICS_TEMP_ALLOCATOR_SIZE = 16 * 1024 * 1024;
 
 inline constexpr int32_t MAX_PHYSICS_JOBS = 2048;
 inline constexpr uint64_t TASK_BUFFER = 64;
@@ -28,7 +28,7 @@ inline constexpr int32_t MAX_PHYSICS_TASKS = 2048 + TASK_BUFFER;
 inline constexpr uint32_t MAX_PHYSICS_BODIES = 65536;
 inline constexpr uint32_t PHYSICS_BODY_MUTEX_COUNT = 0;
 inline constexpr uint32_t MAX_BODY_PAIRS = 65536;
-inline constexpr uint32_t MAX_CONTACT_CONSTRAINTS = 1024 * 1 << 5;
+inline constexpr uint32_t MAX_CONTACT_CONSTRAINTS = 10240;
 
 inline constexpr uint32_t MAX_BODY_ACTIVATION_EVENTS = 256;
 static constexpr uint32_t MAX_COLLISION_EVENTS = 8192;

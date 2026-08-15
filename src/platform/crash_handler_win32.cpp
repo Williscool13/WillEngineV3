@@ -280,7 +280,8 @@ Core::InlineString<8192> CrashHandler::GetStackTrace(PCONTEXT context)
     HANDLE process = GetCurrentProcess();
     HANDLE thread = GetCurrentThread();
 
-    if (!SymInitialize(process, nullptr, TRUE)) {
+    // ERROR_INVALID_PARAMETER = dbghelp already initialized for this process (e.g. by Tracy)
+    if (!SymInitialize(process, nullptr, TRUE) && GetLastError() != ERROR_INVALID_PARAMETER) {
         return Core::InlineString<8192>("\nStack Trace: Failed to initialize symbol handler\n");
     }
     SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
