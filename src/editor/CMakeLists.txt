@@ -35,4 +35,5 @@ target_link_libraries(editor PUBLIC
         bc7enc_rdo
         msdf-atlas-gen
         freetype
+        harfbuzz
 )

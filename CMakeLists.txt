@@ -335,6 +335,17 @@ else ()
     message(STATUS "ispc not found; BC7 encoding falls back to scalar bc7enc")
 endif ()
 
+add_library(harfbuzz STATIC
+        extern/harfbuzz/src/harfbuzz.cc
+        extern/harfbuzz/src/hb-gpu.cc
+        extern/harfbuzz/src/hb-gpu-draw.cc
+        extern/harfbuzz/src/hb-gpu.h
+)
+target_include_directories(harfbuzz PUBLIC extern/harfbuzz/src)
+if (MSVC)
+    target_compile_options(harfbuzz PRIVATE /bigobj)
+endif ()
+
 # Clay UI =====================================
 add_library(clay STATIC
         extern/clay/clay.cpp
