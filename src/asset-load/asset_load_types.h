@@ -24,6 +24,7 @@
 namespace Engine
 {
 struct PhysicsColliderAsset;
+struct Font;
 }
 
 namespace AssetLoad
@@ -36,6 +37,7 @@ class ProceduralModelLoadSlot;
 class PhysicsColliderLoadSlot;
 class AudioLoadSlot;
 class PipelineLoadSlot;
+class FontCurveLoadSlot;
 }
 
 namespace Render
@@ -134,6 +136,7 @@ using PhysicsColliderSlotHandle = Core::Handle<PhysicsColliderLoadSlot>;
 using TextureSlotHandle = Core::Handle<TextureLoadSlot>;
 using CubemapSlotHandle = Core::Handle<CubemapLoadSlot>;
 using ProceduralTextureSlotHandle = Core::Handle<ProceduralTextureLoadSlot>;
+using FontCurveSlotHandle = Core::Handle<FontCurveLoadSlot>;
 
 struct AudioLoadRequest
 {
@@ -209,6 +212,17 @@ struct SamplerLoadRequest
 struct SamplerLoadComplete
 {
     Engine::Sampler* sampler;
+    bool bSuccess;
+};
+
+struct FontCurveLoadRequest
+{
+    Engine::Font* font;
+};
+
+struct FontCurveLoadComplete
+{
+    Engine::Font* font;
     bool bSuccess;
 };
 

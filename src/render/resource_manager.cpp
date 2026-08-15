@@ -49,6 +49,9 @@ ResourceManager::ResourceManager(VulkanContext* context)
     bufferInfo.size = MEGA_PRIMITIVE_BUFFER_SIZE;
     primitiveBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     primitiveBuffer.SetDebugName("Mega Primitive Buffer");
+    bufferInfo.size = MEGA_FONT_CURVE_BUFFER_SIZE;
+    megaFontCurveBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
+    megaFontCurveBuffer.SetDebugName("Mega Font Curve Buffer");
 
     bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
     bufferInfo.size = MEGA_VERTEX_POSITION_BUFFER_SIZE;

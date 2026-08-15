@@ -351,12 +351,3 @@ float ExposureNoiseScale(float adaptedLuminance, float targetLuminance)
     return clamp(targetLuminance / max(adaptedLuminance, 1e-3), 0.25, 32.0);
 }
 
-float MSDFScreenPxRange(Texture2D tex, float2 uv, float pxRange)
-{
-    uint2 atlasSize;
-    uint mipCount;
-    tex.GetDimensions(0, atlasSize.x, atlasSize.y, mipCount);
-    float2 unitRange    = float2(pxRange) / float2(atlasSize);
-    float2 screenTexSize = rsqrt(ddx(uv) * ddx(uv) + ddy(uv) * ddy(uv));
-    return max(0.5 * dot(unitRange, screenTexSize), 1.0);
-}

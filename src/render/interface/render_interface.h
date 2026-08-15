@@ -307,15 +307,14 @@ struct TextDrawCall
 {
     uint32_t quadOffset;
     uint32_t quadCount;
-    uint32_t atlasBindlessIndex;
+    uint32_t fontCurveByteOffset;
     uint32_t textMaterialIndex;
 };
 
 struct TextInstanceDataFull
 {
     uint32_t modelIndex{0};
-    float pxRange{0.0f};
-    uint32_t atlasBindlessIndex{0};
+    uint32_t fontCurveByteOffset{0};
     uint32_t textMaterialIndex{0};
     uint64_t stableId{0};
 };
@@ -324,8 +323,7 @@ struct UITextDrawCall
 {
     uint32_t quadOffset;
     uint32_t quadCount;
-    uint32_t atlasBindlessIndex;
-    float pxRange;
+    uint32_t fontCurveByteOffset;
     int32_t zIndex;
 };
 

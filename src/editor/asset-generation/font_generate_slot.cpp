@@ -4,29 +4,115 @@
 
 #include "font_generate_slot.h"
 
-#include <vector>
+#include <hb.h>
+#include <hb-gpu.h>
 
 #include "core/containers/heap_array.h"
 #include "core/containers/vector.h"
-
-#include <volk.h>
-#include <msdf-atlas-gen/msdf-atlas-gen.h>
-
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/font/font_format.h"
-#include "engine/resources/wimage_format.h"
 #include "engine/serialization/serialization.h"
 #include "platform/file_utils.h"
+#include "tracy/Tracy.hpp"
 
 namespace Editor
 {
-FontGenerateSlot::~FontGenerateSlot()
+static constexpr uint32_t CHARSET_FIRST = 0x20;
+static constexpr uint32_t CHARSET_LAST = 0x7E;
+
+struct ContourCapture
 {
-    if (ft) {
-        msdfgen::deinitializeFreetype(ft);
-        ft = nullptr;
+    Core::Vector<Engine::WContourRange>* contourRanges{nullptr};
+    Core::Vector<Engine::WFontEdge>* edges{nullptr};
+    uint32_t firstEdge{0};
+    float startX{0.0f};
+    float startY{0.0f};
+    float curX{0.0f};
+    float curY{0.0f};
+    bool bOpen{false};
+};
+
+static void CaptureFinishContour(ContourCapture& c)
+{
+    if (!c.bOpen) { return; }
+    if (c.curX != c.startX || c.curY != c.startY) {
+        Engine::WFontEdge edge{};
+        edge.kind = Engine::WFontEdgeKind::Linear;
+        edge.p[0] = c.curX;
+        edge.p[1] = c.curY;
+        edge.p[2] = c.startX;
+        edge.p[3] = c.startY;
+        c.edges->PushBack(edge);
     }
+    const uint32_t edgeCount = static_cast<uint32_t>(c.edges->Size()) - c.firstEdge;
+    if (edgeCount > 0) {
+        c.contourRanges->PushBack({c.firstEdge, edgeCount});
+    }
+    c.bOpen = false;
+}
+
+static void CaptureMoveTo(hb_draw_funcs_t*, void* drawData, hb_draw_state_t*, float toX, float toY, void*)
+{
+    auto& c = *static_cast<ContourCapture*>(drawData);
+    CaptureFinishContour(c);
+    c.firstEdge = static_cast<uint32_t>(c.edges->Size());
+    c.startX = c.curX = toX;
+    c.startY = c.curY = toY;
+    c.bOpen = true;
+}
+
+static void CaptureLineTo(hb_draw_funcs_t*, void* drawData, hb_draw_state_t*, float toX, float toY, void*)
+{
+    auto& c = *static_cast<ContourCapture*>(drawData);
+    Engine::WFontEdge edge{};
+    edge.kind = Engine::WFontEdgeKind::Linear;
+    edge.p[0] = c.curX;
+    edge.p[1] = c.curY;
+    edge.p[2] = toX;
+    edge.p[3] = toY;
+    c.edges->PushBack(edge);
+    c.curX = toX;
+    c.curY = toY;
+}
+
+static void CaptureQuadraticTo(hb_draw_funcs_t*, void* drawData, hb_draw_state_t*, float cX, float cY, float toX, float toY, void*)
+{
+    auto& c = *static_cast<ContourCapture*>(drawData);
+    Engine::WFontEdge edge{};
+    edge.kind = Engine::WFontEdgeKind::Quadratic;
+    edge.p[0] = c.curX;
+    edge.p[1] = c.curY;
+    edge.p[2] = cX;
+    edge.p[3] = cY;
+    edge.p[4] = toX;
+    edge.p[5] = toY;
+    c.edges->PushBack(edge);
+    c.curX = toX;
+    c.curY = toY;
+}
+
+static void CaptureCubicTo(hb_draw_funcs_t*, void* drawData, hb_draw_state_t*, float c1X, float c1Y, float c2X, float c2Y, float toX, float toY, void*)
+{
+    auto& c = *static_cast<ContourCapture*>(drawData);
+    Engine::WFontEdge edge{};
+    edge.kind = Engine::WFontEdgeKind::Cubic;
+    edge.p[0] = c.curX;
+    edge.p[1] = c.curY;
+    edge.p[2] = c1X;
+    edge.p[3] = c1Y;
+    edge.p[4] = c2X;
+    edge.p[5] = c2Y;
+    edge.p[6] = toX;
+    edge.p[7] = toY;
+    c.edges->PushBack(edge);
+    c.curX = toX;
+    c.curY = toY;
+}
+
+static void CaptureClosePath(hb_draw_funcs_t*, void* drawData, hb_draw_state_t*, void*)
+{
+    CaptureFinishContour(*static_cast<ContourCapture*>(drawData));
 }
 
 void FontGenerateSlot::Initialize(
@@ -37,7 +123,6 @@ void FontGenerateSlot::Initialize(
     scheduler = _scheduler;
     memoryManager = _memoryManager;
     _notifyCallback = std::move(notifyCallback);
-    ft = msdfgen::initializeFreetype();
 }
 
 void FontGenerateSlot::Launch(FontGenerateSlotHandle slotHandle, const Core::Path& _ttfPath, const Core::Path& _outputPath, Engine::FontID _fontId, uint64_t _contentVersion)
@@ -71,172 +156,134 @@ void FontGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, 
 
 bool FontGenerateSlot::GenerateAndWrite()
 {
-    if (!ft) {
-        LOG_ERROR(Asset, "FreeType not initialized");
+    ZoneScopedN("SlugEncodeFont");
+
+    Platform::ScopedFileMapping map(ttfPath);
+    if (!map.data) {
+        LOG_ERROR(Asset, "Failed to open font source: {}", ttfPath.c_str());
         return false;
     }
 
-    msdfgen::FontHandle* font = msdfgen::loadFont(ft, ttfPath.c_str());
-    if (!font) {
-        LOG_ERROR(Asset, "Failed to load font: {}", ttfPath.c_str());
+    hb_blob_t* fileBlob = hb_blob_create(reinterpret_cast<const char*>(map.data), static_cast<unsigned>(map.size), HB_MEMORY_MODE_READONLY, nullptr, nullptr);
+    hb_face_t* face = hb_face_create(fileBlob, 0);
+    hb_blob_destroy(fileBlob);
+    if (hb_face_get_glyph_count(face) == 0) {
+        LOG_ERROR(Asset, "Failed to load font face: {}", ttfPath.c_str());
+        hb_face_destroy(face);
         return false;
     }
 
-    msdf_atlas::Charset charset = msdf_atlas::Charset::ASCII;
+    // Default hb_font scale is upem, so every coordinate below is in font units.
+    hb_font_t* font = hb_font_create(face);
+    const uint32_t upem = hb_face_get_upem(face);
 
-    // MEM: std::vector forced by msdf-atlas-gen API; FontGeometry takes std::vector<GlyphGeometry>* by pointer and stores it internally. No workaround without forking.
-    // MEM: msdfgen (shape/contour/edge data) and msdf-atlas-gen (BitmapAtlasStorage float atlas) both use new/delete internally; no allocator hook is exposed.
-    // MEM: FreeType allocator cannot be hooked through msdfgen's opaque FreetypeHandle; initializeFreetype() is the only constructor.
-    std::vector<msdf_atlas::GlyphGeometry> glyphs;
-    msdf_atlas::FontGeometry fontGeometry(&glyphs);
-    fontGeometry.loadCharset(font, 1.0, charset);
-
-    constexpr double MSDF_PIXEL_RANGE = 8.0;
-    constexpr double MSDF_MIN_SCALE = 48.0;
-
-    for (msdf_atlas::GlyphGeometry& glyph : glyphs) {
-        glyph.edgeColoring(&msdfgen::edgeColoringInkTrap, 3.0, 0);
+    hb_font_extents_t fontExtents{};
+    if (!hb_font_get_h_extents(font, &fontExtents)) {
+        LOG_WARN(Asset, "Font has no horizontal extents, using upem defaults: {}", ttfPath.c_str());
+        fontExtents.ascender = static_cast<hb_position_t>(upem);
+        fontExtents.descender = 0;
+        fontExtents.line_gap = 0;
     }
 
-    msdf_atlas::TightAtlasPacker packer;
-    packer.setDimensionsConstraint(msdf_atlas::DimensionsConstraint::POWER_OF_TWO_RECTANGLE);
-    packer.setMinimumScale(MSDF_MIN_SCALE);
-    packer.setPixelRange(MSDF_PIXEL_RANGE);
-    packer.setMiterLimit(1.0);
-    packer.pack(glyphs.data(), static_cast<int>(glyphs.size()));
-
-    int atlasWidth = 0;
-    int atlasHeight = 0;
-    packer.getDimensions(atlasWidth, atlasHeight);
-
-    msdf_atlas::GeneratorAttributes genAttribs;
-    genAttribs.config.overlapSupport = true;
-    genAttribs.scanlinePass = true;
-
-    auto generator = msdf_atlas::ImmediateAtlasGenerator<float, 4, msdf_atlas::mtsdfGenerator, msdf_atlas::BitmapAtlasStorage<float, 4> >(atlasWidth, atlasHeight);
-    generator.setAttributes(genAttribs);
-    generator.setThreadCount(4);
-    generator.generate(glyphs.data(), static_cast<int>(glyphs.size()));
-
-    auto bitmap = static_cast<msdfgen::BitmapConstRef<float, 4>>(generator.atlasStorage());
-
-    // V-flip baked here for Vulkan y-down.
-    const size_t rgbaSize = static_cast<size_t>(atlasWidth) * atlasHeight * 4;
-    Core::HeapArray<uint8_t> rgba(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rgbaSize);
-    for (int y = 0; y < atlasHeight; ++y) {
-        const int srcY = (atlasHeight - 1 - y);
-        for (int x = 0; x < atlasWidth; ++x) {
-            const float* src = bitmap(x, srcY);
-            uint8_t* dst = rgba.Data() + (y * atlasWidth + x) * 4;
-            dst[0] = static_cast<uint8_t>(std::clamp(src[0], 0.0f, 1.0f) * 255.0f + 0.5f);
-            dst[1] = static_cast<uint8_t>(std::clamp(src[1], 0.0f, 1.0f) * 255.0f + 0.5f);
-            dst[2] = static_cast<uint8_t>(std::clamp(src[2], 0.0f, 1.0f) * 255.0f + 0.5f);
-            dst[3] = static_cast<uint8_t>(std::clamp(src[3], 0.0f, 1.0f) * 255.0f + 0.5f);
-        }
-    }
-
-    const Engine::WImageDesc desc{VK_FORMAT_R8G8B8A8_UNORM, static_cast<uint32_t>(atlasWidth), static_cast<uint32_t>(atlasHeight), 1, 1};
-    const size_t blobSize = Engine::WImageBlobSize(desc);
-    Core::HeapArray<uint8_t> blob(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, blobSize);
-    if (Engine::WImageBlobInit(blob.Data(), blob.Size(), desc) == 0) {
-        LOG_ERROR(Asset, "Failed to lay out font atlas image blob");
-        msdfgen::destroyFont(font);
+    hb_gpu_draw_t* gpuDraw = hb_gpu_draw_create_or_fail();
+    if (!gpuDraw) {
+        LOG_ERROR(Asset, "Failed to create Slug encoder for {}", ttfPath.c_str());
+        hb_font_destroy(font);
+        hb_face_destroy(face);
         return false;
     }
-    memcpy(Engine::WImageFaceData(blob.Data(), 0, 0), rgba.Data(), rgba.Size());
 
-    const size_t compressMaxSize = Engine::CompressMaxSize(Engine::DEFAULT_FONT_COMPRESSION, blobSize);
-    Core::HeapArray<uint8_t> atlasCompressed(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, compressMaxSize);
-    const size_t compressedSize = Engine::Compress(Engine::DEFAULT_FONT_COMPRESSION, blob.Data(), blobSize, atlasCompressed.Data(), compressMaxSize);
-
-    // Gather glyph metrics
-    const msdf_atlas::FontGeometry::GlyphRange glyphRange = fontGeometry.getGlyphs();
-    const msdfgen::FontMetrics& metrics = fontGeometry.getMetrics();
-    const double emSize = metrics.emSize;
-    const double invAtlasW = 1.0 / atlasWidth;
-    const double invAtlasH = 1.0 / atlasHeight;
+    hb_draw_funcs_t* contourFuncs = hb_draw_funcs_create();
+    hb_draw_funcs_set_move_to_func(contourFuncs, CaptureMoveTo, nullptr, nullptr);
+    hb_draw_funcs_set_line_to_func(contourFuncs, CaptureLineTo, nullptr, nullptr);
+    hb_draw_funcs_set_quadratic_to_func(contourFuncs, CaptureQuadraticTo, nullptr, nullptr);
+    hb_draw_funcs_set_cubic_to_func(contourFuncs, CaptureCubicTo, nullptr, nullptr);
+    hb_draw_funcs_set_close_path_func(contourFuncs, CaptureClosePath, nullptr, nullptr);
 
     Core::Vector<Engine::WGlyphInfo> glyphInfos(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
-    glyphInfos.Reserve(glyphs.size());
-
-    // Vector outlines for 3D text. Built parallel to glyphInfos so codepoint -> glyph index -> contour range stays aligned.
     Core::Vector<Engine::WGlyphContourRange> glyphContourRanges(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
     Core::Vector<Engine::WContourRange> contourRanges(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
     Core::Vector<Engine::WFontEdge> contourEdges(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+    Core::Vector<uint8_t> slugTexels(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
 
-    for (const msdf_atlas::GlyphGeometry& g : glyphs) {
-        if (g.getCodepoint() == 0) { continue; }
+    bool bEncodeFailed = false;
+    for (uint32_t cp = CHARSET_FIRST; cp <= CHARSET_LAST; ++cp) {
+        hb_codepoint_t glyph = 0;
+        if (!hb_font_get_nominal_glyph(font, cp, &glyph)) { continue; }
 
-        const double geometryScale = g.getGeometryScale();
         Engine::WGlyphContourRange gcr{};
         gcr.firstContour = static_cast<uint32_t>(contourRanges.Size());
-        const msdfgen::Shape& shape = g.getShape();
-        for (const msdfgen::Contour& contour : shape.contours) {
-            Engine::WContourRange cr{};
-            cr.firstEdge = static_cast<uint32_t>(contourEdges.Size());
-            for (const msdfgen::EdgeHolder& holder : contour.edges) {
-                const msdfgen::EdgeSegment* seg = holder;
-                const msdfgen::Point2* cp = seg->controlPoints();
-                Engine::WFontEdge edge{};
-                int pointCount = 2;
-                switch (seg->type()) {
-                    case msdfgen::QuadraticSegment::EDGE_TYPE: edge.kind = Engine::WFontEdgeKind::Quadratic; pointCount = 3; break;
-                    case msdfgen::CubicSegment::EDGE_TYPE: edge.kind = Engine::WFontEdgeKind::Cubic; pointCount = 4; break;
-                    default: edge.kind = Engine::WFontEdgeKind::Linear; pointCount = 2; break;
-                }
-                for (int i = 0; i < pointCount; ++i) {
-                    edge.p[i * 2] = static_cast<float>(cp[i].x * geometryScale);
-                    edge.p[i * 2 + 1] = static_cast<float>(cp[i].y * geometryScale);
-                }
-                contourEdges.PushBack(edge);
-            }
-            cr.edgeCount = static_cast<uint32_t>(contourEdges.Size()) - cr.firstEdge;
-            contourRanges.PushBack(cr);
-        }
+        ContourCapture capture{&contourRanges, &contourEdges};
+        hb_font_draw_glyph(font, glyph, contourFuncs, &capture);
+        CaptureFinishContour(capture);
         gcr.contourCount = static_cast<uint32_t>(contourRanges.Size()) - gcr.firstContour;
         glyphContourRanges.PushBack(gcr);
 
+        hb_gpu_draw_glyph(gpuDraw, font, glyph);
+        hb_glyph_extents_t extents{};
+        hb_blob_t* encoded = hb_gpu_draw_encode(gpuDraw, &extents);
+        if (!encoded) {
+            LOG_ERROR(Asset, "Slug encode failed for codepoint {:#x} in {}", cp, ttfPath.c_str());
+            bEncodeFailed = true;
+            break;
+        }
+
+        unsigned encodedLength = 0;
+        const char* encodedData = hb_blob_get_data(encoded, &encodedLength);
+
         Engine::WGlyphInfo info{};
-        info.codepoint = static_cast<uint32_t>(g.getCodepoint());
-        info.advance = static_cast<float>(g.getAdvance());
+        info.codepoint = cp;
+        info.advance = static_cast<float>(hb_font_get_glyph_h_advance(font, glyph));
+        info.planeLeft = static_cast<float>(extents.x_bearing);
+        info.planeTop = static_cast<float>(extents.y_bearing);
+        info.planeRight = static_cast<float>(extents.x_bearing + extents.width);
+        info.planeBottom = static_cast<float>(extents.y_bearing + extents.height);
+        info.slugTexelOffset = static_cast<uint32_t>(slugTexels.Size() / 8);
+        info.slugTexelCount = encodedLength / 8;
 
-        double pl, pb, pr, pt;
-        g.getQuadPlaneBounds(pl, pb, pr, pt);
-        info.planeLeft = static_cast<float>(pl);
-        info.planeBottom = static_cast<float>(pb);
-        info.planeRight = static_cast<float>(pr);
-        info.planeTop = static_cast<float>(pt);
-
-        double al, ab, ar, at;
-        g.getQuadAtlasBounds(al, ab, ar, at);
-        // V-flip: atlas is y-up, Vulkan is y-down; baked here so runtime needs no flip
-        info.uvLeft = static_cast<float>(al * invAtlasW);
-        info.uvBottom = static_cast<float>((atlasHeight - at) * invAtlasH);
-        info.uvRight = static_cast<float>(ar * invAtlasW);
-        info.uvTop = static_cast<float>((atlasHeight - ab) * invAtlasH);
+        if (encodedLength > 0) {
+            const size_t oldSize = slugTexels.Size();
+            slugTexels.Resize(oldSize + encodedLength);
+            memcpy(slugTexels.Data() + oldSize, encodedData, encodedLength);
+        }
+        hb_gpu_draw_recycle_blob(gpuDraw, encoded);
 
         glyphInfos.PushBack(info);
     }
 
-    msdfgen::destroyFont(font);
+    hb_draw_funcs_destroy(contourFuncs);
+    hb_gpu_draw_destroy(gpuDraw);
+    hb_font_destroy(font);
+    hb_face_destroy(face);
 
-    // Build and write .wsfont
+    if (bEncodeFailed) { return false; }
+    if (glyphInfos.IsEmpty()) {
+        LOG_ERROR(Asset, "Font has no charset glyphs: {}", ttfPath.c_str());
+        return false;
+    }
+
+    const size_t slugUncompressed = slugTexels.Size();
+    size_t compressedSize = 0;
+    Core::HeapArray<uint8_t> slugCompressed{};
+    if (slugUncompressed > 0) {
+        const size_t compressMaxSize = Engine::CompressMaxSize(Engine::DEFAULT_FONT_COMPRESSION, slugUncompressed);
+        slugCompressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, compressMaxSize);
+        compressedSize = Engine::Compress(Engine::DEFAULT_FONT_COMPRESSION, slugTexels.Data(), slugUncompressed, slugCompressed.Data(), compressMaxSize);
+    }
+
     Engine::WFontHeader header{};
     header.fontId = fontId.id;
     header.contentVersion = contentVersion;
     header.major = Engine::FONT_MAJOR_VERSION;
     header.minor = Engine::FONT_MINOR_VERSION;
-    header.sourceSizePx = static_cast<uint32_t>(MSDF_MIN_SCALE);
-    header.sdfSpread = static_cast<uint32_t>(MSDF_PIXEL_RANGE);
-    header.emSize = static_cast<float>(emSize);
-    header.ascender = static_cast<float>(metrics.ascenderY);
-    header.descender = static_cast<float>(metrics.descenderY);
-    header.lineHeight = static_cast<float>(metrics.lineHeight);
-    header.atlasWidth = static_cast<uint32_t>(atlasWidth);
-    header.atlasHeight = static_cast<uint32_t>(atlasHeight);
+    header.emSize = static_cast<float>(upem);
+    header.ascender = static_cast<float>(fontExtents.ascender);
+    header.descender = static_cast<float>(fontExtents.descender);
+    header.lineHeight = static_cast<float>(fontExtents.ascender - fontExtents.descender + fontExtents.line_gap);
     header.glyphCount = static_cast<uint32_t>(glyphInfos.Size());
-    header.atlasDataSize = static_cast<uint64_t>(compressedSize);
-    header.atlasUncompressedSize = static_cast<uint64_t>(blobSize);
+    header.slugTexelCount = slugUncompressed / 8;
+    header.slugDataSize = compressedSize;
+    header.slugUncompressedSize = slugUncompressed;
     header.contourGlyphCount = static_cast<uint32_t>(glyphContourRanges.Size());
     header.contourCount = static_cast<uint32_t>(contourRanges.Size());
     header.edgeCount = static_cast<uint32_t>(contourEdges.Size());
@@ -252,7 +299,9 @@ bool FontGenerateSlot::GenerateAndWrite()
     Engine::AppendRaw(out, glyphContourRanges.Data(), glyphContourRanges.Size() * sizeof(Engine::WGlyphContourRange));
     Engine::AppendRaw(out, contourRanges.Data(), contourRanges.Size() * sizeof(Engine::WContourRange));
     Engine::AppendRaw(out, contourEdges.Data(), contourEdges.Size() * sizeof(Engine::WFontEdge));
-    Engine::AppendRaw(out, atlasCompressed.Data(), compressedSize);
+    if (compressedSize > 0) {
+        Engine::AppendRaw(out, slugCompressed.Data(), compressedSize);
+    }
 
     if (!Platform::WriteFile(outputPath, out.Data(), out.Size())) {
         LOG_ERROR(Asset, "Failed to write font output file: {}", outputPath.c_str());

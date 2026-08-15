@@ -113,7 +113,7 @@ def module_entity(name, origin, parts, folder_id):
 
 def label(name, text, pos, folder_id=0):
     e = base_entity(name, pos, (0.0, 0.0, 1.0, 0.0), folder_id=folder_id)   # faces the -Z aisle
-    add_world_text(e, text, ROBOTO_FONT, TEXT_MATERIAL, render_size_px=0.5,
+    add_world_text(e, text, ROBOTO_FONT, TEXT_MATERIAL, scale=0.5,
                    align=wa.ALIGN_CENTER, anchor=wa.ANCHOR_BOTTOM)
     entities.append(e)
     return e

@@ -56,6 +56,7 @@ inline const StringID TEXT_GLYPH_QUAD_BUFFER = SID("text_glyph_quad_buffer");
 inline const StringID UI_GLYPH_QUAD_BUFFER = SID("ui_glyph_quad_buffer");
 inline const StringID TEXT_INSTANCE_BUFFER = SID("text_instance_buffer");
 inline const StringID TEXT_MATERIAL_BUFFER = SID("text_material_buffer");
+inline const StringID FONT_CURVE_BUFFER = SID("font_curve_buffer");
 
 inline const StringID SHADING_DISPATCH_BUCKETING_BUFFER = SID("shading_bucketing_buffer");
 inline const StringID LIGHTING_DISPATCH_BUCKETING_BUFFER = SID("lighting_bucketing_buffer");
@@ -107,6 +108,7 @@ inline constexpr int32_t REGIR_TILE_BUFFER_SIZE = REGIR_TILE_COUNT * REGIR_TILE_
 inline constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE = 1 << 27; // 64MB indices
 inline constexpr int32_t MEGA_MESHLET_TRIANGLE_BUFFER_SIZE = 1 << 27; // 64MB triangles
 inline constexpr int32_t MEGA_MESHLET_BUFFER_SIZE = 1 << 24; // 2MB meshlets
+inline constexpr int32_t MEGA_FONT_CURVE_BUFFER_SIZE = 1 << 25; // 32MB Slug curve texels (ASCII fonts ~1-2MB each)
 
 inline constexpr int32_t BINDLESS_COMBINED_IMAGE_SAMPLER_COUNT = 1;
 inline constexpr int32_t BINDLESS_STORAGE_IMAGE_COUNT = 128;

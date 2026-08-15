@@ -16,6 +16,8 @@ add_library(asset-load STATIC
         async_asset_load_manager.h
         asset-load-jobs/cubemap_load_slot.cpp
         asset-load-jobs/cubemap_load_slot.h
+        asset-load-jobs/font_curve_load_slot.cpp
+        asset-load-jobs/font_curve_load_slot.h
         asset-load-jobs/procedural_model_load_slot.cpp
         asset-load-jobs/procedural_model_load_slot.h
         asset-load-jobs/physics_collider_load_slot.cpp

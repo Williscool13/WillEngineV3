@@ -133,23 +133,6 @@ add_subdirectory(extern/enkiTS)
 add_subdirectory(extern/OffsetAllocator)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory(extern/meshoptimizer)
-set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
-set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
-set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
-set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
-set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
-add_subdirectory(extern/freetype)
-add_library(Freetype::Freetype ALIAS freetype)
-set(MSDF_ATLAS_BUILD_STANDALONE OFF CACHE BOOL "" FORCE)
-set(MSDF_ATLAS_USE_VCPKG OFF CACHE BOOL "" FORCE)
-set(MSDF_ATLAS_USE_SKIA OFF CACHE BOOL "" FORCE)
-set(MSDF_ATLAS_NO_ARTERY_FONT ON CACHE BOOL "" FORCE)
-set(MSDF_ATLAS_DYNAMIC_RUNTIME ON CACHE BOOL "" FORCE)
-set(MSDFGEN_BUILD_STANDALONE OFF CACHE BOOL "" FORCE)
-set(MSDFGEN_USE_VCPKG OFF CACHE BOOL "" FORCE)
-set(MSDFGEN_DISABLE_SVG ON CACHE BOOL "" FORCE)
-set(MSDFGEN_DISABLE_PNG ON CACHE BOOL "" FORCE)
-add_subdirectory(extern/msdf-atlas-gen)
 
 # NRD (reference denoiser). Source tree at tag v4.17.4 is provided out-of-band into extern/NRD;
 # MathLib/ShaderMake are consumed from extern/NRD/External via FetchContent source-dir overrides (no network at configure).
@@ -342,6 +325,12 @@ add_library(harfbuzz STATIC
         extern/harfbuzz/src/hb-gpu.h
 )
 target_include_directories(harfbuzz PUBLIC extern/harfbuzz/src)
+target_compile_definitions(harfbuzz PRIVATE
+        hb_malloc_impl=hb_malloc_impl
+        hb_calloc_impl=hb_calloc_impl
+        hb_realloc_impl=hb_realloc_impl
+        hb_free_impl=hb_free_impl
+)
 if (MSVC)
     target_compile_options(harfbuzz PRIVATE /bigobj)
 endif ()

@@ -6,6 +6,8 @@ add_library(editor STATIC
         asset-generation/asset_source_catalog.h
         asset-generation/cgltf_impl.cpp
         asset-generation/stb_impl.cpp
+        asset-generation/hb_impl.cpp
+        asset-generation/hb_impl.h
         asset-generation/static_model_generate_slot.cpp
         asset-generation/static_model_generate_slot.h
         asset-generation/texture_generate_slot.cpp
@@ -33,7 +35,5 @@ target_link_libraries(editor PUBLIC
         enkiTS
         meshoptimizer
         bc7enc_rdo
-        msdf-atlas-gen
-        freetype
         harfbuzz
 )

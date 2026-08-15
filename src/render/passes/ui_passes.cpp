@@ -17,10 +17,13 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
 {
     if (viewFamily.uiDrawList.IsEmpty()) { return; }
 
-    const bool bHasText = !viewFamily.uiGlyphQuads.IsEmpty() && graph.HasBuffer(UI_GLYPH_QUAD_BUFFER);
+    const bool bHasText = !viewFamily.uiGlyphQuads.IsEmpty() && graph.HasBuffer(UI_GLYPH_QUAD_BUFFER) && graph.HasBuffer(FONT_CURVE_BUFFER);
 
     RenderPass& uiPass = graph.AddPass(SID("UI Render"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::UI);
-    if (bHasText) { uiPass.ReadBuffer(UI_GLYPH_QUAD_BUFFER); }
+    if (bHasText) {
+        uiPass.ReadBuffer(UI_GLYPH_QUAD_BUFFER);
+        uiPass.ReadBuffer(FONT_CURVE_BUFFER);
+    }
     uiPass.WriteColorAttachment(targetImage);
     uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager, bHasText](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         // Y-flipped viewport: blit to swapchain inverts Y, so pre-invert here to cancel it out
@@ -36,6 +39,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
         vkCmdBeginRendering(cmd, &renderInfo);
 
         const VkDeviceAddress glyphQuadsAddr = bHasText ? graph.GetBufferAddress(UI_GLYPH_QUAD_BUFFER) : 0;
+        const VkDeviceAddress fontCurveAddr = bHasText ? graph.GetBufferAddress(FONT_CURVE_BUFFER) : 0;
 
         const PipelineEntry* rectPipeline = pipelineManager->GetPipelineEntry(SID("ui_rect_default"));
         const PipelineEntry* imagePipeline = pipelineManager->GetPipelineEntry(SID("ui_image_default"));
@@ -156,11 +160,10 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                     }
                     UITextRenderPushConstant pc{
                         .uiGlyphQuads = glyphQuadsAddr,
+                        .fontCurveTexels = fontCurveAddr + drawCmd.text.fontCurveByteOffset,
+                        .colorTint = {overlayColor.x, overlayColor.y, overlayColor.z, overlayColor.w},
                         .quadOffset = drawCmd.text.quadOffset,
                         .quadCount = drawCmd.text.quadCount,
-                        .colorTint = {overlayColor.x, overlayColor.y, overlayColor.z, overlayColor.w},
-                        .atlasBindlessIndex = drawCmd.text.atlasBindlessIndex,
-                        .pxRange = drawCmd.text.pxRange,
                     };
                     vkCmdPushConstants(cmd, textPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UITextRenderPushConstant), &pc);
                     vkCmdDraw(cmd, 4, drawCmd.text.quadCount, 0, 0);

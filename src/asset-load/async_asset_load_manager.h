@@ -19,6 +19,7 @@
 #include "asset-load-jobs/texture_load_slot.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "asset-load-jobs/procedural_texture_load_slot.h"
+#include "asset-load-jobs/font_curve_load_slot.h"
 #include "core/containers/array.h"
 #include "core/memory/concurrent_queue_traits.h"
 #include "core/memory/lock_free_handle_allocator.h"
@@ -103,6 +104,11 @@ public:
     void RequestProceduralTextureLoad(Engine::Texture* texture, StringID pipelineId);
 
     bool TryDequeueProceduralTextureComplete(ProceduralTextureLoadComplete& outResult);
+
+    // Font curve loading
+    void RequestFontCurveLoad(Engine::Font* font);
+
+    bool TryDequeueFontCurveComplete(FontCurveLoadComplete& outResult);
 
 
     [[nodiscard]] uint32_t GetActiveAudioLoadCount() const
@@ -220,6 +226,12 @@ private:
     Core::ConcurrentQueue<ProceduralTextureLoadRequest> proceduralTextureRequestQueue;
     Core::ConcurrentQueue<ProceduralTextureLoadComplete> proceduralTextureCompleteQueue;
 
+    // Font Curve Loading
+    Core::LockFreeHandleAllocator<FontCurveLoadSlot, FONT_CURVE_JOB_COUNT> fontCurveLoadAllocator;
+    Core::Array<FontCurveLoadSlot, FONT_CURVE_JOB_COUNT> fontCurveLoadSlots;
+    Core::ConcurrentQueue<FontCurveLoadRequest> fontCurveRequestQueue;
+    Core::ConcurrentQueue<FontCurveLoadComplete> fontCurveLoadCompleteQueue;
+
     UploadStagingDepot stagingDepot{};
 
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);
@@ -237,6 +249,8 @@ private:
     void OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle);
 
     void OnProceduralTextureLoadComplete(bool success, ProceduralTextureSlotHandle slotHandle);
+
+    void OnFontCurveLoadComplete(bool success, FontCurveSlotHandle slotHandle);
 };
 } // AssetLoad
 #endif //WILL_ENGINE_ASYNC_ASSET_LOAD_THREAD_H

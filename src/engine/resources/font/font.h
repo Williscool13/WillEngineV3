@@ -6,12 +6,14 @@
 #define WILL_ENGINE_FONT_H
 
 #include "font_format.h"
+#include "offsetAllocator.hpp"
 #include "core/containers/heap_array.h"
 #include "core/containers/inline_path.h"
 #include "core/containers/inline_string.h"
+#include "core/containers/inline_vector.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/font_id.h"
-#include "engine/resources/texture/texture.h"
+#include "render/interface/render_interface.h"
 
 namespace Engine
 {
@@ -24,7 +26,7 @@ struct Font
     Core::InlineString<128> name{};
     Core::Path source{};
 
-    /** Header retained for runtime access: emSize, sdfSpread, ascender, lineHeight, etc. */
+    /** Header retained for runtime access: emSize, ascender, lineHeight, slug blob fields, etc. */
     WFontHeader header{};
     /** Glyph map loaded synchronously in LoadFont. Freed on unload. */
     Core::HeapArray<WGlyphInfo> glyphs{};
@@ -34,8 +36,11 @@ struct Font
     Core::HeapArray<WContourRange> contourRanges{};
     Core::HeapArray<WFontEdge> contourEdges{};
 
-    /** Atlas texture; not registered in the texture name/ID maps. Lifecycle owned by Font. */
-    Texture atlasTexture{};
+    /** Slug curve blob residency in megaFontCurveBuffer. Lifecycle owned by Font. */
+    OffsetAllocator::Allocation curveAllocation{};
+    /** 8-aligned byte offset of the blob inside megaFontCurveBuffer. */
+    uint32_t curveByteOffset{0};
+    Core::InlineVector<Core::BufferAcquireOperation, 1> bufferAcquireOps{};
 
     LoadState loadState{LoadState::NotLoaded};
     uint32_t refCount{0};

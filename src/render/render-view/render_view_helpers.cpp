@@ -168,14 +168,14 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
 
     // Text finalization
     {
-        // Sort quads by (atlasBindlessIndex, textMaterialIndex) so each dispatch is wave-uniform on atlas texture.
+        // Sort quads by (fontCurveByteOffset, textMaterialIndex) so each dispatch is wave-uniform on font curve data.
         auto& quads = viewFamily.worldGlyphQuads;
         const auto& cpuInsts = viewFamily.textInstances;
         std::sort(quads.Data(), quads.Data() + quads.Size(), [&](const WorldGlyphQuad& a, const WorldGlyphQuad& b) {
             const Core::TextInstanceDataFull& ia = cpuInsts[a.drawCallIndex];
             const Core::TextInstanceDataFull& ib = cpuInsts[b.drawCallIndex];
-            if (ia.atlasBindlessIndex != ib.atlasBindlessIndex) {
-                return ia.atlasBindlessIndex < ib.atlasBindlessIndex;
+            if (ia.fontCurveByteOffset != ib.fontCurveByteOffset) {
+                return ia.fontCurveByteOffset < ib.fontCurveByteOffset;
             }
             return ia.textMaterialIndex < ib.textMaterialIndex;
         });
@@ -186,13 +186,13 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
             const Core::TextInstanceDataFull* prev = &cpuInsts[quads[0].drawCallIndex];
             for (uint32_t i = 1; i < quads.Size(); ++i) {
                 const Core::TextInstanceDataFull& cur = cpuInsts[quads[i].drawCallIndex];
-                if (cur.atlasBindlessIndex != prev->atlasBindlessIndex || cur.textMaterialIndex != prev->textMaterialIndex) {
-                    drawCalls.PushBack({runStart, i - runStart, prev->atlasBindlessIndex, prev->textMaterialIndex});
+                if (cur.fontCurveByteOffset != prev->fontCurveByteOffset || cur.textMaterialIndex != prev->textMaterialIndex) {
+                    drawCalls.PushBack({runStart, i - runStart, prev->fontCurveByteOffset, prev->textMaterialIndex});
                     runStart = i;
                     prev = &cur;
                 }
             }
-            drawCalls.PushBack({runStart, static_cast<uint32_t>(quads.Size()) - runStart, prev->atlasBindlessIndex, prev->textMaterialIndex});
+            drawCalls.PushBack({runStart, static_cast<uint32_t>(quads.Size()) - runStart, prev->fontCurveByteOffset, prev->textMaterialIndex});
         }
     }
 

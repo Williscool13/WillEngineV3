@@ -70,11 +70,11 @@ void TextComponent::Serialize(const TextComponent& comp, Engine::TextWriter& w)
     if (!comp.text.IsEmpty()) {
         w.KeyStr("text", comp.text.View());
     }
-    w.KeyOpt("renderSizePx", comp.renderSizePx, DEF.renderSizePx);
+    w.KeyOpt("scale", comp.scale, DEF.scale);
     w.KeyOpt("color", comp.color, DEF.color);
     w.KeyOpt("align", static_cast<uint32_t>(comp.align), static_cast<uint32_t>(DEF.align));
     w.KeyOpt("anchor", static_cast<uint32_t>(comp.anchor), static_cast<uint32_t>(DEF.anchor));
-    w.KeyOpt("wrapWidthPx", comp.wrapWidthPx, DEF.wrapWidthPx);
+    w.KeyOpt("wrapWidth", comp.wrapWidth, DEF.wrapWidth);
 }
 
 void TextComponent::Deserialize(TextComponent& comp, const Engine::TextReader& r)
@@ -82,11 +82,11 @@ void TextComponent::Deserialize(TextComponent& comp, const Engine::TextReader& r
     comp.fontId = Engine::FontID(r.U64("fontId", comp.fontId.id));
     comp.textMaterialId = Engine::TextMaterialID(r.U64("textMaterialId", comp.textMaterialId.id));
     r.Str("text", comp.text);
-    comp.renderSizePx = r.Float("renderSizePx", comp.renderSizePx);
+    comp.scale = r.Float("scale", comp.scale);
     comp.color = r.Vec4("color", comp.color);
     comp.align = static_cast<Engine::Text3DAlign>(r.UInt("align", static_cast<uint32_t>(comp.align)));
     comp.anchor = static_cast<Engine::Text3DAnchor>(r.UInt("anchor", static_cast<uint32_t>(comp.anchor)));
-    comp.wrapWidthPx = r.Float("wrapWidthPx", comp.wrapWidthPx);
+    comp.wrapWidth = r.Float("wrapWidth", comp.wrapWidth);
 }
 
 Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -166,7 +166,7 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
         modified = true;
     }
 
-    modified |= ImGui::DragFloat("Size (px)", &comp.renderSizePx, 1.0f, 1.0f, 2048.0f);
+    modified |= ImGui::DragFloat("Scale", &comp.scale, 0.01f, 0.01f, 100.0f, "%.2f");
     modified |= ImGui::ColorEdit4("Color", glm::value_ptr(comp.color));
 
     const char* alignLabels[] = {"Left", "Center", "Right"};
@@ -183,7 +183,7 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
         modified = true;
     }
 
-    modified |= ImGui::DragFloat("Wrap Width (px)", &comp.wrapWidthPx, 1.0f, 0.0f, 8192.0f);
+    modified |= ImGui::DragFloat("Wrap Width", &comp.wrapWidth, 0.05f, 0.0f, 1000.0f, "%.2f");
 
     if (runtime.fontHandle.IsValid()) {
         Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);

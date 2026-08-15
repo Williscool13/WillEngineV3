@@ -1442,16 +1442,16 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
         if (!font) { continue; }
 
-        const float scale = textComp.renderSizePx / font->header.emSize;
-        float lineHeightPx = font->header.lineHeight * scale;
-        if (lineHeightPx <= 0.0f) { lineHeightPx = (font->header.ascender - font->header.descender) * scale; }
-        if (lineHeightPx <= 0.0f) { lineHeightPx = textComp.renderSizePx; }
+        const float scale = textComp.scale / font->header.emSize;
+        float lineHeight = font->header.lineHeight * scale;
+        if (lineHeight <= 0.0f) { lineHeight = (font->header.ascender - font->header.descender) * scale; }
+        if (lineHeight <= 0.0f) { lineHeight = textComp.scale; }
 
         const char* str = textComp.text.c_str();
         const size_t len = textComp.text.Size();
         auto advanceOf = [&](char c) -> float {
             const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(runtime.fontHandle, static_cast<unsigned char>(c));
-            return g ? g->advance * scale : textComp.renderSizePx * 0.25f;
+            return g ? g->advance * scale : textComp.scale * 0.25f;
         };
 
         struct TextLine
@@ -1467,13 +1467,13 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             while (hardEnd < len && str[hardEnd] != '\n') { ++hardEnd; }
 
             size_t segStart = lineStart;
-            if (textComp.wrapWidthPx > 0.0f) {
+            if (textComp.wrapWidth > 0.0f) {
                 float width = 0.0f;
                 size_t lastSpace = SIZE_MAX;
                 for (size_t i = segStart; i < hardEnd && !lines.IsFull(); ++i) {
                     if (str[i] == ' ') { lastSpace = i; }
                     const float adv = advanceOf(str[i]);
-                    if (width + adv > textComp.wrapWidthPx && lastSpace != SIZE_MAX && lastSpace > segStart) {
+                    if (width + adv > textComp.wrapWidth && lastSpace != SIZE_MAX && lastSpace > segStart) {
                         lines.PushBack({segStart, lastSpace, 0.0f});
                         segStart = lastSpace + 1;
                         i = segStart - 1;
@@ -1504,7 +1504,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         const float blockTop = font->header.ascender * scale;
-        const float blockBottom = font->header.descender * scale - static_cast<float>(lines.Size() - 1) * lineHeightPx;
+        const float blockBottom = font->header.descender * scale - static_cast<float>(lines.Size() - 1) * lineHeight;
         float baseY = 0.0f;
         switch (textComp.anchor) {
             case Engine::Text3DAnchor::Top: baseY = -blockTop;
@@ -1524,24 +1524,27 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         for (uint32_t li = 0; li < lines.Size(); ++li) {
             float cursorX = -lines[li].width * alignFactor;
-            const float penY = baseY - static_cast<float>(li) * lineHeightPx;
+            const float penY = baseY - static_cast<float>(li) * lineHeight;
             for (size_t i = lines[li].start; i < lines[li].end; ++i) {
                 const uint32_t codepoint = static_cast<unsigned char>(str[i]);
                 const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(runtime.fontHandle, codepoint);
                 if (!g) {
-                    cursorX += textComp.renderSizePx * 0.25f;
+                    cursorX += textComp.scale * 0.25f;
                     continue;
                 }
 
-                WorldGlyphQuad quad{};
-                quad.posMin = {cursorX + g->planeLeft * scale, penY + g->planeBottom * scale};
-                quad.posMax = {cursorX + g->planeRight * scale, penY + g->planeTop * scale};
-                quad.uvMin = {g->uvLeft, g->uvBottom};
-                quad.uvMax = {g->uvRight, g->uvTop};
-                quad.color = textComp.color;
-                quad.drawCallIndex = drawCallIndex;
-                frameBuffer->mainViewFamily.worldGlyphQuads.PushBack(quad);
-                ++quadCount;
+                if (g->slugTexelCount != 0) {
+                    WorldGlyphQuad quad{};
+                    quad.posMin = {cursorX + g->planeLeft * scale, penY + g->planeBottom * scale};
+                    quad.posMax = {cursorX + g->planeRight * scale, penY + g->planeTop * scale};
+                    quad.emMin = {g->planeLeft, g->planeBottom};
+                    quad.emMax = {g->planeRight, g->planeTop};
+                    quad.glyphTexelOffset = g->slugTexelOffset;
+                    quad.color = textComp.color;
+                    quad.drawCallIndex = drawCallIndex;
+                    frameBuffer->mainViewFamily.worldGlyphQuads.PushBack(quad);
+                    ++quadCount;
+                }
 
                 cursorX += g->advance * scale;
             }
@@ -1562,8 +1565,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         frameBuffer->mainViewFamily.textInstances.PushBack({
             .modelIndex = modelIndex,
-            .pxRange = static_cast<float>(font->header.sdfSpread),
-            .atlasBindlessIndex = font->atlasTexture.bindlessHandle.index,
+            .fontCurveByteOffset = font->curveByteOffset,
             .textMaterialIndex = matIndexRef,
             .stableId = stableId,
         });
@@ -2396,6 +2398,9 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                 float cursorX = bb.x;
                 const float baselineY = bb.y + fontSize;
 
+                const float dilatePx = 0.75f;
+                const float dilateEm = dilatePx / scale;
+
                 for (int32_t ci = 0; ci < td.stringContents.length; ++ci) {
                     const uint32_t cp = static_cast<unsigned char>(td.stringContents.chars[ci]);
                     const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(state->uiFont, cp);
@@ -2404,21 +2409,22 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                         continue;
                     }
 
-                    const float xMin = (cursorX + g->planeLeft * scale) / vpWidth * 2.0f - 1.0f;
-                    const float yMax = (baselineY - g->planeBottom * scale) / vpHeight * 2.0f - 1.0f;
-                    const float xMax = (cursorX + g->planeRight * scale) / vpWidth * 2.0f - 1.0f;
-                    const float yMin = (baselineY - g->planeTop * scale) / vpHeight * 2.0f - 1.0f;
+                    if (g->slugTexelCount != 0) {
+                        const float xMin = (cursorX + g->planeLeft * scale - dilatePx) / vpWidth * 2.0f - 1.0f;
+                        const float xMax = (cursorX + g->planeRight * scale + dilatePx) / vpWidth * 2.0f - 1.0f;
+                        const float yMin = (baselineY - g->planeTop * scale - dilatePx) / vpHeight * 2.0f - 1.0f;
+                        const float yMax = (baselineY - g->planeBottom * scale + dilatePx) / vpHeight * 2.0f - 1.0f;
 
-                    vf.uiGlyphQuads.PushBack(UIGlyphQuad{
-                        .color = {color.x, color.y, color.z, color.w},
-                        .posMin = {xMin, yMin},
-                        .posMax = {xMax, yMax},
-                        .uvMin = {g->uvLeft, g->uvBottom},
-                        .uvMax = {g->uvRight, g->uvTop},
-                        .uvOrigMin = {g->uvLeft, g->uvBottom},
-                        .uvOrigMax = {g->uvRight, g->uvTop},
-                    });
-                    ++quadCount;
+                        vf.uiGlyphQuads.PushBack(UIGlyphQuad{
+                            .color = {color.x, color.y, color.z, color.w},
+                            .posMin = {xMin, yMin},
+                            .posMax = {xMax, yMax},
+                            .emMin = {g->planeLeft - dilateEm, g->planeTop + dilateEm},
+                            .emMax = {g->planeRight + dilateEm, g->planeBottom - dilateEm},
+                            .glyphTexelOffset = g->slugTexelOffset,
+                        });
+                        ++quadCount;
+                    }
 
                     cursorX += g->advance * scale + td.letterSpacing;
                 }
@@ -2429,8 +2435,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                 dc.text = Core::UITextDrawCall{
                     .quadOffset = quadStart,
                     .quadCount = quadCount,
-                    .atlasBindlessIndex = uiFont->atlasTexture.bindlessHandle.index,
-                    .pxRange = static_cast<float>(uiFont->header.sdfSpread),
+                    .fontCurveByteOffset = uiFont->curveByteOffset,
                     .zIndex = cmd.zIndex,
                 };
                 vf.uiDrawList.PushBack(dc);

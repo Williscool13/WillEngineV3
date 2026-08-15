@@ -1544,9 +1544,9 @@ SHADER_PUBLIC struct TextRenderPushConstant
     SHADER_PUBLIC SHADER_PTR(TextInstanceData) textInstanceData;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(TextRenderMaterial) textMaterialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint2) fontCurveTexels;
     SHADER_PUBLIC uint32_t quadOffset;
     SHADER_PUBLIC uint32_t quadCount;
-    SHADER_PUBLIC uint32_t atlasBindlessIndex;
     SHADER_PUBLIC uint32_t textMaterialIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
@@ -1564,11 +1564,11 @@ SHADER_PUBLIC struct UIRectRenderPushConstant
 SHADER_PUBLIC struct UITextRenderPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(UIGlyphQuad) uiGlyphQuads;
+    /** Base of THIS FONT's Slug blob: megabuffer address + fontCurveByteOffset. */
+    SHADER_PUBLIC SHADER_PTR(uint2) fontCurveTexels;
+    SHADER_PUBLIC float4 colorTint;
     SHADER_PUBLIC uint32_t quadOffset;
     SHADER_PUBLIC uint32_t quadCount;
-    SHADER_PUBLIC float4 colorTint;
-    SHADER_PUBLIC uint32_t atlasBindlessIndex;
-    SHADER_PUBLIC float pxRange;
 };
 
 SHADER_PUBLIC struct UIImagePushConstant

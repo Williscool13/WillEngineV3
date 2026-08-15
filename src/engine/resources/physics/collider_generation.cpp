@@ -920,7 +920,8 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
 
 bool BuildText3DColliderPrimitives(const Font& font, const Text3DParams& params, Core::Vector<SplineColliderPrimitive>& out)
 {
-    const float scale = params.scale;
+    const float emSize = font.header.emSize > 0.0f ? font.header.emSize : 1.0f;
+    const float scale = params.scale / emSize;
     const float halfDepth = params.depth * 0.5f;
 
     Text3DGlyphPlacements placements;
@@ -932,7 +933,7 @@ bool BuildText3DColliderPrimitives(const Font& font, const Text3DParams& params,
         const WGlyphContourRange& gcr = font.glyphContourRanges[placements[p].glyphIndex];
         if (gcr.contourCount == 0) { continue; }
 
-        // Plane bounds are the glyph's outline box in the same EM space BuildText3DGeometry extrudes; the pen offset bakes in before scaling.
+        // Plane bounds are the glyph's outline box in the same font-unit space BuildText3DGeometry extrudes; the pen offset bakes in before scaling.
         const float x0 = (placements[p].penX + g.planeLeft) * scale;
         const float x1 = (placements[p].penX + g.planeRight) * scale;
         const float y0 = (placements[p].penY + g.planeBottom) * scale;

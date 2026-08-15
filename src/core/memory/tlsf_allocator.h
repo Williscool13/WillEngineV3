@@ -60,6 +60,7 @@ enum class AllocTag : uint32_t
     Queue,
     Stbi,
     Bc7enc,
+    HarfBuzz,
 
     Count
 };

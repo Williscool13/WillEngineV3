@@ -472,6 +472,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                            {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
         renderGraph->ImportBufferNoBarrier(SID("primitive_buffer"), resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
                                            {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBufferNoBarrier(FONT_CURVE_BUFFER, resourceManager->megaFontCurveBuffer.handle, resourceManager->megaFontCurveBuffer.address,
+                                           {resourceManager->megaFontCurveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 #if WILL_EDITOR
         renderGraph->ImportBuffer(SID("debug_readback_buffer"),
                                   resourceManager->debugReadback.GetHandle(),
@@ -2037,35 +2039,7 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
 
     renderGraph->CreateBuffer(TEXT_GLYPH_QUAD_BUFFER, renderFamilyProperties.glyphQuadBufferSize, false);
     UploadAllocation glyphUpload = renderGraph->AllocateTransient(viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
-    //
-    {
-        auto* dst = static_cast<WorldGlyphQuad*>(glyphUpload.ptr);
-        const uint32_t quadCount = static_cast<uint32_t>(viewFamily.worldGlyphQuads.Size());
-        uint32_t runDrawCall = UINT32_MAX;
-        Vec2 shadowPad = {0.0f, 0.0f};
-        for (uint32_t i = 0; i < quadCount; ++i) {
-            WorldGlyphQuad q = viewFamily.worldGlyphQuads[i];
-            q.uvOrigMin = q.uvMin;
-            q.uvOrigMax = q.uvMax;
-            if (q.drawCallIndex != runDrawCall) {
-                runDrawCall = q.drawCallIndex;
-                const Core::TextInstanceDataFull& inst = viewFamily.textInstances[q.drawCallIndex];
-                const TextRenderMaterial& mat = viewFamily.textMaterials[inst.textMaterialIndex];
-                shadowPad = {glm::abs(mat.shadowOffset.x), glm::abs(mat.shadowOffset.y)};
-            }
-            if (shadowPad.x > 0.0f || shadowPad.y > 0.0f) {
-                Vec2 posDelta = abs(q.posMax - q.posMin);
-                Vec2 uvPerPos = (q.uvMax - q.uvMin) / posDelta;
-                const Vec2 posPad = shadowPad * posDelta / uvPerPos;
-                const Vec2 uvPad = shadowPad * posDelta;
-                q.posMin -= posPad;
-                q.posMax += posPad;
-                q.uvMin -= uvPad;
-                q.uvMax += uvPad;
-            }
-            dst[i] = q;
-        }
-    }
+    memcpy(glyphUpload.ptr, viewFamily.worldGlyphQuads.Data(), viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
 
     RenderPass& uploadGlyphPass = renderGraph->AddPass(SID("Upload Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Scene);
     uploadGlyphPass.WriteTransferBuffer(TEXT_GLYPH_QUAD_BUFFER);
@@ -2096,7 +2070,6 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
             const Core::TextInstanceDataFull& src = viewFamily.textInstances[i];
             dst[i] = {
                 .modelIndex = src.modelIndex,
-                .pxRange = src.pxRange,
                 .stableIdLo = static_cast<uint32_t>(src.stableId & 0xFFFFFFFFu),
                 .stableIdHi = static_cast<uint32_t>(src.stableId >> 32u),
             };

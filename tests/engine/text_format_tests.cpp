@@ -286,8 +286,8 @@ TEST_CASE_METHOD(TextFormatFixture, "Material: full round-trip, deterministic re
     Engine::Material mat{};
     mat.name = Core::InlineString<128>("lab_dark");
     mat.id = Engine::MaterialID(3230886024858855801ull);
-    mat.fragmentShader = Core::StringID("frag", 4);
-    mat.lightingShader = Core::StringID("lit", 3);
+    mat.fragmentShader = StringID("frag", 4);
+    mat.lightingShader = StringID("lit", 3);
     mat.props.colorFactor = {0.02f, 0.02f, 0.02f, 1.0f};
     mat.props.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
     mat.props.textureImageIndices = {-1, -1, -1, -1};
@@ -321,18 +321,19 @@ TEST_CASE_METHOD(TextFormatFixture, "Material: full round-trip, deterministic re
     CHECK(View(a) == View(b));
 }
 
-TEST_CASE_METHOD(TextFormatFixture, "Font header: hex-float metrics round-trip bit-exactly, version 1 rejected", "[textformat]")
+TEST_CASE_METHOD(TextFormatFixture, "Font header: hex-float metrics round-trip bit-exactly, version 2 rejected", "[textformat]")
 {
     Engine::WFontHeader h{};
     strcpy_s(h.name, "roboto");
     h.fontId = 11302268835193496650ull;
-    h.emSize = 1.0f;
-    h.ascender = 0.9277344f;
-    h.descender = -0.24414062f;
-    h.lineHeight = 1.171875f;
+    h.emSize = 2048.0f;
+    h.ascender = 1900.0f;
+    h.descender = -500.0f;
+    h.lineHeight = 2400.0f;
     h.glyphCount = 95;
-    h.atlasWidth = 512;
-    h.atlasHeight = 512;
+    h.slugTexelCount = 12345;
+    h.slugDataSize = 4096;
+    h.slugUncompressedSize = 98760;
 
     Core::Vector<std::byte> buf(&alloc, Core::AllocTag::Unknown);
     REQUIRE(Engine::WriteWFontHeader(buf, h));
@@ -344,11 +345,16 @@ TEST_CASE_METHOD(TextFormatFixture, "Font header: hex-float metrics round-trip b
     CHECK(Engine::FloatBits(read->descender) == Engine::FloatBits(h.descender));
     CHECK(Engine::FloatBits(read->lineHeight) == Engine::FloatBits(h.lineHeight));
     CHECK(read->glyphCount == 95u);
+    CHECK(read->slugTexelCount == 12345u);
+    CHECK(read->slugDataSize == 4096u);
+    CHECK(read->slugUncompressedSize == 98760u);
+    CHECK(read->slugCompressionType == h.slugCompressionType);
+    CHECK(read->slugDataOffset == read->edgeDataOffset);
 
     constexpr std::string_view OLD =
         "wsfont\n"
-        "version 1 0\n"
-        "em_size 1\n"
+        "version 2 0\n"
+        "em_size 0x3f800000\n"
         "atlas_compression 0\n"
         "end_header\n";
     CHECK_FALSE(Engine::ReadWFontHeader(OLD.data(), OLD.size()).has_value());

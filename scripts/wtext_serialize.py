@@ -460,11 +460,11 @@ def c_text(w, j):
     w.key("fontId", int(j.get("fontId", 0)))
     opt_i(w, "textMaterialId", j, "textMaterialId", 0)
     opt_str(w, "text", j, "text")
-    opt_f(w, "renderSizePx", j, "renderSizePx", 32.0)
+    opt_f(w, "scale", j, "scale", 1.0)
     opt_vec(w, "color", j, "color", [1.0, 1.0, 1.0, 1.0])
     opt_i(w, "align", j, "align", 0)
     opt_i(w, "anchor", j, "anchor", 0)
-    opt_f(w, "wrapWidthPx", j, "wrapWidthPx", 0.0)
+    opt_f(w, "wrapWidth", j, "wrapWidth", 0.0)
 
 
 def c_local_ddgi(w, j):

@@ -5,6 +5,7 @@ import push_constant_interop;
 import text_interop;
 import bindless_declarations;
 import shader_functions;
+import slug_functions;
 
 // ==================== Mesh Shader ====================
 
@@ -15,12 +16,11 @@ static const uint TRIS_PER_GROUP  = QUADS_PER_GROUP * 2; // 32, since text rende
 struct VertexOutput
 {
     float4 position : SV_Position;
-    [[vk::location(0)]] float2 uv : TEXCOORD0;
+    [[vk::location(0)]] float2 em : TEXCOORD0;
     [[vk::location(1)]] float4 color : COLOR0;
     [[vk::location(2)]] nointerpolation uint drawCallIndex : COLOR1;
-    [[vk::location(3)]] nointerpolation float2 uvOrigMin : TEXCOORD2;
-    [[vk::location(4)]] nointerpolation float2 uvOrigMax : TEXCOORD3;
-    [[vk::location(5)]] nointerpolation uint2 stableId : COLOR2;
+    [[vk::location(3)]] nointerpolation uint glyphTexelOffset : TEXCOORD2;
+    [[vk::location(4)]] nointerpolation uint2 stableId : COLOR2;
 };
 
 groupshared uint gs_visibleQuadIndices[QUADS_PER_GROUP];
@@ -91,24 +91,41 @@ void MeshTextDefault(
 
         float px = (cornerIdx & 1u) != 0u ? q.posMax.x : q.posMin.x;
         float py = (cornerIdx & 2u) != 0u ? q.posMax.y : q.posMin.y;
-        float3 worldXY = col0 * px + col1 * py + col3;
+        float ex = (cornerIdx & 1u) != 0u ? q.emMax.x : q.emMin.x;
+        float ey = (cornerIdx & 2u) != 0u ? q.emMax.y : q.emMin.y;
 
-        float ux = (cornerIdx & 1u) != 0u ? q.uvMax.x : q.uvMin.x;
-        // world top (posMax.y) maps to atlas low-V (uvMin.y); world bottom to high-V (uvMax.y)
-        float uy = (cornerIdx & 2u) != 0u ? q.uvMin.y : q.uvMax.y;
+        float2 n = float2((cornerIdx & 1u) != 0u ? 0.70710678 : -0.70710678,
+                          (cornerIdx & 2u) != 0u ? 0.70710678 : -0.70710678);
+
+        float3 worldXY = col0 * px + col1 * py + col3;
+        float3 worldN = col0 * n.x + col1 * n.y;
 
         float4 clipPos = mul(scene.viewProj, float4(worldXY, 1.0));
+        float4 clipN = mul(scene.viewProj, float4(worldN, 0.0));
 
-        VertexOutput v;
+        // Slug dilation (hb_gpu_dilate
+        float s = clipPos.w;
+        float t = clipN.w;
+        float u = (s * clipN.x - t * clipPos.x) * scene.mainRenderTargetSize.x;
+        float v = (s * clipN.y - t * clipPos.y) * scene.mainRenderTargetSize.y;
+        float s2 = s * s;
+        float st = s * t;
+        float uv2 = u * u + v * v;
+        float denom = uv2 - st * st;
+        float d = abs(denom) > (1.0 / 16777216.0) ? s2 * (st + sqrt(uv2)) / denom : 0.0;
 
-        v.position = clipPos;
-        v.uv = float2(ux, uy);
-        v.color = q.color;
-        v.drawCallIndex = q.drawCallIndex;
-        v.uvOrigMin = q.uvOrigMin;
-        v.uvOrigMax = q.uvOrigMax;
-        v.stableId = uint2(inst.stableIdLo, inst.stableIdHi);
-        vertices[vi] = v;
+        clipPos += d * clipN;
+        float2 emPerLocal = (q.emMax - q.emMin) / (q.posMax - q.posMin);
+        float2 emOut = float2(ex, ey) + d * n * emPerLocal;
+
+        VertexOutput vtx;
+        vtx.position = clipPos;
+        vtx.em = emOut;
+        vtx.color = q.color;
+        vtx.drawCallIndex = q.drawCallIndex;
+        vtx.glyphTexelOffset = q.glyphTexelOffset;
+        vtx.stableId = uint2(inst.stableIdLo, inst.stableIdHi);
+        vertices[vi] = vtx;
     }
 
     if (tid < visibleCount) {
@@ -120,10 +137,6 @@ void MeshTextDefault(
 }
 
 // ==================== Fragment Shader ====================
-float MSDFMedian(float r, float g, float b)
-{
-    return max(min(r, g), min(max(r, g), b));
-}
 
 struct FragmentOutput
 {
@@ -134,41 +147,12 @@ struct FragmentOutput
 [shader("fragment")]
 FragmentOutput FragmentTextDefault(VertexOutput input, uniform TextRenderPushConstant pc)
 {
-    TextInstanceData inst = pc.textInstanceData[input.drawCallIndex];
     TextRenderMaterial mat = pc.textMaterialBuffer[pc.textMaterialIndex];
 
-    Texture2D atlasTex = assetTextures[pc.atlasBindlessIndex];
-    SamplerState smp = assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX];
-    float screenPxRange = MSDFScreenPxRange(atlasTex, input.uv, inst.pxRange);
-
-    float4 msd = atlasTex.Sample(smp, clamp(input.uv, input.uvOrigMin, input.uvOrigMax));
-    float sd = msd.a;
-    float screenPxDist = screenPxRange * (sd - 0.5);
-    float fillOpacity = clamp(screenPxDist + 0.5, 0.0, 1.0);
+    float coverage = SlugDraw(pc.fontCurveTexels, input.em, input.glyphTexelOffset);
 
     float4 baseColor = input.color * mat.colorTint;
-
-    float4 result;
-    if (mat.shadowColor.a > 0.0 && (mat.shadowOffset.x != 0.0 || mat.shadowOffset.y != 0.0)) {
-        float2 shadowUv = input.uv - mat.shadowOffset;
-        float4 shadowSample = atlasTex.Sample(smp, clamp(shadowUv, input.uvOrigMin, input.uvOrigMax));
-        float shadowPxDist = screenPxRange * (shadowSample.a - 0.5);
-        float shadowEdge = max(screenPxRange * mat.shadowSoftness, 0.001);
-        float shadowOpacity = clamp(shadowPxDist / shadowEdge + 0.5, 0.0, 1.0);
-        result = float4(mat.shadowColor.rgb, mat.shadowColor.a * shadowOpacity);
-    } else {
-        result = float4(0.0, 0.0, 0.0, 0.0);
-    }
-
-    float4 glyphColor;
-    if (mat.outlineColor.a > 0.0 && mat.outlineWidth > 0.0) {
-        float outlineOpacity = clamp(screenPxDist + 0.5 + screenPxRange * min(mat.outlineWidth, 0.475), 0.0, 1.0);
-        glyphColor = lerp(float4(mat.outlineColor.rgb, mat.outlineColor.a * outlineOpacity), float4(baseColor.rgb, baseColor.a * fillOpacity), fillOpacity);
-    } else {
-        glyphColor = float4(baseColor.rgb, baseColor.a * fillOpacity);
-    }
-
-    result = lerp(result, glyphColor, glyphColor.a);
+    float4 result = float4(baseColor.rgb, baseColor.a * coverage);
 
     if (result.a < 0.001) { discard; }
 

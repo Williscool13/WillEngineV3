@@ -59,6 +59,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::Queue: return "Queue";
         case AllocTag::Stbi: return "Stbi";
         case AllocTag::Bc7enc: return "Bc7enc";
+        case AllocTag::HarfBuzz: return "HarfBuzz";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";

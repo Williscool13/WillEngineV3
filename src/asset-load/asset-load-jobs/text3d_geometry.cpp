@@ -170,8 +170,9 @@ bool BuildText3DGeometry(const Engine::Font& font, const Engine::Text3DParams& p
 {
     using namespace Text3DDetail;
 
-    const double tol = std::max(1.0e-5, static_cast<double>(params.flatness));
-    const float scale = params.scale;
+    const float emSize = font.header.emSize > 0.0f ? font.header.emSize : 1.0f;
+    const double tol = std::max(1.0e-5, static_cast<double>(params.flatness)) * emSize;
+    const float scale = params.scale / emSize;
     const float frontZ = params.depth * 0.5f;
     const float backZ = -params.depth * 0.5f;
     const uint32_t bendStart = static_cast<uint32_t>(outVertices.Size());

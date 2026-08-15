@@ -62,7 +62,7 @@ PREFAB_INSTANCE = component_key("PrefabInstanceComponent")  # prefabId (matches 
 CHECKPOINT = component_key("CheckpointComponent")           # checkpointId, priority, spawnOffset[3], spawnRotation[3]
 PATH_MOVER = component_key("PathMoverComponent")            # spline{bClosed,mode,points}, pointSettings[]{easing,speed,waitTime,rotation[xyzw] NOT wxyz}, loopMode, + runtime state; see add_path_mover()
 DEATH_ZONE = component_key("DeathZoneComponent")            # tag, payload is null
-WORLD_TEXT = component_key("TextComponent")                 # text, fontId, textMaterialId, renderSizePx, color[4], align, anchor, wrapWidthPx
+WORLD_TEXT = component_key("TextComponent")                 # text, fontId, textMaterialId, scale, color[4], align, anchor, wrapWidth
 
 # Registered but unused by any authored scene so far; keys are still correct, schemas are not
 # documented here: FreeCameraComponent, CharacterPhysicsComponent, DrawPhysicsDebugTag,
@@ -612,15 +612,15 @@ def add_path_mover(entity, points, speed=1.0, wait_time=0.0, easing=EASE_LINEAR,
     }
     return entity
 
-def add_world_text(entity, text, font_id, text_material_id=0, render_size_px=48.0, color=(1.0, 1.0, 1.0, 1.0),
-                   align=ALIGN_LEFT, anchor=ANCHOR_BASELINE, wrap_width_px=0.0):
-    """Flat MSDF text in the entity's local XY plane (oriented by the entity transform, NOT billboarded).
+def add_world_text(entity, text, font_id, text_material_id=0, scale=1.0, color=(1.0, 1.0, 1.0, 1.0),
+                   align=ALIGN_LEFT, anchor=ANCHOR_BASELINE, wrap_width=0.0):
+    """Flat Slug raster text in the entity's local XY plane (oriented by the entity transform, NOT billboarded).
     Distinct from add_text3d(), which extrudes real geometry and carries a collider; this one has no physics.
-    Quad coordinates are in px (render_size_px tall per line); wrap_width_px word-wraps in that same px
-    space (0 = off). align/anchor use the ALIGN_*/ANCHOR_* constants, same semantics as add_text3d."""
+    scale = em height in local units (1.0 -> one em is 1 unit tall); wrap_width word-wraps in those same
+    units (0 = off). align/anchor use the ALIGN_*/ANCHOR_* constants, same semantics as add_text3d."""
     entity[WORLD_TEXT] = {"text": text, "fontId": font_id, "textMaterialId": text_material_id,
-                          "renderSizePx": render_size_px, "color": list(color),
-                          "align": align, "anchor": anchor, "wrapWidthPx": wrap_width_px}
+                          "scale": scale, "color": list(color),
+                          "align": align, "anchor": anchor, "wrapWidth": wrap_width}
     return entity
 
 # =============================================================================

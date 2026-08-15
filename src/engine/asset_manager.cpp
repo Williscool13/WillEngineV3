@@ -1133,21 +1133,25 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     }
 
     int32_t fontsThisTick{0};
-    for (auto& font : fonts) {
-        if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
-        if (font.loadState != Font::LoadState::Loading) { continue; }
-
-        if (font.atlasTexture.loadState == Texture::LoadState::Loaded) {
-            font.loadState = Font::LoadState::Loaded;
+    AssetLoad::FontCurveLoadComplete fontComplete{};
+    while (assetLoadManager->TryDequeueFontCurveComplete(fontComplete)) {
+        Font* font = fontComplete.font;
+        if (fontComplete.bSuccess) {
+            stagingFrameBuffer.bufferAcquireOperations.Insert(stagingFrameBuffer.bufferAcquireOperations.end(),
+                                                              font->bufferAcquireOps.begin(),
+                                                              font->bufferAcquireOps.end());
+            font->bufferAcquireOps.Clear();
+            font->loadState = Font::LoadState::Loaded;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
-                LOG_TRACE(Asset, "Font loaded: {} (atlas bindless index: {})", font.name.c_str(), static_cast<uint32_t>(font.atlasTexture.bindlessHandle.index));
+                LOG_TRACE(Asset, "Font loaded: {} (curve byte offset: {})", font->name.c_str(), font->curveByteOffset);
             }
             loadCounts.fontLoadedCount++;
             fontsThisTick++;
         }
-        else if (font.atlasTexture.loadState == Texture::LoadState::FailedToLoad) {
-            font.loadState = Font::LoadState::FailedToLoad;
-            LOG_ERROR(Asset, "Font atlas upload failed: {}", font.name.c_str());
+        else {
+            font->bufferAcquireOps.Clear();
+            font->loadState = Font::LoadState::FailedToLoad;
+            LOG_ERROR(Asset, "Font curve upload failed: {}", font->name.c_str());
         }
     }
 
@@ -1410,8 +1414,9 @@ bool AssetManager::ResolveUnloads()
         if (font.refCount > 0 || font.retireFrame == 0 || font.retireFrame == FONT_RETIRE_PENDING || currentFrame < font.retireFrame) { continue; }
 
         if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Font unloaded: {}", font.name.c_str()); }
-        if (font.loadState == Font::LoadState::Loaded) {
-            resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(font.atlasTexture.bindlessHandle);
+        if (font.loadState != Font::LoadState::Loading && font.curveAllocation.offset != OffsetAllocator::Allocation::NO_SPACE) {
+            std::lock_guard lock(resourceManager->fontCurveAllocatorMutex);
+            resourceManager->fontCurveAllocator.free(font.curveAllocation);
         }
         FontHandle* storedFont = fontIdToHandle.Find(font.fontId);
         // If the font in the handle map is still the same one we're unloading here.
@@ -2172,24 +2177,16 @@ FontHandle AssetManager::LoadFont(FontID id)
         }
     }
 
-    font.atlasTexture.source = meta.source;
-    font.atlasTexture.name = meta.name;
-    font.atlasTexture.width = meta.header.atlasWidth;
-    font.atlasTexture.height = meta.header.atlasHeight;
-    font.atlasTexture.mipCount = 1;
-    font.atlasTexture.dataOffset = meta.header.atlasDataOffset;
-    font.atlasTexture.dataSize = meta.header.atlasDataSize;
-    font.atlasTexture.uncompressedSize = meta.header.atlasUncompressedSize;
-    font.atlasTexture.compressionType = meta.header.atlasCompressionType;
-    font.atlasTexture.loadState = Texture::LoadState::Loading;
-    font.atlasTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    font.curveAllocation = {};
+    font.curveByteOffset = 0;
+    font.bufferAcquireOps.Clear();
 
     fontIdToHandle[id] = handle;
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting font load: {}", font.name.c_str());
+        LOG_TRACE(Asset, "Requesting font curve load: {}", font.name.c_str());
     }
-    assetLoadManager->RequestTextureLoad(&font.atlasTexture);
+    assetLoadManager->RequestFontCurveLoad(&font);
 
     return handle;
 }

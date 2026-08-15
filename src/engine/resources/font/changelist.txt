@@ -5,10 +5,15 @@
 # Stale major -> Outdated -> regenerated at startup.
 
 ================================================================================
-VERSION 2.0  (current)
+VERSION 3.0  (current)
+================================================================================
+- Slug re-bake: MSDF atlas + atlas_*/source_size_px/sdf_spread replaced by the zstd Slug curve blob (slug_* header fields).
+- WGlyphInfo: uv bounds -> slugTexelOffset/Count, planeBounds = tight bbox; all coords font units, em_size = upem.
+
+================================================================================
+VERSION 2.0
 ================================================================================
 - Header floats (em_size, ascender, descender, line_height) now hex bits ("0x%08x").
-- 3.0 reserved for Slug re-bake.
 
 ================================================================================
 VERSION 1.0

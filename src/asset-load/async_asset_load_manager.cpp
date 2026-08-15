@@ -13,6 +13,7 @@
 #include "asset-load-jobs/text3d_geometry.h"
 #include "core/memory/memory_manager.h"
 #include "engine/logging/engine_log.h"
+#include "engine/resources/font/font.h"
 #include "engine/resources/model/static_model.h"
 #include "engine/resources/physics/physics_collider_asset.h"
 #include "engine/resources/sampler/sampler.h"
@@ -168,6 +169,21 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             },
             [this](bool success, CubemapSlotHandle cubemapSlotHandle) {
                 OnCubemapComplete(success, cubemapSlotHandle);
+            }
+        );
+    }
+
+    for (uint32_t i = 0; i < FONT_CURVE_JOB_COUNT; ++i) {
+        fontCurveLoadSlots[i].Initialize(
+            scheduler,
+            context,
+            resourceManager,
+            &memoryManager,
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, completionSignal);
+            },
+            [this](bool success, FontCurveSlotHandle slotHandle) {
+                OnFontCurveLoadComplete(success, slotHandle);
             }
         );
     }
@@ -332,6 +348,28 @@ void AsyncAssetLoadManager::ThreadMain()
                 }
                 else {
                     cubemapRequestQueue.enqueue(cubemapReq);
+                }
+            }
+        }
+        //
+        {
+            ZoneScopedN("Process Font Curve Requests");
+            FontCurveLoadRequest fontCurveReq{};
+            if (fontCurveRequestQueue.try_dequeue(fontCurveReq)) {
+                Core::Handle<FontCurveLoadSlot> slotHandle = fontCurveLoadAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    UploadStaging* uploadStaging = stagingDepot.CheckOut(fontCurveReq.font->header.slugUncompressedSize);
+                    if (uploadStaging) {
+                        FontCurveLoadSlot& slot = fontCurveLoadSlots[slotHandle.index];
+                        slot.Launch(slotHandle, uploadStaging, fontCurveReq.font);
+                    }
+                    else {
+                        fontCurveRequestQueue.enqueue(fontCurveReq);
+                        fontCurveLoadAllocator.Remove(slotHandle);
+                    }
+                }
+                else {
+                    fontCurveRequestQueue.enqueue(fontCurveReq);
                 }
             }
         }
@@ -547,6 +585,28 @@ bool AsyncAssetLoadManager::TryDequeueCubemapComplete(CubemapLoadComplete& outRe
     return cubemapLoadCompleteQueue.try_dequeue(outResult);
 }
 
+void AsyncAssetLoadManager::RequestFontCurveLoad(Engine::Font* font)
+{
+    ZoneScoped;
+
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (!font) {
+        LOG_ERROR(Asset, "RequestFontCurveLoad called with null font");
+        return;
+    }
+
+    fontCurveRequestQueue.enqueue({font});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+bool AsyncAssetLoadManager::TryDequeueFontCurveComplete(FontCurveLoadComplete& outResult)
+{
+    return fontCurveLoadCompleteQueue.try_dequeue(outResult);
+}
+
 void AsyncAssetLoadManager::RequestSamplerLoad(Engine::Sampler* sampler)
 {
     ZoneScoped;
@@ -735,6 +795,32 @@ void AsyncAssetLoadManager::OnPhysicsColliderLoadComplete(bool success, PhysicsC
 
     slot.Clear();
     physicsColliderLoadAllocator.Remove(slotHandle);
+
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+void AsyncAssetLoadManager::OnFontCurveLoadComplete(bool success, FontCurveSlotHandle slotHandle)
+{
+    ZoneScoped;
+
+    if (!fontCurveLoadAllocator.IsValid(slotHandle)) {
+        LOG_ERROR(Asset, "OnFontCurveLoadComplete called with invalid slot handle");
+        return;
+    }
+
+    FontCurveLoadSlot& slot = fontCurveLoadSlots[slotHandle.index];
+    fontCurveLoadCompleteQueue.enqueue({slot.outputFont, success});
+
+    if (!success) {
+        LOG_ERROR(Asset, "Failed to load font curves: {}", slot.outputFont->name.c_str());
+    }
+
+    if (slot.uploadStaging) {
+        stagingDepot.Return(slot.uploadStaging);
+    }
+    slot.Clear();
+    fontCurveLoadAllocator.Remove(slotHandle);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();

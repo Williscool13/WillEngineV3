@@ -66,7 +66,7 @@ void SetupTextForwardPass(RenderGraph& graph,
                           const RenderTargets& targets)
 {
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
-    if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER)) { return; }
+    if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER) || !graph.HasBuffer(FONT_CURVE_BUFFER)) { return; }
 
     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("text_default"));
     if (!pipelineEntry) { return; }
@@ -77,6 +77,7 @@ void SetupTextForwardPass(RenderGraph& graph,
     textPass.ReadBuffer(TEXT_INSTANCE_BUFFER);
     textPass.ReadBuffer(TEXT_MATERIAL_BUFFER);
     textPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    textPass.ReadBuffer(FONT_CURVE_BUFFER);
     //textPass.ReadDepthAttachment(targets.depthStencil);
     textPass.ReadWriteDepthAttachment(targets.depthStencil);
     textPass.WriteColorAttachment(targets.colorOutput);
@@ -105,6 +106,7 @@ void SetupTextForwardPass(RenderGraph& graph,
         VkDeviceAddress instAddr = graph.GetBufferAddress(TEXT_INSTANCE_BUFFER);
         VkDeviceAddress modelAddr = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER);
         VkDeviceAddress matAddr = graph.GetBufferAddress(TEXT_MATERIAL_BUFFER);
+        VkDeviceAddress fontCurveAddr = graph.GetBufferAddress(FONT_CURVE_BUFFER);
 
         for (const Core::TextDrawCall& dc : viewFamily.textDrawCalls) {
             uint32_t groupCount = (dc.quadCount + 15) / 16;
@@ -114,9 +116,9 @@ void SetupTextForwardPass(RenderGraph& graph,
                 .textInstanceData = instAddr,
                 .modelBuffer = modelAddr,
                 .textMaterialBuffer = matAddr,
+                .fontCurveTexels = fontCurveAddr + dc.fontCurveByteOffset,
                 .quadOffset = dc.quadOffset,
                 .quadCount = dc.quadCount,
-                .atlasBindlessIndex = dc.atlasBindlessIndex,
                 .textMaterialIndex = dc.textMaterialIndex,
                 .sceneDataIndex = 0,
             };

@@ -14,14 +14,14 @@
 
 namespace Engine
 {
-constexpr uint32_t FONT_MAJOR_VERSION = 2;
+constexpr uint32_t FONT_MAJOR_VERSION = 3;
 constexpr uint32_t FONT_MINOR_VERSION = 0;
 constexpr size_t WFONT_NAME_LENGTH = 128;
 
 /**
  * Per-glyph metrics stored in the .wsfont body.
- * planeBounds: quad rect relative to cursor in EM units (left, bottom, right, top).
- * uvBounds: normalized atlas UVs [0,1], V already flipped for Vulkan (y-down).
+ * planeBounds: tight glyph bbox relative to cursor in font units (left, bottom, right, top), from the Slug encoder extents.
+ * slugTexel*: this glyph's range in the font's Slug curve blob, in 8-byte texels; count 0 = inkless glyph (space), draws nothing.
  */
 struct WGlyphInfo
 {
@@ -33,15 +33,13 @@ struct WGlyphInfo
     float planeRight{0.0f};
     float planeTop{0.0f};
 
-    float uvLeft{0.0f};
-    float uvBottom{0.0f};
-    float uvRight{0.0f};
-    float uvTop{0.0f};
+    uint32_t slugTexelOffset{0};
+    uint32_t slugTexelCount{0};
 };
 
 /**
  * Vector outline data for extruded 3D text. Only present when a font is imported with contour emission.
- * Coordinates are in the same EM space as WGlyphInfo planeBounds/advance.
+ * Coordinates are in the same font-unit space as WGlyphInfo planeBounds/advance.
  */
 enum class WFontEdgeKind : uint32_t
 {
@@ -50,7 +48,7 @@ enum class WFontEdgeKind : uint32_t
     Cubic = 2,
 };
 
-/** One Bezier segment. p[0..1]=start, then 0/1/2 control points, then end; (x,y) pairs in EM units. */
+/** One Bezier segment. p[0..1]=start, then 0/1/2 control points, then end; (x,y) pairs in font units. */
 struct WFontEdge
 {
     WFontEdgeKind kind{WFontEdgeKind::Linear};
@@ -79,25 +77,20 @@ struct WFontHeader
 
     uint64_t contentVersion{0};
 
-    /** Source rasterization size in pixels (e.g. 48). */
-    uint32_t sourceSizePx{0};
-    /** SDF texel spread radius in pixels. Used in shader smoothstep edge computation. */
-    uint32_t sdfSpread{0};
-
-    /** EM square size; used to convert EM-unit planeBounds to screen pixels: px = emValue * (renderSizePx / emSize). */
+    /** Em square size in font units (face upem); converts font-unit values to output units: out = value * (targetEmSize / emSize). */
     float emSize{1.0f};
     float ascender{0.0f};
     float descender{0.0f};
     float lineHeight{0.0f};
 
-    uint32_t atlasWidth{0};
-    uint32_t atlasHeight{0};
     uint32_t glyphCount{0};
-    /** Compressed size of the WImage atlas blob as stored on disk. */
-    uint64_t atlasDataSize{0};
-    /** Uncompressed size of the WImage atlas blob; used by the texture loader for decompression. */
-    uint64_t atlasUncompressedSize{0};
-    CompressionType atlasCompressionType{DEFAULT_FONT_COMPRESSION};
+    /** Total Slug curve blob size in 8-byte texels (uncompressed). */
+    uint64_t slugTexelCount{0};
+    /** Compressed size of the Slug curve blob as stored on disk. */
+    uint64_t slugDataSize{0};
+    /** Uncompressed size of the Slug curve blob. */
+    uint64_t slugUncompressedSize{0};
+    CompressionType slugCompressionType{DEFAULT_FONT_COMPRESSION};
 
     /**
      * Contour outline tables for 3D text. contourGlyphCount==0 means no contours were baked (flat-only font).
@@ -109,13 +102,13 @@ struct WFontHeader
 
     /**
      * Byte offsets from file start -- set by the reader after parsing end_header.
-     * Layout: [header text] [glyphCount x WGlyphInfo] [contourGlyphCount x WGlyphContourRange] [contourCount x WContourRange] [edgeCount x WFontEdge] [atlas WImage blob]
+     * Layout: [header text] [glyphCount x WGlyphInfo] [contourGlyphCount x WGlyphContourRange] [contourCount x WContourRange] [edgeCount x WFontEdge] [slug curve blob]
      */
     uint64_t glyphDataOffset{0};
     uint64_t glyphContourRangeOffset{0};
     uint64_t contourRangeOffset{0};
     uint64_t edgeDataOffset{0};
-    uint64_t atlasDataOffset{0};
+    uint64_t slugDataOffset{0};
 };
 
 bool WriteWFontHeader(Core::Vector<std::byte>& out, const WFontHeader& header);

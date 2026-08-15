@@ -9,6 +9,7 @@
 
 #include "miscellaneous_asset_generate.h"
 #include "stb_impl.h"
+#include "hb_impl.h"
 #include "bc7enc_rdo/bc_allocator.h"
 #include "render/gpu_dispatcher.h"
 #include "engine/resources/environment_map/environment_map_format.h"
@@ -50,6 +51,7 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
       scheduler(scheduler)
 {
     SetStbImageAllocator(&memoryManager.AssetsScratch());
+    SetHarfBuzzAllocator(&memoryManager.AssetsScratch());
     gBc7encAllocator = &memoryManager.AssetsScratch();
     bc_alloc::bc7enc_set_allocator(Bc7encAlloc, Bc7encFree);
 

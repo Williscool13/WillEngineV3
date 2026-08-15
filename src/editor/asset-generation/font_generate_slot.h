@@ -6,7 +6,6 @@
 #define WILL_ENGINE_FONT_GENERATE_SLOT_H
 
 #include <TaskScheduler.h>
-#include <msdfgen/msdfgen-ext.h>
 
 #include "core/containers/inline_function.h"
 #include "core/containers/inline_path.h"
@@ -21,7 +20,6 @@ using FontGenerateSlotHandle = Core::Handle<struct FontGenerateSlot>;
 struct FontGenerateSlot
 {
     FontGenerateSlot() = default;
-    ~FontGenerateSlot();
 
     FontGenerateSlot(const FontGenerateSlot&) = delete;
     FontGenerateSlot& operator=(const FontGenerateSlot&) = delete;
@@ -47,7 +45,6 @@ private:
     enki::TaskScheduler* scheduler{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
     Core::InlineFunction<void(bool success, FontGenerateSlotHandle slotHandle)> _notifyCallback;
-    msdfgen::FreetypeHandle* ft{nullptr};
 
     FontGenerateSlotHandle _slotHandle{FontGenerateSlotHandle::INVALID};
 

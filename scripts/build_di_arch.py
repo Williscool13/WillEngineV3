@@ -99,7 +99,7 @@ LABEL_SIZE_PX = 0.5
 
 def label(name, text, pos, folder_id=0):
     e = base_entity(name, pos, (0.0, 0.0, 1.0, 0.0), folder_id=folder_id)   # 180 about Y: glyph face points -Z, toward the aisle
-    add_world_text(e, text, ROBOTO_FONT, TEXT_MATERIAL, render_size_px=LABEL_SIZE_PX)
+    add_world_text(e, text, ROBOTO_FONT, TEXT_MATERIAL, scale=LABEL_SIZE_PX)
     entities.append(e)
     return e
 

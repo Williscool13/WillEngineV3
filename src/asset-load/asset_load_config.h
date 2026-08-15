@@ -20,11 +20,12 @@ inline constexpr uint32_t WILL_MODEL_JOB_COUNT = 2;
 inline constexpr uint32_t WILL_MODEL_LOAD_QUEUE_COUNT = 64;
 inline constexpr uint32_t TEXTURE_JOB_COUNT = 12;
 inline constexpr uint32_t CUBEMAP_JOB_COUNT = 1;
+inline constexpr uint32_t FONT_CURVE_JOB_COUNT = 2;
 inline constexpr uint32_t PROCEDURAL_TEXTURE_JOB_COUNT = 6;
 inline constexpr uint32_t PROCEDURAL_TEXTURE_DISPATCHES_PER_FRAME = 4;
 inline constexpr uint32_t TEXTURE_LOAD_QUEUE_COUNT = 128;
 
-inline constexpr uint32_t UPLOAD_STAGING_DEPOT_MAX = MODEL_JOB_COUNT + PROCEDURAL_MODEL_JOB_COUNT + TEXTURE_JOB_COUNT + CUBEMAP_JOB_COUNT;
+inline constexpr uint32_t UPLOAD_STAGING_DEPOT_MAX = MODEL_JOB_COUNT + PROCEDURAL_MODEL_JOB_COUNT + TEXTURE_JOB_COUNT + CUBEMAP_JOB_COUNT + FONT_CURVE_JOB_COUNT;
 inline constexpr uint64_t UPLOAD_STAGING_MIP0_DIVISOR = 1;
 inline constexpr uint64_t UPLOAD_STAGING_MIN_SIZE = 1ull * 1024 * 1024;  // 1MB
 inline constexpr uint64_t UPLOAD_STAGING_MAX_SIZE = 64ull * 1024 * 1024; // 64MB
