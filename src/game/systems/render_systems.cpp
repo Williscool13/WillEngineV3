@@ -1447,6 +1447,33 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (lineHeight <= 0.0f) { lineHeight = (font->header.ascender - font->header.descender) * scale; }
         if (lineHeight <= 0.0f) { lineHeight = textComp.scale; }
 
+        const auto rmat = ctx->materialManager->GetRenderTextMaterial(textComp.textMaterialId);
+
+        const Engine::WFontHeader& fh = font->header;
+        const bool bSdf = fh.sdfUncompressedSize > 0;
+        const float sdfSpreadFU = fh.sdfSpread * fh.emSize;
+        const float sdfCellU = bSdf ? 1.0f / static_cast<float>(fh.sdfCols) : 0.0f;
+        const float sdfCellV = bSdf ? 1.0f / static_cast<float>(fh.sdfRows) : 0.0f;
+
+        glm::vec2 padMinEm{0.0f};
+        glm::vec2 padMaxEm{0.0f};
+        if (rmat.outlineColor.w > 0.0f && rmat.outlineWidth > 0.0f) {
+            padMinEm = glm::vec2(rmat.outlineWidth);
+            padMaxEm = glm::vec2(rmat.outlineWidth);
+        }
+        if (rmat.shadowColor.w > 0.0f && (rmat.shadowOffset.x != 0.0f || rmat.shadowOffset.y != 0.0f)) {
+            const glm::vec2 off{rmat.shadowOffset.x, rmat.shadowOffset.y};
+            const glm::vec2 soft{rmat.shadowSoftness};
+            padMinEm = glm::max(padMinEm, soft - off);
+            padMaxEm = glm::max(padMaxEm, soft + off);
+        }
+        if (bSdf) {
+            padMinEm = glm::min(padMinEm, glm::vec2(fh.sdfSpread));
+            padMaxEm = glm::min(padMaxEm, glm::vec2(fh.sdfSpread));
+        }
+        const glm::vec2 padMinFU = padMinEm * font->header.emSize;
+        const glm::vec2 padMaxFU = padMaxEm * font->header.emSize;
+
         const char* str = textComp.text.c_str();
         const size_t len = textComp.text.Size();
         auto advanceOf = [&](char c) -> float {
@@ -1535,10 +1562,20 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 
                 if (g->slugTexelCount != 0) {
                     WorldGlyphQuad quad{};
-                    quad.posMin = {cursorX + g->planeLeft * scale, penY + g->planeBottom * scale};
-                    quad.posMax = {cursorX + g->planeRight * scale, penY + g->planeTop * scale};
-                    quad.emMin = {g->planeLeft, g->planeBottom};
-                    quad.emMax = {g->planeRight, g->planeTop};
+                    quad.emMin = {g->planeLeft - padMinFU.x, g->planeBottom - padMinFU.y};
+                    quad.emMax = {g->planeRight + padMaxFU.x, g->planeTop + padMaxFU.y};
+                    quad.posMin = {cursorX + quad.emMin.x * scale, penY + quad.emMin.y * scale};
+                    quad.posMax = {cursorX + quad.emMax.x * scale, penY + quad.emMax.y * scale};
+                    if (bSdf) {
+                        // Cell = planeBounds + spread, v runs top-down
+                        const uint32_t glyphIdx = static_cast<uint32_t>(g - font->glyphs.Data());
+                        const float cellU0 = static_cast<float>(glyphIdx % fh.sdfCols) * sdfCellU;
+                        const float cellV0 = static_cast<float>(glyphIdx / fh.sdfCols) * sdfCellV;
+                        const float ku = sdfCellU / (g->planeRight - g->planeLeft + 2.0f * sdfSpreadFU);
+                        const float kv = sdfCellV / (g->planeTop - g->planeBottom + 2.0f * sdfSpreadFU);
+                        quad.sdfUvScale = {ku, -kv};
+                        quad.sdfUvBias = {cellU0 - (g->planeLeft - sdfSpreadFU) * ku, cellV0 + (g->planeTop + sdfSpreadFU) * kv};
+                    }
                     quad.glyphTexelOffset = g->slugTexelOffset;
                     quad.color = textComp.color;
                     quad.drawCallIndex = drawCallIndex;
@@ -1555,7 +1592,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         auto [matIndexRef, inserted] = frameBuffer->mainViewFamily.activeTextMaterials.TryEmplace(textComp.textMaterialId);
         if (inserted) {
             matIndexRef = static_cast<uint32_t>(frameBuffer->mainViewFamily.textMaterials.Size());
-            frameBuffer->mainViewFamily.textMaterials.PushBack(ctx->materialManager->GetRenderTextMaterial(textComp.textMaterialId));
+            frameBuffer->mainViewFamily.textMaterials.PushBack(rmat);
         }
 
         uint64_t stableId = 0;
@@ -1567,6 +1604,8 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             .modelIndex = modelIndex,
             .fontCurveByteOffset = font->curveByteOffset,
             .textMaterialIndex = matIndexRef,
+            .fontAtlasIndex = bSdf ? static_cast<uint32_t>(font->atlasBindlessHandle.index) : 0u,
+            .sdfGridDims = bSdf ? (fh.sdfCols | (fh.sdfRows << 16)) : 0u,
             .stableId = stableId,
         });
     }

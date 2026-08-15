@@ -20,8 +20,9 @@ struct TextMaterial
 
     float4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
     float4 outlineColor{0.0f, 0.0f, 0.0f, 0.0f};
+    // outlineWidth, shadowSoftness, and shadowOffset are em units
     float outlineWidth{0.0f};
-    float shadowSoftness{1.0f};
+    float shadowSoftness{0.05f};
     float2 shadowOffset{0.0f, 0.0f};
     float4 shadowColor{0.0f, 0.0f, 0.0f, 0.0f};
 };

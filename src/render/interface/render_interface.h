@@ -309,6 +309,8 @@ struct TextDrawCall
     uint32_t quadCount;
     uint32_t fontCurveByteOffset;
     uint32_t textMaterialIndex;
+    uint32_t fontAtlasIndex;
+    uint32_t sdfGridDims;
 };
 
 struct TextInstanceDataFull
@@ -316,6 +318,8 @@ struct TextInstanceDataFull
     uint32_t modelIndex{0};
     uint32_t fontCurveByteOffset{0};
     uint32_t textMaterialIndex{0};
+    uint32_t fontAtlasIndex{0};
+    uint32_t sdfGridDims{0};
     uint64_t stableId{0};
 };
 

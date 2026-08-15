@@ -1549,6 +1549,9 @@ SHADER_PUBLIC struct TextRenderPushConstant
     SHADER_PUBLIC uint32_t quadCount;
     SHADER_PUBLIC uint32_t textMaterialIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t fontAtlasIndex;
+    // cols | rows << 16
+    SHADER_PUBLIC uint32_t sdfGridDims;
 };
 
 SHADER_PUBLIC struct UIRectRenderPushConstant

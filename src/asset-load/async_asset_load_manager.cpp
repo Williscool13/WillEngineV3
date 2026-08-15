@@ -358,7 +358,7 @@ void AsyncAssetLoadManager::ThreadMain()
             if (fontCurveRequestQueue.try_dequeue(fontCurveReq)) {
                 Core::Handle<FontCurveLoadSlot> slotHandle = fontCurveLoadAllocator.Add();
                 if (slotHandle.IsValid()) {
-                    UploadStaging* uploadStaging = stagingDepot.CheckOut(fontCurveReq.font->header.slugUncompressedSize);
+                    UploadStaging* uploadStaging = stagingDepot.CheckOut(std::max(fontCurveReq.font->header.slugUncompressedSize, fontCurveReq.font->header.sdfUncompressedSize));
                     if (uploadStaging) {
                         FontCurveLoadSlot& slot = fontCurveLoadSlots[slotHandle.index];
                         slot.Launch(slotHandle, uploadStaging, fontCurveReq.font);

@@ -21,6 +21,8 @@ struct VertexOutput
     [[vk::location(2)]] nointerpolation uint drawCallIndex : COLOR1;
     [[vk::location(3)]] nointerpolation uint glyphTexelOffset : TEXCOORD2;
     [[vk::location(4)]] nointerpolation uint2 stableId : COLOR2;
+    [[vk::location(5)]] float2 sdfUv : TEXCOORD3;
+    [[vk::location(6)]] nointerpolation float2 sdfUvScale : TEXCOORD4;
 };
 
 groupshared uint gs_visibleQuadIndices[QUADS_PER_GROUP];
@@ -125,6 +127,8 @@ void MeshTextDefault(
         vtx.drawCallIndex = q.drawCallIndex;
         vtx.glyphTexelOffset = q.glyphTexelOffset;
         vtx.stableId = uint2(inst.stableIdLo, inst.stableIdHi);
+        vtx.sdfUv = emOut * q.sdfUvScale + q.sdfUvBias;
+        vtx.sdfUvScale = q.sdfUvScale;
         vertices[vi] = vtx;
     }
 
@@ -149,10 +153,46 @@ FragmentOutput FragmentTextDefault(VertexOutput input, uniform TextRenderPushCon
 {
     TextRenderMaterial mat = pc.textMaterialBuffer[pc.textMaterialIndex];
 
-    float coverage = SlugDraw(pc.fontCurveTexels, input.em, input.glyphTexelOffset);
+    float2 pixelsPerEm = 1.0 / fwidth(input.em);
+    SlugGlyphInfo gi = SlugDecodeGlyph(pc.fontCurveTexels, input.em, input.glyphTexelOffset);
+    float ppem = SlugPpem(gi, pixelsPerEm);
+
+    float fillOpacity = SlugCoverage(pc.fontCurveTexels, input.em, pixelsPerEm, input.glyphTexelOffset);
+
+    bool bOutline = mat.outlineColor.a > 0.0 && mat.outlineWidth > 0.0;
+    bool bShadow = mat.shadowColor.a > 0.0 && (mat.shadowOffset.x != 0.0 || mat.shadowOffset.y != 0.0);
+
+    Texture2D sdfTex = assetTextures[pc.fontAtlasIndex];
+    SamplerState sdfSampler = assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX];
 
     float4 baseColor = input.color * mat.colorTint;
-    float4 result = float4(baseColor.rgb, baseColor.a * coverage);
+
+    float4 result = float4(0.0, 0.0, 0.0, 0.0);
+    if (bShadow) {
+        float2 uvPerEm = input.sdfUvScale * gi.scale;
+        float2 shadowUv = input.sdfUv - mat.shadowOffset * uvPerEm;
+        float2 gridDims = float2(float(pc.sdfGridDims & 0xFFFFu), float(pc.sdfGridDims >> 16u));
+        uint atlasW, atlasH;
+        sdfTex.GetDimensions(atlasW, atlasH);
+        float2 halfTexel = 0.5 / float2(float(atlasW), float(atlasH));
+        float2 cellMin = floor(input.sdfUv * gridDims) / gridDims;
+        shadowUv = clamp(shadowUv, cellMin + halfTexel, cellMin + 1.0 / gridDims - halfTexel);
+        float sdEm = (sdfTex.Sample(sdfSampler, shadowUv).r - 0.5) * (2.0 * SDF_SPREAD_EM);
+        float blurEm = clamp(mat.shadowSoftness, 1.0 / ppem, SDF_SPREAD_EM);
+        float shadowOpacity = smoothstep(-blurEm, blurEm, sdEm);
+        result = float4(mat.shadowColor.rgb, mat.shadowColor.a * shadowOpacity);
+    }
+
+    float4 glyphColor;
+    if (bOutline) {
+        float sdEm = (sdfTex.Sample(sdfSampler, input.sdfUv).r - 0.5) * (2.0 * SDF_SPREAD_EM);
+        float outlineOpacity = clamp((sdEm + mat.outlineWidth) * ppem + 0.5, 0.0, 1.0);
+        glyphColor = lerp(float4(mat.outlineColor.rgb, mat.outlineColor.a * outlineOpacity), float4(baseColor.rgb, baseColor.a * fillOpacity), fillOpacity);
+    } else {
+        glyphColor = float4(baseColor.rgb, baseColor.a * fillOpacity);
+    }
+
+    result = lerp(result, glyphColor, glyphColor.a);
 
     if (result.a < 0.001) { discard; }
 

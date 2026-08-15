@@ -1141,6 +1141,10 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
                                                               font->bufferAcquireOps.begin(),
                                                               font->bufferAcquireOps.end());
             font->bufferAcquireOps.Clear();
+            if (font->atlasAcquireBarrier.image != 0) {
+                stagingFrameBuffer.imageAcquireOperations.PushBack(font->atlasAcquireBarrier);
+                font->atlasAcquireBarrier = {};
+            }
             font->loadState = Font::LoadState::Loaded;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
                 LOG_TRACE(Asset, "Font loaded: {} (curve byte offset: {})", font->name.c_str(), font->curveByteOffset);
@@ -1417,6 +1421,9 @@ bool AssetManager::ResolveUnloads()
         if (font.loadState != Font::LoadState::Loading && font.curveAllocation.offset != OffsetAllocator::Allocation::NO_SPACE) {
             std::lock_guard lock(resourceManager->fontCurveAllocatorMutex);
             resourceManager->fontCurveAllocator.free(font.curveAllocation);
+        }
+        if (font.header.sdfUncompressedSize > 0) {
+            resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(font.atlasBindlessHandle);
         }
         FontHandle* storedFont = fontIdToHandle.Find(font.fontId);
         // If the font in the handle map is still the same one we're unloading here.
@@ -2180,6 +2187,10 @@ FontHandle AssetManager::LoadFont(FontID id)
     font.curveAllocation = {};
     font.curveByteOffset = 0;
     font.bufferAcquireOps.Clear();
+    font.atlasAcquireBarrier = {};
+    if (font.header.sdfUncompressedSize > 0) {
+        font.atlasBindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    }
 
     fontIdToHandle[id] = handle;
 

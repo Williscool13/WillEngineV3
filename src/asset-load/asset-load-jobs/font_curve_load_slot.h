@@ -30,7 +30,7 @@ struct VulkanContext;
 
 namespace AssetLoad
 {
-/** Uploads a font's Slug curve blob into megaFontCurveBuffer: mmap + decompress on the load thread, suballocate, staged copy on the transfer queue, release barrier recorded as an acquire op on the Font. */
+/** Uploads a font's Slug curve blob into megaFontCurveBuffer plus its effects SDF atlas image: mmap + decompress on the load thread, suballocate/create, staged copies on the transfer queue, release barriers recorded as acquire ops on the Font. */
 class FontCurveLoadSlot
 {
 public:
@@ -60,7 +60,13 @@ private:
 
     bool AllocateResidency() const;
 
+    bool AllocateAtlasResources() const;
+
     void UploadCurves(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
+
+    void UploadAtlas(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
+
+    void PostUploadSetup() const;
 
     struct LoadTask : enki::ITaskSet
     {
@@ -82,6 +88,7 @@ private:
     SubmitContext transferSubmit{};
 
     Core::HeapArray<uint8_t> blobData{};
+    Core::HeapArray<uint8_t> atlasData{};
 
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
     Core::InlineFunction<void(bool success, FontCurveSlotHandle slotHandle)> _notifyCallback;

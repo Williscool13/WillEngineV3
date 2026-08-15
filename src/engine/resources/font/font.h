@@ -13,7 +13,9 @@
 #include "core/containers/inline_vector.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/font_id.h"
+#include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "render/interface/render_interface.h"
+#include "render/vulkan/vk_resources.h"
 
 namespace Engine
 {
@@ -41,6 +43,12 @@ struct Font
     /** 8-aligned byte offset of the blob inside megaFontCurveBuffer. */
     uint32_t curveByteOffset{0};
     Core::InlineVector<Core::BufferAcquireOperation, 1> bufferAcquireOps{};
+
+    /** Effects SDF atlas; only present when header.sdfUncompressedSize > 0, bindless handle reserved in LoadFont. */
+    Render::AllocatedImage atlasImage{};
+    Render::ImageView atlasImageView{};
+    Render::BindlessTextureHandle atlasBindlessHandle{};
+    Core::ImageAcquireOperation atlasAcquireBarrier{};
 
     LoadState loadState{LoadState::NotLoaded};
     uint32_t refCount{0};

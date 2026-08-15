@@ -121,6 +121,8 @@ void SetupTextForwardPass(RenderGraph& graph,
                 .quadCount = dc.quadCount,
                 .textMaterialIndex = dc.textMaterialIndex,
                 .sceneDataIndex = 0,
+                .fontAtlasIndex = dc.fontAtlasIndex,
+                .sdfGridDims = dc.sdfGridDims,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(TextRenderPushConstant), &pc);
             vkCmdDrawMeshTasksEXT(cmd, groupCount, 1, 1);

@@ -5,7 +5,12 @@
 # Stale major -> Outdated -> regenerated at startup.
 
 ================================================================================
-VERSION 3.0  (current)
+VERSION 4.0  (current)
+================================================================================
+- Low-res single-channel SDF atlas blob appended for outline/shadow effects (sdf_* header fields); Slug still renders the fill.
+
+================================================================================
+VERSION 3.0
 ================================================================================
 - Slug re-bake: MSDF atlas + atlas_*/source_size_px/sdf_spread replaced by the zstd Slug curve blob (slug_* header fields).
 - WGlyphInfo: uv bounds -> slugTexelOffset/Count, planeBounds = tight bbox; all coords font units, em_size = upem.

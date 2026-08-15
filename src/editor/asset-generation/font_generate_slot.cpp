@@ -7,6 +7,8 @@
 #include <hb.h>
 #include <hb-gpu.h>
 
+#include <cmath>
+
 #include "core/containers/heap_array.h"
 #include "core/containers/vector.h"
 #include "engine/compression/compression.h"
@@ -14,12 +16,44 @@
 #include "engine/resources/font/font_format.h"
 #include "engine/serialization/serialization.h"
 #include "platform/file_utils.h"
+#include "render/shaders/text_interop.h"
 #include "tracy/Tracy.hpp"
 
 namespace Editor
 {
 static constexpr uint32_t CHARSET_FIRST = 0x20;
 static constexpr uint32_t CHARSET_LAST = 0x7E;
+
+struct SdfSegment
+{
+    float ax, ay, bx, by;
+};
+
+static void FlattenEdgeForSdf(const Engine::WFontEdge& e, Core::Vector<SdfSegment>& out)
+{
+    if (e.kind == Engine::WFontEdgeKind::Linear) {
+        out.PushBack({e.p[0], e.p[1], e.p[2], e.p[3]});
+        return;
+    }
+    const int n = e.kind == Engine::WFontEdgeKind::Quadratic ? 8 : 12;
+    float px = e.p[0];
+    float py = e.p[1];
+    for (int i = 1; i <= n; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(n);
+        const float u = 1.0f - t;
+        float x, y;
+        if (e.kind == Engine::WFontEdgeKind::Quadratic) {
+            x = u * u * e.p[0] + 2.0f * u * t * e.p[2] + t * t * e.p[4];
+            y = u * u * e.p[1] + 2.0f * u * t * e.p[3] + t * t * e.p[5];
+        } else {
+            x = u * u * u * e.p[0] + 3.0f * u * u * t * e.p[2] + 3.0f * u * t * t * e.p[4] + t * t * t * e.p[6];
+            y = u * u * u * e.p[1] + 3.0f * u * u * t * e.p[3] + 3.0f * u * t * t * e.p[5] + t * t * t * e.p[7];
+        }
+        out.PushBack({px, py, x, y});
+        px = x;
+        py = y;
+    }
+}
 
 struct ContourCapture
 {
@@ -271,6 +305,82 @@ bool FontGenerateSlot::GenerateAndWrite()
         compressedSize = Engine::Compress(Engine::DEFAULT_FONT_COMPRESSION, slugTexels.Data(), slugUncompressed, slugCompressed.Data(), compressMaxSize);
     }
 
+    const uint32_t sdfCols = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(glyphInfos.Size()))));
+    const uint32_t sdfRows = (static_cast<uint32_t>(glyphInfos.Size()) + sdfCols - 1) / sdfCols;
+    const uint32_t atlasW = sdfCols * Engine::FONT_SDF_CELL_PX;
+    const uint32_t atlasH = sdfRows * Engine::FONT_SDF_CELL_PX;
+    const float spreadFU = SDF_SPREAD_EM * static_cast<float>(upem);
+    Core::HeapArray<uint8_t> sdfAtlas(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, static_cast<size_t>(atlasW) * atlasH);
+    memset(sdfAtlas.Data(), 0, sdfAtlas.Size());
+    {
+        ZoneScopedN("SdfAtlasBake");
+        Core::Vector<SdfSegment> segs(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator);
+        for (uint32_t gi = 0; gi < glyphInfos.Size(); ++gi) {
+            const Engine::WGlyphContourRange& gcr = glyphContourRanges[gi];
+            if (gcr.contourCount == 0) { continue; }
+
+            segs.Clear();
+            for (uint32_t c = 0; c < gcr.contourCount; ++c) {
+                const Engine::WContourRange& cr = contourRanges[gcr.firstContour + c];
+                for (uint32_t e = 0; e < cr.edgeCount; ++e) {
+                    FlattenEdgeForSdf(contourEdges[cr.firstEdge + e], segs);
+                }
+            }
+            if (segs.IsEmpty()) { continue; }
+
+            const Engine::WGlyphInfo& info = glyphInfos[gi];
+            const float winMinX = info.planeLeft - spreadFU;
+            const float winMaxX = info.planeRight + spreadFU;
+            const float winMinY = info.planeBottom - spreadFU;
+            const float winMaxY = info.planeTop + spreadFU;
+            const uint32_t cellX = (gi % sdfCols) * Engine::FONT_SDF_CELL_PX;
+            const uint32_t cellY = (gi / sdfCols) * Engine::FONT_SDF_CELL_PX;
+
+            for (uint32_t ty = 0; ty < Engine::FONT_SDF_CELL_PX; ++ty) {
+                const float py = winMaxY - (static_cast<float>(ty) + 0.5f) / static_cast<float>(Engine::FONT_SDF_CELL_PX) * (winMaxY - winMinY);
+                uint8_t* row = sdfAtlas.Data() + static_cast<size_t>(cellY + ty) * atlasW + cellX;
+                for (uint32_t tx = 0; tx < Engine::FONT_SDF_CELL_PX; ++tx) {
+                    const float px = winMinX + (static_cast<float>(tx) + 0.5f) / static_cast<float>(Engine::FONT_SDF_CELL_PX) * (winMaxX - winMinX);
+
+                    float d2 = 3.4e38f;
+                    int winding = 0;
+                    for (const SdfSegment& s : segs) {
+                        const float ex = s.bx - s.ax;
+                        const float ey = s.by - s.ay;
+                        const float qx = px - s.ax;
+                        const float qy = py - s.ay;
+                        const float len2 = ex * ex + ey * ey;
+                        float t = len2 > 1.0e-12f ? (qx * ex + qy * ey) / len2 : 0.0f;
+                        t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+                        const float dx = qx - ex * t;
+                        const float dy = qy - ey * t;
+                        const float dd = dx * dx + dy * dy;
+                        if (dd < d2) { d2 = dd; }
+
+                        if ((s.ay > py) != (s.by > py)) {
+                            const float xc = s.ax + (py - s.ay) / (s.by - s.ay) * ex;
+                            if (xc > px) { winding += s.by > s.ay ? 1 : -1; }
+                        }
+                    }
+
+                    const float sd = winding != 0 ? std::sqrt(d2) : -std::sqrt(d2);
+                    float v = 0.5f + 0.5f * sd / spreadFU;
+                    v = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+                    row[tx] = static_cast<uint8_t>(v * 255.0f + 0.5f);
+                }
+            }
+        }
+    }
+
+    const size_t sdfUncompressed = sdfAtlas.Size();
+    size_t sdfCompressedSize = 0;
+    Core::HeapArray<uint8_t> sdfCompressed{};
+    if (sdfUncompressed > 0) {
+        const size_t compressMaxSize = Engine::CompressMaxSize(Engine::DEFAULT_FONT_COMPRESSION, sdfUncompressed);
+        sdfCompressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, compressMaxSize);
+        sdfCompressedSize = Engine::Compress(Engine::DEFAULT_FONT_COMPRESSION, sdfAtlas.Data(), sdfUncompressed, sdfCompressed.Data(), compressMaxSize);
+    }
+
     Engine::WFontHeader header{};
     header.fontId = fontId.id;
     header.contentVersion = contentVersion;
@@ -284,6 +394,12 @@ bool FontGenerateSlot::GenerateAndWrite()
     header.slugTexelCount = slugUncompressed / 8;
     header.slugDataSize = compressedSize;
     header.slugUncompressedSize = slugUncompressed;
+    header.sdfCellPx = Engine::FONT_SDF_CELL_PX;
+    header.sdfCols = sdfCols;
+    header.sdfRows = sdfRows;
+    header.sdfSpread = SDF_SPREAD_EM;
+    header.sdfDataSize = sdfCompressedSize;
+    header.sdfUncompressedSize = sdfUncompressed;
     header.contourGlyphCount = static_cast<uint32_t>(glyphContourRanges.Size());
     header.contourCount = static_cast<uint32_t>(contourRanges.Size());
     header.edgeCount = static_cast<uint32_t>(contourEdges.Size());
@@ -301,6 +417,9 @@ bool FontGenerateSlot::GenerateAndWrite()
     Engine::AppendRaw(out, contourEdges.Data(), contourEdges.Size() * sizeof(Engine::WFontEdge));
     if (compressedSize > 0) {
         Engine::AppendRaw(out, slugCompressed.Data(), compressedSize);
+    }
+    if (sdfCompressedSize > 0) {
+        Engine::AppendRaw(out, sdfCompressed.Data(), sdfCompressedSize);
     }
 
     if (!Platform::WriteFile(outputPath, out.Data(), out.Size())) {

@@ -321,7 +321,7 @@ TEST_CASE_METHOD(TextFormatFixture, "Material: full round-trip, deterministic re
     CHECK(View(a) == View(b));
 }
 
-TEST_CASE_METHOD(TextFormatFixture, "Font header: hex-float metrics round-trip bit-exactly, version 2 rejected", "[textformat]")
+TEST_CASE_METHOD(TextFormatFixture, "Font header: hex-float metrics round-trip bit-exactly, version 3 rejected", "[textformat]")
 {
     Engine::WFontHeader h{};
     strcpy_s(h.name, "roboto");
@@ -334,6 +334,12 @@ TEST_CASE_METHOD(TextFormatFixture, "Font header: hex-float metrics round-trip b
     h.slugTexelCount = 12345;
     h.slugDataSize = 4096;
     h.slugUncompressedSize = 98760;
+    h.sdfCellPx = 48;
+    h.sdfCols = 10;
+    h.sdfRows = 10;
+    h.sdfSpread = 0.25f;
+    h.sdfDataSize = 2048;
+    h.sdfUncompressedSize = 230400;
 
     Core::Vector<std::byte> buf(&alloc, Core::AllocTag::Unknown);
     REQUIRE(Engine::WriteWFontHeader(buf, h));
@@ -350,12 +356,19 @@ TEST_CASE_METHOD(TextFormatFixture, "Font header: hex-float metrics round-trip b
     CHECK(read->slugUncompressedSize == 98760u);
     CHECK(read->slugCompressionType == h.slugCompressionType);
     CHECK(read->slugDataOffset == read->edgeDataOffset);
+    CHECK(read->sdfCellPx == 48u);
+    CHECK(read->sdfCols == 10u);
+    CHECK(read->sdfRows == 10u);
+    CHECK(Engine::FloatBits(read->sdfSpread) == Engine::FloatBits(0.25f));
+    CHECK(read->sdfDataSize == 2048u);
+    CHECK(read->sdfUncompressedSize == 230400u);
+    CHECK(read->sdfDataOffset == read->slugDataOffset + read->slugDataSize);
 
     constexpr std::string_view OLD =
         "wsfont\n"
-        "version 2 0\n"
+        "version 3 0\n"
         "em_size 0x3f800000\n"
-        "atlas_compression 0\n"
+        "slug_compression 0\n"
         "end_header\n";
     CHECK_FALSE(Engine::ReadWFontHeader(OLD.data(), OLD.size()).has_value());
 }

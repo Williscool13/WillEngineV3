@@ -28,6 +28,12 @@ bool WriteWFontHeader(Core::Vector<std::byte>& out, const WFontHeader& header)
     AppendTextF(out, "slug_data_size %llu\n", header.slugDataSize);
     AppendTextF(out, "slug_uncompressed_size %llu\n", header.slugUncompressedSize);
     AppendTextF(out, "slug_compression %u\n", static_cast<uint32_t>(header.slugCompressionType));
+    AppendTextF(out, "sdf_cell_px %u\n", header.sdfCellPx);
+    AppendTextF(out, "sdf_cols %u\n", header.sdfCols);
+    AppendTextF(out, "sdf_rows %u\n", header.sdfRows);
+    AppendTextF(out, "sdf_spread 0x%08x\n", FloatBits(header.sdfSpread));
+    AppendTextF(out, "sdf_data_size %llu\n", header.sdfDataSize);
+    AppendTextF(out, "sdf_uncompressed_size %llu\n", header.sdfUncompressedSize);
     AppendTextF(out, "contour_glyph_count %u\n", header.contourGlyphCount);
     AppendTextF(out, "contour_count %u\n", header.contourCount);
     AppendTextF(out, "edge_count %u\n", header.edgeCount);
@@ -42,6 +48,7 @@ static void ComputeOffsets(WFontHeader& header, uint64_t headerEnd)
     header.contourRangeOffset = header.glyphContourRangeOffset + static_cast<uint64_t>(header.contourGlyphCount) * sizeof(WGlyphContourRange);
     header.edgeDataOffset = header.contourRangeOffset + static_cast<uint64_t>(header.contourCount) * sizeof(WContourRange);
     header.slugDataOffset = header.edgeDataOffset + static_cast<uint64_t>(header.edgeCount) * sizeof(WFontEdge);
+    header.sdfDataOffset = header.slugDataOffset + header.slugDataSize;
 }
 
 static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& header)
@@ -67,6 +74,12 @@ static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& h
         std::from_chars(line + 17, line + lineBufSize, v);
         header.slugCompressionType = static_cast<CompressionType>(v);
     }
+    else if (strncmp(line, "sdf_cell_px ", 12) == 0) { std::from_chars(line + 12, line + lineBufSize, header.sdfCellPx); }
+    else if (strncmp(line, "sdf_cols ", 9) == 0) { std::from_chars(line + 9, line + lineBufSize, header.sdfCols); }
+    else if (strncmp(line, "sdf_rows ", 9) == 0) { std::from_chars(line + 9, line + lineBufSize, header.sdfRows); }
+    else if (strncmp(line, "sdf_spread ", 11) == 0) { header.sdfSpread = ParseHexFloat(line + 11, line + lineBufSize); }
+    else if (strncmp(line, "sdf_data_size ", 14) == 0) { std::from_chars(line + 14, line + lineBufSize, header.sdfDataSize); }
+    else if (strncmp(line, "sdf_uncompressed_size ", 22) == 0) { std::from_chars(line + 22, line + lineBufSize, header.sdfUncompressedSize); }
     else if (strncmp(line, "contour_glyph_count ", 20) == 0) { std::from_chars(line + 20, line + lineBufSize, header.contourGlyphCount); }
     else if (strncmp(line, "contour_count ", 14) == 0) { std::from_chars(line + 14, line + lineBufSize, header.contourCount); }
     else if (strncmp(line, "edge_count ", 11) == 0) { std::from_chars(line + 11, line + lineBufSize, header.edgeCount); }

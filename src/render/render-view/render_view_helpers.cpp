@@ -187,12 +187,12 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
             for (uint32_t i = 1; i < quads.Size(); ++i) {
                 const Core::TextInstanceDataFull& cur = cpuInsts[quads[i].drawCallIndex];
                 if (cur.fontCurveByteOffset != prev->fontCurveByteOffset || cur.textMaterialIndex != prev->textMaterialIndex) {
-                    drawCalls.PushBack({runStart, i - runStart, prev->fontCurveByteOffset, prev->textMaterialIndex});
+                    drawCalls.PushBack({runStart, i - runStart, prev->fontCurveByteOffset, prev->textMaterialIndex, prev->fontAtlasIndex, prev->sdfGridDims});
                     runStart = i;
                     prev = &cur;
                 }
             }
-            drawCalls.PushBack({runStart, static_cast<uint32_t>(quads.Size()) - runStart, prev->fontCurveByteOffset, prev->textMaterialIndex});
+            drawCalls.PushBack({runStart, static_cast<uint32_t>(quads.Size()) - runStart, prev->fontCurveByteOffset, prev->textMaterialIndex, prev->fontAtlasIndex, prev->sdfGridDims});
         }
     }
 

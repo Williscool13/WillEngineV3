@@ -14,9 +14,11 @@
 
 namespace Engine
 {
-constexpr uint32_t FONT_MAJOR_VERSION = 3;
+constexpr uint32_t FONT_MAJOR_VERSION = 4;
 constexpr uint32_t FONT_MINOR_VERSION = 0;
 constexpr size_t WFONT_NAME_LENGTH = 128;
+
+constexpr uint32_t FONT_SDF_CELL_PX = 48;
 
 /**
  * Per-glyph metrics stored in the .wsfont body.
@@ -93,6 +95,17 @@ struct WFontHeader
     CompressionType slugCompressionType{DEFAULT_FONT_COMPRESSION};
 
     /**
+     * Single-channel SDF atlas for outline/shadow effects. Fixed grid of sdfCellPx cells, glyph i at
+     * (i % sdfCols, i / sdfCols), each cell = planeBounds + sdfSpread em; R8, 0.5 = edge, >0.5 inside.
+     */
+    uint32_t sdfCellPx{0};
+    uint32_t sdfCols{0};
+    uint32_t sdfRows{0};
+    float sdfSpread{0.0f};
+    uint64_t sdfDataSize{0};
+    uint64_t sdfUncompressedSize{0};
+
+    /**
      * Contour outline tables for 3D text. contourGlyphCount==0 means no contours were baked (flat-only font).
      * When present, contourGlyphCount==glyphCount and the range table is indexed parallel to the glyph array.
      */
@@ -102,13 +115,14 @@ struct WFontHeader
 
     /**
      * Byte offsets from file start -- set by the reader after parsing end_header.
-     * Layout: [header text] [glyphCount x WGlyphInfo] [contourGlyphCount x WGlyphContourRange] [contourCount x WContourRange] [edgeCount x WFontEdge] [slug curve blob]
+     * Layout: [header text] [glyphCount x WGlyphInfo] [contourGlyphCount x WGlyphContourRange] [contourCount x WContourRange] [edgeCount x WFontEdge] [slug curve blob] [sdf atlas blob]
      */
     uint64_t glyphDataOffset{0};
     uint64_t glyphContourRangeOffset{0};
     uint64_t contourRangeOffset{0};
     uint64_t edgeDataOffset{0};
     uint64_t slugDataOffset{0};
+    uint64_t sdfDataOffset{0};
 };
 
 bool WriteWFontHeader(Core::Vector<std::byte>& out, const WFontHeader& header);

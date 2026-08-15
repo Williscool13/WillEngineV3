@@ -515,12 +515,12 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
                         ImGui::SeparatorText("Outline");
                         changed |= ImGui::ColorEdit4("Outline Color", &editMat.outlineColor.x);
-                        changed |= ImGui::SliderFloat("Outline Width", &editMat.outlineWidth, 0.0f, 0.475f);
+                        changed |= ImGui::SliderFloat("Outline Width (em)", &editMat.outlineWidth, 0.0f, 0.25f);
 
                         ImGui::SeparatorText("Shadow");
                         changed |= ImGui::ColorEdit4("Shadow Color", &editMat.shadowColor.x);
-                        changed |= ImGui::DragFloat2("Shadow Offset", &editMat.shadowOffset.x, 0.001f);
-                        changed |= ImGui::SliderFloat("Shadow Softness", &editMat.shadowSoftness, 0.0f, 1.0f);
+                        changed |= ImGui::DragFloat2("Shadow Offset (em)", &editMat.shadowOffset.x, 0.005f);
+                        changed |= ImGui::SliderFloat("Shadow Softness (em)", &editMat.shadowSoftness, 0.0f, 0.25f);
 
                         if (changed) {
                             materialManager->UpdateTextMaterial(id, editMat);

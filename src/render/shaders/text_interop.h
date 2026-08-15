@@ -12,6 +12,8 @@ import common_interop;
 #include "common_interop.h"
 #endif // __SLANG__
 
+SHADER_PUBLIC static const float SDF_SPREAD_EM = 0.25f;
+
 SHADER_PUBLIC struct WorldGlyphQuad
 {
     SHADER_PUBLIC float4 color;
@@ -19,6 +21,8 @@ SHADER_PUBLIC struct WorldGlyphQuad
     SHADER_PUBLIC float2 posMax;
     SHADER_PUBLIC float2 emMin;
     SHADER_PUBLIC float2 emMax;
+    SHADER_PUBLIC float2 sdfUvScale;
+    SHADER_PUBLIC float2 sdfUvBias;
     SHADER_PUBLIC uint32_t glyphTexelOffset;
     SHADER_PUBLIC uint32_t drawCallIndex;
     uint32_t _pad0;
