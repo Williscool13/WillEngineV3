@@ -71,6 +71,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData)
 {
+    if (pCallbackData->pMessage && strstr(pCallbackData->pMessage, "vkGetQueryPoolResults") != nullptr && strstr(pCallbackData->pMessage, "VK_NOT_READY") != nullptr) {
+        return VK_FALSE;
+    }
+
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         LOG_ERROR(Engine, "[Vulkan] {}", pCallbackData->pMessage);
     }

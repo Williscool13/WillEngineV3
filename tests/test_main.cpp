@@ -28,14 +28,18 @@ int main(int argc, char* argv[])
 {
     gTestMemory.Init({
         .persistentSize = 8ull * 1024 * 1024,
-        .assetsPoolSize = 8ull * 1024 * 1024,
         .physicsPoolSize = 8ull * 1024 * 1024,
-        .renderPoolSize = 8ull * 1024 * 1024,
         .arenaPoolSize = 32ull * 1024 * 1024,
         .generalPoolSize = 8ull * 1024 * 1024,
         .generalPoolBudget = 64ull * 1024 * 1024,
+        .assetsPoolSize = 8ull * 1024 * 1024,
+        .assetsPoolBudget = 64ull * 1024 * 1024,
         .assetsScratchPoolSize = 16ull * 1024 * 1024,
         .assetsScratchBudget = 512ull * 1024 * 1024,
+        .renderPoolSize = 8ull * 1024 * 1024,
+        .renderPoolBudget = 16ull * 1024 * 1024,
+        .vulkanPoolSize = 4ull * 1024 * 1024,
+        .vulkanPoolBudget = 16ull * 1024 * 1024,
     });
 
     meshopt_setAllocator(TestMeshoptAlloc, TestMeshoptFree);
