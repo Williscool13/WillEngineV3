@@ -377,7 +377,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
 
     // Primary miss: draw the environment map (matches the skybox pass reconstruction + Y flip).
-    if (depth <= 0.0) {
+    if (depth <= 1e-6) {
         float3 background = float3(0.0);
         if (pc.skyboxIndex >= 0) {
             float2 ndc = uv * 2.0 - 1.0;
