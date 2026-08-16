@@ -178,6 +178,11 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) {
             renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude);
         }
+        ImGui::SameLine();
+        bool motionBlurExclude = renderFlags.Has(RenderFlagsComponent::NO_MOTION_BLUR);
+        if (ImGui::Checkbox("Motion Blur Exclude", &motionBlurExclude)) {
+            renderFlags.Set(RenderFlagsComponent::NO_MOTION_BLUR, motionBlurExclude);
+        }
 
         auto* runtime = registry.try_get<MeshRuntime>(entity);
 

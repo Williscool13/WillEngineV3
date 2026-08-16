@@ -67,6 +67,7 @@ struct PostProcessConfiguration
     float motionBlurVelocityScale{0.8f}; // shutter fraction of inter-frame displacement
     float motionBlurTargetFps{60.0f}; // reference rate the shutter is normalized to; 0 = physical shutter (blur scales with frame time)
     float motionBlurDepthScale{1.0f}; // 1 / soft depth-classification band in view units
+    float motionBlurMaxRadiusPx{32.0f}; // cap on blur reach in output pixels; neighbor-max dilation grows to match
 
     bool bColorGradingEnabled{true};
     float colorGradingExposure = 0.0f; // EV bias folded into exposure before tonemapping

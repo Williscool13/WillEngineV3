@@ -26,11 +26,12 @@ agxMinEV|0xc1479538
 agxMaxEV|0x4080d58f
 khronosStartCompression|0x3f428f5c
 khronosDesaturation|0x3e19999a
-bMotionBlurEnabled|0
+bMotionBlurEnabled|1
 bMotionBlurObjectOnly|1
-motionBlurVelocityScale|0x3f4ccccd
+motionBlurVelocityScale|0x3fd2e3ce
 motionBlurTargetFps|0x42700000
 motionBlurDepthScale|0x3f800000
+motionBlurMaxRadiusPx|0x42000000
 bColorGradingEnabled|0
 colorGradingExposure|0x3ecccccd
 colorGradingContrast|0x3f8ccccd

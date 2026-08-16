@@ -561,6 +561,7 @@ void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w)
     w.Key("motionBlurVelocityScale", p.motionBlurVelocityScale);
     w.Key("motionBlurTargetFps", p.motionBlurTargetFps);
     w.Key("motionBlurDepthScale", p.motionBlurDepthScale);
+    w.Key("motionBlurMaxRadiusPx", p.motionBlurMaxRadiusPx);
     w.Key("bColorGradingEnabled", p.bColorGradingEnabled);
     w.Key("colorGradingExposure", p.colorGradingExposure);
     w.Key("colorGradingContrast", p.colorGradingContrast);
@@ -620,6 +621,7 @@ void Deserialize(const TextReader& r, Core::PostProcessConfiguration& p)
     p.motionBlurVelocityScale = r.Float("motionBlurVelocityScale", p.motionBlurVelocityScale);
     p.motionBlurTargetFps = r.Float("motionBlurTargetFps", p.motionBlurTargetFps);
     p.motionBlurDepthScale = r.Float("motionBlurDepthScale", p.motionBlurDepthScale);
+    p.motionBlurMaxRadiusPx = r.Float("motionBlurMaxRadiusPx", p.motionBlurMaxRadiusPx);
     p.bColorGradingEnabled = r.Bool("bColorGradingEnabled", p.bColorGradingEnabled);
     p.colorGradingExposure = r.Float("colorGradingExposure", p.colorGradingExposure);
     p.colorGradingContrast = r.Float("colorGradingContrast", p.colorGradingContrast);

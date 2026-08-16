@@ -1669,6 +1669,7 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
         ppF("Velocity Scale", &pp.motionBlurVelocityScale, defaults.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f", "Shutter fraction of the inter-frame displacement; 0.5 = cinematic 180-degree shutter.");
         ppF("Target FPS", &pp.motionBlurTargetFps, defaults.motionBlurTargetFps, 0.0f, 240.0f, "%.0f", "Frame rate the shutter is normalized to, so blur length stays constant as fps varies and hitches do not smear. 0 = physical shutter (blur grows with frame time).");
         ppF("Depth Scale", &pp.motionBlurDepthScale, defaults.motionBlurDepthScale, 0.1f, 10.0f, "%.2f", "1 / soft depth band (view units) for foreground/background classification. 1.0 = 1m band.");
+        ppF("Max Radius", &pp.motionBlurMaxRadiusPx, defaults.motionBlurMaxRadiusPx, 4.0f, 64.0f, "%.0f", "Cap on blur reach in output pixels. Faster movers saturate here and read as solid; tile dilation and sample count scale with it.");
     }
 
     if (ImGui::CollapsingHeader("Color Grading")) {

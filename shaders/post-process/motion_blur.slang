@@ -20,7 +20,7 @@ void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConst
 
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(srcCoord, 0));
     float depth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(srcCoord, 0)).r;
-    if ((gt1.w & GBUFFER1_LIT_BIT) == 0u || depth <= 0.0) {
+    if ((gt1.w & GBUFFER1_LIT_BIT) == 0u || (gt1.w & GBUFFER1_NO_MOTION_BLUR_BIT) != 0u || depth <= 0.0) {
         rdgStorageFloat2[pc.outputIndex][pixelCoord] = float2(0.0, 0.0);
         return;
     }
@@ -72,8 +72,8 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
     if (groupIndex == 0) {
         float2 maxVelocity = g_vel[0];
         float pixelLen = length(maxVelocity * 0.5 * float2(pc.velocityBufferSize));
-        if (pixelLen > float(POST_PROCESS_MOTION_BLUR_TILE_SIZE)) {
-            maxVelocity *= float(POST_PROCESS_MOTION_BLUR_TILE_SIZE) / pixelLen;
+        if (pixelLen > pc.maxRadiusPx) {
+            maxVelocity *= pc.maxRadiusPx / pixelLen;
         }
         rdgStorageFloat2[pc.tileMaxIndex][gid.xy] = maxVelocity;
     }
@@ -91,10 +91,9 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
     float maxVelocityLengthSq = 0.0;
     float2 maxVelocity = float2(0.0f, 0.0f);
 
-    [ForceUnroll]
-    for (int y = -1; y <= 1; ++y) {
-        [ForceUnroll]
-        for (int x = -1; x <= 1; ++x) {
+    int radius = int(pc.dilationRadius);
+    for (int y = -radius; y <= radius; ++y) {
+        for (int x = -radius; x <= radius; ++x) {
             int2 sampleCoord = int2(tileCoord) + int2(x, y);
 
             sampleCoord = clamp(sampleCoord, int2(0, 0), int2(pc.tileBufferSize) - int2(1, 1));
@@ -135,34 +134,40 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     float depthLinearizeMult = pc.sceneData.depthLinearizeMult;
     float depthLinearizeAdd = pc.sceneData.depthLinearizeAdd;
 
-    uint2 tileCoord = pixelCoord / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
     float3 centerColor = rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
 
-    // Tile velocities are already shutter-scaled and tile-clamped; per-pixel velocities below are raw and still need the scale
+    float noise = frac(52.9829189 * frac(0.06711056 * pixelCoord.x + 0.00583715 * pixelCoord.y));
+    float noiseSwap = frac(52.9829189 * frac(0.06711056 * pixelCoord.y + 0.00583715 * pixelCoord.x));
+
+    // Half-tile jittered lookup
+    int2 tileBufferSize = int2((pc.srcBufferSize + uint(POST_PROCESS_MOTION_BLUR_TILE_SIZE) - 1u) / uint(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
+    float2 tileJitter = (float2(noise, noiseSwap) - 0.5) * float(POST_PROCESS_MOTION_BLUR_TILE_SIZE);
+    int2 tileCoord = clamp(int2((float2(pixelCoord) + tileJitter) / float(POST_PROCESS_MOTION_BLUR_TILE_SIZE)), int2(0, 0), tileBufferSize - 1);
+
+    // Tile velocities are already shutter-scaled and radius-clamped; per-pixel velocities below are raw and still need the scale
     float2 blurDir = rdgTexturesFloat2[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg * 0.5;
     float blurLen = length(blurDir * pc.srcBufferSize);
     if (blurLen < 0.5) {
         rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
         return;
     }
-    if (blurLen > float(POST_PROCESS_MOTION_BLUR_TILE_SIZE)) {
-        blurDir *= float(POST_PROCESS_MOTION_BLUR_TILE_SIZE) / blurLen;
-        blurLen = float(POST_PROCESS_MOTION_BLUR_TILE_SIZE);
+    if (blurLen > pc.maxRadiusPx) {
+        blurDir *= pc.maxRadiusPx / blurLen;
+        blurLen = pc.maxRadiusPx;
     }
 
     float2 centerVelocityUv = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg * 0.5;
     int2 centerDepthCoord = min(int2(uv * float2(pc.renderExtent)), int2(pc.renderExtent) - 1);
     float centerViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(centerDepthCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
-    float centerSpreadLen = min(length(centerVelocityUv * pc.velocityScale * pc.srcBufferSize), float(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
+    float centerSpreadLen = min(length(centerVelocityUv * pc.velocityScale * pc.srcBufferSize), pc.maxRadiusPx);
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
     float weightAccum = 0.0;
     float sampleCount = 0.0;
 
-    float noise = frac(52.9829189 * frac(0.06711056 * pixelCoord.x + 0.00583715 * pixelCoord.y));
-
-    for (int i = 1; i <= POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2; ++i) {
-        float t = min((float(i) - 0.5 + noise) / float(POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2), 1.0);
+    int pairCount = clamp(int(ceil(blurLen * 0.5)), 2, POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2);
+    for (int i = 1; i <= pairCount; ++i) {
+        float t = min((float(i) - 0.5 + noise) / float(pairCount), 1.0);
         float offsetLen = t * blurLen;
 
         float3 pairColor[2] = { float3(0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0) };
@@ -177,12 +182,12 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
             pairValid[side] = all(sampleUV >= 0.0) && all(sampleUV <= 1.0);
             if (!pairValid[side]) { continue; }
 
-            int2 sampleCoord = int2(sampleUV * pc.srcBufferSize);
+            int2 sampleCoord = min(int2(sampleUV * pc.srcBufferSize), int2(pc.srcBufferSize) - 1);
             int2 sampleDepthCoord = min(int2(sampleUV * float2(pc.renderExtent)), int2(pc.renderExtent) - 1);
             pairColor[side] = rdgTexturesFloat4[pc.sceneColorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], sampleUV, 0).rgb;
             float sampleViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(sampleDepthCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
             float2 sampleVelocityUv = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).rg * 0.5;
-            float sampleSpreadLen = min(length(sampleVelocityUv * pc.velocityScale * pc.srcBufferSize), float(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
+            float sampleSpreadLen = min(length(sampleVelocityUv * pc.velocityScale * pc.srcBufferSize), pc.maxRadiusPx);
 
             float2 d = DepthCmp(centerViewZ, sampleViewZ, pc.depthScale);
             float2 s = SpreadCmp(offsetLen, float2(centerSpreadLen, sampleSpreadLen));

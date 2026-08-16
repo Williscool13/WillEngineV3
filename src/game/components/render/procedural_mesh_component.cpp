@@ -613,6 +613,11 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         if (ImGui::Checkbox("Probe Bake Exclude##proceduralmesh", &probeBakeExclude)) {
             renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude);
         }
+        ImGui::SameLine();
+        bool motionBlurExclude = renderFlags.Has(RenderFlagsComponent::NO_MOTION_BLUR);
+        if (ImGui::Checkbox("Motion Blur Exclude##proceduralmesh", &motionBlurExclude)) {
+            renderFlags.Set(RenderFlagsComponent::NO_MOTION_BLUR, motionBlurExclude);
+        }
 
         if (std::holds_alternative<std::monostate>(component.params)) {
             if (ImGui::BeginCombo("Shape", "")) {

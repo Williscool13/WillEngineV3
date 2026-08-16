@@ -32,6 +32,7 @@ struct RenderFlagsComponent
     static constexpr uint32_t VISIBLE = 1u << 0;
     static constexpr uint32_t PROBE_BAKE_INCLUDE = 1u << 1;
     static constexpr uint32_t DDGI_CONTRIBUTE = 1u << 2;
+    static constexpr uint32_t NO_MOTION_BLUR = 1u << 3;
     static constexpr uint32_t DEFAULT_FLAGS = VISIBLE | PROBE_BAKE_INCLUDE | DDGI_CONTRIBUTE;
 
     uint32_t flags{DEFAULT_FLAGS};
@@ -69,6 +70,7 @@ struct MeshRuntime
     Engine::StaticModelHandle modelHandle{};
     bool visible{true};
     bool ddgiVisible{true};
+    bool noMotionBlur{false};
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };

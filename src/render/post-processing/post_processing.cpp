@@ -182,6 +182,10 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     if (ctx.config.motionBlurTargetFps > 0.0f && ctx.deltaTime > 1e-6f) {
         velocityScale /= ctx.deltaTime * ctx.config.motionBlurTargetFps;
     }
+    velocityScale *= 0.5f;
+
+    const float maxRadiusPx = std::max(1.0f, ctx.config.motionBlurMaxRadiusPx);
+    const uint32_t dilationRadius = static_cast<uint32_t>(std::ceil(maxRadiusPx / static_cast<float>(POST_PROCESS_MOTION_BLUR_TILE_SIZE)));
 
     const uint32_t bObjectOnly = ctx.config.bMotionBlurObjectOnly ? 1u : 0u;
 
@@ -220,13 +224,14 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     RenderPass& motionBlurTiledMaxPass = graph.AddPass(SID("[Motion Blur] Tiled Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     motionBlurTiledMaxPass.ReadSampledImage(velocity);
     motionBlurTiledMaxPass.WriteStorageImage(SID("motion_blur_tiled_max"));
-    motionBlurTiledMaxPass.Execute([width, height, blurTiledX, blurTiledY, pipelines, velocity, velocityScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    motionBlurTiledMaxPass.Execute([width, height, blurTiledX, blurTiledY, pipelines, velocity, velocityScale, maxRadiusPx](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurTileVelocityPushConstant pc{
             .velocityBufferSize = {width, height},
             .tileBufferSize = {blurTiledX, blurTiledY},
             .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
             .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_tiled_max")),
             .velocityScale = velocityScale,
+            .maxRadiusPx = maxRadiusPx,
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_tile_max"));
@@ -238,11 +243,12 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     RenderPass& motionBlurNeighborMax = graph.AddPass(SID("[Motion Blur] Neighbor Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     motionBlurNeighborMax.ReadSampledImage(SID("motion_blur_tiled_max"));
     motionBlurNeighborMax.WriteStorageImage(SID("motion_blur_tiled_neighbor_max"));
-    motionBlurNeighborMax.Execute([blurTiledX, blurTiledY, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    motionBlurNeighborMax.Execute([blurTiledX, blurTiledY, pipelines, dilationRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurNeighborMaxPushConstant pc{
             .tileBufferSize = {blurTiledX, blurTiledY},
             .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("motion_blur_tiled_max")),
             .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_tiled_neighbor_max")),
+            .dilationRadius = dilationRadius,
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_neighbor_max"));
@@ -260,7 +266,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     motionBlurReconstructionPass.ReadSampledImage(depthStencil);
     motionBlurReconstructionPass.ReadSampledImage(SID("motion_blur_tiled_neighbor_max"));
     motionBlurReconstructionPass.WriteStorageImage(SID("motion_blur_output"));
-    motionBlurReconstructionPass.Execute([width, height, renderWidth, renderHeight, input, pipelines, velocity, depthStencil, velocityScale, depthScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    motionBlurReconstructionPass.Execute([width, height, renderWidth, renderHeight, input, pipelines, velocity, depthStencil, velocityScale, depthScale, maxRadiusPx](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurReconstructionPushConstant pc{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
             .srcBufferSize = {width, height},
@@ -272,6 +278,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_output")),
             .velocityScale = velocityScale,
             .depthScale = depthScale,
+            .maxRadiusPx = maxRadiusPx,
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_reconstruction"));

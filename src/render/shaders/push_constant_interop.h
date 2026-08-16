@@ -1163,8 +1163,8 @@ SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant
     SHADER_PUBLIC uint2 tileBufferSize;
     SHADER_PUBLIC uint32_t velocityBufferIndex;
     SHADER_PUBLIC uint32_t tileMaxIndex;
-    // Applied before the tile-radius clamp so the stored max describes the blur that will actually be gathered
     SHADER_PUBLIC float velocityScale;
+    SHADER_PUBLIC float maxRadiusPx;
 };
 
 SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant
@@ -1172,6 +1172,7 @@ SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant
     SHADER_PUBLIC uint2 tileBufferSize;
     SHADER_PUBLIC uint tileMaxIndex;
     SHADER_PUBLIC uint neighborMaxIndex;
+    SHADER_PUBLIC uint32_t dilationRadius;
 };
 
 SHADER_PUBLIC struct MotionBlurReconstructionPushConstant
@@ -1186,6 +1187,7 @@ SHADER_PUBLIC struct MotionBlurReconstructionPushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float velocityScale; // shutter fraction of inter-frame displacement
     SHADER_PUBLIC float depthScale; // 1 / soft depth-classification band in view units
+    SHADER_PUBLIC float maxRadiusPx;
 };
 
 SHADER_PUBLIC struct BloomThresholdPushConstant

@@ -1265,6 +1265,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         for (auto [entity, renderFlags, runtime] : state->registry.view<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
             runtime.visible = renderFlags.Has(Component::RenderFlagsComponent::VISIBLE);
             runtime.ddgiVisible = renderFlags.Has(Component::RenderFlagsComponent::DDGI_CONTRIBUTE);
+            runtime.noMotionBlur = renderFlags.Has(Component::RenderFlagsComponent::NO_MOTION_BLUR);
         }
     }
 
@@ -1314,6 +1315,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     .blasDeviceAddress = inst.blasDeviceAddress,
                     .emissiveTriLightBase = triBase,
                     .ddgiVisible = runtime.ddgiVisible,
+                    .noMotionBlur = runtime.noMotionBlur,
                 };
             }
         }

@@ -1862,7 +1862,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             .stableId = inst.stableId,
             .lightIndex = inst.lightIndex,
             .emissiveTriLightBase = inst.emissiveTriLightBase,
-            .flags = 0u,
+            .flags = inst.noMotionBlur ? INSTANCE_FLAG_NO_MOTION_BLUR : 0u,
         };
     }
 
