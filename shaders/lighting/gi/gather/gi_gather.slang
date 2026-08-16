@@ -18,7 +18,7 @@ import reflection_probe_interop;
 import reflection_probe_common;
 
 // =============== Shader Summary ============
-// One cosine-weighted ray per half-res pixel, zero shading at the hit: cache radiance, else albedo * DDGI irradiance (one material fetch). MC-projected into per-channel 2-band SH, evaluated at the full-res normal at composite.
+// One cosine-weighted ray per gather-res (half or quarter res) pixel, zero shading at the hit: cache radiance, else albedo * DDGI irradiance (one material fetch). MC-projected into per-channel 2-band SH, evaluated at the full-res normal at composite.
 // Sky misses do not feed the SH; the miss fraction goes to a scalar sky-visibility channel, filtered separately and multiplied by prefiltered sky irradiance at upscale.
 
 static const float GI_GATHER_MAX_RADIANCE = 20.0;
@@ -157,7 +157,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
         return;
     }
 
-    uint2 pixel = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent);
+    uint2 pixel = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent, pc.gatherScale);
 
     float4 shR = float4(0.0);
     float4 shG = float4(0.0);

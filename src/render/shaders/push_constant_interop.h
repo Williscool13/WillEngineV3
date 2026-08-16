@@ -753,7 +753,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t rayCount;
     SHADER_PUBLIC uint32_t giHistoryIndex;
     SHADER_PUBLIC uint32_t varGuideOutIndex;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t gatherScale;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -776,6 +776,8 @@ SHADER_PUBLIC struct GIDenoisePushConstant
     SHADER_PUBLIC float chromaLumaPower;
     SHADER_PUBLIC uint32_t srcSkyVisIndex;
     SHADER_PUBLIC uint32_t dstSkyVisIndex;
+    SHADER_PUBLIC uint32_t gatherScale;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct GIUpscalePushConstant
@@ -811,7 +813,7 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t bMomentsValid;
     SHADER_PUBLIC uint32_t motionTileIndex;
     SHADER_PUBLIC uint32_t varGuideIndex;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t gatherScale;
 };
 
 SHADER_PUBLIC struct GIMotionTileMaxPushConstant
@@ -1384,7 +1386,7 @@ SHADER_PUBLIC struct GIGatherDebugPushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t mode;
     SHADER_PUBLIC uint32_t varGuideIndex;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t gatherScale;
 };
 
 SHADER_PUBLIC struct ClusterGridDebugPushConstant

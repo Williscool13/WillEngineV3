@@ -13,7 +13,7 @@
 
 namespace Render
 {
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier)
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(RADIANCE_CACHE_ENTRIES) || !graph.HasBuffer(RADIANCE_CACHE_CELLS)
         || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER)
@@ -21,7 +21,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         return {};
     }
 
-    const Core::Array<uint32_t, 2> gatherExtent = {(renderExtent[0] + 1u) / 2u, (renderExtent[1] + 1u) / 2u};
+    const uint32_t gatherScale = bQuarterRes ? 4u : 2u;
+    const Core::Array<uint32_t, 2> gatherExtent = {(renderExtent[0] + gatherScale - 1u) / gatherScale, (renderExtent[1] + gatherScale - 1u) / gatherScale};
     const StringID gatherShR = bDenoise ? GI_GATHER_RAW_SH_R : GI_GATHER_SH_R;
     const StringID gatherShG = bDenoise ? GI_GATHER_RAW_SH_G : GI_GATHER_SH_G;
     const StringID gatherShB = bDenoise ? GI_GATHER_RAW_SH_B : GI_GATHER_SH_B;
@@ -30,7 +31,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateTexture(gatherShG, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(gatherShB, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(gatherSkyVis, TextureInfo{VK_FORMAT_R8_UNORM, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
-    // Variance guide: DDGI-predicted relative deviation of a 1spp gather (encoded /GI_GATHER_VARIANCE_GUIDE_SCALE); probe-smooth, so half-res R8 suffices. Not denoised.
+    // Variance guide: DDGI-predicted relative deviation of a 1spp gather (encoded /GI_GATHER_VARIANCE_GUIDE_SCALE); probe-smooth, so gather-res R8 suffices. Not denoised.
     graph.CreateTexture(GI_GATHER_VARIANCE_GUIDE, TextureInfo{VK_FORMAT_R8_UNORM, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(GI_GATHER_DATA, TextureInfo{VK_FORMAT_R16G16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(GI_GATHER_GUIDE, TextureInfo{VK_FORMAT_R32G32_UINT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
@@ -73,7 +74,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
     const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, bCascades, bScreenSpace, bDemodulate, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute,
+    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, bCascades, bScreenSpace, bDemodulate, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy, bakedDiffuseClampK = viewFamily.bakedDiffuseClampK,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_gather"));
@@ -121,6 +122,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .rayCount = glm::clamp(raysPerPixel, 1u, GI_GATHER_MAX_RAYS_PER_PIXEL),
             .giHistoryIndex = bDemodulate ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_HISTORY) : ~0x0u,
             .varGuideOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
+            .gatherScale = gatherScale,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (gatherExtent[0] + 7u) / 8u, (gatherExtent[1] + 7u) / 8u, 1);
@@ -173,7 +175,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
                     blur.WriteStorageImage(dstSkyVis);
                 }
 
-                blur.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, direction, stepSize, srcShR, srcShG, srcShB, dstShR, dstShG, dstShB, srcSkyVis, dstSkyVis, bAO, bChromaPass, chromaLumaPower](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                blur.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, direction, stepSize, srcShR, srcShG, srcShB, dstShR, dstShG, dstShB, srcSkyVis, dstSkyVis, bAO, bChromaPass, chromaLumaPower](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bChromaPass ? SID("gi_denoise_chroma") : SID("gi_denoise"));
                     if (!pipelineEntry) {
                         return;
@@ -199,6 +201,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
                         .chromaLumaPower = chromaLumaPower,
                         .srcSkyVisIndex = bChromaPass ? ~0x0u : graph.GetSampledImageViewDescriptorIndex(srcSkyVis),
                         .dstSkyVisIndex = bChromaPass ? ~0x0u : graph.GetStorageImageViewDescriptorIndex(dstSkyVis),
+                        .gatherScale = gatherScale,
                     };
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, (gatherExtent[0] + 15u) / 16u, (gatherExtent[1] + 15u) / 16u, 1);
@@ -292,7 +295,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     const bool bUpscaleCascades = AddDDGISampleDependencies(graph, upscale);
     upscale.WriteStorageImage(GI_GATHER_RESOLVED);
 
-    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, bTemporal, bMoments, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute,
+    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bMoments, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_upscale"));
@@ -333,6 +336,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .bMomentsValid = bMoments ? 1u : 0u,
             .motionTileIndex = graph.GetSampledImageViewDescriptorIndex(GI_MOTION_TILED_NEIGHBOR_MAX),
             .varGuideIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
+            .gatherScale = gatherScale,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
@@ -387,7 +391,7 @@ void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Co
     });
 }
 
-void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, int32_t mode)
+void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, int32_t mode, bool bQuarterRes)
 {
     if (mode <= 0 || !graph.HasTexture(GI_GATHER_RESOLVED) || !graph.HasTexture(GI_GATHER_DATA)) {
         return;
@@ -404,7 +408,7 @@ void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Co
         pass.ReadSampledImage(GI_GATHER_VARIANCE_GUIDE);
     }
     pass.WriteStorageImage(GI_GATHER_DEBUG_TARGET);
-    pass.Execute([pipelineManager, renderExtent, mode, bVarGuide](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, renderExtent, mode, bVarGuide, bQuarterRes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_gather_debug"));
         if (!pipelineEntry) {
             return;
@@ -419,6 +423,7 @@ void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Co
             // GIGatherDebugColor keeps the composite-era 2-based numbering.
             .mode = static_cast<uint32_t>(mode) + 1u,
             .varGuideIndex = bVarGuide ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE) : ~0x0u,
+            .gatherScale = bQuarterRes ? 4u : 2u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);

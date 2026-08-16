@@ -434,6 +434,7 @@ struct DDGIParams
 
     bool bApplyToLighting{true};
     bool bFinalGather{false};
+    bool bFinalGatherQuarterRes{false};
     bool bFinalGatherDenoise{true};
     bool bFinalGatherChromaDenoise{true};
     uint32_t gatherChromaDenoisePasses{2};

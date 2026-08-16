@@ -44,7 +44,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         bool inside = all(pos >= int2(0)) && all(pos < int2(pc.gatherExtent));
         int2 p = clamp(pos, int2(0), int2(pc.gatherExtent) - 1);
 
-        uint2 fullPixel = GIGatherRepresentativePixel(uint2(p), pc.renderExtent);
+        uint2 fullPixel = GIGatherRepresentativePixel(uint2(p), pc.renderExtent, pc.gatherScale);
         uint2 g = rdgTexturesUInt2[pc.guideIndex].Load(int3(p, 0)).xy;
         float2 data = rdgTexturesFloat2[pc.dataIndex].Load(int3(p, 0)).xy;
         // Backface samples carry no radiance; excluding them here removes them as taps and reduces the center to a passthrough.
@@ -110,7 +110,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
                 sumB *= fireflyScale;
             }
         }
-        uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent);
+        uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent, pc.gatherScale);
         float2 centerUv = (float2(centerFull) + 0.5) / float2(pc.renderExtent);
         float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, centerUv, centerViewZ);
         float invPlaneSigma = 1.0 / (GI_DENOISE_PLANE_DIST_SIGMA * abs(centerViewZ));
@@ -128,7 +128,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             float tapViewZ = sViewZ[idx];
             if (tapViewZ == 0.0) { continue; }
 
-            uint2 tapFull = GIGatherRepresentativePixel(uint2(int2(gatherPixel) + dir * tapOffset), pc.renderExtent);
+            uint2 tapFull = GIGatherRepresentativePixel(uint2(int2(gatherPixel) + dir * tapOffset), pc.renderExtent, pc.gatherScale);
             float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
             float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
             float3 tapNormal = UnpackNormalOct16(sNormal[idx]);
@@ -196,7 +196,7 @@ void ComputeGIDenoiseChroma(uniform GIDenoisePushConstant pc, uint3 dtid : SV_Di
         float3 centerNormal = UnpackNormalOct16(centerGuide.x);
         bool bCenterFar = uint(centerData.y + 0.5) == GI_GATHER_TIER_SKY || centerData.x >= GI_DENOISE_HITT_FAR_METERS;
         float centerHitT = bCenterFar ? -1.0 : centerData.x;
-        uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent);
+        uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent, pc.gatherScale);
         float centerAO = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(centerFull, 0)).y : 1.0;
         float2 centerUv = (float2(centerFull) + 0.5) / float2(pc.renderExtent);
         float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, centerUv, centerViewZ);
@@ -213,7 +213,7 @@ void ComputeGIDenoiseChroma(uniform GIDenoisePushConstant pc, uint3 dtid : SV_Di
             float tapViewZ = asfloat(tapGuide.y);
             if (tapViewZ == 0.0 || uint(tapData.y + 0.5) == GI_GATHER_TIER_BACKFACE) { continue; }
 
-            uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent);
+            uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent, pc.gatherScale);
             float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
             float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
             bool bTapFar = uint(tapData.y + 0.5) == GI_GATHER_TIER_SKY || tapData.x >= GI_DENOISE_HITT_FAR_METERS;

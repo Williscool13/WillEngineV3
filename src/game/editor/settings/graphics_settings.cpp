@@ -1175,6 +1175,11 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Counter accumulation of the resolved gather across frames (up to 32). Off = this frame's result only; with Denoise also off the composite shows the raw gather.");
             }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Quarter Res##gigather", &ddgi.bFinalGatherQuarterRes)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Gather at quarter render resolution instead of half: 1/4 the rays and denoise cost. Each gather texel covers 4x4 full-res pixels, so contact detail leans harder on the bilateral guides and history.");
+            }
             int gatherRaysPerPixel = static_cast<int>(ddgi.gatherRaysPerPixel);
             if (Widgets::SliderInt("Rays Per Pixel##gigather", &gatherRaysPerPixel, 1, static_cast<int>(Render::GI_GATHER_MAX_RAYS_PER_PIXEL), {
                                        .tooltip = "Gather rays per half-res pixel, uniform across the frame so cost stays flat and rays stay coherent. Relative noise falls as 1/sqrt(n), which is the only lever that reaches the bright-to-dark gradients near small light slits, where one ray finds the aperture too rarely for any reweighting to help. Trace cost is linear.", .reset = true,

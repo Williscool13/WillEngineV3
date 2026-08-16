@@ -66,9 +66,10 @@ struct FinalGatherFrame
  * @param raysPerPixel Gather rays per half-res pixel, clamped to [1, GI_GATHER_MAX_RAYS_PER_PIXEL]. Uniform across the frame, so cost is flat and rays stay coherent; relative noise falls as 1/sqrt(n), which is the only lever on dark bright-to-dark gradients where a single ray finds a bright aperture too rarely.
  * @param bDebugView A GI-gather debug view is active; disable the screen tier so the debug color written into the composite is not fed back as radiance.
  * @param bDisableScreenTier Disable the lit-history screen tier so ray hits resolve only against world-space sources; set while the GI field is frozen (lit history is view-dependent and keeps evolving, which face-seams probe bakes).
+ * @param bQuarterRes Gather at quarter render resolution instead of half: 1/4 the rays and denoise work; the upscale footprint spans 4x4 full-res pixels per gather texel, so sub-footprint detail leans harder on the guides and history.
  * @return
  */
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier);
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes);
 
 /**
  * Full-screen GI leak deconstruction at the primary surface, written to gi_deconstruct_target for the debug visualizer.
@@ -87,8 +88,9 @@ void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Co
  * @param pipelineManager
  * @param renderExtent
  * @param mode UI mode: 1 resolved irradiance, 2 fallback tier, 3 hit distance, 4 accumulation, 5 first-ray escape
+ * @param bQuarterRes Must match the SetupFinalGather that produced this frame's gather targets.
  */
-void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, int32_t mode);
+void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, int32_t mode, bool bQuarterRes);
 } // Render
 
 #endif //WILL_ENGINE_FINAL_GATHER_PASSES_H

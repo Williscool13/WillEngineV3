@@ -21,9 +21,9 @@ public static const uint GI_GATHER_TIER_INVALID = 5u;
 public static const uint GI_GATHER_TIER_BAKED = 6u;
 
 /** The full-res pixel a gather texel represents; fixed to the quad's (0,0) so guide geometry (depth/normal/hitT) is stationary. Deliberately not frame-cycled: cycling strobed depth edges every 4 frames; temporal supersampling lives in the ray RNG instead. */
-public uint2 GIGatherRepresentativePixel(uint2 gatherPixel, uint2 renderExtent)
+public uint2 GIGatherRepresentativePixel(uint2 gatherPixel, uint2 renderExtent, uint gatherScale)
 {
-    return min(gatherPixel * 2u, renderExtent - 1u);
+    return min(gatherPixel * gatherScale, renderExtent - 1u);
 }
 
 /** Bilinear-samples the half-res gather SH, evaluated at the pixel's world normal; returns indirectDiffuse (E/pi). */
@@ -138,7 +138,7 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
 }
 
 /** Debug views: 2 = resolved irradiance, 3 = fallback tier (cyan screen / green cache / blue probe / yellow sky / red backface / magenta baked), 4 = hit distance, 5 = temporal accumulation count, 6 = first-ray escape (yellow sky miss, magenta backface, front-face hitT green-to-red over 2-10m). */
-public float3 GIGatherDebugColor(uint dataIndex, uint resolvedIndex, uint2 pixel, uint mode, float3 indirectDiffuse)
+public float3 GIGatherDebugColor(uint dataIndex, uint resolvedIndex, uint2 pixel, uint mode, float3 indirectDiffuse, uint gatherScale)
 {
     if (mode == 2u) {
         return indirectDiffuse;
@@ -146,7 +146,7 @@ public float3 GIGatherDebugColor(uint dataIndex, uint resolvedIndex, uint2 pixel
     if (mode == 5u) {
         return float3(rdgTexturesFloat4[resolvedIndex].Load(int3(pixel, 0)).a / GI_GATHER_MAX_ACCUM);
     }
-    float2 data = rdgTexturesFloat2[dataIndex].Load(int3(pixel >> 1u, 0));
+    float2 data = rdgTexturesFloat2[dataIndex].Load(int3(pixel / gatherScale, 0));
     if (mode == 3u) {
         switch (uint(data.y)) {
             case 0u: return float3(0.1, 0.9, 0.9);

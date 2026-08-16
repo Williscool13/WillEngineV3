@@ -153,6 +153,7 @@ brightnessThreshold|0x3dcccccd
 distanceExponent|0x42480000
 bApplyToLighting|1
 bFinalGather|1
+bFinalGatherQuarterRes|1
 bFinalGatherDenoise|1
 bFinalGatherChromaDenoise|0
 gatherChromaDenoisePasses|1

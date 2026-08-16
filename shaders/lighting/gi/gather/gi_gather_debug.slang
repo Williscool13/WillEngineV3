@@ -15,7 +15,7 @@ void ComputeGIGatherDebug(uniform GIGatherDebugPushConstant pc, uint3 dtid: SV_D
         return;
     }
     if (pc.mode == 7u) {
-        float g = pc.varGuideIndex != ~0x0u ? rdgTexturesFloat[pc.varGuideIndex].Load(int3(pixel >> 1u, 0)).r : 0.0;
+        float g = pc.varGuideIndex != ~0x0u ? rdgTexturesFloat[pc.varGuideIndex].Load(int3(pixel / pc.gatherScale, 0)).r : 0.0;
         float relDev = g * GI_GATHER_VARIANCE_GUIDE_SCALE;
         // Below 1 stays a gray ramp; banded above so the magnitude reads at a glance.
         float3 color = float3(relDev);
@@ -32,6 +32,6 @@ void ComputeGIGatherDebug(uniform GIGatherDebugPushConstant pc, uint3 dtid: SV_D
         return;
     }
     float3 indirectDiffuse = rdgTexturesFloat4[pc.resolvedIndex].Load(int3(pixel, 0)).rgb;
-    float3 color = GIGatherDebugColor(pc.dataIndex, pc.resolvedIndex, pixel, pc.mode, indirectDiffuse);
+    float3 color = GIGatherDebugColor(pc.dataIndex, pc.resolvedIndex, pixel, pc.mode, indirectDiffuse, pc.gatherScale);
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(color, 1.0);
 }

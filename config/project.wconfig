@@ -4,7 +4,7 @@ frameLimitTarget|60
 bAutoSaveProjectConfig|0
 bAutoSaveLighting|0
 bAutoSavePostProcess|1
-activeLightingProfile|ReSTIR
+activeLightingProfile|Ground-Truth DI
 activePostProcessProfile|main_post_process
 activeInputProfile|
 aa

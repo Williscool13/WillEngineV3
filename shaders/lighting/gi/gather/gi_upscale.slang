@@ -10,7 +10,7 @@ import ddgi_common;
 import reflection_probe_interop;
 import reflection_probe_common;
 
-// Full-res resolve: bilateral upsample of the gather SH from the pixel's nearest 2x2 half-res footprint (the own texel is always among the taps), evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection.
+// Full-res resolve: bilateral upsample of the gather SH from the pixel's nearest 2x2 gather-res footprint (the own texel is always among the taps), evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection.
 
 static const float GI_UPSCALE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_UPSCALE_NORMAL_POWER = 32.0;
@@ -92,7 +92,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     // Unlike the temporal moments below it does not reset on motion/disocclusion and is not estimated from the noisy signal itself; 0 where unavailable = current behavior.
     float priorRelDev = 0.0;
     if (pc.varGuideIndex != ~0x0u) {
-        priorRelDev = rdgTexturesFloat[pc.varGuideIndex].Load(int3(pixel >> 1u, 0)).r * GI_GATHER_VARIANCE_GUIDE_SCALE;
+        priorRelDev = rdgTexturesFloat[pc.varGuideIndex].Load(int3(pixel / pc.gatherScale, 0)).r * GI_GATHER_VARIANCE_GUIDE_SCALE;
     }
 
     // Restores the sky the gather SH no longer carries: filtered miss fraction times prefiltered sky irradiance.
@@ -114,14 +114,14 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float3 irrM1 = float3(0.0);
     float3 irrM2 = float3(0.0);
     float clampTaps = 0.0;
-    float2 halfCoord = (float2(pixel) + 0.5) * 0.5;
-    int2 footprintBase = int2(floor(halfCoord - 0.5));
-    float2 footprintFrac = halfCoord - 0.5 - float2(footprintBase);
+    float2 gatherCoord = (float2(pixel) + 0.5) / float(pc.gatherScale);
+    int2 footprintBase = int2(floor(gatherCoord - 0.5));
+    float2 footprintFrac = gatherCoord - 0.5 - float2(footprintBase);
     bool bAnyBackfaceTap = false;
     [unroll]
     for (uint i = 0; i < 4; i++) {
         int2 tap = clamp(footprintBase + int2(int(i & 1u), int(i >> 1u)), int2(0), int2(pc.gatherExtent) - 1);
-        uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent);
+        uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent, pc.gatherScale);
         uint2 tapGuide = rdgTexturesUInt2[pc.guideIndex].Load(int3(tap, 0)).xy;
         float tapTier = rdgTexturesFloat2[pc.dataIndex].Load(int3(tap, 0)).y;
         if (asfloat(tapGuide.y) == 0.0) { continue; }
@@ -202,7 +202,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     if (bHasCurrent && nBlend < GI_UPSCALE_HISTORY_FIX_FRAMES) {
         int stride = int(round(GI_UPSCALE_HISTORY_FIX_STRIDE / (1.0 + nBlend)));
         if (stride >= 1) {
-            int2 gatherCenter = int2(pixel >> 1u);
+            int2 gatherCenter = int2(pixel / pc.gatherScale);
             float3 fixSum = current;
             float fixW = 1.0;
             [unroll]
@@ -215,7 +215,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                     if (asfloat(tapGuide.y) == 0.0) { continue; }
                     if (uint(rdgTexturesFloat2[pc.dataIndex].Load(int3(tap, 0)).y + 0.5) == GI_GATHER_TIER_BACKFACE) { continue; }
 
-                    uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent);
+                    uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent, pc.gatherScale);
                     float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
                     float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, asfloat(tapGuide.y));
                     float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
