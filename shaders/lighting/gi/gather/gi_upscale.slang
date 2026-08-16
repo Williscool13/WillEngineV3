@@ -310,28 +310,16 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
 groupshared float g_motionLenSq[GI_MOTION_TILE_SIZE * GI_MOTION_TILE_SIZE];
 groupshared float2 g_motion[GI_MOTION_TILE_SIZE * GI_MOTION_TILE_SIZE];
 
-// Per-tile max object motion (gbuffer MV minus camera-static reprojection, UV domain).Dilated by the motion blur neighbor-max pass, consumed by the upscale's history cap.
+// Per-tile max object motion from the shared object_motion extract (UV domain). Dilated by the motion blur neighbor-max pass, consumed by the upscale's history cap.
 [shader("compute")]
 [numthreads(GI_MOTION_TILE_SIZE, GI_MOTION_TILE_SIZE, 1)]
 void ComputeGIMotionTileMax(uniform GIMotionTileMaxPushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint groupIndex : SV_GroupIndex)
 {
     uint2 pixel = gid.xy * uint(GI_MOTION_TILE_SIZE) + gtid.xy;
-    SceneData scene = pc.sceneData[pc.sceneDataIndex];
 
     float2 objectMotion = float2(0.0);
     if (all(pixel < pc.renderExtent)) {
-        float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
-        uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
-        if (depth > 0.0 && (gt1.w & 1u) != 0u) {
-            float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
-            float viewZ = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-            float3 xv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewZ);
-            float4 prevClip = mul(scene.prevViewProj, float4(mul(scene.invView, float4(xv, 1.0)).xyz, 1.0));
-            if (prevClip.w > 0.0) {
-                float2 staticDeltaUv = ((prevClip.xy / prevClip.w) * 0.5 + 0.5) - uv - scene.jitter * 0.5 + scene.prevJitter * 0.5;
-                objectMotion = UnpackMotionVectors(gt1.g) * 0.5 - staticDeltaUv;
-            }
-        }
+        objectMotion = rdgTexturesFloat4[pc.objectMotionIndex].Load(int3(pixel, 0)).rg;
     }
 
     g_motionLenSq[groupIndex] = dot(objectMotion, objectMotion);

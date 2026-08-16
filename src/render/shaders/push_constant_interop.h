@@ -818,11 +818,8 @@ SHADER_PUBLIC struct GIUpscalePushConstant
 
 SHADER_PUBLIC struct GIMotionTileMaxPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
-    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t objectMotionIndex;
     SHADER_PUBLIC uint32_t tileMaxIndex;
 };
 
@@ -1146,15 +1143,27 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
     SHADER_PUBLIC uint32_t totalPixels;
 };
 
+SHADER_PUBLIC struct ObjectMotionExtractPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+};
+
 SHADER_PUBLIC struct MotionBlurVelocityExtractPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 extent;
     SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
-    SHADER_PUBLIC uint32_t depthBufferIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex; // full-camera mode only, ~0u in object-only mode
+    SHADER_PUBLIC uint32_t depthBufferIndex; // full-camera mode only
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t bObjectOnly; // 0 keeps full camera+object motion
+    SHADER_PUBLIC uint32_t objectMotionIndex; // object-only mode source, ~0u otherwise
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant
@@ -1173,16 +1182,18 @@ SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant
     SHADER_PUBLIC uint tileMaxIndex;
     SHADER_PUBLIC uint neighborMaxIndex;
     SHADER_PUBLIC uint32_t dilationRadius;
+    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indirectArgsBuffer;
+    SHADER_PUBLIC uint2 velocityBufferSize;
 };
 
 SHADER_PUBLIC struct MotionBlurReconstructionPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer;
     SHADER_PUBLIC uint2 srcBufferSize;
-    SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneColorIndex;
     SHADER_PUBLIC uint32_t velocityBufferIndex;
-    SHADER_PUBLIC uint32_t depthBufferIndex;
     SHADER_PUBLIC uint32_t tileNeighborMaxIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float velocityScale; // shutter fraction of inter-frame displacement

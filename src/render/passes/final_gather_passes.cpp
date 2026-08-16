@@ -13,6 +13,36 @@
 
 namespace Render
 {
+void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex)
+{
+    if (graph.HasTexture(OBJECT_MOTION)) { return; }
+    graph.CreateTexture(OBJECT_MOTION, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+
+    RenderPass& pass = graph.AddPass(SID("Object Motion Extract"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Untagged);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.depthCopy);
+    pass.WriteStorageImage(OBJECT_MOTION);
+    pass.Execute([pipelineManager, sceneIndex, renderExtent, gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("object_motion_extract"));
+        if (!pipelineEntry) {
+            return;
+        }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        ObjectMotionExtractPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .sceneDataIndex = sceneIndex,
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(OBJECT_MOTION),
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (renderExtent[0] + POST_PROCESS_MOTION_BLUR_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_X, (renderExtent[1] + POST_PROCESS_MOTION_BLUR_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1);
+    });
+}
+
 FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(RADIANCE_CACHE_ENTRIES) || !graph.HasBuffer(RADIANCE_CACHE_CELLS)
@@ -213,16 +243,16 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateTexture(GI_GATHER_RESOLVED, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(GI_GATHER_MOMENTS, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
+    SetupObjectMotion(graph, pipelineManager, renderExtent, targets, sceneIndex);
+
     const Core::Array<uint32_t, 2> motionTileExtent = {(renderExtent[0] + GI_MOTION_TILE_SIZE - 1u) / GI_MOTION_TILE_SIZE, (renderExtent[1] + GI_MOTION_TILE_SIZE - 1u) / GI_MOTION_TILE_SIZE};
     graph.CreateTexture(GI_MOTION_TILED_MAX, TextureInfo{VK_FORMAT_R16G16_SFLOAT, motionTileExtent[0], motionTileExtent[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(GI_MOTION_TILED_NEIGHBOR_MAX, TextureInfo{VK_FORMAT_R16G16_SFLOAT, motionTileExtent[0], motionTileExtent[1], 1}, {std::nullopt}, true);
 
     RenderPass& motionTileMax = graph.AddPass(SID("GI Motion Tile Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
-    motionTileMax.ReadBuffer(SCENE_DATA_BUFFER);
-    motionTileMax.ReadSampledImage(targets.gbufferOne);
-    motionTileMax.ReadSampledImage(targets.depthCopy);
+    motionTileMax.ReadSampledImage(OBJECT_MOTION);
     motionTileMax.WriteStorageImage(GI_MOTION_TILED_MAX);
-    motionTileMax.Execute([pipelineManager, sceneIndex, renderExtent, motionTileExtent, gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    motionTileMax.Execute([pipelineManager, renderExtent, motionTileExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_motion_tile_max"));
         if (!pipelineEntry) {
             return;
@@ -230,11 +260,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
         GIMotionTileMaxPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .renderExtent = {renderExtent[0], renderExtent[1]},
-            .sceneDataIndex = sceneIndex,
-            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+            .objectMotionIndex = graph.GetSampledImageViewDescriptorIndex(OBJECT_MOTION),
             .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex(GI_MOTION_TILED_MAX),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

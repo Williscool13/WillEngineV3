@@ -38,6 +38,7 @@ inline const StringID GI_GATHER_MOMENTS = SID("gi_gather_moments");
 inline const StringID GI_GATHER_MOMENTS_HISTORY = SID("gi_gather_moments_history");
 inline const StringID GI_MOTION_TILED_MAX = SID("gi_motion_tiled_max");
 inline const StringID GI_MOTION_TILED_NEIGHBOR_MAX = SID("gi_motion_tiled_neighbor_max");
+inline const StringID OBJECT_MOTION = SID("object_motion");
 inline const StringID GI_DECONSTRUCT_TARGET = SID("gi_deconstruct_target");
 inline const StringID GI_GATHER_DEBUG_TARGET = SID("gi_gather_debug_target");
 
@@ -48,6 +49,12 @@ struct FinalGatherFrame
 {
     bool bValid{false};
 };
+
+/**
+ * Shared per-pixel object motion at render extent, RGBA16F (motionUv.xy = gbuffer MV minus camera-static reprojection, linear viewZ, motion blur mask).
+ * Idempotent; the GI motion tile max and object-only motion blur both call it and the first caller adds the pass.
+ */
+void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex);
 
 /**
  * TDA-style final gather: one cosine-weighted ray per half-res pixel, radiance cache read at the hit (probes as fallback, skybox on miss), projected into per-channel 2-band SH targets.

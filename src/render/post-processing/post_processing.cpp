@@ -12,6 +12,7 @@
 #include "render/interface/render_interface.h"
 #include "render/render-graph/render_graph.h"
 #include "render/render-graph/render_pass.h"
+#include "render/passes/final_gather_passes.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/shaders/constants_interop.h"
 #include "render/shaders/push_constant_interop.h"
@@ -89,7 +90,7 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
 
     if (!graph.HasBuffer(SID("luminance_buffer"))) {
         graph.CreateBuffer(SID("luminance_buffer"), sizeof(float), false);
-        auto& initPass = graph.AddPass(SID("[Exposure] Init Luminance"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::PostProcessing);
+        auto& initPass = graph.AddPass(SID("[Exposure] Init Luminance"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
         initPass.WriteTransferBuffer(SID("luminance_buffer"));
         initPass.Execute([target = config.exposureTargetLuminance](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(SID("luminance_buffer")), 0, sizeof(float), &target);
@@ -187,23 +188,31 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     const float maxRadiusPx = std::max(1.0f, ctx.config.motionBlurMaxRadiusPx);
     const uint32_t dilationRadius = static_cast<uint32_t>(std::ceil(maxRadiusPx / static_cast<float>(POST_PROCESS_MOTION_BLUR_TILE_SIZE)));
 
-    const uint32_t bObjectOnly = ctx.config.bMotionBlurObjectOnly ? 1u : 0u;
+    const bool bObjectOnly = ctx.config.bMotionBlurObjectOnly;
+    if (bObjectOnly) {
+        SetupObjectMotion(graph, pipelines, ctx.preAaExtent, ctx.targets, 0);
+    }
 
-    graph.CreateTexture(SID("motion_blur_velocity"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, width, height, 1}, std::nullopt, true);
+    graph.CreateTexture(SID("motion_blur_velocity"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1}, std::nullopt, true);
     RenderPass& velocityExtractPass = graph.AddPass(SID("[Motion Blur] Velocity Extract"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     velocityExtractPass.ReadBuffer(SID("scene_data"));
-    velocityExtractPass.ReadSampledImage(velocity);
-    velocityExtractPass.ReadSampledImage(depthStencil);
+    if (bObjectOnly) {
+        velocityExtractPass.ReadSampledImage(OBJECT_MOTION);
+    } else {
+        velocityExtractPass.ReadSampledImage(velocity);
+        velocityExtractPass.ReadSampledImage(depthStencil);
+    }
     velocityExtractPass.WriteStorageImage(SID("motion_blur_velocity"));
     velocityExtractPass.Execute([width, height, renderWidth, renderHeight, pipelines, velocity, depthStencil, bObjectOnly](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurVelocityExtractPushConstant pc{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
             .extent = {width, height},
             .renderExtent = {renderWidth, renderHeight},
-            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
-            .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
+            .gbufferOneIndex = bObjectOnly ? ~0u : graph.GetSampledImageViewDescriptorIndex(velocity),
+            .depthBufferIndex = bObjectOnly ? ~0u : graph.GetSampledImageViewDescriptorIndex(depthStencil),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_velocity")),
-            .bObjectOnly = bObjectOnly,
+            .bObjectOnly = bObjectOnly ? 1u : 0u,
+            .objectMotionIndex = bObjectOnly ? graph.GetSampledImageViewDescriptorIndex(OBJECT_MOTION) : ~0u,
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_velocity_extract"));
@@ -220,6 +229,15 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     graph.CreateTexture(SID("motion_blur_tiled_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, std::nullopt, true);
     graph.CreateTexture(SID("motion_blur_tiled_neighbor_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, std::nullopt, true);
     graph.CreateTexture(SID("motion_blur_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
+    graph.CreateBuffer(SID("motion_blur_dispatch_args"), 3 * sizeof(uint32_t), false);
+    graph.CreateBuffer(SID("motion_blur_tile_list"), blurTiledX * blurTiledY * sizeof(uint32_t), false);
+
+    RenderPass& argsInitPass = graph.AddPass(SID("[Motion Blur] Args Init"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
+    argsInitPass.WriteTransferBuffer(SID("motion_blur_dispatch_args"));
+    argsInitPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const uint32_t init[3] = {0u, 1u, 1u};
+        vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(SID("motion_blur_dispatch_args")), 0, sizeof(init), init);
+    });
 
     RenderPass& motionBlurTiledMaxPass = graph.AddPass(SID("[Motion Blur] Tiled Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     motionBlurTiledMaxPass.ReadSampledImage(velocity);
@@ -243,12 +261,17 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     RenderPass& motionBlurNeighborMax = graph.AddPass(SID("[Motion Blur] Neighbor Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     motionBlurNeighborMax.ReadSampledImage(SID("motion_blur_tiled_max"));
     motionBlurNeighborMax.WriteStorageImage(SID("motion_blur_tiled_neighbor_max"));
-    motionBlurNeighborMax.Execute([blurTiledX, blurTiledY, pipelines, dilationRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    motionBlurNeighborMax.ReadWriteBuffer(SID("motion_blur_dispatch_args"));
+    motionBlurNeighborMax.ReadWriteBuffer(SID("motion_blur_tile_list"));
+    motionBlurNeighborMax.Execute([width, height, blurTiledX, blurTiledY, pipelines, dilationRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurNeighborMaxPushConstant pc{
             .tileBufferSize = {blurTiledX, blurTiledY},
             .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("motion_blur_tiled_max")),
             .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_tiled_neighbor_max")),
             .dilationRadius = dilationRadius,
+            .tileListBuffer = graph.GetBufferAddress(SID("motion_blur_tile_list")),
+            .indirectArgsBuffer = graph.GetBufferAddress(SID("motion_blur_dispatch_args")),
+            .velocityBufferSize = {width, height},
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_neighbor_max"));
@@ -259,21 +282,43 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
+    // Static tiles keep this copy; the indirect reconstruction only touches listed tiles
+    RenderPass& prefillPass = graph.AddPass(SID("[Motion Blur] Output Prefill"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::PostProcessing);
+    prefillPass.ReadCopyImage(input);
+    prefillPass.WriteCopyImage(SID("motion_blur_output"));
+    prefillPass.Execute([width, height, input](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        VkImageCopy2 copyRegion{};
+        copyRegion.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
+        copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.srcSubresource.layerCount = 1;
+        copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.dstSubresource.layerCount = 1;
+        copyRegion.extent = {width, height, 1};
+
+        VkCopyImageInfo2 copyInfo{};
+        copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
+        copyInfo.srcImage = graph.GetImageHandle(input);
+        copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        copyInfo.dstImage = graph.GetImageHandle(SID("motion_blur_output"));
+        copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        copyInfo.regionCount = 1;
+        copyInfo.pRegions = &copyRegion;
+        vkCmdCopyImage2(cmd, &copyInfo);
+    });
+
     RenderPass& motionBlurReconstructionPass = graph.AddPass(SID("[Motion Blur] Reconstruction"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-    motionBlurReconstructionPass.ReadBuffer(SID("scene_data"));
     motionBlurReconstructionPass.ReadSampledImage(input);
     motionBlurReconstructionPass.ReadSampledImage(velocity);
-    motionBlurReconstructionPass.ReadSampledImage(depthStencil);
     motionBlurReconstructionPass.ReadSampledImage(SID("motion_blur_tiled_neighbor_max"));
+    motionBlurReconstructionPass.ReadIndirectBuffer(SID("motion_blur_dispatch_args"));
+    motionBlurReconstructionPass.ReadBuffer(SID("motion_blur_tile_list"));
     motionBlurReconstructionPass.WriteStorageImage(SID("motion_blur_output"));
-    motionBlurReconstructionPass.Execute([width, height, renderWidth, renderHeight, input, pipelines, velocity, depthStencil, velocityScale, depthScale, maxRadiusPx](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    motionBlurReconstructionPass.Execute([width, height, input, pipelines, velocity, velocityScale, depthScale, maxRadiusPx](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurReconstructionPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .tileListBuffer = graph.GetBufferAddress(SID("motion_blur_tile_list")),
             .srcBufferSize = {width, height},
-            .renderExtent = {renderWidth, renderHeight},
             .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
-            .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
             .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("motion_blur_tiled_neighbor_max")),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_output")),
             .velocityScale = velocityScale,
@@ -284,9 +329,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_reconstruction"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        uint32_t xDispatch = (width + POST_PROCESS_MOTION_BLUR_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_X;
-        uint32_t yDispatch = (height + POST_PROCESS_MOTION_BLUR_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_Y;
-        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SID("motion_blur_dispatch_args")), 0);
     });
 
     return SID("motion_blur_output");

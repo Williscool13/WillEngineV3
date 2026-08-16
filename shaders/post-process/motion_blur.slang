@@ -1,15 +1,45 @@
 import push_constant_interop;
 import constants_interop;
 import flags_interop;
+import common_interop;
 
 import shader_functions;
 import shader_constants;
 
 import bindless_declarations;
 
-// Camera-only reprojection subtracted from the gbuffer motion vector leaves object motion alone. Both terms
-// carry the same jitter offset and the same current-frame NDC, so those cancel and the residual is the
-// model-matrix delta only; the jitter terms must still be spelled out to match the gbuffer expression.
+static const float OBJECT_MOTION_FAR_VIEWZ = 3.0e4;
+
+// Camera-only reprojection subtracted from the gbuffer motion vector leaves object motion alone.
+[shader("compute")]
+[numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
+void ComputeObjectMotionExtract(uniform ObjectMotionExtractPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    uint2 pixel = dtid.xy;
+    if (any(pixel >= pc.renderExtent)) { return; }
+    SceneData scene = pc.sceneData[pc.sceneDataIndex];
+
+    float2 objectMotion = float2(0.0, 0.0);
+    float viewZ = OBJECT_MOTION_FAR_VIEWZ;
+    float blurMask = 0.0;
+
+    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
+    if (depth > 0.0 && (gt1.w & GBUFFER1_LIT_BIT) != 0u) {
+        float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
+        viewZ = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+        float3 xv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewZ);
+        float4 prevClip = mul(scene.prevViewProj, float4(mul(scene.invView, float4(xv, 1.0)).xyz, 1.0));
+        if (prevClip.w > 0.0) {
+            float2 staticDeltaUv = ((prevClip.xy / prevClip.w) * 0.5 + 0.5) - uv - scene.jitter * 0.5 + scene.prevJitter * 0.5;
+            objectMotion = UnpackMotionVectors(gt1.g) * 0.5 - staticDeltaUv;
+        }
+        blurMask = (gt1.w & GBUFFER1_NO_MOTION_BLUR_BIT) != 0u ? 0.0 : 1.0;
+    }
+
+    rdgStorageFloat4[pc.outputIndex][pixel] = float4(objectMotion, viewZ, blurMask);
+}
+
+// Output per pixel: (motionUv.xy with the blur mask folded in, linear viewZ, unused).
 [shader("compute")]
 [numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
 void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
@@ -18,27 +48,20 @@ void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConst
 
     int2 srcCoord = min(int2((float2(pixelCoord) + 0.5) * float2(pc.renderExtent) / float2(pc.extent)), int2(pc.renderExtent) - 1);
 
-    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(srcCoord, 0));
-    float depth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(srcCoord, 0)).r;
-    if ((gt1.w & GBUFFER1_LIT_BIT) == 0u || (gt1.w & GBUFFER1_NO_MOTION_BLUR_BIT) != 0u || depth <= 0.0) {
-        rdgStorageFloat2[pc.outputIndex][pixelCoord] = float2(0.0, 0.0);
+    if (pc.bObjectOnly != 0u) {
+        float4 om = rdgTexturesFloat4[pc.objectMotionIndex].Load(int3(srcCoord, 0));
+        rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(om.xy * om.w, om.z, 0.0);
         return;
     }
 
-    float2 velocity = UnpackMotionVectors(gt1.g);
-    if (pc.bObjectOnly != 0u) {
-        float2 uv = (float2(srcCoord) + 0.5) / float2(pc.renderExtent);
-        float3 worldPos = ReconstructWorldPosition(pc.sceneData.invViewProj, uv, depth);
-        float4 prevClip = mul(pc.sceneData.prevViewProj, float4(worldPos, 1.0));
-        if (prevClip.w <= 1e-6) {
-            rdgStorageFloat2[pc.outputIndex][pixelCoord] = float2(0.0, 0.0);
-            return;
-        }
-        float2 cameraVelocity = (prevClip.xy / prevClip.w - (uv * 2.0 - 1.0)) - pc.sceneData.jitter + pc.sceneData.prevJitter;
-        velocity -= cameraVelocity;
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(srcCoord, 0));
+    float depth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(srcCoord, 0)).r;
+    float viewZ = depth > 0.0 ? ScreenToViewSpaceDepth(depth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd) : OBJECT_MOTION_FAR_VIEWZ;
+    float2 velocityUv = float2(0.0, 0.0);
+    if ((gt1.w & GBUFFER1_LIT_BIT) != 0u && (gt1.w & GBUFFER1_NO_MOTION_BLUR_BIT) == 0u && depth > 0.0) {
+        velocityUv = UnpackMotionVectors(gt1.g) * 0.5;
     }
-
-    rdgStorageFloat2[pc.outputIndex][pixelCoord] = velocity;
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(velocityUv, viewZ, 0.0);
 }
 
 groupshared float g_velLenSq[POST_PROCESS_MOTION_BLUR_TILE_SIZE * POST_PROCESS_MOTION_BLUR_TILE_SIZE];
@@ -52,7 +75,7 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
 
     float2 velocity = float2(0.0, 0.0);
     if (all(pixelCoord < pc.velocityBufferSize)) {
-        velocity = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg * pc.velocityScale;
+        velocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg * pc.velocityScale;
     }
     g_velLenSq[groupIndex] = dot(velocity, velocity);
     g_vel[groupIndex] = velocity;
@@ -71,7 +94,7 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
 
     if (groupIndex == 0) {
         float2 maxVelocity = g_vel[0];
-        float pixelLen = length(maxVelocity * 0.5 * float2(pc.velocityBufferSize));
+        float pixelLen = length(maxVelocity * float2(pc.velocityBufferSize));
         if (pixelLen > pc.maxRadiusPx) {
             maxVelocity *= pc.maxRadiusPx / pixelLen;
         }
@@ -109,6 +132,15 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
     }
 
     rdgStorageFloat2[pc.neighborMaxIndex][tileCoord] = float2(maxVelocity);
+
+    if (pc.indirectArgsBuffer != nullptr) {
+        float pixelLen = length(maxVelocity * float2(pc.velocityBufferSize));
+        if (pixelLen >= 0.5) {
+            uint slot;
+            InterlockedAdd(pc.indirectArgsBuffer[0], 1u, slot);
+            pc.tileListBuffer[slot] = tileCoord.x | (tileCoord.y << 16);
+        }
+    }
 }
 
 // View-depth soft classification: delta > 0 means the sample is farther (behind the center).
@@ -125,41 +157,35 @@ float2 SpreadCmp(float offsetLen, float2 spreadLen) {
 
 // https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare/
 [shader("compute")]
-[numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
-void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    uint2 pixelCoord = dtid.xy;
+[numthreads(POST_PROCESS_MOTION_BLUR_TILE_SIZE, POST_PROCESS_MOTION_BLUR_TILE_SIZE, 1)]
+void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstant pc, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID) {
+    uint packedTile = pc.tileListBuffer[gid.x];
+    uint2 pixelCoord = uint2(packedTile & 0xFFFFu, packedTile >> 16) * uint(POST_PROCESS_MOTION_BLUR_TILE_SIZE) + gtid.xy;
     if (any(pixelCoord >= pc.srcBufferSize)) { return; }
 
     float2 uv = (float2(pixelCoord) + 0.5) / pc.srcBufferSize;
-    float depthLinearizeMult = pc.sceneData.depthLinearizeMult;
-    float depthLinearizeAdd = pc.sceneData.depthLinearizeAdd;
-
     float3 centerColor = rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
 
     float noise = frac(52.9829189 * frac(0.06711056 * pixelCoord.x + 0.00583715 * pixelCoord.y));
-    float noiseSwap = frac(52.9829189 * frac(0.06711056 * pixelCoord.y + 0.00583715 * pixelCoord.x));
 
     // Half-tile jittered lookup
     int2 tileBufferSize = int2((pc.srcBufferSize + uint(POST_PROCESS_MOTION_BLUR_TILE_SIZE) - 1u) / uint(POST_PROCESS_MOTION_BLUR_TILE_SIZE));
-    float2 tileJitter = (float2(noise, noiseSwap) - 0.5) * float(POST_PROCESS_MOTION_BLUR_TILE_SIZE);
+    float2 jitterNoise = assetTextures[BLUE_NOISE_BINDLESS_INDEX].Load(int3(int2(pixelCoord & uint(BLUE_NOISE_SIZE_MASK)), 0)).rg;
+    float2 tileJitter = (jitterNoise - 0.5) * float(POST_PROCESS_MOTION_BLUR_TILE_SIZE);
     int2 tileCoord = clamp(int2((float2(pixelCoord) + tileJitter) / float(POST_PROCESS_MOTION_BLUR_TILE_SIZE)), int2(0, 0), tileBufferSize - 1);
 
     // Tile velocities are already shutter-scaled and radius-clamped; per-pixel velocities below are raw and still need the scale
-    float2 blurDir = rdgTexturesFloat2[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg * 0.5;
+    float2 blurDir = rdgTexturesFloat2[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg;
     float blurLen = length(blurDir * pc.srcBufferSize);
-    if (blurLen < 0.5) {
-        rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
-        return;
-    }
+    if (blurLen < 0.5) { return; }
     if (blurLen > pc.maxRadiusPx) {
         blurDir *= pc.maxRadiusPx / blurLen;
         blurLen = pc.maxRadiusPx;
     }
 
-    float2 centerVelocityUv = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg * 0.5;
-    int2 centerDepthCoord = min(int2(uv * float2(pc.renderExtent)), int2(pc.renderExtent) - 1);
-    float centerViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(centerDepthCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
-    float centerSpreadLen = min(length(centerVelocityUv * pc.velocityScale * pc.srcBufferSize), pc.maxRadiusPx);
+    float4 centerVelocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0));
+    float centerViewZ = centerVelocity.z;
+    float centerSpreadLen = min(length(centerVelocity.xy * pc.velocityScale * pc.srcBufferSize), pc.maxRadiusPx);
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
     float weightAccum = 0.0;
@@ -183,11 +209,10 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
             if (!pairValid[side]) { continue; }
 
             int2 sampleCoord = min(int2(sampleUV * pc.srcBufferSize), int2(pc.srcBufferSize) - 1);
-            int2 sampleDepthCoord = min(int2(sampleUV * float2(pc.renderExtent)), int2(pc.renderExtent) - 1);
             pairColor[side] = rdgTexturesFloat4[pc.sceneColorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], sampleUV, 0).rgb;
-            float sampleViewZ = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthBufferIndex].Load(int3(sampleDepthCoord, 0)).r, depthLinearizeMult, depthLinearizeAdd);
-            float2 sampleVelocityUv = rdgTexturesFloat2[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).rg * 0.5;
-            float sampleSpreadLen = min(length(sampleVelocityUv * pc.velocityScale * pc.srcBufferSize), pc.maxRadiusPx);
+            float4 sampleVelocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(sampleCoord, 0));
+            float sampleViewZ = sampleVelocity.z;
+            float sampleSpreadLen = min(length(sampleVelocity.xy * pc.velocityScale * pc.srcBufferSize), pc.maxRadiusPx);
 
             float2 d = DepthCmp(centerViewZ, sampleViewZ, pc.depthScale);
             float2 s = SpreadCmp(offsetLen, float2(centerSpreadLen, sampleSpreadLen));
@@ -212,10 +237,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
         }
     }
 
-    if (sampleCount < 0.5) {
-        rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
-        return;
-    }
+    if (sampleCount < 0.5) { return; }
 
     float4 sumColor = float4(colorAccum, weightAccum) / sampleCount;
     float3 finalColor = sumColor.rgb + (1.0 - sumColor.w) * centerColor;
