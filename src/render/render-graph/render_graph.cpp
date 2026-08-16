@@ -482,6 +482,8 @@ void RenderGraph::PopulateAutoClearTextures()
 
 void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
 {
+    ReconcileDetachedPhysicals();
+
     for (auto& tex : textures) {
         if (tex.accumulatedUsage == 0) {
             if (bDebugLogging) {
@@ -1645,16 +1647,57 @@ void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& tex
     TextureResource* tex = GetOrCreateTexture(textureId);
 
     if (tex->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        ENGINE_ASSERT(Renderer, tex->textureInfo.format == texInfo.format, "Texture format mismatch");
-        ENGINE_ASSERT(Renderer, tex->textureInfo.width == texInfo.width, "Texture width mismatch");
-        ENGINE_ASSERT(Renderer, tex->textureInfo.height == texInfo.height, "Texture height mismatch");
-        ENGINE_ASSERT(Renderer, tex->textureInfo.mipLevels == texInfo.mipLevels, "Texture mip level mismatch");
+        const bool bSameDescription = tex->textureInfo.format == texInfo.format && tex->textureInfo.width == texInfo.width && tex->textureInfo.height == texInfo.height && tex->textureInfo.mipLevels == texInfo.mipLevels;
+        if (!bSameDescription) {
+            ENGINE_ASSERT(Renderer, !tex->bDeclaredThisFrame, "Texture '{}' declared twice this frame with different descriptions", textureId.ToString());
+            DetachCarriedTexture(*tex);
+        }
     }
 
     ENGINE_ASSERT(Renderer, texInfo.format != VK_FORMAT_UNDEFINED, "Texture info uses undefined format");
     tex->textureInfo = texInfo;
     tex->bIsViewportScaled = bIsViewportScaled;
     tex->clear = clearValue;
+    tex->bDeclaredThisFrame = true;
+}
+
+void RenderGraph::DetachCarriedTexture(TextureResource& tex) const
+{
+    if (bDebugLogging) {
+        LOG_WARN(Renderer, "Texture '{}' re-declared with a new description; carried contents dropped", tex.textureId.ToString());
+    }
+    tex.physicalIndex = UINT32_MAX;
+    tex.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+}
+
+void RenderGraph::DetachCarriedBuffer(BufferResource& buf) const
+{
+    if (bDebugLogging) {
+        LOG_WARN(Renderer, "Buffer '{}' re-declared with a new description; carried contents dropped", buf.bufferId.ToString());
+    }
+    buf.physicalIndex = UINT32_MAX;
+    buf.carriedCount = 0;
+}
+
+void RenderGraph::ReconcileDetachedPhysicals()
+{
+    for (uint32_t i = 0; i < physicalResources.Size(); ++i) {
+        PhysicalResource& phys = physicalResources[i];
+        if (phys.bIsImported || phys.logicalResourceIndices.IsEmpty()) { continue; }
+
+        const bool bImage = phys.dimensions.IsImage();
+        for (int32_t j = static_cast<int32_t>(phys.logicalResourceIndices.Size()) - 1; j >= 0; --j) {
+            const uint32_t logical = phys.logicalResourceIndices[j];
+            if ((bImage ? textures[logical].physicalIndex : buffers[logical].physicalIndex) != i) {
+                phys.logicalResourceIndices.RemoveAt(j);
+            }
+        }
+
+        if (phys.logicalResourceIndices.IsEmpty()) {
+            phys.bCanAlias = true;
+            phys.usageChain.Clear();
+        }
+    }
 }
 
 void RenderGraph::AliasTexture(const StringID aliasId, const StringID existingId)
@@ -1675,13 +1718,15 @@ void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsVie
 {
     BufferResource* buf = GetOrCreateBuffer(bufferId);
 
-    if (buf->bufferInfo.size != 0) {
-        ENGINE_ASSERT(Renderer, buf->bufferInfo.size == size, "Buffer size mismatch");
+    if (buf->bufferInfo.size != 0 && buf->bufferInfo.size != size) {
+        ENGINE_ASSERT(Renderer, !buf->bDeclaredThisFrame, "Buffer '{}' declared twice this frame at different sizes", bufferId.ToString());
+        DetachCarriedBuffer(*buf);
     }
 
     buf->bufferInfo.size = size;
     buf->bCanUseAliasedBuffer = bCanAlias;
     buf->bIsViewportScaled = bIsViewportScaled;
+    buf->bDeclaredThisFrame = true;
 }
 
 void RenderGraph::CreateTLAS(StringID name, VkDeviceSize asSize, RenderCategory category)
@@ -1704,15 +1749,16 @@ void RenderGraph::CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDe
 {
     BufferResource* buf = GetOrCreateBuffer(bufferId);
 
-    if (buf->bufferInfo.size != 0) {
-        ENGINE_ASSERT(Renderer, buf->bufferInfo.size == size, "Buffer size mismatch");
-        ENGINE_ASSERT(Renderer, buf->minAlignment == minAlignment, "Buffer alignment mismatch");
+    if (buf->bufferInfo.size != 0 && (buf->bufferInfo.size != size || buf->minAlignment != minAlignment)) {
+        ENGINE_ASSERT(Renderer, !buf->bDeclaredThisFrame, "Buffer '{}' declared twice this frame with different descriptions", bufferId.ToString());
+        DetachCarriedBuffer(*buf);
     }
 
     buf->bufferInfo.size = size;
     buf->minAlignment = minAlignment;
     buf->bCanUseAliasedBuffer = bCanAlias;
     buf->bIsViewportScaled = bIsViewportScaled;
+    buf->bDeclaredThisFrame = true;
 }
 
 void RenderGraph::ImportTexture(StringID textureId,

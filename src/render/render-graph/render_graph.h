@@ -379,6 +379,20 @@ private:
 
     BufferResource* GetOrCreateBuffer(StringID textureId);
 
+    /**
+     * Releases a carried-in resource from its physical so the compile pass allocates it fresh; last frame's contents are lost.
+     * Only the logical side is touched here; ReconcileDetachedPhysicals does the physical bookkeeping at compile time.
+     * @param tex
+     */
+    void DetachCarriedTexture(TextureResource& tex) const;
+
+    void DetachCarriedBuffer(BufferResource& buf) const;
+
+    /**
+     * Clears physical to logical back-references left dangling by a detach, re-opening any physical that is now unreferenced for aliasing this frame.
+     */
+    void ReconcileDetachedPhysicals();
+
     void DestroyPhysicalResource(PhysicalResource& resource);
 
     void CreatePhysicalImage(PhysicalResource& resource, const ResourceDimensions& dim);

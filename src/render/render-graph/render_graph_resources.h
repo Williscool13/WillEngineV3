@@ -390,6 +390,8 @@ struct TextureResource
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageUsageFlags accumulatedUsage;
 
+    bool bDeclaredThisFrame = false;
+
     uint32_t firstPass = UINT32_MAX;
     uint32_t lastPass = 0;
 
@@ -422,6 +424,8 @@ struct BufferResource
     BufferInfo bufferInfo = {};
     VkBufferUsageFlags accumulatedUsage = 0;
     VkDeviceSize minAlignment = 0;
+
+    bool bDeclaredThisFrame = false;
 
     uint32_t firstPass = UINT32_MAX;
     uint32_t lastPass = 0;

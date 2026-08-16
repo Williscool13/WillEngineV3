@@ -72,6 +72,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
                 Engine::Profiles::LightingProfileBundle bundle = Engine::Profiles::CaptureLightingProfile(*state);
                 if (Engine::Profiles::LoadLightingProfile(names[i].c_str(), bundle)) {
                     Engine::Profiles::ApplyLightingProfile(*state, bundle);
+                    state->requests.pendingCacheReset = Core::RenderCacheReset::All;
                 }
                 Engine::WriteProjectConfig(cfg, state->allocator);
             }
