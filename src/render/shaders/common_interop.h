@@ -81,6 +81,7 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     BentNormal = 35,
     ReflectionProbeIndex = 40,
     ReflectionProbeBinDisagreement = 41,
+    DofCoc = 42,
 };
 
 SHADER_PUBLIC struct Frustum

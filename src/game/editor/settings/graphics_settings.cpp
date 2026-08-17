@@ -656,6 +656,8 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (ImGui::CollapsingHeader("Post-Processing")) {
             if (ImGui::Button("Bloom Chain")) setDebugTarget("bloom_chain", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("DoF Half-Res Color")) setDebugTarget("dof_color_coc", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("DoF Circle of Confusion")) setDebugTarget("dof_color_coc", DebugTransformationType::DofCoc, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Velocity")) setDebugTarget("motion_blur_velocity", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Tiled Max")) setDebugTarget("motion_blur_tiled_max", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Neighbor Max")) setDebugTarget("motion_blur_tiled_neighbor_max", DebugTransformationType::None, Core::DebugViewAspect::None);
@@ -1661,6 +1663,16 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
         ppF("Soft Threshold", &pp.bloomSoftThreshold, defaults.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
         ppF("Radius", &pp.bloomRadius, defaults.bloomRadius, 0.5f, 1.25f, "%.2f", "Tent-filter tap spacing in mip texels; above ~1.25 the upsample starts skipping texels and shimmers.");
         ppF("Clamp", &pp.bloomClamp, defaults.bloomClamp, 0.1f, 100.0f, "%.1f", "Display-relative cap applied before thresholding; secondary firefly defense behind the Karis average.");
+    }
+
+    if (ImGui::CollapsingHeader("Depth of Field")) {
+        check("Enabled##dof", &pp.bDepthOfFieldEnabled);
+        ppF("Focus Distance", &pp.dofFocusDistance, defaults.dofFocusDistance, 0.1f, 200.0f, "%.2f", "View-space distance to the focal plane; everything at this depth stays sharp.");
+        ppF("Focus Range", &pp.dofFocusRange, defaults.dofFocusRange, 0.0f, 20.0f, "%.2f", "Depth band centered on the focal plane that stays fully sharp.");
+        ppF("Near Transition", &pp.dofNearTransition, defaults.dofNearTransition, 0.05f, 20.0f, "%.2f", "View units in front of the sharp band over which the blur ramps to its max near radius.");
+        ppF("Far Transition", &pp.dofFarTransition, defaults.dofFarTransition, 0.05f, 200.0f, "%.2f", "View units behind the sharp band over which the blur ramps to its max far radius. The sky always sits at max.");
+        ppF("Near Radius", &pp.dofNearRadiusPx, defaults.dofNearRadiusPx, 0.0f, 64.0f, "%.0f", "Max blur radius in output pixels for foreground (in front of focus).");
+        ppF("Far Radius", &pp.dofFarRadiusPx, defaults.dofFarRadiusPx, 0.0f, 64.0f, "%.0f", "Max blur radius in output pixels for background (behind focus).");
     }
 
     if (ImGui::CollapsingHeader("Motion Blur")) {

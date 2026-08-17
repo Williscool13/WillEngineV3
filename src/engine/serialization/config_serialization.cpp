@@ -556,6 +556,13 @@ void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w)
     w.Key("agxMaxEV", p.agxParams.maxEV);
     w.Key("khronosStartCompression", p.khronosParams.startCompression);
     w.Key("khronosDesaturation", p.khronosParams.desaturation);
+    w.Key("bDepthOfFieldEnabled", p.bDepthOfFieldEnabled);
+    w.Key("dofFocusDistance", p.dofFocusDistance);
+    w.Key("dofFocusRange", p.dofFocusRange);
+    w.Key("dofNearTransition", p.dofNearTransition);
+    w.Key("dofFarTransition", p.dofFarTransition);
+    w.Key("dofNearRadiusPx", p.dofNearRadiusPx);
+    w.Key("dofFarRadiusPx", p.dofFarRadiusPx);
     w.Key("bMotionBlurEnabled", p.bMotionBlurEnabled);
     w.Key("bMotionBlurObjectOnly", p.bMotionBlurObjectOnly);
     w.Key("motionBlurVelocityScale", p.motionBlurVelocityScale);
@@ -616,6 +623,13 @@ void Deserialize(const TextReader& r, Core::PostProcessConfiguration& p)
     p.agxParams.maxEV = r.Float("agxMaxEV", p.agxParams.maxEV);
     p.khronosParams.startCompression = r.Float("khronosStartCompression", p.khronosParams.startCompression);
     p.khronosParams.desaturation = r.Float("khronosDesaturation", p.khronosParams.desaturation);
+    p.bDepthOfFieldEnabled = r.Bool("bDepthOfFieldEnabled", p.bDepthOfFieldEnabled);
+    p.dofFocusDistance = r.Float("dofFocusDistance", p.dofFocusDistance);
+    p.dofFocusRange = r.Float("dofFocusRange", p.dofFocusRange);
+    p.dofNearTransition = r.Float("dofNearTransition", p.dofNearTransition);
+    p.dofFarTransition = r.Float("dofFarTransition", p.dofFarTransition);
+    p.dofNearRadiusPx = r.Float("dofNearRadiusPx", p.dofNearRadiusPx);
+    p.dofFarRadiusPx = r.Float("dofFarRadiusPx", p.dofFarRadiusPx);
     p.bMotionBlurEnabled = r.Bool("bMotionBlurEnabled", p.bMotionBlurEnabled);
     p.bMotionBlurObjectOnly = r.Bool("bMotionBlurObjectOnly", p.bMotionBlurObjectOnly);
     p.motionBlurVelocityScale = r.Float("motionBlurVelocityScale", p.motionBlurVelocityScale);

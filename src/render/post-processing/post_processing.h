@@ -40,6 +40,8 @@ struct PostProcessContext
 // Sideband passes: produce named side resources, return input unchanged
 StringID PPExposure(PostProcessContext& ctx, StringID input);
 StringID PPBloom(PostProcessContext& ctx, StringID input);
+/** Half-res dof_color_coc: rgb = color, a = signed CoC in full-res pixels, negative in front of the focal plane. */
+StringID PPDepthOfField(PostProcessContext& ctx, StringID input);
 
 // Transform passes: 1-in 1-out, return their output name
 StringID PPMotionBlur(PostProcessContext& ctx, StringID input);
@@ -50,7 +52,6 @@ StringID PPCompose(PostProcessContext& ctx, StringID input);
 // Gameplay screen cover (fade/iris/wipe/dissolve/letterbox); skipped entirely when inactive.
 // Outside the chain above because ScreenFadeState::bDrawOverUI decides whether it runs before or after UI compositing.
 StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Array<uint32_t, 2> extent, StringID input);
-
 } // Render
 
 #endif //WILLENGINEV3_POST_PROCESSING_H

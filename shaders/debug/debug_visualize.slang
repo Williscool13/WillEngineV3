@@ -335,6 +335,11 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             }
             break;
         }
+        case 42: { // DofCoc: signed circle of confusion in dof_color_coc.a. Red = near field, blue = far, black = sharp; sqrt ramp over a 64px reference (the radius slider cap) so typical radii do not read black.
+            float coc = srcPixel.a;
+            srcPixel.xyz = float3(sqrt(saturate(-coc / 64.0)), 0.0, sqrt(saturate(coc / 64.0)));
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

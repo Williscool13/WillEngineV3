@@ -62,6 +62,14 @@ struct PostProcessConfiguration
         float desaturation{0.15f};
     } khronosParams;
 
+    bool bDepthOfFieldEnabled{false};
+    float dofFocusDistance{5.0f}; // view units from camera to the focal plane
+    float dofFocusRange{1.0f}; // fully sharp band centered on the focal plane, view units
+    float dofNearTransition{2.0f}; // view units from the sharp band to the max near radius
+    float dofFarTransition{20.0f}; // view units from the sharp band to the max far radius
+    float dofNearRadiusPx{16.0f}; // max CoC radius in front of focus, output pixels
+    float dofFarRadiusPx{16.0f}; // max CoC radius behind focus, output pixels
+
     bool bMotionBlurEnabled{false};
     bool bMotionBlurObjectOnly{true}; // subtract camera reprojection so only moving objects smear
     float motionBlurVelocityScale{0.8f}; // shutter fraction of inter-frame displacement

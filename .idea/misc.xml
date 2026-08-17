@@ -5,6 +5,9 @@
   </component>
   <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
   <component name="CidrRootsConfiguration">
+    <sourceRoots>
+      <file path="$PROJECT_DIR$/src" />
+    </sourceRoots>
     <excludeRoots>
       <file path="$PROJECT_DIR$/extern" />
       <file path="$PROJECT_DIR$/extern/Catch2" />
@@ -29,7 +32,6 @@
       <file path="$PROJECT_DIR$/extern/tracy" />
       <file path="$PROJECT_DIR$/extern/vk-bootstrap" />
       <file path="$PROJECT_DIR$/extern/vma" />
-      <file path="$PROJECT_DIR$/extern/volk" />
     </excludeRoots>
   </component>
 </project>

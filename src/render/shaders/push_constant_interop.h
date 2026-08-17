@@ -1201,6 +1201,23 @@ SHADER_PUBLIC struct MotionBlurReconstructionPushConstant
     SHADER_PUBLIC float maxRadiusPx;
 };
 
+SHADER_PUBLIC struct DofCocPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 outputExtent;
+    SHADER_PUBLIC uint2 inputExtent;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneColorIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float focusDistance;
+    SHADER_PUBLIC float sharpHalfRange;
+    SHADER_PUBLIC float nearTransitionInv;
+    SHADER_PUBLIC float farTransitionInv;
+    SHADER_PUBLIC float nearRadiusPx;
+    SHADER_PUBLIC float farRadiusPx;
+};
+
 SHADER_PUBLIC struct BloomThresholdPushConstant
 {
     SHADER_PUBLIC uint2 outputExtent;

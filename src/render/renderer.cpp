@@ -33,6 +33,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
 
     StringID current = ctx.targets.colorOutput;
     current = PPExposure(ctx, current);
+    current = PPDepthOfField(ctx, current);
     current = PPMotionBlur(ctx, current);
     current = PPBloom(ctx, current);
     current = PPFinalize(ctx, current);
