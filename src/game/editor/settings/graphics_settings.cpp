@@ -658,11 +658,15 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Bloom Chain")) setDebugTarget("bloom_chain", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("DoF Half-Res Color")) setDebugTarget("dof_color_coc", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("DoF Circle of Confusion")) setDebugTarget("dof_color_coc", DebugTransformationType::DofCoc, Core::DebugViewAspect::None);
+            if (ImGui::Button("DoF Zones")) setDebugTarget("dof_color_coc", DebugTransformationType::DofZones, Core::DebugViewAspect::None);
             if (ImGui::Button("DoF Tiled Max")) setDebugTarget("dof_tiled_max", DebugTransformationType::DofTileMax, Core::DebugViewAspect::None);
             if (ImGui::Button("DoF Tiled Neighbor Max")) setDebugTarget("dof_tiled_neighbor_max", DebugTransformationType::DofTileMax, Core::DebugViewAspect::None);
             if (ImGui::Button("DoF Near Layer")) setDebugTarget("dof_near", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("DoF Near Coverage")) setDebugTarget("dof_near", DebugTransformationType::AlphaOnly, Core::DebugViewAspect::None);
             if (ImGui::Button("DoF Far Layer")) setDebugTarget("dof_far", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("DoF Near Filtered")) setDebugTarget("dof_near_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("DoF Far Filtered")) setDebugTarget("dof_far_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("DoF Output")) setDebugTarget("dof_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Velocity")) setDebugTarget("motion_blur_velocity", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Tiled Max")) setDebugTarget("motion_blur_tiled_max", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Neighbor Max")) setDebugTarget("motion_blur_tiled_neighbor_max", DebugTransformationType::None, Core::DebugViewAspect::None);
@@ -1031,6 +1035,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::SliderInt("Samples/Frame##gt", &state->lighting.groundTruthSpp, 1, 32);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Path-traced samples per pixel per frame; Full mode only, DI/GI stay 1. The probe bake overrides this with its own GT Samples/Frame while baking.");
+            }
+            ImGui::SliderFloat("DoF Aperture##gt", &state->lighting.groundTruthDofAperture, 0.0f, 0.25f, "%.3f");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Thin-lens aperture radius in meters; 0 = pinhole. Full mode only. Focus distance is shared with the Depth of Field settings. While active the raster DoF is skipped so the two never stack. A physical lens has one aperture: match the artist near/far radii one side at a time.");
             }
         }
 

@@ -11,12 +11,12 @@ import bindless_declarations;
 static const float DOF_SKY_VIEWZ = 3.0e4;
 
 // Signed circle of confusion in full-res pixels
-float DofSignedCoc(float viewZ, DofCocPushConstant pc) {
-    float delta = viewZ - pc.focusDistance;
-    float dist = abs(delta) - pc.sharpHalfRange;
+float DofSignedCoc(float viewZ, float focusDistance, float sharpHalfRange, float nearTransitionInv, float farTransitionInv, float nearRadiusPx, float farRadiusPx) {
+    float delta = viewZ - focusDistance;
+    float dist = abs(delta) - sharpHalfRange;
     if (dist <= 0.0) { return 0.0; }
-    if (delta < 0.0) { return -saturate(dist * pc.nearTransitionInv) * pc.nearRadiusPx; }
-    return saturate(dist * pc.farTransitionInv) * pc.farRadiusPx;
+    if (delta < 0.0) { return -saturate(dist * nearTransitionInv) * nearRadiusPx; }
+    return saturate(dist * farTransitionInv) * farRadiusPx;
 }
 
 [shader("compute")]
@@ -25,26 +25,47 @@ void ComputeDofCoc(uniform DofCocPushConstant pc, uint3 dtid : SV_DispatchThread
     uint2 pixel = dtid.xy;
     if (any(pixel >= pc.outputExtent)) { return; }
 
-    float3 color = float3(0.0, 0.0, 0.0);
+    float3 colors[4];
+    float cocs[4];
     float coc = 0.0;
     float maxMagnitude = -1.0;
+    float minFar = 1e9;
 
     for (int i = 0; i < 4; ++i) {
         int2 fullCoord = min(int2(pixel) * 2 + int2(i & 1, i >> 1), int2(pc.inputExtent) - 1);
-        color += rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(fullCoord, 0)).rgb;
+        colors[i] = rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(fullCoord, 0)).rgb;
 
         int2 depthCoord = min(int2((float2(fullCoord) + 0.5) * float2(pc.renderExtent) / float2(pc.inputExtent)), int2(pc.renderExtent) - 1);
         float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(depthCoord, 0)).r;
         float viewZ = depth > 0.0 ? ScreenToViewSpaceDepth(depth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd) : DOF_SKY_VIEWZ;
 
-        float sampleCoc = DofSignedCoc(viewZ, pc);
-        if (abs(sampleCoc) > maxMagnitude) {
-            maxMagnitude = abs(sampleCoc);
-            coc = sampleCoc;
+        cocs[i] = DofSignedCoc(viewZ, pc.focusDistance, pc.sharpHalfRange, pc.nearTransitionInv, pc.farTransitionInv, pc.nearRadiusPx, pc.farRadiusPx);
+        if (abs(cocs[i]) > maxMagnitude) {
+            maxMagnitude = abs(cocs[i]);
+            coc = cocs[i];
         }
     }
 
-    rdgStorageFloat4[pc.outputIndex][pixel] = float4(color * 0.25, coc);
+    for (int j = 0; j < 16; ++j) {
+        int2 ringCoord = clamp(int2(pixel) * 2 + int2((j & 3) - 1, (j >> 2) - 1), int2(0, 0), int2(pc.inputExtent) - 1);
+        int2 ringDepthCoord = min(int2((float2(ringCoord) + 0.5) * float2(pc.renderExtent) / float2(pc.inputExtent)), int2(pc.renderExtent) - 1);
+        float ringDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(ringDepthCoord, 0)).r;
+        float ringViewZ = ringDepth > 0.0 ? ScreenToViewSpaceDepth(ringDepth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd) : DOF_SKY_VIEWZ;
+        float ringCoc = DofSignedCoc(ringViewZ, pc.focusDistance, pc.sharpHalfRange, pc.nearTransitionInv, pc.farTransitionInv, pc.nearRadiusPx, pc.farRadiusPx);
+        minFar = min(minFar, max(ringCoc, 0.0));
+    }
+
+    float3 color = float3(0.0, 0.0, 0.0);
+    float weightSum = 0.0;
+    float cocSign = coc >= 0.0 ? 1.0 : -1.0;
+    for (int i = 0; i < 4; ++i) {
+        float w = (cocs[i] * cocSign > 0.0 ? 1.0 : 0.0) + 1e-2;
+        color += colors[i] * w;
+        weightSum += w;
+    }
+
+    rdgStorageFloat4[pc.outputIndex][pixel] = float4(color / weightSum, coc);
+    rdgStorageFloat[pc.farMinIndex][pixel] = minFar;
 }
 
 groupshared float g_maxNear[POST_PROCESS_DOF_TILE_SIZE * POST_PROCESS_DOF_TILE_SIZE];
@@ -121,9 +142,10 @@ void ComputeDofGather(uniform DofGatherPushConstant pc, uint3 gid : SV_GroupID, 
     float centerCoc = centerSample.a * 0.5;
 
     float2 noise = assetTextures[BLUE_NOISE_BINDLESS_INDEX].Load(int3(int2(pixel & uint(BLUE_NOISE_SIZE_MASK)), 0)).rg;
+    noise = frac(noise + float(pc.frameIndex & 63u) * float2(0.7548776662, 0.5698402909));
     float angleOffset = noise.x * 6.2831853;
 
-    int sampleCount = clamp(int(ceil(searchRadius * 4.0)), 8, POST_PROCESS_DOF_SAMPLE_COUNT);
+    int sampleCount = clamp(int(ceil(searchRadius * 5.0)), 8, POST_PROCESS_DOF_SAMPLE_COUNT);
 
     float3 nearColor = float3(0.0, 0.0, 0.0);
     float nearWeight = 0.0;
@@ -143,6 +165,7 @@ void ComputeDofGather(uniform DofGatherPushConstant pc, uint3 gid : SV_GroupID, 
         if (coverage <= 0.0) { continue; }
 
         float weight = coverage / max(spread * spread, 1.0);
+        weight /= 1.0 + dot(s.rgb, float3(0.2126, 0.7152, 0.0722));
 
         if (sampleCoc < 0.0) {
             nearColor += s.rgb * weight;
@@ -156,8 +179,57 @@ void ComputeDofGather(uniform DofGatherPushConstant pc, uint3 gid : SV_GroupID, 
         }
     }
 
-    float nearAlpha = max(saturate(nearCoverage / float(sampleCount)), saturate(-centerCoc));
+    float nearFrac = tileMax.x > 0.0 ? (tileMax.x * tileMax.x) / (searchRadius * searchRadius) : 1.0;
+    float nearAlpha = max(saturate(nearCoverage / max(float(sampleCount) * nearFrac, 1.0)), saturate(-centerCoc));
 
     rdgStorageFloat4[pc.nearOutputIndex][pixel] = float4(nearColor / max(nearWeight, 1e-6), nearAlpha);
     rdgStorageFloat4[pc.farOutputIndex][pixel] = float4(farColor / farWeight, 1.0);
+}
+
+[shader("compute")]
+[numthreads(POST_PROCESS_DOF_DISPATCH_X, POST_PROCESS_DOF_DISPATCH_Y, 1)]
+void ComputeDofLayerBlur(uniform DofLayerBlurPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    uint2 pixel = dtid.xy;
+    if (any(pixel >= pc.extent)) { return; }
+
+    float4 nearSum = float4(0.0, 0.0, 0.0, 0.0);
+    float4 farSum = float4(0.0, 0.0, 0.0, 0.0);
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            int2 c = clamp(int2(pixel) + int2(x, y), int2(0, 0), int2(pc.extent) - 1);
+            float4 n = rdgTexturesFloat4[pc.nearIndex].Load(int3(c, 0));
+            float4 f = rdgTexturesFloat4[pc.farIndex].Load(int3(c, 0));
+            nearSum += float4(n.rgb * n.a, n.a);
+            farSum += float4(f.rgb * f.a, f.a);
+        }
+    }
+
+    float4 nearOut = float4(nearSum.rgb / max(nearSum.a, 1e-6), nearSum.a / 9.0);
+    float4 farBlurred = float4(farSum.rgb / max(farSum.a, 1e-6), farSum.a / 9.0);
+
+    float centerCoc = rdgTexturesFloat4[pc.cocIndex].Load(int3(pixel, 0)).a;
+    float4 farOut = lerp(rdgTexturesFloat4[pc.farIndex].Load(int3(pixel, 0)), farBlurred, saturate((max(centerCoc, 0.0) - 1.0) * 0.5));
+
+    rdgStorageFloat4[pc.nearOutputIndex][pixel] = nearOut;
+    rdgStorageFloat4[pc.farOutputIndex][pixel] = farOut;
+}
+
+[shader("compute")]
+[numthreads(POST_PROCESS_DOF_DISPATCH_X, POST_PROCESS_DOF_DISPATCH_Y, 1)]
+void ComputeDofComposite(uniform DofCompositePushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    uint2 pixel = dtid.xy;
+    if (any(pixel >= pc.extent)) { return; }
+
+    float3 color = rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(pixel, 0)).rgb;
+    float2 uv = (float2(pixel) + 0.5) / float2(pc.extent);
+
+    float coc = rdgTexturesFloat[pc.farMinCocIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
+
+    float4 farLayer = rdgTexturesFloat4[pc.farIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0);
+    color = lerp(color, farLayer.rgb, saturate((coc - 1.0) / 3.0));
+
+    float4 nearLayer = rdgTexturesFloat4[pc.nearIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0);
+    color = lerp(color, nearLayer.rgb, nearLayer.a);
+
+    rdgStorageFloat4[pc.outputIndex][pixel] = float4(color, 1.0);
 }

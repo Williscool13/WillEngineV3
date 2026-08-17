@@ -376,6 +376,112 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
 
+    float lensRadius = f16tof32(pc.dofPackedApertureFocus & 0xFFFFu);
+    if (lensRadius > 0.0) {
+        float focusDistance = max(f16tof32(pc.dofPackedApertureFocus >> 16), 0.05);
+        float3 cameraPos = scene.cameraWorldPos.xyz;
+        float3 camRight = mul(scene.invView, float4(1.0, 0.0, 0.0, 0.0)).xyz;
+        float3 camUp = mul(scene.invView, float4(0.0, 1.0, 0.0, 0.0)).xyz;
+        RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
+        uint rng = SeedRng(pixel, pc.frameIndex, 0x51C0FEu);
+
+        uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
+        float4 accum = pc.accumulationBuffer[pixelIdx];
+        float count = float(pc.accumulationCount);
+
+        uint spp = max(pc.samplesPerFrame, 1u);
+        float3 sampleSum = float3(0.0);
+        for (uint s = 0; s < spp; ++s) {
+            float2 jitteredUv = (float2(pixel) + float2(HashStep(rng), HashStep(rng))) / float2(pc.renderExtent);
+            float2 ndc = jitteredUv * 2.0 - 1.0;
+            float4 farPoint = mul(scene.invViewProj, float4(ndc, 1.0, 1.0));
+            float3 pinholeDir = normalize(farPoint.xyz / farPoint.w - cameraPos);
+            float dirViewZ = abs(mul(scene.view, float4(pinholeDir, 0.0)).z);
+            float3 focalPoint = cameraPos + pinholeDir * (focusDistance / max(dirViewZ, 1e-4));
+
+            float lensR = sqrt(HashStep(rng)) * lensRadius;
+            float lensPhi = 6.28318530718 * HashStep(rng);
+            float3 rayOrigin = cameraPos + camRight * (lensR * cos(lensPhi)) + camUp * (lensR * sin(lensPhi));
+            float3 rayDir = normalize(focalPoint - rayOrigin);
+
+            float3 radiance = float3(0.0);
+            float3 throughput = float3(1.0);
+            float segmentPdf = 1e8;
+
+            for (uint segment = 0; segment <= GT_FULL_MAX_BOUNCES; ++segment) {
+                RayDesc ray;
+                ray.Origin = rayOrigin;
+                ray.Direction = rayDir;
+                ray.TMin = 0.0;
+                ray.TMax = 10000.0;
+
+                RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+                q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
+                q.Proceed();
+
+                const bool bTriangleHit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+                float segmentT = bTriangleHit ? q.CommittedRayT() : ray.TMax;
+                radiance += throughput * CollectAnalyticLightHits(pc, rayOrigin, rayDir, segmentT, segmentPdf);
+
+                if (!bTriangleHit) {
+                    float3 skyDirection = float3(rayDir.x, -rayDir.y, rayDir.z);
+                    if (segment == 0) {
+                        // Matches the pinhole path's primary-miss background exactly
+                        if (pc.skyboxIndex >= 0) {
+                            radiance += assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+                        }
+                    } else {
+                        if (pc.skyboxIndex >= 0) {
+                            radiance += throughput * assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb * pc.iblIntensity;
+                        }
+                        DirectionalLightData dl = pc.lightData->directionalLight;
+                        if (dl.directionIntensity.w > 0.0) {
+                            float cosThetaMax = cos(dl.angularRadius);
+                            float coneSolidAngle = 2.0 * PI * (1.0 - cosThetaMax);
+                            if (coneSolidAngle > 1e-7 && dot(rayDir, normalize(-dl.directionIntensity.xyz)) >= cosThetaMax) {
+                                float pdfCone = 1.0 / coneSolidAngle;
+                                float w = segmentPdf / (segmentPdf + pdfCone);
+                                radiance += throughput * (dl.directionIntensity.w / coneSolidAngle) * UnpackUnorm4x8(dl.packedColor).rgb * w;
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                float3 hitPosition = rayOrigin + rayDir * segmentT;
+                Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
+                GTFullSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
+                float3 shadingN = dot(surface.normal, -rayDir) < 0.0 ? -surface.normal : surface.normal;
+                float3 Vnext = -rayDir;
+                float3 hitOrigin = OffsetHitRayOrigin(hitPosition, shadingN);
+
+                radiance += throughput * surface.emissive;
+                radiance += throughput * EvalDirectLighting(pc, hitPosition, hitOrigin, shadingN, Vnext, surface.albedo, surface.metallic, surface.roughness, surface.F0, segment < GT_FULL_MAX_BOUNCES, rng);
+
+                BrdfSample bs = SampleSurfaceBrdf(shadingN, Vnext, surface.albedo, surface.metallic, surface.roughness, surface.F0, rng);
+                if (!bs.valid) {
+                    break;
+                }
+                throughput *= bs.weight;
+                rayOrigin = hitOrigin;
+                rayDir = bs.direction;
+                segmentPdf = bs.pdf;
+            }
+
+            float lum = GTLuminance(radiance);
+            float cap = GT_FIREFLY_CLAMP_BASE * sqrt(count + float(s) + 1.0);
+            if (lum > cap) {
+                radiance *= cap / lum;
+            }
+            sampleSum += radiance;
+        }
+
+        accum = (accum * count + float4(sampleSum, float(spp))) / (count + float(spp));
+        pc.accumulationBuffer[pixelIdx] = accum;
+        rdgStorageFloat4[pc.outputIndex][pixel] = float4(accum.xyz, 1.0);
+        return;
+    }
+
     // Primary miss: draw the environment map (matches the skybox pass reconstruction + Y flip).
     if (depth <= 1e-6) {
         float3 background = float3(0.0);

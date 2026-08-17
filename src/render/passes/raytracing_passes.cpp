@@ -7,6 +7,7 @@
 #include <cstring>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/packing.hpp>
 
 #include "render/render_config.h"
 #include "render/frame_resources.h"
@@ -438,7 +439,9 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.WriteStorageImage(targets.colorOutput);
-    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, samplesPerFrame, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
+    const uint32_t dofPacked = glm::packHalf2x16(glm::vec2(glm::max(0.0f, viewFamily.groundTruthDofAperture), viewFamily.postProcessConfig.dofFocusDistance));
+
+    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, samplesPerFrame, dofPacked, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_full"));
@@ -466,6 +469,7 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
             .accumulationCount = accumulationCount,
             .iblIntensity = iblIntensity,
             .samplesPerFrame = samplesPerFrame,
+            .dofPackedApertureFocus = dofPacked,
             .renderExtent = {renderExtent[0], renderExtent[1]},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

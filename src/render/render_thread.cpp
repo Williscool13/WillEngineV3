@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <enkiTS/src/TaskScheduler.h>
+#include <glm/gtc/packing.hpp>
 #include <spdlog/spdlog.h>
 #include <stb/stb_image_write.h>
 #include <tracy/Tracy.hpp>
@@ -844,6 +845,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             renderGraph->CarryTextureToNextFrame(SID("lit_color_preoverlay"), SID("lit_color_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
         }
 
+        if (viewFamily.groundTruthMode == Core::GroundTruthMode::None) {
+            targets.colorOutput = PPDepthOfField(*renderGraph, pipelineManager, viewFamily.postProcessConfig, targets, renderExtent, frameNumber, targets.colorOutput);
+        }
+
         switch (viewFamily.aaConfig.mode) {
             case Core::AntiAliasingMode::SMAA:
                 targets.colorOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
@@ -1074,6 +1079,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .historyCheckerboardField = historyCheckerboardField,
                         .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? renderGraph->TryGetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                         .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
+                        .dofPackedRadii = glm::packHalf2x16(glm::vec2(viewFamily.postProcessConfig.dofNearRadiusPx, viewFamily.postProcessConfig.dofFarRadiusPx)),
                         .worldGridProbeGrid = viewFamily.bReflectionProbeBruteForce ? 0 : renderGraph->TryGetBufferAddress(SID("world_grid_probe_grid")),
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));

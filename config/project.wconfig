@@ -34,7 +34,7 @@ bUseCatmullRom|1
 bUseHistoryClampRelax|0
 ;
 ;
-resolutionScale|0x3f400000
+resolutionScale|0x3f800000
 reflectionProbeLineWidth|0x3ca3d70a
 gameCameraFovDegrees|0x428c0000
 gameCameraNearPlane|0x3dcccccd

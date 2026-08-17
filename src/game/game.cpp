@@ -402,11 +402,20 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->mainViewFamily.groundTruthMode = state->lighting.groundTruthMode;
     frameBuffer->mainViewFamily.bResetGroundTruth = state->lighting.bResetGroundTruth;
     frameBuffer->mainViewFamily.groundTruthSpp = static_cast<uint32_t>(glm::max(1, state->lighting.groundTruthSpp));
+    frameBuffer->mainViewFamily.groundTruthDofAperture = state->lighting.groundTruthDofAperture;
     if (frameBuffer->mainViewFamily.groundTruthMode != Core::GroundTruthMode::None) {
         const Core::RenderView& rv = frameBuffer->mainViewFamily.mainView;
         if (rv.currentViewData.view != rv.previousViewData.view) {
             frameBuffer->mainViewFamily.bResetGroundTruth = true;
         }
+        static float prevGtAperture = -1.0f;
+        static float prevGtFocus = -1.0f;
+        const float gtFocus = state->lighting.postProcess.dofFocusDistance;
+        if (state->lighting.groundTruthDofAperture != prevGtAperture || (state->lighting.groundTruthDofAperture > 0.0f && gtFocus != prevGtFocus)) {
+            frameBuffer->mainViewFamily.bResetGroundTruth = true;
+        }
+        prevGtAperture = state->lighting.groundTruthDofAperture;
+        prevGtFocus = gtFocus;
     }
 
     state->lighting.bResetGroundTruth = false;

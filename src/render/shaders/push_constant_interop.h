@@ -98,7 +98,7 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint historyCheckerboardField;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC uint reflectionProbeCount;
-    SHADER_PUBLIC uint pad0;
+    SHADER_PUBLIC uint dofPackedRadii;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
 };
 
@@ -1210,6 +1210,7 @@ SHADER_PUBLIC struct DofCocPushConstant
     SHADER_PUBLIC uint32_t sceneColorIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t farMinIndex;
     SHADER_PUBLIC float focusDistance;
     SHADER_PUBLIC float sharpHalfRange;
     SHADER_PUBLIC float nearTransitionInv;
@@ -1245,6 +1246,30 @@ SHADER_PUBLIC struct DofGatherPushConstant
     SHADER_PUBLIC uint32_t tileNeighborMaxIndex;
     SHADER_PUBLIC uint32_t nearOutputIndex;
     SHADER_PUBLIC uint32_t farOutputIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t pad0;
+};
+
+SHADER_PUBLIC struct DofLayerBlurPushConstant
+{
+    SHADER_PUBLIC uint2 extent; // half res
+    SHADER_PUBLIC uint32_t cocIndex;
+    SHADER_PUBLIC uint32_t nearIndex;
+    SHADER_PUBLIC uint32_t farIndex;
+    SHADER_PUBLIC uint32_t nearOutputIndex;
+    SHADER_PUBLIC uint32_t farOutputIndex;
+    SHADER_PUBLIC uint32_t pad0;
+};
+
+SHADER_PUBLIC struct DofCompositePushConstant
+{
+    SHADER_PUBLIC uint2 extent;
+    SHADER_PUBLIC uint32_t sceneColorIndex;
+    SHADER_PUBLIC uint32_t farMinCocIndex;
+    SHADER_PUBLIC uint32_t nearIndex;
+    SHADER_PUBLIC uint32_t farIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct BloomThresholdPushConstant
@@ -2053,7 +2078,7 @@ SHADER_PUBLIC struct RTGroundTruthGIPushConstant
     SHADER_PUBLIC uint32_t accumulationCount;
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC uint32_t samplesPerFrame;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t dofPackedApertureFocus;
     SHADER_PUBLIC uint2 renderExtent;
 };
 

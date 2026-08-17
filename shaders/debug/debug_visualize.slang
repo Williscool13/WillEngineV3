@@ -348,6 +348,17 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(srcPixel.a);
             break;
         }
+        case 45: { // DofZones on dof_color_coc.a: green = in focus, orange ramp = near transition, red = near saturated, cyan ramp = far transition, blue = far saturated. Ramp brightness shows progress, so the transition corners read as bands.
+            float coc = srcPixel.a;
+            float nearR = max(f16tof32(pc.dofPackedRadii & 0xFFFFu), 1e-3);
+            float farR = max(f16tof32(pc.dofPackedRadii >> 16), 1e-3);
+            if (abs(coc) < 0.05) { srcPixel.xyz = float3(0.0, 0.35, 0.0); }
+            else if (coc <= -nearR * 0.999) { srcPixel.xyz = float3(1.0, 0.0, 0.0); }
+            else if (coc < 0.0) { srcPixel.xyz = lerp(float3(0.1, 0.05, 0.0), float3(1.0, 0.5, 0.0), -coc / nearR); }
+            else if (coc >= farR * 0.999) { srcPixel.xyz = float3(0.0, 0.0, 1.0); }
+            else { srcPixel.xyz = lerp(float3(0.0, 0.05, 0.1), float3(0.0, 0.8, 1.0), coc / farR); }
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;
