@@ -344,6 +344,10 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(sqrt(saturate(srcPixel.r / 64.0)), 0.0, sqrt(saturate(srcPixel.g / 64.0)));
             break;
         }
+        case 44: { // AlphaOnly
+            srcPixel.xyz = float3(srcPixel.a);
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

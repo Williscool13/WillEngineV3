@@ -1237,6 +1237,16 @@ SHADER_PUBLIC struct DofNeighborMaxPushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) indirectArgsBuffer;
 };
 
+SHADER_PUBLIC struct DofGatherPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer;
+    SHADER_PUBLIC uint2 sourceExtent; // half res
+    SHADER_PUBLIC uint32_t cocIndex;
+    SHADER_PUBLIC uint32_t tileNeighborMaxIndex;
+    SHADER_PUBLIC uint32_t nearOutputIndex;
+    SHADER_PUBLIC uint32_t farOutputIndex;
+};
+
 SHADER_PUBLIC struct BloomThresholdPushConstant
 {
     SHADER_PUBLIC uint2 outputExtent;

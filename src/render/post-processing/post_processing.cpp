@@ -274,6 +274,46 @@ StringID PPDepthOfField(PostProcessContext& ctx, StringID input)
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
+    graph.CreateTexture(SID("dof_near"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
+    graph.CreateTexture(SID("dof_far"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
+
+    // Unlisted tiles are never gathered; alpha 0 is what tells the composite to keep the sharp pixel
+    RenderPass& layerClearPass = graph.AddPass(SID("[DoF] Layer Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
+    layerClearPass.WriteClearImage(SID("dof_near"));
+    layerClearPass.WriteClearImage(SID("dof_far"));
+    layerClearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        VkClearColorValue clearValue{};
+        VkImageSubresourceRange range{};
+        range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        range.levelCount = 1;
+        range.layerCount = 1;
+        vkCmdClearColorImage(cmd, graph.GetImageHandle(SID("dof_near")), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &range);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle(SID("dof_far")), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &range);
+    });
+
+    RenderPass& gatherPass = graph.AddPass(SID("[DoF] Gather"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    gatherPass.ReadSampledImage(SID("dof_color_coc"));
+    gatherPass.ReadSampledImage(SID("dof_tiled_neighbor_max"));
+    gatherPass.ReadIndirectBuffer(SID("dof_dispatch_args"));
+    gatherPass.ReadBuffer(SID("dof_tile_list"));
+    gatherPass.WriteStorageImage(SID("dof_near"));
+    gatherPass.WriteStorageImage(SID("dof_far"));
+    gatherPass.Execute([halfWidth, halfHeight, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        DofGatherPushConstant pc{
+            .tileListBuffer = graph.GetBufferAddress(SID("dof_tile_list")),
+            .sourceExtent = {halfWidth, halfHeight},
+            .cocIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc")),
+            .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_tiled_neighbor_max")),
+            .nearOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_near")),
+            .farOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_far")),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_gather"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SID("dof_dispatch_args")), 0);
+    });
+
     return input;
 }
 

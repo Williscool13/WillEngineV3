@@ -102,3 +102,62 @@ void ComputeDofNeighborMax(uniform DofNeighborMaxPushConstant pc, uint3 dtid : S
         pc.tileListBuffer[slot] = tileCoord.x | (tileCoord.y << 16);
     }
 }
+
+static const float DOF_GOLDEN_ANGLE = 2.39996323;
+
+[shader("compute")]
+[numthreads(POST_PROCESS_DOF_TILE_SIZE, POST_PROCESS_DOF_TILE_SIZE, 1)]
+void ComputeDofGather(uniform DofGatherPushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID) {
+    uint packedTile = pc.tileListBuffer[gid.x];
+    uint2 tileCoord = uint2(packedTile & 0xFFFFu, packedTile >> 16);
+    uint2 pixel = tileCoord * uint(POST_PROCESS_DOF_TILE_SIZE) + gtid.xy;
+    if (any(pixel >= pc.sourceExtent)) { return; }
+
+    float2 tileMax = rdgTexturesFloat2[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg * 0.5;
+    float searchRadius = max(tileMax.x, tileMax.y);
+    if (searchRadius < 0.5) { return; }
+
+    float4 centerSample = rdgTexturesFloat4[pc.cocIndex].Load(int3(pixel, 0));
+    float centerCoc = centerSample.a * 0.5;
+
+    float2 noise = assetTextures[BLUE_NOISE_BINDLESS_INDEX].Load(int3(int2(pixel & uint(BLUE_NOISE_SIZE_MASK)), 0)).rg;
+    float angleOffset = noise.x * 6.2831853;
+
+    int sampleCount = clamp(int(ceil(searchRadius * 4.0)), 8, POST_PROCESS_DOF_SAMPLE_COUNT);
+
+    float3 nearColor = float3(0.0, 0.0, 0.0);
+    float nearWeight = 0.0;
+    float nearCoverage = 0.0;
+    float3 farColor = centerSample.rgb * 1e-3;
+    float farWeight = 1e-3;
+
+    for (int i = 0; i < sampleCount; ++i) {
+        float radius = searchRadius * sqrt((float(i) + noise.y) / float(sampleCount));
+        float angle = float(i) * DOF_GOLDEN_ANGLE + angleOffset;
+        int2 sampleCoord = clamp(int2(round(float2(pixel) + float2(cos(angle), sin(angle)) * radius)), int2(0, 0), int2(pc.sourceExtent) - 1);
+
+        float4 s = rdgTexturesFloat4[pc.cocIndex].Load(int3(sampleCoord, 0));
+        float sampleCoc = s.a * 0.5;
+        float spread = abs(sampleCoc);
+        float coverage = saturate(spread - radius + 1.0);
+        if (coverage <= 0.0) { continue; }
+
+        float weight = coverage / max(spread * spread, 1.0);
+
+        if (sampleCoc < 0.0) {
+            nearColor += s.rgb * weight;
+            nearWeight += weight;
+            nearCoverage += coverage;
+        } else {
+            // Sharper than the center means in front of it, which must not bleed backwards
+            float behind = saturate(sampleCoc - centerCoc + 1.0);
+            farColor += s.rgb * weight * behind;
+            farWeight += weight * behind;
+        }
+    }
+
+    float nearAlpha = max(saturate(nearCoverage / float(sampleCount)), saturate(-centerCoc));
+
+    rdgStorageFloat4[pc.nearOutputIndex][pixel] = float4(nearColor / max(nearWeight, 1e-6), nearAlpha);
+    rdgStorageFloat4[pc.farOutputIndex][pixel] = float4(farColor / farWeight, 1.0);
+}
