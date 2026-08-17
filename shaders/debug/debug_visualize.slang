@@ -340,6 +340,10 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(sqrt(saturate(-coc / 64.0)), 0.0, sqrt(saturate(coc / 64.0)));
             break;
         }
+        case 43: { // DofTileMax: r = max near magnitude, g = max far, both full-res pixel radii. Red = near reach, blue = far reach, same 64px sqrt ramp as case 42.
+            srcPixel.xyz = float3(sqrt(saturate(srcPixel.r / 64.0)), 0.0, sqrt(saturate(srcPixel.g / 64.0)));
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

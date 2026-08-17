@@ -647,6 +647,10 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ScreenFadePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("dof_coc"), src / "depth_of_field.spv", "ComputeDofCoc",
                             sizeof(DofCocPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("dof_tile_max"), src / "depth_of_field.spv", "ComputeDofTileMax",
+                            sizeof(DofTileMaxPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("dof_neighbor_max"), src / "depth_of_field.spv", "ComputeDofNeighborMax",
+                            sizeof(DofNeighborMaxPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("object_motion_extract"), src / "motion_blur.spv", "ComputeObjectMotionExtract",
                             sizeof(ObjectMotionExtractPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("motion_blur_velocity_extract"), src / "motion_blur.spv", "ComputeMotionBlurVelocityExtract",

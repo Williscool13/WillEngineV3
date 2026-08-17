@@ -82,6 +82,7 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     ReflectionProbeIndex = 40,
     ReflectionProbeBinDisagreement = 41,
     DofCoc = 42,
+    DofTileMax = 43,
 };
 
 SHADER_PUBLIC struct Frustum

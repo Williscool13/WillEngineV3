@@ -217,6 +217,63 @@ StringID PPDepthOfField(PostProcessContext& ctx, StringID input)
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
+    const uint32_t tiledX = (halfWidth + POST_PROCESS_DOF_TILE_SIZE - 1) / POST_PROCESS_DOF_TILE_SIZE;
+    const uint32_t tiledY = (halfHeight + POST_PROCESS_DOF_TILE_SIZE - 1) / POST_PROCESS_DOF_TILE_SIZE;
+    const float maxRadiusHalfResPx = std::max(nearRadiusPx, farRadiusPx) * 0.5f;
+    const uint32_t dilationRadius = static_cast<uint32_t>(std::ceil(maxRadiusHalfResPx / static_cast<float>(POST_PROCESS_DOF_TILE_SIZE)));
+
+    graph.CreateTexture(SID("dof_tiled_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, tiledX, tiledY, 1}, std::nullopt, true);
+    graph.CreateTexture(SID("dof_tiled_neighbor_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, tiledX, tiledY, 1}, std::nullopt, true);
+    graph.CreateBuffer(SID("dof_dispatch_args"), 3 * sizeof(uint32_t), false);
+    graph.CreateBuffer(SID("dof_tile_list"), tiledX * tiledY * sizeof(uint32_t), false);
+
+    RenderPass& argsInitPass = graph.AddPass(SID("[DoF] Args Init"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
+    argsInitPass.WriteTransferBuffer(SID("dof_dispatch_args"));
+    argsInitPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const uint32_t init[3] = {0u, 1u, 1u};
+        vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(SID("dof_dispatch_args")), 0, sizeof(init), init);
+    });
+
+    RenderPass& tileMaxPass = graph.AddPass(SID("[DoF] Tile Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    tileMaxPass.ReadSampledImage(SID("dof_color_coc"));
+    tileMaxPass.WriteStorageImage(SID("dof_tiled_max"));
+    tileMaxPass.Execute([halfWidth, halfHeight, tiledX, tiledY, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        DofTileMaxPushConstant pc{
+            .sourceExtent = {halfWidth, halfHeight},
+            .tileExtent = {tiledX, tiledY},
+            .cocIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc")),
+            .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_tiled_max")),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_tile_max"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, tiledX, tiledY, 1);
+    });
+
+    RenderPass& neighborMaxPass = graph.AddPass(SID("[DoF] Neighbor Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    neighborMaxPass.ReadSampledImage(SID("dof_tiled_max"));
+    neighborMaxPass.WriteStorageImage(SID("dof_tiled_neighbor_max"));
+    neighborMaxPass.ReadWriteBuffer(SID("dof_dispatch_args"));
+    neighborMaxPass.ReadWriteBuffer(SID("dof_tile_list"));
+    neighborMaxPass.Execute([tiledX, tiledY, pipelines, dilationRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        DofNeighborMaxPushConstant pc{
+            .tileExtent = {tiledX, tiledY},
+            .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_tiled_max")),
+            .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_tiled_neighbor_max")),
+            .dilationRadius = dilationRadius,
+            .tileListBuffer = graph.GetBufferAddress(SID("dof_tile_list")),
+            .indirectArgsBuffer = graph.GetBufferAddress(SID("dof_dispatch_args")),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_neighbor_max"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        uint32_t xDispatch = (tiledX + POST_PROCESS_DOF_NEIGHBOR_DISPATCH_X - 1) / POST_PROCESS_DOF_NEIGHBOR_DISPATCH_X;
+        uint32_t yDispatch = (tiledY + POST_PROCESS_DOF_NEIGHBOR_DISPATCH_Y - 1) / POST_PROCESS_DOF_NEIGHBOR_DISPATCH_Y;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+
     return input;
 }
 

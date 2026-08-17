@@ -46,3 +46,59 @@ void ComputeDofCoc(uniform DofCocPushConstant pc, uint3 dtid : SV_DispatchThread
 
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(color * 0.25, coc);
 }
+
+groupshared float g_maxNear[POST_PROCESS_DOF_TILE_SIZE * POST_PROCESS_DOF_TILE_SIZE];
+groupshared float g_maxFar[POST_PROCESS_DOF_TILE_SIZE * POST_PROCESS_DOF_TILE_SIZE];
+
+
+[shader("compute")]
+[numthreads(POST_PROCESS_DOF_TILE_SIZE, POST_PROCESS_DOF_TILE_SIZE, 1)]
+void ComputeDofTileMax(uniform DofTileMaxPushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint groupIndex : SV_GroupIndex) {
+    uint2 pixel = gid.xy * POST_PROCESS_DOF_TILE_SIZE + gtid.xy;
+
+    float coc = 0.0;
+    if (all(pixel < pc.sourceExtent)) {
+        coc = rdgTexturesFloat4[pc.cocIndex].Load(int3(pixel, 0)).a;
+    }
+    g_maxNear[groupIndex] = max(-coc, 0.0);
+    g_maxFar[groupIndex] = max(coc, 0.0);
+
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint cutoff = (POST_PROCESS_DOF_TILE_SIZE * POST_PROCESS_DOF_TILE_SIZE) >> 1; cutoff > 0; cutoff >>= 1) {
+        if (groupIndex < cutoff) {
+            g_maxNear[groupIndex] = max(g_maxNear[groupIndex], g_maxNear[groupIndex + cutoff]);
+            g_maxFar[groupIndex] = max(g_maxFar[groupIndex], g_maxFar[groupIndex + cutoff]);
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    if (groupIndex == 0) {
+        rdgStorageFloat2[pc.tileMaxIndex][gid.xy] = float2(g_maxNear[0], g_maxFar[0]);
+    }
+}
+
+[shader("compute")]
+[numthreads(POST_PROCESS_DOF_NEIGHBOR_DISPATCH_X, POST_PROCESS_DOF_NEIGHBOR_DISPATCH_Y, 1)]
+void ComputeDofNeighborMax(uniform DofNeighborMaxPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    uint2 tileCoord = dtid.xy;
+    if (any(tileCoord >= pc.tileExtent)) { return; }
+
+    float2 maxCoc = float2(0.0, 0.0);
+    int radius = int(pc.dilationRadius);
+    for (int y = -radius; y <= radius; ++y) {
+        for (int x = -radius; x <= radius; ++x) {
+            int2 sampleCoord = int2(tileCoord) + int2(x, y);
+            if (any(sampleCoord < int2(0, 0)) || any(sampleCoord >= int2(pc.tileExtent))) { continue; }
+            maxCoc = max(maxCoc, rdgTexturesFloat2[pc.tileMaxIndex].Load(int3(sampleCoord, 0)).rg);
+        }
+    }
+
+    rdgStorageFloat2[pc.neighborMaxIndex][tileCoord] = maxCoc;
+
+    if (max(maxCoc.x, maxCoc.y) >= 1.0) {
+        uint slot;
+        InterlockedAdd(pc.indirectArgsBuffer[0], 1u, slot);
+        pc.tileListBuffer[slot] = tileCoord.x | (tileCoord.y << 16);
+    }
+}

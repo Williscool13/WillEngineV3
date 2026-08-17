@@ -658,6 +658,8 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Bloom Chain")) setDebugTarget("bloom_chain", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("DoF Half-Res Color")) setDebugTarget("dof_color_coc", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("DoF Circle of Confusion")) setDebugTarget("dof_color_coc", DebugTransformationType::DofCoc, Core::DebugViewAspect::None);
+            if (ImGui::Button("DoF Tiled Max")) setDebugTarget("dof_tiled_max", DebugTransformationType::DofTileMax, Core::DebugViewAspect::None);
+            if (ImGui::Button("DoF Tiled Neighbor Max")) setDebugTarget("dof_tiled_neighbor_max", DebugTransformationType::DofTileMax, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Velocity")) setDebugTarget("motion_blur_velocity", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Tiled Max")) setDebugTarget("motion_blur_tiled_max", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Motion Blur Neighbor Max")) setDebugTarget("motion_blur_tiled_neighbor_max", DebugTransformationType::None, Core::DebugViewAspect::None);

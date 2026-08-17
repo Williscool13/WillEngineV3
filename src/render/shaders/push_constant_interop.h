@@ -1218,6 +1218,25 @@ SHADER_PUBLIC struct DofCocPushConstant
     SHADER_PUBLIC float farRadiusPx;
 };
 
+SHADER_PUBLIC struct DofTileMaxPushConstant
+{
+    SHADER_PUBLIC uint2 sourceExtent; // half res
+    SHADER_PUBLIC uint2 tileExtent;
+    SHADER_PUBLIC uint32_t cocIndex;
+    SHADER_PUBLIC uint32_t tileMaxIndex;
+};
+
+SHADER_PUBLIC struct DofNeighborMaxPushConstant
+{
+    SHADER_PUBLIC uint2 tileExtent;
+    SHADER_PUBLIC uint32_t tileMaxIndex;
+    SHADER_PUBLIC uint32_t neighborMaxIndex;
+    SHADER_PUBLIC uint32_t dilationRadius;
+    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indirectArgsBuffer;
+};
+
 SHADER_PUBLIC struct BloomThresholdPushConstant
 {
     SHADER_PUBLIC uint2 outputExtent;
