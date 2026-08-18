@@ -218,6 +218,40 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
+    const uint32_t mip1Width = std::max(1u, (halfWidth + 1) / 2);
+    const uint32_t mip1Height = std::max(1u, (halfHeight + 1) / 2);
+    const uint32_t mip2Width = std::max(1u, (mip1Width + 1) / 2);
+    const uint32_t mip2Height = std::max(1u, (mip1Height + 1) / 2);
+
+    graph.CreateTexture(SID("dof_color_coc_mip1"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, mip1Width, mip1Height, 1}, std::nullopt, true);
+    graph.CreateTexture(SID("dof_color_coc_mip2"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, mip2Width, mip2Height, 1}, std::nullopt, true);
+
+    struct MipStep { StringID passName; StringID input; StringID output; uint32_t inW, inH, outW, outH; };
+    const MipStep mipSteps[2] = {
+        {SID("[DoF] Color Mip 1"), SID("dof_color_coc"), SID("dof_color_coc_mip1"), halfWidth, halfHeight, mip1Width, mip1Height},
+        {SID("[DoF] Color Mip 2"), SID("dof_color_coc_mip1"), SID("dof_color_coc_mip2"), mip1Width, mip1Height, mip2Width, mip2Height},
+    };
+    for (const MipStep& step : mipSteps) {
+        RenderPass& mipPass = graph.AddPass(step.passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+        mipPass.ReadSampledImage(step.input);
+        mipPass.WriteStorageImage(step.output);
+        mipPass.Execute([step, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            DofMipPushConstant pc{
+                .inputExtent = {step.inW, step.inH},
+                .outputExtent = {step.outW, step.outH},
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex(step.input),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(step.output),
+            };
+
+            const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_mip"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (step.outW + POST_PROCESS_DOF_DISPATCH_X - 1) / POST_PROCESS_DOF_DISPATCH_X;
+            uint32_t yDispatch = (step.outH + POST_PROCESS_DOF_DISPATCH_Y - 1) / POST_PROCESS_DOF_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
+
     const uint32_t tiledX = (halfWidth + POST_PROCESS_DOF_TILE_SIZE - 1) / POST_PROCESS_DOF_TILE_SIZE;
     const uint32_t tiledY = (halfHeight + POST_PROCESS_DOF_TILE_SIZE - 1) / POST_PROCESS_DOF_TILE_SIZE;
     const float maxRadiusHalfResPx = std::max(nearRadiusPx, farRadiusPx) * 0.5f;
@@ -294,6 +328,8 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
 
     RenderPass& gatherPass = graph.AddPass(SID("[DoF] Gather"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     gatherPass.ReadSampledImage(SID("dof_color_coc"));
+    gatherPass.ReadSampledImage(SID("dof_color_coc_mip1"));
+    gatherPass.ReadSampledImage(SID("dof_color_coc_mip2"));
     gatherPass.ReadSampledImage(SID("dof_tiled_neighbor_max"));
     gatherPass.ReadIndirectBuffer(SID("dof_dispatch_args"));
     gatherPass.ReadBuffer(SID("dof_tile_list"));
@@ -304,6 +340,8 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
             .tileListBuffer = graph.GetBufferAddress(SID("dof_tile_list")),
             .sourceExtent = {halfWidth, halfHeight},
             .cocIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc")),
+            .mip1Index = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc_mip1")),
+            .mip2Index = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc_mip2")),
             .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_tiled_neighbor_max")),
             .nearOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_near")),
             .farOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_far")),

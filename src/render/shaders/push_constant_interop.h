@@ -1243,11 +1243,21 @@ SHADER_PUBLIC struct DofGatherPushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer;
     SHADER_PUBLIC uint2 sourceExtent; // half res
     SHADER_PUBLIC uint32_t cocIndex;
+    SHADER_PUBLIC uint32_t mip1Index;
+    SHADER_PUBLIC uint32_t mip2Index;
     SHADER_PUBLIC uint32_t tileNeighborMaxIndex;
     SHADER_PUBLIC uint32_t nearOutputIndex;
     SHADER_PUBLIC uint32_t farOutputIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t pad0;
+};
+
+SHADER_PUBLIC struct DofMipPushConstant
+{
+    SHADER_PUBLIC uint2 inputExtent;
+    SHADER_PUBLIC uint2 outputExtent;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
 };
 
 SHADER_PUBLIC struct DofLayerBlurPushConstant

@@ -27,12 +27,12 @@ agxMaxEV|0x4080d58f
 khronosStartCompression|0x3f428f5c
 khronosDesaturation|0x3e19999a
 bDepthOfFieldEnabled|1
-dofFocusDistance|0x40a00000
+dofFocusDistance|0x40400000
 dofFocusRange|0x3f800000
-dofNearTransition|0x40000000
+dofNearTransition|0x40800000
 dofFarTransition|0x41a00000
 dofNearRadiusPx|0x41800000
-dofFarRadiusPx|0x41800000
+dofFarRadiusPx|0x00000000
 bMotionBlurEnabled|0
 bMotionBlurObjectOnly|1
 motionBlurVelocityScale|0x3f4ccccd

@@ -645,6 +645,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(PostProcessComposePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("screen_fade"), src / "screen_fade.spv", "ComputeScreenFade",
                             sizeof(ScreenFadePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("dof_mip"), src / "depth_of_field.spv", "ComputeDofMip",
+                            sizeof(DofMipPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("dof_coc"), src / "depth_of_field.spv", "ComputeDofCoc",
                             sizeof(DofCocPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("dof_tile_max"), src / "depth_of_field.spv", "ComputeDofTileMax",

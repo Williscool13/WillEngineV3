@@ -1,9 +1,9 @@
 defaultScene|New Scene
-bLimitFps|0
+bLimitFps|1
 frameLimitTarget|60
 bAutoSaveProjectConfig|0
 bAutoSaveLighting|0
-bAutoSavePostProcess|1
+bAutoSavePostProcess|0
 activeLightingProfile|ReSTIR
 activePostProcessProfile|main_post_process
 activeInputProfile|
