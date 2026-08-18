@@ -20,6 +20,7 @@
 namespace Render
 {
 DeviceInfo VulkanContext::deviceInfo{};
+bool VulkanContext::bForceNoREBAR{false};
 
 static void* VKAPI_PTR VkHostAlloc(void* pUserData, size_t size, size_t alignment, VkSystemAllocationScope)
 {
@@ -95,6 +96,26 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
 #endif
 
     return VK_FALSE;
+}
+
+static bool DetectREBAR(const VkPhysicalDeviceMemoryProperties& memProps)
+{
+    uint32_t largestDeviceLocalHeap = UINT32_MAX;
+    VkDeviceSize largestSize = 0;
+    for (uint32_t i = 0; i < memProps.memoryHeapCount; ++i) {
+        if ((memProps.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0) { continue; }
+        if (memProps.memoryHeaps[i].size <= largestSize) { continue; }
+        largestSize = memProps.memoryHeaps[i].size;
+        largestDeviceLocalHeap = i;
+    }
+    if (largestDeviceLocalHeap == UINT32_MAX) { return false; }
+
+    constexpr VkMemoryPropertyFlags REQUIRED = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+        if ((memProps.memoryTypes[i].propertyFlags & REQUIRED) != REQUIRED) { continue; }
+        if (memProps.memoryTypes[i].heapIndex == largestDeviceLocalHeap) { return true; }
+    }
+    return false;
 }
 
 VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryManager)
@@ -646,6 +667,9 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     deviceInfo.subgroupProps.pNext = &deviceInfo.accelerationStructureProps;
     vkGetPhysicalDeviceProperties2(physicalDevice, &deviceInfo.properties);
 
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceInfo.memoryProperties);
+    deviceInfo.bREBAR = !bForceNoREBAR && DetectREBAR(deviceInfo.memoryProperties);
+
 #if PROFILER_ENABLED
     tracyContext = TracyVkContextHostCalibrated(
         physicalDevice, device,
@@ -672,6 +696,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     else {
         LOG_INFO(Engine, "Queue Families - Graphics: {} | Transfer: {} | Compute: none, aliased to graphics", graphicsQueueFamily, transferQueueFamily);
     }
+    LOG_INFO(Engine, "Resizable BAR: {}", deviceInfo.bREBAR ? "yes" : (bForceNoREBAR ? "no (forced off)" : "no"));
     LOG_INFO(Engine, "Max Push Constant Size: {}", deviceInfo.properties.properties.limits.maxPushConstantsSize);
     LOG_INFO(Engine, "Max Descriptor Buffer Bindings: {}", deviceInfo.descriptorBufferProps.maxDescriptorBufferBindings);
     LOG_INFO(Engine, "Mesh Shader Support - Max Task Workgroups: {}", deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0]);

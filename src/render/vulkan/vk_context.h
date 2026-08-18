@@ -25,11 +25,15 @@ struct DeviceInfo
     VkPhysicalDeviceMeshShaderPropertiesEXT meshShaderProps{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT};
     VkPhysicalDeviceSubgroupProperties subgroupProps{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
     VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProps{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
+    VkPhysicalDeviceMemoryProperties memoryProperties{};
+    bool bREBAR{false};
 };
 
 struct VulkanContext
 {
     static DeviceInfo deviceInfo;
+    /** Set before context creation to make the device report no REBAR, so the staged upload path can be exercised on hardware that has it. */
+    static bool bForceNoREBAR;
 
     VkInstance instance{};
     VkSurfaceKHR surface{};

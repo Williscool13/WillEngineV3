@@ -167,23 +167,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gCheckerboardResolveAccumSpeed = bCheckerboard ? checkerboardResolveAccumSpeed : 0.0f;
 
     // Upload constants buffer
-    graph.CreateBuffer(SID("relax_constants"), sizeof(RelaxDiffuseSpecularConstants));
-    UploadAllocation rcAlloc = graph.AllocateTransient(sizeof(RelaxDiffuseSpecularConstants));
-    memcpy(rcAlloc.ptr, &rc, sizeof(RelaxDiffuseSpecularConstants)); {
-        auto& pass = graph.AddPass(SID("[ReLAX] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Untagged);
-        pass.WriteTransferBuffer(SID("relax_constants"));
-        pass.Execute([offset = rcAlloc.offset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkBufferCopy2 region{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = offset, .dstOffset = 0, .size = sizeof(RelaxDiffuseSpecularConstants)};
-            VkCopyBufferInfo2 info{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = graph.GetTransientUploadBuffer(),
-                .dstBuffer = graph.GetBufferHandle(SID("relax_constants")),
-                .regionCount = 1,
-                .pRegions = &region
-            };
-            vkCmdCopyBuffer2(cmd, &info);
-        });
-    }
+    memcpy(graph.OpenHostBuffer(SID("relax_constants"), sizeof(RelaxDiffuseSpecularConstants)), &rc, sizeof(RelaxDiffuseSpecularConstants));
 
     // Declare transient textures
     const TextureInfo colorInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1};
@@ -814,23 +798,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     rc.gCheckerboardResolveAccumSpeed = bCheckerboard ? checkerboardResolveAccumSpeed : 0.0f;
 
     // Upload constants buffer
-    graph.CreateBuffer(SID("reblur_constants"), sizeof(ReblurDiffuseSpecularConstants));
-    UploadAllocation rcAlloc = graph.AllocateTransient(sizeof(ReblurDiffuseSpecularConstants));
-    memcpy(rcAlloc.ptr, &rc, sizeof(ReblurDiffuseSpecularConstants)); {
-        auto& pass = graph.AddPass(SID("[ReBLUR] Upload Constants"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Untagged);
-        pass.WriteTransferBuffer(SID("reblur_constants"));
-        pass.Execute([offset = rcAlloc.offset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkBufferCopy2 region{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = offset, .dstOffset = 0, .size = sizeof(ReblurDiffuseSpecularConstants)};
-            VkCopyBufferInfo2 info{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = graph.GetTransientUploadBuffer(),
-                .dstBuffer = graph.GetBufferHandle(SID("reblur_constants")),
-                .regionCount = 1,
-                .pRegions = &region
-            };
-            vkCmdCopyBuffer2(cmd, &info);
-        });
-    }
+    memcpy(graph.OpenHostBuffer(SID("reblur_constants"), sizeof(ReblurDiffuseSpecularConstants)), &rc, sizeof(ReblurDiffuseSpecularConstants));
 
     const TextureInfo colorInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1};
     const TextureInfo histLenInfo{VK_FORMAT_R16_SFLOAT, width, height, 1};

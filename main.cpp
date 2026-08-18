@@ -17,6 +17,7 @@
  * --out <dir>      capture PNG output directory
  * --settle <n>     per-shot convergence frames (default probeBake.settleFrames)
  * --exit           quit after the last shot is saved
+ * --no-rebar       report no resizable BAR, forcing per frame data through the staged upload path
  */
 static Engine::AutomationConfig ParseLaunchArgs(int argc, char* argv[])
 {
@@ -41,6 +42,9 @@ static Engine::AutomationConfig ParseLaunchArgs(int argc, char* argv[])
         }
         else if (strcmp(argv[i], "--exit") == 0) {
             automation.bExitWhenDone = true;
+        }
+        else if (strcmp(argv[i], "--no-rebar") == 0) {
+            automation.bForceNoREBAR = true;
         }
     }
     return automation;

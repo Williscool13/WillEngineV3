@@ -95,13 +95,15 @@ RenderGraph::~RenderGraph()
             allocFns.destroyBuffer(context, readback.buffer, readback.bufferAllocation);
         }
     }
-    for (auto& entry : persistentBuffers) {
+    for (auto& entry : hostBuffers) {
         for (auto& slot : entry.slots) {
             if (slot.buffer != VK_NULL_HANDLE) {
-                if (slot.userData != 0 && entry.onDestroyUserData) { entry.onDestroyUserData(slot.userData); }
                 allocFns.destroyBuffer(context, slot.buffer, slot.allocation);
             }
         }
+    }
+    for (auto& retired : retiredBuffers) {
+        allocFns.destroyBuffer(context, retired.buffer, retired.allocation);
     }
 }
 
@@ -1455,6 +1457,13 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     currentFrameIndex = _currentFrameIndex;
     uploadArenas[currentFrameIndex].allocator.Reset();
 
+    for (int32_t i = static_cast<int32_t>(retiredBuffers.Size()) - 1; i >= 0; --i) {
+        RetiredBuffer& retired = retiredBuffers[i];
+        if (--retired.framesRemaining > 0) { continue; }
+        allocFns.destroyBuffer(context, retired.buffer, retired.allocation);
+        retiredBuffers.SwapRemove(i);
+    }
+
     //
     if (bDestroyViewportAssociated || bDropAllCarryovers) {
         ZoneScopedN("DestroyViewportScaledResources");
@@ -1498,8 +1507,8 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
                 carryover.accumulatedUsage = buf->accumulatedUsage;
             }
         }
-        for (auto& entry : persistentBuffers) {
-            PersistentBuffer& slot = entry.slots[currentFrameIndex];
+        for (auto& entry : hostBuffers) {
+            HostBuffer& slot = entry.slots[currentFrameIndex];
             if (slot.buffer == VK_NULL_HANDLE) { continue; }
             if (const BufferResource* buf = GetBuffer(entry.name)) {
                 slot.lastState = GetBufferState(entry.name);
@@ -2280,28 +2289,44 @@ void RenderGraph::RecreateTransientArena(uint32_t frameIndex, size_t newSize)
     arena.size = newSize;
 }
 
-void RenderGraph::RegisterPersistentBuffer(StringID name, VkBufferUsageFlags usage, Core::InlineFunction<void(uint64_t), 32> onDestroyUserData)
+void RenderGraph::RegisterHostBuffer(StringID name, VkBufferUsageFlags usage)
 {
-    for (const auto& entry : persistentBuffers) {
-        if (entry.name == name) { return; }
+    for (auto& entry : hostBuffers) {
+        if (entry.name == name) {
+            entry.usage |= usage;
+            return;
+        }
     }
-    PersistentBufferSlots& entry = persistentBuffers.EmplaceBack();
+    HostBufferSlots& entry = hostBuffers.EmplaceBack();
     entry.name = name;
-    entry.usage = usage;
-    entry.onDestroyUserData = std::move(onDestroyUserData);
+
+    entry.usage = usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 }
 
-bool RenderGraph::EnsurePersistentBufferCapacity(StringID name, VkDeviceSize requiredSize)
+// The device supporting REBAR does not guarantee this allocation got it: VMA falls back to system memory when the preferred heap is exhausted.
+static bool IsREBAR(VmaAllocator allocator, VmaAllocation allocation)
 {
-    for (auto& entry : persistentBuffers) {
+    if (!VulkanContext::deviceInfo.bREBAR) { return false; }
+
+    VmaAllocationInfo allocInfo{};
+    vmaGetAllocationInfo(allocator, allocation, &allocInfo);
+    if (allocInfo.pMappedData == nullptr) { return false; }
+
+    VkMemoryPropertyFlags props = 0;
+    vmaGetAllocationMemoryProperties(allocator, allocation, &props);
+    return (props & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0;
+}
+
+bool RenderGraph::EnsureHostBufferCapacity(StringID name, VkDeviceSize requiredSize)
+{
+    for (auto& entry : hostBuffers) {
         if (entry.name != name) { continue; }
 
-        PersistentBuffer& slot = entry.slots[currentFrameIndex];
+        HostBuffer& slot = entry.slots[currentFrameIndex];
         if (requiredSize <= slot.capacity) { return false; }
 
         if (slot.buffer != VK_NULL_HANDLE) {
-            if (slot.userData != 0 && entry.onDestroyUserData) { entry.onDestroyUserData(slot.userData); }
-            allocFns.destroyBuffer(context, slot.buffer, slot.allocation);
+            RetireBuffer(slot.buffer, slot.allocation);
             slot = {};
         }
 
@@ -2310,6 +2335,9 @@ bool RenderGraph::EnsurePersistentBufferCapacity(StringID name, VkDeviceSize req
         bufferInfo.usage = entry.usage;
         VmaAllocationCreateInfo vmaInfo{};
         vmaInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+        if (VulkanContext::deviceInfo.bREBAR) {
+            vmaInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        }
 
         auto _alloc = allocFns.createBuffer(context, bufferInfo, vmaInfo);
         slot.buffer = _alloc.buffer;
@@ -2318,48 +2346,100 @@ bool RenderGraph::EnsurePersistentBufferCapacity(StringID name, VkDeviceSize req
 
         VkBufferDeviceAddressInfo addrInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = slot.buffer};
         slot.address = vkGetBufferDeviceAddress(context->device, &addrInfo);
-        slot.userData = 0;
+
+        slot.bREBAR = IsREBAR(context->allocator, slot.allocation);
+        slot.mappedData = slot.bREBAR ? _alloc.mappedData : nullptr;
+        slot.bContentsValid = false;
+        LOG_INFO(Renderer, "Host buffer '{}' slot {}: {}, {} KiB", name.ToString(), currentFrameIndex, slot.bREBAR ? "REBAR" : "staged upload", requiredSize / 1024);
         return true;
     }
-    ENGINE_ASSERT(Renderer, false, "EnsurePersistentBufferCapacity: buffer '{}' not registered", name.ToString());
+    ENGINE_ASSERT(Renderer, false, "EnsureHostBufferCapacity: buffer '{}' not registered", name.ToString());
     return false;
 }
 
-PersistentBuffer& RenderGraph::GetPersistentBuffer(StringID name)
+void RenderGraph::RetireBuffer(VkBuffer buffer, VmaAllocation allocation)
 {
-    for (auto& entry : persistentBuffers) {
+    // ImportBuffer dedupes imported physicals by raw handle, so detach this one before the handle dies and a new allocation reuses its value.
+    for (auto& phys : physicalResources) {
+        if (phys.bIsImported && phys.buffer == buffer) {
+            phys.buffer = VK_NULL_HANDLE;
+            phys.bufferAddress = 0;
+            phys.addressRetrieved = false;
+        }
+    }
+
+    RetiredBuffer& retired = retiredBuffers.EmplaceBack();
+    retired.buffer = buffer;
+    retired.allocation = allocation;
+    retired.framesRemaining = Core::FRAME_BUFFER_COUNT + 1;
+}
+
+void* RenderGraph::OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage)
+{
+    ENGINE_ASSERT(Renderer, size > 0, "OpenHostBuffer: buffer '{}' requested with zero size", name.ToString());
+
+    RegisterHostBuffer(name, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | extraUsage);
+    EnsureHostBufferCapacity(name, size);
+    ImportHostBuffer(name);
+
+    HostBuffer& slot = GetHostBuffer(name);
+    if (slot.mappedData != nullptr) {
+        slot.bContentsValid = true;
+        return slot.mappedData;
+    }
+
+    // No REBAR, so the write lands in the upload arena and a copy carries it into the slot.
+    UploadAllocation upload = AllocateTransient(size);
+
+    auto passName = Core::InlineString<64>("Upload ");
+    passName.Append(name.ToString());
+    RenderPass& pass = AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Upload);
+    pass.WriteTransferBuffer(name);
+    pass.Execute([name, srcOffset = upload.offset, size](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        VkBufferCopy2 copy{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .srcOffset = srcOffset,
+            .dstOffset = 0,
+            .size = size,
+        };
+        VkCopyBufferInfo2 copyInfo{
+            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+            .srcBuffer = graph.GetTransientUploadBuffer(),
+            .dstBuffer = graph.GetBufferHandle(name),
+            .regionCount = 1,
+            .pRegions = &copy,
+        };
+        vkCmdCopyBuffer2(cmd, &copyInfo);
+    });
+
+    slot.bContentsValid = true;
+    return upload.ptr;
+}
+
+HostBuffer& RenderGraph::GetHostBuffer(StringID name)
+{
+    for (auto& entry : hostBuffers) {
         if (entry.name == name) { return entry.slots[currentFrameIndex]; }
     }
-    ENGINE_ASSERT(Renderer, false, "GetPersistentBuffer: buffer '{}' not registered", name.ToString());
-    static PersistentBuffer dummy{};
+    ENGINE_ASSERT(Renderer, false, "GetHostBuffer: buffer '{}' not registered", name.ToString());
+    static HostBuffer dummy{};
     return dummy;
 }
 
-void RenderGraph::ImportPersistentBuffer(StringID name)
+void RenderGraph::ImportHostBuffer(StringID name)
 {
-    for (const auto& entry : persistentBuffers) {
+    for (const auto& entry : hostBuffers) {
         if (entry.name != name) { continue; }
-        const PersistentBuffer& slot = entry.slots[currentFrameIndex];
+        const HostBuffer& slot = entry.slots[currentFrameIndex];
         if (slot.buffer == VK_NULL_HANDLE) {
-            LOG_WARN(Renderer, "ImportPersistentBuffer: Attempted to import a persistent buffer that does not exist.");
+            LOG_WARN(Renderer, "ImportHostBuffer: Attempted to import a persistent buffer that does not exist.");
             return;
         }
         const BufferInfo info{.size = slot.capacity, .usage = entry.usage};
         ImportBuffer(name, slot.buffer, slot.address, info, slot.lastState);
         return;
     }
-    ENGINE_ASSERT(Renderer, false, "ImportPersistentBuffer: buffer '{}' not registered", name.ToString());
-}
-
-void RenderGraph::WriteAccelerationStructureDescriptor(StringID name, VkAccelerationStructureKHR handle)
-{
-    PersistentBuffer& buf = GetPersistentBuffer(name);
-    buf.userData = reinterpret_cast<uint64_t>(handle);
-    VkAccelerationStructureDeviceAddressInfoKHR addrInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
-    addrInfo.accelerationStructure = handle;
-    const VkDeviceAddress address = vkGetAccelerationStructureDeviceAddressKHR(context->device, &addrInfo);
-    resourceManager->bindlessRDGRTDescriptorBuffer.WriteAccelerationStructureDescriptor(currentFrameIndex, address);
-    buf.userData2 = currentFrameIndex;
+    ENGINE_ASSERT(Renderer, false, "ImportHostBuffer: buffer '{}' not registered", name.ToString());
 }
 
 VkAccelerationStructureKHR RenderGraph::GetAccelerationStructureHandle(StringID name)

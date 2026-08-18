@@ -57,10 +57,8 @@ void SetupTLASBuild(RenderGraph& graph,
 
     graph.CreateTLAS(RT_TLAS_BUFFER, alignedTLASSize);
 
-    // Upload TLAS instance buffer
-    const size_t instanceDataSize = instanceCount * sizeof(VkAccelerationStructureInstanceKHR);
-    UploadAllocation instanceUpload = graph.AllocateTransient(instanceDataSize);
-    auto* instanceData = static_cast<VkAccelerationStructureInstanceKHR*>(instanceUpload.ptr);
+    const size_t instanceBufferSize = limits.highestTLASInstanceCount * sizeof(VkAccelerationStructureInstanceKHR);
+    auto* instanceData = static_cast<VkAccelerationStructureInstanceKHR*>(graph.OpenHostBuffer(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR));
 
     size_t instanceSlot = 0;
     for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
@@ -89,28 +87,6 @@ void SetupTLASBuild(RenderGraph& graph,
         inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         inst.accelerationStructureReference = src.blasDeviceAddress;
     }
-
-    const size_t instanceBufferSize = limits.highestTLASInstanceCount * sizeof(VkAccelerationStructureInstanceKHR);
-    graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, 16, false, false);
-
-    RenderPass& uploadPass = graph.AddPass(SID("RT Upload TLAS Instances"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Untagged);
-    uploadPass.WriteTransferBuffer(RT_TLAS_INSTANCE_BUFFER);
-    uploadPass.Execute([srcOffset = instanceUpload.offset, totalSize = instanceDataSize](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        VkBufferCopy2 copy{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-            .srcOffset = srcOffset,
-            .dstOffset = 0,
-            .size = totalSize,
-        };
-        VkCopyBufferInfo2 copyInfo{
-            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-            .srcBuffer = graph.GetTransientUploadBuffer(),
-            .dstBuffer = graph.GetBufferHandle(RT_TLAS_INSTANCE_BUFFER),
-            .regionCount = 1,
-            .pRegions = &copy,
-        };
-        vkCmdCopyBuffer2(cmd, &copyInfo);
-    });
 
     const VkDeviceSize scratchAlignment = VulkanContext::deviceInfo.accelerationStructureProps.minAccelerationStructureScratchOffsetAlignment;
     graph.CreateBufferAligned(RT_TLAS_SCRATCH_BUFFER, scratchSize, scratchAlignment, false);

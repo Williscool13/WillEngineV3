@@ -19,6 +19,7 @@ struct AutomationConfig
     Core::InlineString<512> outputDir{};
     int32_t settleFrames{-1};
     bool bExitWhenDone{false};
+    bool bForceNoREBAR{false};
 
     [[nodiscard]] bool IsCaptureRun() const { return !shotsPath.IsEmpty(); }
 };

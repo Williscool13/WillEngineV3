@@ -351,6 +351,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     //
     {
         ZoneScopedN("CreateRenderThread");
+        Render::VulkanContext::bForceNoREBAR = automation.bForceNoREBAR;
         ImGui::SetAllocatorFunctions(ImGuiAlloc, ImGuiFree, &memoryManager);
         engineRenderSynchronization = new(memoryManager.PersistentAllocRaw(sizeof(Core::FrameSync), Core::AllocTag::FrameSync)) Core::FrameSync(memoryManager);
         renderThread = new(memoryManager.PersistentAllocRaw(sizeof(Render::RenderThread), Core::AllocTag::RenderThread)) Render::RenderThread(

@@ -1661,38 +1661,26 @@ void RenderThread::RegisterDebugReadbacks()
 void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const
 {
     ZoneScoped;
-    renderGraph->CreateBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE, false);
-    renderGraph->CreateBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE, false);
-    renderGraph->CreateBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE, false);
-    renderGraph->CreateBuffer(REFLECTION_PROBE_BUFFER, REFLECTION_PROBE_BUFFER_SIZE, false);
-
     // Scene Data
-    SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
-    UploadAllocation sceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
-    memcpy(sceneDataUploadAllocation.ptr, &sceneData, sizeof(SceneData));
+    auto* sceneData = static_cast<SceneData*>(renderGraph->OpenHostBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE));
+    sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
     // Portal Scene Data
-    UploadAllocation portalSceneDataUploadAllocation{};
-    bool bHasPortal = !viewFamily.portalViews.IsEmpty();
-    if (bHasPortal) {
+    if (!viewFamily.portalViews.IsEmpty()) {
         SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
         portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal,
                                               -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
-        portalSceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
-        memcpy(portalSceneDataUploadAllocation.ptr, &portalSceneData, sizeof(SceneData));
+        sceneData[1] = portalSceneData;
     }
 
     const uint32_t analyticLightCount = viewFamily.analyticLightCount;
     const auto totalLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
     const uint32_t triLightCount = totalLightCount > static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) ? totalLightCount - static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) : 0u;
-    const size_t lightHeaderBytes = offsetof(LightData, lights);
     const size_t analyticLightBytes = analyticLightCount * sizeof(LightInfo);
     const size_t triLightBytes = triLightCount * sizeof(LightInfo);
     const size_t emissiveGroupCount = glm::min(viewFamily.emissiveGroups.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS));
     const size_t emissiveGroupBytes = emissiveGroupCount * sizeof(EmissiveGroup);
 
-    UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(lightHeaderBytes + analyticLightBytes + triLightBytes + emissiveGroupBytes);
-    auto* lightData = static_cast<LightData*>(lightDataUploadAllocation.ptr);
-    auto* lightUploadBytes = static_cast<uint8_t*>(lightDataUploadAllocation.ptr);
+    auto* lightData = static_cast<LightData*>(renderGraph->OpenHostBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE));
     {
         const glm::vec3& dir = viewFamily.directionalLight.direction;
         lightData->directionalLight.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
@@ -1708,136 +1696,30 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         lightData->lightCount = static_cast<int32_t>(totalLightCount);
         lightData->emissiveGroupCount = static_cast<int32_t>(emissiveGroupCount);
         if (analyticLightBytes > 0) {
-            memcpy(lightUploadBytes + lightHeaderBytes, viewFamily.lights.Data(), analyticLightBytes);
+            memcpy(lightData->lights, viewFamily.lights.Data(), analyticLightBytes);
         }
         if (triLightBytes > 0) {
-            memcpy(lightUploadBytes + lightHeaderBytes + analyticLightBytes, viewFamily.lights.Data() + MAX_ANALYTIC_LIGHTS, triLightBytes);
+            memcpy(lightData->lights + MAX_ANALYTIC_LIGHTS, viewFamily.lights.Data() + MAX_ANALYTIC_LIGHTS, triLightBytes);
         }
         if (emissiveGroupBytes > 0) {
-            memcpy(lightUploadBytes + lightHeaderBytes + analyticLightBytes + triLightBytes, viewFamily.emissiveGroups.Data(), emissiveGroupBytes);
+            memcpy(lightData->emissiveGroups, viewFamily.emissiveGroups.Data(), emissiveGroupBytes);
         }
     }
 
     // Power alias table (rebuilt every frame on the CPU, world space)
     const auto lightCount = static_cast<uint32_t>(viewFamily.lights.Size());
-    const size_t aliasBytes = static_cast<size_t>(lightCount) * sizeof(LightAliasEntry);
-    UploadAllocation aliasUploadAllocation{};
-    if (aliasBytes > 0) {
-        aliasUploadAllocation = renderGraph->AllocateTransient(aliasBytes);
-        BuildLightPowerAlias(viewFamily.lights.Data(), lightCount, lightAliasScratch, static_cast<LightAliasEntry*>(aliasUploadAllocation.ptr));
+    auto* aliasEntries = static_cast<LightAliasEntry*>(renderGraph->OpenHostBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE));
+    if (lightCount > 0) {
+        BuildLightPowerAlias(viewFamily.lights.Data(), lightCount, lightAliasScratch, aliasEntries);
     }
 
     // Reflection probes
     const auto probeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-    const size_t probeBytes = static_cast<size_t>(probeCount) * sizeof(ReflectionProbeGPU);
-    UploadAllocation probeUploadAllocation{};
-    if (probeBytes > 0) {
-        probeUploadAllocation = renderGraph->AllocateTransient(probeBytes);
-        memcpy(probeUploadAllocation.ptr, viewFamily.reflectionProbes.Data(), probeBytes);
+    void* probeDst = renderGraph->OpenHostBuffer(REFLECTION_PROBE_BUFFER, REFLECTION_PROBE_BUFFER_SIZE);
+    if (probeCount > 0) {
+        memcpy(probeDst, viewFamily.reflectionProbes.Data(), probeCount * sizeof(ReflectionProbeGPU));
     }
 
-    auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-    uploadUniformsPass.WriteTransferBuffer(SCENE_DATA_BUFFER);
-    uploadUniformsPass.WriteTransferBuffer(LIGHT_DATA_BUFFER);
-    uploadUniformsPass.WriteTransferBuffer(LIGHT_ALIAS_BUFFER);
-    uploadUniformsPass.WriteTransferBuffer(REFLECTION_PROBE_BUFFER);
-    uploadUniformsPass.Execute([&,
-            sceneOffset = sceneDataUploadAllocation.offset,
-            portalOffset = portalSceneDataUploadAllocation.offset,
-            hasPortal = bHasPortal,
-            lightOffset = lightDataUploadAllocation.offset,
-            lightHeaderBytes = lightHeaderBytes,
-            analyticLightBytes = analyticLightBytes,
-            triLightBytes = triLightBytes,
-            emissiveGroupBytes = emissiveGroupBytes,
-            aliasOffset = aliasUploadAllocation.offset,
-            aliasBytes = aliasBytes,
-            probeOffset = probeUploadAllocation.offset,
-            probeBytes = probeBytes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            Core::Array<VkBufferCopy2, 2> sceneDataRegions{};
-            uint32_t sceneDataCount{1};
-            sceneDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-            sceneDataRegions[0].srcOffset = sceneOffset;
-            sceneDataRegions[0].dstOffset = 0;
-            sceneDataRegions[0].size = sizeof(SceneData);
-            if (hasPortal) {
-                sceneDataRegions[1].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-                sceneDataRegions[1].srcOffset = portalOffset;
-                sceneDataRegions[1].dstOffset = sizeof(SceneData);
-                sceneDataRegions[1].size = sizeof(SceneData);
-                sceneDataCount++;
-            }
-
-            const VkCopyBufferInfo2 sceneDataCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle(SCENE_DATA_BUFFER),
-                .regionCount = sceneDataCount,
-                .pRegions = sceneDataRegions.Data()
-            };
-            vkCmdCopyBuffer2(cmd, &sceneDataCopyInfo);
-
-            Core::Array<VkBufferCopy2, 3> lightDataRegions{};
-            uint32_t lightRegionCount{1};
-            lightDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-            lightDataRegions[0].srcOffset = lightOffset;
-            lightDataRegions[0].dstOffset = 0;
-            lightDataRegions[0].size = lightHeaderBytes + analyticLightBytes;
-            if (triLightBytes > 0) {
-                lightDataRegions[lightRegionCount].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-                lightDataRegions[lightRegionCount].srcOffset = lightOffset + lightHeaderBytes + analyticLightBytes;
-                lightDataRegions[lightRegionCount].dstOffset = offsetof(LightData, lights) + static_cast<size_t>(MAX_ANALYTIC_LIGHTS) * sizeof(LightInfo);
-                lightDataRegions[lightRegionCount].size = triLightBytes;
-                lightRegionCount++;
-            }
-            if (emissiveGroupBytes > 0) {
-                lightDataRegions[lightRegionCount].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-                lightDataRegions[lightRegionCount].srcOffset = lightOffset + lightHeaderBytes + analyticLightBytes + triLightBytes;
-                lightDataRegions[lightRegionCount].dstOffset = offsetof(LightData, emissiveGroups);
-                lightDataRegions[lightRegionCount].size = emissiveGroupBytes;
-                lightRegionCount++;
-            }
-            const VkCopyBufferInfo2 lightDataCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle(LIGHT_DATA_BUFFER),
-                .regionCount = lightRegionCount,
-                .pRegions = lightDataRegions.Data()
-            };
-            vkCmdCopyBuffer2(cmd, &lightDataCopyInfo);
-
-            if (aliasBytes > 0) {
-                VkBufferCopy2 aliasRegion{};
-                aliasRegion.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-                aliasRegion.srcOffset = aliasOffset;
-                aliasRegion.dstOffset = 0;
-                aliasRegion.size = aliasBytes;
-                const VkCopyBufferInfo2 aliasCopyInfo{
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                    .dstBuffer = renderGraph->GetBufferHandle(LIGHT_ALIAS_BUFFER),
-                    .regionCount = 1,
-                    .pRegions = &aliasRegion
-                };
-                vkCmdCopyBuffer2(cmd, &aliasCopyInfo);
-            }
-
-            if (probeBytes > 0) {
-                VkBufferCopy2 probeRegion{};
-                probeRegion.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-                probeRegion.srcOffset = probeOffset;
-                probeRegion.dstOffset = 0;
-                probeRegion.size = probeBytes;
-                const VkCopyBufferInfo2 probeCopyInfo{
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                    .dstBuffer = renderGraph->GetBufferHandle(REFLECTION_PROBE_BUFFER),
-                    .regionCount = 1,
-                    .pRegions = &probeRegion
-                };
-                vkCmdCopyBuffer2(cmd, &probeCopyInfo);
-            }
-        });
 }
 
 void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
@@ -1845,8 +1727,10 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     ZoneScoped;
 
     size_t totalInstanceCount = viewFamily.primitiveInstances.Size();
-    UploadAllocation instanceUpload = renderGraph->AllocateTransient(totalInstanceCount * sizeof(Instance));
-    auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
+    Instance* instanceBuffer = nullptr;
+    if (totalInstanceCount > 0) {
+        instanceBuffer = static_cast<Instance*>(renderGraph->OpenHostBuffer(GEOMETRY_INSTANCE_BUFFER, totalInstanceCount * sizeof(Instance)));
+    }
 
     Core::Array<uint32_t, Render::BINDLESS_MATERIAL_BUFFER_COUNT> lightingIndexByStable{};
     for (const Core::ActiveMaterial& active : viewFamily.activeMaterials) {
@@ -1872,97 +1756,30 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         };
     }
 
-    if (totalInstanceCount > 0) {
-        renderGraph->CreateBuffer(GEOMETRY_INSTANCE_BUFFER, totalInstanceCount * sizeof(Instance), false);
-
-        RenderPass& uploadPass = renderGraph->AddPass(SID("Upload Instances"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-        uploadPass.WriteTransferBuffer(GEOMETRY_INSTANCE_BUFFER);
-        uploadPass.Execute([&,srcOffset = instanceUpload.offset,totalSize = totalInstanceCount * sizeof(Instance)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkBufferCopy2 copy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = srcOffset,
-                .dstOffset = 0,
-                .size = totalSize,
-            };
-            VkCopyBufferInfo2 copyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle(GEOMETRY_INSTANCE_BUFFER),
-                .regionCount = 1,
-                .pRegions = &copy,
-            };
-            vkCmdCopyBuffer2(cmd, &copyInfo);
-        });
-    }
-
-
     if (!viewFamily.modelMatrices.IsEmpty()) {
-        renderGraph->CreateBuffer(GEOMETRY_MODEL_BUFFER, renderFamilyProperties.modelBufferSize, false);
-        UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.Size() * sizeof(Model));
-        memcpy(modelUpload.ptr, viewFamily.modelMatrices.Data(), viewFamily.modelMatrices.Size() * sizeof(Model));
-
-        RenderPass& uploadModelMatricesPass = renderGraph->AddPass(SID("Upload Model Matrices"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-        uploadModelMatricesPass.WriteTransferBuffer(SID("model_buffer"));
-        uploadModelMatricesPass.Execute([&,
-                modelOffset = modelUpload.offset,
-                modelSize = viewFamily.modelMatrices.Size() * sizeof(Model)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                VkBufferCopy2 copy{
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                    .srcOffset = modelOffset,
-                    .dstOffset = 0,
-                    .size = modelSize
-                };
-
-                VkCopyBufferInfo2 copyInfo{
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                    .dstBuffer = renderGraph->GetBufferHandle(SID("model_buffer")),
-                    .regionCount = 1,
-                    .pRegions = &copy
-                };
-                vkCmdCopyBuffer2(cmd, &copyInfo);
-            });
+        void* modelDst = renderGraph->OpenHostBuffer(GEOMETRY_MODEL_BUFFER, renderFamilyProperties.modelBufferSize);
+        memcpy(modelDst, viewFamily.modelMatrices.Data(), viewFamily.modelMatrices.Size() * sizeof(Model));
     }
 
     if (!viewFamily.activeMaterials.IsEmpty()) {
-        renderGraph->CreateBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize, false);
-
-        UploadAllocation materialUpload = renderGraph->AllocateTransient(Render::BINDLESS_MATERIAL_BUFFER_SIZE);
-        auto* dst = static_cast<MaterialProperties*>(materialUpload.ptr);
-        memset(dst, 0, Render::BINDLESS_MATERIAL_BUFFER_SIZE);
+        Core::Array<uint16_t, Render::BINDLESS_MATERIAL_BUFFER_COUNT> materialByStable{};
+        memset(materialByStable.Data(), 0xFF, sizeof(materialByStable));
+        uint16_t activeSlot = 0;
         for (Core::ActiveMaterial& active : viewFamily.activeMaterials) {
             assert(viewFamily.lightingBuckets.Contains(active.material.lightingShader) && "Lighting bucket missing lighting model for a material");
             active.material.props.shadingBucketIndex = active.stableIndex;
             active.material.props.lightingBucketIndex = viewFamily.lightingBuckets.At(active.material.lightingShader);
-            dst[active.stableIndex] = active.material.props;
+            materialByStable[active.stableIndex] = activeSlot++;
         }
 
-        RenderPass& uploadMaterialsPass = renderGraph->AddPass(SID("Upload Materials"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-        uploadMaterialsPass.WriteTransferBuffer(SID("material_buffer"));
-        uploadMaterialsPass.Execute([&,
-                materialOffset = materialUpload.offset,
-                materialSize = static_cast<size_t>(Render::BINDLESS_MATERIAL_BUFFER_SIZE)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                VkBufferCopy2 copy{
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                    .srcOffset = materialOffset,
-                    .dstOffset = 0,
-                    .size = materialSize
-                };
+        auto* dst = static_cast<MaterialProperties*>(renderGraph->OpenHostBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize));
+        constexpr MaterialProperties EMPTY_MATERIAL{};
+        for (int32_t i = 0; i < Render::BINDLESS_MATERIAL_BUFFER_COUNT; ++i) {
+            const uint16_t slot = materialByStable[i];
+            dst[i] = slot == 0xFFFFu ? EMPTY_MATERIAL : viewFamily.activeMaterials[slot].material.props;
+        }
 
-                VkCopyBufferInfo2 copyInfo{
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                    .dstBuffer = renderGraph->GetBufferHandle(SID("material_buffer")),
-                    .regionCount = 1,
-                    .pRegions = &copy
-                };
-                vkCmdCopyBuffer2(cmd, &copyInfo);
-            });
-
-        renderGraph->CreateBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, false);
-
-        UploadAllocation shadeDispatchUpload = renderGraph->AllocateTransient(Render::BINDLESS_MATERIAL_BUFFER_COUNT * sizeof(ShadeDispatchParameters));
-        auto* shadeDispatchBuffer = static_cast<ShadeDispatchParameters*>(shadeDispatchUpload.ptr);
+        auto* shadeDispatchBuffer = static_cast<ShadeDispatchParameters*>(renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
         for (int32_t i = 0; i < Render::BINDLESS_MATERIAL_BUFFER_COUNT; ++i) {
             shadeDispatchBuffer[i] = {
                 .xDispatch = 0,
@@ -1976,31 +1793,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             };
         }
 
-        RenderPass& uploadShadeDispatchPass = renderGraph->AddPass(SID("Upload Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-        uploadShadeDispatchPass.WriteTransferBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
-        uploadShadeDispatchPass.Execute([&,
-                shadeDispatchOffset = shadeDispatchUpload.offset,
-                shadeDispatchSize = Render::BINDLESS_MATERIAL_BUFFER_COUNT * sizeof(ShadeDispatchParameters)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                VkBufferCopy2 copy{
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                    .srcOffset = shadeDispatchOffset,
-                    .dstOffset = 0,
-                    .size = shadeDispatchSize,
-                };
-                VkCopyBufferInfo2 copyInfo{
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                    .dstBuffer = renderGraph->GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER),
-                    .regionCount = 1,
-                    .pRegions = &copy,
-                };
-                vkCmdCopyBuffer2(cmd, &copyInfo);
-            });
-
-        renderGraph->CreateBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.lightingDispatchBufferSize, false);
-
-        UploadAllocation lightDispatchUpload = renderGraph->AllocateTransient(viewFamily.lightingBuckets.Size() * sizeof(LightingDispatchParameters));
-        auto* lightDispatchBuffer = static_cast<LightingDispatchParameters*>(lightDispatchUpload.ptr);
+        auto* lightDispatchBuffer = static_cast<LightingDispatchParameters*>(renderGraph->OpenHostBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.lightingDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
         for (size_t i = 0; i < viewFamily.lightingBuckets.Size(); ++i) {
             lightDispatchBuffer[i] = {
                 .xDispatch = 0,
@@ -2013,27 +1806,6 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 .lightingIndex = static_cast<uint32_t>(i),
             };
         }
-
-        RenderPass& uploadLightDispatchPass = renderGraph->AddPass(SID("Upload Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-        uploadLightDispatchPass.WriteTransferBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-        uploadLightDispatchPass.Execute([&,
-                lightDispatchOffset = lightDispatchUpload.offset,
-                lightDispatchSize = viewFamily.lightingBuckets.Size() * sizeof(LightingDispatchParameters)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                VkBufferCopy2 copy{
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                    .srcOffset = lightDispatchOffset,
-                    .dstOffset = 0,
-                    .size = lightDispatchSize,
-                };
-                VkCopyBufferInfo2 copyInfo{
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                    .dstBuffer = renderGraph->GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-                    .regionCount = 1,
-                    .pRegions = &copy,
-                };
-                vkCmdCopyBuffer2(cmd, &copyInfo);
-            });
     }
 }
 
@@ -2043,90 +1815,22 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
 
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
 
-    renderGraph->CreateBuffer(TEXT_GLYPH_QUAD_BUFFER, renderFamilyProperties.glyphQuadBufferSize, false);
-    UploadAllocation glyphUpload = renderGraph->AllocateTransient(viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
-    memcpy(glyphUpload.ptr, viewFamily.worldGlyphQuads.Data(), viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
+    void* glyphDst = renderGraph->OpenHostBuffer(TEXT_GLYPH_QUAD_BUFFER, renderFamilyProperties.glyphQuadBufferSize);
+    memcpy(glyphDst, viewFamily.worldGlyphQuads.Data(), viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
 
-    RenderPass& uploadGlyphPass = renderGraph->AddPass(SID("Upload Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Scene);
-    uploadGlyphPass.WriteTransferBuffer(TEXT_GLYPH_QUAD_BUFFER);
-    uploadGlyphPass.Execute([&,
-            srcOffset = glyphUpload.offset,
-            totalSize = viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkBufferCopy2 copy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = srcOffset,
-                .dstOffset = 0,
-                .size = totalSize,
-            };
-            VkCopyBufferInfo2 copyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle(TEXT_GLYPH_QUAD_BUFFER),
-                .regionCount = 1,
-                .pRegions = &copy,
-            };
-            vkCmdCopyBuffer2(cmd, &copyInfo);
-        });
-
-    renderGraph->CreateBuffer(TEXT_INSTANCE_BUFFER, renderFamilyProperties.textInstanceBufferSize, false);
     const uint32_t instCount = viewFamily.textInstances.Size();
-    UploadAllocation instUpload = renderGraph->AllocateTransient(instCount * sizeof(TextInstanceData)); {
-        auto* dst = static_cast<TextInstanceData*>(instUpload.ptr);
-        for (uint32_t i = 0; i < instCount; ++i) {
-            const Core::TextInstanceDataFull& src = viewFamily.textInstances[i];
-            dst[i] = {
-                .modelIndex = src.modelIndex,
-                .stableIdLo = static_cast<uint32_t>(src.stableId & 0xFFFFFFFFu),
-                .stableIdHi = static_cast<uint32_t>(src.stableId >> 32u),
-            };
-        }
+    auto* instDst = static_cast<TextInstanceData*>(renderGraph->OpenHostBuffer(TEXT_INSTANCE_BUFFER, renderFamilyProperties.textInstanceBufferSize));
+    for (uint32_t i = 0; i < instCount; ++i) {
+        const Core::TextInstanceDataFull& src = viewFamily.textInstances[i];
+        instDst[i] = {
+            .modelIndex = src.modelIndex,
+            .stableIdLo = static_cast<uint32_t>(src.stableId & 0xFFFFFFFFu),
+            .stableIdHi = static_cast<uint32_t>(src.stableId >> 32u),
+        };
     }
 
-    RenderPass& uploadInstPass = renderGraph->AddPass(SID("Upload Text Instances"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Scene);
-    uploadInstPass.WriteTransferBuffer(TEXT_INSTANCE_BUFFER);
-    uploadInstPass.Execute([&,
-            srcOffset = instUpload.offset,
-            totalSize = instCount * sizeof(TextInstanceData)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkBufferCopy2 copy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = srcOffset,
-                .dstOffset = 0,
-                .size = totalSize,
-            };
-            VkCopyBufferInfo2 copyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle(TEXT_INSTANCE_BUFFER),
-                .regionCount = 1,
-                .pRegions = &copy,
-            };
-            vkCmdCopyBuffer2(cmd, &copyInfo);
-        });
-
-    renderGraph->CreateBuffer(TEXT_MATERIAL_BUFFER, renderFamilyProperties.textMaterialBufferSize, false);
-    UploadAllocation matUpload = renderGraph->AllocateTransient(viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
-    memcpy(matUpload.ptr, viewFamily.textMaterials.Data(), viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
-
-    RenderPass& uploadMatPass = renderGraph->AddPass(SID("Upload Text Materials"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Scene);
-    uploadMatPass.WriteTransferBuffer(TEXT_MATERIAL_BUFFER);
-    uploadMatPass.Execute([&,
-            srcOffset = matUpload.offset,
-            totalSize = viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkBufferCopy2 copy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = srcOffset,
-                .dstOffset = 0,
-                .size = totalSize,
-            };
-            VkCopyBufferInfo2 copyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle(TEXT_MATERIAL_BUFFER),
-                .regionCount = 1,
-                .pRegions = &copy,
-            };
-            vkCmdCopyBuffer2(cmd, &copyInfo);
-        });
+    void* matDst = renderGraph->OpenHostBuffer(TEXT_MATERIAL_BUFFER, renderFamilyProperties.textMaterialBufferSize);
+    memcpy(matDst, viewFamily.textMaterials.Data(), viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
 }
 
 void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) const
@@ -2140,9 +1844,7 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) cons
     const uint32_t spriteCount = static_cast<uint32_t>(viewFamily.sprites.Size());
     const size_t uploadSize = spriteCount * sizeof(SpriteData);
 
-    renderGraph->CreateBuffer(SPRITE_BUFFER, uploadSize, false);
-    UploadAllocation spriteUpload = renderGraph->AllocateTransient(uploadSize);
-    auto* dst = static_cast<SpriteData*>(spriteUpload.ptr);
+    auto* dst = static_cast<SpriteData*>(renderGraph->OpenHostBuffer(SPRITE_BUFFER, uploadSize));
 
     for (uint32_t i = 0; i < spriteCount; i++) {
         const Core::Sprite& s = viewFamily.sprites[i];
@@ -2156,24 +1858,6 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) cons
         };
     }
 
-    RenderPass& uploadPass = renderGraph->AddPass(SID("Upload Sprites"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Scene);
-    uploadPass.WriteTransferBuffer(SPRITE_BUFFER);
-    uploadPass.Execute([&, srcOffset = spriteUpload.offset, size = uploadSize](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const VkBufferCopy2 region{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-            .srcOffset = srcOffset,
-            .dstOffset = 0,
-            .size = size,
-        };
-        const VkCopyBufferInfo2 copyInfo{
-            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-            .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-            .dstBuffer = renderGraph->GetBufferHandle(SPRITE_BUFFER),
-            .regionCount = 1,
-            .pRegions = &region,
-        };
-        vkCmdCopyBuffer2(cmd, &copyInfo);
-    });
 }
 
 void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
@@ -2181,17 +1865,9 @@ void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const Re
     ZoneScoped;
 
     if (!viewFamily.uiGlyphQuads.IsEmpty()) {
-        renderGraph->CreateBuffer(UI_GLYPH_QUAD_BUFFER, renderFamilyProperties.uiGlyphQuadBufferSize, false);
         const uint32_t quadCount = viewFamily.uiGlyphQuads.Size();
-        UploadAllocation upload = renderGraph->AllocateTransient(quadCount * sizeof(UIGlyphQuad));
-        memcpy(upload.ptr, viewFamily.uiGlyphQuads.Data(), quadCount * sizeof(UIGlyphQuad));
-        RenderPass& uploadPass = renderGraph->AddPass(SID("Upload UI Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::UI);
-        uploadPass.WriteTransferBuffer(UI_GLYPH_QUAD_BUFFER);
-        uploadPass.Execute([&, srcOffset = upload.offset, totalSize = quadCount * sizeof(UIGlyphQuad)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkBufferCopy2 copy{.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = srcOffset, .dstOffset = 0, .size = totalSize};
-            VkCopyBufferInfo2 copyInfo{.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2, .srcBuffer = renderGraph->GetTransientUploadBuffer(), .dstBuffer = renderGraph->GetBufferHandle(UI_GLYPH_QUAD_BUFFER), .regionCount = 1, .pRegions = &copy};
-            vkCmdCopyBuffer2(cmd, &copyInfo);
-        });
+        void* quadDst = renderGraph->OpenHostBuffer(UI_GLYPH_QUAD_BUFFER, renderFamilyProperties.uiGlyphQuadBufferSize);
+        memcpy(quadDst, viewFamily.uiGlyphQuads.Data(), quadCount * sizeof(UIGlyphQuad));
     }
 }
 
@@ -2286,10 +1962,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 
     limits.highestDebugSegmentCount = std::max(limits.highestDebugSegmentCount, NextPowerOfTwo(totalSegments));
 
-    graph.CreateBuffer(SID("debug_segment_buffer"), limits.highestDebugSegmentCount * sizeof(DebugLineSegment), false);
-
-    UploadAllocation segmentUpload = graph.AllocateTransient(totalSegments * sizeof(DebugLineSegment));
-    auto* segments = static_cast<DebugLineSegment*>(segmentUpload.ptr);
+    auto* segments = static_cast<DebugLineSegment*>(graph.OpenHostBuffer(SID("debug_segment_buffer"), limits.highestDebugSegmentCount * sizeof(DebugLineSegment)));
 
     uint32_t segmentOffset = 0;
 
@@ -2473,29 +2146,6 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     }
 
     const uint32_t totalLineSegments = segmentOffset;
-
-    RenderPass& uploadDebugPass = graph.AddPass(SID("Upload Debug Geometry"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-    uploadDebugPass.WriteTransferBuffer(SID("debug_segment_buffer"));
-
-    VkBuffer srcBuffer = graph.GetTransientUploadBuffer();
-    uploadDebugPass.Execute([&, srcBuffer,
-            uploadOffset = segmentUpload.offset,
-            uploadSize = totalLineSegments * sizeof(DebugLineSegment)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkBufferCopy2 copy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = uploadOffset,
-                .dstOffset = 0,
-                .size = uploadSize
-            };
-            VkCopyBufferInfo2 copyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
-                .dstBuffer = graph.GetBufferHandle(SID("debug_segment_buffer")),
-                .regionCount = 1,
-                .pRegions = &copy
-            };
-            vkCmdCopyBuffer2(cmd, &copyInfo);
-        });
 
     RenderPass& debugDrawPass = graph.AddPass(SID("Debug Draw"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::Debug);
     debugDrawPass.WriteColorAttachment(targetImage);

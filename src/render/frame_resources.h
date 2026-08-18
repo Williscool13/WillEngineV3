@@ -18,7 +18,7 @@ struct FrameResourceLimits
     size_t highestTLASInstanceCount{1024};
 
     size_t highestGlyphQuadCount{128};
-    size_t highestUIGlyphQuadCount{128};
+    size_t highestUIGlyphQuadCount{8192};
     size_t highestTextInstanceCount{32};
     size_t highestTextMaterialCount{32};
 

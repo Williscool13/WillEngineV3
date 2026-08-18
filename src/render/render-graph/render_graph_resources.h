@@ -55,9 +55,10 @@ enum class RenderCategory : uint64_t
     Debug               = 1ull << 20,
     NRD                 = 1ull << 21,
     GeometryPhase2      = 1ull << 22,
+    Upload              = 1ull << 23,
 };
 
-inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 23;
+inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 24;
 inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = {
     "Geometry",
     "WorldGridBinning",
@@ -82,6 +83,7 @@ inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = 
     "Debug",
     "NRD",
     "Geometry P2",
+    "Upload",
 };
 
 inline RenderCategory operator|(RenderCategory a, RenderCategory b)
@@ -111,6 +113,7 @@ enum class RenderCategoryGroup : uint8_t
     Scene,
     UI,
     Debug,
+    Upload,
     Count,
 };
 
@@ -125,6 +128,7 @@ inline constexpr const char* RENDER_CATEGORY_GROUP_NAMES[RENDER_CATEGORY_GROUP_C
     "Scene",
     "UI",
     "Debug",
+    "Upload",
 };
 
 // Indexed by leaf bit position (matches RenderCategory declaration order above).
@@ -152,6 +156,7 @@ inline constexpr RenderCategoryGroup RENDER_CATEGORY_GROUP_OF[RENDER_CATEGORY_BI
     /*Debug*/ RenderCategoryGroup::Debug,
     /*NRD*/ RenderCategoryGroup::ReSTIR,
     /*GeometryPhase2*/ RenderCategoryGroup::Geometry,
+    /*Upload*/ RenderCategoryGroup::Upload,
 };
 
 struct VRAMReport
@@ -479,24 +484,31 @@ struct BufferFrameCarryover
     VkBufferUsageFlags accumulatedUsage{};
 };
 
-struct PersistentBuffer
+struct HostBuffer
 {
     VkBuffer buffer{VK_NULL_HANDLE};
     VmaAllocation allocation{VK_NULL_HANDLE};
     VkDeviceAddress address{0};
     VkDeviceSize capacity{0};
-    uint64_t userData{0};
-    uint64_t userData2{0};
     PipelineEvent lastState{};
+    void* mappedData{nullptr};
+    bool bREBAR{false};
+    bool bContentsValid{false};
 };
 
-struct PersistentBufferSlots
+struct HostBufferSlots
 {
     StringID name{};
     VkBufferUsageFlags usage{};
-    Core::Array<PersistentBuffer, Core::FRAME_BUFFER_COUNT> slots{};
-    /** Called on each slot when the buffer is reallocated or destroyed. Use to clean up userData (e.g. VkAccelerationStructureKHR). */
-    Core::InlineFunction<void(uint64_t userData), 32> onDestroyUserData{};
+    Core::Array<HostBuffer, Core::FRAME_BUFFER_COUNT> slots{};
+};
+
+/** A buffer replaced by a larger one. Destruction waits out the frames in flight that may still reference it. */
+struct RetiredBuffer
+{
+    VkBuffer buffer{VK_NULL_HANDLE};
+    VmaAllocation allocation{VK_NULL_HANDLE};
+    uint32_t framesRemaining{0};
 };
 } // Render
 

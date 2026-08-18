@@ -240,34 +240,13 @@ public: // Compile and execute
 
 public: // Persistent Per-FIF Buffers
     /**
-     * Should be called during render_thread init.
+     * Registers the buffer on first use, grows it to size, imports the current frame's slot so passes can declare reads against the name, and returns memory to write into.
+     * On a device without resizable BAR the returned memory is staging and a copy into the slot is queued automatically, so callers never branch.
      * @param name
-     * @param usage
-     * @param onDestroyUserData
+     * @param size
+     * @param extraUsage usage beyond storage/device address/transfer, needed because a persistent slot cannot pick usage up from pass declarations
      */
-    void RegisterPersistentBuffer(StringID name, VkBufferUsageFlags usage, Core::InlineFunction<void(uint64_t), 32> onDestroyUserData = {});
-    /**
-     *
-     * @param name
-     * @param requiredSize
-     * @return true if the buffer was reallocated (caller must rebuild any AS handle stored in userData)
-     */
-    bool EnsurePersistentBufferCapacity(StringID name, VkDeviceSize requiredSize);
-    PersistentBuffer& GetPersistentBuffer(StringID name);
-
-    /**
-     * Imports the current frame's slot into the pass system so passes can declare reads/writes against it.
-     * @param name
-     */
-    void ImportPersistentBuffer(StringID name);
-
-    /**
-     * Stores the AS handle in userData, writes the descriptor into the RDG RT bindless set at the current frame's slot, and stores that slot in userData2.
-     * Only call when the AS handle has just been created or recreated.
-     * @param name the persistent buffer to associate the handle with
-     * @param handle the newly created VkAccelerationStructureKHR
-     */
-    void WriteAccelerationStructureDescriptor(StringID name, VkAccelerationStructureKHR handle);
+    void* OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);
 
 public:
     void CreateTLAS(StringID name, VkDeviceSize asSize, RenderCategory category = RenderCategory::Untagged);
@@ -298,6 +277,19 @@ private:
 
     void ValidatePassDeclaresTexture(uint32_t textureIndex);
     void ValidatePassDeclaresBuffer(uint32_t bufferIndex);
+
+    /** Queues a replaced buffer for destruction once no frame in flight can still reference it. */
+    void RetireBuffer(VkBuffer buffer, VmaAllocation allocation);
+
+    void RegisterHostBuffer(StringID name, VkBufferUsageFlags usage);
+
+    /** @return true if the slot was reallocated, which clears its contents */
+    bool EnsureHostBufferCapacity(StringID name, VkDeviceSize requiredSize);
+
+    HostBuffer& GetHostBuffer(StringID name);
+
+    /** Imports the current frame's slot into the pass system so passes can declare reads against it. */
+    void ImportHostBuffer(StringID name);
     const RenderPass* currentRecordingPass{};
     bool bFrameCorrupted{};
 
@@ -358,7 +350,8 @@ private:
     uint32_t currentFrameIndex{0};
     Core::Array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
     Core::Array<TransientReadback, Core::FRAME_BUFFER_COUNT> meshletCountReadbacks{};
-    Core::InlineVector<PersistentBufferSlots, 8> persistentBuffers{};
+    Core::InlineVector<HostBufferSlots, 32> hostBuffers{};
+    Core::InlineVector<RetiredBuffer, 32> retiredBuffers{};
     GPUTimestampQueryPool gpuTimestampQuery{};
     GPUProfileSnapshot lastGpuProfile{};
 
