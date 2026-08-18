@@ -116,13 +116,10 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
             }
             if (pc.reflectionProbeCount > 0u) {
                 float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-                float probeFade;
-                int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
-                if (probeIndex >= 0) {
-                    ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
-                    float3 probeIrr = SampleReflectionProbeIrradiance(probe, worldN) * probe.intensity;
-                    probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
-                    indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
+                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
+                if (probeBlend.indexA >= 0) {
+                    float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, worldN);
+                    indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
                 }
             }
         }
@@ -138,14 +135,12 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
 
         if (pc.reflectionProbeCount > 0u) {
             float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-            float probeFade;
-            int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
-            if (probeIndex >= 0) {
-                ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
+            ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
+            if (probeBlend.indexA >= 0) {
                 float3 worldR = normalize(mul((float3x3)scene.invView, reflect(-V, N)));
-                float3 probeRadiance = SampleReflectionProbeSpecular(probe, worldPosition, worldR, roughness);
-                float3 probeTerm = probeRadiance * (F_ibl * envBRDF.x + envBRDF.y) * probe.intensity;
-                reflectionSpecular = lerp(reflectionSpecular, probeTerm, probeFade);
+                float3 probeRadiance = SampleReflectionProbeSpecularBlended(probeBlend, pc.reflectionProbes, worldPosition, worldR, roughness);
+                float3 probeTerm = probeRadiance * (F_ibl * envBRDF.x + envBRDF.y);
+                reflectionSpecular = lerp(reflectionSpecular, probeTerm, probeBlend.coverage);
             }
         }
 

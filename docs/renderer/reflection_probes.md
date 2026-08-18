@@ -14,11 +14,10 @@ Sun and skybox always bake in. In-world text/sprites bake in. Debug draws/outlin
 ## Placement
 
 - One lighting environment per probe. Never span occluding walls.
-- Overshoot room bounds slightly, but less than wall thickness. Buries the fade band in the wall (full coverage) without leaking into the next room.
-- Overshoot cost: the box is also the parallax proxy, so reflections displace slightly outward. Only visible on mirror-flat surfaces; fit those faces tight instead.
+- Run bounds past the shell's outer face slightly. Keep the overshoot small.
 - Extents = entity scale (sphere radius = max component). `fadeMargin` = meters, inward.
 - `captureOffset` = world units, scale-independent. Bias toward the brightest region: too-bright is safe, too-dark is destructive.
-- Overlaps: smallest volume wins. Nesting is fine.
+- Overlaps: the two smallest-volume probes blend, split by fade over volume, then lowest index. Nesting is fine, the tighter one keeps its interior.
 
 ## Bake behavior
 

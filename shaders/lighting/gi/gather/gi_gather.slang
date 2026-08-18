@@ -87,7 +87,7 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
     return s;
 }
 
-static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, float3 normal, float3 direction, float hitT, int probeIndex, float probeFade)
+static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, float3 normal, float3 direction, float hitT, ReflectionProbeBlend probeBlend)
 {
     float3 indirectDiffuse = float3(0.0);
     float giW = 0.0;
@@ -100,11 +100,10 @@ static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, 
         indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
         giW = gi.w;
     }
-    if (probeIndex >= 0) {
-        ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
-        float3 probeIrr = SampleReflectionProbeIrradiance(probe, normal) * probe.intensity;
-        probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
-        indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
+    if (probeBlend.indexA >= 0) {
+        float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, normal);
+        // Fill, not override: a cubemap has no positional validity, so it stands in only where the cascades have no answer.
+        indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
     }
     return indirectDiffuse;
 }
@@ -120,28 +119,26 @@ static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos,
     bool bSelfCell = slot != RADIANCE_CACHE_HASH_INVALID && all(pc.cacheKeys[slot] == originCellKey);
     uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
     uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
-    int probeIndex = -1;
-    float probeFade = 0.0;
+    ReflectionProbeBlend probeBlend = ReflectionProbeBlendNone();
     if (pc.reflectionProbeCount > 0u) {
-        probeIndex = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos, probeFade);
+        probeBlend = PickReflectionProbeBinned(hitWorldPos, hit.normal, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);
     }
     if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u && !bSelfCell) {
         radiance = RadianceCacheUnpackRadiance(packedRadiance);
         tier = GI_GATHER_TIER_CACHE;
-        if (probeIndex >= 0) {
-            ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
-            float3 probeIrr = SampleReflectionProbeIrradiance(probe, hit.normal) * probe.intensity;
+        if (probeBlend.indexA >= 0) {
+            float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, hit.normal);
             float probeLuma = Luma(probeIrr);
             if (probeLuma > 1e-4) {
-                radiance *= lerp(1.0, min(1.0, pc.bakedDiffuseClampK * probeLuma / max(Luma(radiance), 1e-4)), probeFade);
+                radiance *= lerp(1.0, min(1.0, pc.bakedDiffuseClampK * probeLuma / max(Luma(radiance), 1e-4)), probeBlend.coverage);
             }
         }
         pc.cacheCells[slot].lastTouched = pc.frameIndex;
     } else {
         // No light loop at fallback hits; their own direct light is missing (TDA's same trade).
-        radiance = hit.diffuseColor * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, probeIndex, probeFade);
+        radiance = hit.diffuseColor * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, probeBlend);
         tier = GI_GATHER_TIER_PROBE;
-        if (probeIndex >= 0 && probeFade > 0.5) {
+        if (probeBlend.indexA >= 0 && probeBlend.coverage > 0.5) {
             tier = GI_GATHER_TIER_BAKED;
         }
     }
@@ -200,21 +197,19 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
             uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition, geoN);
             uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
             uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
-            int probeIndex = -1;
-            float probeFade = 0.0;
+            ReflectionProbeBlend probeBlend = ReflectionProbeBlendNone();
             if (pc.reflectionProbeCount > 0u) {
-                probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, probeFade);
+                probeBlend = PickReflectionProbeBinned(worldPosition, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
             }
             // Count gate: a count-1 cell is one bary-jittered point; the probe tier is smoother while cells stream in.
             if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
                 radiance = RadianceCacheUnpackRadiance(packedRadiance);
                 tier = GI_GATHER_TIER_CACHE;
-                if (probeIndex >= 0) {
-                    ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
-                    float3 probeIrr = SampleReflectionProbeIrradiance(probe, worldN) * probe.intensity;
+                if (probeBlend.indexA >= 0) {
+                    float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, worldN);
                     float probeLuma = Luma(probeIrr);
                     if (probeLuma > 1e-4) {
-                        radiance *= lerp(1.0, min(1.0, pc.bakedDiffuseClampK * probeLuma / max(Luma(radiance), 1e-4)), probeFade);
+                        radiance *= lerp(1.0, min(1.0, pc.bakedDiffuseClampK * probeLuma / max(Luma(radiance), 1e-4)), probeBlend.coverage);
                     }
                 }
                 // Reader keeps the cell resident: probe rays alone can let a gather-consumed sparse cell age past the LRU window.
@@ -235,12 +230,11 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                 // No hit material to modulate by; the shading pixel's own albedo is applied once downstream (matches the non-gather DDGI path).
                 radiance = indirectDiffuse;
                 tier = GI_GATHER_TIER_PROBE;
-                if (probeIndex >= 0) {
-                    ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
-                    float3 probeIrr = SampleReflectionProbeIrradiance(probe, worldN) * probe.intensity;
-                    probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
-                    radiance = lerp(radiance, probeIrr, probeFade);
-                    if (probeFade > 0.5) {
+                if (probeBlend.indexA >= 0) {
+                    float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, worldN);
+                    float probeWeight = probeBlend.coverage * (1.0 - giW);
+                    radiance = lerp(radiance, probeIrr, probeWeight);
+                    if (probeWeight > 0.5) {
                         tier = GI_GATHER_TIER_BAKED;
                     }
                 }
@@ -359,12 +353,11 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                     radiance = sum / sumW;
                                     // Demodulate the recirculated GI: lit history contains last frame's gather output (composite kD*albedo*gtao*gi), so the loop gain is ~albedo and screen-space artifacts self-sustain (frame-entry seam). Subtract it and re-source the indirect component from the world tiers; direct stays exact. diffuseColor stands in for the composite factor, so the subtraction over-reaches where AO is dark; the floor bounds it.
                                     if (pc.giHistoryIndex != ~0x0u) {
-                                        int demodProbeIndex = -1;
-                                        float demodProbeFade = 0.0;
+                                        ReflectionProbeBlend demodProbeBlend = ReflectionProbeBlendNone();
                                         if (pc.reflectionProbeCount > 0u) {
-                                            demodProbeIndex = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz, demodProbeFade);
+                                            demodProbeBlend = PickReflectionProbeBinned(hitWorldPos, hit.normal, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
                                         }
-                                        float3 worldIndirect = ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, demodProbeIndex, demodProbeFade);
+                                        float3 worldIndirect = ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, demodProbeBlend);
                                         radiance = max(radiance - hit.diffuseColor * (giPrevSum / sumW), float3(0.0)) + hit.diffuseColor * worldIndirect;
                                     }
                                     tier = GI_GATHER_TIER_SCREEN;

@@ -28,8 +28,20 @@ public float ReflectionProbeVolume(ReflectionProbeGPU probe)
     return 8.0 * extent.x * extent.y * extent.z;
 }
 
-/** Containment + volume + edge-fade for a single probe. False when worldPos lies outside the volume. */
-static bool ReflectionProbeContains(ReflectionProbeGPU probe, float3 worldPos, out float volume, out float fade)
+/** DDGI-style backface weight: a surface facing away from the capture is on the far side of the shell the cubemap recorded, so that content does not apply. Smooth, since a binary cut pops along silhouettes. A degenerate normal skips the term. */
+static float ReflectionProbeFacingWeight(ReflectionProbeGPU probe, float3 worldPos, float3 worldNormal)
+{
+    float normalLength = length(worldNormal);
+    float3 toCapture = probe.capturePosition.xyz - worldPos;
+    float captureDistance = length(toCapture);
+    if (normalLength < 1e-4 || captureDistance < 1e-4) { return 1.0; }
+
+    float facing = dot(worldNormal / normalLength, toCapture / captureDistance) * 0.5 + 0.5;
+    return facing * facing;
+}
+
+/** Containment + volume + edge-fade for a single probe. False when worldPos lies outside the volume. The fade carries the capture-facing weight. */
+static bool ReflectionProbeContains(ReflectionProbeGPU probe, float3 worldPos, float3 worldNormal, out float volume, out float fade)
 {
     float3 localPos = mul(probe.worldToLocal, float4(worldPos, 1.0)).xyz;
     float3 extent = ReflectionProbeWorldExtent(probe);
@@ -50,48 +62,113 @@ static bool ReflectionProbeContains(ReflectionProbeGPU probe, float3 worldPos, o
             fade = 1.0;
         }
     }
+    fade *= ReflectionProbeFacingWeight(probe, worldPos, worldNormal);
     return true;
 }
 
-/** Brute-force pick of the smallest-volume probe containing worldPos. Returns the array index (or -1), and a world-space edge fade in [0,1] (1 = interior, 0 = boundary). Tie-break: strictly-less volume, then lowest index. */
-public int PickReflectionProbe(float3 worldPos, ReflectionProbeGPU* probes, uint count, out float fade)
+/** The probes covering a shading point. indexA is the smaller-volume one, indexB is -1 when only one covers. weightA/weightB sum to 1 and split the pair; coverage is what the pair owns against the world tiers. */
+public struct ReflectionProbeBlend
 {
-    int best = -1;
-    float bestVolume = 1e30;
-    float bestFade = 1.0;
+    public int indexA;
+    public int indexB;
+    public float weightA;
+    public float weightB;
+    public float coverage;
+};
+
+/** Coverage sums the fades so an overlap hands one probe to the next instead of dipping toward the world tiers. The split is fade/volume, preserving smallest-volume-wins: a probe nested in a looser one owns its interior rather than averaging with it. */
+static ReflectionProbeBlend MakeReflectionProbeBlend(int indexA, float fadeA, float volumeA, int indexB, float fadeB, float volumeB)
+{
+    ReflectionProbeBlend blend;
+    blend.indexA = indexA;
+    blend.indexB = indexB;
+    blend.weightA = 1.0;
+    blend.weightB = 0.0;
+    blend.coverage = 0.0;
+    if (indexA < 0) { return blend; }
+
+    float fadeSum = fadeA + max(fadeB, 0.0);
+    blend.coverage = saturate(fadeSum);
+    if (indexB >= 0) {
+        float priorityA = fadeA / max(volumeA, 1e-6);
+        float prioritySum = priorityA + fadeB / max(volumeB, 1e-6);
+        if (prioritySum > 1e-12) {
+            blend.weightA = priorityA / prioritySum;
+            blend.weightB = 1.0 - blend.weightA;
+        }
+    }
+    return blend;
+}
+
+/** The no-probe result, for callers that skip the pick entirely. */
+public ReflectionProbeBlend ReflectionProbeBlendNone()
+{
+    return MakeReflectionProbeBlend(-1, 0.0, 1.0, -1, 0.0, 1.0);
+}
+
+/** Brute-force pick of the two smallest-volume probes containing worldPos. Pass float3(0) as worldNormal to skip the capture-facing term. Tie-break: strictly-less volume, then lowest index. */
+public ReflectionProbeBlend PickReflectionProbe(float3 worldPos, float3 worldNormal, ReflectionProbeGPU* probes, uint count)
+{
+    int bestA = -1;
+    int bestB = -1;
+    float volumeA = 1e30;
+    float volumeB = 1e30;
+    float fadeA = 0.0;
+    float fadeB = 0.0;
 
     for (uint i = 0; i < count; i++) {
         float volume;
         float thisFade;
-        if (!ReflectionProbeContains(probes[i], worldPos, volume, thisFade)) { continue; }
-        if (volume < bestVolume) {
-            bestVolume = volume;
-            best = int(i);
-            bestFade = thisFade;
+        if (!ReflectionProbeContains(probes[i], worldPos, worldNormal, volume, thisFade)) { continue; }
+        if (volume < volumeA) {
+            volumeB = volumeA;
+            bestB = bestA;
+            fadeB = fadeA;
+            volumeA = volume;
+            bestA = int(i);
+            fadeA = thisFade;
+        } else if (volume < volumeB) {
+            volumeB = volume;
+            bestB = int(i);
+            fadeB = thisFade;
         }
     }
 
-    fade = bestFade;
-    return best;
+    return MakeReflectionProbeBlend(bestA, fadeA, volumeA, bestB, fadeB, volumeB);
 }
 
-/** Cell-lookup pick: reads the per-cell probe index the world-grid binning kernel wrote and validates containment against that one probe. A null probeGrid (debug brute-force toggle, or grid pass absent) falls back to PickReflectionProbe. camPos must be the same cameraWorldPos the binning kernel used. Returns the array index (or -1) and the probe's edge fade. */
-public int PickReflectionProbeBinned(float3 worldPos, ReflectionProbeGPU* probes, uint count, uint* probeGrid, float3 camPos, out float fade)
+/** Cell-lookup pick: revalidates the probe pair the binning kernel packed into the cell. A null probeGrid falls back to PickReflectionProbe. camPos must be the same cameraWorldPos the binning kernel used. */
+public ReflectionProbeBlend PickReflectionProbeBinned(float3 worldPos, float3 worldNormal, ReflectionProbeGPU* probes, uint count, uint* probeGrid, float3 camPos)
 {
-    fade = 0.0;
-    if (probeGrid == nullptr) { return PickReflectionProbe(worldPos, probes, count, fade); }
+    if (probeGrid == nullptr) { return PickReflectionProbe(worldPos, worldNormal, probes, count); }
 
+    ReflectionProbeBlend empty = ReflectionProbeBlendNone();
     WorldGridKey key = WorldGridResolveCell(worldPos, camPos);
-    if (!key.bValid) { return -1; }
+    if (!key.bValid) { return empty; }
 
-    uint idx = probeGrid[key.cellIndex];
-    if (idx == WORLD_GRID_PROBE_SENTINEL || idx >= count) { return -1; }
+    uint packed = probeGrid[key.cellIndex];
+    if (packed == WORLD_GRID_PROBE_SENTINEL) { return empty; }
 
-    float volume;
-    float thisFade;
-    if (!ReflectionProbeContains(probes[idx], worldPos, volume, thisFade)) { return -1; }
-    fade = thisFade;
-    return int(idx);
+    uint idxA = packed & 0xFFFFu;
+    uint idxB = packed >> 16u;
+
+    int bestA = -1;
+    int bestB = -1;
+    float fadeA = 0.0;
+    float fadeB = 0.0;
+    float volumeA = 1.0;
+    float volumeB = 1.0;
+    if (idxA < count && ReflectionProbeContains(probes[idxA], worldPos, worldNormal, volumeA, fadeA)) { bestA = int(idxA); }
+    if (idxB < count && ReflectionProbeContains(probes[idxB], worldPos, worldNormal, volumeB, fadeB)) { bestB = int(idxB); }
+    if (bestA < 0) {
+        bestA = bestB;
+        fadeA = fadeB;
+        volumeA = volumeB;
+        bestB = -1;
+        fadeB = 0.0;
+    }
+
+    return MakeReflectionProbeBlend(bestA, fadeA, volumeA, bestB, fadeB, volumeB);
 }
 
 /** Prefiltered specular radiance from a probe. worldR is the world-space reflection vector; when the probe is a parallax box the ray is intersected against the OBB interior and re-pointed from the capture origin. Routes the final direction through the shared cubemap Y-flip so it matches SpecularReflection. Returns raw radiance; the caller applies the BRDF term and intensity. */
@@ -118,4 +195,24 @@ public float3 SampleReflectionProbeSpecular(ReflectionProbeGPU probe, float3 wor
 public float3 SampleReflectionProbeIrradiance(ReflectionProbeGPU probe, float3 worldNormal)
 {
     return assetCubemaps[NonUniformResourceIndex(probe.cubemapIndex)].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(worldNormal), ENVIRONMENT_MAP_DIFFUSE_MIP).rgb;
+}
+
+/** Irradiance for a picked pair, per-probe intensity applied. Weighted but not coverage-scaled; the caller lerps by blend.coverage. */
+public float3 SampleReflectionProbeIrradianceBlended(ReflectionProbeBlend blend, ReflectionProbeGPU* probes, float3 worldNormal)
+{
+    float3 irradiance = SampleReflectionProbeIrradiance(probes[blend.indexA], worldNormal) * probes[blend.indexA].intensity * blend.weightA;
+    if (blend.indexB >= 0) {
+        irradiance += SampleReflectionProbeIrradiance(probes[blend.indexB], worldNormal) * probes[blend.indexB].intensity * blend.weightB;
+    }
+    return irradiance;
+}
+
+/** Specular radiance for a picked pair, each probe parallax-corrected against its own volume and per-probe intensity applied. The caller applies the BRDF term and lerps by blend.coverage. */
+public float3 SampleReflectionProbeSpecularBlended(ReflectionProbeBlend blend, ReflectionProbeGPU* probes, float3 worldPos, float3 worldR, float roughness)
+{
+    float3 radiance = SampleReflectionProbeSpecular(probes[blend.indexA], worldPos, worldR, roughness) * probes[blend.indexA].intensity * blend.weightA;
+    if (blend.indexB >= 0) {
+        radiance += SampleReflectionProbeSpecular(probes[blend.indexB], worldPos, worldR, roughness) * probes[blend.indexB].intensity * blend.weightB;
+    }
+    return radiance;
 }

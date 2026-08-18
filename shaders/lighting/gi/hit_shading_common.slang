@@ -213,13 +213,10 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         giW = gi.w;
     }
     if (pc.reflectionProbeCount > 0u) {
-        float probeFade;
-        int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[0].cameraWorldPos.xyz, probeFade);
-        if (probeIndex >= 0) {
-            ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
-            float3 probeIrr = SampleReflectionProbeIrradiance(probe, N) * probe.intensity;
-            probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
-            indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
+        ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, N, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[0].cameraWorldPos.xyz);
+        if (probeBlend.indexA >= 0) {
+            float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, N);
+            indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
         }
     }
     radiance += diffuseColor * indirectDiffuse;
@@ -428,13 +425,10 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
         giW = gi.w;
     }
     if (pc.reflectionProbeCount > 0u) {
-        float probeFade;
-        int probeIndex = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, probeFade);
-        if (probeIndex >= 0) {
-            ReflectionProbeGPU probe = pc.reflectionProbes[probeIndex];
-            float3 probeIrr = SampleReflectionProbeIrradiance(probe, N) * probe.intensity;
-            probeIrr *= lerp(1.0, min(1.0, Luma(indirectDiffuse) / max(Luma(probeIrr), 1e-4)), giW);
-            indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeFade);
+        ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, N, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz);
+        if (probeBlend.indexA >= 0) {
+            float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, N);
+            indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
         }
     }
     radiance += diffuseColor * indirectDiffuse;

@@ -46,7 +46,14 @@ the culvert middle still have no direct sky line, so they stay bounce-fed.
 
 Baking the reflection probes
 ----------------------------
-Eight probes ship unbaked (standInEnvMap 0), so they contribute nothing until you bake.
+Nine probes ship unbaked (standInEnvMap 0), so they contribute nothing until you bake. Seven
+are interiors; the helipad and the revetment are open-air and fade out at their edges. The
+open yard has no probe at all and rides the skybox specular tier, which is gated by sky
+reachability and GTAO -- a level-sized catch-all probe is one unoccluded environment and lit
+every sheltered underside as if it were facing open sky.
+
+Local DDGI windows (`gi_volume`) are separate and cover the diffuse side: every enclosed room
+gets one or more, because camera cascades cannot resolve interior corners at any scale.
 Bake with a profile that has the GI diffuse gather OFF (DDGI itself stays on) and GTAO OFF
 -- both are view-dependent per face and would tint each cube face differently, and runtime
 GTAO already multiplies probe content, so baked AO double-darkens corners. `ReSTIR Bake`
@@ -88,7 +95,7 @@ from wscene_authoring import (
     box_params, cylinder_params, sphere_params, capsule_params, wedge_params,
     pipe_params, torus_params, cone_params, spiral_params, wall_params, ring_params,
     bowl_params, add_area_light, add_sphere_light, add_directional_light, add_skybox,
-    add_reflection_probe, add_checkpoint, mat_to_quat, PROBE_RES_128, PROBE_RES_256,
+    add_reflection_probe, add_local_ddgi_volume, add_checkpoint, mat_to_quat, PROBE_RES_128, PROBE_RES_256,
     PROCEDURAL, NAME, FOLDER, SCENE_FOLDER, SPAWN, RENDER_DEFAULTS,
     write_material, write_texture_stub, camera_look_quat, shot, write_shots,
     DXGI_BC5_UNORM, DXGI_BC7_UNORM, DXGI_BC7_UNORM_SRGB,
@@ -332,14 +339,21 @@ def light(entities, name, pos, rot=IDENT, folder=0):
     return e
 
 
+PROBE_PAD = 0.1            # metres past a shell's outer face; small enough that parallax barely shifts
+
+
 def probe_box(entities, name, lo, hi, capture=(0.0, 0.0, 0.0), resolution=PROBE_RES_128,
               fade=0.0, folder=0):
     """Axis-aligned box probe over world extents lo..hi. transform.scale is HALF-EXTENTS.
 
     Per docs/renderer/reflection_probes.md:
       * One lighting environment per probe; never span an occluding wall.
-      * Overshoot the room bounds by less than the wall thickness, so the fade band ends
-        up buried in the wall rather than dimming the interior surface.
+      * Bounds run to the OUTER face of the shell plus PROBE_PAD, not to the room's exact
+        interior. Stopping on the perfect bounds leaves every surface sitting on the
+        boundary half in and half out, and with no catch-all probe behind it the half that
+        falls out jumps to the skybox tier. Swallowing the shell is safe because the
+        capture-facing weight zeroes the exterior faces, which then fall through on their
+        own. The cost is parallax: the box is also the proxy, so keep the pad small.
       * `fade` is metres inward from every face, so only use it where the overshoot is at
         least as large -- or on a volume that is genuinely open on that side and should
         blend into the enclosing probe.
@@ -356,6 +370,28 @@ def probe_box(entities, name, lo, hi, capture=(0.0, 0.0, 0.0), resolution=PROBE_
                          fade_margin=fade)
     entities.append(e)
     return e
+
+
+def gi_volume(entities, tag, lo, hi, spacing, folder=0):
+    """Local DDGI windows over the INTERIOR extents lo..hi, tiled when the room is longer than
+    one window reaches (GI_VOLUME_COVERAGE_CELLS * spacing; the window itself is 9 * spacing,
+    the rest is the fade band that has to sit outside the room).
+
+    Camera cascades cannot resolve interior corners at any scale -- that is architectural, not
+    a tuning problem -- so every enclosed room here gets one. Open ground does not: cascades
+    already handle it and a window costs its margin. Spacing is the only size control (the
+    lattice is always 10 probes per axis), so small rooms take 0.8 to keep several probes
+    inside the room rather than in the walls, and big volumes take 1.7 to avoid paying the
+    5-cell margin over and over. volumeIds come from name_id, same stability rule as probe ids."""
+    tiles = wa.gi_volume_grid(lo, hi, spacing)
+    regions = wa.gi_volume_tiles(lo, hi, tiles)
+    for index, (sub_lo, sub_hi) in enumerate(regions):
+        suffix = "" if len(regions) == 1 else f" {index}"
+        corner = wa.gi_volume_window(sub_lo, sub_hi, spacing)
+        e = base_entity(f"{tag} GI Volume{suffix}", corner, folder_id=folder)
+        add_local_ddgi_volume(e, name_id(f"{tag} GI Volume {index}"), probe_spacing=spacing)
+        entities.append(e)
+    return len(regions)
 
 
 # =============================================================================
@@ -432,6 +468,15 @@ e = light(entities, "Gatehouse Light", (GH_X0 + GH_W * 0.5, GRADE + GH_H - 0.15,
           folder=F_SITE)
 add_sphere_light(e, color=(1.0, 0.93, 0.80), intensity=14.0, radius=0.09, draw_range=9.0,
                  draw_emissive=True)
+
+# Small, sealed and lit by one weak bulb -- the same case as the huts. The east wall sits
+# inside the footprint while the west run hangs outboard, hence the asymmetric bounds.
+# Capture leans west toward the door and window.
+probe_box(entities, "Probe Gatehouse", (GH_X0 - 0.15 - PROBE_PAD, GRADE - PROBE_PAD, GH_Z0 - PROBE_PAD),
+          (GH_X0 + GH_W + PROBE_PAD, GRADE + 0.15 + GH_H + 0.18 + PROBE_PAD, GH_Z0 + GH_D + PROBE_PAD),
+          capture=(-0.9, -0.1, 0.0), folder=F_SITE)
+gi_volume(entities, "Gatehouse", (GH_X0, GRADE + 0.15, GH_Z0 + 0.15),
+          (GH_X0 + GH_W - 0.15, GRADE + 0.15 + GH_H, GH_Z0 + GH_D - 0.15), 0.8, folder=F_SITE)
 
 # Road network: thin asphalt slabs sunk 0.02 into the ground slab so the top sits 0.06
 # proud and no coincident co-facing planes exist. Spine runs gate -> yard centre, one
@@ -577,14 +622,18 @@ for i in range(9):
     box(entities, f"Hangar Crate {i}", (HX0 + 2.6 + (i % 3) * 1.9, HFY, 5.4 + (i // 3) * 1.5),
         (1.7, 1.1, 1.3), M["olive"] if i % 2 else M["od_light"], folder=F_HANGAR)
 
-# Bounds sit mid-shell -- a 0.25 overshoot into a 0.5 wall, so every interior face is inside
-# the volume and every exterior face is outside it. fadeMargin stays 0: the shell is sealed
-# and never blends into a neighbour, and any inward fade would dim the very walls sitting on
-# the boundary. Capture is pushed toward the door, the brightest part of the interior, and
-# lands in open air clear of the fuselage, gantry and crates.
-probe_box(entities, "Probe Hangar", (HX0 - HT * 0.5, GRADE, HZ0 - HT * 0.5),
-          (HX1 + HT * 0.5, HH + HT * 0.5, HZ1 + HT * 0.5),
+# Bounds clear the whole shell by PROBE_PAD, so no interior face and no piece of wall sits on
+# the boundary. fadeMargin stays 0: the shell is sealed and never blends into a neighbour, and
+# any inward fade would dim the very walls it is meant to cover. Capture is pushed toward the
+# door, the brightest part of the interior, and lands in open air clear of the fuselage,
+# gantry and crates.
+probe_box(entities, "Probe Hangar", (HXO0 - PROBE_PAD, GRADE - PROBE_PAD, HZO0 - PROBE_PAD),
+          (HXO1 + PROBE_PAD, HH + HT + PROBE_PAD, HZO1 + PROBE_PAD),
           capture=(8.0, -0.5, 5.0), resolution=PROBE_RES_256, folder=F_HANGAR)
+
+# 28 x 24 of floor lit almost entirely by bounce through the door: the motivating case for
+# local windows. 1.7 tiles it 3x1x3; the full 9.8m height fits one window vertically.
+gi_volume(entities, "Hangar", (HX0, HFY, HZ0), (HX1, HH, HZ1), 1.7, folder=F_HANGAR)
 
 
 # =============================================================================
@@ -657,12 +706,20 @@ for i in range(3):
     shape(entities, f"Bunker Pillar {i}", (BX0 + 4.5 + i * 4.5, BFY + BH * 0.5, (BZ0 + BZ1) * 0.5),
           cylinder_params(0.45, BH, 26), M["concrete"], folder=F_BUNKER)
 
-# Mid-shell again (0.3 overshoot into a 0.6 wall). Capture biased south toward the embrasure
-# slits -- the brightest thing in the room -- while clearing the pillars, map table and
-# console bank. Biasing dark here would be the destructive direction.
-probe_box(entities, "Probe Bunker", (BX0 - BT * 0.5, BFY, BZ0 - BT * 0.5),
-          (BX1 + BT * 0.5, BCY + 0.2, BZ1 + BT * 0.5),
+# Past the outer wall faces again, which here also buys the embrasure and doorway reveals --
+# they live inside the wall thickness and a mid-shell box cut them in half. The roof slab is
+# 1.4 thick and holds nothing, so the top stops one wall-thickness up rather than clearing it:
+# the box is the parallax proxy and a ceiling 1.4m too high in a 3.4m room shows. Capture
+# biased south toward the embrasure slits -- the brightest thing in the room -- while clearing
+# the pillars, map table and console bank. Biasing dark here would be the destructive direction.
+probe_box(entities, "Probe Bunker", (BXO0 - PROBE_PAD, GRADE - PROBE_PAD, BZO0 - PROBE_PAD),
+          (BXO1 + PROBE_PAD, BCY + BT + PROBE_PAD, BZO1 + PROBE_PAD),
           capture=(-1.0, 0.5, -4.0), resolution=PROBE_RES_128, folder=F_BUNKER)
+
+# Sealed and bounce-only, so nothing here is recoverable from the cascades. 1.2 rather than
+# 1.7: the room is 3.4m tall and coarser spacing would leave barely a probe plane between
+# floor and ceiling. Tiles 3x1x2.
+gi_volume(entities, "Bunker", (BX0, BFY, BZ0), (BX1, BCY, BZ1), 1.2, folder=F_BUNKER)
 
 
 # =============================================================================
@@ -700,19 +757,27 @@ e = light(entities, "Culvert Lamp", (CULV_X, CULV_Y + 1.4, LAMP_Z), face_dir(0.0
 add_sphere_light(e, color=(0.95, 0.92, 0.85), intensity=38.0, radius=0.1, draw_range=18.0,
                  draw_emissive=True)
 
-# One probe PER SEGMENT rather than one for the whole run: the whole point of the culvert is
-# that its lighting changes along its length, and a single probe over a 33m gradient is
-# exactly the "one lighting environment per probe" rule being broken. Bounds hug the bore and
-# overshoot 0.15 into the 0.3 pipe wall. fadeMargin stays 0 -- an inward fade would dim the
-# bore wall, and the cost is a hard seam at each joint, inside a rough concrete tube.
-# Each capture leans toward its own segment's bright end -- the open mouth for the two end
-# segments, the lamp for the middle one -- without landing on the lamp proxy itself.
-for i, cap_z in enumerate((-2.5, -2.0, 2.5)):
-    z0 = CULV_Z0 + i * CULV_LEN
-    probe_box(entities, f"Probe Culvert {i}",
-              (CULV_X - CULV_RI - 0.15, CULV_Y - CULV_RI - 0.15, z0),
-              (CULV_X + CULV_RI + 0.15, CULV_Y + CULV_RI + 0.15, z0 + CULV_LEN),
-              capture=(0.0, 0.0, cap_z), folder=F_CULVERT)
+# ONE probe for the whole run. This was three, one per segment, to keep the along-the-length
+# gradient in the probe term -- but the renderer picks exactly one probe per world-grid cell
+# (smallest volume, then lowest index) and never blends between two, so equal-volume segments
+# handed the entire shared region to segment 0 and the changeover landed on a camera-relative
+# grid cell boundary: a hard seam that swims as you walk. Overlapping the boxes cannot fix
+# that; overlap has no blend to trigger, and a fadeMargin in the overlap fades to the skybox
+# tier, which sky-visibility gating drives to near zero inside a bore. The gradient still
+# reads -- it comes from DDGI and direct light, not from this -- and the parallax box keeps
+# the reflection position-dependent along the tube. Bounds clear the 0.3 pipe wall so the
+# whole shell is inside; capture sits at the centre of the bore, which sees both mouths and
+# is the least-distorted origin for a proxy this long, well clear of the lamp proxy.
+probe_box(entities, "Probe Culvert",
+          (CULV_X - CULV_RO - PROBE_PAD, CULV_Y - CULV_RO - PROBE_PAD, CULV_Z0 - PROBE_PAD),
+          (CULV_X + CULV_RO + PROBE_PAD, CULV_Y + CULV_RO + PROBE_PAD,
+           CULV_Z0 + 3 * CULV_LEN + PROBE_PAD),
+          capture=(0.0, 0.0, 0.0), folder=F_CULVERT)
+
+# The along-the-length gradient lives HERE, not in the reflection probe. 1.0 keeps 4 cells
+# across a 4m bore while still tiling the 33m run in 6 windows.
+gi_volume(entities, "Culvert", (CULV_X - CULV_RI, CULV_Y - CULV_RI, CULV_Z0),
+          (CULV_X + CULV_RI, CULV_Y + CULV_RI, CULV_Z0 + 3 * CULV_LEN), 1.0, folder=F_CULVERT)
 
 
 # =============================================================================
@@ -761,9 +826,9 @@ for i in (0, 1):
         (0.8, 0.9, 2.2), M["concrete_dark"], folder=F_PAD)
 
 # Open-air apron, so there is no wall to bury a fade band in -- instead it fades over its
-# outer 1.5m straight into the yard probe that encloses it. The twelve pad emitters still
-# light the bake even though their proxies are hidden from it, so this genuinely differs
-# from the yard environment rather than duplicating it.
+# outer 1.5m into the skybox tier. That tier is the daylight environment gated by sky
+# reachability, and the twelve pad emitters are what this probe adds on top of it, so the
+# band is a real crossfade rather than a seam between two versions of the same sky.
 probe_box(entities, "Probe Helipad", (PAD_X - PAD_R - 1.0, GRADE, PAD_Z - PAD_R - 1.0),
           (PAD_X + PAD_R + 1.0, 7.0, PAD_Z + PAD_R + 1.0), capture=(0.0, 2.5, 0.0),
           fade=1.5, folder=F_PAD)
@@ -847,7 +912,7 @@ add_sphere_light(e, color=(1.0, 0.88, 0.70), intensity=95.0, radius=0.16, draw_r
 # to the south and to the sky, so it cannot be treated as sealed. Bounds overshoot 0.6 into
 # the barriers on the three closed sides, which is exactly the fadeMargin, so the band ends
 # up buried inside them; on the open south face and the top that same band fades out into the
-# yard probe instead of ending on a hard seam. Capture sits north of the crate stack, below
+# skybox tier instead of ending on a hard seam. Capture sits north of the crate stack, below
 # the lamp proxy.
 probe_box(entities, "Probe Revetment", (REV_X - 7.2, GRADE - 0.6, REV_Z - 7.2),
           (REV_X + 7.2, GRADE + 5.0, REV_Z + 7.2), capture=(0.0, 0.4, 2.0),
@@ -1178,6 +1243,18 @@ for h, (hz0, wall_mat) in enumerate(((30.0, M["od_light"]), (37.5, M["panel"]), 
               folder=F_BARRACKS)
     add_sphere_light(e, color=(1.0, 0.93, 0.80), intensity=34.0, radius=0.09, draw_range=10.0,
                      draw_emissive=True)
+    # Sealed rooms lit by one 34-intensity bulb, so they need their own environment rather
+    # than the skybox tier. Bounds clear the 0.15 shell and the 0.16 roof by PROBE_PAD, which
+    # also covers the door and window reveals in the front run. Capture pushed 2.5m toward the
+    # door-and-window face, the bright end of the room, and sits below the ceiling light
+    # rather than inside it.
+    probe_box(entities, f"{n} Probe", (hx0 - PROBE_PAD, GRADE - PROBE_PAD, hz0 - PROBE_PAD),
+              (hx0 + HUT_W + 0.15 + PROBE_PAD, GRADE + 0.15 + HUT_H + 0.16 + PROBE_PAD,
+               hz0 + HUT_D + PROBE_PAD),
+              capture=(2.5, -0.1, 0.0), folder=F_BARRACKS)
+    # 0.8 on a 2.7m-tall room: at 1.7 the lattice would put nearly every probe in a wall.
+    gi_volume(entities, n, (hx0 + 0.15, GRADE + 0.15, hz0 + 0.15),
+              (hx0 + HUT_W, GRADE + 0.15 + HUT_H, hz0 + HUT_D - 0.15), 0.8, folder=F_BARRACKS)
 
 # Pallet stacks inside the north gate, staged like an unloaded supply drop.
 for p, (px, pz, cnt, topped) in enumerate(((3.0, 43.0, 6, True), (5.0, 45.0, 4, False),
@@ -1206,14 +1283,11 @@ for name, pos, prio in (("Checkpoint Hangar", (HX1 - 3.0, HFY + 1.2, HELI_Z + 6.
     add_checkpoint(e, name_id(name), priority=prio, spawn_offset=(0.0, 0.6, 0.0))
     entities.append(e)
 
-# Fallback for open ground: the largest volume in the level, so smallest-volume-wins leaves
-# every interior to its own tighter probe. It is the one probe that does span occluding walls,
-# which is unavoidable for a catch-all -- the fix is that anything with a genuinely different
-# lighting environment (hangar, bunker, culvert, revetment, helipad) has its own. Top is above
-# the radar mast so nothing tall falls outside every probe. fadeMargin 0: nothing encloses it
-# to fade into, and a band here would dim the perimeter walls sitting on the boundary.
-probe_box(entities, "Probe Yard", (GX0, GRADE, GZ0), (GX1, 26.0, GZ1),
-          capture=(0.0, 8.0, -30.0), folder=F_SITE)
+# No catch-all probe over the open ground. A level-sized box is one cubemap with no occlusion
+# beyond the capture-facing weight, so every sheltered exterior surface -- undersides, wall
+# recesses, anything under an overhang -- got the full daylight environment. Uncovered ground
+# falls through to the skybox specular tier instead, which is gated by sky reachability and
+# GTAO, so shelter actually darkens it. Interiors keep their own probes.
 
 
 # =============================================================================

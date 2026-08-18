@@ -170,9 +170,11 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
     }
     pc.worldGridCellPower[flatIndex] = float2(analyticPowerSum, groupPowerSum);
 
-    // Smallest-volume probe whose influence volume intersects this cell; ascending-index strict-less tie-break. Written unconditionally (aliased RDG buffers are not zeroed).
-    uint bestProbe = WORLD_GRID_PROBE_SENTINEL;
+    // Two smallest-volume probes intersecting this cell, packed 16 bits each; ascending-index strict-less tie-break. Written unconditionally (aliased RDG buffers are not zeroed).
+    uint bestProbe = WORLD_GRID_PROBE_SLOT_SENTINEL;
+    uint secondProbe = WORLD_GRID_PROBE_SLOT_SENTINEL;
     float bestProbeVolume = 1e30;
+    float secondProbeVolume = 1e30;
     for (uint p = 0u; p < pc.reflectionProbeCount; p++)
     {
         ReflectionProbeGPU probe = pc.reflectionProbes[p];
@@ -180,11 +182,18 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
         float volume = ReflectionProbeVolume(probe);
         if (volume < bestProbeVolume)
         {
+            secondProbeVolume = bestProbeVolume;
+            secondProbe = bestProbe;
             bestProbeVolume = volume;
             bestProbe = p;
         }
+        else if (volume < secondProbeVolume)
+        {
+            secondProbeVolume = volume;
+            secondProbe = p;
+        }
     }
-    pc.worldGridProbeGrid[flatIndex] = bestProbe;
+    pc.worldGridProbeGrid[flatIndex] = (secondProbe << 16u) | bestProbe;
 
     uint volumeOffset = flatIndex * MAX_DDGI_VOLUMES_PER_WORLD_GRID_CELL;
     uint volumeCount = 0u;
