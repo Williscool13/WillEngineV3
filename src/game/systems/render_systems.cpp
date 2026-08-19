@@ -51,6 +51,7 @@ void ConnectRenderObservers(entt::registry& registry)
 
     registry.on_destroy<Component::MeshRuntime>().connect<&Component::MeshRuntime::OnDestroy>();
     registry.on_destroy<Component::LightSurfaceRuntime>().connect<&Component::LightSurfaceRuntime::OnDestroy>();
+    registry.on_destroy<Component::TextRuntime>().connect<&Component::TextRuntime::OnDestroy>();
 
     registry.on_construct<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnConstruct>();
     registry.on_destroy<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnDestroy>();
@@ -95,6 +96,7 @@ void DisconnectRenderObservers(entt::registry& registry)
 
     registry.on_destroy<Component::MeshRuntime>().disconnect<&Component::MeshRuntime::OnDestroy>();
     registry.on_destroy<Component::LightSurfaceRuntime>().disconnect<&Component::LightSurfaceRuntime::OnDestroy>();
+    registry.on_destroy<Component::TextRuntime>().disconnect<&Component::TextRuntime::OnDestroy>();
 
     registry.on_construct<Component::StaticMeshComponent>().disconnect<&Component::StaticMeshComponent::OnConstruct>();
     registry.on_destroy<Component::StaticMeshComponent>().disconnect<&Component::StaticMeshComponent::OnDestroy>();
@@ -1249,6 +1251,12 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         m.modelMatrix = Component::ComputeSphereLightMatrix(transform, light);
     }
 
+    // Text quads
+    for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::TextRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyTransformComponent>().each()) {
+        if (!runtime.modelRange.IsValid()) { continue; }
+        state->modelStore.Models()[runtime.modelRange.offset] = {renderTransform.modelMatrix, renderTransform.previousMatrix};
+    }
+
     for (auto [entity, dirty] : state->registry.view<Component::MultiframeDirtyTransformComponent>().each()) {
         dirty.counter--;
         if (dirty.counter <= 0) {
@@ -1440,6 +1448,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 
     for (const auto& [entity, textComp, runtime, renderTransform] : view.each()) {
         if (textComp.text.IsEmpty()) { continue; }
+        if (!runtime.modelRange.IsValid()) { continue; }
 
         Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
         if (!font) { continue; }
@@ -1545,8 +1554,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             case Engine::Text3DAnchor::Baseline: break;
         }
 
-        const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
-        frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
+        const uint32_t modelIndex = runtime.modelRange.offset;
 
         const auto drawCallIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.textInstances.Size());
         uint32_t quadCount = 0;

@@ -33,11 +33,14 @@ import wscene_authoring as wa
 wa.seed_ids("probe_orientation_room")   # must precede every next_id() call; see seed_ids()
 
 from wscene_authoring import base_entity, box_params, sphere_params, name_id, PROCEDURAL, TEXT3D
+import asset_index
+
+IDX = asset_index.scan()
 
 MAT_MIRROR = 12524225612196796220   # reflective_restir (metallic 1, roughness 0)
 MAT_GLOSSY = 13687812491276665160   # somewhat_reflective (metallic 1, roughness 0.305)
 
-ROBOTO_FONT = 11302268835193496650
+ROBOTO_FONT = IDX.font("Roboto")
 FRAG_SHADER = 11262630175972558216
 LIT_EMISSIVE = 12304496605836952073
 

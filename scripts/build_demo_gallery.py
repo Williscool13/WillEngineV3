@@ -38,8 +38,10 @@ from wscene_authoring import (
     PROBE_RES_128, PROBE_RES_256, EASE_IN_OUT_SINE, EASE_LINEAR, LOOP_PINGPONG, LOOP_LOOP,
     ALIGN_CENTER, ANCHOR_BOTTOM, ANCHOR_CENTER,
 )
+import asset_index
 
-ROBOTO_FONT = 11302268835193496650   # assets/fonts/Roboto/Roboto.wsfont (baked FontID)
+IDX = asset_index.scan()
+ROBOTO_FONT = IDX.font("Roboto")
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCENE_PATH = os.path.join(REPO, "assets", "scenes", "demo_gallery.wscene")

@@ -12,6 +12,7 @@
 #include "engine/core/font_id.h"
 #include "engine/core/text_material_id.h"
 #include "engine/engine_api.h"
+#include "engine/resources/model/model_store.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -40,6 +41,12 @@ struct TextComponent
 struct TextRuntime
 {
     Engine::FontHandle fontHandle{Engine::FontHandle::INVALID};
+    /**
+     * Entity's model matrix slot in EngineState::modelStore
+     */
+    Engine::ModelStore::Range modelRange{};
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 
 struct TextFontPendingTag

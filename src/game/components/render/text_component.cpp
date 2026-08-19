@@ -34,12 +34,22 @@ void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::en
 
 void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity)
 {
+    auto* state = registry.ctx().get<Engine::EngineState*>();
     // Arm only; the load happens in ResolveTextFontPending (freeze-gated).
-    registry.get_or_emplace<TextRuntime>(entity);
+    auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    if (!runtime.modelRange.IsValid()) {
+        runtime.modelRange = state->modelStore.Allocate(1);
+    }
     if (comp.fontId.IsValid()) {
         registry.emplace_or_replace<TextFontPendingTag>(entity);
-        registry.ctx().get<Engine::EngineState*>()->assetLoad.bPendingModelResolve = true;
+        state->assetLoad.bPendingModelResolve = true;
     }
+}
+
+void TextRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    state->modelStore.Free(registry.get<TextRuntime>(entity).modelRange);
 }
 
 void TextComponent::OnConstruct(entt::registry& registry, entt::entity entity)
