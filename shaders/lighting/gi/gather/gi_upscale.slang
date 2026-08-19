@@ -68,6 +68,9 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         rdgStorageFloat4[pc.outputIndex][pixel] = float4(0.0);
         // The bilinear moments fetch touches these texels at geometry/sky boundaries, and aliased RDG memory is never zeroed.
         rdgStorageFloat2[pc.momentsIndex][pixel] = float2(0.0);
+        if (pc.debugPathIndex != ~0x0u) {
+            rdgStorageFloat4[pc.debugPathIndex][pixel] = float4(0.0);
+        }
         return;
     }
 
@@ -163,18 +166,24 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
 
     bool bHasCurrent = true;
     float3 current;
+    uint debugPath = 0u;
+    float debugSupport = 1.0;
     if (sumW > 1e-4) {
         float invW = 1.0 / sumW;
         current = max(float3(shR.x + dot(shR.yzw, evalN), shG.x + dot(shG.yzw, evalN), shB.x + dot(shB.yzw, evalN)) * invW, float3(0.0)) + sumV * invW * skyTerm;
+        debugPath = 1u;
     } else if (fbW > 1e-4) {
         // All taps guide-rejected but valid geometry exists (sub-half-res features: slots, trim): bilinear over the valid taps only. A single best tap is quad-constant and shows as 2x2 blocks; bilinear is continuous, and backface/sky texels never enter (validity-gated above).
         float invW = 1.0 / fbW;
         current = max(float3(fbShR.x + dot(fbShR.yzw, evalN), fbShG.x + dot(fbShG.yzw, evalN), fbShB.x + dot(fbShB.yzw, evalN)) * invW, float3(0.0)) + fbV * invW * skyTerm;
+        debugPath = 2u;
     } else if (!bAnyBackfaceTap) {
         current = GIUpscaleWorldIrradiance(pc, scene, worldPos, evalN, centerXv);
+        debugPath = 3u;
     } else {
         current = float3(0.0);
         bHasCurrent = false;
+        debugPath = 4u;
     }
 
     GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
@@ -238,6 +247,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
 
             // Thin geometry (railings, trim): nothing else lies on the surface, so the footprint and fix taps reject, jitter keeps history from accumulating, and the pixel shows raw 1spp and boils. Trade precision for stability with the world tiers.
             float support = max(saturate((sumW + fixW - 1.0) / GI_UPSCALE_SUPPORT_FULL), nBlend / GI_UPSCALE_HISTORY_FIX_FRAMES);
+            debugSupport = support;
             if (support < 1.0) {
                 current = lerp(GIUpscaleWorldIrradiance(pc, scene, worldPos, evalN, centerXv), current, support);
             }
@@ -302,6 +312,14 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
 
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(result, accum);
+
+    if (pc.debugPathIndex != ~0x0u) {
+        float3 tint = debugPath == 1u ? (sumW < 0.1 ? float3(1.0, 0.1, 0.1) : float3(0.1, 0.6, 0.1)) : debugPath == 2u ? float3(1.0, 0.1, 1.0) : debugPath == 3u ? float3(0.1, 0.8, 1.0) : float3(1.0, 0.9, 0.1);
+        if (debugSupport < 1.0) {
+            tint = float3(1.0, 0.5, 0.1);
+        }
+        rdgStorageFloat4[pc.debugPathIndex][pixel] = float4(tint * lerp(0.15, 1.0, 1.0 / (1.0 + nBlend)), 1.0);
+    }
 }
 
 groupshared float g_motionLenSq[GI_MOTION_TILE_SIZE * GI_MOTION_TILE_SIZE];

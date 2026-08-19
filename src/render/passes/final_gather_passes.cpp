@@ -43,7 +43,7 @@ void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Cor
     });
 }
 
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes)
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, bool bDebugUpscalePath)
 {
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(RADIANCE_CACHE_ENTRIES) || !graph.HasBuffer(RADIANCE_CACHE_CELLS)
         || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER)
@@ -321,8 +321,12 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     }
     const bool bUpscaleCascades = AddDDGISampleDependencies(graph, upscale);
     upscale.WriteStorageImage(GI_GATHER_RESOLVED);
+    if (bDebugUpscalePath) {
+        graph.CreateTexture(GI_UPSCALE_PATH_DEBUG, TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+        upscale.WriteStorageImage(GI_UPSCALE_PATH_DEBUG);
+    }
 
-    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bMoments, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute,
+    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bMoments, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute, bDebugUpscalePath,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_upscale"));
@@ -364,6 +368,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .motionTileIndex = graph.GetSampledImageViewDescriptorIndex(GI_MOTION_TILED_NEIGHBOR_MAX),
             .varGuideIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
             .gatherScale = gatherScale,
+            .debugPathIndex = bDebugUpscalePath ? graph.GetStorageImageViewDescriptorIndex(GI_UPSCALE_PATH_DEBUG) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
@@ -427,6 +432,7 @@ void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Co
     graph.CreateTexture(GI_GATHER_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
     const bool bVarGuide = graph.HasTexture(GI_GATHER_VARIANCE_GUIDE);
+    const bool bPath = graph.HasTexture(GI_UPSCALE_PATH_DEBUG);
 
     RenderPass& pass = graph.AddPass(SID("GI Gather Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
     pass.ReadSampledImage(GI_GATHER_RESOLVED);
@@ -434,8 +440,11 @@ void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Co
     if (bVarGuide) {
         pass.ReadSampledImage(GI_GATHER_VARIANCE_GUIDE);
     }
+    if (bPath) {
+        pass.ReadSampledImage(GI_UPSCALE_PATH_DEBUG);
+    }
     pass.WriteStorageImage(GI_GATHER_DEBUG_TARGET);
-    pass.Execute([pipelineManager, renderExtent, mode, bVarGuide, bQuarterRes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, renderExtent, mode, bVarGuide, bPath, bQuarterRes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_gather_debug"));
         if (!pipelineEntry) {
             return;
@@ -451,6 +460,7 @@ void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Co
             .mode = static_cast<uint32_t>(mode) + 1u,
             .varGuideIndex = bVarGuide ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE) : ~0x0u,
             .gatherScale = bQuarterRes ? 4u : 2u,
+            .pathIndex = bPath ? graph.GetSampledImageViewDescriptorIndex(GI_UPSCALE_PATH_DEBUG) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);

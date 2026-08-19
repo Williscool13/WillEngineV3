@@ -20,10 +20,10 @@ public static const uint GI_GATHER_TIER_BACKFACE = 4u;
 public static const uint GI_GATHER_TIER_INVALID = 5u;
 public static const uint GI_GATHER_TIER_BAKED = 6u;
 
-/** The full-res pixel a gather texel represents; fixed to the quad's (0,0) so guide geometry (depth/normal/hitT) is stationary. Deliberately not frame-cycled: cycling strobed depth edges every 4 frames; temporal supersampling lives in the ray RNG instead. */
+/** The full-res pixel a gather texel represents; fixed to the quad's center so the sample sits where the upscale footprint expects the texel and the bias is direction-symmetric (the (0,0) corner biased left/up, which trailed bright edges behind rightward/downward reveals at quarter res). Deliberately not frame-cycled: cycling strobed depth edges every 4 frames; temporal supersampling lives in the ray RNG instead. */
 public uint2 GIGatherRepresentativePixel(uint2 gatherPixel, uint2 renderExtent, uint gatherScale)
 {
-    return min(gatherPixel * gatherScale, renderExtent - 1u);
+    return min(gatherPixel * gatherScale + (gatherScale >> 1u), renderExtent - 1u);
 }
 
 /** Bilinear-samples the half-res gather SH, evaluated at the pixel's world normal; returns indirectDiffuse (E/pi). */
