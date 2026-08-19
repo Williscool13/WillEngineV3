@@ -82,7 +82,7 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
         frameSync.Initialize();
     }
 
-    renderArena = Core::ManagedArena(memoryManager.ArenaPool(), 4ull * 1024 * 1024, Core::AllocTag::Render);
+    renderArena = Core::ManagedArena(memoryManager.ArenaPool(), 4ull * 1024 * 1024, Core::AllocTag::Render, "render");
     renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, renderArena.Get());
     screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler, memoryManager.AssetsScratch());
     // Vulkan-side NRD init is deferred to the first Record when DenoiserMode::NRD is selected

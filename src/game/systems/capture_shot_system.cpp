@@ -18,6 +18,7 @@
 #include "game/components/core_components.h"
 #include "game/components/camera_components.h"
 #include "game/components/physics/physics_components.h"
+#include "game/components/render/light_components.h"
 #include "game/components/render/module_mesh_component.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/reflection_probe_component.h"
@@ -25,6 +26,7 @@
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/render/static_mesh_primitive_component.h"
 #include "game/components/render/text3d_component.h"
+#include "game/components/render/text_component.h"
 #include "game/gameplay/camera/gameplay_camera.h"
 
 namespace Game
@@ -42,7 +44,19 @@ static size_t CountLoadingEntities(Engine::EngineState* state)
            state->registry.view<Component::ModuleMeshLoadingTag>().size() +
            state->registry.view<Component::Text3DLoadingTag>().size() +
            state->registry.view<Component::ReflectionProbeLoadingTag>().size() +
-           state->registry.view<Component::PhysicsMeshLoadingTag>().size();
+           state->registry.view<Component::PhysicsMeshLoadingTag>().size() +
+           state->registry.view<Component::StaticMeshLoadPendingTag>().size() +
+           state->registry.view<Component::StaticMeshPrimitiveLoadPendingTag>().size() +
+           state->registry.view<Component::ProceduralMeshLoadPendingTag>().size() +
+           state->registry.view<Component::SplineMeshLoadPendingTag>().size() +
+           state->registry.view<Component::ModuleMeshLoadPendingTag>().size() +
+           state->registry.view<Component::Text3DGeneratePendingTag>().size() +
+           state->registry.view<Component::ReflectionProbeLoadPendingTag>().size() +
+           state->registry.view<Component::PendingPhysicsMeshTag>().size() +
+           state->registry.view<Component::PendingPhysicsShapeCreationTag>().size() +
+           state->registry.view<Component::PendingPhysicsBodyCreationTag>().size() +
+           state->registry.view<Component::LightSurfacePendingTag>().size() +
+           state->registry.view<Component::TextFontPendingTag>().size();
 }
 
 

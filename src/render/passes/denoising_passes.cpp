@@ -4,6 +4,8 @@
 
 #include "render/passes/denoising_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "ddgi_passes.h"
 #include "final_gather_passes.h"
 #include "reflection_passes.h"
@@ -36,6 +38,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         const Core::ReflectionConfiguration& reflectionConfig,
                         uint32_t giGatherMode)
 {
+    ZoneScoped;
     const bool bCheckerboard = activeCheckerboardField != 0u;
     // NRD RELAX resolves checkerboard inside the prepass
     const bool bPrepass = params.enablePrepass || bCheckerboard;
@@ -671,6 +674,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          const Core::ReflectionConfiguration& reflectionConfig,
                           uint32_t giGatherMode)
 {
+    ZoneScoped;
     const bool bCheckerboard = activeCheckerboardField != 0u;
     // NRD resolves checkerboard inside the prepass, so it must run when checkerboard is on
     // (with radius 0 when the user disabled it; the shader gates the Poisson loops on radius).

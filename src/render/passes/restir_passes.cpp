@@ -4,6 +4,8 @@
 
 #include "render/passes/restir_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "ddgi_passes.h"
 #include "final_gather_passes.h"
 #include "reflection_passes.h"
@@ -34,6 +36,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        bool bResetHistory,
                        bool bSkipReflectionPiggyback)
 {
+    ZoneScoped;
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const uint32_t reservoirBufferSize = pixelCount * static_cast<uint32_t>(sizeof(Reservoir));
     const float reflectionRoughnessMax = bSkipReflectionPiggyback ? -1.0f : ComputeReflectionRoughnessMax(reflectionConfig);
@@ -622,6 +625,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     uint32_t bFullRateResolve,
                                     const Core::ReflectionConfiguration& reflectionConfig)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
     struct LightingEntry
@@ -728,6 +732,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                const Core::ReflectionConfiguration& reflectionConfig,
                                uint32_t giGatherMode)
 {
+    ZoneScoped;
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);

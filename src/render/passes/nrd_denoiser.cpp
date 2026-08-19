@@ -4,6 +4,8 @@
 
 #include "render/passes/nrd_denoiser.h"
 
+#include <tracy/Tracy.hpp>
+
 #include <glm/glm.hpp>
 
 #include "core/containers/inline_string.h"
@@ -410,6 +412,7 @@ void NrdDenoiser::ReleaseRetired(uint64_t frameNumber, bool bForce)
 
 void NrdDenoiser::EnsureResources(Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber)
 {
+    ZoneScoped;
     if (currentWidth == renderExtent[0] && currentHeight == renderExtent[1] && !poolTextures.IsEmpty()) {
         return;
     }
@@ -450,6 +453,7 @@ void NrdDenoiser::EnsureResources(Core::Array<uint32_t, 2> renderExtent, uint64_
 
 void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const Core::RELAXParams& relaxParams, const Core::ReBLURParams& reblurParams, uint64_t frameNumber, float renderFps, bool bHistoryReset)
 {
+    ZoneScoped;
     const Core::RELAXParams& params = relaxParams;
     const glm::mat4& view = viewFamily.mainView.currentViewData.view;
     const glm::mat4& proj = viewFamily.mainView.currentViewData.proj;
@@ -846,6 +850,7 @@ void NrdDenoiser::RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourc
 
 void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams)
 {
+    ZoneScoped;
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const StringID gbufferOne = targets.gbufferOne;
@@ -929,6 +934,7 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
 
 void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend)
 {
+    ZoneScoped;
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
     const StringID diffOutput = targets.intermediateOne;

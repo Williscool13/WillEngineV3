@@ -4,6 +4,8 @@
 
 #include "render/passes/lighting_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "ddgi_passes.h"
 #include "final_gather_passes.h"
 #include "reflection_passes.h"
@@ -24,6 +26,7 @@ void SetupFrustumBinningPass(RenderGraph& graph,
                              float clusterZNear,
                              float clusterZFar)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(LIGHT_DATA_BUFFER)) { return; }
 
     const VkDeviceSize gridBytes = static_cast<VkDeviceSize>(CLUSTER_COUNT) * 2u * sizeof(uint32_t);
@@ -63,6 +66,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
                                Core::Arena& arena,
                                const DDGICascades& ddgiCascades)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(LIGHT_DATA_BUFFER)) { return; }
 
     const VkDeviceSize gridBytes = static_cast<VkDeviceSize>(WORLD_GRID_CELL_COUNT) * 2u * sizeof(uint32_t);
@@ -152,6 +156,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint32_t giGatherMode,
                                         const Core::ReflectionConfiguration& reflectionConfig)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
@@ -277,6 +282,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   uint32_t accumulationCount,
                                   uint64_t frameNumber)
 {
+    ZoneScoped;
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
@@ -354,6 +360,7 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
                                   uint32_t sceneIndex,
                                   uint32_t pixelScale)
 {
+    ZoneScoped;
     if (!graph.HasTexture(SID("rt_sun_shadow"))) { return; }
 
     const bool bHalfRes = pixelScale > 1u;

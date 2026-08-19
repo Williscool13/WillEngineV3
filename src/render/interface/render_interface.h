@@ -554,7 +554,7 @@ struct FrameBuffer
 
     FrameBuffer& operator=(FrameBuffer&&) = delete;
 
-    void Initialize(ArenaSuballocator& pool, AllocTag tag = AllocTag::FrameSync0);
+    void Initialize(ArenaSuballocator& pool, AllocTag tag, const char* name);
 
     void Reinitialize();
 

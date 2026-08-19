@@ -4,6 +4,8 @@
 
 #include "render/passes/shadow_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -20,6 +22,7 @@ void SetupShadowsResolve(RenderGraph& graph,
                          const RenderTargets& targets,
                          uint32_t sceneIndex)
 {
+    ZoneScoped;
     graph.CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
 
@@ -65,6 +68,7 @@ static void AddSigmaBlurPass(RenderGraph& graph,
                              StringID depth,
                              StringID gbufferOne)
 {
+    ZoneScoped;
     RenderPass& pass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
     pass.ReadBuffer(SID("scene_data"));
     pass.ReadBuffer(SID("light_data"));
@@ -110,6 +114,7 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
                              uint32_t sceneIndex,
                              uint64_t frameNumber)
 {
+    ZoneScoped;
     if (!graph.HasTexture(SID("rt_sun_shadow"))) { return; }
 
     const Core::SIGMAParams& sigma = viewFamily.sigmaParams;
@@ -184,6 +189,7 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
                               const RenderTargets& targets,
                               uint32_t sceneIndex)
 {
+    ZoneScoped;
     if (!graph.HasTexture(SID("sigma_shadow"))) { return; }
 
     const Core::SIGMAParams& sigma = viewFamily.sigmaParams;

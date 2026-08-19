@@ -115,6 +115,8 @@ struct RescanRequests
     std::atomic<bool> bMaterials{false};
 };
 
+inline constexpr size_t MAX_ASSET_RESOLVES_PER_TICK = 2048;
+
 struct EngineContext
 {
     WindowContext windowContext{};

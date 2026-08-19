@@ -4,6 +4,7 @@
 
 #include "render_interface.h"
 
+#include "core/math/math_helpers.h"
 #include "engine/logging/engine_log.h"
 
 namespace Core
@@ -46,9 +47,9 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     spriteBatches = ArenaVector<SpriteBatch>(&arena, wm.spriteBatches);
 }
 
-void FrameBuffer::Initialize(ArenaSuballocator& pool, AllocTag tag)
+void FrameBuffer::Initialize(ArenaSuballocator& pool, AllocTag tag, const char* name)
 {
-    frameArena = ManagedArena(pool, 16ull * 1024 * 1024, tag);
+    frameArena = ManagedArena(pool, 48ull * 1024 * 1024, tag, name);
     mainViewFamily = ViewFamily(frameArena.Get());
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);
@@ -57,10 +58,10 @@ void FrameBuffer::Initialize(ArenaSuballocator& pool, AllocTag tag)
 void FrameBuffer::Reinitialize()
 {
     const ViewFamily& vf = mainViewFamily;
-    viewFamilyWatermarks.primitiveInstances = std::max(viewFamilyWatermarks.primitiveInstances, vf.primitiveInstances.Size());
-    viewFamilyWatermarks.worldGlyphQuads = std::max(viewFamilyWatermarks.worldGlyphQuads, vf.worldGlyphQuads.Size());
-    viewFamilyWatermarks.textInstances = std::max(viewFamilyWatermarks.textInstances, vf.textInstances.Size());
-    viewFamilyWatermarks.modelMatrices = std::max(viewFamilyWatermarks.modelMatrices, vf.modelMatrices.Size());
+    viewFamilyWatermarks.primitiveInstances = std::max(viewFamilyWatermarks.primitiveInstances, NextPowerOfTwo(vf.primitiveInstances.Size()));
+    viewFamilyWatermarks.worldGlyphQuads = std::max(viewFamilyWatermarks.worldGlyphQuads, NextPowerOfTwo(vf.worldGlyphQuads.Size()));
+    viewFamilyWatermarks.textInstances = std::max(viewFamilyWatermarks.textInstances, NextPowerOfTwo(vf.textInstances.Size()));
+    viewFamilyWatermarks.modelMatrices = std::max(viewFamilyWatermarks.modelMatrices, NextPowerOfTwo(vf.modelMatrices.Size()));
     viewFamilyWatermarks.lights = std::max(viewFamilyWatermarks.lights, vf.lights.Size());
     viewFamilyWatermarks.activeMaterials = std::max(viewFamilyWatermarks.activeMaterials, vf.activeMaterials.Size());
     viewFamilyWatermarks.activeTextMaterials = std::max(viewFamilyWatermarks.activeTextMaterials, vf.activeTextMaterials.Size());

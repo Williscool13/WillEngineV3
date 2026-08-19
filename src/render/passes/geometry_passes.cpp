@@ -4,6 +4,8 @@
 
 #include "render/passes/geometry_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/passes/occlusion_passes.h"
 #include "render/render_utils.h"
 #include "core/containers/inline_string.h"
@@ -23,6 +25,7 @@ void SetupGeometryPass(RenderGraph& graph,
                        const RenderTargets& targets,
                        uint32_t sceneIndex)
 {
+    ZoneScoped;
     if (viewFamily.primitiveInstances.IsEmpty()) {
         return;
     }
@@ -629,6 +632,7 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               const RenderTargets& targets,
                                               uint32_t sceneIndex)
 {
+    ZoneScoped;
     RenderPass& visBarDer = graph.AddPass(SID("Visibility Barycentric Derivative"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     visBarDer.ReadSampledImage(targets.visibility);
     visBarDer.ReadBuffer(SCENE_DATA_BUFFER);
@@ -676,6 +680,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   const RenderTargets& targets,
                                   uint32_t sceneIndex)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -761,6 +766,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                                 uint32_t sceneIndex,
                                 Core::Arena& arena)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
     struct MaterialEntry
@@ -851,6 +857,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
                                        uint32_t sceneIndex,
                                        Core::Arena& arena)
 {
+    ZoneScoped;
     RenderPass& bucketVisualizePass = graph.AddPass(SID("Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     bucketVisualizePass.ReadSampledImage(targets.visibility);
     bucketVisualizePass.ReadStorageImage(targets.barycentric);
@@ -911,6 +918,7 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                      const RenderTargets& targets,
                                      uint32_t sceneIndex)
 {
+    ZoneScoped;
     RenderPass& lightBucketVisualizePass = graph.AddPass(SID("Light Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     lightBucketVisualizePass.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferOne);

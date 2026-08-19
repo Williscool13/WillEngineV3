@@ -328,18 +328,16 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::Text3DGeneratePendingKickoff(ctx, state);
     Game::PhysicsMeshPendingKickoff(ctx, state);
 
-    if (ctx->frameStatus.bAssetsChangedThisFrame || state->assetLoad.bPendingModelResolve) {
-        state->assetLoad.bPendingModelResolve = false;
-        Game::StaticMeshLoadResolve(ctx, state);
-        Game::LightSurfaceResolve(ctx, state);
-        Game::ReflectionProbeLoadResolve(ctx, state);
-        Game::StaticMeshPrimitiveLoadResolve(ctx, state);
-        Game::ProceduralMeshLoadResolve(ctx, state);
-        Game::SplineMeshLoadResolve(ctx, state);
-        Game::ModuleMeshLoadResolve(ctx, state);
-        Game::Text3DLoadResolve(ctx, state);
-        Game::PhysicsMeshLoadResolve(ctx, state);
-    }
+    state->assetLoad.bPendingModelResolve = false;
+    Game::StaticMeshLoadResolve(ctx, state);
+    Game::LightSurfaceResolve(ctx, state);
+    Game::ReflectionProbeLoadResolve(ctx, state);
+    Game::StaticMeshPrimitiveLoadResolve(ctx, state);
+    Game::ProceduralMeshLoadResolve(ctx, state);
+    Game::SplineMeshLoadResolve(ctx, state);
+    Game::ModuleMeshLoadResolve(ctx, state);
+    Game::Text3DLoadResolve(ctx, state);
+    Game::PhysicsMeshLoadResolve(ctx, state);
     Game::PhysicsShapeCreationResolve(ctx, state);
     Game::PhysicsBodyCreationResolve(ctx, state);
 

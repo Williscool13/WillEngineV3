@@ -4,6 +4,8 @@
 
 #include "render/passes/radiance_cache_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/renderer_types.h"
 #include "render/passes/ddgi_passes.h"
 #include "render/render_utils.h"
@@ -15,6 +17,7 @@ namespace Render
 {
 RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos, bool bFreeze)
 {
+    ZoneScoped;
     graph.CreateBuffer(RADIANCE_CACHE_ENTRIES, RADIANCE_CACHE_ENTRIES_BYTES, false);
     graph.CreateBuffer(RADIANCE_CACHE_KEYS, RADIANCE_CACHE_KEYS_BYTES, false);
     graph.CreateBuffer(RADIANCE_CACHE_CELLS, RADIANCE_CACHE_CELLS_BYTES, false);
@@ -98,6 +101,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
 
 void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const RadianceCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce)
 {
+    ZoneScoped;
     if (!frame.bValid) {
         return;
     }
@@ -200,6 +204,7 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
 
 void SetupRadianceCacheEnd(RenderGraph& graph, const RadianceCacheFrame& frame)
 {
+    ZoneScoped;
     if (!frame.bValid) {
         return;
     }
@@ -210,6 +215,7 @@ void SetupRadianceCacheEnd(RenderGraph& graph, const RadianceCacheFrame& frame)
 
 void SetupRadianceCacheDebug(RenderGraph& graph, PipelineManager* pipelineManager, const RadianceCacheFrame& frame, float debugExposure, int32_t normalBucket)
 {
+    ZoneScoped;
 #ifdef WDEBUG
     if (!frame.bValid || !graph.HasBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER)) {
         return;

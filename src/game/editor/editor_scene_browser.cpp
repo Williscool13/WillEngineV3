@@ -381,9 +381,12 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             uint16_t depth; // (0 = root)
         };
 
-        Core::ArenaVector<EntityEntry> entries{&ctx->editorArena.Get(), 1024};
+        constexpr size_t MAX_BROWSER_ENTRIES = 4096;
+
+        Core::ArenaVector<EntityEntry> entries{&ctx->editorArena.Get(), MAX_BROWSER_ENTRIES + 1};
 
         size_t totalInScene = 0;
+        bool bEntriesTruncated = false;
         auto view2 = state->registry.view<Component::SceneComponent>();
         for (auto entity : view2) {
             auto& scene = view2.get<Component::SceneComponent>(entity);
@@ -421,6 +424,10 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                     depth = h->depth;
                 }
             }
+            if (entries.Size() >= MAX_BROWSER_ENTRIES) {
+                bEntriesTruncated = true;
+                continue;
+            }
             entries.PushBack({entity, label, stableId, sortOrder, folderId, parentEntity, depth});
         }
         std::ranges::sort(entries, [](const EntityEntry& a, const EntityEntry& b) { return a.sortOrder < b.sortOrder; });
@@ -440,13 +447,26 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         entt::entity reparentFolderEntity = entt::null;
         StringID reparentFolderTo{};
 
-        // Direct transform children of an entity, in sort order (entries is already sorted by sortOrder).
-        auto collectChildren = [&](entt::entity parent) {
-            Core::ArenaVector<EntityEntry*> kids{&ctx->editorArena.Get(), 8};
-            for (auto& en : entries) {
-                if (en.parentEntity == parent) { kids.PushBack(&en); }
+        Core::ArenaVector<EntityEntry*> childIndex{&ctx->editorArena.Get(), entries.Size() + 1};
+        for (auto& en : entries) {
+            if (en.parentEntity != entt::null) { childIndex.PushBack(&en); }
+        }
+        std::stable_sort(childIndex.begin(), childIndex.end(), [](const EntityEntry* a, const EntityEntry* b) {
+            return static_cast<uint32_t>(a->parentEntity) < static_cast<uint32_t>(b->parentEntity);
+        });
+
+        auto collectChildren = [&](entt::entity parent) -> Core::Span<EntityEntry*> {
+            const auto key = static_cast<uint32_t>(parent);
+            size_t lo = 0;
+            size_t hi = childIndex.Size();
+            while (lo < hi) {
+                const size_t mid = lo + (hi - lo) / 2;
+                if (static_cast<uint32_t>(childIndex[mid]->parentEntity) < key) { lo = mid + 1; }
+                else { hi = mid; }
             }
-            return kids;
+            size_t last = lo;
+            while (last < childIndex.Size() && static_cast<uint32_t>(childIndex[last]->parentEntity) == key) { ++last; }
+            return {childIndex.Data() + lo, last - lo};
         };
 
         // True if `ancestor` lies on `node`'s parent chain (so parenting node under ancestor would form a cycle).
@@ -635,7 +655,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             for (size_t i = 0; i < group.Size(); ++i) {
                 const EntityEntry* prev = i > 0 ? group[i - 1] : nullptr;
                 const EntityEntry* next = (i + 1 < group.Size()) ? group[i + 1] : nullptr;
-                Core::ArenaVector<EntityEntry*> kids = collectChildren(group[i]->entity);
+                Core::Span<EntityEntry*> kids = collectChildren(group[i]->entity);
                 const bool open = drawEntityRow(*group[i], prev, next, !kids.IsEmpty());
                 if (open) {
                     ImGui::Indent();
@@ -1035,6 +1055,10 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         }
         else {
             ImGui::Text("%d entities", static_cast<int>(totalInScene));
+        }
+        if (bEntriesTruncated) {
+            ImGui::SameLine();
+            ImGui::TextColored({1.0f, 0.75f, 0.2f, 1.0f}, "(capped at %d - search to narrow)", static_cast<int>(MAX_BROWSER_ENTRIES));
         }
 
         const size_t selCount = state->editor.selectedEntities.Size();

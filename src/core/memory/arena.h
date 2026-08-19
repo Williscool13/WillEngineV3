@@ -24,7 +24,7 @@ class Arena
 public:
     Arena() = default;
 
-    Arena(void* memory, size_t size, const char* name = "");
+    Arena(void* memory, size_t size, const char* name);
 
     Arena(const Arena&) = delete;
 

@@ -4,6 +4,8 @@
 
 #include "render/passes/reflection_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "ddgi_passes.h"
 #include "render/render_config.h"
 #include "render/render_utils.h"
@@ -23,6 +25,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
                               uint64_t frameNumber,
                               const Core::ReflectionConfiguration& reflectionConfig)
 {
+    ZoneScoped;
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
     if (reflectionRoughnessMax < 0.0f || !graph.HasBuffer(RT_TLAS_BUFFER)) {
         return;
@@ -68,6 +71,7 @@ void SetupSSRTracePass(RenderGraph& graph,
                        uint32_t activeCheckerboardField,
                        const Core::ReflectionConfiguration& reflectionConfig)
 {
+    ZoneScoped;
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
     if (reflectionRoughnessMax < 0.0f) {
         return;
@@ -118,6 +122,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
                               bool bCheckerboardPacked,
                               bool bDisableScreenTier)
 {
+    ZoneScoped;
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
     if (reflectionRoughnessMax < 0.0f || !graph.HasBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER)) {
         return;

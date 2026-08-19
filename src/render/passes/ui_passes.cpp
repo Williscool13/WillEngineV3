@@ -4,6 +4,8 @@
 
 #include "render/passes/ui_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -15,6 +17,7 @@ namespace Render
 {
 void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID targetImage)
 {
+    ZoneScoped;
     if (viewFamily.uiDrawList.IsEmpty()) { return; }
 
     const bool bHasText = !viewFamily.uiGlyphQuads.IsEmpty() && graph.HasBuffer(UI_GLYPH_QUAD_BUFFER) && graph.HasBuffer(FONT_CURVE_BUFFER);
@@ -178,6 +181,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
 
 void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint64_t selectedStableId)
 {
+    ZoneScoped;
     RenderPass& outlinePass = graph.AddPass(SID("Selection Outline"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::UI);
     outlinePass.ReadStorageImage(targets.stableId);
     outlinePass.WriteStorageImage(targets.colorOutput);

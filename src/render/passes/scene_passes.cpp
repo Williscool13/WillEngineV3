@@ -4,6 +4,8 @@
 
 #include "render/passes/scene_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -19,6 +21,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           const RenderTargets& targets,
                           uint32_t sceneIndex)
 {
+    ZoneScoped;
     const PipelineEntry* skyboxEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
     if (!skyboxEntry || skyboxEntry->pipeline == VK_NULL_HANDLE) { return; }
 
@@ -65,6 +68,7 @@ void SetupTextForwardPass(RenderGraph& graph,
                           Core::Array<uint32_t, 2> renderExtent,
                           const RenderTargets& targets)
 {
+    ZoneScoped;
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
     if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER) || !graph.HasBuffer(FONT_CURVE_BUFFER)) { return; }
 
@@ -134,6 +138,7 @@ void SetupTextForwardPass(RenderGraph& graph,
 
 void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets)
 {
+    ZoneScoped;
     if (viewFamily.spriteBatches.IsEmpty()) {
         return;
     }

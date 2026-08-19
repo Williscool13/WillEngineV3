@@ -4,6 +4,8 @@
 
 #include "raytracing_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include <cstring>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -27,6 +29,7 @@ void SetupTLASBuild(RenderGraph& graph,
                     Core::Array<uint32_t, 2> renderExtent,
                     const FrameResourceLimits& limits)
 {
+    ZoneScoped;
     size_t instanceCount = 0;
     for (const auto& p : viewFamily.primitiveInstances) {
         if (p.blasDeviceAddress != 0) { ++instanceCount; }
@@ -73,7 +76,7 @@ void SetupTLASBuild(RenderGraph& graph,
         __m128 r3 = _mm_loadu_ps(&model.modelMatrix[3][0]);
         _MM_TRANSPOSE4_PS(r0, r1, r2, r3);
 
-        VkAccelerationStructureInstanceKHR& inst = instanceData[instanceSlot++];
+        VkAccelerationStructureInstanceKHR inst{};
         _mm_storeu_ps(inst.transform.matrix[0], r0);
         _mm_storeu_ps(inst.transform.matrix[1], r1);
         _mm_storeu_ps(inst.transform.matrix[2], r2);
@@ -86,6 +89,8 @@ void SetupTLASBuild(RenderGraph& graph,
         inst.instanceShaderBindingTableRecordOffset = 0;
         inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         inst.accelerationStructureReference = src.blasDeviceAddress;
+
+        instanceData[instanceSlot++] = inst;
     }
 
     const VkDeviceSize scratchAlignment = VulkanContext::deviceInfo.accelerationStructureProps.minAccelerationStructureScratchOffsetAlignment;
@@ -126,6 +131,7 @@ void SetupRTShadowTest(RenderGraph& graph,
                        StringID outputTarget,
                        uint32_t sceneIndex)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
 
     RenderPass& pass = graph.AddPass(SID("RT Shadow Test"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Untagged);
@@ -164,6 +170,7 @@ void SetupRTSunShadow(RenderGraph& graph,
                       uint64_t frameNumber,
                       uint32_t pixelScale)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
 
     const bool bHalfRes = pixelScale > 1u;
@@ -225,6 +232,7 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
                            uint32_t accumulationCount,
                            uint64_t frameNumber)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return false; }
     if (!pipelineManager->GetPipelineEntry(SID("rt_ground_truth_di"))) { return false; }
 
@@ -296,6 +304,7 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
                           uint32_t accumulationCount,
                           uint64_t frameNumber)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return false; }
     if (!pipelineManager->GetPipelineEntry(SID("rt_ground_truth_gi"))) { return false; }
 
@@ -381,6 +390,7 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
                             uint64_t frameNumber,
                             uint32_t samplesPerFrame)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return false; }
     if (!pipelineManager->GetPipelineEntry(SID("rt_ground_truth_full"))) { return false; }
 

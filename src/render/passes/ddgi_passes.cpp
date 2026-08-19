@@ -4,6 +4,8 @@
 
 #include "render/passes/ddgi_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include <cfloat>
 
 #include "render/render_utils.h"
@@ -297,6 +299,7 @@ void DeclareDDGIVolumeGridReads(RenderGraph& graph, RenderPass& pass)
 
 void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) {
         return;
     }
@@ -700,6 +703,7 @@ static uint32_t DDGISlotTint(uint32_t slot)
 
 void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive, int32_t probeDebugMode)
 {
+    ZoneScoped;
 #ifdef WDEBUG
     if (!graph.HasBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER)) {
         return;

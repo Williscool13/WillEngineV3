@@ -4,6 +4,8 @@
 
 #include "render/passes/final_gather_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/passes/ddgi_passes.h"
 #include "render/render_utils.h"
 #include "render/interface/render_interface.h"
@@ -15,6 +17,7 @@ namespace Render
 {
 void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex)
 {
+    ZoneScoped;
     if (graph.HasTexture(OBJECT_MOTION)) { return; }
     graph.CreateTexture(OBJECT_MOTION, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
@@ -45,6 +48,7 @@ void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Cor
 
 FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, bool bDebugUpscalePath)
 {
+    ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(RADIANCE_CACHE_ENTRIES) || !graph.HasBuffer(RADIANCE_CACHE_CELLS)
         || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER)
         || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER) || !graph.HasBuffer(GEOMETRY_INDEX_BUFFER) || !graph.HasBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER)) {
@@ -382,6 +386,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 
 void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, int32_t mode)
 {
+    ZoneScoped;
     if (mode <= 0 || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(RADIANCE_CACHE_ENTRIES) || !graph.HasBuffer(RADIANCE_CACHE_KEYS) || !graph.HasBuffer(RADIANCE_CACHE_CELLS)) {
         return;
     }
@@ -425,6 +430,7 @@ void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Co
 
 void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, int32_t mode, bool bQuarterRes)
 {
+    ZoneScoped;
     if (mode <= 0 || !graph.HasTexture(GI_GATHER_RESOLVED) || !graph.HasTexture(GI_GATHER_DATA)) {
         return;
     }

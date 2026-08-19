@@ -4,6 +4,8 @@
 
 #include "render/passes/ambient_occlusion_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -21,6 +23,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
                                       uint64_t frameNumber,
                                       uint32_t sceneIndex)
 {
+    ZoneScoped;
     const Core::GTAOConfiguration& gtaoConfig = viewFamily.gtaoConfig;
 
     uint32_t denoisePassCount = static_cast<uint32_t>(gtaoConfig.denoisePasses + 0.5f);

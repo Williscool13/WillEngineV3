@@ -23,7 +23,7 @@ namespace Core
  *   ArenaSuballocator sub;
  *   sub.Init(pool, poolBytes, "MyPool");
  *
- *   Arena a = sub.Acquire(256 * 1024, AllocTag::FrameSync);
+ *   Arena a = sub.Acquire(256 * 1024, AllocTag::FrameSync, "frameSync");
  *   sub.RegisterArena(a.Data(), &a);   // patch live pointer for stats
  *   // ... bump-allocate into a ...
  *   sub.Release(a);  // chunk returned to pool; a is invalidated
@@ -40,7 +40,7 @@ public:
      * an Arena wrapping it. Returns a null Arena (Data() == nullptr) on failure.
      * Call RegisterArena(arena.Data(), &arena) afterwards to enable live stats.
      */
-    Arena Acquire(size_t size, AllocTag tag = AllocTag::Unknown, const char* name = "");
+    Arena Acquire(size_t size, AllocTag tag, const char* name);
 
     /**
      * Patches the Arena* for an already-acquired chunk so GetLiveArenaStats can read it.
@@ -101,7 +101,7 @@ class ManagedArena
 public:
     ManagedArena() = default;
 
-    ManagedArena(ArenaSuballocator& pool, size_t size, AllocTag tag = AllocTag::Unknown, const char* name = "")
+    ManagedArena(ArenaSuballocator& pool, size_t size, AllocTag tag, const char* name)
         : pool_(&pool), arena_(pool.Acquire(size, tag, name))
     {
         if (arena_.Data()) {

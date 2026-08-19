@@ -4,6 +4,8 @@
 
 #include "render/passes/occlusion_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/render-graph/render_pass.h"
@@ -19,6 +21,7 @@ static uint32_t PreviousPow2(uint32_t v)
 
 void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets)
 {
+    ZoneScoped;
     const uint32_t mip0W = PreviousPow2(renderExtent[0] > 1u ? renderExtent[0] / 2u : 1u);
     const uint32_t mip0H = PreviousPow2(renderExtent[1] > 1u ? renderExtent[1] / 2u : 1u);
     uint32_t mipCount = 1;
@@ -64,6 +67,7 @@ void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core:
 
 void SetupHiZDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, int32_t mip)
 {
+    ZoneScoped;
     if (mip < 0 || !graph.HasTexture(HIZ_PYRAMID)) {
         return;
     }

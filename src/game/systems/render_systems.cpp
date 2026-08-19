@@ -295,8 +295,10 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadPendingTag>();
     if (view.size_hint() == 0) { return; }
 
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
+        if (started.Size() >= budget) { break; }
         if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; } // stay pending while frozen
         auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
         runtime.modelHandle = ctx->assetManager->LoadModel(meshComponent.modelId);
@@ -313,8 +315,10 @@ void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineSta
     auto view = state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeLoadPendingTag>();
     if (view.size_hint() == 0) { return; }
 
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, probe] : view.each()) {
+        if (started.Size() >= budget) { break; }
         if (ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) {
             probe.contentHandle = ctx->assetManager->LoadProbe(Engine::ProbeID{probe.probeId});
             probe.contentSource = Component::ReflectionProbeComponent::ContentSource::Baked;
@@ -414,8 +418,10 @@ void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState*
     auto view = state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeLoadingTag>();
     if (view.size_hint() == 0) { return; }
 
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, probe] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
         if (!cubemap) {
             resolved.PushBack(entity);
@@ -451,8 +457,10 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
     const Engine::Material* defaultMaterial = ctx->materialManager->GetMaterial(ctx->materialManager->GetDefaultMaterialID());
     if (!defaultMaterial) { return; }
 
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size());
+    const size_t budget = std::min(view.size(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const entt::entity entity : view) {
+        if (resolved.Size() >= budget) { break; }
         const auto* areaLight = state->registry.try_get<Component::AreaLightComponent>(entity);
         const auto* sphereLight = state->registry.try_get<Component::SphereLightComponent>(entity);
         if (!areaLight && !sphereLight) {
@@ -507,20 +515,30 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
     int32_t modelsWaitingThisTick{0};
 
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
         Engine::InstanceStore& store = state->instanceStore;
 
-        store.ReleaseAndFree(materialManager, &state->triLightStore, runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        auto releaseExisting = [&] {
+            store.ReleaseAndFree(materialManager, &state->triLightStore, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
+        };
 
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Model ({}) is not in the asset manager after a load request.", runtime->modelHandle.index);
+            releaseExisting();
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            releaseExisting();
             resolved.PushBack(entity);
             continue;
         }
@@ -559,9 +577,12 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         if (totalPrimitives == 0) {
+            releaseExisting();
             resolved.PushBack(entity);
             continue;
         }
+
+        releaseExisting();
 
         Engine::ModelStore::Range modelRange = state->modelStore.Allocate(contributingNodes);
         if (!modelRange.IsValid()) {
@@ -661,8 +682,10 @@ void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::Engin
     auto view = state->registry.view<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadPendingTag>();
     if (view.size_hint() == 0) { return; }
 
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
+        if (started.Size() >= budget) { break; }
         if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; }
         auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
         runtime.modelHandle = ctx->assetManager->LoadModel(meshComponent.modelId);
@@ -680,18 +703,29 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
     size_t viewCount = view.size_hint();
     if (viewCount == 0) { return; }
 
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
-        state->instanceStore.ReleaseAndFree(materialManager, &state->triLightStore, runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+
+        auto releaseExisting = [&] {
+            state->instanceStore.ReleaseAndFree(materialManager, &state->triLightStore, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
+        };
 
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Model ({}) is not in the asset manager after a load request.", runtime->modelHandle.index);
+            releaseExisting();
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            releaseExisting();
             resolved.PushBack(entity);
             continue;
         }
@@ -720,9 +754,12 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
         }
         if (!targetPrim) {
             LOG_WARN(Game, "StaticMeshPrimitive ordinal {} out of range for model ({})", meshComponent.primitiveOrdinal, model->name.c_str());
+            releaseExisting();
             resolved.PushBack(entity);
             continue;
         }
+
+        releaseExisting();
 
         auto applyShaderOverrides = [&](Engine::Material mat) -> Engine::Material {
             if (meshComponent.shadingShaderOverride) { mat.fragmentShader = meshComponent.shadingShaderOverride; }
@@ -784,8 +821,10 @@ void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
     auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadPendingTag>();
     if (view.size_hint() == 0) { return; }
 
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, meshComponent] : view.each()) {
+        if (started.Size() >= budget) { break; }
         auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
         runtime.modelHandle = ctx->assetManager->LoadProceduralModel(meshComponent.params);
         if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
@@ -806,8 +845,10 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
 
     int32_t proceduralWaitingThisTick{0};
 
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
@@ -905,8 +946,10 @@ void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     auto view = state->registry.view<Component::ModuleMeshComponent, Component::ModuleMeshLoadPendingTag>();
     if (view.size_hint() == 0) { return; }
 
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, meshComponent] : view.each()) {
+        if (started.Size() >= budget) { break; }
         if (meshComponent.params.parts.IsEmpty()) { continue; }
         auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
         runtime.modelHandle = ctx->assetManager->LoadModuleModel(meshComponent.params);
@@ -925,8 +968,10 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     if (viewCount == 0) {
         return;
     }
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
@@ -955,8 +1000,10 @@ void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadPendingTag>();
     if (view.size_hint() == 0) { return; }
 
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, meshComponent] : view.each()) {
+        if (started.Size() >= budget) { break; }
         auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
         runtime.modelHandle = ctx->assetManager->LoadSplineModel(Component::ToSplineParams(meshComponent));
         if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
@@ -974,8 +1021,10 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     if (viewCount == 0) {
         return;
     }
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
@@ -1015,8 +1064,10 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
     if (viewCount == 0) {
         return;
     }
-    auto done = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto done = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, textComponent] : view.each()) {
+        if (done.Size() >= budget) { break; }
         // Stay pending while the font is missing or frozen (e.g. mid hot-reload drain). The generated mesh takes its own font ref, so we hold none here.
         if (!textComponent.fontId.IsValid() || ctx->assetManager->IsFontFrozen(textComponent.fontId)) { continue; }
 
@@ -1044,8 +1095,10 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (viewCount == 0) {
         return;
     }
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, textComponent] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
@@ -1200,23 +1253,31 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
     else {
         ZoneScopedN("Parallel");
-        auto entities = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), dirtyViewCount);
+        constexpr size_t TASK_BATCH = 8192;
+        auto entities = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), std::min(dirtyViewCount, TASK_BATCH));
+
+        auto dispatch = [&]() {
+            if (entities.IsEmpty()) { return; }
+            enki::TaskSet task(entities.Size(), [&](enki::TaskSetPartition range, uint32_t) {
+                for (uint32_t i = range.start; i < range.end; ++i) {
+                    auto entity = entities[i];
+                    auto& world = dirtyView.get<Component::WorldTransformComponent>(entity);
+                    auto& renderTransform = dirtyView.get<Component::RenderTransformComponent>(entity);
+
+                    renderTransform.previousMatrix = renderTransform.modelMatrix;
+                    renderTransform.modelMatrix = glm::translate(GetMatrix(world), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
+                }
+            });
+            ctx->scheduler->AddTaskSetToPipe(&task);
+            ctx->scheduler->WaitforTask(&task);
+            entities.Clear();
+        };
+
         for (entt::entity e : dirtyView) {
             entities.PushBack(e);
+            if (entities.Size() == entities.GetCapacity()) { dispatch(); }
         }
-
-        enki::TaskSet task(entities.Size(), [&](enki::TaskSetPartition range, uint32_t) {
-            for (uint32_t i = range.start; i < range.end; ++i) {
-                auto entity = entities[i];
-                auto& world = dirtyView.get<Component::WorldTransformComponent>(entity);
-                auto& renderTransform = dirtyView.get<Component::RenderTransformComponent>(entity);
-
-                renderTransform.previousMatrix = renderTransform.modelMatrix;
-                renderTransform.modelMatrix = glm::translate(GetMatrix(world), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
-            }
-        });
-        ctx->scheduler->AddTaskSetToPipe(&task);
-        ctx->scheduler->WaitforTask(&task);
+        dispatch();
     }
 
     // Dirty entities write their node matrices into their stable model slots
@@ -1419,8 +1480,10 @@ void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* sta
     auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::TextFontPendingTag>();
     if (view.size_hint() == 0) { return; }
 
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
+    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, textComp, runtime] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         // Load here (not at construct) so the freeze can hold it pending.
         if (!runtime.fontHandle.IsValid()) {
             if (!textComp.fontId.IsValid() || ctx->assetManager->IsFontFrozen(textComp.fontId)) { continue; }

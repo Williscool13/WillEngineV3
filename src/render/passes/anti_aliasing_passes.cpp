@@ -4,6 +4,8 @@
 
 #include "render/passes/anti_aliasing_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -16,6 +18,7 @@ namespace Render
 StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
                                                 const RenderTargets& targets)
 {
+    ZoneScoped;
     graph.CreateTexture(SID("smaa_edges"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("smaa_blend"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("smaa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
@@ -115,6 +118,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
                        Core::Array<uint32_t, 2> renderExtent,
                        const RenderTargets& targets)
 {
+    ZoneScoped;
     graph.CreateTexture(SID("smaa_edges"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("smaa_blend"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("smaa_t2x_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
@@ -248,6 +252,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    const RenderTargets& targets,
                                    StringID pipelineSID)
 {
+    ZoneScoped;
     graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
@@ -346,6 +351,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                                         Core::Array<uint32_t, 2> outputExtent,
                                         const RenderTargets& targets)
 {
+    ZoneScoped;
     graph.CreateTexture(SID("donut_taa_feedback"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CarryTextureToNextFrame(SID("donut_taa_feedback"), SID("donut_taa_feedback_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CreateTexture(SID("donut_taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, CLEAR_COLOR_EMPTY, true);

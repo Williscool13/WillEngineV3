@@ -460,9 +460,11 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
     if (viewCount == 0) {
         return;
     }
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
-    auto abandoned = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
+    auto abandoned = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, bodyDesc] : view.each()) {
+        if (started.Size() + abandoned.Size() >= budget) { break; }
         bool allArmed = true;
         bool shouldAbandon = false;
 
@@ -525,8 +527,10 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
     if (viewCount == 0) {
         return;
     }
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, bodyDesc] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         bool allReady = true;
         bool shouldAbandon = false;
 
@@ -575,9 +579,11 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
     if (viewCount == 0) {
         return;
     }
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
 
     for (const auto& [entity, bodyDesc] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         bool bDegenerate = false;
         for (const auto& shape : bodyDesc.shapes) {
             if (shape.type != Component::PhysicsShapeType::Collider) { continue; }
@@ -651,11 +657,13 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
     if (viewCount == 0) {
         return;
     }
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
+    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
 
     JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
     for (const auto& [entity, bodyDesc] : view.each()) {
+        if (resolved.Size() >= budget) { break; }
         if (!bodyDesc.shapeRef) {
             resolved.PushBack(entity);
             continue;

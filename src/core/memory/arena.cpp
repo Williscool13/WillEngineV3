@@ -4,6 +4,9 @@
 
 #include "arena.h"
 
+#include <cassert>
+#include <cstdio>
+
 namespace Core
 {
 Arena::Arena(void* memory, size_t size, const char* name)
@@ -19,9 +22,11 @@ void* Arena::AllocRaw(size_t size, size_t alignment)
     assert((alignment & (alignment - 1)) == 0 && "Alignment must be a power of two");
 
     const size_t alignedHead = (head + alignment - 1) & ~(alignment - 1);
-    assert(alignedHead + size <= capacity && "Arena out of memory");
-
-    if (alignedHead + size > capacity) { return nullptr; }
+    if (alignedHead + size > capacity) {
+        fprintf(stderr, "Arena '%s' OOM: Alloc %zu bytes (align %zu), used %zu / %zu\n", name.buf, size, alignment, head, capacity);
+        assert(false && "Arena out of memory");
+        return nullptr;
+    }
 
     head = alignedHead + size;
     if (head > peakHead) { peakHead = head; }

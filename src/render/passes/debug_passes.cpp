@@ -4,6 +4,8 @@
 
 #include "render/passes/debug_passes.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "render/render_utils.h"
 #include "render/interface/render_interface.h"
 #include "render/pipelines/pipeline_data.h"
@@ -15,6 +17,7 @@ namespace Render
 {
 void SetupGPUDebugBegin(RenderGraph& graph, const bool bLocked)
 {
+    ZoneScoped;
 #ifdef WDEBUG
     if (bLocked) {
         return;
@@ -66,6 +69,7 @@ void SetupGPUDebugBegin(RenderGraph& graph, const bool bLocked)
 
 void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, const Core::Array<uint32_t, 2> renderExtent, const StringID depthTarget, const StringID targetImage, const bool bLocked)
 {
+    ZoneScoped;
 #ifdef WDEBUG
     if (!graph.HasBuffer(GPU_DEBUG_ARGS_BUFFER)) {
         return;
@@ -185,6 +189,7 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
 
 void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, const Core::ViewFamily& viewFamily)
 {
+    ZoneScoped;
     const Core::ProbePreviewSettings settings = viewFamily.probePreviewSettings;
     if (!settings.bActive || viewFamily.probePreviews.IsEmpty() || !graph.HasTexture(depthTarget)) {
         return;
@@ -233,6 +238,7 @@ void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManag
 }
 void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, uint32_t sceneIndex, float clusterZNear, float clusterZFar)
 {
+    ZoneScoped;
 #ifdef WDEBUG
     if (!graph.HasBuffer(GPU_DEBUG_ARGS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER)) {
         return;
@@ -278,6 +284,7 @@ static const uint32_t WORLD_GRID_CASCADE_TINT[WORLD_GRID_CASCADES] = {
 
 void SetupWorldGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, uint32_t sceneIndex, int32_t debugLevel)
 {
+    ZoneScoped;
 #ifdef WDEBUG
     if (!graph.HasBuffer(GPU_DEBUG_ARGS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER)) {
         return;
