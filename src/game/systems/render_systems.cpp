@@ -1381,12 +1381,15 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     {
         ZoneScopedN("Material Recording");
         Core::Array<bool, Render::BINDLESS_MATERIAL_BUFFER_COUNT> seen{};
+        uint32_t watermark = 0;
         for (auto& instance : frameBuffer->mainViewFamily.primitiveInstances) {
             if (instance.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) { continue; }
             if (seen[instance.materialIndex]) { continue; }
             seen[instance.materialIndex] = true;
+            watermark = glm::max(watermark, instance.materialIndex + 1u);
             frameBuffer->mainViewFamily.activeMaterials.PushBack({instance.materialIndex, materialManager->GetRenderMaterial(instance.materialID)});
         }
+        frameBuffer->mainViewFamily.materialWatermark = watermark;
     } {
         int32_t bestPriority = INT32_MIN;
         Render::Cubemap* bestCubemap = nullptr;

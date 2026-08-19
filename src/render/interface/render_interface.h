@@ -464,6 +464,7 @@ struct ViewFamily
     ArenaVector<PrimitiveInstanceData> primitiveInstances{};
     ArenaVector<Model> modelMatrices{};
     ArenaVector<ActiveMaterial> activeMaterials{};
+    uint32_t materialWatermark{0};
 
     ArenaVector<WorldGlyphQuad> worldGlyphQuads{};
     ArenaVector<TextInstanceDataFull> textInstances{};

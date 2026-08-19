@@ -450,7 +450,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     //
     {
         ZoneScopedN("SetupUniforms");
-        UploadFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
+        UploadFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime, frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR);
         UploadModelUniforms(viewFamily, renderFamilyProperties);
         UploadTextUniforms(viewFamily, renderFamilyProperties);
         UploadUIUniforms(viewFamily, renderFamilyProperties);
@@ -1658,7 +1658,7 @@ void RenderThread::RegisterDebugReadbacks()
 }
 #endif
 
-void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const
+void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime, bool bBuildLightAlias) const
 {
     ZoneScoped;
     // Scene Data
@@ -1682,6 +1682,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
     auto* lightData = static_cast<LightData*>(renderGraph->OpenHostBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE));
     {
+        ZoneScopedN("Lights");
         const glm::vec3& dir = viewFamily.directionalLight.direction;
         lightData->directionalLight.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
         lightData->directionalLight.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
@@ -1708,8 +1709,9 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
     // Power alias table (rebuilt every frame on the CPU, world space)
     const auto lightCount = static_cast<uint32_t>(viewFamily.lights.Size());
-    auto* aliasEntries = static_cast<LightAliasEntry*>(renderGraph->OpenHostBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE));
-    if (lightCount > 0) {
+    if (bBuildLightAlias && lightCount > 0) {
+        ZoneScopedN("Light Alias Table");
+        auto* aliasEntries = static_cast<LightAliasEntry*>(renderGraph->OpenHostBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE));
         BuildLightPowerAlias(viewFamily.lights.Data(), lightCount, lightAliasScratch, aliasEntries);
     }
 
@@ -1737,26 +1739,30 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         lightingIndexByStable[active.stableIndex] = viewFamily.lightingBuckets[active.material.lightingShader];
     }
 
-    for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
-        auto& inst = viewFamily.primitiveInstances[i];
-        if (inst.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) {
-            instanceBuffer[i] = {.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
-            continue;
+    {
+        ZoneScopedN("Instances");
+        for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
+            auto& inst = viewFamily.primitiveInstances[i];
+            if (inst.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) {
+                instanceBuffer[i] = {.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
+                continue;
+            }
+            uint32_t lightingIndex = lightingIndexByStable[inst.materialIndex];
+            instanceBuffer[i] = {
+                .primitiveIndex = inst.primitiveIndex,
+                .modelIndex = inst.modelIndex,
+                .materialIndex = inst.materialIndex,
+                .lightingIndex = lightingIndex,
+                .stableId = inst.stableId,
+                .lightIndex = inst.lightIndex,
+                .emissiveTriLightBase = inst.emissiveTriLightBase,
+                .flags = inst.noMotionBlur ? INSTANCE_FLAG_NO_MOTION_BLUR : 0u,
+            };
         }
-        uint32_t lightingIndex = lightingIndexByStable[inst.materialIndex];
-        instanceBuffer[i] = {
-            .primitiveIndex = inst.primitiveIndex,
-            .modelIndex = inst.modelIndex,
-            .materialIndex = inst.materialIndex,
-            .lightingIndex = lightingIndex,
-            .stableId = inst.stableId,
-            .lightIndex = inst.lightIndex,
-            .emissiveTriLightBase = inst.emissiveTriLightBase,
-            .flags = inst.noMotionBlur ? INSTANCE_FLAG_NO_MOTION_BLUR : 0u,
-        };
     }
 
     if (!viewFamily.modelMatrices.IsEmpty()) {
+        ZoneScopedN("Models");
         void* modelDst = renderGraph->OpenHostBuffer(GEOMETRY_MODEL_BUFFER, renderFamilyProperties.modelBufferSize);
         memcpy(modelDst, viewFamily.modelMatrices.Data(), viewFamily.modelMatrices.Size() * sizeof(Model));
     }
@@ -1772,15 +1778,19 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             materialByStable[active.stableIndex] = activeSlot++;
         }
 
-        auto* dst = static_cast<MaterialProperties*>(renderGraph->OpenHostBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize));
-        constexpr MaterialProperties EMPTY_MATERIAL{};
-        for (int32_t i = 0; i < Render::BINDLESS_MATERIAL_BUFFER_COUNT; ++i) {
-            const uint16_t slot = materialByStable[i];
-            dst[i] = slot == 0xFFFFu ? EMPTY_MATERIAL : viewFamily.activeMaterials[slot].material.props;
+        {
+            ZoneScopedN("Materials");
+            auto* dst = static_cast<MaterialProperties*>(renderGraph->OpenHostBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize));
+            constexpr MaterialProperties EMPTY_MATERIAL{};
+            for (uint32_t i = 0; i < viewFamily.materialWatermark; ++i) {
+                const uint16_t slot = materialByStable[i];
+                dst[i] = slot == 0xFFFFu ? EMPTY_MATERIAL : viewFamily.activeMaterials[slot].material.props;
+            }
         }
 
+        ZoneScopedN("Dispatch Resets");
         auto* shadeDispatchBuffer = static_cast<ShadeDispatchParameters*>(renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
-        for (int32_t i = 0; i < Render::BINDLESS_MATERIAL_BUFFER_COUNT; ++i) {
+        for (uint32_t i = 0; i < viewFamily.materialWatermark; ++i) {
             shadeDispatchBuffer[i] = {
                 .xDispatch = 0,
                 .yDispatch = 0,
@@ -1789,7 +1799,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 .maxX = 0,
                 .minY = UINT32_MAX,
                 .maxY = 0,
-                .shadingIndex = static_cast<uint32_t>(i),
+                .shadingIndex = i,
             };
         }
 

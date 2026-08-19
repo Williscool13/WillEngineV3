@@ -703,7 +703,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
 
     RenderPass& resolvePass = graph.AddPass(SID("Shade Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     resolvePass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
-    resolvePass.Execute([&, pipelineManager, materialCount = static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    resolvePass.Execute([&, pipelineManager, materialCount = viewFamily.materialWatermark](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         ShadeBucketingResolvePushConstant pc{
             .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
             .materialCount = materialCount,
@@ -737,7 +737,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     dispatchCountPass.ReadBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     dispatchCountPass.ReadWriteBuffer(SID("readback_buffer"));
     dispatchCountPass.Execute([&, pipelineManager,
-            materialCount = static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT),
+            materialCount = viewFamily.materialWatermark,
             lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BucketDispatchCountPushConstant pc{
                 .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
@@ -877,6 +877,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
 
             VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER);
             for (uint32_t i = 0; i < materialCount; ++i) {
+                const uint32_t stableIndex = viewFamily.activeMaterials[i].stableIndex;
                 VisibilityShadingPushConstant pc{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
                     .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
@@ -889,7 +890,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                     .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                     .shadeDispatchBuffer = shadeDispatchAddress,
-                    .materialIndex = viewFamily.activeMaterials[i].stableIndex,
+                    .materialIndex = stableIndex,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
                     .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
@@ -898,7 +899,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER),
-                                      i * sizeof(ShadeDispatchParameters) + offsetof(ShadeDispatchParameters, xDispatch));
+                                      stableIndex * sizeof(ShadeDispatchParameters) + offsetof(ShadeDispatchParameters, xDispatch));
             }
         });
 }

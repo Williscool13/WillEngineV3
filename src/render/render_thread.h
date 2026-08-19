@@ -142,7 +142,10 @@ public:
     void ReleaseProbeCapture() { screenCapture->ReleaseProbeCapture(); }
 
 private:
-    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
+    /**
+     * @param bBuildLightAlias Whether to build the power alias table. At the moment, its only consumer is the ReGIR presample pass.
+     */
+    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime, bool bBuildLightAlias) const;
 
     void UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
 
