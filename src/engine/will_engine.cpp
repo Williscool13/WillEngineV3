@@ -1480,8 +1480,15 @@ void WillEngine::Run()
                 }
             }
         }
-        if (engineState->projectConfig.bLimitFps && engineState->projectConfig.frameLimitTarget > 0) {
-            const auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(1.0 / static_cast<double>(engineState->projectConfig.frameLimitTarget)));
+        //
+        {
+            ZoneScopedN("FramePacing");
+            constexpr auto FRAME_INTERVAL_FLOOR = std::chrono::microseconds(3000);
+            auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(FRAME_INTERVAL_FLOOR);
+            if (engineState->projectConfig.bLimitFps && engineState->projectConfig.frameLimitTarget > 0) {
+                const auto capInterval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(1.0 / static_cast<double>(engineState->projectConfig.frameLimitTarget)));
+                if (capInterval > interval) { interval = capInterval; }
+            }
             nextFrameTime += interval;
             const auto now = std::chrono::steady_clock::now();
             if (now < nextFrameTime) {
@@ -1490,9 +1497,6 @@ void WillEngine::Run()
             else {
                 nextFrameTime = now;
             }
-        }
-        else {
-            nextFrameTime = std::chrono::steady_clock::now();
         }
         while (SDL_PollEvent(&e) != 0) {
             ImGui_ImplSDL3_ProcessEvent(&e);
@@ -1587,23 +1591,19 @@ void WillEngine::Run()
         bool bTextureGenerated = false;
         //
         {
-            engineState->assetLoad.pendingHotReloadModelIds.Clear();
             Editor::ModelGenerateComplete modelComplete{};
             while (assetGenerator->TryDequeueModelGenerateComplete(modelComplete)) {
                 engineContext->rescan.bResources = true;
             }
-            engineState->assetLoad.pendingHotReloadFontIds.Clear();
             Editor::FontGenerateComplete fontComplete{};
             while (assetGenerator->TryDequeueFontGenerateComplete(fontComplete)) {
                 engineContext->rescan.bResources = true;
             }
-            engineState->assetLoad.pendingHotReloadTextureIds.Clear();
             Editor::TextureGenerateComplete textureComplete{};
             while (assetGenerator->TryDequeueTextureGenerateComplete(textureComplete)) {
                 engineContext->rescan.bResources = true;
                 bTextureGenerated = true;
             }
-            engineState->assetLoad.pendingHotReloadEnvironmentMapIds.Clear();
             Editor::EnvironmentMapGenerateComplete envMapComplete{};
             while (assetGenerator->TryDequeueCubemapGenerateComplete(envMapComplete)) {
                 engineContext->rescan.bResources = true;

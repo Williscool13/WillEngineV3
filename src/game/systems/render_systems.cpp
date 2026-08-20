@@ -190,6 +190,8 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
         state->assetLoad.bPendingModelResolve = true;
     }
+
+    state->assetLoad.pendingHotReloadModelIds.Clear();
 }
 
 void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -266,6 +268,8 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
         state->assetLoad.bPendingModelResolve = true;
     }
+
+    state->assetLoad.pendingHotReloadFontIds.Clear();
 }
 
 void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -277,6 +281,8 @@ void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
             ctx->assetManager->ReloadTexture(hotId);
         }
     }
+
+    state->assetLoad.pendingHotReloadTextureIds.Clear();
 }
 
 void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -288,6 +294,8 @@ void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
             ctx->assetManager->ReloadCubemap(hotId);
         }
     }
+
+    state->assetLoad.pendingHotReloadEnvironmentMapIds.Clear();
 }
 
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -852,9 +860,21 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
+        auto releaseExisting = [&] {
+            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
+        };
+
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Procedural model ({}) is not in the asset manager, it should have been requested to load during scene load.", runtime->modelHandle.index);
+            releaseExisting();
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            releaseExisting();
+            resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -866,8 +886,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
             matID = meshComponent.material;
         }
-        state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset);
@@ -975,9 +994,21 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
+        auto releaseExisting = [&] {
+            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
+        };
+
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Module model ({}) is not in the asset manager.", runtime->modelHandle.index);
+            releaseExisting();
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            releaseExisting();
+            resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -1028,9 +1059,21 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
+        auto releaseExisting = [&] {
+            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
+        };
+
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Spline model ({}) is not in the asset manager.", runtime->modelHandle.index);
+            releaseExisting();
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            releaseExisting();
+            resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -1041,8 +1084,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
             matID = meshComponent.material;
         }
-        state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset);

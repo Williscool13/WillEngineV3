@@ -259,7 +259,6 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    const auto frameStart = std::chrono::high_resolution_clock::now();
 
 #if WILL_EDITOR
     Game::EditorUpdate(ctx, state);
@@ -352,15 +351,6 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     ctx->physicsSystem->ClearCollisionEvents();
     ctx->physicsSystem->ClearActivationEvents();
     ctx->materialManager->ProcessRetirements();
-
-    const auto frameEnd = std::chrono::high_resolution_clock::now();
-    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);
-    constexpr auto targetFrameTime = std::chrono::microseconds(3000);
-
-    if (elapsed < targetFrameTime) {
-        ZoneScopedN("WaitForTargetFrameTime");
-        SDL_DelayNS(std::chrono::duration_cast<std::chrono::nanoseconds>(targetFrameTime - elapsed).count());
-    }
 }
 
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
