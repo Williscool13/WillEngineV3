@@ -154,23 +154,15 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    auto view = state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>();
-    Core::ArenaVector<entt::entity> entitiesToRestart{&ctx->gameplayArena.Get(), view.size_hint()};
-
-    for (const auto& [entity, smc, runtime] : view.each()) {
+    for (auto [entity, smc] : state->registry.view<Component::StaticMeshComponent>().each()) {
+        if (!state->registry.all_of<Component::MeshRuntime>(entity)) { continue; }
         if (!isHot(smc.modelId)) { continue; }
         Component::UnloadStaticMesh(state->registry, entity);
-        entitiesToRestart.PushBack(entity);
-    }
-
-    for (const entt::entity entity : entitiesToRestart) {
-        Component::LoadStaticMesh(state->registry.get<Component::StaticMeshComponent>(entity), state->registry, entity);
+        Component::LoadStaticMesh(smc, state->registry, entity);
     }
 
     // Physics holds its own model ref (its serialized key, loaded independently), so it must also release + re-arm or the model can never drain.
-    auto physicsView = state->registry.view<Component::PhysicsBodyDesc>();
-    Core::ArenaVector<entt::entity> physicsToRestart{&ctx->gameplayArena.Get(), physicsView.size()};
-    for (auto [entity, bodyDesc] : physicsView.each()) {
+    for (auto [entity, bodyDesc] : state->registry.view<Component::PhysicsBodyDesc>().each()) {
         bool affected = false;
         for (auto& shape : bodyDesc.shapes) {
             if (shape.meshSourceModelId.IsValid() && isHot(shape.meshSourceModelId)) {
@@ -181,15 +173,16 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
                 }
             }
         }
-        if (affected) { physicsToRestart.PushBack(entity); }
-    }
-    for (const entt::entity entity : physicsToRestart) {
+        if (!affected) { continue; }
+
         state->registry.remove<Component::PhysicsMeshLoadingTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
         state->assetLoad.bPendingModelResolve = true;
     }
+
+    state->assetLoad.pendingHotReloadModelIds.Clear();
 }
 
 void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -219,34 +212,19 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    auto textView = state->registry.view<Component::TextComponent, Component::TextRuntime>();
-    auto text3DView = state->registry.view<Component::Text3DComponent>();
-
-    Core::ArenaVector<entt::entity> textEntitiesToRestart{&ctx->gameplayArena.Get(), textView.size_hint()};
-    Core::ArenaVector<entt::entity> text3DEntitiesToRestart{&ctx->gameplayArena.Get(), text3DView.size()};
-
-    for (auto [entity, textComp, runtime] : textView.each()) {
+    for (auto [entity, textComp, runtime] : state->registry.view<Component::TextComponent, Component::TextRuntime>().each()) {
         if (!isHot(textComp.fontId)) { continue; }
         Component::UnloadTextComponent(textComp, state->registry, entity);
-        textEntitiesToRestart.PushBack(entity);
+        Component::LoadTextComponent(textComp, state->registry, entity);
     }
-    for (auto [entity, text3DComp] : text3DView.each()) {
+    for (auto [entity, text3DComp] : state->registry.view<Component::Text3DComponent>().each()) {
         if (!isHot(text3DComp.fontId)) { continue; }
         Component::UnloadText3DFont(state->registry, entity);
-        text3DEntitiesToRestart.PushBack(entity);
-    }
-
-    for (const entt::entity entity : textEntitiesToRestart) {
-        Component::LoadTextComponent(state->registry.get<Component::TextComponent>(entity), state->registry, entity);
-    }
-    for (const entt::entity entity : text3DEntitiesToRestart) {
-        Component::LoadText3DFont(state->registry.get<Component::Text3DComponent>(entity), state->registry, entity);
+        Component::LoadText3DFont(text3DComp, state->registry, entity);
     }
 
     // A Text3D physics collider holds its own ref to the generated mesh (keyed on the font), so it must release + re-arm too or that mesh can never drain.
-    auto physicsView = state->registry.view<Component::PhysicsBodyDesc>();
-    Core::ArenaVector<entt::entity> physicsToRestart{&ctx->gameplayArena.Get(), physicsView.size()};
-    for (auto [entity, bodyDesc] : physicsView.each()) {
+    for (auto [entity, bodyDesc] : state->registry.view<Component::PhysicsBodyDesc>().each()) {
         bool affected = false;
         for (auto& shape : bodyDesc.shapes) {
             if (shape.text3DSource.IsValid() && isHot(shape.text3DSource.fontId)) {
@@ -257,15 +235,16 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
                 }
             }
         }
-        if (affected) { physicsToRestart.PushBack(entity); }
-    }
-    for (const entt::entity entity : physicsToRestart) {
+        if (!affected) { continue; }
+
         state->registry.remove<Component::PhysicsMeshLoadingTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
         state->assetLoad.bPendingModelResolve = true;
     }
+
+    state->assetLoad.pendingHotReloadFontIds.Clear();
 }
 
 void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -277,6 +256,8 @@ void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
             ctx->assetManager->ReloadTexture(hotId);
         }
     }
+
+    state->assetLoad.pendingHotReloadTextureIds.Clear();
 }
 
 void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -288,6 +269,8 @@ void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
             ctx->assetManager->ReloadCubemap(hotId);
         }
     }
+
+    state->assetLoad.pendingHotReloadEnvironmentMapIds.Clear();
 }
 
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -852,9 +835,21 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
+        auto releaseExisting = [&] {
+            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
+        };
+
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Procedural model ({}) is not in the asset manager, it should have been requested to load during scene load.", runtime->modelHandle.index);
+            releaseExisting();
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            releaseExisting();
+            resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -866,8 +861,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
             matID = meshComponent.material;
         }
-        state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset);
@@ -975,9 +969,21 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
+        auto releaseExisting = [&] {
+            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
+        };
+
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Module model ({}) is not in the asset manager.", runtime->modelHandle.index);
+            releaseExisting();
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            releaseExisting();
+            resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -1028,9 +1034,21 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
+        auto releaseExisting = [&] {
+            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->modelStore.Free(runtime->modelRange);
+        };
+
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Spline model ({}) is not in the asset manager.", runtime->modelHandle.index);
+            releaseExisting();
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            releaseExisting();
+            resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -1041,8 +1059,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
             matID = meshComponent.material;
         }
-        state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset);
