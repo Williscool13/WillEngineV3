@@ -30,6 +30,8 @@ inline constexpr uint64_t UPLOAD_STAGING_MIP0_DIVISOR = 1;
 inline constexpr uint64_t UPLOAD_STAGING_MIN_SIZE = 1ull * 1024 * 1024;  // 1MB
 inline constexpr uint64_t UPLOAD_STAGING_MAX_SIZE = 64ull * 1024 * 1024; // 64MB
 
+inline constexpr uint64_t BLAS_SCRATCH_SLOT_SIZE = 4ull * 1024 * 1024;
+
 // During loading screens, game/engine can increase asset loading memory budget
 inline constexpr uint64_t UPLOAD_STAGING_BUDGET_DEFAULT = 128ull * 1024 * 1024;
 inline constexpr uint64_t UPLOAD_STAGING_BUDGET_LOADING_SCREEN = 256ull * 1024 * 1024;

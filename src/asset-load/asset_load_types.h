@@ -110,9 +110,12 @@ struct SubmitContext
 
 struct BLASTransients
 {
-    VkDeviceSize blasScratchSize{};
     Core::HeapArray<VkAccelerationStructureGeometryKHR> geoms{};
     Core::HeapArray<uint32_t> primCounts{};
+    Core::HeapArray<VkDeviceSize> scratchSizes{};
+    Core::HeapArray<VkAccelerationStructureBuildGeometryInfoKHR> buildInfos{};
+    Core::HeapArray<VkAccelerationStructureBuildRangeInfoKHR> ranges{};
+    Core::HeapArray<const VkAccelerationStructureBuildRangeInfoKHR*> rangePtrs{};
 };
 
 struct UnpackedStaticModel

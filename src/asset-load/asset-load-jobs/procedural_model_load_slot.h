@@ -90,8 +90,10 @@ private:
     SubmitContext transferSubmit{};
     SubmitContext graphicsSubmit{};
     VkSemaphore uploadCompleteSemaphore{VK_NULL_HANDLE};
+    Render::AllocatedBuffer blasScratch{};
 
     UnpackedStaticModel rawData{};
+    BLASTransients blasTransients{};
 
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore, VkSemaphore signalSemaphore)> _requestTransferDispatchCallback;
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore, VkSemaphore waitSemaphore)> _requestGraphicsDispatchCallback;

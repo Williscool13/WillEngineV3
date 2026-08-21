@@ -84,6 +84,7 @@ private:
     SubmitContext transferSubmit{};
     SubmitContext graphicsSubmit{};
     VkSemaphore uploadCompleteSemaphore{VK_NULL_HANDLE};
+    Render::AllocatedBuffer blasScratch{};
 
     UnpackedStaticModel rawData{};
     BLASTransients blasTransients{};
