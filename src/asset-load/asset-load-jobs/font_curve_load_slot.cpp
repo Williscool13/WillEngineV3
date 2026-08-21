@@ -130,7 +130,7 @@ bool FontCurveLoadSlot::LoadCurvesFromDisk()
     if (header.slugUncompressedSize == 0 && header.sdfUncompressedSize == 0) { return true; }
 
     const Core::Path& fontPath = outputFont->source;
-    Platform::ScopedFileMapping map(fontPath);
+    Platform::ScopedFileMapping map(fontPath, true);
     if (!map.data || header.slugDataOffset + header.slugDataSize > map.size || header.sdfDataOffset + header.sdfDataSize > map.size) {
         LOG_ERROR(Asset, "Failed to read .wsfont slug data: {}", fontPath.c_str());
         return false;

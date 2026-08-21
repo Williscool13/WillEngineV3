@@ -27,6 +27,17 @@
 
 namespace Editor
 {
+/**
+ * A BLAS build needs roughly 200 bytes of scratch per triangle, so this keeps every primitive under the loader's fixed per-slot scratch buffer (AssetLoad::BLAS_SCRATCH_SLOT_SIZE) with margin for driver variance.
+ */
+static constexpr uint32_t BLAS_SPLIT_TRIANGLE_TARGET = 16384;
+
+static uint32_t ComputeBlasSplitCount(uint32_t triangleCount, uint32_t remainingPrimitiveSlots)
+{
+    const uint32_t desired = (triangleCount + BLAS_SPLIT_TRIANGLE_TARGET - 1) / BLAS_SPLIT_TRIANGLE_TARGET;
+    return std::clamp(desired, 1u, std::max(remainingPrimitiveSlots, 1u));
+}
+
 struct GltfParseArena
 {
     uint8_t* base{nullptr};
@@ -374,7 +385,15 @@ bool StaticModelGenerateSlot::LoadGltf()
 
         size_t totalPrimitives = 0;
         for (size_t m = 0; m < gltf.meshes_count; ++m) {
-            totalPrimitives += gltf.meshes[m].primitives_count;
+            const cgltf_mesh& mesh = gltf.meshes[m];
+            uint32_t meshPrimitives = 0;
+            for (size_t primIndex = 0; primIndex < mesh.primitives_count; ++primIndex) {
+                const uint32_t triangleCount = static_cast<uint32_t>(mesh.primitives[primIndex].indices->count / 3);
+                const uint32_t remaining = meshPrimitives < Engine::MAX_PRIMITIVES_PER_MESH ? Engine::MAX_PRIMITIVES_PER_MESH - meshPrimitives : 0;
+                const uint32_t splitCount = ComputeBlasSplitCount(triangleCount, remaining);
+                meshPrimitives += splitCount;
+                totalPrimitives += splitCount;
+            }
         }
 
         rawModel.primitives = Core::HeapArray<Primitive>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, totalPrimitives);
@@ -387,24 +406,23 @@ bool StaticModelGenerateSlot::LoadGltf()
 
             for (size_t primIndex = 0; primIndex < mesh.primitives_count; ++primIndex) {
                 const cgltf_primitive& p = mesh.primitives[primIndex];
-                currentPrimitiveIndex++;
-                Primitive& primitiveData = rawModel.primitives[currentPrimitiveIndex];
 
                 int32_t materialIndex{-1};
-                Core::HeapArray<uint32_t> primitiveIndices;
-                Core::HeapArray<Engine::FullVertex> primitiveVertices;
+                bool bHasTransparent = false;
+                Core::HeapArray<uint32_t> sourceIndices;
+                Core::HeapArray<Engine::FullVertex> sourceVertices;
 
                 // Extract accessor data
                 {
                     if (p.material != nullptr) {
                         materialIndex = static_cast<int32_t>(p.material - gltf.materials);
-                        primitiveData.bHasTransparent = (static_cast<Engine::MaterialType>(rawModel.materials[materialIndex].props.alphaProperties.y) == Engine::MaterialType::BLEND);
+                        bHasTransparent = (static_cast<Engine::MaterialType>(rawModel.materials[materialIndex].props.alphaProperties.y) == Engine::MaterialType::BLEND);
                     }
 
                     // INDICES
                     const cgltf_accessor& indexAccessor = *p.indices;
-                    primitiveIndices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, indexAccessor.count);
-                    cgltf_accessor_unpack_indices(&indexAccessor, primitiveIndices.Data(), sizeof(uint32_t), indexAccessor.count);
+                    sourceIndices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, indexAccessor.count);
+                    cgltf_accessor_unpack_indices(&indexAccessor, sourceIndices.Data(), sizeof(uint32_t), indexAccessor.count);
 
                     const cgltf_accessor* posAccessor = nullptr;
                     const cgltf_accessor* normalAccessor = nullptr;
@@ -414,33 +432,38 @@ bool StaticModelGenerateSlot::LoadGltf()
                     for (size_t a = 0; a < p.attributes_count; ++a) {
                         const cgltf_attribute& attr = p.attributes[a];
                         switch (attr.type) {
-                            case cgltf_attribute_type_position: posAccessor = attr.data; break;
-                            case cgltf_attribute_type_normal: normalAccessor = attr.data; break;
-                            case cgltf_attribute_type_tangent: tangentAccessor = attr.data; break;
-                            case cgltf_attribute_type_texcoord: if (attr.index == 0) { uvAccessor = attr.data; } break;
-                            case cgltf_attribute_type_color: if (attr.index == 0) { colorAccessor = attr.data; } break;
+                            case cgltf_attribute_type_position: posAccessor = attr.data;
+                                break;
+                            case cgltf_attribute_type_normal: normalAccessor = attr.data;
+                                break;
+                            case cgltf_attribute_type_tangent: tangentAccessor = attr.data;
+                                break;
+                            case cgltf_attribute_type_texcoord: if (attr.index == 0) { uvAccessor = attr.data; }
+                                break;
+                            case cgltf_attribute_type_color: if (attr.index == 0) { colorAccessor = attr.data; }
+                                break;
                             default: break;
                         }
                     }
 
                     // POSITION (REQUIRED)
-                    primitiveVertices = Core::HeapArray<Engine::FullVertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, posAccessor->count);
+                    sourceVertices = Core::HeapArray<Engine::FullVertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, posAccessor->count);
                     Core::HeapArray<float> attrScratch(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, posAccessor->count * 4);
 
                     cgltf_accessor_unpack_floats(posAccessor, attrScratch.Data(), posAccessor->count * 3);
                     for (size_t v = 0; v < posAccessor->count; ++v) {
-                        primitiveVertices[v] = {};
-                        primitiveVertices[v].position = Vec3{attrScratch[v * 3 + 0], attrScratch[v * 3 + 1], attrScratch[v * 3 + 2]};
-                        primitiveVertices[v].color = {1.0f, 1.0f, 1.0f, 1.0f};
-                        primitiveVertices[v].normal = {0.0f, 0.0f, 1.0f};
-                        primitiveVertices[v].tangent = {1.0f, 0.0f, 0.0f, 1.0f};
+                        sourceVertices[v] = {};
+                        sourceVertices[v].position = Vec3{attrScratch[v * 3 + 0], attrScratch[v * 3 + 1], attrScratch[v * 3 + 2]};
+                        sourceVertices[v].color = {1.0f, 1.0f, 1.0f, 1.0f};
+                        sourceVertices[v].normal = {0.0f, 0.0f, 1.0f};
+                        sourceVertices[v].tangent = {1.0f, 0.0f, 0.0f, 1.0f};
                     }
 
                     // NORMALS
                     if (normalAccessor != nullptr) {
                         cgltf_accessor_unpack_floats(normalAccessor, attrScratch.Data(), normalAccessor->count * 3);
                         for (size_t v = 0; v < normalAccessor->count; ++v) {
-                            primitiveVertices[v].normal = {attrScratch[v * 3 + 0], attrScratch[v * 3 + 1], attrScratch[v * 3 + 2]};
+                            sourceVertices[v].normal = {attrScratch[v * 3 + 0], attrScratch[v * 3 + 1], attrScratch[v * 3 + 2]};
                         }
                     }
 
@@ -448,7 +471,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                     if (tangentAccessor != nullptr) {
                         cgltf_accessor_unpack_floats(tangentAccessor, attrScratch.Data(), tangentAccessor->count * 4);
                         for (size_t v = 0; v < tangentAccessor->count; ++v) {
-                            primitiveVertices[v].tangent = {attrScratch[v * 4 + 0], attrScratch[v * 4 + 1], attrScratch[v * 4 + 2], attrScratch[v * 4 + 3]};
+                            sourceVertices[v].tangent = {attrScratch[v * 4 + 0], attrScratch[v * 4 + 1], attrScratch[v * 4 + 2], attrScratch[v * 4 + 3]};
                         }
                     }
 
@@ -459,7 +482,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                         cgltf_accessor_unpack_floats(uvAccessor, attrScratch.Data(), uvAccessor->count * 2);
                         const float uvFloor = uvAccessor->normalized ? -1.0f : -FLT_MAX;
                         for (size_t v = 0; v < uvAccessor->count; ++v) {
-                            primitiveVertices[v].uv = {std::max(attrScratch[v * 2 + 0], uvFloor), std::max(attrScratch[v * 2 + 1], uvFloor)};
+                            sourceVertices[v].uv = {std::max(attrScratch[v * 2 + 0], uvFloor), std::max(attrScratch[v * 2 + 1], uvFloor)};
                         }
                     }
 
@@ -470,276 +493,309 @@ bool StaticModelGenerateSlot::LoadGltf()
                             cgltf_accessor_unpack_floats(colorAccessor, attrScratch.Data(), colorAccessor->count * numComponents);
                             for (size_t v = 0; v < colorAccessor->count; ++v) {
                                 const float alpha = numComponents == 4 ? attrScratch[v * 4 + 3] : 1.0f;
-                                primitiveVertices[v].color = {attrScratch[v * numComponents + 0], attrScratch[v * numComponents + 1], attrScratch[v * numComponents + 2], alpha};
+                                sourceVertices[v].color = {attrScratch[v * numComponents + 0], attrScratch[v * numComponents + 1], attrScratch[v * numComponents + 2], alpha};
                             }
                         }
                     }
                 }
 
-                assert(primitiveIndices.IsAllocated());
-                assert(primitiveVertices.IsAllocated());
-                // Optimize Vertex and Index Buffer.
-                {
-                    ZoneScopedN("Optimize Mesh");
+                assert(sourceIndices.IsAllocated());
+                assert(sourceVertices.IsAllocated());
 
+                const uint32_t sourceTriangleCount = static_cast<uint32_t>(sourceIndices.Size() / 3);
+                const size_t usedPrimitiveSlots = meshOutput.primitiveProperties.Size();
+                const uint32_t remainingPrimitiveSlots = usedPrimitiveSlots < Engine::MAX_PRIMITIVES_PER_MESH ? Engine::MAX_PRIMITIVES_PER_MESH - static_cast<uint32_t>(usedPrimitiveSlots) : 0;
+                const uint32_t splitCount = ComputeBlasSplitCount(sourceTriangleCount, remainingPrimitiveSlots);
 
-                    size_t indexCount = primitiveIndices.Size();
-                    size_t vertexCount = primitiveVertices.Size();
-                    auto remap = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, vertexCount);
-
-                    size_t uniqueVertices;
-                    //
-                    {
-                        ZoneScopedN("Generate Vertex Remap");
-                        uniqueVertices = meshopt_generateVertexRemap(
-                            remap.Data(),
-                            primitiveIndices.Data(),
-                            indexCount,
-                            primitiveVertices.Data(),
-                            vertexCount,
-                            sizeof(Engine::FullVertex));
-                    }
-                    //
-                    {
-                        ZoneScopedN("Remap Buffers");
-                        auto remappedIndices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, primitiveIndices.Size());;
-                        meshopt_remapIndexBuffer(
-                            remappedIndices.Data(),
-                            primitiveIndices.Data(),
-                            primitiveIndices.Size(),
-                            remap.Data());
-
-                        auto remappedVertices = Core::HeapArray<Engine::FullVertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, uniqueVertices);
-                        meshopt_remapVertexBuffer(
-                            remappedVertices.Data(),
-                            primitiveVertices.Data(),
-                            primitiveVertices.Size(),
-                            sizeof(Engine::FullVertex),
-                            remap.Data()
-                        );
-
-                        primitiveIndices = std::move(remappedIndices);
-                        primitiveVertices = std::move(remappedVertices);
-                    }
-                    //
-                    {
-                        ZoneScopedN("Optimize Vertex Cache");
-                        meshopt_optimizeVertexCache(
-                            primitiveIndices.Data(),
-                            primitiveIndices.Data(),
-                            primitiveIndices.Size(),
-                            primitiveVertices.Size()
-                        );
-                    }
-                    //
-                    {
-                        ZoneScopedN("Optimize Overdraw");
-                        meshopt_optimizeOverdraw(
-                            primitiveIndices.Data(),
-                            primitiveIndices.Data(),
-                            primitiveIndices.Size(),
-                            &primitiveVertices[0].position.x,
-                            primitiveVertices.Size(),
-                            sizeof(Engine::FullVertex),
-                            1.05f
-                        );
-                    }
-                    //
-                    {
-                        ZoneScopedN("Optimize Vertex Fetch");
-                        meshopt_optimizeVertexFetch(
-                            primitiveVertices.Data(),
-                            primitiveIndices.Data(),
-                            primitiveIndices.Size(),
-                            primitiveVertices.Data(),
-                            primitiveVertices.Size(),
-                            sizeof(Engine::FullVertex)
-                        );
-                    }
+                if (splitCount > 1) {
+                    ZoneScopedN("Spatial Sort Triangles");
+                    auto sortedIndices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, sourceIndices.Size());
+                    meshopt_spatialSortTriangles(
+                        sortedIndices.Data(),
+                        sourceIndices.Data(),
+                        sourceIndices.Size(),
+                        &sourceVertices[0].position.x,
+                        sourceVertices.Size(),
+                        sizeof(Engine::FullVertex)
+                    );
+                    sourceIndices = std::move(sortedIndices);
                 }
 
+                for (uint32_t split = 0; split < splitCount; ++split) {
+                    const size_t splitTriangleStart = (static_cast<size_t>(sourceTriangleCount) * split) / splitCount;
+                    const size_t splitTriangleEnd = (static_cast<size_t>(sourceTriangleCount) * (split + 1)) / splitCount;
 
-                auto primitiveBounds = AssetLoad::CalculateMeshBounds(primitiveVertices);
-                primitiveData.boundingSphere = {primitiveBounds.sphere.center, primitiveBounds.sphere.radius};
-                primitiveData.boundingBoxMin = primitiveBounds.aabb.min;
-                primitiveData.boundingBoxMax = primitiveBounds.aabb.max;
+                    currentPrimitiveIndex++;
+                    Primitive& primitiveData = rawModel.primitives[currentPrimitiveIndex];
+                    primitiveData.bHasTransparent = bHasTransparent;
 
-                // All LODs draw from the same "source vertex buffer".
-                // Perhaps with LOD streaming this needs to change
-                uint32_t vertexOffset = rawModel.vertices.Size();
-                rawModel.vertices.Resize(rawModel.vertices.Size() + primitiveVertices.Size());
-                CompressVertices(scheduler, primitiveVertices.Data(), static_cast<uint32_t>(primitiveVertices.Size()), primitiveBounds, rawModel.vertices.Data() + vertexOffset);
-                allPositions.Reserve(allPositions.Size() + primitiveVertices.Size());
-                for (const auto& v : primitiveVertices) {
-                    allPositions.PushBack(v.position);
-                }
+                    Core::HeapArray<uint32_t> primitiveIndices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, (splitTriangleEnd - splitTriangleStart) * 3);
+                    memcpy(primitiveIndices.Data(), sourceIndices.Data() + splitTriangleStart * 3, primitiveIndices.Size() * sizeof(uint32_t));
+                    Core::HeapArray<Engine::FullVertex> primitiveVertices;
 
-                // todo: prepare LODs for this too? Determine when using for raytracing.
-                // There are concerns this won't line up with meshlet geometry
-                primitiveData.indexOffset = static_cast<uint32_t>(rawModel.indices.Size());
-                rawModel.indices.Reserve(rawModel.indices.Size() + primitiveIndices.Size());
-                for (uint32_t idx : primitiveIndices) {
-                    rawModel.indices.PushBack(idx + vertexOffset);
-                }
+                    // Optimize Vertex and Index Buffer.
+                    {
+                        ZoneScopedN("Optimize Mesh");
 
-                Core::Array<Core::HeapArray<uint32_t>, LOD_COUNT> lodIndices{};
-                Core::Array<Core::HeapArray<meshopt_Meshlet>, LOD_COUNT> lodMeshlets{};
-                Core::Array<Core::HeapArray<uint32_t>, LOD_COUNT> lodMeshletVertices{};
-                Core::Array<Core::HeapArray<uint8_t>, LOD_COUNT> lodMeshletTriangles{};
 
-                struct LodInformation
-                {
-                    int32_t indexCount;
-                    int32_t meshletCount;
-                    int32_t meshletVertexCount;
-                    int32_t meshletTriangleCount;
-                };
-                Core::Array<LodInformation, LOD_COUNT> lodInformation;
+                        size_t indexCount = primitiveIndices.Size();
+                        size_t vertexCount = sourceVertices.Size();
+                        auto remap = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, vertexCount);
 
-                lodIndices[0] = std::move(primitiveIndices);
-                lodInformation[0].indexCount = lodIndices[0].Size();
-
-                //
-                {
-                    for (uint32_t lod = 1; lod < LOD_COUNT; ++lod) {
-                        ZoneScopedN("Generate LOD");
-
-                        constexpr float thresholds[LOD_COUNT - 1]{0.5f, 0.5f, 0.3f};
-                        const int32_t prevIndexCount = lodInformation[lod - 1].indexCount;
-                        size_t targetIndexCount = prevIndexCount * thresholds[lod - 1];
-                        targetIndexCount = targetIndexCount / 3 * 3;
-
-                        lodIndices[lod] = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, lodIndices[lod - 1].Size());
-
-                        if (targetIndexCount < 3) {
-                            // Too small to simplify; duplicate the previous LOD
-                            memcpy(lodIndices[lod].Data(), lodIndices[lod - 1].Data(), prevIndexCount * sizeof(uint32_t));
-                            lodInformation[lod].indexCount = prevIndexCount;
+                        size_t uniqueVertices;
+                        //
+                        {
+                            ZoneScopedN("Generate Vertex Remap");
+                            uniqueVertices = meshopt_generateVertexRemap(
+                                remap.Data(),
+                                primitiveIndices.Data(),
+                                indexCount,
+                                sourceVertices.Data(),
+                                vertexCount,
+                                sizeof(Engine::FullVertex));
                         }
-                        else {
-                            size_t simplifiedCount = meshopt_simplify(
-                                lodIndices[lod].Data(),
-                                lodIndices[lod - 1].Data(),
-                                prevIndexCount,
+                        //
+                        {
+                            ZoneScopedN("Remap Buffers");
+                            auto remappedIndices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, primitiveIndices.Size());;
+                            meshopt_remapIndexBuffer(
+                                remappedIndices.Data(),
+                                primitiveIndices.Data(),
+                                primitiveIndices.Size(),
+                                remap.Data());
+
+                            auto remappedVertices = Core::HeapArray<Engine::FullVertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, uniqueVertices);
+                            meshopt_remapVertexBuffer(
+                                remappedVertices.Data(),
+                                sourceVertices.Data(),
+                                sourceVertices.Size(),
+                                sizeof(Engine::FullVertex),
+                                remap.Data()
+                            );
+
+                            primitiveIndices = std::move(remappedIndices);
+                            primitiveVertices = std::move(remappedVertices);
+                        }
+                        //
+                        {
+                            ZoneScopedN("Optimize Vertex Cache");
+                            meshopt_optimizeVertexCache(
+                                primitiveIndices.Data(),
+                                primitiveIndices.Data(),
+                                primitiveIndices.Size(),
+                                primitiveVertices.Size()
+                            );
+                        }
+                        //
+                        {
+                            ZoneScopedN("Optimize Overdraw");
+                            meshopt_optimizeOverdraw(
+                                primitiveIndices.Data(),
+                                primitiveIndices.Data(),
+                                primitiveIndices.Size(),
                                 &primitiveVertices[0].position.x,
                                 primitiveVertices.Size(),
                                 sizeof(Engine::FullVertex),
-                                targetIndexCount,
-                                0.01f
+                                1.05f
                             );
+                        }
+                        //
+                        {
+                            ZoneScopedN("Optimize Vertex Fetch");
+                            meshopt_optimizeVertexFetch(
+                                primitiveVertices.Data(),
+                                primitiveIndices.Data(),
+                                primitiveIndices.Size(),
+                                primitiveVertices.Data(),
+                                primitiveVertices.Size(),
+                                sizeof(Engine::FullVertex)
+                            );
+                        }
+                    }
 
-                            if (simplifiedCount < 3) {
+
+                    auto primitiveBounds = AssetLoad::CalculateMeshBounds(primitiveVertices);
+                    primitiveData.boundingSphere = {primitiveBounds.sphere.center, primitiveBounds.sphere.radius};
+                    primitiveData.boundingBoxMin = primitiveBounds.aabb.min;
+                    primitiveData.boundingBoxMax = primitiveBounds.aabb.max;
+
+                    // All LODs draw from the same "source vertex buffer".
+                    // Perhaps with LOD streaming this needs to change
+                    uint32_t vertexOffset = rawModel.vertices.Size();
+                    rawModel.vertices.Resize(rawModel.vertices.Size() + primitiveVertices.Size());
+                    CompressVertices(scheduler, primitiveVertices.Data(), static_cast<uint32_t>(primitiveVertices.Size()), primitiveBounds, rawModel.vertices.Data() + vertexOffset);
+                    allPositions.Reserve(allPositions.Size() + primitiveVertices.Size());
+                    for (const auto& v : primitiveVertices) {
+                        allPositions.PushBack(v.position);
+                    }
+
+                    // todo: prepare LODs for this too? Determine when using for raytracing.
+                    // There are concerns this won't line up with meshlet geometry
+                    primitiveData.indexOffset = static_cast<uint32_t>(rawModel.indices.Size());
+                    rawModel.indices.Reserve(rawModel.indices.Size() + primitiveIndices.Size());
+                    for (uint32_t idx : primitiveIndices) {
+                        rawModel.indices.PushBack(idx + vertexOffset);
+                    }
+
+                    Core::Array<Core::HeapArray<uint32_t>, LOD_COUNT> lodIndices{};
+                    Core::Array<Core::HeapArray<meshopt_Meshlet>, LOD_COUNT> lodMeshlets{};
+                    Core::Array<Core::HeapArray<uint32_t>, LOD_COUNT> lodMeshletVertices{};
+                    Core::Array<Core::HeapArray<uint8_t>, LOD_COUNT> lodMeshletTriangles{};
+
+                    struct LodInformation
+                    {
+                        int32_t indexCount;
+                        int32_t meshletCount;
+                        int32_t meshletVertexCount;
+                        int32_t meshletTriangleCount;
+                    };
+                    Core::Array<LodInformation, LOD_COUNT> lodInformation;
+
+                    lodIndices[0] = std::move(primitiveIndices);
+                    lodInformation[0].indexCount = lodIndices[0].Size();
+
+                    //
+                    {
+                        for (uint32_t lod = 1; lod < LOD_COUNT; ++lod) {
+                            ZoneScopedN("Generate LOD");
+
+                            constexpr float thresholds[LOD_COUNT - 1]{0.5f, 0.5f, 0.3f};
+                            const int32_t prevIndexCount = lodInformation[lod - 1].indexCount;
+                            size_t targetIndexCount = prevIndexCount * thresholds[lod - 1];
+                            targetIndexCount = targetIndexCount / 3 * 3;
+
+                            lodIndices[lod] = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, lodIndices[lod - 1].Size());
+
+                            if (targetIndexCount < 3) {
+                                // Too small to simplify; duplicate the previous LOD
                                 memcpy(lodIndices[lod].Data(), lodIndices[lod - 1].Data(), prevIndexCount * sizeof(uint32_t));
                                 lodInformation[lod].indexCount = prevIndexCount;
                             }
                             else {
-                                lodInformation[lod].indexCount = simplifiedCount;
+                                size_t simplifiedCount = meshopt_simplify(
+                                    lodIndices[lod].Data(),
+                                    lodIndices[lod - 1].Data(),
+                                    prevIndexCount,
+                                    &primitiveVertices[0].position.x,
+                                    primitiveVertices.Size(),
+                                    sizeof(Engine::FullVertex),
+                                    targetIndexCount,
+                                    0.01f
+                                );
+
+                                if (simplifiedCount < 3) {
+                                    memcpy(lodIndices[lod].Data(), lodIndices[lod - 1].Data(), prevIndexCount * sizeof(uint32_t));
+                                    lodInformation[lod].indexCount = prevIndexCount;
+                                }
+                                else {
+                                    lodInformation[lod].indexCount = simplifiedCount;
+                                }
                             }
+                        }
+
+                        for (size_t lod = 0; lod < LOD_COUNT; ++lod) {
+                            ZoneScopedN("Build Meshlets LOD");
+
+                            size_t maxMeshlets = meshopt_buildMeshletsBound(
+                                lodInformation[lod].indexCount,
+                                MESHLET_MAX_VERTICES,
+                                MESHLET_MAX_TRIANGLES
+                            );
+
+                            lodMeshlets[lod] = Core::HeapArray<meshopt_Meshlet>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxMeshlets);
+                            lodMeshletVertices[lod] = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxMeshlets * MESHLET_MAX_VERTICES);
+                            lodMeshletTriangles[lod] = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxMeshlets * MESHLET_MAX_TRIANGLES * 3);
+
+                            size_t meshletCount = meshopt_buildMeshlets(
+                                lodMeshlets[lod].Data(),
+                                lodMeshletVertices[lod].Data(),
+                                lodMeshletTriangles[lod].Data(),
+                                lodIndices[lod].Data(),
+                                lodInformation[lod].indexCount,
+                                &primitiveVertices[0].position.x,
+                                primitiveVertices.Size(),
+                                sizeof(Engine::FullVertex),
+                                MESHLET_MAX_VERTICES,
+                                MESHLET_MAX_TRIANGLES,
+                                0.0f
+                            );
+
+                            lodInformation[lod].meshletCount = meshletCount;
+
+                            // Optimize each meshlet
+                            {
+                                ZoneScopedN("Optimize Meshlets");
+                                for (int32_t m = 0; m < lodInformation[lod].meshletCount; ++m) {
+                                    auto& meshlet = lodMeshlets[lod][m];
+                                    meshopt_optimizeMeshlet(
+                                        &lodMeshletVertices[lod][meshlet.vertex_offset],
+                                        &lodMeshletTriangles[lod][meshlet.triangle_offset],
+                                        meshlet.triangle_count,
+                                        meshlet.vertex_count
+                                    );
+                                }
+                            }
+
+                            // Trim
+                            const meshopt_Meshlet& last = lodMeshlets[lod][meshletCount - 1];
+                            lodInformation[lod].meshletVertexCount = last.vertex_offset + last.vertex_count;
+                            lodInformation[lod].meshletTriangleCount = last.triangle_offset + last.triangle_count * 3;
                         }
                     }
 
                     for (size_t lod = 0; lod < LOD_COUNT; ++lod) {
-                        ZoneScopedN("Build Meshlets LOD");
+                        primitiveData.meshletOffset[lod] = static_cast<int32_t>(rawModel.meshlets.Size());
+                        primitiveData.meshletCount[lod] = lodInformation[lod].meshletCount;
 
-                        size_t maxMeshlets = meshopt_buildMeshletsBound(
-                            lodInformation[lod].indexCount,
-                            MESHLET_MAX_VERTICES,
-                            MESHLET_MAX_TRIANGLES
-                        );
+                        uint32_t meshletVertexOffset = rawModel.meshletVertices.Size();
+                        uint32_t meshletTrianglesOffset = rawModel.meshletTriangles.Size();
 
-                        lodMeshlets[lod] = Core::HeapArray<meshopt_Meshlet>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxMeshlets);
-                        lodMeshletVertices[lod] = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxMeshlets * MESHLET_MAX_VERTICES);
-                        lodMeshletTriangles[lod] = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxMeshlets * MESHLET_MAX_TRIANGLES * 3);
+                        rawModel.meshletVertices.Reserve(rawModel.meshletVertices.Size() + lodInformation[lod].meshletVertexCount);
+                        for (int i = 0; i < lodInformation[lod].meshletVertexCount; ++i) {
+                            rawModel.meshletVertices.PushBack(lodMeshletVertices[lod][i]);
+                        }
 
-                        size_t meshletCount = meshopt_buildMeshlets(
-                            lodMeshlets[lod].Data(),
-                            lodMeshletVertices[lod].Data(),
-                            lodMeshletTriangles[lod].Data(),
-                            lodIndices[lod].Data(),
-                            lodInformation[lod].indexCount,
-                            &primitiveVertices[0].position.x,
-                            primitiveVertices.Size(),
-                            sizeof(Engine::FullVertex),
-                            MESHLET_MAX_VERTICES,
-                            MESHLET_MAX_TRIANGLES,
-                            0.0f
-                        );
+                        rawModel.meshletTriangles.Reserve(rawModel.meshletTriangles.Size() + lodInformation[lod].meshletTriangleCount);
+                        for (int i = 0; i < lodInformation[lod].meshletTriangleCount; ++i) {
+                            rawModel.meshletTriangles.PushBack(lodMeshletTriangles[lod][i]);
+                        }
 
-                        lodInformation[lod].meshletCount = meshletCount;
-
-                        // Optimize each meshlet
+                        //
                         {
-                            ZoneScopedN("Optimize Meshlets");
+                            ZoneScopedN("ComputeMeshletBounds");
                             for (int32_t m = 0; m < lodInformation[lod].meshletCount; ++m) {
                                 auto& meshlet = lodMeshlets[lod][m];
-                                meshopt_optimizeMeshlet(
+                                meshopt_Bounds bounds = meshopt_computeMeshletBounds(
                                     &lodMeshletVertices[lod][meshlet.vertex_offset],
                                     &lodMeshletTriangles[lod][meshlet.triangle_offset],
                                     meshlet.triangle_count,
-                                    meshlet.vertex_count
+                                    reinterpret_cast<const float*>(primitiveVertices.Data()),
+                                    primitiveVertices.Size(),
+                                    sizeof(Engine::FullVertex)
                                 );
+
+                                rawModel.meshlets.PushBack({
+                                    .meshletBoundingSphere = Vec4(
+                                        bounds.center[0], bounds.center[1], bounds.center[2],
+                                        bounds.radius
+                                    ),
+                                    .coneApex = Vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
+                                    .coneCutoff = bounds.cone_cutoff,
+
+                                    .coneAxis = Vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
+                                    .vertexOffset = vertexOffset,
+
+                                    .meshletVertexOffset = meshletVertexOffset + meshlet.vertex_offset,
+                                    .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
+                                    .meshletVertexCount = meshlet.vertex_count,
+                                    .meshletTriangleCount = meshlet.triangle_count,
+                                });
                             }
                         }
-
-                        // Trim
-                        const meshopt_Meshlet& last = lodMeshlets[lod][meshletCount - 1];
-                        lodInformation[lod].meshletVertexCount = last.vertex_offset + last.vertex_count;
-                        lodInformation[lod].meshletTriangleCount = last.triangle_offset + last.triangle_count * 3;
                     }
+
+                    meshOutput.primitiveProperties.PushBack({static_cast<uint32_t>(currentPrimitiveIndex), materialIndex});
                 }
-
-                for (size_t lod = 0; lod < LOD_COUNT; ++lod) {
-                    primitiveData.meshletOffset[lod] = static_cast<int32_t>(rawModel.meshlets.Size());
-                    primitiveData.meshletCount[lod] = lodInformation[lod].meshletCount;
-
-                    uint32_t meshletVertexOffset = rawModel.meshletVertices.Size();
-                    uint32_t meshletTrianglesOffset = rawModel.meshletTriangles.Size();
-
-                    rawModel.meshletVertices.Reserve(rawModel.meshletVertices.Size() + lodInformation[lod].meshletVertexCount);
-                    for (int i = 0; i < lodInformation[lod].meshletVertexCount; ++i) {
-                        rawModel.meshletVertices.PushBack(lodMeshletVertices[lod][i]);
-                    }
-
-                    rawModel.meshletTriangles.Reserve(rawModel.meshletTriangles.Size() + lodInformation[lod].meshletTriangleCount);
-                    for (int i = 0; i < lodInformation[lod].meshletTriangleCount; ++i) {
-                        rawModel.meshletTriangles.PushBack(lodMeshletTriangles[lod][i]);
-                    }
-
-                    //
-                    {
-                        ZoneScopedN("ComputeMeshletBounds");
-                        for (int32_t m = 0; m < lodInformation[lod].meshletCount; ++m) {
-                            auto& meshlet = lodMeshlets[lod][m];
-                            meshopt_Bounds bounds = meshopt_computeMeshletBounds(
-                                &lodMeshletVertices[lod][meshlet.vertex_offset],
-                                &lodMeshletTriangles[lod][meshlet.triangle_offset],
-                                meshlet.triangle_count,
-                                reinterpret_cast<const float*>(primitiveVertices.Data()),
-                                primitiveVertices.Size(),
-                                sizeof(Engine::FullVertex)
-                            );
-
-                            rawModel.meshlets.PushBack({
-                                .meshletBoundingSphere = Vec4(
-                                    bounds.center[0], bounds.center[1], bounds.center[2],
-                                    bounds.radius
-                                ),
-                                .coneApex = Vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
-                                .coneCutoff = bounds.cone_cutoff,
-
-                                .coneAxis = Vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
-                                .vertexOffset = vertexOffset,
-
-                                .meshletVertexOffset = meshletVertexOffset + meshlet.vertex_offset,
-                                .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
-                                .meshletVertexCount = meshlet.vertex_count,
-                                .meshletTriangleCount = meshlet.triangle_count,
-                            });
-                        }
-                    }
-                }
-
-                meshOutput.primitiveProperties.PushBack({static_cast<uint32_t>(currentPrimitiveIndex), materialIndex});
             }
         }
     }

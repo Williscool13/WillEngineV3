@@ -189,7 +189,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
     //
     {
         ZoneScopedN("ReadFile");
-        Platform::ScopedFileMapping map(outputModel->source);
+        Platform::ScopedFileMapping map(outputModel->source, true);
         if (!map.data) {
             SPDLOG_ERROR("Failed to open static model - {}", outputModel->name.c_str());
             return false;

@@ -121,10 +121,11 @@ uint64_t GetFileSize(const char* path)
 
 uint64_t GetFileSize(const Core::Path& path) { return GetFileSize(path.c_str()); }
 
-FileMapping MapFileReadOnly(const Core::Path& path)
+FileMapping MapFileReadOnly(const Core::Path& path, bool bSequential)
 {
     FileMapping mapping{};
-    HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    const DWORD flags = bSequential ? FILE_FLAG_SEQUENTIAL_SCAN : FILE_ATTRIBUTE_NORMAL;
+    HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, flags, nullptr);
     if (file == INVALID_HANDLE_VALUE) { return mapping; }
     LARGE_INTEGER size{};
     if (!GetFileSizeEx(file, &size) || size.QuadPart == 0) {
@@ -146,6 +147,12 @@ FileMapping MapFileReadOnly(const Core::Path& path)
     mapping.size = static_cast<uint64_t>(size.QuadPart);
     mapping.fileHandle = file;
     mapping.mappingHandle = mapHandle;
+
+    if (bSequential) {
+        WIN32_MEMORY_RANGE_ENTRY range{const_cast<void*>(view), static_cast<SIZE_T>(size.QuadPart)};
+        PrefetchVirtualMemory(GetCurrentProcess(), 1, &range, 0);
+    }
+
     return mapping;
 }
 

@@ -148,7 +148,7 @@ bool TextureLoadSlot::LoadTextureFromDisk()
     } {
         ZoneScopedN("WImageParse");
 
-        Platform::ScopedFileMapping map(texturePath);
+        Platform::ScopedFileMapping map(texturePath, true);
         if (!map.data || outputTexture->dataOffset + outputTexture->dataSize > map.size) {
             LOG_ERROR(Asset, "Failed to read .wtexture data: {}", texturePath.c_str());
             return false;

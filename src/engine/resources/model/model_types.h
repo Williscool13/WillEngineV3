@@ -47,11 +47,13 @@ struct PrimitiveProperty
     OffsetAllocator::Allocation blasAllocation{};
 };
 
+inline constexpr uint32_t MAX_PRIMITIVES_PER_MESH = 128;
+
 struct MeshInformation
 {
     Core::InlineString<> name;
-    // todo parameterize this 128 primitive per mesh limit. Perhaps even increase it.
-    Core::InlineVector<PrimitiveProperty, 128> primitiveProperties;
+    // todo perhaps increase this limit.
+    Core::InlineVector<PrimitiveProperty, MAX_PRIMITIVES_PER_MESH> primitiveProperties;
 };
 
 /**

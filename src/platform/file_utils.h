@@ -81,14 +81,18 @@ struct FileMapping
     void* mappingHandle{nullptr};
 };
 
-FileMapping MapFileReadOnly(const Core::Path& path);
+/**
+ * @param path
+ * @param bSequential declares the whole file will be read front to back.
+ */
+FileMapping MapFileReadOnly(const Core::Path& path, bool bSequential = false);
 
 void UnmapFile(FileMapping& mapping);
 
 /** RAII FileMapping */
 struct ScopedFileMapping : FileMapping
 {
-    explicit ScopedFileMapping(const Core::Path& path) : FileMapping(MapFileReadOnly(path)) {}
+    explicit ScopedFileMapping(const Core::Path& path, bool bSequential = false) : FileMapping(MapFileReadOnly(path, bSequential)) {}
     ~ScopedFileMapping() { UnmapFile(*this); }
     ScopedFileMapping(const ScopedFileMapping&) = delete;
     ScopedFileMapping& operator=(const ScopedFileMapping&) = delete;

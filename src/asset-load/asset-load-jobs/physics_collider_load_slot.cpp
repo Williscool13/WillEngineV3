@@ -72,7 +72,7 @@ static bool ReadModelColliderGeometry(const Core::Path& source, Core::MemoryMana
     Core::HeapArray<Primitive> primitives{};
 
     {
-        Platform::ScopedFileMapping map(source);
+        Platform::ScopedFileMapping map(source, true);
         if (!map.data) { return false; }
         auto optHeader = Engine::ReadWStaticModelHeader(map.data, map.size);
         if (!optHeader) { return false; }

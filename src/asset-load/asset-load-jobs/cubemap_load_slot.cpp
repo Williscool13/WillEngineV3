@@ -149,7 +149,7 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
     {
         ZoneScopedN("WImageLoad");
 
-        Platform::ScopedFileMapping map(cubemapPath);
+        Platform::ScopedFileMapping map(cubemapPath, true);
         if (!map.data || outputCubemap->dataOffset + outputCubemap->dataSize > map.size) {
             SPDLOG_ERROR("Failed to read .wenvmap data: {}", cubemapPath.c_str());
             return false;
