@@ -57,13 +57,12 @@ public:
 
     VirtualMemoryManager& operator=(const VirtualMemoryManager&) = delete;
 
-    /** Rounds up to the OS reserve granularity. Nothing is committed. */
     Handle Reserve(size_t bytes, AllocTag tag, const char* name);
 
-    /** Commits up to bytes, rounded to COMMIT_STEP. Asserts past reserved. */
+    /** Rounds up to COMMIT_STEP. Asserts past reserved. */
     bool EnsureCommitted(Handle h, size_t bytes);
 
-    /** Decommits past keepBytes (rounded up to COMMIT_STEP). */
+    /** keepBytes rounds up to COMMIT_STEP. */
     void Decommit(Handle h, size_t keepBytes);
 
     void Release(Handle h);
@@ -76,7 +75,6 @@ public:
 
     [[nodiscard]] Stats GetStats() const;
 
-    /** Returns count written. */
     size_t GetReservations(Reservation out[], size_t maxOut) const;
 
 private:

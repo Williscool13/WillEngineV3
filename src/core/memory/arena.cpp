@@ -7,10 +7,19 @@
 #include <cassert>
 #include <cstdio>
 
+#include "virtual_memory_manager.h"
+
 namespace Core
 {
 Arena::Arena(void* memory, size_t size, const char* name)
-    : memory(memory), head(0), capacity(size), name(name)
+    : memory(memory), head(0), capacity(size), committed(size), name(name)
+{
+    assert(memory != nullptr);
+    assert(size > 0);
+}
+
+Arena::Arena(void* memory, size_t size, const char* name, VirtualMemoryManager* vm, uint32_t vmHandle)
+    : memory(memory), head(0), capacity(size), committed(vm->Committed(vmHandle)), vm(vm), vmHandle(vmHandle), name(name)
 {
     assert(memory != nullptr);
     assert(size > 0);
@@ -30,6 +39,10 @@ void* Arena::AllocRaw(size_t size, size_t alignment)
 
     head = alignedHead + size;
     if (head > peakHead) { peakHead = head; }
+    if (head > committed) {
+        vm->EnsureCommitted(vmHandle, head);
+        committed = vm->Committed(vmHandle);
+    }
     return static_cast<char*>(memory) + alignedHead;
 }
 

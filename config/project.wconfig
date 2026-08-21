@@ -48,7 +48,7 @@ captureSize|1024
 bAutoConverge|1
 bAutoFreeze|1
 bGroundTruth|1
-groundTruthSpp|3
+groundTruthSpp|2
 ;
 cameraPresets|8
 p

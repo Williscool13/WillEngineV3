@@ -15,8 +15,7 @@
 namespace Core
 {
 /**
- * Fixed-capacity array on a VirtualMemoryManager reservation. Slots are committed and value-constructed by EnsureCommitted, released by Trim.
- * Indexing past the committed count asserts.
+ * Fixed-capacity array on a VirtualMemoryManager reservation. Slots past Committed() are not constructed; indexing them asserts.
  */
 template<typename T>
 class VirtualArray

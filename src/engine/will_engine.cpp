@@ -242,7 +242,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     memoryManager.Init({
         .persistentSize = 16ull * 1024 * 1024,
         .physicsPoolSize = 32ull * 1024 * 1024,
-        .arenaPoolSize = 256ull * 1024 * 1024,
+        .arenaPoolSize = 32ull * 1024 * 1024,
         .generalPoolSize = 32ull * 1024 * 1024,
         .generalPoolBudget = 512ull * 1024 * 1024,
         .assetsPoolSize = 32ull * 1024 * 1024,

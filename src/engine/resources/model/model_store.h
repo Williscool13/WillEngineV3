@@ -13,7 +13,7 @@
 
 namespace Engine
 {
-inline constexpr uint32_t MAX_MODEL_SLOTS = 128 * 1024;
+inline constexpr uint32_t MAX_MODEL_SLOTS = 1024 * 1024;
 
 /**
  * Persistent store of model matrices in a stable slot space, independent of the instance slot space. A RangeAllocator hands out contiguous runs (one slot per unique source node for meshes; anything may hold slots with no instance attached). Owners write matrices in place on dirty; consumers snapshot [0, watermark). Not thread-safe.

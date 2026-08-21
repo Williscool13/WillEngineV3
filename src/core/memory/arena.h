@@ -14,6 +14,8 @@
 
 namespace Core
 {
+class VirtualMemoryManager;
+
 /**
  * Non-owning bump-pointer allocator over an externally-provided buffer.
  * Does NOT call destructors on Reset(); only use for trivially-destructible
@@ -25,6 +27,9 @@ public:
     Arena() = default;
 
     Arena(void* memory, size_t size, const char* name);
+
+    /** size is the reserved range; pages commit as the head advances. */
+    Arena(void* memory, size_t size, const char* name, VirtualMemoryManager* vm, uint32_t vmHandle);
 
     Arena(const Arena&) = delete;
 
@@ -65,9 +70,10 @@ public:
         size_t usedBytes;
         size_t freeBytes;
         size_t peakBytes;
+        size_t committedBytes;
     };
 
-    [[nodiscard]] Stats GetStats() const { return {capacity, head, capacity - head, peakHead}; }
+    [[nodiscard]] Stats GetStats() const { return {capacity, head, capacity - head, peakHead, committed}; }
     [[nodiscard]] void* Data() const { return memory; }
     [[nodiscard]] size_t GetUsed() const { return head; }
     [[nodiscard]] size_t GetCapacity() const { return capacity; }
@@ -79,6 +85,9 @@ private:
     void* memory{};
     size_t head{};
     size_t capacity{};
+    size_t committed{};
+    VirtualMemoryManager* vm{};
+    uint32_t vmHandle{};
     size_t peakHead{};
     InlineString<32> name{};
 };

@@ -15,6 +15,7 @@
 #include "core/containers/arena_vector.h"
 #include "core/containers/vector.h"
 #include "core/memory/arena_suballocator.h"
+#include "core/memory/virtual_arena.h"
 #include "core/time/time_frame.h"
 #include "core/types/transform.h"
 #include "engine/material_manager.h"
@@ -402,7 +403,7 @@ struct ViewFamilyWatermarks
     size_t activeMaterials{256};
     size_t activeTextMaterials{32};
     size_t textMaterials{256};
-    size_t debugLines{131072};
+    size_t debugLines{256};
     size_t debugBoxes{256};
     size_t debugSpheres{256};
     size_t debugRects{256};
@@ -554,11 +555,13 @@ struct FrameBuffer
 
     FrameBuffer& operator=(FrameBuffer&&) = delete;
 
-    void Initialize(ArenaSuballocator& pool, AllocTag tag, const char* name);
+    static constexpr size_t FRAME_ARENA_RESERVE_BYTES = 256ull * 1024 * 1024;
+
+    void Initialize(VirtualMemoryManager& vm, AllocTag tag, const char* name);
 
     void Reinitialize();
 
-    ManagedArena frameArena{};
+    VirtualArena frameArena{};
 
     bool bArenaPeakWarned{false};
 

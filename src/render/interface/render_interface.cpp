@@ -47,9 +47,9 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     spriteBatches = ArenaVector<SpriteBatch>(&arena, wm.spriteBatches);
 }
 
-void FrameBuffer::Initialize(ArenaSuballocator& pool, AllocTag tag, const char* name)
+void FrameBuffer::Initialize(VirtualMemoryManager& vm, AllocTag tag, const char* name)
 {
-    frameArena = ManagedArena(pool, 48ull * 1024 * 1024, tag, name);
+    frameArena = VirtualArena(vm, FRAME_ARENA_RESERVE_BYTES, tag, name);
     mainViewFamily = ViewFamily(frameArena.Get());
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);
@@ -81,7 +81,7 @@ void FrameBuffer::Reinitialize()
 
     const Arena::Stats arenaStats = frameArena.Get().GetStats();
     if (!bArenaPeakWarned && arenaStats.peakBytes * 4 > arenaStats.totalBytes * 3) {
-        LOG_WARN(Renderer, "Frame arena peak {:.1f} MB crossed 75% of {:.0f} MB capacity", arenaStats.peakBytes / (1024.0f * 1024.0f), arenaStats.totalBytes / (1024.0f * 1024.0f));
+        LOG_WARN(Renderer, "Frame arena peak {:.1f} MB crossed 75% of {:.0f} MB reserved", arenaStats.peakBytes / (1024.0f * 1024.0f), arenaStats.totalBytes / (1024.0f * 1024.0f));
         bArenaPeakWarned = true;
     }
 

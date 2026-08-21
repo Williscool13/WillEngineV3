@@ -15,7 +15,7 @@ void* VirtualReserve(size_t bytes);
 /** base and bytes must be page aligned. */
 bool VirtualCommit(void* base, size_t bytes);
 
-/** base and bytes must be page aligned. Contents are lost. */
+/** base and bytes must be page aligned. */
 bool VirtualDecommit(void* base, size_t bytes);
 
 void VirtualRelease(void* base);

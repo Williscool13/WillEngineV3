@@ -14,7 +14,7 @@ FrameSync::FrameSync(MemoryManager& memoryManager)
     };
     constexpr const char* kFrameNames[] = {"frame0", "frame1", "frame2", "frame3"};
     for (size_t i = 0; i < frameBuffers.Size(); ++i) {
-        frameBuffers[i].Initialize(memoryManager.ArenaPool(), kFrameTags[i], kFrameNames[i]);
+        frameBuffers[i].Initialize(memoryManager.Virtual(), kFrameTags[i], kFrameNames[i]);
     }
 }
 } // Core
