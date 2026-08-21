@@ -156,6 +156,7 @@ void CreateBRDFLookupTable(
         std::binary_semaphore done(0);
         graphicsDispatchCallback(graphicsCmd, graphicsFence, &done);
         done.acquire();
+        VK_CHECK(vkWaitForFences(context->device, 1, &graphicsFence, VK_TRUE, UINT64_MAX));
         VK_CHECK(vkResetFences(context->device, 1, &graphicsFence));
         VK_CHECK(vkResetCommandBuffer(graphicsCmd, 0));
 

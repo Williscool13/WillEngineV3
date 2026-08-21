@@ -272,9 +272,9 @@ private:
 
     void OnFontGenerateComplete(bool success, FontGenerateSlotHandle slotHandle);
 
-    void TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
+    void TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal) const;
 
-    void ComputeQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
+    void ComputeQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal) const;
 
     Core::MemoryManager* memoryManager{};
     Engine::EngineContext* ctx;

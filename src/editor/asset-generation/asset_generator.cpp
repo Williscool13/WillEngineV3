@@ -74,8 +74,8 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
             renderThread->GetPipelineManager(),
             &memoryManager,
             this,
-            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                ComputeQueueGPUDispatch(cmd, fence, completionSignal);
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal) {
+                ComputeQueueGPUDispatch(cmd, fence, submittedSignal);
             },
             [this](bool success, TextureGenerateSlotHandle slotHandle) {
                 OnTextureGenerateComplete(success, slotHandle);
@@ -98,8 +98,8 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
             renderThread->GetPipelineManager(),
             renderThread->GetResourceManager(),
             &memoryManager,
-            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                ComputeQueueGPUDispatch(cmd, fence, completionSignal);
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal) {
+                ComputeQueueGPUDispatch(cmd, fence, submittedSignal);
             },
             [this](bool success, EnvironmentMapGenerateSlotHandle slotHandle) {
                 OnEnvironmentGenerateComplete(success, slotHandle);
@@ -236,14 +236,14 @@ void AssetGenerator::Join()
     thisThread.join();
 }
 
-void AssetGenerator::TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
+void AssetGenerator::TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal) const
 {
-    gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, completionSignal);
+    gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, submittedSignal);
 }
 
-void AssetGenerator::ComputeQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
+void AssetGenerator::ComputeQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal) const
 {
-    gpuDispatcher->Enqueue(Render::DispatchChannel::Compute, cmd, fence, completionSignal);
+    gpuDispatcher->Enqueue(Render::DispatchChannel::Compute, cmd, fence, submittedSignal);
 }
 
 void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath, bool bSkipExistingTextures)
@@ -420,8 +420,8 @@ bool AssetGenerator::TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateCom
 void AssetGenerator::GenerateBRDFLUT(const Core::Path& outputFile)
 {
     CreateBRDFLookupTable(memoryManager, outputFile, Engine::TextureID(textureIdRng()), vk, renderThread->GetResourceManager(), renderThread->GetPipelineManager(),
-                          [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                              ComputeQueueGPUDispatch(cmd, fence, completionSignal);
+                          [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal) {
+                              ComputeQueueGPUDispatch(cmd, fence, submittedSignal);
                           });
 }
 

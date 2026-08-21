@@ -114,6 +114,7 @@ void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition ran
         std::binary_semaphore done(0);
         loadSlot->_requestTransferDispatchCallback(cmd, fence, &done, VK_NULL_HANDLE);
         done.acquire();
+        VK_CHECK(vkWaitForFences(loadSlot->context->device, 1, &fence, VK_TRUE, UINT64_MAX));
 
         if (reset) {
             VK_CHECK(vkResetFences(loadSlot->context->device, 1, &fence));
@@ -135,6 +136,7 @@ void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition ran
     std::binary_semaphore done(0);
     loadSlot->_requestTransferDispatchCallback(cmd, fence, &done, uploadCompleteSemaphore);
     done.acquire();
+    VK_CHECK(vkWaitForFences(loadSlot->context->device, 1, &fence, VK_TRUE, UINT64_MAX));
 
     loadSlot->transferSubmit.Reset(loadSlot->context);
 
@@ -154,6 +156,7 @@ void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition ran
             loadSlot->_requestGraphicsDispatchCallback(graphicsCmd, graphicsFence, &done, waitSemaphore);
             waitSemaphore = VK_NULL_HANDLE;
             done.acquire();
+            VK_CHECK(vkWaitForFences(loadSlot->context->device, 1, &graphicsFence, VK_TRUE, UINT64_MAX));
             if (reset) {
                 VK_CHECK(vkResetFences(loadSlot->context->device, 1, &graphicsFence));
                 VK_CHECK(vkResetCommandBuffer(graphicsCmd, 0));

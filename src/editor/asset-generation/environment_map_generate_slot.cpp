@@ -199,6 +199,7 @@ void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartiti
         std::binary_semaphore done(0);
         taskSlot->_dispatchCallback(cmd, fence, &done);
         done.acquire();
+        VK_CHECK(vkWaitForFences(taskSlot->context->device, 1, &fence, VK_TRUE, UINT64_MAX));
         VK_CHECK(vkResetFences(taskSlot->context->device, 1, &fence));
         VK_CHECK(vkResetCommandBuffer(cmd, 0));
 

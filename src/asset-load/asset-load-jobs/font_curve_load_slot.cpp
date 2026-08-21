@@ -85,6 +85,7 @@ void FontCurveLoadSlot::LoadTask::ExecuteRange(enki::TaskSetPartition range, uin
         std::binary_semaphore done(0);
         loadSlot->_requestDispatchCallback(cmd, fence, &done);
         done.acquire();
+        VK_CHECK(vkWaitForFences(loadSlot->context->device, 1, &fence, VK_TRUE, UINT64_MAX));
 
         if (reset) {
             VK_CHECK(vkResetFences(loadSlot->context->device, 1, &fence));
@@ -107,6 +108,7 @@ void FontCurveLoadSlot::LoadTask::ExecuteRange(enki::TaskSetPartition range, uin
     std::binary_semaphore done(0);
     loadSlot->_requestDispatchCallback(cmd, fence, &done);
     done.acquire();
+    VK_CHECK(vkWaitForFences(loadSlot->context->device, 1, &fence, VK_TRUE, UINT64_MAX));
 
     loadSlot->PostUploadSetup();
 

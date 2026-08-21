@@ -36,7 +36,7 @@ struct GPUDispatchRequest
 {
     VkCommandBuffer cmd;
     VkFence fence;
-    std::binary_semaphore* completionSignal;
+    std::binary_semaphore* submittedSignal;
     VkSemaphore signalSemaphore;
     VkSemaphore waitSemaphore;
     VkPipelineStageFlags2 stageMask;
@@ -59,7 +59,10 @@ public:
 
     GPUDispatcher& operator=(GPUDispatcher&&) = delete;
 
-    void Enqueue(DispatchChannel channel, VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore = VK_NULL_HANDLE, VkSemaphore waitSemaphore = VK_NULL_HANDLE);
+    /**
+     * @param submittedSignal released as soon as the command buffer reaches the queue. The caller owns the fence wait.
+     */
+    void Enqueue(DispatchChannel channel, VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal, VkSemaphore signalSemaphore = VK_NULL_HANDLE, VkSemaphore waitSemaphore = VK_NULL_HANDLE);
 
     /**
      * Render thread only.
@@ -71,15 +74,9 @@ public:
     /**
      * Render Thread only.
      */
-    [[nodiscard]] bool IsGraphicsIdle() const { return pendingGraphics.Size() == 0 && graphicsRequests.size_approx() == 0; }
+    [[nodiscard]] bool IsGraphicsIdle() const { return graphicsRequests.size_approx() == 0; }
 
 private:
-    struct PendingGraphicsDispatch
-    {
-        VkFence fence;
-        std::binary_semaphore* completionSignal;
-    };
-
     struct WorkerChannel
     {
         Core::ConcurrentQueue<GPUDispatchRequest> requests;
@@ -102,9 +99,6 @@ private:
     WorkerChannel computeWorker;
 
     Core::ConcurrentQueue<GPUDispatchRequest> graphicsRequests;
-
-    // Render Thread only
-    Core::InlineVector<PendingGraphicsDispatch, 32> pendingGraphics;
 };
 } // Render
 

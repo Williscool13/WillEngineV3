@@ -45,9 +45,9 @@ GPUDispatcher::~GPUDispatcher()
     Shutdown();
 }
 
-void GPUDispatcher::Enqueue(DispatchChannel channel, VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal, VkSemaphore signalSemaphore, VkSemaphore waitSemaphore)
+void GPUDispatcher::Enqueue(DispatchChannel channel, VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal, VkSemaphore signalSemaphore, VkSemaphore waitSemaphore)
 {
-    const GPUDispatchRequest request{cmd, fence, completionSignal, signalSemaphore, waitSemaphore, ChannelStageMask(channel)};
+    const GPUDispatchRequest request{cmd, fence, submittedSignal, signalSemaphore, waitSemaphore, ChannelStageMask(channel)};
 
     WorkerChannel* worker = nullptr;
     if (channel == DispatchChannel::Transfer) {
@@ -69,16 +69,6 @@ void GPUDispatcher::Enqueue(DispatchChannel channel, VkCommandBuffer cmd, VkFenc
 
 void GPUDispatcher::DrainGraphics()
 {
-    for (size_t i = 0; i < pendingGraphics.Size();) {
-        if (vkGetFenceStatus(context->device, pendingGraphics[i].fence) == VK_SUCCESS) {
-            pendingGraphics[i].completionSignal->release();
-            pendingGraphics.RemoveAt(i);
-        }
-        else {
-            ++i;
-        }
-    }
-
     GPUDispatchRequest req{};
     while (graphicsRequests.try_dequeue(req)) {
         VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(req.cmd);
@@ -89,8 +79,7 @@ void GPUDispatcher::DrainGraphics()
         VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, pWaitInfo, pSignalInfo);
         VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, req.fence));
 
-        assert(!pendingGraphics.IsFull());
-        pendingGraphics.PushBack({req.fence, req.completionSignal});
+        req.submittedSignal->release();
     }
 }
 
@@ -107,7 +96,6 @@ void GPUDispatcher::WorkerThreadMain(WorkerChannel& channel, const char* threadN
             ZoneScopedN("Dispatch Requests");
             constexpr size_t MAX_BATCH = 16;
             GPUDispatchRequest batch[MAX_BATCH];
-            VkFence fenceBuf[MAX_BATCH];
 
             size_t count = channel.requests.try_dequeue_bulk(batch, MAX_BATCH);
             if (count > 0) {
@@ -119,12 +107,7 @@ void GPUDispatcher::WorkerThreadMain(WorkerChannel& channel, const char* threadN
                     const VkSemaphoreSubmitInfo* pSignalInfo = batch[i].signalSemaphore != VK_NULL_HANDLE ? &signalInfo : nullptr;
                     VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, pWaitInfo, pSignalInfo);
                     VK_CHECK(vkQueueSubmit2(channel.queue, 1, &submitInfo, batch[i].fence));
-                    fenceBuf[i] = batch[i].fence;
-                }
-
-                VK_CHECK(vkWaitForFences(context->device, static_cast<uint32_t>(count), fenceBuf, VK_TRUE, UINT64_MAX));
-                for (size_t i = 0; i < count; ++i) {
-                    batch[i].completionSignal->release();
+                    batch[i].submittedSignal->release();
                 }
             }
         }
