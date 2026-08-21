@@ -212,6 +212,14 @@ static void DumpMemoryBreakdown(Core::MemoryManager& memoryManager)
     }
 
     const Core::MemoryManager::Stats ms = memoryManager.GetStats();
+    LOG_INFO(Engine, "[MemDump] Virtual: committed {:.2f} / reserved {:.2f} MB, {} reservations", ms.virtualMemory.committedBytes * kToMB, ms.virtualMemory.reservedBytes * kToMB, ms.virtualMemory.reservationCount);
+    Core::Array<Core::VirtualMemoryManager::Reservation, Core::VirtualMemoryManager::MAX_RESERVATIONS> reservations{};
+    const size_t reservationCount = memoryManager.Virtual().GetReservations(reservations.Data(), reservations.Size());
+    for (size_t i = 0; i < reservationCount; ++i) {
+        const auto& r = reservations[i];
+        LOG_INFO(Engine, "[MemDump]     {} ({}): committed {:.2f} / reserved {:.2f} MB", r.name.c_str(), Core::AllocTagName(r.tag), r.committed * kToMB, r.reserved * kToMB);
+    }
+
     LOG_INFO(Engine, "[MemDump] Device: {} allocs, {:.2f} MB", static_cast<size_t>(ms.deviceMemory.allocationCount), static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
 }
 
@@ -1074,6 +1082,38 @@ void WillEngine::EditorImgui()
                                 ImGui::Text("%.1f", static_cast<float>(la.arenaStats.peakBytes) / 1024.0f);
                                 ImGui::TableSetColumnIndex(3);
                                 ImGui::Text("%.1f", static_cast<float>(la.arenaStats.totalBytes) / 1024.0f);
+                            }
+                            ImGui::EndTable();
+                        }
+                    }
+                }
+
+                ImGui::SeparatorText("Virtual Memory"); {
+                    const auto& vs = ms.virtualMemory;
+                    drawMemBar("Committed", vs.committedBytes, vs.reservedBytes, vs.reservationCount);
+
+                    Core::Array<Core::VirtualMemoryManager::Reservation, Core::VirtualMemoryManager::MAX_RESERVATIONS> reservations{};
+                    const size_t reservationCount = memoryManager.Virtual().GetReservations(reservations.Data(), reservations.Size());
+                    if (reservationCount > 0) {
+                        constexpr ImGuiTableFlags vmTableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+                        if (ImGui::BeginTable("VirtualMemoryTable", 4, vmTableFlags)) {
+                            ImGui::TableSetupColumn("Reservation");
+                            ImGui::TableSetupColumn("Tag");
+                            ImGui::TableSetupColumn("Committed (MB)");
+                            ImGui::TableSetupColumn("Reserved (MB)");
+                            ImGui::TableHeadersRow();
+
+                            for (size_t i = 0; i < reservationCount; ++i) {
+                                const auto& r = reservations[i];
+                                ImGui::TableNextRow();
+                                ImGui::TableSetColumnIndex(0);
+                                ImGui::TextUnformatted(r.name.c_str());
+                                ImGui::TableSetColumnIndex(1);
+                                ImGui::TextUnformatted(Core::AllocTagName(r.tag));
+                                ImGui::TableSetColumnIndex(2);
+                                ImGui::Text("%.2f", static_cast<float>(r.committed) * kToMB);
+                                ImGui::TableSetColumnIndex(3);
+                                ImGui::Text("%.0f", static_cast<float>(r.reserved) * kToMB);
                             }
                             ImGui::EndTable();
                         }

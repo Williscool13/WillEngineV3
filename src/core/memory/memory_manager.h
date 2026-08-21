@@ -12,6 +12,7 @@
 #include "arena.h"
 #include "arena_suballocator.h"
 #include "tlsf_allocator.h"
+#include "virtual_memory_manager.h"
 
 namespace Core
 {
@@ -66,6 +67,7 @@ public:
         TlsfAllocator::Stats physics;
         TlsfAllocator::Stats render;
         TlsfAllocator::Stats vulkan;
+        VirtualMemoryManager::Stats virtualMemory;
 
         struct
         {
@@ -121,6 +123,7 @@ public:
      * @return
      */
     ArenaSuballocator& ArenaPool() { return arenaPool; }
+    VirtualMemoryManager& Virtual() { return virtualMemory; }
 
     [[nodiscard]] Stats GetStats();
 
@@ -141,6 +144,7 @@ private:
     TlsfAllocator tlsfRender;
     TlsfAllocator tlsfVulkan;
     ArenaSuballocator arenaPool;
+    VirtualMemoryManager virtualMemory;
 
     std::atomic<uint32_t> deviceAllocCount{0};
     std::atomic<uint64_t> deviceAllocBytes{0};

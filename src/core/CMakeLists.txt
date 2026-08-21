@@ -79,6 +79,8 @@ add_library(core STATIC
         containers/arena_queue.h
         memory/arena_suballocator.cpp
         memory/arena_suballocator.h
+        memory/virtual_memory_manager.cpp
+        memory/virtual_memory_manager.h
 )
 
 
@@ -92,3 +94,5 @@ target_link_libraries(core PUBLIC
         SDL3::SDL3
         tlsf
 )
+
+target_link_libraries(core PRIVATE platform)

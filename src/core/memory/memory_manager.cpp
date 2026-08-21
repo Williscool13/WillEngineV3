@@ -143,6 +143,7 @@ MemoryManager::Stats MemoryManager::GetStats()
         tlsfPhysics.GetStats(),
         tlsfRender.GetStats(),
         tlsfVulkan.GetStats(),
+        virtualMemory.GetStats(),
     };
 #ifdef WDEBUG
     s.deviceMemory.allocationCount = deviceAllocCount.load(std::memory_order_relaxed);
