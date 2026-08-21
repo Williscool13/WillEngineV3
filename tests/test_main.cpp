@@ -29,7 +29,6 @@ int main(int argc, char* argv[])
     gTestMemory.Init({
         .persistentSize = 8ull * 1024 * 1024,
         .physicsPoolSize = 8ull * 1024 * 1024,
-        .arenaPoolSize = 32ull * 1024 * 1024,
         .generalPoolSize = 8ull * 1024 * 1024,
         .generalPoolBudget = 64ull * 1024 * 1024,
         .assetsPoolSize = 8ull * 1024 * 1024,

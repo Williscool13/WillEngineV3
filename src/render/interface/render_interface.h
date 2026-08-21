@@ -14,7 +14,6 @@
 #include "core/containers/arena_map.h"
 #include "core/containers/arena_vector.h"
 #include "core/containers/vector.h"
-#include "core/memory/arena_suballocator.h"
 #include "core/memory/virtual_arena.h"
 #include "core/time/time_frame.h"
 #include "core/types/transform.h"
@@ -556,14 +555,17 @@ struct FrameBuffer
     FrameBuffer& operator=(FrameBuffer&&) = delete;
 
     static constexpr size_t FRAME_ARENA_RESERVE_BYTES = 256ull * 1024 * 1024;
+    static constexpr uint32_t FRAME_ARENA_SHRINK_WINDOW = 120;
+    static constexpr size_t FRAME_ARENA_SHRINK_RATIO = 4;
 
     void Initialize(VirtualMemoryManager& vm, AllocTag tag, const char* name);
 
     void Reinitialize();
 
     VirtualArena frameArena{};
-
     bool bArenaPeakWarned{false};
+    size_t shrinkWindowPeak{0};
+    uint32_t shrinkWindowFrames{0};
 
     ViewFamilyWatermarks viewFamilyWatermarks{};
     ViewFamily mainViewFamily{};

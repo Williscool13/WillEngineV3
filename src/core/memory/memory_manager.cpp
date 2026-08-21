@@ -24,9 +24,8 @@ void MemoryManager::Init(const Layout& layout)
     const size_t physicsSz = AlignUp(layout.physicsPoolSize, kAlign);
     const size_t renderSz = AlignUp(layout.renderPoolSize, kAlign);
     const size_t vulkanSz = AlignUp(layout.vulkanPoolSize, kAlign);
-    const size_t arenaPoolSz = AlignUp(layout.arenaPoolSize, kAlign);
 
-    totalSize = persistentSz + physicsSz + arenaPoolSz;
+    totalSize = persistentSz + physicsSz;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
@@ -42,7 +41,6 @@ void MemoryManager::Init(const Layout& layout)
     cursor += physicsSz;
     tlsfRender.InitGrowable(renderSz, layout.renderPoolBudget, false, "Render", renderSz);
     tlsfVulkan.InitGrowable(vulkanSz, layout.vulkanPoolBudget, true, "Vulkan", vulkanSz);
-    arenaPool.Init(cursor, arenaPoolSz, "ArenaPool");
 }
 
 MemoryManager::~MemoryManager()

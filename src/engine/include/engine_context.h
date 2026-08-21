@@ -13,7 +13,7 @@
 #include "core/containers/inline_function.h"
 #include "core/containers/heap_array.h"
 #include "core/containers/inline_path.h"
-#include "core/memory/arena_suballocator.h"
+#include "core/memory/virtual_arena.h"
 #include "engine/resources/environment_map/probe_format.h"
 #include "render/pipelines/pipeline_manager.h"
 
@@ -123,8 +123,8 @@ struct EngineContext
 
     enki::TaskScheduler* scheduler{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
-    Core::ManagedArena gameplayArena{};
-    Core::ManagedArena editorArena{};
+    Core::VirtualArena gameplayArena{};
+    Core::VirtualArena editorArena{};
 
     EngineLogger* engineLogger{nullptr};
     AssetManager* assetManager{nullptr};

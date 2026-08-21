@@ -57,6 +57,26 @@ void FrameBuffer::Initialize(VirtualMemoryManager& vm, AllocTag tag, const char*
 
 void FrameBuffer::Reinitialize()
 {
+    const Arena::Stats arenaStats = frameArena.Get().GetStats();
+    if (!bArenaPeakWarned && arenaStats.peakBytes * 4 > arenaStats.totalBytes * 3) {
+        LOG_WARN(Renderer, "Frame arena peak {:.1f} MB crossed 75% of {:.0f} MB reserved", arenaStats.peakBytes / (1024.0f * 1024.0f), arenaStats.totalBytes / (1024.0f * 1024.0f));
+        bArenaPeakWarned = true;
+    }
+
+    size_t trimTo = 0;
+    shrinkWindowPeak = std::max(shrinkWindowPeak, arenaStats.usedBytes);
+    if (++shrinkWindowFrames >= FRAME_ARENA_SHRINK_WINDOW) {
+        const size_t target = std::max(NextPowerOfTwo(shrinkWindowPeak), VirtualMemoryManager::COMMIT_STEP);
+        if (arenaStats.committedBytes > target * FRAME_ARENA_SHRINK_RATIO) {
+            trimTo = std::max(target, arenaStats.committedBytes / 2);
+        }
+        shrinkWindowPeak = 0;
+        shrinkWindowFrames = 0;
+    }
+    if (trimTo) {
+        viewFamilyWatermarks = ViewFamilyWatermarks{};
+    }
+
     const ViewFamily& vf = mainViewFamily;
     viewFamilyWatermarks.primitiveInstances = std::max(viewFamilyWatermarks.primitiveInstances, NextPowerOfTwo(vf.primitiveInstances.Size()));
     viewFamilyWatermarks.worldGlyphQuads = std::max(viewFamilyWatermarks.worldGlyphQuads, NextPowerOfTwo(vf.worldGlyphQuads.Size()));
@@ -79,16 +99,13 @@ void FrameBuffer::Reinitialize()
     viewFamilyWatermarks.sprites = std::max(viewFamilyWatermarks.sprites, vf.sprites.Size());
     viewFamilyWatermarks.spriteBatches = std::max(viewFamilyWatermarks.spriteBatches, vf.spriteBatches.Size());
 
-    const Arena::Stats arenaStats = frameArena.Get().GetStats();
-    if (!bArenaPeakWarned && arenaStats.peakBytes * 4 > arenaStats.totalBytes * 3) {
-        LOG_WARN(Renderer, "Frame arena peak {:.1f} MB crossed 75% of {:.0f} MB reserved", arenaStats.peakBytes / (1024.0f * 1024.0f), arenaStats.totalBytes / (1024.0f * 1024.0f));
-        bArenaPeakWarned = true;
-    }
-
     mainViewFamily = ViewFamily{};
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>{};
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>{};
     frameArena.Get().Reset();
+    if (trimTo) {
+        frameArena.Get().Trim(trimTo);
+    }
     mainViewFamily = ViewFamily(frameArena.Get(), viewFamilyWatermarks);
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);

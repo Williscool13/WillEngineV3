@@ -50,4 +50,12 @@ void Arena::Reset()
 {
     head = 0;
 }
+
+void Arena::Trim(size_t keepBytes)
+{
+    if (!vm) { return; }
+    assert(head <= keepBytes);
+    vm->Decommit(vmHandle, keepBytes);
+    committed = vm->Committed(vmHandle);
+}
 } // Core

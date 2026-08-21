@@ -64,6 +64,12 @@ public:
      */
     void Reset();
 
+    /**
+     * Decommits above keepBytes (rounded up to COMMIT_STEP). head must not exceed keepBytes. No-op without a VirtualMemoryManager.
+     * @param keepBytes
+     */
+    void Trim(size_t keepBytes);
+
     struct Stats
     {
         size_t totalBytes;

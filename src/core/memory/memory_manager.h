@@ -9,8 +9,6 @@
 
 #include <atomic>
 
-#include "arena.h"
-#include "arena_suballocator.h"
 #include "tlsf_allocator.h"
 #include "virtual_memory_manager.h"
 
@@ -21,7 +19,7 @@ namespace Core
  * typed regions. All engine systems suballocate from this manager — no additional new/delete.
  *
  * Layout (contiguous):
- *   [persistentPool | physicsPool | arenaPool]  (general/assets/assetsScratch/render/vulkan are growable, own their chunks)
+ *   [persistentPool | physicsPool]  (general/assets/assetsScratch/render/vulkan are growable, own their chunks; arenas and slot stores are VirtualMemoryManager reservations)
  *
  * Regions:
  *   - Persistent TLSF: individual allocs that live for the entire process lifetime.
@@ -42,7 +40,6 @@ public:
     {
         size_t persistentSize;
         size_t physicsPoolSize;
-        size_t arenaPoolSize;
 
         // Growables (heap allocated)
         size_t generalPoolSize;
@@ -117,12 +114,6 @@ public:
     TlsfAllocator& Physics() { return tlsfPhysics; }
     TlsfAllocator& Render() { return tlsfRender; }
     TlsfAllocator& Vulkan() { return tlsfVulkan; }
-    /**
-     * General per-frame arena. Cleared at the end of each game frame.
-     * Access from game thread only.
-     * @return
-     */
-    ArenaSuballocator& ArenaPool() { return arenaPool; }
     VirtualMemoryManager& Virtual() { return virtualMemory; }
 
     [[nodiscard]] Stats GetStats();
@@ -143,7 +134,6 @@ private:
     TlsfAllocator tlsfPhysics;
     TlsfAllocator tlsfRender;
     TlsfAllocator tlsfVulkan;
-    ArenaSuballocator arenaPool;
     VirtualMemoryManager virtualMemory;
 
     std::atomic<uint32_t> deviceAllocCount{0};

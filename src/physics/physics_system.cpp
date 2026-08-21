@@ -103,8 +103,7 @@ void PhysicsSystem::UnregisterPhysics() const
 PhysicsSystem::PhysicsSystem(Core::MemoryManager& memoryManager, enki::TaskScheduler* scheduler)
     : memoryManager(&memoryManager)
     , scheduler(scheduler)
-    , physicsArena(memoryManager.ArenaPool(), PHYSICS_TEMP_ALLOCATOR_SIZE, Core::AllocTag::Physics, "physics")
-    , tempAllocator(physicsArena.Get().Data(), physicsArena.Get().GetCapacity())
+    , tempAllocator(memoryManager.Virtual(), PHYSICS_TEMP_ALLOCATOR_RESERVE)
 {
     RegisterPhysics();
 

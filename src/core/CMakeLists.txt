@@ -78,8 +78,6 @@ add_library(core STATIC
         containers/queue.h
         containers/arena_queue.h
         containers/virtual_array.h
-        memory/arena_suballocator.cpp
-        memory/arena_suballocator.h
         memory/virtual_memory_manager.cpp
         memory/virtual_memory_manager.h
         memory/virtual_arena.h

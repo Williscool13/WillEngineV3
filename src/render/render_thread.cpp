@@ -36,7 +36,6 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/span.h"
-#include "core/memory/arena_suballocator.h"
 #include "core/memory/memory_manager.h"
 #include "core/string_id.h"
 #include "core/math/math_helpers.h"
@@ -82,7 +81,7 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
         frameSync.Initialize();
     }
 
-    renderArena = Core::ManagedArena(memoryManager.ArenaPool(), 4ull * 1024 * 1024, Core::AllocTag::Render, "render");
+    renderArena = Core::VirtualArena(memoryManager.Virtual(), 16ull * 1024 * 1024, Core::AllocTag::Render, "render");
     renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, renderArena.Get());
     screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler, memoryManager.AssetsScratch());
     // Vulkan-side NRD init is deferred to the first Record when DenoiserMode::NRD is selected
