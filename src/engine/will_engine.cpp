@@ -452,7 +452,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 
         // todo game state
 
-        engineState = new(memoryManager.PersistentAllocRaw(sizeof(EngineState), Core::AllocTag::AssetGenerator)) EngineState(&memoryManager.General());
+        engineState = new(memoryManager.PersistentAllocRaw(sizeof(EngineState), Core::AllocTag::AssetGenerator)) EngineState(&memoryManager.General(), &memoryManager.Virtual());
         engineState->projectConfig = ReadProjectConfig();
         engineState->automation = automation;
         engineState->lighting.aaConfig = engineState->projectConfig.aaConfig;

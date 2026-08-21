@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-#include "core/containers/heap_array.h"
+#include "core/containers/virtual_array.h"
 #include "core/memory/range_allocator.h"
 #include "render/shaders/model_interop.h"
 
@@ -23,7 +23,7 @@ class ModelStore
 public:
     using Range = Core::RangeAllocator::Range;
 
-    void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::AllocTag tag = Core::AllocTag::RenderMesh);
+    void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag = Core::AllocTag::RenderMesh);
 
     /** Invalid range (and an error log) when full. */
     Range Allocate(uint32_t count);
@@ -39,7 +39,7 @@ public:
     [[nodiscard]] bool IsInitialized() const { return ranges_.IsInitialized(); }
 
 private:
-    Core::HeapArray<Model> models_{};
+    Core::VirtualArray<Model> models_{};
     Core::RangeAllocator ranges_{};
 };
 } // Engine

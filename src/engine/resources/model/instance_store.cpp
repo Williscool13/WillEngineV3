@@ -11,10 +11,25 @@
 
 namespace Engine
 {
-void InstanceStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::AllocTag tag)
+void InstanceStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag)
 {
-    instances_ = Core::HeapArray<InstanceSource>(alloc, tag, capacity);
+    instances_ = Core::VirtualArray<InstanceSource>(vm, tag, capacity, "InstanceStore");
     ranges_.Init(capacity, alloc, tag, "InstanceStore");
+}
+
+InstanceStore::Range InstanceStore::Allocate(uint32_t count)
+{
+    const Range range = ranges_.Allocate(count);
+    if (range.IsValid()) {
+        instances_.EnsureCommitted(ranges_.GetWatermark());
+    }
+    return range;
+}
+
+void InstanceStore::Free(Range range)
+{
+    ranges_.Free(range);
+    instances_.Trim(ranges_.GetWatermark());
 }
 
 InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot)
@@ -24,7 +39,7 @@ InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* mat
     const auto count = static_cast<uint32_t>(mesh.primitiveProperties.Size());
     if (count == 0) { return {}; }
 
-    Range range = ranges_.Allocate(count);
+    Range range = Allocate(count);
     if (!range.IsValid()) {
         LOG_ERROR(Engine, "Instance store full; cannot allocate single-mesh range for model ({})", model->name.c_str());
         return {};
@@ -70,7 +85,7 @@ void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, TriLightSto
         materialManager->ReleaseMaterial(instances_[range.offset + i].materialID);
         triLightStore->Free(instances_[range.offset + i].triLightRange);
     }
-    ranges_.Free(range);
+    Free(range);
     range = {};
 }
 } // Engine

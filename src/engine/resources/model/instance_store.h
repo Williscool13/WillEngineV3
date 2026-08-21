@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-#include "core/containers/heap_array.h"
+#include "core/containers/virtual_array.h"
 #include "core/memory/range_allocator.h"
 #include "core/types/math.h"
 #include "engine/core/material_id.h"
@@ -63,11 +63,11 @@ class InstanceStore
 public:
     using Range = Core::RangeAllocator::Range;
 
-    void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::AllocTag tag = Core::AllocTag::RenderMesh);
+    void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag = Core::AllocTag::RenderMesh);
 
-    Range Allocate(uint32_t count) { return ranges_.Allocate(count); }
+    Range Allocate(uint32_t count);
 
-    void Free(Range range) { ranges_.Free(range); }
+    void Free(Range range);
 
     /** Range over model mesh[0]'s primitives with a uniform material (acquired per entry), identity transforms, a shared ModelStore slot, and a tri-light range per emissive primitive. Invalid range on an empty model or full store. Null triLightStore suppresses tri-light allocation (light proxy surfaces resolve BRDF hits via their analytic light). */
     Range AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot);
@@ -91,7 +91,7 @@ public:
     [[nodiscard]] bool IsInitialized() const { return ranges_.IsInitialized(); }
 
 private:
-    Core::HeapArray<InstanceSource> instances_{};
+    Core::VirtualArray<InstanceSource> instances_{};
     Core::RangeAllocator ranges_{};
 };
 } // Engine

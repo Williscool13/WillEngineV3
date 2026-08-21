@@ -110,7 +110,7 @@ InputState::InputState(Core::TlsfAllocator* allocator)
       actionStates(allocator, Core::AllocTag::EngineState, 128)
 {}
 
-EngineState::EngineState(Core::TlsfAllocator* allocator)
+EngineState::EngineState(Core::TlsfAllocator* allocator, Core::VirtualMemoryManager* virtualMemory)
     : allocator(allocator),
       stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
       componentRegistry(allocator),
@@ -118,8 +118,8 @@ EngineState::EngineState(Core::TlsfAllocator* allocator)
       editor(allocator),
       input(allocator)
 {
-    instanceStore.Init(MAX_INSTANCE_SLOTS, allocator, Core::AllocTag::RenderMesh);
-    modelStore.Init(MAX_MODEL_SLOTS, allocator, Core::AllocTag::RenderMesh);
+    instanceStore.Init(MAX_INSTANCE_SLOTS, allocator, virtualMemory, Core::AllocTag::RenderMesh);
+    modelStore.Init(MAX_MODEL_SLOTS, allocator, virtualMemory, Core::AllocTag::RenderMesh);
     analyticLightStore.Init(MAX_ANALYTIC_LIGHTS, allocator, Core::AllocTag::Render);
     triLightStore.Init(MAX_LIGHTS - MAX_ANALYTIC_LIGHTS, allocator, Core::AllocTag::Render);
 

@@ -160,7 +160,7 @@ struct EngineState
 {
     EngineState() = default;
 
-    explicit EngineState(Core::TlsfAllocator* allocator);
+    EngineState(Core::TlsfAllocator* allocator, Core::VirtualMemoryManager* virtualMemory);
 
     ~EngineState() = default;
 
