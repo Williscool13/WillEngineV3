@@ -204,7 +204,7 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
         ImGui::Spacing();
         ImGui::Separator();
         if (Widgets::SliderFloat("Render Resolution##graphics", &state->projectConfig.resolutionScale, 0.5f, 1.0f, {.format = "%.3f", .commitOnRelease = true})) { changed = true; }
-        if (Widgets::SliderFloat("Reflection Probe Line Width##graphics", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe debug wireframes (volume, fade shell, capture marker, stale bake volume).", .reset = true, .resetTo = 0.02})) { changed = true; }
+        if (Widgets::SliderFloat("Probe Line Width##graphics", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe and DDGI world volume debug wireframes (volume, fade shell, capture marker, stale bake volume).", .reset = true, .resetTo = 0.02})) { changed = true; }
 
 
         const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
@@ -1241,6 +1241,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Local Volumes##ddgi", &ddgi.bLocalVolumes)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Hand-placed fine-spacing probe volumes (LocalDDGIVolumeComponent entities), sampled before cascade 0 where they cover. Nearest few volumes stay resident, one updates per frame.");
+            }
+            if (ImGui::Checkbox("Debug Draw World Volumes##ddgi", &ddgi.bDebugDrawVolumes)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Draw every authored world volume: dim outer box = snapped probe window, solid inner box = the region the volume fully owns (one fade cell in). Interior faces must sit inside the inner box.");
             }
             int maxResidentWorldVolumes = static_cast<int>(ddgi.maxResidentWorldVolumes);
             if (Widgets::SliderInt("Max Resident Volumes##ddgi", &maxResidentWorldVolumes, 1, static_cast<int>(DDGI_MAX_RESIDENT_LOCAL_VOLUMES), {

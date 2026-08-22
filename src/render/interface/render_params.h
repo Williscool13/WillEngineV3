@@ -420,6 +420,7 @@ struct DDGIParams
     float edgeBlendCells{3.0f};
     bool bScaleBiasPerCascade{true};
     bool bLocalVolumes{true};
+    bool bDebugDrawVolumes{false};
     bool bCascadeSampling{true};
     bool bWorldVolumeGridCull{true};
     int32_t maxResidentWorldVolumes{100};

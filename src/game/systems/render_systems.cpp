@@ -40,6 +40,7 @@
 #include "game/components/core_components.h"
 #include "game/components/physics/physics_body_desc.h"
 #include "render/types/render_types.h"
+#include "core/memory/memory_manager.h"
 
 
 namespace Game
@@ -2044,6 +2045,40 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
             .billboard = true,
         });
     }
+
+    auto probeView = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
+    for (auto [entity, probe, transform] : probeView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation + transform.rotation * probe.captureOffset,
+            .pixelSize = 0.5f,
+            .color = Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f),
+            .stableId = stableId,
+            .textureIndex = SPRITE_REFLECTION_PROBE_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
+
+    auto volumeView = state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>();
+    for (auto [entity, volume, transform] : volumeView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = Component::LocalDDGIVolumeComponent::WindowMin(transform.translation, volume.probeSpacing),
+            .pixelSize = 0.5f,
+            .color = Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f),
+            .stableId = stableId,
+            .textureIndex = SPRITE_DDGI_VOLUME_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
 }
 
 void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
@@ -2051,7 +2086,8 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     ZoneScoped;
     const Engine::LightDebugDrawMode mode = state->editor.lightDebugDrawMode;
     const bool bProbeDebugDraw = state->lighting.reflectionProbe.bDebugDraw;
-    if (mode == Engine::LightDebugDrawMode::None && !bProbeDebugDraw) { return; }
+    const bool bVolumeDebugDraw = state->lighting.ddgi.bDebugDrawVolumes;
+    if (mode == Engine::LightDebugDrawMode::None && !bProbeDebugDraw && !bVolumeDebugDraw) { return; }
 
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
 
@@ -2118,6 +2154,13 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform.translation, transform.translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
+    }
+
+    for (auto [entity, volume, transform] : state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>().each()) {
+        if (!bVolumeDebugDraw && !shouldDraw(entity)) { continue; }
+        constexpr Vec4 disabledColor{0.45f, 0.45f, 0.45f, 1.0f};
+        const Vec4 color = volume.bEnabled ? Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f) : disabledColor;
+        Component::LocalDDGIVolumeComponent::DrawWindow(viewFamily, transform.translation, volume.probeSpacing, color, state->projectConfig.reflectionProbeLineWidth);
     }
 
     for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
@@ -2379,6 +2422,26 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
         appendPPTag(pp.bDitherEnabled, "Dither");
         if (!bAnyPPActive) { ppSummary.Append(" None"); }
 
+        static Core::InlineString<80> memText("Mem: ...");
+        static float memRefreshTimer = 1.0f;
+        memRefreshTimer += tf.deltaTime;
+        if (memRefreshTimer >= 1.0f) {
+            memRefreshTimer = 0.0f;
+            const Core::MemoryManager::Stats ms = ctx->memoryManager->GetStats();
+            const Core::TlsfAllocator::Stats* pools[] = {&ms.persistent, &ms.general, &ms.assetsScratch, &ms.assets, &ms.physics, &ms.render, &ms.vulkan};
+            size_t usedBytes = ms.virtualMemory.committedBytes;
+            size_t committedBytes = ms.virtualMemory.committedBytes;
+            size_t budgetBytes = ms.virtualMemory.reservedBytes;
+            for (const Core::TlsfAllocator::Stats* pool : pools) {
+                usedBytes += pool->usedBytes;
+                committedBytes += pool->totalBytes;
+                budgetBytes += pool->budgetBytes > 0 ? pool->budgetBytes : pool->totalBytes;
+            }
+            constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
+            memText = Core::InlineString<80>::Format("Mem: %.0f / %.0f cmt / %.0f MB", static_cast<float>(usedBytes) * kToMB, static_cast<float>(committedBytes) * kToMB, static_cast<float>(budgetBytes) * kToMB);
+        }
+        const Clay_String memString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(memText.Size()), .chars = memText.c_str()};
+
         const Clay_String profileString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(profileText.Size()), .chars = profileText.c_str()};
         const Clay_String aaString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(aaText.Size()), .chars = aaText.c_str()};
         const Clay_String giString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(giText.Size()), .chars = giText.c_str()};
@@ -2404,6 +2467,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
             CLAY_TEXT(giString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
             CLAY_TEXT(resString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
             CLAY_TEXT(ppString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
+            CLAY_TEXT(memString, { .textColor = {200, 200, 200, 255}, .fontSize = 16 });
         }
 #if WILL_EDITOR
     } // state->debug.bEnableUI

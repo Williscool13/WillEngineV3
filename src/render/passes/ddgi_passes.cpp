@@ -9,6 +9,7 @@
 #include <cfloat>
 
 #include "render/render_utils.h"
+#include "core/math/color_helpers.h"
 #include "render/interface/render_interface.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -676,6 +677,12 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass)
 }
 
 /** Slot identification tint for the all-volumes debug view (unorm RGBA, low byte = red). Golden-ratio hue walk at low saturation so neighbouring slots stay distinguishable at any slot count; slot 0 stays white. */
+static uint32_t DDGIPackTint(const glm::vec3& rgb)
+{
+    const glm::uvec3 quantized = glm::uvec3(glm::round(glm::clamp(rgb, 0.0f, 1.0f) * 255.0f));
+    return 0xFF000000u | (quantized.z << 16u) | (quantized.y << 8u) | quantized.x;
+}
+
 static uint32_t DDGISlotTint(uint32_t slot)
 {
     if (slot == 0) {
@@ -697,8 +704,13 @@ static uint32_t DDGISlotTint(uint32_t slot)
         case 4: rgb = {rising, low, high}; break;
         default: rgb = {high, low, falling}; break;
     }
-    const glm::uvec3 quantized = glm::uvec3(glm::round(glm::clamp(rgb, 0.0f, 1.0f) * 255.0f));
-    return 0xFF000000u | (quantized.z << 16u) | (quantized.y << 8u) | quantized.x;
+    return DDGIPackTint(rgb);
+}
+
+/** World volumes tint by volumeId so probe spheres match the editor box and sprite colour regardless of slot. */
+static uint32_t DDGIVolumeTint(uint64_t volumeId)
+{
+    return DDGIPackTint(glm::vec3(Core::Math::HashColor(volumeId, 0u, 0.08f, 0.84f)));
 }
 
 void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive, int32_t probeDebugMode)
@@ -742,7 +754,7 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
         if (bActive) {
             pass.ReadBuffer(DDGI_PROBE_ACTIVE_BUFFER);
         }
-        const uint32_t packedTint = debugCascade < 0 ? DDGISlotTint(k) : 0xFFFFFFFFu;
+        const uint32_t packedTint = debugCascade < 0 ? (bLocal ? DDGIVolumeTint(cascades.localIds[k]) : DDGISlotTint(k)) : 0xFFFFFFFFu;
         const uint32_t warmupAge = bLocal ? cascades.localWarmup[k] : DDGI_LOCAL_AGE_CAP;
         pass.Execute([pipelineManager, volume, bOffsets, bActive, bHideInactive, probeDebugExposure, packedTint, warmupAge, atlasId, visibilityId, bVisibility, probeDebugMode, probeDataElem](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_debug"));

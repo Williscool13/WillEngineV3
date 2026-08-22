@@ -36,6 +36,16 @@ struct LocalDDGIVolumeComponent
     static void Deserialize(LocalDDGIVolumeComponent& comp, const Engine::TextReader& r);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
+
+    /**
+     * Snapped probe window min corner for an authored corner.
+     */
+    static Vec3 WindowMin(const Vec3& corner, float spacing);
+
+    /**
+     * Draws the snapped window (half brightness, with face crosses) and the fully-owned interior one fade cell in (full colour).
+     */
+    static void DrawWindow(Core::ViewFamily& viewFamily, const Vec3& corner, float spacing, const Vec4& color, float lineWidth);
 };
 }
 

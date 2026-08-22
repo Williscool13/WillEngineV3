@@ -149,6 +149,26 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
         LOG_CRITICAL(Asset, "Blue noise texture does not exist, please regenerate and restart the engine");
     }
 
+    TextureID spriteReflectionProbe = FindTextureByName("sprite_reflection_probe");
+    if (spriteReflectionProbe.IsValid()) {
+        Texture* spriteReflectionProbeTex = LoadTexture(spriteReflectionProbe);
+        assert(spriteReflectionProbeTex && spriteReflectionProbeTex->bindlessHandle.index == SPRITE_REFLECTION_PROBE_BINDLESS_INDEX);
+    }
+    else {
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+        LOG_CRITICAL(Asset, "Sprite texture sprite_reflection_probe does not exist, please generate and restart the engine");
+    }
+
+    TextureID spriteDDGIVolume = FindTextureByName("sprite_ddgi_volume");
+    if (spriteDDGIVolume.IsValid()) {
+        Texture* spriteDDGIVolumeTex = LoadTexture(spriteDDGIVolume);
+        assert(spriteDDGIVolumeTex && spriteDDGIVolumeTex->bindlessHandle.index == SPRITE_DDGI_VOLUME_BINDLESS_INDEX);
+    }
+    else {
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+        LOG_CRITICAL(Asset, "Sprite texture sprite_ddgi_volume does not exist, please generate and restart the engine");
+    }
+
     auto roboto = FindFontByName("Roboto");
     if (roboto.IsValid()) {
         LoadFont(roboto);

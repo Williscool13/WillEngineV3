@@ -12,6 +12,7 @@
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/components/core_components.h"
+#include "core/math/color_helpers.h"
 #include "engine/include/engine_context.h"
 #include "game/input/game_actions.h"
 #include "render/interface/render_interface.h"
@@ -45,13 +46,8 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
 
     if (transform && open) {
         const auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
-        const float spacing = comp.probeSpacing;
-        const Vec3 windowMin = glm::round(transform->translation / spacing) * spacing;
-        const Vec3 windowMax = windowMin + Vec3(static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * spacing);
-
-        constexpr Vec4 windowColor{0.95f, 0.9f, 0.35f, 1.0f};
-        constexpr float lineWidth = 0.02f;
-        DEBUG_ADD_BOX(viewFamily.debugBoxes, {(windowMin + windowMax) * 0.5f, (windowMax - windowMin) * 0.5f, Quat{1.0f, 0.0f, 0.0f, 0.0f}, windowColor, lineWidth});
+        auto* state = registry.ctx().get<Engine::EngineState*>();
+        DrawWindow(viewFamily, transform->translation, comp.probeSpacing, Core::Math::HashColor(comp.volumeId, 0u, 0.08f, 0.84f), state->projectConfig.reflectionProbeLineWidth);
     }
 
     return {.bRequestRemoval = remove, .bModified = modified};
@@ -79,5 +75,37 @@ void LocalDDGIVolumeComponent::OnConstruct(entt::registry& registry, entt::entit
     if (comp.volumeId == 0) {
         comp.volumeId = state->rng();
     }
+}
+
+Vec3 LocalDDGIVolumeComponent::WindowMin(const Vec3& corner, float spacing)
+{
+    const float s = glm::max(spacing, 0.25f);
+    return glm::round(corner / s) * s;
+}
+
+void LocalDDGIVolumeComponent::DrawWindow(Core::ViewFamily& viewFamily, const Vec3& corner, float spacing, const Vec4& color, float lineWidth)
+{
+    const float s = glm::max(spacing, 0.25f);
+    const Vec3 windowMin = WindowMin(corner, s);
+    const Vec3 outerHalf = Vec3(static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * s * 0.5f);
+    const Vec3 center = windowMin + outerHalf;
+    const Vec3 innerHalf = outerHalf - Vec3(s);
+    const Vec4 outerColor{color.r * 0.5f, color.g * 0.5f, color.b * 0.5f, color.a};
+    constexpr Quat identity{1.0f, 0.0f, 0.0f, 0.0f};
+
+    DEBUG_ADD_BOX(viewFamily.debugBoxes, {center, outerHalf, identity, outerColor, lineWidth});
+    for (int i = 0; i < 3; ++i) {
+        Vec3 u{0.0f};
+        Vec3 v{0.0f};
+        u[(i + 1) % 3] = outerHalf[(i + 1) % 3];
+        v[(i + 2) % 3] = outerHalf[(i + 2) % 3];
+        for (int side = 0; side < 2; ++side) {
+            Vec3 faceCenter = center;
+            faceCenter[i] += side == 0 ? outerHalf[i] : -outerHalf[i];
+            DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u - v, faceCenter + u + v, outerColor, lineWidth});
+            DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u + v, faceCenter + u - v, outerColor, lineWidth});
+        }
+    }
+    DEBUG_ADD_BOX(viewFamily.debugBoxes, {center, innerHalf, identity, color, lineWidth});
 }
 }
