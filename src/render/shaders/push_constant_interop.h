@@ -926,6 +926,7 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t sunMode; // REFLECTION_SUN_* for the analytic hit-shading fallback
     SHADER_PUBLIC float maxRayIntensity;
+    SHADER_PUBLIC float iblIntensity;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant

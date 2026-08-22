@@ -100,7 +100,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
             } else {
                 if (pc.skyboxIndex >= 0) {
                     float3 skyDirection = float3(hit.rayDir.x, -hit.rayDir.y, hit.rayDir.z);
-                    radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+                    radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb * pc.iblIntensity;
                 }
                 if (pc.reflectionProbeCount > 0u) {
                     ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
@@ -157,7 +157,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
         if (pc.skyboxIndex >= 0) {
             // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
             float3 skyDirection = float3(hit.rayDir.x, -hit.rayDir.y, hit.rayDir.z);
-            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb * pc.iblIntensity;
         }
         if (pc.reflectionProbeCount > 0u) {
             ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
@@ -178,15 +178,9 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
         }
     }
 
-    // Demodulate by the mirror surface's specular reflectance so the denoiser sees a near-albedo-free signal.
-    float nDotV = max(dot(N, V), 0.0);
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
-    float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
-    float3 specReflectance = max(F0 * envBRDF.x + envBRDF.y, float3(0.01, 0.01, 0.01));
-    float3 demodulated = radiance / specReflectance;
-
+    // Incoming radiance is already the demodulated form: the outgoing specular is specReflectance * radiance, and every consumer applies that factor at remodulation.
     // Packed (rcoord) when a checkerboard-aware consumer (the merged lighting resolve or the reflection RELAX prepass) will resolve it; otherwise dense-duplicated to both fields so a direct .Load(pixel) fallback (denoiser off, full-rate resolve, or ReBLUR/plain modes) sees no holes. Matches lighting_pbr_restir.slang's writeCoord logic exactly.
-    float4 outColor = float4(demodulated, hitTOut);
+    float4 outColor = float4(radiance, hitTOut);
     uint2 writeCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? rcoord : pixel;
     rdgStorageFloat4[pc.outputIndex][writeCoord] = outColor;
     if (field != 0u && pc.bCheckerboardPacked == 0u) {
