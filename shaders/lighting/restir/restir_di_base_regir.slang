@@ -52,6 +52,9 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
+    float3 reflViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv + scene.jitter * 0.5, viewSpaceDepth);
+    float3 reflWorldPos = mul(scene.invView, float4(reflViewPosition, 1.0)).xyz;
+    float3 reflV = normalize(-reflViewPosition);
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
@@ -59,7 +62,9 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
     float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
-    int mBrdf = (roughness <= pc.brdfRoughnessMax) ? RESTIR_M_BRDF : 0;
+    bool bMirror = roughness <= pc.mirrorRoughnessMax && roughness <= pc.reflectionRoughnessMax;
+    int mBrdf = bMirror ? 1 : ((roughness <= pc.brdfRoughnessMax) ? RESTIR_M_BRDF : 0);
+    int mBrdfMis = bMirror ? 0 : mBrdf;
 
     int lightCount = pc.lightData->lightCount;
 
@@ -108,7 +113,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
                     // Same d2 floor as LightGeometryTerm so the MIS denominator stays consistent with p_hat at contact distances.
                     float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, LIGHT_GEOM_MIN_DIST2)) : 0.0;
-                    float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdf) * p_brdf_area;
+                    float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdfMis) * p_brdf_area;
                     w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
                     candLightIdx = uint(lightIdx);
                     candXi = Xi;
@@ -133,8 +138,11 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
             }
             float uSelect = HashStep(h);
 
-            float p_brdf_sample;
-            float3 brdfL = ImportanceSampleGGX(xiBrdf, N, V, roughness, p_brdf_sample);
+            float p_brdf_sample = 0.0;
+            float3 brdfL = reflect(-reflV, N);
+            if (!bMirror) {
+                brdfL = ImportanceSampleGGX(xiBrdf, N, reflV, roughness, p_brdf_sample);
+            }
 
             float p_hat_Xi = 0.0;
             int bestLightIdx = -1;
@@ -152,7 +160,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
 #if RESTIR_ENABLE_BRDF_RAY
                 float3 worldN = normalize(mul(float3x3(scene.invView), N));
                 RayDesc ray;
-                ray.Origin = ReflectionRayOrigin(worldPos, worldN, viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
+                ray.Origin = ReflectionRayOrigin(reflWorldPos, worldN, viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
                 ray.Direction = normalize(mul(float3x3(scene.invView), brdfL));
                 ray.TMin = 0.0;
                 ray.TMax = 1e30;
@@ -227,7 +235,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                 }
                 hitT = nearestT;
 #endif
-                if (hitLightIdx >= 0) {
+                if (hitLightIdx >= 0 && !bMirror) {
 #if RESTIR_ENABLE_BRDF_RAY
                     LightView vs = hitVS;
 #else
@@ -246,7 +254,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                 }
             }
 
-            float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdf) * p_brdf_area;
+            float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdfMis) * p_brdf_area;
             float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
             if (ReservoirAddSample(accum_gen, w_i, uSelect) && bestLightIdx >= 0) {
                 r_gen.lightIdx = uint(bestLightIdx);

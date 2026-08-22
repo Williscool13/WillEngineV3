@@ -40,7 +40,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.WriteBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
 
-    pass.Execute([pipelineManager, sceneIndex, renderExtent, frameNumber, reflectionRoughnessMax,
+    pass.Execute([pipelineManager, sceneIndex, renderExtent, frameNumber, reflectionRoughnessMax, mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReflectionTracePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
@@ -52,6 +52,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
                 .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .roughnessMax = reflectionRoughnessMax,
+                .mirrorRoughnessMax = mirrorRoughnessMax,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_trace"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -208,6 +209,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                 .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
                 .sunMode = sunMode,
+                .maxRayIntensity = reflectionConfig.maxRayIntensity,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_shade"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

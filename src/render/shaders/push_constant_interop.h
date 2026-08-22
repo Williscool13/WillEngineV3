@@ -485,6 +485,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC float brdfRoughnessMax;
     SHADER_PUBLIC float finalWClamp;
     SHADER_PUBLIC float lightSpecularFromReflectionsMax;
+    SHADER_PUBLIC float mirrorRoughnessMax;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
@@ -869,6 +870,7 @@ SHADER_PUBLIC struct ReflectionTracePushConstant
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC float roughnessMax;
+    SHADER_PUBLIC float mirrorRoughnessMax;
 };
 
 SHADER_PUBLIC struct SSRTracePushConstant
@@ -923,7 +925,7 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t sunMode; // REFLECTION_SUN_* for the analytic hit-shading fallback
-    SHADER_PUBLIC uint32_t padS0;
+    SHADER_PUBLIC float maxRayIntensity;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant

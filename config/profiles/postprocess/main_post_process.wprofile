@@ -26,7 +26,7 @@ agxMinEV|0xc1479538
 agxMaxEV|0x4080d58f
 khronosStartCompression|0x3f428f5c
 khronosDesaturation|0x3e19999a
-bDepthOfFieldEnabled|1
+bDepthOfFieldEnabled|0
 dofFocusDistance|0x40400000
 dofFocusRange|0x3f800000
 dofNearTransition|0x40800000
@@ -54,8 +54,8 @@ bChromaticAberrationEnabled|0
 chromaticAberrationStrength|0x3fc00000
 bSharpeningEnabled|1
 sharpeningStrength|0x3ecccccd
-bPaniniEnabled|0
-paniniStrength|0x00000000
+bPaniniEnabled|1
+paniniStrength|0x3dab6b23
 bFilmGrainEnabled|0
 grainStrength|0x3c23d70a
 grainSize|0x3fc00000

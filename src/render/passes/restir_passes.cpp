@@ -311,6 +311,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
                 .brdfRoughnessMax = reflectionConfig.tracedRoughnessMax,
                 .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
+                .mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

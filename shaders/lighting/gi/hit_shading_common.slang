@@ -24,17 +24,27 @@ import reflection_interop;
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
 
 /** Geometry-only normal decode, no material/lighting work. Used to key the radiance cache before deciding whether a full shade is even needed. */
-public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+static float3 DecodeHitNormalImpl(Primitive* primitiveBuffer, uint32_t* indexBuffer, VertexAttribute* vertexAttrBuffer, Model* modelBuffer, Instance instance, uint triangleIndex, float2 barycentrics)
 {
-    Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
+    Primitive primitive = primitiveBuffer[instance.primitiveIndex];
     uint firstIndex = primitive.indexOffset + triangleIndex * 3;
-    VertexAttribute a0 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 0]];
-    VertexAttribute a1 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 1]];
-    VertexAttribute a2 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 2]];
+    VertexAttribute a0 = vertexAttrBuffer[indexBuffer[firstIndex + 0]];
+    VertexAttribute a1 = vertexAttrBuffer[indexBuffer[firstIndex + 1]];
+    VertexAttribute a2 = vertexAttrBuffer[indexBuffer[firstIndex + 2]];
     float3 bary = float3(1.0 - barycentrics.x - barycentrics.y, barycentrics.x, barycentrics.y);
     float3 normalOS = normalize(bary.x * DecodeNormal(a0) + bary.y * DecodeNormal(a1) + bary.z * DecodeNormal(a2));
-    Model model = pc.modelBuffer[instance.modelIndex];
+    Model model = modelBuffer[instance.modelIndex];
     return normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
+}
+
+public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+{
+    return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics);
+}
+
+public float3 DecodeHitNormal(ReflectionShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+{
+    return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics);
 }
 
 /**
@@ -224,7 +234,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
 }
 
 /** Used by the reflection shade pass. */
-public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias, uint sunMode)
+public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias, float3 cameraWorldPos)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -262,12 +272,12 @@ public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance inst
 
     float3 radiance = emissive;
     DirectionalLightData sun = pc.lightData->directionalLight;
-    if (sun.directionIntensity.w > 0.0 && sunMode != REFLECTION_SUN_ALWAYS_UNLIT) {
+    if (sun.directionIntensity.w > 0.0 && pc.sunMode != REFLECTION_SUN_ALWAYS_UNLIT) {
         float3 L = normalize(-sun.directionIntensity.xyz);
         float NoL = dot(N, L);
         if (NoL > 0.0) {
             bool bVisible = true;
-            if (sunMode == REFLECTION_SUN_SHADOW_RAY) {
+            if (pc.sunMode == REFLECTION_SUN_SHADOW_RAY) {
                 RayDesc shadowRay;
                 shadowRay.Origin = OffsetHitRayOrigin(worldPosition, N);
                 shadowRay.Direction = L;
@@ -299,10 +309,27 @@ public float3 ShadeReflectionRayHit(DDGIProbeTracePushConstant pc, Instance inst
         }
     }
 
-    if ((pc.previousBaseCellZFlags & (1u << 16u)) != 0u) {
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades, maxBias);
+    if (pc.bDDGIApply != 0u) {
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.ddgiCascades, maxBias);
         radiance += diffuseColor * gi.rgb;
     }
+
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, metallic);
+    float3 R = reflect(rayDirection, N);
+    float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(NoV, roughness), 0).rg;
+    float3 F = F_SCHLICK_ROUGHNESS(NoV, F0, roughness);
+    float3 specRadiance = float3(0.0);
+    if (pc.skyboxIndex >= 0) {
+        specRadiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(R), sqrt(roughness) * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1)).rgb;
+    }
+    if (pc.reflectionProbeCount > 0u) {
+        ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);
+        if (probeBlend.indexA >= 0) {
+            float3 probeRadiance = SampleReflectionProbeSpecularBlended(probeBlend, pc.reflectionProbes, worldPosition, R, roughness);
+            specRadiance = lerp(specRadiance, probeRadiance, probeBlend.coverage);
+        }
+    }
+    radiance += specRadiance * (F * envBRDF.x + envBRDF.y);
     return radiance;
 }
 

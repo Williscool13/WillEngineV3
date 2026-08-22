@@ -49,13 +49,17 @@ void ComputeReflectionTrace(uniform ReflectionTracePushConstant pc, uint3 thread
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-    float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
+    // Jittered sample position so reflected edges move with the camera jitter and TAA resolves them; reflection_shade reconstructs the same origin.
+    float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv + scene.jitter * 0.5, viewSpaceDepth);
     float3 N = normalize(UnpackNormalOct16(gt1.r));
     float3 V = normalize(-viewPosition);
 
-    float pdf;
-    float2 xi = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 2u);
-    float3 brdfL = ImportanceSampleGGX(xi, N, V, roughness, pdf);
+    float pdf = 0.0;
+    float3 brdfL = reflect(-V, N);
+    if (roughness > pc.mirrorRoughnessMax) {
+        float2 xi = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 2u);
+        brdfL = ImportanceSampleGGX(xi, N, V, roughness, pdf);
+    }
     if (dot(N, brdfL) <= 0.0) {
         pc.reflectionDescriptors[pixelIdx] = refl;
         return;

@@ -55,7 +55,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-    float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
+    float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv + scene.jitter * 0.5, viewSpaceDepth);
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
     float3 worldN = normalize(mul(float3x3(scene.invView), N));
@@ -115,18 +115,6 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
             Instance inst = pc.instanceBuffer[hit.instanceID];
             uint rng = SeedRng(pixel, pc.frameIndex, 0xA17Fu);
 
-            DDGIProbeTracePushConstant ddgiPC = (DDGIProbeTracePushConstant)0;
-            ddgiPC.lightData = pc.lightData;
-            ddgiPC.instanceBuffer = pc.instanceBuffer;
-            ddgiPC.primitiveBuffer = pc.primitiveBuffer;
-            ddgiPC.modelBuffer = pc.modelBuffer;
-            ddgiPC.materialBuffer = pc.materialBuffer;
-            ddgiPC.indexBuffer = pc.indexBuffer;
-            ddgiPC.vertexAttrBuffer = pc.vertexAttrBuffer;
-            ddgiPC.tlasIndex = pc.tlasIndex;
-            ddgiPC.previousCascades = pc.ddgiCascades;
-            ddgiPC.previousBaseCellZFlags = pc.bDDGIApply != 0 ? (1u << 16u) : 0u;
-
             WorldGridPunctualLights worldGridLights = (WorldGridPunctualLights)0;
             if (pc.worldGridBuffer != nullptr) {
                 worldGridLights.view = scene.view;
@@ -149,7 +137,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
                         if (prevRawDepth > 0.0) {
                             float prevViewDepth = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
                             if (abs(prevViewDepth - prevClip.w) <= 0.03 * prevClip.w + 0.05) {
-                                float3 hitN = DecodeHitNormal(ddgiPC, inst, hit.primIndex, hit.bary);
+                                float3 hitN = DecodeHitNormal(pc, inst, hit.primIndex, hit.bary);
                                 float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0)).r)));
                                 if (dot(hitN, prevWorldN) > 0.5) {
                                     radiance = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(prevPixel, 0)).rgb;
@@ -161,7 +149,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
                 }
             }
             if (!bShaded) {
-                radiance = ShadeReflectionRayHit(ddgiPC, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT, pc.sunMode);
+                radiance = ShadeReflectionRayHit(pc, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT, scene.cameraWorldPos.xyz);
             }
             hitTOut = hit.hitT;
         }
@@ -183,6 +171,12 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
     // hit.hitT == REFLECTION_HIT_T_OWNED (or the NaN clear-sentinel): radiance and hitTOut stay 0, matching the "no hit" convention RELAX's temporal accumulation expects.
 
     radiance *= pc.intensity;
+    if (pc.maxRayIntensity > 0.0) {
+        float lum = Luma(radiance);
+        if (lum > pc.maxRayIntensity) {
+            radiance *= pc.maxRayIntensity / lum;
+        }
+    }
 
     // Demodulate by the mirror surface's specular reflectance so the denoiser sees a near-albedo-free signal.
     float nDotV = max(dot(N, V), 0.0);

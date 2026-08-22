@@ -471,7 +471,9 @@ struct ReflectionConfiguration
 
     float tracedRoughnessMax{0.3f};
     float lightSpecularFromReflectionsMax{0.3f};
+    float mirrorRoughnessMax{0.08f};
     float intensity{1.0f};
+    float maxRayIntensity{0.0f};
     float ssrThickness{0.3f};
     int32_t ssrMaxSteps{64};
 };

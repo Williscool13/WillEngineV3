@@ -375,7 +375,9 @@ void Serialize(const Core::ReflectionConfiguration& p, TextWriter& w)
     w.Key("sunMode", static_cast<int32_t>(p.sunMode));
     w.Key("tracedRoughnessMax", p.tracedRoughnessMax);
     w.Key("lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax);
+    w.Key("mirrorRoughnessMax", p.mirrorRoughnessMax);
     w.Key("intensity", p.intensity);
+    w.Key("maxRayIntensity", p.maxRayIntensity);
     w.Key("ssrThickness", p.ssrThickness);
     w.Key("ssrMaxSteps", p.ssrMaxSteps);
 }
@@ -390,7 +392,9 @@ void Deserialize(const TextReader& r, Core::ReflectionConfiguration& p)
     p.sunMode = static_cast<Core::ReflectionConfiguration::SunMode>(sunModeRaw < 0 ? 0 : (sunModeRaw > 2 ? 2 : sunModeRaw));
     p.tracedRoughnessMax = r.Float("tracedRoughnessMax", p.tracedRoughnessMax);
     p.lightSpecularFromReflectionsMax = r.Float("lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax);
+    p.mirrorRoughnessMax = r.Float("mirrorRoughnessMax", p.mirrorRoughnessMax);
     p.intensity = r.Float("intensity", p.intensity);
+    p.maxRayIntensity = r.Float("maxRayIntensity", p.maxRayIntensity);
     p.ssrThickness = r.Float("ssrThickness", p.ssrThickness);
     p.ssrMaxSteps = r.Int("ssrMaxSteps", p.ssrMaxSteps);
 }
