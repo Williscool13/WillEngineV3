@@ -37,6 +37,8 @@
 #include "game/components/editor_components.h"
 #include "game/components/scene_components.h"
 #include "game/components/render/light_components.h"
+#include "game/components/render/local_ddgi_volume_component.h"
+#include "game/components/render/reflection_probe_component.h"
 #include "game/components/render/static_mesh_primitive_component.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
@@ -415,6 +417,12 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 for (entt::entity entity : state->editor.selectedEntities) {
                     if (!state->registry.valid(entity)) continue;
                     entt::entity copy = CopySceneEntity(state, entity, state->scene.currentSceneId);
+                    if (auto* volume = state->registry.try_get<Component::LocalDDGIVolumeComponent>(copy)) {
+                        volume->volumeId = state->rng();
+                    }
+                    if (auto* probe = state->registry.try_get<Component::ReflectionProbeComponent>(copy)) {
+                        probe->probeId = state->rng();
+                    }
                     if (auto* nameComp = state->registry.try_get<Component::NameComponent>(copy)) {
                         nameComp->name = GenerateIncrementedName(state->registry, state->scene.currentSceneId, nameComp->name);
                     }

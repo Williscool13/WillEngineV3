@@ -42,7 +42,7 @@ namespace Game
 Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName)
 {
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    Core::TlsfAllocator* alloc = &ctx->memoryManager->AssetsScratch();
+    Core::TlsfAllocator* alloc = &ctx->memoryManager->General();
 
     Engine::Scene outScene(alloc);
     Engine::TextWriter w(outScene.content);
@@ -812,7 +812,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
     UnloadScenes(state, scenesToUnload);
     DeserializeAll(state, state->editor.pieSnapshot);
-    state->editor.pieSnapshot.Clear();
+    state->editor.pieSnapshot = {};
 
     state->inputContext = Engine::InputContext::Editor;
     ctx->setCursorHiddenFn(false); {

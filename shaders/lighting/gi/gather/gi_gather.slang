@@ -121,7 +121,7 @@ static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos,
     uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
     ReflectionProbeBlend probeBlend = ReflectionProbeBlendNone();
     if (pc.reflectionProbeCount > 0u) {
-        probeBlend = PickReflectionProbeBinned(hitWorldPos, hit.normal, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);
+        probeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);
     }
     if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u && !bSelfCell) {
         radiance = RadianceCacheUnpackRadiance(packedRadiance);
@@ -199,7 +199,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
             uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
             ReflectionProbeBlend probeBlend = ReflectionProbeBlendNone();
             if (pc.reflectionProbeCount > 0u) {
-                probeBlend = PickReflectionProbeBinned(worldPosition, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
+                probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
             }
             // Count gate: a count-1 cell is one bary-jittered point; the probe tier is smoother while cells stream in.
             if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
@@ -355,7 +355,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                     if (pc.giHistoryIndex != ~0x0u) {
                                         ReflectionProbeBlend demodProbeBlend = ReflectionProbeBlendNone();
                                         if (pc.reflectionProbeCount > 0u) {
-                                            demodProbeBlend = PickReflectionProbeBinned(hitWorldPos, hit.normal, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
+                                            demodProbeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
                                         }
                                         float3 worldIndirect = ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, demodProbeBlend);
                                         radiance = max(radiance - hit.diffuseColor * (giPrevSum / sumW), float3(0.0)) + hit.diffuseColor * worldIndirect;

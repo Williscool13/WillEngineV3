@@ -55,6 +55,58 @@ void FrameBuffer::Initialize(VirtualMemoryManager& vm, AllocTag tag, const char*
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);
 }
 
+static ViewFamilyWatermarks ObservedWatermarks(const ViewFamily& vf)
+{
+    ViewFamilyWatermarks w{};
+    w.primitiveInstances = NextPowerOfTwo(vf.primitiveInstances.Size());
+    w.worldGlyphQuads = NextPowerOfTwo(vf.worldGlyphQuads.Size());
+    w.textInstances = NextPowerOfTwo(vf.textInstances.Size());
+    w.modelMatrices = NextPowerOfTwo(vf.modelMatrices.Size());
+    w.lights = vf.lights.Size();
+    w.activeMaterials = vf.activeMaterials.Size();
+    w.activeTextMaterials = vf.activeTextMaterials.Size();
+    w.textMaterials = vf.textMaterials.Size();
+    w.debugLines = vf.debugLines.Size();
+    w.debugBoxes = vf.debugBoxes.Size();
+    w.debugSpheres = vf.debugSpheres.Size();
+    w.debugRects = vf.debugRects.Size();
+    w.debugArrows = vf.debugArrows.Size();
+    w.debugCapsules = vf.debugCapsules.Size();
+    w.debugCylinders = vf.debugCylinders.Size();
+    w.uiDrawCommands = vf.uiDrawList.Size();
+    w.uiGlyphQuads = vf.uiGlyphQuads.Size();
+    w.textDrawCalls = vf.textDrawCalls.Size();
+    w.sprites = vf.sprites.Size();
+    w.spriteBatches = vf.spriteBatches.Size();
+    return w;
+}
+
+static ViewFamilyWatermarks MaxWatermarks(const ViewFamilyWatermarks& a, const ViewFamilyWatermarks& b)
+{
+    ViewFamilyWatermarks w{};
+    w.primitiveInstances = std::max(a.primitiveInstances, b.primitiveInstances);
+    w.worldGlyphQuads = std::max(a.worldGlyphQuads, b.worldGlyphQuads);
+    w.textInstances = std::max(a.textInstances, b.textInstances);
+    w.modelMatrices = std::max(a.modelMatrices, b.modelMatrices);
+    w.lights = std::max(a.lights, b.lights);
+    w.activeMaterials = std::max(a.activeMaterials, b.activeMaterials);
+    w.activeTextMaterials = std::max(a.activeTextMaterials, b.activeTextMaterials);
+    w.textMaterials = std::max(a.textMaterials, b.textMaterials);
+    w.debugLines = std::max(a.debugLines, b.debugLines);
+    w.debugBoxes = std::max(a.debugBoxes, b.debugBoxes);
+    w.debugSpheres = std::max(a.debugSpheres, b.debugSpheres);
+    w.debugRects = std::max(a.debugRects, b.debugRects);
+    w.debugArrows = std::max(a.debugArrows, b.debugArrows);
+    w.debugCapsules = std::max(a.debugCapsules, b.debugCapsules);
+    w.debugCylinders = std::max(a.debugCylinders, b.debugCylinders);
+    w.uiDrawCommands = std::max(a.uiDrawCommands, b.uiDrawCommands);
+    w.uiGlyphQuads = std::max(a.uiGlyphQuads, b.uiGlyphQuads);
+    w.textDrawCalls = std::max(a.textDrawCalls, b.textDrawCalls);
+    w.sprites = std::max(a.sprites, b.sprites);
+    w.spriteBatches = std::max(a.spriteBatches, b.spriteBatches);
+    return w;
+}
+
 void FrameBuffer::Reinitialize()
 {
     const Arena::Stats arenaStats = frameArena.Get().GetStats();
@@ -65,39 +117,20 @@ void FrameBuffer::Reinitialize()
 
     size_t trimTo = 0;
     shrinkWindowPeak = std::max(shrinkWindowPeak, arenaStats.usedBytes);
+    windowWatermarks = MaxWatermarks(windowWatermarks, ObservedWatermarks(mainViewFamily));
     if (++shrinkWindowFrames >= FRAME_ARENA_SHRINK_WINDOW) {
-        const size_t target = std::max(NextPowerOfTwo(shrinkWindowPeak), VirtualMemoryManager::COMMIT_STEP);
+        const size_t target = NextPowerOfTwo(shrinkWindowPeak);
         if (arenaStats.committedBytes > target * FRAME_ARENA_SHRINK_RATIO) {
             trimTo = std::max(target, arenaStats.committedBytes / 2);
         }
+        maxWatermarks = windowWatermarks;
+        windowWatermarks = ViewFamilyWatermarks{};
         shrinkWindowPeak = 0;
         shrinkWindowFrames = 0;
     }
-    if (trimTo) {
-        viewFamilyWatermarks = ViewFamilyWatermarks{};
+    else {
+        maxWatermarks = MaxWatermarks(maxWatermarks, windowWatermarks);
     }
-
-    const ViewFamily& vf = mainViewFamily;
-    viewFamilyWatermarks.primitiveInstances = std::max(viewFamilyWatermarks.primitiveInstances, NextPowerOfTwo(vf.primitiveInstances.Size()));
-    viewFamilyWatermarks.worldGlyphQuads = std::max(viewFamilyWatermarks.worldGlyphQuads, NextPowerOfTwo(vf.worldGlyphQuads.Size()));
-    viewFamilyWatermarks.textInstances = std::max(viewFamilyWatermarks.textInstances, NextPowerOfTwo(vf.textInstances.Size()));
-    viewFamilyWatermarks.modelMatrices = std::max(viewFamilyWatermarks.modelMatrices, NextPowerOfTwo(vf.modelMatrices.Size()));
-    viewFamilyWatermarks.lights = std::max(viewFamilyWatermarks.lights, vf.lights.Size());
-    viewFamilyWatermarks.activeMaterials = std::max(viewFamilyWatermarks.activeMaterials, vf.activeMaterials.Size());
-    viewFamilyWatermarks.activeTextMaterials = std::max(viewFamilyWatermarks.activeTextMaterials, vf.activeTextMaterials.Size());
-    viewFamilyWatermarks.textMaterials = std::max(viewFamilyWatermarks.textMaterials, vf.textMaterials.Size());
-    viewFamilyWatermarks.debugLines = std::max(viewFamilyWatermarks.debugLines, vf.debugLines.Size());
-    viewFamilyWatermarks.debugBoxes = std::max(viewFamilyWatermarks.debugBoxes, vf.debugBoxes.Size());
-    viewFamilyWatermarks.debugSpheres = std::max(viewFamilyWatermarks.debugSpheres, vf.debugSpheres.Size());
-    viewFamilyWatermarks.debugRects = std::max(viewFamilyWatermarks.debugRects, vf.debugRects.Size());
-    viewFamilyWatermarks.debugArrows = std::max(viewFamilyWatermarks.debugArrows, vf.debugArrows.Size());
-    viewFamilyWatermarks.debugCapsules = std::max(viewFamilyWatermarks.debugCapsules, vf.debugCapsules.Size());
-    viewFamilyWatermarks.debugCylinders = std::max(viewFamilyWatermarks.debugCylinders, vf.debugCylinders.Size());
-    viewFamilyWatermarks.uiDrawCommands = std::max(viewFamilyWatermarks.uiDrawCommands, vf.uiDrawList.Size());
-    viewFamilyWatermarks.uiGlyphQuads = std::max(viewFamilyWatermarks.uiGlyphQuads, vf.uiGlyphQuads.Size());
-    viewFamilyWatermarks.textDrawCalls = std::max(viewFamilyWatermarks.textDrawCalls, vf.textDrawCalls.Size());
-    viewFamilyWatermarks.sprites = std::max(viewFamilyWatermarks.sprites, vf.sprites.Size());
-    viewFamilyWatermarks.spriteBatches = std::max(viewFamilyWatermarks.spriteBatches, vf.spriteBatches.Size());
 
     mainViewFamily = ViewFamily{};
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>{};
@@ -106,7 +139,7 @@ void FrameBuffer::Reinitialize()
     if (trimTo) {
         frameArena.Get().Trim(trimTo);
     }
-    mainViewFamily = ViewFamily(frameArena.Get(), viewFamilyWatermarks);
+    mainViewFamily = ViewFamily(frameArena.Get(), maxWatermarks);
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);
 }

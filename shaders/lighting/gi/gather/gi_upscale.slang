@@ -44,7 +44,7 @@ static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene
         giW = gi.w;
     }
     if (pc.reflectionProbeCount > 0u) {
-        ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPos, evalN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
+        ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
         if (probeBlend.indexA >= 0) {
             float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, evalN);
             irr = lerp(irr, probeIrr, probeBlend.coverage * (1.0 - giW));

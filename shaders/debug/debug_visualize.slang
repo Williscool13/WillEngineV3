@@ -302,7 +302,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
             float3 viewPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
             float3 worldPos = mul(pc.sceneData->invView, float4(viewPos, 1.0)).xyz;
-            int probeIndex = PickReflectionProbeBinned(worldPos, float3(0.0), pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData->cameraWorldPos.xyz).indexA;
+            int probeIndex = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData->cameraWorldPos.xyz).indexA;
             if (probeIndex < 0) {
                 srcPixel.xyz = float3(1.0, 0.0, 1.0);
             } else {
@@ -317,8 +317,8 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
             float3 viewPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
             float3 worldPos = mul(pc.sceneData->invView, float4(viewPos, 1.0)).xyz;
-            int brute = PickReflectionProbe(worldPos, float3(0.0), pc.reflectionProbes, pc.reflectionProbeCount).indexA;
-            int binned = PickReflectionProbeBinned(worldPos, float3(0.0), pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData->cameraWorldPos.xyz).indexA;
+            int brute = PickReflectionProbe(worldPos, pc.reflectionProbes, pc.reflectionProbeCount).indexA;
+            int binned = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData->cameraWorldPos.xyz).indexA;
             if (brute < 0 && binned < 0) {
                 srcPixel.xyz = float3(0.05);
             } else if (brute == binned) {

@@ -102,7 +102,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
                 giW = gi.w;
             }
             if (pc.reflectionProbeCount > 0u) {
-                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz);
+                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz);
                 if (probeBlend.indexA >= 0) {
                     float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, worldN);
                     indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
@@ -125,7 +125,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
 #endif
             }
             if (pc.reflectionProbeCount > 0u) {
-                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz);
+                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz);
                 if (probeBlend.indexA >= 0) {
                     float3 worldR = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, reflect(-V, N)));
                     float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;

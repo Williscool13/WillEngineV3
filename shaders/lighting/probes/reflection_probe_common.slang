@@ -28,20 +28,8 @@ public float ReflectionProbeVolume(ReflectionProbeGPU probe)
     return 8.0 * extent.x * extent.y * extent.z;
 }
 
-/** DDGI-style backface weight: a surface facing away from the capture is on the far side of the shell the cubemap recorded, so that content does not apply. Smooth, since a binary cut pops along silhouettes. A degenerate normal skips the term. */
-static float ReflectionProbeFacingWeight(ReflectionProbeGPU probe, float3 worldPos, float3 worldNormal)
-{
-    float normalLength = length(worldNormal);
-    float3 toCapture = probe.capturePosition.xyz - worldPos;
-    float captureDistance = length(toCapture);
-    if (normalLength < 1e-4 || captureDistance < 1e-4) { return 1.0; }
-
-    float facing = dot(worldNormal / normalLength, toCapture / captureDistance) * 0.5 + 0.5;
-    return facing * facing;
-}
-
-/** Containment + volume + edge-fade for a single probe. False when worldPos lies outside the volume. The fade carries the capture-facing weight. */
-static bool ReflectionProbeContains(ReflectionProbeGPU probe, float3 worldPos, float3 worldNormal, out float volume, out float fade)
+/** Containment + volume + edge-fade for a single probe. False when worldPos lies outside the volume. */
+static bool ReflectionProbeContains(ReflectionProbeGPU probe, float3 worldPos, out float volume, out float fade)
 {
     float3 localPos = mul(probe.worldToLocal, float4(worldPos, 1.0)).xyz;
     float3 extent = ReflectionProbeWorldExtent(probe);
@@ -62,7 +50,6 @@ static bool ReflectionProbeContains(ReflectionProbeGPU probe, float3 worldPos, f
             fade = 1.0;
         }
     }
-    fade *= ReflectionProbeFacingWeight(probe, worldPos, worldNormal);
     return true;
 }
 
@@ -106,8 +93,8 @@ public ReflectionProbeBlend ReflectionProbeBlendNone()
     return MakeReflectionProbeBlend(-1, 0.0, 1.0, -1, 0.0, 1.0);
 }
 
-/** Brute-force pick of the two smallest-volume probes containing worldPos. Pass float3(0) as worldNormal to skip the capture-facing term. Tie-break: strictly-less volume, then lowest index. */
-public ReflectionProbeBlend PickReflectionProbe(float3 worldPos, float3 worldNormal, ReflectionProbeGPU* probes, uint count)
+/** Brute-force pick of the two smallest-volume probes containing worldPos. Tie-break: strictly-less volume, then lowest index. */
+public ReflectionProbeBlend PickReflectionProbe(float3 worldPos, ReflectionProbeGPU* probes, uint count)
 {
     int bestA = -1;
     int bestB = -1;
@@ -119,7 +106,7 @@ public ReflectionProbeBlend PickReflectionProbe(float3 worldPos, float3 worldNor
     for (uint i = 0; i < count; i++) {
         float volume;
         float thisFade;
-        if (!ReflectionProbeContains(probes[i], worldPos, worldNormal, volume, thisFade)) { continue; }
+        if (!ReflectionProbeContains(probes[i], worldPos, volume, thisFade)) { continue; }
         if (volume < volumeA) {
             volumeB = volumeA;
             bestB = bestA;
@@ -138,9 +125,9 @@ public ReflectionProbeBlend PickReflectionProbe(float3 worldPos, float3 worldNor
 }
 
 /** Cell-lookup pick: revalidates the probe pair the binning kernel packed into the cell. A null probeGrid falls back to PickReflectionProbe. camPos must be the same cameraWorldPos the binning kernel used. */
-public ReflectionProbeBlend PickReflectionProbeBinned(float3 worldPos, float3 worldNormal, ReflectionProbeGPU* probes, uint count, uint* probeGrid, float3 camPos)
+public ReflectionProbeBlend PickReflectionProbeBinned(float3 worldPos, ReflectionProbeGPU* probes, uint count, uint* probeGrid, float3 camPos)
 {
-    if (probeGrid == nullptr) { return PickReflectionProbe(worldPos, worldNormal, probes, count); }
+    if (probeGrid == nullptr) { return PickReflectionProbe(worldPos, probes, count); }
 
     ReflectionProbeBlend empty = ReflectionProbeBlendNone();
     WorldGridKey key = WorldGridResolveCell(worldPos, camPos);
@@ -158,8 +145,8 @@ public ReflectionProbeBlend PickReflectionProbeBinned(float3 worldPos, float3 wo
     float fadeB = 0.0;
     float volumeA = 1.0;
     float volumeB = 1.0;
-    if (idxA < count && ReflectionProbeContains(probes[idxA], worldPos, worldNormal, volumeA, fadeA)) { bestA = int(idxA); }
-    if (idxB < count && ReflectionProbeContains(probes[idxB], worldPos, worldNormal, volumeB, fadeB)) { bestB = int(idxB); }
+    if (idxA < count && ReflectionProbeContains(probes[idxA], worldPos, volumeA, fadeA)) { bestA = int(idxA); }
+    if (idxB < count && ReflectionProbeContains(probes[idxB], worldPos, volumeB, fadeB)) { bestB = int(idxB); }
     if (bestA < 0) {
         bestA = bestB;
         fadeA = fadeB;

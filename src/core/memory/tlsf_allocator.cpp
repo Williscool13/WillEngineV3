@@ -126,7 +126,7 @@ void TlsfAllocator::ReleaseEmptyChunks()
     for (size_t i = chunkCount_; i-- > 0;) {
         bool bUsed = false;
         tlsf_walk_pool(chunks_[i].pool, UsedBlockWalker, &bUsed);
-        if (!bUsed) {
+        if (!bUsed && chunkCount_ > 1) {
             tlsf_remove_pool(tlsf, chunks_[i].pool);
             poolBytes -= chunks_[i].bytes;
             free(chunks_[i].mem);

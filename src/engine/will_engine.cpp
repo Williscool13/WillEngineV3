@@ -233,17 +233,24 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     // The only things that alloc now are SDL startup, EnTT, and Tracy.
     memoryManager.Init({
         .persistentSize = 16ull * 1024 * 1024,
-        .physicsPoolSize = 32ull * 1024 * 1024,
         .generalPoolSize = 32ull * 1024 * 1024,
         .generalPoolBudget = 512ull * 1024 * 1024,
-        .assetsPoolSize = 32ull * 1024 * 1024,
+        .generalGrowChunk = 32ull * 1024 * 1024,
+        .assetsPoolSize = 16ull * 1024 * 1024,
         .assetsPoolBudget = 256ull * 1024 * 1024,
-        .assetsScratchPoolSize = 128ull * 1024 * 1024,
+        .assetsGrowChunk = 16ull * 1024 * 1024,
+        .assetsScratchPoolSize = 8ull * 1024 * 1024,
         .assetsScratchBudget = ASSETS_SCRATCH_BUDGET,
+        .assetsScratchGrowChunk = 32ull * 1024 * 1024,
+        .physicsPoolSize = 16ull * 1024 * 1024,
+        .physicsPoolBudget = 256ull * 1024 * 1024,
+        .physicsGrowChunk = 16ull * 1024 * 1024,
         .renderPoolSize = 8ull * 1024 * 1024,
         .renderPoolBudget = 64ull * 1024 * 1024,
+        .renderGrowChunk = 8ull * 1024 * 1024,
         .vulkanPoolSize = 48ull * 1024 * 1024,
         .vulkanPoolBudget = 512ull * 1024 * 1024,
+        .vulkanGrowChunk = 16ull * 1024 * 1024,
     });
 
 #if LOGGING_ENABLED

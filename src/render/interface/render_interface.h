@@ -556,7 +556,7 @@ struct FrameBuffer
 
     static constexpr size_t FRAME_ARENA_RESERVE_BYTES = 256ull * 1024 * 1024;
     static constexpr uint32_t FRAME_ARENA_SHRINK_WINDOW = 120;
-    static constexpr size_t FRAME_ARENA_SHRINK_RATIO = 4;
+    static constexpr size_t FRAME_ARENA_SHRINK_RATIO = 2;
 
     void Initialize(VirtualMemoryManager& vm, AllocTag tag, const char* name);
 
@@ -567,7 +567,8 @@ struct FrameBuffer
     size_t shrinkWindowPeak{0};
     uint32_t shrinkWindowFrames{0};
 
-    ViewFamilyWatermarks viewFamilyWatermarks{};
+    ViewFamilyWatermarks maxWatermarks{};
+    ViewFamilyWatermarks windowWatermarks{};
     ViewFamily mainViewFamily{};
 
     TimeFrame timeFrame{};

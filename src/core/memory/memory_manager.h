@@ -18,8 +18,8 @@ namespace Core
  * Top-level memory manager. Performs a single heap allocation at startup and carves it into
  * typed regions. All engine systems suballocate from this manager — no additional new/delete.
  *
- * Layout (contiguous):
- *   [persistentPool | physicsPool]  (general/assets/assetsScratch/render/vulkan are growable, own their chunks; arenas and slot stores are VirtualMemoryManager reservations)
+ * Layout:
+ *   [persistentPool]  (every other pool is growable and owns its chunks; arenas and slot stores are VirtualMemoryManager reservations)
  *
  * Regions:
  *   - Persistent TLSF: individual allocs that live for the entire process lifetime.
@@ -39,19 +39,31 @@ public:
     struct Layout
     {
         size_t persistentSize;
-        size_t physicsPoolSize;
 
-        // Growables (heap allocated)
+        // Growables (heap allocated).
         size_t generalPoolSize;
         size_t generalPoolBudget;
+        size_t generalGrowChunk;
+
         size_t assetsPoolSize;
         size_t assetsPoolBudget;
+        size_t assetsGrowChunk;
+
         size_t assetsScratchPoolSize;
         size_t assetsScratchBudget;
+        size_t assetsScratchGrowChunk;
+
+        size_t physicsPoolSize;
+        size_t physicsPoolBudget;
+        size_t physicsGrowChunk;
+
         size_t renderPoolSize;
         size_t renderPoolBudget;
+        size_t renderGrowChunk;
+
         size_t vulkanPoolSize;
         size_t vulkanPoolBudget;
+        size_t vulkanGrowChunk;
     };
 
     struct Stats

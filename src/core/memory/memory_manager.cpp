@@ -25,22 +25,20 @@ void MemoryManager::Init(const Layout& layout)
     const size_t renderSz = AlignUp(layout.renderPoolSize, kAlign);
     const size_t vulkanSz = AlignUp(layout.vulkanPoolSize, kAlign);
 
-    totalSize = persistentSz + physicsSz;
+    totalSize = persistentSz;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
 
-    auto* cursor = static_cast<uint8_t*>(megaBuffer);
+    const auto chunkOr = [](size_t chunk, size_t baseline) { return chunk != 0 ? chunk : baseline; };
 
-    tlsfPersistent.Init(cursor, persistentSz, true, "Persistent");
-    cursor += persistentSz;
-    tlsfGeneral.InitGrowable(generalSz, layout.generalPoolBudget, true, "General", generalSz);
-    tlsfAssets.InitGrowable(assetsSz, layout.assetsPoolBudget, true, "Assets", assetsSz);
-    tlsfAssetsScratch.InitGrowable(assetsScratchSz, layout.assetsScratchBudget, true, "AssetsScratch", assetsScratchSz);
-    tlsfPhysics.Init(cursor, physicsSz, true, "Physics");
-    cursor += physicsSz;
-    tlsfRender.InitGrowable(renderSz, layout.renderPoolBudget, false, "Render", renderSz);
-    tlsfVulkan.InitGrowable(vulkanSz, layout.vulkanPoolBudget, true, "Vulkan", vulkanSz);
+    tlsfPersistent.Init(static_cast<uint8_t*>(megaBuffer), persistentSz, true, "Persistent");
+    tlsfGeneral.InitGrowable(generalSz, layout.generalPoolBudget, true, "General", chunkOr(layout.generalGrowChunk, generalSz));
+    tlsfAssets.InitGrowable(assetsSz, layout.assetsPoolBudget, true, "Assets", chunkOr(layout.assetsGrowChunk, assetsSz));
+    tlsfAssetsScratch.InitGrowable(assetsScratchSz, layout.assetsScratchBudget, true, "AssetsScratch", chunkOr(layout.assetsScratchGrowChunk, assetsScratchSz));
+    tlsfPhysics.InitGrowable(physicsSz, layout.physicsPoolBudget, true, "Physics", chunkOr(layout.physicsGrowChunk, physicsSz));
+    tlsfRender.InitGrowable(renderSz, layout.renderPoolBudget, false, "Render", chunkOr(layout.renderGrowChunk, renderSz));
+    tlsfVulkan.InitGrowable(vulkanSz, layout.vulkanPoolBudget, true, "Vulkan", chunkOr(layout.vulkanGrowChunk, vulkanSz));
 }
 
 MemoryManager::~MemoryManager()
@@ -48,6 +46,7 @@ MemoryManager::~MemoryManager()
     tlsfAssetsScratch.Shutdown();
     tlsfAssets.Shutdown();
     tlsfGeneral.Shutdown();
+    tlsfPhysics.Shutdown();
     tlsfRender.Shutdown();
     tlsfVulkan.Shutdown();
     free(megaBuffer);

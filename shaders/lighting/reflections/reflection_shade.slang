@@ -103,7 +103,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
                     radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
                 }
                 if (pc.reflectionProbeCount > 0u) {
-                    ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPos, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
+                    ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
                     if (probeBlend.indexA >= 0) {
                         float3 probeRadiance = SampleReflectionProbeSpecularBlended(probeBlend, pc.reflectionProbes, worldPos, hit.rayDir, roughness);
                         radiance = lerp(radiance, probeRadiance, probeBlend.coverage);
@@ -172,7 +172,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
             radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
         }
         if (pc.reflectionProbeCount > 0u) {
-            ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPos, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
+            ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
             if (probeBlend.indexA >= 0) {
                 float3 probeRadiance = SampleReflectionProbeSpecularBlended(probeBlend, pc.reflectionProbes, worldPos, hit.rayDir, roughness);
                 radiance = lerp(radiance, probeRadiance, probeBlend.coverage);

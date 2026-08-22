@@ -116,7 +116,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
             }
             if (pc.reflectionProbeCount > 0u) {
                 float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
+                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
                 if (probeBlend.indexA >= 0) {
                     float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, worldN);
                     indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
@@ -135,7 +135,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
 
         if (pc.reflectionProbeCount > 0u) {
             float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-            ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, worldN, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
+            ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
             if (probeBlend.indexA >= 0) {
                 float3 worldR = normalize(mul((float3x3)scene.invView, reflect(-V, N)));
                 float3 probeRadiance = SampleReflectionProbeSpecularBlended(probeBlend, pc.reflectionProbes, worldPosition, worldR, roughness);
