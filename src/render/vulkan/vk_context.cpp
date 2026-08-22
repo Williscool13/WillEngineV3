@@ -350,6 +350,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                     query.features.shaderImageGatherExtended &&
                     query.features.shaderClipDistance &&
                     query.features.samplerAnisotropy &&
+                    // BC Compression
+                    query.features.textureCompressionBC &&
                     // Extensions
                     qDesc.descriptorBuffer &&
                     qMesh.taskShader &&
@@ -519,6 +521,9 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         features10.shaderClipDistance = VK_TRUE;
         features10.samplerAnisotropy = VK_TRUE;
         features10.fillModeNonSolid = VK_TRUE;
+
+        // BC Compression
+        features10.textureCompressionBC = VK_TRUE;
 #ifdef ENABLE_VULKAN_VALIDATION
         // Suppresses a false-positive validation error: SV_PrimitiveID in mesh shaders
         // triggers a geometry shader requirement check that doesn't apply here.

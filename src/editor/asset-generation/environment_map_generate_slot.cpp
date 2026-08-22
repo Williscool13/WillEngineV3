@@ -23,6 +23,8 @@
 
 namespace Editor
 {
+static constexpr uint32_t BC6H_BLOCK_BYTES = 16;
+
 EnvironmentMapGenerateSlot::EnvironmentMapGenerateSlot() = default;
 
 EnvironmentMapGenerateSlot::~EnvironmentMapGenerateSlot()
@@ -48,7 +50,7 @@ void EnvironmentMapGenerateSlot::Initialize(
     _notifyCallback = std::move(notifyCallback);
 
     imageStagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE);
-    imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE);
+    imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
     VkSamplerCreateInfo equiSamplerInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -782,37 +784,60 @@ bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, c
         finalCubemapImage.handle,
         Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, ENVIRONMENT_MAP_MIPS, 0, 6),
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
     );
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
-    // Copy all mip faces back to CPU for blob serialization
+    // Encode every mip face to BC6H and read the packed blocks back for blob serialization
     {
-        ZoneScopedN("CopyCubemapToCPU");
+        ZoneScopedN("EncodeCubemapToCPU");
 
+        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot(SID("bc6h_encode"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.pipeline);
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
+
+        uint64_t writeOffset = 0;
         for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_MIPS; mip++) {
-            uint32_t mipResolution = (mip < ENVIRONMENT_MAP_DIFFUSE_MIP) ? (baseResolution >> mip) : diffuseResolution;
-            size_t faceSize = mipResolution * mipResolution * 4 * sizeof(uint16_t);
-
-            if (faceSize > imageReceivingBuffer.allocationInfo.size) {
-                SPDLOG_ERROR("Mip {} face too large for receiving buffer", mip);
-                return false;
-            }
+            const uint32_t mipResolution = (mip < ENVIRONMENT_MAP_DIFFUSE_MIP) ? (baseResolution >> mip) : diffuseResolution;
+            const uint32_t blockCount = (mipResolution + 3) / 4;
+            const uint64_t faceSize = static_cast<uint64_t>(blockCount) * blockCount * BC6H_BLOCK_BYTES;
 
             for (uint32_t face = 0; face < 6; face++) {
-                VkBufferImageCopy _copyRegion{};
-                _copyRegion.bufferOffset = 0;
-                _copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                _copyRegion.imageSubresource.mipLevel = mip;
-                _copyRegion.imageSubresource.baseArrayLayer = face;
-                _copyRegion.imageSubresource.layerCount = 1;
-                _copyRegion.imageExtent = {mipResolution, mipResolution, 1};
+                if (writeOffset + faceSize > imageReceivingBuffer.allocationInfo.size) {
+                    SPDLOG_ERROR("Encoded cubemap too large for receiving buffer");
+                    return false;
+                }
 
-                vkCmdCopyImageToBuffer(cmd, finalCubemapImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageReceivingBuffer.handle, 1, &_copyRegion);
-                submitAndWait(!(mip == ENVIRONMENT_MAP_MIPS - 1 && face == 5));
+                BC6HEncodePushConstant pc{
+                    .blocks = imageReceivingBuffer.address + writeOffset,
+                    .sourceIndex = mip,
+                    .face = face,
+                    .width = mipResolution,
+                    .height = mipResolution
+                };
 
+                vkCmdPushConstants(cmd, pipelineEntry.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                const uint32_t dispatchX = (blockCount + ENVIRONMENT_MAP_GENERATION_DISPATCH_X - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_X;
+                const uint32_t dispatchY = (blockCount + ENVIRONMENT_MAP_GENERATION_DISPATCH_Y - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_Y;
+                vkCmdDispatch(cmd, dispatchX, dispatchY, 1);
+
+                writeOffset += faceSize;
+            }
+        }
+
+        submitAndWait(false);
+
+        const uint8_t* receivingBase = static_cast<const uint8_t*>(imageReceivingBuffer.allocationInfo.pMappedData);
+        uint64_t readOffset = 0;
+        for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_MIPS; mip++) {
+            const uint32_t mipResolution = (mip < ENVIRONMENT_MAP_DIFFUSE_MIP) ? (baseResolution >> mip) : diffuseResolution;
+            const uint32_t blockCount = (mipResolution + 3) / 4;
+            const uint64_t faceSize = static_cast<uint64_t>(blockCount) * blockCount * BC6H_BLOCK_BYTES;
+
+            for (uint32_t face = 0; face < 6; face++) {
                 mipData[mip][face] = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, faceSize);
-                memcpy(mipData[mip][face].Data(), imageReceivingBuffer.allocationInfo.pMappedData, faceSize);
+                memcpy(mipData[mip][face].Data(), receivingBase + readOffset, faceSize);
+                readOffset += faceSize;
             }
         }
     }
@@ -824,7 +849,7 @@ bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
 {
     ZoneScopedN("WriteWEnvMapFile");
 
-    const Engine::WImageDesc desc{VK_FORMAT_R16G16B16A16_SFLOAT, baseResolution, baseResolution, ENVIRONMENT_MAP_MIPS, 6};
+    const Engine::WImageDesc desc{VK_FORMAT_BC6H_UFLOAT_BLOCK, baseResolution, baseResolution, ENVIRONMENT_MAP_MIPS, 6};
     const size_t blobSize = Engine::WImageBlobSize(desc);
     auto blob = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, blobSize);
     if (Engine::WImageBlobInit(blob.Data(), blob.Size(), desc) == 0) {
@@ -871,7 +896,7 @@ bool EnvironmentMapGenerateSlot::WriteWProbeFile()
 {
     ZoneScopedN("WriteWProbeFile");
 
-    const Engine::WImageDesc desc{VK_FORMAT_R16G16B16A16_SFLOAT, baseResolution, baseResolution, ENVIRONMENT_MAP_MIPS, 6};
+    const Engine::WImageDesc desc{VK_FORMAT_BC6H_UFLOAT_BLOCK, baseResolution, baseResolution, ENVIRONMENT_MAP_MIPS, 6};
     const size_t blobSize = Engine::WImageBlobSize(desc);
     auto blob = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, blobSize);
     if (Engine::WImageBlobInit(blob.Data(), blob.Size(), desc) == 0) {

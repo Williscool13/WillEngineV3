@@ -1603,6 +1603,15 @@ SHADER_PUBLIC struct PrefilterSpecularPushConstant
     SHADER_PUBLIC uint32_t sourceResolution;
 };
 
+SHADER_PUBLIC struct BC6HEncodePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(uint4) blocks;
+    SHADER_PUBLIC uint32_t sourceIndex;
+    SHADER_PUBLIC uint32_t face;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+};
+
 SHADER_PUBLIC struct EnvironmentSkyboxPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;

@@ -702,6 +702,9 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipelineCustomLayout(SID("ibl_prefilter_specular"), src / "ibl_bake.spv", "ComputePrefilterSpecular",
                                         sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
 
+    RegisterComputePipelineCustomLayout(SID("bc6h_encode"), src / "bc6h_encode.spv", "ComputeEncodeBC6H",
+                                        sizeof(BC6HEncodePushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
+
     VkDescriptorSetLayout brdfLutLayout = resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle;
     RegisterComputePipelineCustomLayout(SID("ibl_brdf_lut"), src / "brdf_lut.spv", "ComputeBRDFLUT",
                                         sizeof(BRDFLUTPushConstant), PipelineCategory::AssetGeneration, Core::Span(&brdfLutLayout, 1));
