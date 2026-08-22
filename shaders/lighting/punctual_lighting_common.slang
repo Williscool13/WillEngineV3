@@ -68,7 +68,8 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
 }
 
 /** Direction to the point on the light nearest the specular reflection ray, so large sources give
- *  broad highlights (Karis 2013). Falls back to the center when a rect ray misses its plane. */
+ *  broad highlights (Karis 2013). A rect ray that misses its plane clamps a far point along the ray instead of
+ *  snapping to the center: both branches meet at the rect edge as the ray goes parallel, so the highlight stays continuous. */
 float3 RepresentativePointL(PunctualLight pl, float3 N, float3 V, float3 viewPos, float distToCenter)
 {
     float3 R = reflect(-V, N);
@@ -78,14 +79,11 @@ float3 RepresentativePointL(PunctualLight pl, float3 N, float3 V, float3 viewPos
     {
         float denom = dot(R, pl.dir);
         float t = dot(toCenter, pl.dir) / denom;
-        if (abs(denom) >= 1e-4 && t > 0.0)
-        {
-            float3 rel = (viewPos + R * t) - pl.pos;
-            float u = clamp(dot(rel, pl.rightAxis), -pl.halfWidth, pl.halfWidth);
-            float v = clamp(dot(rel, pl.upAxis), -pl.halfHeight, pl.halfHeight);
-            return normalize((pl.pos + u * pl.rightAxis + v * pl.upAxis) - viewPos);
-        }
-        return toCenter / max(distToCenter, 1e-5);
+        bool bHitsPlane = abs(denom) >= 1e-4 && t > 0.0;
+        float3 rel = (viewPos + R * (bHitsPlane ? t : 1e4)) - pl.pos;
+        float u = clamp(dot(rel, pl.rightAxis), -pl.halfWidth, pl.halfWidth);
+        float v = clamp(dot(rel, pl.upAxis), -pl.halfHeight, pl.halfHeight);
+        return normalize((pl.pos + u * pl.rightAxis + v * pl.upAxis) - viewPos);
     }
 
     float3 centerToRay = dot(toCenter, R) * R - toCenter;

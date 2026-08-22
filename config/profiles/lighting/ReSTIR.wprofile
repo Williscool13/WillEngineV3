@@ -67,7 +67,7 @@ specMaxLuminanceRelativeDifference|0x42c80000
 luminanceEdgeStoppingRelaxation|0x3f800000
 normalEdgeStoppingRelaxation|0x3e99999a
 roughnessEdgeStoppingRelaxation|0x3f800000
-specVarianceBoost|0x00000000
+specVarianceBoost|0x41000000
 roughnessEdgeStoppingEnabled|1
 historyFixEdgeStoppingNormalPower|0x41000000
 historyFixFrameNum|0x40800000
@@ -172,8 +172,8 @@ bMergedDenoise|1
 bScreenSpaceLighting|0
 bScreenSpaceTrace|0
 sunMode|0
-tracedRoughnessMax|0x3e99999a
-lightSpecularFromReflectionsMax|0x3e99999a
+tracedRoughnessMax|0x3e4ccccd
+lightSpecularFromReflectionsMax|0x3e4ccccd
 mirrorRoughnessMax|0x3da3d70a
 intensity|0x3f800000
 maxRayIntensity|0x00000000

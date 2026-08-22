@@ -87,6 +87,8 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     uint2 historyPixel = uint2(0, 0);
     bool bHistoryUsable = false;
     float3 historyN_cvs = N;
+    uint4 historyG1 = g1;
+    float historyViewDepthSel = viewSpaceDepth;
 
     uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
@@ -126,7 +128,8 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
                 tapPixel = uint2(snapped);
             }
             uint2 historyFullPixel = tapPixel;
-            float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0)).r));
+            uint4 historyG1Tap = rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(historyFullPixel, 0));
+            float3 historyN = normalize(UnpackNormalOct16(historyG1Tap.r));
             float3 historyWorldN = normalize(mul(transpose(float3x3(scene.prevView)), historyN));
             if (dot(currWorldN, historyWorldN) < 0.5) { continue; }
             float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(historyFullPixel, 0)).r;
@@ -134,10 +137,28 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
             if (abs(historyViewDepth - expectedPrevViewDepth) * NoV > disocclusionThreshold) { continue; }
             historyPixel = tapPixel;
             historyN_cvs = normalize(mul(float3x3(scene.view), historyWorldN));
+            historyG1 = historyG1Tap;
+            historyViewDepthSel = historyViewDepth;
             bHistoryUsable = true;
             break;
         }
     }
+
+    float3 historyViewPosition = viewPosition;
+    float3 historyV = V;
+    float historyRoughness = roughness;
+    float historyMetallic = li.metallic;
+    if (bHistoryUsable) {
+        float2 historyPixelUV = (float2(historyPixel) + 0.5) / float2(pc.renderExtent);
+        float3 historyPrevViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, historyPixelUV, historyViewDepthSel);
+        float3 historyWorldPos = mul(scene.invPrevView, float4(historyPrevViewPosition, 1.0)).xyz;
+        float3 prevCameraWorldPos = mul(scene.invPrevView, float4(0.0, 0.0, 0.0, 1.0)).xyz;
+        historyViewPosition = mul(scene.view, float4(historyWorldPos, 1.0)).xyz;
+        historyV = normalize(mul(float3x3(scene.view), prevCameraWorldPos - historyWorldPos));
+        UnpackPBR(historyG1.b, historyRoughness, historyMetallic);
+        historyRoughness = max(historyRoughness, RESTIR_MIN_ROUGHNESS);
+    }
+    float3 historyF0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, historyMetallic);
 
     Reservoir r_gen = pc.genBuffer[pixelIdx];
     if (isnan(r_gen.W) || isinf(r_gen.W)) { r_gen = ReservoirEmpty(); }
@@ -173,7 +194,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         LightView genVS = UnpackLightVS(pc.lightVS[r_gen.lightIdx]);
         pGen_cur = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.lightSpecularFromReflectionsMax);
         if (validHistoryReservoir) {
-            pGen_hist = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness, pc.lightSpecularFromReflectionsMax);
+            pGen_hist = EvalReservoirPHatLight(genVS, r_gen.sampleOffsetPacked, historyViewPosition, historyN_cvs, historyV, li.albedo.xyz, historyF0, historyMetallic, historyRoughness, pc.lightSpecularFromReflectionsMax);
         }
 
         float denomGen = Mc * pGen_cur + Mi * pGen_hist;
@@ -191,7 +212,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         float pHist_hist;
         LightView histVS = UnpackLightVS(pc.lightVS[history.lightIdx]);
         pHist_cur = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.lightSpecularFromReflectionsMax);
-        pHist_hist = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, viewPosition, historyN_cvs, V, li.albedo.xyz, F0, li.metallic, roughness, pc.lightSpecularFromReflectionsMax);
+        pHist_hist = EvalReservoirPHatLight(histVS, history.sampleOffsetPacked, historyViewPosition, historyN_cvs, historyV, li.albedo.xyz, historyF0, historyMetallic, historyRoughness, pc.lightSpecularFromReflectionsMax);
 
         float denomHist = Mi * pHist_hist + Mc * pHist_cur;
         float misHist = (denomHist > 0.0) ? (Mi * pHist_hist) / denomHist : 0.0;

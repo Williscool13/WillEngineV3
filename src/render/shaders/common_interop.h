@@ -104,6 +104,7 @@ SHADER_PUBLIC struct SceneData
     SHADER_PUBLIC float4x4 prevProj;
     SHADER_PUBLIC float4x4 prevViewProj;
     SHADER_PUBLIC float4x4 clipToPrevClip; // currClip -> prevClip space in 1 single multiplication
+    SHADER_PUBLIC float4x4 invPrevView;
 
     SHADER_PUBLIC Frustum frustum;
 

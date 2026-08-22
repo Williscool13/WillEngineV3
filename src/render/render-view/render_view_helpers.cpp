@@ -82,6 +82,7 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
     sceneData.prevViewProj = sceneData.prevProj * sceneData.prevView;
 
     sceneData.invView = glm::inverse(sceneData.view);
+    sceneData.invPrevView = glm::inverse(sceneData.prevView);
     sceneData.invProj = glm::inverse(sceneData.proj);
     sceneData.invViewProj = glm::inverse(sceneData.viewProj);
 

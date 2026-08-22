@@ -675,44 +675,73 @@ public float EvalReservoirPHatVisibilityLight(LightView vs, uint sampleOffsetPac
     return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity, lightSpecularFromReflectionsMax);
 }
 
+static void GGXTangentFrame(float3 N, out float3 T, out float3 B)
+{
+    float3 up = abs(N.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    T = normalize(cross(up, N));
+    B = cross(N, T);
+}
+
+// Bounded VNDF (Eto & Tokuyoshi 2023), isotropic alpha = roughness^2. Tangent-space i = view dir, m = half vector. Returns the solid-angle pdf of the reflected direction.
+static float BoundedVNDFPdfTangent(float3 i, float3 m, float a)
+{
+    float a2 = a * a;
+    // Floor must sit below t^2 at min roughness (a2^2). A larger floor underclaims the pdf and over-weights BRDF candidates in MIS.
+    float t = m.z * m.z * (a2 - 1.0) + 1.0;
+    float ndf = a2 / (PI * max(t * t, 1e-15));
+    float2 ai = a * i.xy;
+    float len2 = dot(ai, ai);
+    float tl = sqrt(len2 + i.z * i.z);
+    if (i.z >= 0.0) {
+        float s = 1.0 + length(i.xy);
+        float s2 = s * s;
+        float k = (1.0 - a2) * s2 / (s2 + a2 * i.z * i.z);
+        return ndf / (2.0 * (k * i.z + tl));
+    }
+    return ndf * (tl - i.z) / (2.0 * max(len2, 1e-15));
+}
+
 public float GGXPdf(float3 N, float3 V, float3 L, float roughness)
 {
     if (dot(N, L) <= 0.0) { return 0.0; }
+    float3 T;
+    float3 B;
+    GGXTangentFrame(N, T, B);
     float3 H = normalize(V + L);
-    float NdotH = max(dot(N, H), 0.0);
-    float VdotH = max(dot(V, H), 0.0001);
-    float a = roughness * roughness;
-    float a2 = a * a;
-    // Floor must sit below t^2 at min roughness (a2^2). A larger floor underclaims the pdf and over-weights BRDF candidates in MIS.
-    float t = NdotH * NdotH * (a2 - 1.0) + 1.0;
-    float D = a2 / (PI * max(t * t, 1e-15));
-    return D * NdotH / (4.0 * VdotH);
+    float3 i = float3(dot(V, T), dot(V, B), dot(V, N));
+    float3 m = float3(dot(H, T), dot(H, B), dot(H, N));
+    return BoundedVNDFPdfTangent(i, m, roughness * roughness);
 }
 
 public float3 ImportanceSampleGGX(float2 xi, float3 N, float3 V, float roughness, out float pdf)
 {
     float a = roughness * roughness;
     float a2 = a * a;
+    float3 T;
+    float3 B;
+    GGXTangentFrame(N, T, B);
+    float3 i = float3(dot(V, T), dot(V, B), dot(V, N));
+    float3 iStd = normalize(float3(i.xy * a, i.z));
 
     float phi = 2.0 * PI * xi.x;
-    float cosTheta = sqrt((1.0 - xi.y) / max(1.0 + (a2 - 1.0) * xi.y, 0.0001));
-    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
+    float s = 1.0 + length(i.xy);
+    float s2 = s * s;
+    float k = (1.0 - a2) * s2 / (s2 + a2 * i.z * i.z);
+    float b = i.z > 0.0 ? k * iStd.z : iStd.z;
+    float z = (1.0 - xi.y) * (1.0 + b) - b;
+    float sinTheta = sqrt(saturate(1.0 - z * z));
+    float3 oStd = float3(sinTheta * cos(phi), sinTheta * sin(phi), z);
 
-    float3 Ht = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
-
-    float3 up = abs(N.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
-    float3 T = normalize(cross(up, N));
-    float3 B = cross(N, T);
-    float3 H = normalize(T * Ht.x + B * Ht.y + N * Ht.z);
-
+    float3 mStd = iStd + oStd;
+    float3 m = normalize(float3(mStd.xy * a, mStd.z));
+    float3 H = normalize(T * m.x + B * m.y + N * m.z);
     float3 L = reflect(-V, H);
 
-    float NdotH = max(dot(N, H), 0.0);
-    float VdotH = max(dot(V, H), 0.0001);
-    float t = NdotH * NdotH * (a2 - 1.0) + 1.0;
-    float D = a2 / (PI * max(t * t, 1e-15));
-    pdf = D * NdotH / (4.0 * VdotH);
-
+    if (dot(N, L) <= 0.0) {
+        pdf = 0.0;
+        return L;
+    }
+    pdf = BoundedVNDFPdfTangent(i, m, a);
     return L;
 }
 
