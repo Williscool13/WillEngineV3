@@ -328,12 +328,12 @@ def add_reflection_probe(entity, probe_id, shape=PROBE_BOX, fade_margin=0.0, cap
     return entity
 
 GI_VOLUME_PROBES_PER_AXIS = 10
-# A window spans (count-1)*spacing; a region must clear it by the 1-cell fade band plus the half cell the engine's corner snap can eat, on both sides.
-GI_VOLUME_COVERAGE_CELLS = GI_VOLUME_PROBES_PER_AXIS - 4
+# A window spans (count-1)*spacing and owns everything past the 1-cell fade band on each side; the lattice is anchored to the authored corner, no snap slack.
+GI_VOLUME_COVERAGE_CELLS = GI_VOLUME_PROBES_PER_AXIS - 3
 
 def add_local_ddgi_volume(entity, volume_id, probe_spacing=0.5, enabled=True):
     """Axis-aligned local DDGI probe window, always GI_VOLUME_PROBES_PER_AXIS cubed: entity
-    translation = window MIN CORNER (engine snaps it to the nearest spacing multiple), window span =
+    translation = window CENTRE (the lattice min corner is centre - 4.5 * spacing), window span =
     (count-1)*spacing. Rotation and scale IGNORED (world-axis lattice). Spacing is the only size
     control; tile volumes to cover a bigger room, and keep the window PAST the walls so the edge
     fade band lies outside the interior (exact-fit windows hand wall pixels back to the cascades).
@@ -342,20 +342,19 @@ def add_local_ddgi_volume(entity, volume_id, probe_spacing=0.5, enabled=True):
     return entity
 
 def gi_volume_window(region_min, region_max, spacing, min_margin_cells=1.0):
-    """Min corner for a world DDGI volume covering region_min..region_max, verified against the
-    snapped corner so an under-covered face raises instead of silently leaking. Returns the corner."""
-    corner = []
+    """Centre for a world DDGI volume covering region_min..region_max, verified so an
+    under-covered face raises instead of silently leaking. Returns the centre (entity translation)."""
+    centre = []
     span_limit = GI_VOLUME_COVERAGE_CELLS * spacing
     for i in range(3):
         span = region_max[i] - region_min[i]
         origin = (region_min[i] + region_max[i]) * 0.5 - (GI_VOLUME_PROBES_PER_AXIS - 1) * spacing * 0.5
-        snapped = round(origin / spacing) * spacing
-        margin = min(region_min[i] - snapped, snapped + (GI_VOLUME_PROBES_PER_AXIS - 1) * spacing - region_max[i]) / spacing
+        margin = min(region_min[i] - origin, origin + (GI_VOLUME_PROBES_PER_AXIS - 1) * spacing - region_max[i]) / spacing
         if margin < min_margin_cells:
             raise ValueError(f"gi_volume_window: axis {i} spans {span:.2f} but one window covers {span_limit:.2f} at spacing "
                              f"{spacing} (clears by {margin:.2f} cells); tile the region or raise spacing")
-        corner.append(origin)
-    return tuple(corner)
+        centre.append(origin + (GI_VOLUME_PROBES_PER_AXIS - 1) * spacing * 0.5)
+    return tuple(centre)
 
 def gi_volume_grid(region_min, region_max, spacing):
     """Fewest tiles per axis that keep every sub-region inside one window, so changing the probe

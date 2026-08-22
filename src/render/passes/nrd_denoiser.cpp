@@ -455,10 +455,16 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
 {
     ZoneScoped;
     const Core::RELAXParams& params = relaxParams;
-    const glm::mat4& view = viewFamily.mainView.currentViewData.view;
     const glm::mat4& proj = viewFamily.mainView.currentViewData.proj;
-    const glm::mat4& prevView = viewFamily.mainView.previousViewData.view;
     const glm::mat4& prevProj = viewFamily.mainView.previousViewData.proj;
+
+    // The gbuffer is OGL window-origin (row 0 = NDC y -1) while NRD reconstructs and projects D3D-style; negating the view's y row flips gFrustumUp and the clip-space y of worldToClip together.
+    glm::mat4 view = viewFamily.mainView.currentViewData.view;
+    glm::mat4 prevView = viewFamily.mainView.previousViewData.view;
+    for (int c = 0; c < 4; c++) {
+        view[c][1] = -view[c][1];
+        prevView[c][1] = -prevView[c][1];
+    }
 
     stagedCommon = nrd::CommonSettings{};
     memcpy(stagedCommon.viewToClipMatrix, &proj, sizeof(float) * 16);

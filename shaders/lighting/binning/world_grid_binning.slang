@@ -201,8 +201,8 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
     {
         DDGIVolumeParams volume = pc.ddgiVolumes[v];
         float3 pad = float3(volume.normalBias + volume.viewBias);
-        float3 windowMin = float3(volume.baseCell) * volume.probeSpacing - pad;
-        float3 windowMax = float3(volume.baseCell + int3(volume.probeCount) - 1) * volume.probeSpacing + pad;
+        float3 windowMin = volume.origin + float3(volume.baseCell) * volume.probeSpacing - pad;
+        float3 windowMax = volume.origin + float3(volume.baseCell + int3(volume.probeCount) - 1) * volume.probeSpacing + pad;
         if (any(windowMin > aabbMax) || any(windowMax < aabbMin)) { continue; }
 
         if (volumeCount == MAX_DDGI_VOLUMES_PER_WORLD_GRID_CELL)

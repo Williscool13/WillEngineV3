@@ -387,8 +387,8 @@ def gi_volume(entities, tag, lo, hi, spacing, folder=0):
     regions = wa.gi_volume_tiles(lo, hi, tiles)
     for index, (sub_lo, sub_hi) in enumerate(regions):
         suffix = "" if len(regions) == 1 else f" {index}"
-        corner = wa.gi_volume_window(sub_lo, sub_hi, spacing)
-        e = base_entity(f"{tag} GI Volume{suffix}", corner, folder_id=folder)
+        centre = wa.gi_volume_window(sub_lo, sub_hi, spacing)
+        e = base_entity(f"{tag} GI Volume{suffix}", centre, folder_id=folder)
         add_local_ddgi_volume(e, name_id(f"{tag} GI Volume {index}"), probe_spacing=spacing)
         entities.append(e)
     return len(regions)

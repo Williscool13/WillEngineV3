@@ -1982,7 +1982,7 @@ void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* sta
         if (vf.localDDGIVolumes.IsFull()) { break; }
         if (!volume.bEnabled) { continue; }
         vf.localDDGIVolumes.PushBack(Core::LocalDDGIVolume{
-            .corner = worldTransform.translation,
+            .corner = Component::LocalDDGIVolumeComponent::WindowCorner(worldTransform.translation, volume.probeSpacing),
             .probeSpacing = glm::max(volume.probeSpacing, 0.25f),
             .volumeId = volume.volumeId,
         });
@@ -2070,7 +2070,7 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
             stableId = stable->id.id;
         }
         sprites.PushBack(Core::Sprite{
-            .worldPosition = Component::LocalDDGIVolumeComponent::WindowMin(transform.translation, volume.probeSpacing),
+            .worldPosition = transform.translation,
             .pixelSize = 0.5f,
             .color = Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f),
             .stableId = stableId,
@@ -2160,7 +2160,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (!bVolumeDebugDraw && !shouldDraw(entity)) { continue; }
         constexpr Vec4 disabledColor{0.45f, 0.45f, 0.45f, 1.0f};
         const Vec4 color = volume.bEnabled ? Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f) : disabledColor;
-        Component::LocalDDGIVolumeComponent::DrawWindow(viewFamily, transform.translation, volume.probeSpacing, color, state->projectConfig.reflectionProbeLineWidth);
+        Component::LocalDDGIVolumeComponent::DrawWindow(viewFamily, transform.translation, volume.probeSpacing, color, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
     for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
@@ -2176,7 +2176,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         else {
             DEBUG_ADD_BOX(viewFamily.debugBoxes, {transform.translation, transform.scale, transform.rotation, volumeColor, lineWidth});
             const Vec3 axes[3] = {transform.rotation * Vec3(1.0f, 0.0f, 0.0f), transform.rotation * Vec3(0.0f, 1.0f, 0.0f), transform.rotation * Vec3(0.0f, 0.0f, 1.0f)};
-            for (int i = 0; i < 3; ++i) {
+            for (int i = 0; i < 3 && state->editor.selectedEntities.Contains(entity); ++i) {
                 const Vec3 u = axes[(i + 1) % 3] * transform.scale[(i + 1) % 3];
                 const Vec3 v = axes[(i + 2) % 3] * transform.scale[(i + 2) % 3];
                 for (int s = 0; s < 2; ++s) {

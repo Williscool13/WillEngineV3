@@ -18,7 +18,7 @@ namespace Game::Component
 {
 /**
  * Hand-placed axis-aligned local DDGI probe volume (10^3)
- * Entity translation = window min corner (snapped to the nearest spacing multiple).
+ * Entity translation = window CENTRE; the probe lattice is anchored to the window's min corner, centre - 4.5 * spacing.
  * Bounds derive as (count - 1) * spacing per axis, so only position and spacing are authored.
  */
 struct LocalDDGIVolumeComponent
@@ -38,14 +38,12 @@ struct LocalDDGIVolumeComponent
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 
     /**
-     * Snapped probe window min corner for an authored corner.
+     * Draws the fully-owned interior (the window minus its one-cell fade band); the outer window is never drawn. Face crosses only when bCrosses (selected / editing).
      */
-    static Vec3 WindowMin(const Vec3& corner, float spacing);
+    static void DrawWindow(Core::ViewFamily& viewFamily, const Vec3& centre, float spacing, const Vec4& color, float lineWidth, bool bCrosses);
 
-    /**
-     * Draws the snapped window (half brightness, with face crosses) and the fully-owned interior one fade cell in (full colour).
-     */
-    static void DrawWindow(Core::ViewFamily& viewFamily, const Vec3& corner, float spacing, const Vec4& color, float lineWidth);
+    /** Lattice min corner for an authored centre. */
+    static Vec3 WindowCorner(const Vec3& centre, float spacing);
 };
 }
 

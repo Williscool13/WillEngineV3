@@ -35,7 +35,7 @@ bUseHistoryClampRelax|0
 ;
 ;
 resolutionScale|0x3f400000
-reflectionProbeLineWidth|0x3ca3d70a
+reflectionProbeLineWidth|0x3dcccccd
 gameCameraFovDegrees|0x428c0000
 gameCameraNearPlane|0x3dcccccd
 editorCameraFovDegrees|0x428c0000

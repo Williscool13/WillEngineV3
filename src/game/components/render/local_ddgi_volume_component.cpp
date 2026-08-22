@@ -21,13 +21,29 @@ namespace Game::Component
 {
 Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
+    static entt::entity editEntity = entt::null;
+    static bool bEditing = false;
+
+    if (editEntity != entity) {
+        editEntity = entity;
+        bEditing = false;
+    }
+
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* transform = registry.try_get<TransformComponent>(entity);
+    if (bEditing) {
+        state->editor.bExclusiveGizmoActive = true;
+        const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+        if (!popupOpen && state->input.GetActionState(Actions::ACTION_ESCAPE).down) {
+            bEditing = false;
+        }
+    }
+
     bool open = ImGui::CollapsingHeader("Local DDGI Volume", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     bool remove = ImGui::SmallButton("X##deletelocalddgi");
     ImGui::PopStyleColor();
-
-    auto* transform = registry.try_get<TransformComponent>(entity);
 
     bool modified = false;
     if (open) {
@@ -40,14 +56,55 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
         }
 
         const float extent = static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * comp.probeSpacing;
-        ImGui::Text("Window: %.2f m cube (%d probes)", extent, Core::LOCAL_DDGI_PROBES_PER_AXIS * Core::LOCAL_DDGI_PROBES_PER_AXIS * Core::LOCAL_DDGI_PROBES_PER_AXIS);
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Translation = min corner (snapped to spacing); rotation and scale ignored. Spacing is the only size control; tile volumes to cover a larger room.");
+        ImGui::Text("Window: %.2f m cube, owns %.2f m", extent, extent - 2.0f * comp.probeSpacing);
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Translation = window centre; rotation and scale ignored. Face dots scale the cube about the centre. The box is the region this volume fully owns: fit interior faces inside it.");
+
+        ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
+        ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing);
+        if (ImGui::Button(bEditing ? "Done##lddgi" : "Edit Window##lddgi")) {
+            bEditing = !bEditing;
+        }
+        ImGui::EndDisabled();
+        ImGui::PopStyleColor();
     }
 
-    if (transform && open) {
+    if (transform && bEditing) {
+        auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
+        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        const auto& vd = viewFamily.mainView.currentViewData;
+        const Vec4 viewport{
+            static_cast<float>(ctx->windowContext.viewportOffsetX),
+            static_cast<float>(ctx->windowContext.viewportOffsetY),
+            static_cast<float>(ctx->windowContext.viewportWidth),
+            static_cast<float>(ctx->windowContext.viewportHeight),
+        };
+
+        const float spacing = glm::max(comp.probeSpacing, 0.25f);
+        const Vec3 center = transform->translation;
+        const float halfExtent = static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * 0.5f * spacing;
+        constexpr ImU32 handleColor = IM_COL32(110, 180, 255, 255);
+        for (int i = 0; i < 3; ++i) {
+            Vec3 axis{0.0f};
+            axis[i] = 1.0f;
+            for (int s = 0; s < 2; ++s) {
+                const Vec3 outward = s == 0 ? axis : -axis;
+                const Vec3 handlePos = center + outward * halfExtent;
+                const int32_t handleId = Editor::DotHandleId::LOCAL_DDGI_BOUNDS_BASE + i * 2 + s;
+                // Uniform cube with one size knob: every face scales about the pivot so the centre gizmo stays true.
+                Editor::AxisDotHandle(handleId, handlePos, outward, vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                      [&](Vec3 newPt) {
+                                          const float newExtent = 2.0f * glm::dot(newPt - center, outward);
+                                          comp.probeSpacing = glm::clamp(newExtent / static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1), 0.25f, 2.0f);
+                                          modified = true;
+                                      },
+                                      handleColor);
+            }
+        }
+    }
+
+    if (transform && (open || bEditing)) {
         const auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
-        auto* state = registry.ctx().get<Engine::EngineState*>();
-        DrawWindow(viewFamily, transform->translation, comp.probeSpacing, Core::Math::HashColor(comp.volumeId, 0u, 0.08f, 0.84f), state->projectConfig.reflectionProbeLineWidth);
+        DrawWindow(viewFamily, transform->translation, comp.probeSpacing, Core::Math::HashColor(comp.volumeId, 0u, 0.08f, 0.84f), state->projectConfig.reflectionProbeLineWidth, true);
     }
 
     return {.bRequestRemoval = remove, .bModified = modified};
@@ -77,35 +134,32 @@ void LocalDDGIVolumeComponent::OnConstruct(entt::registry& registry, entt::entit
     }
 }
 
-Vec3 LocalDDGIVolumeComponent::WindowMin(const Vec3& corner, float spacing)
+Vec3 LocalDDGIVolumeComponent::WindowCorner(const Vec3& centre, float spacing)
 {
-    const float s = glm::max(spacing, 0.25f);
-    return glm::round(corner / s) * s;
+    return centre - Vec3(static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * 0.5f * glm::max(spacing, 0.25f));
 }
 
-void LocalDDGIVolumeComponent::DrawWindow(Core::ViewFamily& viewFamily, const Vec3& corner, float spacing, const Vec4& color, float lineWidth)
+void LocalDDGIVolumeComponent::DrawWindow(Core::ViewFamily& viewFamily, const Vec3& centre, float spacing, const Vec4& color, float lineWidth, bool bCrosses)
 {
     const float s = glm::max(spacing, 0.25f);
-    const Vec3 windowMin = WindowMin(corner, s);
-    const Vec3 outerHalf = Vec3(static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * s * 0.5f);
-    const Vec3 center = windowMin + outerHalf;
-    const Vec3 innerHalf = outerHalf - Vec3(s);
-    const Vec4 outerColor{color.r * 0.5f, color.g * 0.5f, color.b * 0.5f, color.a};
+    const Vec3 ownedHalf = Vec3((static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * 0.5f - 1.0f) * s);
     constexpr Quat identity{1.0f, 0.0f, 0.0f, 0.0f};
 
-    DEBUG_ADD_BOX(viewFamily.debugBoxes, {center, outerHalf, identity, outerColor, lineWidth});
+    DEBUG_ADD_BOX(viewFamily.debugBoxes, {centre, ownedHalf, identity, color, lineWidth});
+    if (!bCrosses) {
+        return;
+    }
     for (int i = 0; i < 3; ++i) {
         Vec3 u{0.0f};
         Vec3 v{0.0f};
-        u[(i + 1) % 3] = outerHalf[(i + 1) % 3];
-        v[(i + 2) % 3] = outerHalf[(i + 2) % 3];
+        u[(i + 1) % 3] = ownedHalf[(i + 1) % 3];
+        v[(i + 2) % 3] = ownedHalf[(i + 2) % 3];
         for (int side = 0; side < 2; ++side) {
-            Vec3 faceCenter = center;
-            faceCenter[i] += side == 0 ? outerHalf[i] : -outerHalf[i];
-            DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u - v, faceCenter + u + v, outerColor, lineWidth});
-            DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u + v, faceCenter + u - v, outerColor, lineWidth});
+            Vec3 faceCenter = centre;
+            faceCenter[i] += side == 0 ? ownedHalf[i] : -ownedHalf[i];
+            DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u - v, faceCenter + u + v, color, lineWidth});
+            DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u + v, faceCenter + u - v, color, lineWidth});
         }
     }
-    DEBUG_ADD_BOX(viewFamily.debugBoxes, {center, innerHalf, identity, color, lineWidth});
 }
 }

@@ -113,7 +113,7 @@ void ComputeDDGIProbeRelocate(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbe
     }
 
     if (pc.bClassify != 0) {
-        float activeDistance = length(pc.volume.probeSpacing) * 1.5;
+        float activeDistance = pc.volume.probeSpacing * DDGI_CELL_DIAGONAL * 1.5;
         uint active = (backfaceCount > 0 || closestFrontfaceDistance < activeDistance) ? 1u : 0u;
         if (!bWasActive && active != 0) {
             restart = 1;

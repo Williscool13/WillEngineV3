@@ -11,7 +11,7 @@ import shader_functions;
 import packing_functions;
 
 // Fixes ridiculous looking specular light DI
-public static const float RESTIR_MIN_ROUGHNESS = 0.15;
+public static const float RESTIR_MIN_ROUGHNESS = 0.045;
 
 public static const float QUAD_UNIFORM_DEPTH_THRESHOLD = 0.02;
 

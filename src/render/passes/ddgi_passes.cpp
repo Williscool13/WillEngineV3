@@ -83,7 +83,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
         const float spacing = baseSpacing * cascadeScale;
         DDGIVolumeParams volume{};
         volume.probeCount = glm::uvec3(counts);
-        volume.probeSpacing = glm::vec3(spacing);
+        volume.probeSpacing = spacing;
         volume.normalBias = glm::max(params.normalBias, 0.0f) * biasScale;
         volume.viewBias = glm::max(params.viewBias, 0.0f) * biasScale;
         volume.irradianceGamma = glm::max(params.irradianceGamma, 1.0f);
@@ -113,7 +113,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
                     continue;
                 }
                 const glm::vec3 halfExtents = glm::vec3(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * localVolumes[i].probeSpacing * 0.5f;
-                const glm::vec3 center = glm::round(localVolumes[i].corner / localVolumes[i].probeSpacing) * localVolumes[i].probeSpacing + halfExtents;
+                const glm::vec3 center = localVolumes[i].corner + halfExtents;
                 const glm::vec3 delta = glm::max(glm::abs(cameraPosition - center) - halfExtents, glm::vec3(0.0f));
                 const float dist = glm::dot(delta, delta);
                 if (dist < bestDist) {
@@ -157,7 +157,8 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
 
         for (uint32_t s = 0; s < selectedCount; ++s) {
             const uint32_t k = slotOf[s];
-            cascades.localWarmup[k] = previous.localIds[k] == localVolumes[selected[s]].volumeId ? previous.localWarmup[k] : 0u;
+            const bool bSameVolume = previous.localIds[k] == localVolumes[selected[s]].volumeId && previous.volumes[k].origin == localVolumes[selected[s]].corner;
+            cascades.localWarmup[k] = bSameVolume ? previous.localWarmup[k] : 0u;
         }
 
         bool bWarmupPick[DDGI_MAX_VOLUME_SLOTS]{};
@@ -189,19 +190,19 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
             const Core::LocalDDGIVolume& local = localVolumes[selected[s]];
             const uint32_t k = slotOf[s];
             const float spacing = glm::max(local.probeSpacing, 0.25f);
-            const glm::ivec3 baseCell = glm::ivec3(glm::round(local.corner / spacing));
             const glm::ivec3 localCounts = glm::ivec3(Core::LOCAL_DDGI_PROBES_PER_AXIS);
 
             DDGIVolumeParams volume{};
             volume.probeCount = glm::uvec3(localCounts);
-            volume.probeSpacing = glm::vec3(spacing);
+            volume.probeSpacing = spacing;
+            volume.origin = local.corner;
             volume.normalBias = glm::max(params.normalBias, 0.0f);
             volume.viewBias = glm::max(params.viewBias, 0.0f);
             volume.irradianceGamma = glm::max(params.irradianceGamma, 1.0f);
             volume.edgeFadeCells = 1.0f;
             volume.atlasSlot = k - localBase;
             volume.atlasRows = cascades.localAtlasRows;
-            volume.baseCell = baseCell;
+            volume.baseCell = glm::ivec3(0);
 
             cascades.volumes[k] = volume;
             cascades.localIds[k] = local.volumeId;
@@ -327,7 +328,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     bool bActiveHistoryValid[DDGI_MAX_VOLUME_SLOTS]{};
     for (uint32_t k = 0; k < total; ++k) {
         const bool bSameWindow = k < prevTotal && previous.localIds[k] == cascades.localIds[k] && previous.volumes[k].probeCount == cascades.volumes[k].probeCount
-            && previous.volumes[k].probeSpacing == cascades.volumes[k].probeSpacing && previous.volumes[k].irradianceGamma == cascades.volumes[k].irradianceGamma;
+            && previous.volumes[k].probeSpacing == cascades.volumes[k].probeSpacing && previous.volumes[k].origin == cascades.volumes[k].origin && previous.volumes[k].irradianceGamma == cascades.volumes[k].irradianceGamma;
         const bool bWritten = k < cascades.count || previous.localWarmup[k] > 0;
         bHistoryValid[k] = bSameWindow && bWritten && (k >= cascades.count
                                                           ? graph.HasTexture(sharedIrradianceId) && graph.HasTexture(sharedVisibilityId)

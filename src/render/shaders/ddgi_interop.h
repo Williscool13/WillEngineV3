@@ -59,7 +59,8 @@ SHADER_PUBLIC SHADER_CONST uint DDGI_VISIBILITY_TILE = 16u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_VISIBILITY_INTERIOR = 14u;
 
 /**
- * Rolling probe window over an infinite world-space lattice. Probe cell g sits at g * probeSpacing; the window spans probeCount cells from baseCell.
+ * Rolling probe window over a world-space lattice. Probe cell g sits at origin + g * probeSpacing; the window spans probeCount cells from baseCell.
+ * Camera cascades use origin 0 and scroll baseCell; world volumes use origin = authored corner and baseCell 0, so the authored box is exact.
  * Storage slot s holds cell baseCell + EuclideanMod(s - baseCell, probeCount), so a scroll only changes the cells of the newly exposed planes.
  * Also carries the sampling parameters (biases, encoding gamma) so consumers need only this struct plus the two atlas textures.
  */
@@ -69,13 +70,13 @@ SHADER_PUBLIC struct DDGIVolumeParams
     SHADER_PUBLIC float normalBias;
     SHADER_PUBLIC uint3 probeCount;
     SHADER_PUBLIC float viewBias;
-    SHADER_PUBLIC float3 probeSpacing;
+    SHADER_PUBLIC float3 origin;
+    SHADER_PUBLIC float probeSpacing;
     SHADER_PUBLIC float irradianceGamma;
     SHADER_PUBLIC float edgeFadeCells;
     /** Same-size world volumes stack as sub-rectangles of one shared atlas: this volume occupies row atlasSlot of atlasRows. Camera cascades own their atlas outright (slot 0 of 1). */
     SHADER_PUBLIC uint atlasSlot;
     SHADER_PUBLIC uint atlasRows;
-    SHADER_PUBLIC float pad2;
 };
 
 /** One sampleable cascade: the volume it was built with plus the atlas/offsets it should be read through. Explicit pads keep the C++ size at the std430 array stride (96). */

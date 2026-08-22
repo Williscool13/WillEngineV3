@@ -21,7 +21,7 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
     int3 slot = int3(dtid);
     int3 cell = DDGICellFromSlot(slot, pc.volume);
     float3 position = DDGIProbeWorldPosition(cell, pc.volume);
-    float radius = 0.08 * min(pc.volume.probeSpacing.x, min(pc.volume.probeSpacing.y, pc.volume.probeSpacing.z));
+    float radius = 0.08 * pc.volume.probeSpacing;
     uint probeIndex = DDGIProbeIndexFromSlot(slot, pc.volume);
     if (pc.bOffsetsValid != 0) {
         float4 probeOffset = pc.probeOffsets[probeIndex];
@@ -59,7 +59,7 @@ void ComputeDDGIProbeDebug(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeDeb
 
     if (pc.debugMode == 1u) {
         int2 visTileOrigin = DDGIProbeTileOrigin(slot, pc.volume, DDGI_VISIBILITY_TILE);
-        float maxDistance = length(pc.volume.probeSpacing) * 1.5;
+        float maxDistance = pc.volume.probeSpacing * DDGI_CELL_DIAGONAL * 1.5;
         float dcMean = 0.0;
         float dcStd = 0.0;
         float3 dirMean = float3(0.0);

@@ -170,9 +170,9 @@ def sealed_room(tag, cx, cz, inner, door_face, door_w, door_h, sill, folder_id, 
     tiles = wa.gi_volume_grid(interior_min, interior_max, spacing) if volume_tiles == "auto" else volume_tiles
     regions = wa.gi_volume_tiles(interior_min, interior_max, tiles)
     for index, (sub_min, sub_max) in enumerate(regions):
-        corner = wa.gi_volume_window(sub_min, sub_max, spacing)
+        centre = wa.gi_volume_window(sub_min, sub_max, spacing)
         suffix = "" if len(regions) == 1 else f" {index}"
-        volume = base_entity(f"[{tag}] gi volume{suffix}", corner, folder_id=folder_id)
+        volume = base_entity(f"[{tag}] gi volume{suffix}", centre, folder_id=folder_id)
         add_local_ddgi_volume(volume, name_id(f"gi_sunbounce_lv_{tag}_{index}"), probe_spacing=spacing)
         entities.append(volume)
     return room

@@ -29,7 +29,7 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     uint rayBudget = bInactive ? min(DDGI_SENTINEL_RAYS, pc.raysPerProbe) : pc.raysPerProbe;
 
     // abs() folds the negative backface marker back into a distance; the clamp bounds what Chebyshev ever compares against.
-    float maxDistance = length(pc.volume.probeSpacing) * 1.5;
+    float maxDistance = pc.volume.probeSpacing * DDGI_CELL_DIAGONAL * 1.5;
     uint threadIndex = gtid.y * DDGI_VISIBILITY_TILE + gtid.x;
     for (uint r = threadIndex; r < rayBudget; r += DDGI_VISIBILITY_TILE * DDGI_VISIBILITY_TILE) {
         gsRayDistances[r] = min(abs(pc.rayData[probeIndex * pc.raysPerProbe + r].w), maxDistance);

@@ -61,7 +61,7 @@ static GICageStats GIDeconstructCage(float3 worldPosition, float3 normal, float3
         biasOffset *= maxBias / biasLength;
     }
     float3 biasedPosition = worldPosition + biasOffset;
-    float3 gridCoord = biasedPosition / volume.probeSpacing;
+    float3 gridCoord = (biasedPosition - volume.origin) / volume.probeSpacing;
 
     float3 edgeDistance = min(gridCoord - float3(volume.baseCell), float3(volume.baseCell + int3(volume.probeCount) - 1) - gridCoord);
     s.fade = saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(volume.edgeFadeCells, 1.0));
@@ -71,7 +71,7 @@ static GICageStats GIDeconstructCage(float3 worldPosition, float3 normal, float3
 
     int3 baseCell = int3(floor(gridCoord));
     float3 alpha = saturate(gridCoord - float3(baseCell));
-    float maxDistance = length(volume.probeSpacing) * 1.5;
+    float maxDistance = volume.probeSpacing * DDGI_CELL_DIAGONAL * 1.5;
     float maxWeight = 0.0;
     for (uint i = 0; i < 8; ++i) {
         int3 offset = int3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
@@ -127,7 +127,7 @@ static GICageStats GIDeconstructCage(float3 worldPosition, float3 normal, float3
         }
         if (weight > maxWeight) {
             maxWeight = weight;
-            s.margin = (moments.x - distanceToProbe) / max(length(volume.probeSpacing), 1e-4);
+            s.margin = (moments.x - distanceToProbe) / max(volume.probeSpacing * DDGI_CELL_DIAGONAL, 1e-4);
             s.stdRatio = sqrt(abs(moments.y - moments.x * moments.x)) / max(moments.x, 1e-4);
         }
     }
@@ -208,7 +208,7 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
                 uint c = bLocal ? count + i : i - localCount;
                 DDGICascadeDescriptor desc = pc.ddgiCascades->cascades[c];
                 if (bLocal) {
-                    float3 gridCoord = worldPosition / desc.volume.probeSpacing;
+                    float3 gridCoord = (worldPosition - desc.volume.origin) / desc.volume.probeSpacing;
                     float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
                     localFade = max(localFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
                 }

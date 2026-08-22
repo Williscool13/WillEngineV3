@@ -7,7 +7,7 @@ import world_grid_interop;
 import binning_common;
 
 // =============== Shader Summary ============
-// Rolling-grid math for the DDGI probe volume. Probes live on an infinite world-space lattice (cell * spacing); the volume is a window of probeCount cells starting at baseCell that follows the camera in whole-cell steps.
+// Rolling-grid math for the DDGI probe volume. Probes live on a world-space lattice (origin + cell * spacing); a camera cascade is a window of probeCount cells starting at baseCell that follows the camera in whole-cell steps, a world volume is the window [0, probeCount) anchored at its authored origin.
 // Storage slots map to cells via Euclidean modulo so a scroll only invalidates the newly exposed planes; every other slot keeps its probe.
 
 public int3 DDGIEuclideanMod(int3 v, int3 m)
@@ -29,7 +29,7 @@ public int3 DDGISlotFromCell(int3 cell, DDGIVolumeParams volume)
 
 public float3 DDGIProbeWorldPosition(int3 cell, DDGIVolumeParams volume)
 {
-    return float3(cell) * volume.probeSpacing;
+    return volume.origin + float3(cell) * volume.probeSpacing;
 }
 
 public int3 DDGISlotFromProbeIndex(uint probeIndex, DDGIVolumeParams volume)
@@ -87,6 +87,8 @@ public static const float DDGI_PROBE_DEAD_BACKFACE_FRACTION = 0.35;
 
 // Non-escape relocation moves below this fraction of spacing are skipped (rotation-noise jitter, not convergence); matches the temporal-restart threshold so every applied move restarts the blends.
 public static const float DDGI_RELOCATE_DEADBAND = 0.05;
+/** length(float3(spacing)) / spacing: cell-diagonal factor the classification and visibility caps were tuned against. */
+public static const float DDGI_CELL_DIAGONAL = 1.7320508;
 
 public static const float DDGI_VISIBILITY_VARIANCE_CAP = 0.3;
 
@@ -106,7 +108,7 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         biasOffset *= maxBias / biasLength;
     }
     float3 biasedPosition = worldPosition + biasOffset;
-    float3 gridCoord = biasedPosition / volume.probeSpacing;
+    float3 gridCoord = (biasedPosition - volume.origin) / volume.probeSpacing;
 
     float3 edgeDistance = min(gridCoord - float3(volume.baseCell), float3(volume.baseCell + int3(volume.probeCount) - 1) - gridCoord);
     float fade = saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(volume.edgeFadeCells, 1.0));
@@ -250,11 +252,11 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
 
         if (bLocal) {
             // Locals take priority
-            float3 gridCoord = worldPosition / desc.volume.probeSpacing;
+            float3 gridCoord = (worldPosition - desc.volume.origin) / desc.volume.probeSpacing;
             float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
             localFade = max(localFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
         } else {
-            float3 gridCoord = worldPosition / desc.volume.probeSpacing;
+            float3 gridCoord = (worldPosition - desc.volume.origin) / desc.volume.probeSpacing;
             float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
             edgeFade = max(edgeFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
         }
@@ -311,7 +313,7 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
         }
         DDGICascadeDescriptor desc = cascadeSet->cascades[c];
         if (bLocal) {
-            float3 gridCoord = worldPosition / desc.volume.probeSpacing;
+            float3 gridCoord = (worldPosition - desc.volume.origin) / desc.volume.probeSpacing;
             float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
             localFade = max(localFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
         }

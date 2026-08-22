@@ -204,7 +204,6 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
         ImGui::Spacing();
         ImGui::Separator();
         if (Widgets::SliderFloat("Render Resolution##graphics", &state->projectConfig.resolutionScale, 0.5f, 1.0f, {.format = "%.3f", .commitOnRelease = true})) { changed = true; }
-        if (Widgets::SliderFloat("Probe Line Width##graphics", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe and DDGI world volume debug wireframes (volume, fade shell, capture marker, stale bake volume).", .reset = true, .resetTo = 0.02})) { changed = true; }
 
 
         const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
@@ -939,8 +938,21 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::PopID();
         };
 
-        if (ImGui::CollapsingHeader("Probe Bake")) {
-            DrawProbeBakeSection(ctx, state);
+        if (ImGui::CollapsingHeader("Authoring")) {
+            if (ImGui::Checkbox("Draw Reflection Probe Volumes##authoring", &state->lighting.reflectionProbe.bDebugDraw)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Every reflection probe volume with its capture marker; stale bakes in red. Face crosses on selected probes only.");
+            }
+            if (ImGui::Checkbox("Draw DDGI World Volumes##authoring", &state->lighting.ddgi.bDebugDrawVolumes)) { changed = true; }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Every authored world volume as the region it fully owns (the probe window minus its one-cell fade band). Interior faces must sit inside the box. Face crosses on selected volumes only.");
+            }
+            if (Widgets::SliderFloat("Probe Line Width##authoring", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe and DDGI world volume wireframes.", .reset = true, .resetTo = 0.02})) {
+                Engine::WriteProjectConfig(state->projectConfig, state->allocator);
+            }
+            if (ImGui::CollapsingHeader("Probe Bake")) {
+                DrawProbeBakeSection(ctx, state);
+            }
         }
 
         ImGui::Separator();
@@ -1141,7 +1153,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             if (ImGui::Checkbox("Enable Reflection Probes", &reflectionProbe.bEnabled)) { changed = true; }
             if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
-            if (ImGui::Checkbox("Debug Draw Probe Volumes", &reflectionProbe.bDebugDraw)) { changed = true; }
             if (Widgets::SliderFloat("Baked Diffuse Clamp K##reflectionprobe", &reflectionProbe.bakedDiffuseClampK, 1.0f, 16.0f, {.format = "%.1f", .tooltip = "Luminance-ratio ceiling for the radiance-cache diffuse tier inside a probe volume: cache is scaled down when it exceeds K times the baked probe irradiance. Default 4.0.", .reset = true, .resetTo = 4.0})) { changed = true; }
             if (ImGui::Checkbox("Brute-Force Probe Pick", &reflectionProbe.bBruteForcePick)) { changed = true; }
             if (ImGui::IsItemHovered()) {
@@ -1241,10 +1252,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Local Volumes##ddgi", &ddgi.bLocalVolumes)) { changed = true; }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Hand-placed fine-spacing probe volumes (LocalDDGIVolumeComponent entities), sampled before cascade 0 where they cover. Nearest few volumes stay resident, one updates per frame.");
-            }
-            if (ImGui::Checkbox("Debug Draw World Volumes##ddgi", &ddgi.bDebugDrawVolumes)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Draw every authored world volume: dim outer box = snapped probe window, solid inner box = the region the volume fully owns (one fade cell in). Interior faces must sit inside the inner box.");
             }
             int maxResidentWorldVolumes = static_cast<int>(ddgi.maxResidentWorldVolumes);
             if (Widgets::SliderInt("Max Resident Volumes##ddgi", &maxResidentWorldVolumes, 1, static_cast<int>(DDGI_MAX_RESIDENT_LOCAL_VOLUMES), {

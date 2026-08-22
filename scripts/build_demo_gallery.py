@@ -222,8 +222,8 @@ def carousels(tag, cx, cz, rings, colors):
 def gi_volumes(tag, region_min, region_max, spacing=2.0):
     tiles = wa.gi_volume_grid(region_min, region_max, spacing)
     for i, (lo, hi) in enumerate(wa.gi_volume_tiles(region_min, region_max, tiles)):
-        corner = wa.gi_volume_window(lo, hi, spacing)
-        e = base_entity(f"[{tag}] GI Volume {i}", corner)
+        centre = wa.gi_volume_window(lo, hi, spacing)
+        e = base_entity(f"[{tag}] GI Volume {i}", centre)
         add_local_ddgi_volume(e, name_id(f"gallery_gi_{tag}_{i}"), probe_spacing=spacing)
         entities.append(e)
 

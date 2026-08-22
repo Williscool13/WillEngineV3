@@ -24,6 +24,14 @@ float3 SanitizeRadiance(float3 c) {
     return clamp(c, 0.0, 65504.0);
 }
 
+// NRD's multi-path rule: specular hitT = min of the non-zero hit distances, independent of radiance (0 = no data).
+float MergeSpecHitT(float acc, float hitT) {
+    if (isnan(hitT) || isinf(hitT) || hitT <= 0.0) {
+        return acc;
+    }
+    return acc > 0.0 ? min(acc, hitT) : hitT;
+}
+
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
@@ -87,7 +95,6 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     float diffHitDistance = 0.0;
     float specHitDistance = 0.0;
     float bestDiffLum = -1.0;
-    float bestSpecLum = -1.0;
 
     uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
     uint pixelIdx = rcoord.y * stride + rcoord.x;
@@ -135,15 +142,8 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
                 // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
                 if (roughness > pc.lightSpecularFromReflectionsMax)
                 {
-                    float3 specContribution = specularAl * commonTerm;
-                    specularRadiance += specContribution;
-
-                    float specLum = dot(specContribution, float3(0.2126, 0.7152, 0.0722));
-                    if (specLum > bestSpecLum)
-                    {
-                        bestSpecLum = specLum;
-                        specHitDistance = s.dist;
-                    }
+                    specularRadiance += specularAl * commonTerm;
+                    specHitDistance = MergeSpecHitT(specHitDistance, s.dist);
                 }
             }
         }
@@ -184,15 +184,8 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
                 // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
                 if (roughness > pc.lightSpecularFromReflectionsMax)
                 {
-                    float3 specContribution = specularSun * commonSun;
-                    specularRadiance += specContribution;
-
-                    float specLum = dot(specContribution, float3(0.2126, 0.7152, 0.0722));
-                    if (specLum > bestSpecLum)
-                    {
-                        bestSpecLum = specLum;
-                        specHitDistance = SUN_SPEC_HIT_T;
-                    }
+                    specularRadiance += specularSun * commonSun;
+                    specHitDistance = MergeSpecHitT(specHitDistance, SUN_SPEC_HIT_T);
                 }
             }
         }
@@ -205,22 +198,15 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
     float3 specularOut = specularRadiance / max(specReflectance, float3(0.01, 0.01, 0.01));
 
     float diffHitT = (isnan(diffHitDistance) || isinf(diffHitDistance)) ? 0.0 : diffHitDistance;
-    float specHitT = (isnan(specHitDistance) || isinf(specHitDistance)) ? 0.0 : specHitDistance;
+    float specHitT = specHitDistance;
 
     // Merged reflections: the reflection shade pass wrote radiance demodulated by this same specReflectance, so it sums
-    // directly into the specular channel. The hitT slot goes to the dominant specular contributor; on smooth surfaces
-    // (roughness <= lightSpecularFromReflectionsMax) the analytic terms were skipped above, so the ray's hitT always wins.
+    // directly into the specular channel. Its hitT joins the min-of-non-zero merge even when the ray shaded to black.
     if (pc.reflectionIndex != ~0x0u)
     {
         uint2 reflCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? PixelPosToReservoirPos(pixel, field) : pixel;
         float4 refl = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(reflCoord, 0));
-        float reflLum = dot(refl.rgb, float3(0.2126, 0.7152, 0.0722));
-        float specLum = dot(specularOut, float3(0.2126, 0.7152, 0.0722));
-        if (reflLum > specLum)
-        {
-            float reflHitT = refl.w;
-            specHitT = (isnan(reflHitT) || isinf(reflHitT)) ? 0.0 : reflHitT;
-        }
+        specHitT = MergeSpecHitT(specHitT, refl.w);
         specularOut += SanitizeRadiance(refl.rgb);
     }
     float4 diffPacked = float4(SanitizeRadiance(diffuseOut), diffHitT);

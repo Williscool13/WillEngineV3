@@ -11,7 +11,7 @@ bBloomEnabled|1
 bloomThreshold|0x3f800000
 bloomSoftThreshold|0x3f000000
 bloomRadius|0x3f800000
-bloomIntensity|0x3f800000
+bloomIntensity|0x3e800000
 bloomClamp|0x41200000
 tonemapOperator|9
 uchimuraP|0x3f800000
