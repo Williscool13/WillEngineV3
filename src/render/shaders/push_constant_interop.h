@@ -225,6 +225,7 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
     SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     // [0] frustum, [1] cone, [2] contribution, [3] occlusion (readback culledMeshletFrustum base)
     SHADER_PUBLIC SHADER_PTR(uint) cullStats;
@@ -240,6 +241,7 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
     SHADER_PUBLIC uint32_t cullFlags;
 };
 
+// Meshlet visibility scans run on pairs: x = visible, y = visible cutout
 SHADER_PUBLIC struct MeshletVisibilityPrefixSumUpsweep1PushConstant
 {
     // Read
@@ -247,19 +249,57 @@ SHADER_PUBLIC struct MeshletVisibilityPrefixSumUpsweep1PushConstant
     SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for totalMeshlets
 
     // Write
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel1Sums;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel1BlockSums;
+    SHADER_PUBLIC SHADER_PTR(uint2) meshletLevel1Sums;
+    SHADER_PUBLIC SHADER_PTR(uint2) meshletLevel1BlockSums;
 
     // Read-Only
     SHADER_PUBLIC uint32_t blockCount;
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
+SHADER_PUBLIC struct PairPrefixSumUpsweep2PushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(uint2) level1BlockSums;
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(uint2) level2Sums;
+    SHADER_PUBLIC SHADER_PTR(uint2) level2BlockSums;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t elementCount;
+    SHADER_PUBLIC uint32_t blockCount;
+};
+
+SHADER_PUBLIC struct PairPrefixSumScanBlocksPushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(uint2) level2BlockSums;
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(uint2) scannedLevel2BlockSums;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t blockCount;
+};
+
+SHADER_PUBLIC struct PairPrefixSumDownsweep1PushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(uint2) scannedLevel2BlockSums;
+
+    // Read-Write
+    SHADER_PUBLIC SHADER_PTR(uint2) level2Sums;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t elementCount;
+};
+
 SHADER_PUBLIC struct MeshletVisibilityPrefixSumDownsweep2PushConstant
 {
     // Read
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel1Sums;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel2Sums;
+    SHADER_PUBLIC SHADER_PTR(uint2) meshletLevel1Sums;
+    SHADER_PUBLIC SHADER_PTR(uint2) meshletLevel2Sums;
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
     SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for elementCount (totalMeshlets)
 
@@ -288,12 +328,14 @@ SHADER_PUBLIC struct VisibilityBufferAccumulatePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
     SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
     SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer; // for "total visible meshlets"
 };

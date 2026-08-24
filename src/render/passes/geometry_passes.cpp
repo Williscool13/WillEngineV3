@@ -328,6 +328,7 @@ void SetupGeometryPass(RenderGraph& graph,
             expandInstancesToMeshlets.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
             expandInstancesToMeshlets.ReadBuffer(GEOMETRY_MODEL_BUFFER);
             expandInstancesToMeshlets.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
+            expandInstancesToMeshlets.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
             expandInstancesToMeshlets.ReadBuffer(instanceMeshletOffsets);
             expandInstancesToMeshlets.ReadIndirectBuffer(meshletCountDispatchArgs);
             expandInstancesToMeshlets.WriteBuffer(intermediateMeshlets);
@@ -356,6 +357,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
                         .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                         .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                        .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                         .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                         .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, culledMeshletFrustum) : 0,
                         .hizExtent = hizExtent,
@@ -412,7 +414,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 meshletUpsweep2Pass.WriteBuffer(meshletLevel2BlockSums);
                 meshletUpsweep2Pass.Execute(
                     [meshletLevel1BlockSums, meshletLevel2Sums, meshletLevel2BlockSums, pipelineManager, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                        PrefixSumUpsweep2PushConstant pc{
+                        PairPrefixSumUpsweep2PushConstant pc{
                             .level1BlockSums = graph.GetBufferAddress(meshletLevel1BlockSums),
                             .level2Sums = graph.GetBufferAddress(meshletLevel2Sums),
                             .level2BlockSums = graph.GetBufferAddress(meshletLevel2BlockSums),
@@ -420,7 +422,7 @@ void SetupGeometryPass(RenderGraph& graph,
                             .blockCount = meshletLevel2BlockCount,
                         };
 
-                        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_up_2"));
+                        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_pair_prefix_sum_up_2"));
                         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                         vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
@@ -431,13 +433,13 @@ void SetupGeometryPass(RenderGraph& graph,
                 meshletScanBlocksPass.ReadBuffer(meshletLevel2BlockSums);
                 meshletScanBlocksPass.WriteBuffer(meshletScannedLevel2BlockSums);
                 meshletScanBlocksPass.Execute([meshletLevel2BlockSums, meshletScannedLevel2BlockSums, pipelineManager, meshletLevel2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                    PrefixSumScanBlocksPushConstant pc{
+                    PairPrefixSumScanBlocksPushConstant pc{
                         .level2BlockSums = graph.GetBufferAddress(meshletLevel2BlockSums),
                         .scannedLevel2BlockSums = graph.GetBufferAddress(meshletScannedLevel2BlockSums),
                         .blockCount = meshletLevel2BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_pair_scan_blocks"));
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, 1, 1, 1);
@@ -448,13 +450,13 @@ void SetupGeometryPass(RenderGraph& graph,
                 meshletDownsweep1Pass.ReadBuffer(meshletScannedLevel2BlockSums);
                 meshletDownsweep1Pass.ReadWriteBuffer(meshletLevel2Sums);
                 meshletDownsweep1Pass.Execute([meshletScannedLevel2BlockSums, meshletLevel2Sums, pipelineManager, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                    PrefixSumDownsweep1PushConstant pc{
+                    PairPrefixSumDownsweep1PushConstant pc{
                         .scannedLevel2BlockSums = graph.GetBufferAddress(meshletScannedLevel2BlockSums),
                         .level2Sums = graph.GetBufferAddress(meshletLevel2Sums),
                         .elementCount = meshletLevel1BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_down_1"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_pair_prefix_sum_down_1"));
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
@@ -466,13 +468,13 @@ void SetupGeometryPass(RenderGraph& graph,
                 meshletScanBlocksPass.ReadBuffer(meshletLevel1BlockSums);
                 meshletScanBlocksPass.WriteBuffer(meshletScannedLevel2BlockSums);
                 meshletScanBlocksPass.Execute([meshletLevel1BlockSums, meshletScannedLevel2BlockSums, pipelineManager, meshletLevel1BlockCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                    PrefixSumScanBlocksPushConstant pc{
+                    PairPrefixSumScanBlocksPushConstant pc{
                         .level2BlockSums = graph.GetBufferAddress(meshletLevel1BlockSums),
                         .scannedLevel2BlockSums = graph.GetBufferAddress(meshletScannedLevel2BlockSums),
                         .blockCount = meshletLevel1BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_pair_scan_blocks"));
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, 1, 1, 1);
@@ -558,6 +560,7 @@ void SetupGeometryPass(RenderGraph& graph,
         instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
         instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
         instancedMeshShading.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
+        instancedMeshShading.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
         instancedMeshShading.ReadBuffer(visibleMeshlets);
         instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
         instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
@@ -582,12 +585,14 @@ void SetupGeometryPass(RenderGraph& graph,
                 VisibilityBufferAccumulatePushConstant pushConstants{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
                     .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+                    .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
                     .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
                     .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
                     .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
                     .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                    .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                     .visibleMeshlets = graph.GetBufferAddress(visibleMeshlets),
                     .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
                 };
@@ -600,6 +605,17 @@ void SetupGeometryPass(RenderGraph& graph,
                     cmd,
                     graph.GetBufferHandle(compactedMeshletDispatchArgs),
                     offsetof(InstancingCompactedMeshletDispatchIndirect, x),
+                    1,
+                    sizeof(InstancingCompactedMeshletDispatchIndirect));
+
+                const PipelineEntry* cutoutEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate_cutout"));
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, cutoutEntry->pipeline);
+                vkCmdPushConstants(cmd, cutoutEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(VisibilityBufferAccumulatePushConstant), &pushConstants);
+
+                vkCmdDrawMeshTasksIndirectEXT(
+                    cmd,
+                    graph.GetBufferHandle(compactedMeshletDispatchArgs),
+                    offsetof(InstancingCompactedMeshletDispatchIndirect, cutoutX),
                     1,
                     sizeof(InstancingCompactedMeshletDispatchIndirect));
 

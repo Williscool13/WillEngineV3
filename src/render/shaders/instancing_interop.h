@@ -63,7 +63,7 @@ SHADER_PUBLIC struct InstancingMeshletDispatchIndirect
 
 SHADER_PUBLIC struct IntermediateMeshlet
 {
-    SHADER_PUBLIC uint32_t instanceIndex; // 1/31. greatest bit is whether it is visible
+    SHADER_PUBLIC uint32_t instanceIndex; // bit 31 visible, bit 30 cutout, bits 0..29 instance index
     SHADER_PUBLIC uint32_t meshletIndexWithinLOD; // 2/30, greatest 2 bits are LOD
 };
 
@@ -78,7 +78,13 @@ SHADER_PUBLIC struct InstancingCompactedMeshletDispatchIndirect
     SHADER_PUBLIC uint32_t x;
     SHADER_PUBLIC uint32_t y;
     SHADER_PUBLIC uint32_t z;
-    SHADER_PUBLIC uint32_t totalVisibleMeshlets;
+    SHADER_PUBLIC uint32_t totalVisibleMeshlets; // opaque + cutout
+    SHADER_PUBLIC uint32_t cutoutX;
+    SHADER_PUBLIC uint32_t cutoutY;
+    SHADER_PUBLIC uint32_t cutoutZ;
+    SHADER_PUBLIC uint32_t totalCutoutMeshlets;
+    // Cutout entries are written descending from the tail of the visible meshlet buffer; capacity anchors the tail
+    SHADER_PUBLIC uint32_t meshletCapacity;
 };
 
 SHADER_PUBLIC struct PrimitiveCounters

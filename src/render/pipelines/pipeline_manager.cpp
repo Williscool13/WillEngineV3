@@ -413,6 +413,12 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ExpandMeshletsPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_up_1"), src / "instancing_prefix_sum.spv", "ComputeMeshletVisibilityPrefixSumUpsweep1",
                             sizeof(MeshletVisibilityPrefixSumUpsweep1PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_pair_prefix_sum_up_2"), src / "instancing_prefix_sum.spv", "ComputePairPrefixSumUpsweep2",
+                            sizeof(PairPrefixSumUpsweep2PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_pair_scan_blocks"), src / "instancing_prefix_sum.spv", "ComputePairPrefixSumScanBlocks",
+                            sizeof(PairPrefixSumScanBlocksPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_pair_prefix_sum_down_1"), src / "instancing_prefix_sum.spv", "ComputePairPrefixSumDownsweep1",
+                            sizeof(PairPrefixSumDownsweep1PushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_down_2"), src / "instancing_prefix_sum.spv", "ComputeMeshletVisibilityPrefixSumDownsweep2",
                             sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("instancing_compacted_meshlet_dispatch"), src / "instancing_meshlets.spv", "ComputeCompactedMeshletDispatch",
@@ -748,6 +754,27 @@ void PipelineManager::RegisterPipelines()
 
         RegisterGraphicsPipeline(
             SID("visibility_buffer_accumulate"),
+            builder,
+            sizeof(VisibilityBufferAccumulatePushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    // Visibility Buffer Cutout
+    {
+        builder.AddShaderStage(src / "geometry_visibility_buffer_cutout.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshGeometryVisibilityBufferCutout");
+        builder.AddShaderStage(src / "geometry_visibility_buffer_cutout.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentGeometryVisibilityBufferCutout");
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_POLYGON_MODE_EXT);
+
+        builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("visibility_buffer_accumulate_cutout"),
             builder,
             sizeof(VisibilityBufferAccumulatePushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT,

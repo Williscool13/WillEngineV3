@@ -106,8 +106,15 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
         }
     }
 
-    // Instance greatest bit is visibility,
-    uint packedInstanceIndex = (instanceIndex & 0x7FFFFFFF) | (bVisible ? 0x80000000 : 0);
+    uint alphaMode = uint(pc.materialBuffer[inst.materialIndex].alphaProperties.y);
+    // Blend has no consumer yet (OIT pending); drop before the scan so the partition stays dense
+    if (alphaMode == MATERIAL_ALPHA_BLEND) {
+        bVisible = false;
+    }
+    bool bCutout = alphaMode == MATERIAL_ALPHA_CUTOUT;
+
+    // Bit 31 visibility, bit 30 cutout
+    uint packedInstanceIndex = (instanceIndex & 0x3FFFFFFF) | (bCutout ? 0x40000000 : 0) | (bVisible ? 0x80000000 : 0);
     // Meshlet 2 greatest bit indicates which LOD to use,
     uint packedLocalMeshlet = (meshletIndexWithinLOD & 0x3FFFFFFF) | (lod << 30);
 
@@ -117,22 +124,36 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
     }
 }
 
-// =============== Instancing Step 4f: Generate an indirect command to draw all visible meshlets ===============
+// =============== Instancing Step 4f: Generate indirect commands for the opaque and cutout meshlet draws ===============
+static void MeshletCountToDispatch(uint count, out uint x, out uint y)
+{
+    x = min(count, (MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1);
+    y = 1;
+    if (count > (MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1) {
+        y = (count + (MAX_MESH_WORK_GROUP_COUNT_X / 2)) / ((MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1);
+    }
+}
+
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void ComputeCompactedMeshletDispatch(uniform CompactedMeshletDispatchPushConstant pc)
 {
     uint totalVisible = min(pc.compactedDispatchBuffer->totalVisibleMeshlets, pc.currentFrameBufferMeshletLimit);
+    uint totalCutout = min(pc.compactedDispatchBuffer->totalCutoutMeshlets, totalVisible);
+    uint totalOpaque = totalVisible - totalCutout;
 
-    uint x = min(totalVisible, (MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1);
-    uint y = 1;
-    if (totalVisible > (MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1) {
-        y = (totalVisible + (MAX_MESH_WORK_GROUP_COUNT_X / 2)) / ((MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1);
-    }
-
+    uint x, y;
+    MeshletCountToDispatch(totalOpaque, x, y);
     pc.compactedDispatchBuffer->x = x;
     pc.compactedDispatchBuffer->y = y;
     pc.compactedDispatchBuffer->z = 1;
+
+    uint cx, cy;
+    MeshletCountToDispatch(totalCutout, cx, cy);
+    pc.compactedDispatchBuffer->cutoutX = cx;
+    pc.compactedDispatchBuffer->cutoutY = cy;
+    pc.compactedDispatchBuffer->cutoutZ = 1;
+    pc.compactedDispatchBuffer->meshletCapacity = pc.currentFrameBufferMeshletLimit;
 }
 
 // =============== Instancing Step 4g: Gather total number of visible meshlets from final meshlet postfix sum ===============

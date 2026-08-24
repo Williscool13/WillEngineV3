@@ -170,6 +170,11 @@ SHADER_PUBLIC struct MaterialProperties
     SHADER_PUBLIC float4 physicalProperties; // x: IOR, y: dispersion, z: normal scale, w: occlusion strength
 };
 
+// Matches Engine::MaterialType; alphaProperties.y
+SHADER_PUBLIC SHADER_CONST uint32_t MATERIAL_ALPHA_SOLID = 0;
+SHADER_PUBLIC SHADER_CONST uint32_t MATERIAL_ALPHA_BLEND = 1;
+SHADER_PUBLIC SHADER_CONST uint32_t MATERIAL_ALPHA_CUTOUT = 2;
+
 SHADER_PUBLIC SHADER_CONST uint32_t DEAD_SLOT_PRIMITIVE_INDEX = 0xFFFFFFFFu;
 
 SHADER_PUBLIC SHADER_CONST uint32_t MAX_INSTANCE_SLOTS = 1048576;

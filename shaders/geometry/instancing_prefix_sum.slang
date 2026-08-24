@@ -40,6 +40,36 @@ static uint BlockExclusiveScan(uint value, uint threadIdx)
     return localScan + gsScanWaveSums[waveID];
 }
 
+groupshared uint2 gsPairScanWaveSums[8];
+
+// Pair variant for the meshlet visibility scan: x = visible, y = visible cutout
+static uint2 BlockExclusiveScan2(uint2 value, uint threadIdx)
+{
+    uint2 localScan = WavePrefixSum(value);
+    uint waveIdx = WaveGetLaneIndex();
+    uint waveID = threadIdx / WaveGetLaneCount();
+    uint numWaves = (INSTANCING_PREFIX_SUM_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
+
+    if (waveIdx == WaveGetLaneCount() - 1) {
+        gsPairScanWaveSums[waveID] = localScan + value;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (threadIdx == 0) {
+        uint2 runningSum = uint2(0, 0);
+        for (uint i = 0; i < numWaves; i++) {
+            uint2 temp = gsPairScanWaveSums[i];
+            gsPairScanWaveSums[i] = runningSum;
+            runningSum += temp;
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    return localScan + gsPairScanWaveSums[waveID];
+}
+
 // =============== Instancing Step 2a: Upsweep Level 1 ===============
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
@@ -136,7 +166,7 @@ void ComputePrefixSumDownsweep2(uniform PrefixSumDownsweep2PushConstant pc, uint
     pc.instanceMeshletOffsets[globalIdx].offset = pc.level1Sums[globalIdx] + blockOffset;
 }
 
-// Note: The meshlet visibility chain reuses steps 2b, 2c, 2d above; only its ends differ (visibility-bit load, compaction store).
+// Note: The meshlet visibility chain scans (visible, visibleCutout) pairs; its middle steps are the pair variants below.
 // =============== Instancing Step 4a: Meshlet Visibility Upsweep Level 1 ===============
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
@@ -145,13 +175,16 @@ void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSu
     uint globalIdx = dtid.x;
     uint threadIdx = gtid.x;
 
-    uint value = 0;
+    uint2 value = uint2(0, 0);
     uint limit = min(pc.currentFrameBufferMeshletLimit, pc.indirectDispatchBuffer->totalMeshlets);
     if (globalIdx < limit) {
-        value = bool((pc.intermediateMeshlets[globalIdx].instanceIndex >> 31) & 1);
+        uint packed = pc.intermediateMeshlets[globalIdx].instanceIndex;
+        uint visible = (packed >> 31) & 1;
+        uint cutout = (packed >> 30) & 1;
+        value = uint2(visible, visible & cutout);
     }
 
-    uint blockLocalScan = BlockExclusiveScan(value, threadIdx);
+    uint2 blockLocalScan = BlockExclusiveScan2(value, threadIdx);
     if (globalIdx < limit) {
         pc.meshletLevel1Sums[globalIdx] = blockLocalScan;
     }
@@ -159,6 +192,62 @@ void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSu
     if (threadIdx == 255 && gid.x < pc.blockCount) {
         pc.meshletLevel1BlockSums[gid.x] = blockLocalScan + value;
     }
+}
+
+// =============== Instancing Step 4b: Pair Upsweep Level 2 (optional) ===============
+[shader("compute")]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
+void ComputePairPrefixSumUpsweep2(uniform PairPrefixSumUpsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint globalIdx = dtid.x;
+    uint threadIdx = gtid.x;
+
+    uint2 value = uint2(0, 0);
+    if (globalIdx < pc.elementCount) {
+        value = pc.level1BlockSums[globalIdx];
+    }
+
+    uint2 blockLocalScan = BlockExclusiveScan2(value, threadIdx);
+    if (globalIdx < pc.elementCount) {
+        pc.level2Sums[globalIdx] = blockLocalScan;
+    }
+
+    if (threadIdx == 255 && gid.x < pc.blockCount) {
+        pc.level2BlockSums[gid.x] = blockLocalScan + value;
+    }
+}
+
+// =============== Instancing Step 4c: Pair Scan Block Sums ===============
+[shader("compute")]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
+void ComputePairPrefixSumScanBlocks(uniform PairPrefixSumScanBlocksPushConstant pc, uint3 gtid : SV_GroupThreadID)
+{
+    uint threadIdx = gtid.x;
+
+    uint2 value = uint2(0, 0);
+    if (threadIdx < pc.blockCount) {
+        value = pc.level2BlockSums[threadIdx];
+    }
+
+    uint2 blockLocalScan = BlockExclusiveScan2(value, threadIdx);
+    if (threadIdx < pc.blockCount) {
+        pc.scannedLevel2BlockSums[threadIdx] = blockLocalScan;
+    }
+}
+
+// =============== Instancing Step 4d: Pair Downsweep Level 1 (Optional) ===============
+[shader("compute")]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
+void ComputePairPrefixSumDownsweep1(uniform PairPrefixSumDownsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint globalIdx = dtid.x;
+
+    if (globalIdx >= pc.elementCount) {
+        return;
+    }
+
+    uint2 blockOffset = pc.scannedLevel2BlockSums[gid.x];
+    pc.level2Sums[globalIdx] += blockOffset;
 }
 
 // =============== Instancing Step 4e: Meshlet Visibility Downsweep Level 2 ===============
@@ -174,19 +263,25 @@ void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefix
     }
 
     uint blockIdx = globalIdx / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    uint blockOffset = pc.meshletLevel2Sums[blockIdx];
-    uint compactOffset = pc.meshletLevel1Sums[globalIdx] + blockOffset;
+    uint2 blockOffset = pc.meshletLevel2Sums[blockIdx];
+    uint2 ranks = pc.meshletLevel1Sums[globalIdx] + blockOffset; // x = visible rank, y = cutout rank
 
     uint packedInstance = pc.intermediateMeshlets[globalIdx].instanceIndex;
     bool visible = bool((packedInstance >> 31) & 1);
+    bool cutout = bool((packedInstance >> 30) & 1);
 
-    if (visible && compactOffset < limit) {
-        pc.visibleMeshlets[compactOffset].instanceIndex = packedInstance & 0x7FFFFFFF;
-        pc.visibleMeshlets[compactOffset].meshletIndexWithinLOD = pc.intermediateMeshlets[globalIdx].meshletIndexWithinLOD;
+    // Opaque compacts from the front, cutout descends from the buffer tail; totals never overlap since their sum <= limit <= capacity
+    if (visible) {
+        uint compactOffset = cutout ? pc.currentFrameBufferMeshletLimit - 1 - ranks.y : ranks.x - ranks.y;
+        if (compactOffset < pc.currentFrameBufferMeshletLimit) {
+            pc.visibleMeshlets[compactOffset].instanceIndex = packedInstance & 0x3FFFFFFF;
+            pc.visibleMeshlets[compactOffset].meshletIndexWithinLOD = pc.intermediateMeshlets[globalIdx].meshletIndexWithinLOD;
+        }
     }
 
     // Final thread does a postfix sum so we can get total visible meshlets
     if (globalIdx == limit - 1) {
-        pc.compactedDispatchBuffer->totalVisibleMeshlets = compactOffset + (visible ? 1 : 0);
+        pc.compactedDispatchBuffer->totalVisibleMeshlets = ranks.x + (visible ? 1 : 0);
+        pc.compactedDispatchBuffer->totalCutoutMeshlets = ranks.y + ((visible && cutout) ? 1 : 0);
     }
 }
