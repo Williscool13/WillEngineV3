@@ -242,6 +242,24 @@ const PipelineEntry* PipelineManager::GetPipelineEntry(StringID pipelineId)
     return nullptr;
 }
 
+LightingShaderType PipelineManager::GetLightingShaderType(StringID pipelineId) const
+{
+    for (const LightingPipelineInfo& info : lightingPipelines) {
+        if (info.id == pipelineId) { return info.type; }
+    }
+    return LightingShaderType::Default;
+}
+
+Core::ArenaFixedVector<StringID> PipelineManager::GetLightingPipelinesForMode(Core::LightingMode mode, Core::Arena& arena) const
+{
+    const LightingShaderType requiredType = RequiredLightingShaderType(mode);
+    Core::ArenaFixedVector<StringID> matching(&arena, lightingPipelines.Size());
+    for (const LightingPipelineInfo& info : lightingPipelines) {
+        if (info.type == requiredType) { matching.PushBack(info.id); }
+    }
+    return matching;
+}
+
 PipelineEntry PipelineManager::GetPipelineEntrySnapshot(StringID pipelineId)
 {
     std::scoped_lock lock(activeEntryMutex);
@@ -466,16 +484,16 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr.spv", "ComputeLightingPBR",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
-    lightingPipelines.PushBack("default_pbr"_sid);
+    lightingPipelines.PushBack({"default_pbr"_sid, LightingShaderType::Default});
     RegisterComputePipeline("default_pbr_restir"_sid, src / "lighting_pbr_restir.spv", "ComputeLightingPBRRestir",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
-    lightingPipelines.PushBack("default_pbr_restir"_sid);
+    lightingPipelines.PushBack({"default_pbr_restir"_sid, LightingShaderType::ReSTIR});
     RegisterComputePipeline("default_toon"_sid, src / "lighting_toon.spv", "ComputeLightingToon",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
-    lightingPipelines.PushBack("default_toon"_sid);
+    lightingPipelines.PushBack({"default_toon"_sid, LightingShaderType::Default});
     RegisterComputePipeline("default_unlit"_sid, src / "lighting_unlit.spv", "ComputeLightingUnlit",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
-    lightingPipelines.PushBack("default_unlit"_sid);
+    lightingPipelines.PushBack({"default_unlit"_sid, LightingShaderType::Default});
     RegisterComputePipeline(SID("lighting_ground_truth"), src / "lighting_ground_truth.spv", "ComputeLightingGroundTruth",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
 

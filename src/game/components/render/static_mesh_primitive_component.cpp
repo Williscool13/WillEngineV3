@@ -208,8 +208,8 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         {
             auto* pm = ctx->pipelineManager;
             Core::Span<const StringID> shadingPipelines = pm->GetShadingPipelines();
-            Core::Span<const StringID> lightingPipelines = pm->GetLightingPipelines();
             Core::Arena& arena = ctx->editorArena.Get();
+            Core::ArenaFixedVector<StringID> lightingPipelines = pm->GetLightingPipelinesForMode(viewFamily.lightingMode, arena);
             bool shaderChanged = false;
 
             {

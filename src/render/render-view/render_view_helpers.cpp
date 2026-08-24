@@ -144,6 +144,10 @@ void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineM
         return exists;
     };
 
+    const LightingShaderType requiredType = RequiredLightingShaderType(viewFamily.lightingMode);
+    const StringID lightingFallback = requiredType == LightingShaderType::ReSTIR ? "default_pbr_restir"_sid : "default_pbr"_sid;
+    auto matchesMode = [&](StringID id) { return pipelineManager->GetLightingShaderType(id) == requiredType; };
+
     for (Core::ActiveMaterial& active : viewFamily.activeMaterials) {
         bool fragOk = checkExists(active.material.fragmentShader);
         bool lightOk = checkExists(active.material.lightingShader);
@@ -151,6 +155,13 @@ void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineM
             active.material.fragmentShader = "error_unlit"_sid;
             active.material.lightingShader = "default_unlit"_sid;
         }
+        if (!matchesMode(active.material.lightingShader)) {
+            active.material.lightingShader = lightingFallback;
+        }
+    }
+
+    if (viewFamily.lightingShaderOverride && !matchesMode(viewFamily.lightingShaderOverride)) {
+        viewFamily.lightingShaderOverride = lightingFallback;
     }
 }
 

@@ -14,6 +14,7 @@
 #include "pipeline_category.h"
 #include "pipeline_data.h"
 #include "graphics_pipeline_builder.h"
+#include "core/containers/arena_fixed_vector.h"
 #include "core/containers/array.h"
 #include "core/containers/inline_path.h"
 #include "core/containers/map.h"
@@ -87,7 +88,20 @@ public:
     VkPipelineCache GetPipelineCache() const { return pipelineCache; }
 
     Core::Span<const StringID> GetShadingPipelines() const { return Core::Span<const StringID>{shadingPipelines.Data(), shadingPipelines.Size()}; }
-    Core::Span<const StringID> GetLightingPipelines() const { return Core::Span<const StringID>{lightingPipelines.Data(), lightingPipelines.Size()}; }
+
+    /**
+     * Output contract the lighting shader was registered with. Ids that are not registered lighting shaders report Default.
+     * @param pipelineId
+     */
+    LightingShaderType GetLightingShaderType(StringID pipelineId) const;
+
+    /**
+     * Lighting pipelines whose output contract matches the mode, in registration order. Anything outside this set is
+     * rewritten to the mode's default by SanitizeViewFamily, so editor pickers should offer only these.
+     * @param mode
+     * @param arena backs the returned vector
+     */
+    Core::ArenaFixedVector<StringID> GetLightingPipelinesForMode(Core::LightingMode mode, Core::Arena& arena) const;
 
 private:
     void SubmitPipelineLoad(PipelineData* data) const;
@@ -126,7 +140,7 @@ private:
 
     // // Geometry pipelines
     Core::InlineVector<StringID, 128> shadingPipelines;
-    Core::InlineVector<StringID, 128> lightingPipelines;
+    Core::InlineVector<LightingPipelineInfo, 128> lightingPipelines;
 
     PipelineLayout globalPipelineLayout;
 

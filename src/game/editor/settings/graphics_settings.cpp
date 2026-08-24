@@ -1027,9 +1027,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         // Lighting Pipeline Overrides
         {
-            Core::Span<const StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelines();
-            const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
             Core::Arena& arena = ctx->editorArena.Get();
+            Core::ArenaFixedVector<StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelinesForMode(state->lighting.lightingMode, arena);
+            const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
 
             int currentShader = pipelineCount; // "None"
             for (int32_t i = 0; i < pipelineCount; ++i) {

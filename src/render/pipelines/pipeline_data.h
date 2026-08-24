@@ -12,6 +12,7 @@
 #include "core/string_id.h"
 #include "pipeline_category.h"
 #include "core/memory/memory_manager.h"
+#include "render/interface/render_params.h"
 
 namespace Render
 {
@@ -22,6 +23,23 @@ struct PipelineEntry
     VkPipeline pipeline{VK_NULL_HANDLE};
     VkPipelineLayout layout{VK_NULL_HANDLE};
 };
+
+enum class LightingShaderType : uint8_t
+{
+    Default = 0,
+    ReSTIR,
+};
+
+struct LightingPipelineInfo
+{
+    StringID id{};
+    LightingShaderType type{LightingShaderType::Default};
+};
+
+inline LightingShaderType RequiredLightingShaderType(Core::LightingMode mode)
+{
+    return mode == Core::LightingMode::ReSTIR ? LightingShaderType::ReSTIR : LightingShaderType::Default;
+}
 
 class PipelineData
 {
