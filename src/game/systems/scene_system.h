@@ -58,6 +58,24 @@ struct LoadSceneResult
 
 LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId);
 
+/**
+ * Binds the current scene to a numpad slot and persists it to the project config. Editor-only.
+ * @param state
+ * @param slotIndex zero-based; Numpad 1 is slot 0
+ * @return false if the index is out of range or no scene is current.
+ */
+bool SaveSceneSlot(Engine::EngineState* state, int slotIndex);
+
+/**
+ * Unloads every loaded scene and loads the one bound to the slot, ending and restarting play if a session is active.
+ * Fizzles without touching the current scenes if the slot is empty or its scene is no longer registered.
+ * @param ctx
+ * @param state
+ * @param slotIndex zero-based; Numpad 1 is slot 0
+ * @return true if the slot's scene was loaded.
+ */
+bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int slotIndex);
+
 void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName);
 
 entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition = {});

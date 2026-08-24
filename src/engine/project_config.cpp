@@ -71,6 +71,14 @@ ProjectConfig ReadProjectConfig()
         p.rotation = e.Quat("r", p.rotation);
     });
 
+    size_t slotIndex = 0;
+    r.ForEachRecord("sceneSlots", [&](const TextReader& e) {
+        if (slotIndex >= MAX_SCENE_SLOTS) { return; }
+        SceneSlot& s = config.sceneSlots[slotIndex++];
+        s.sceneId = StringID(e.U64("id"));
+        e.Str("name", s.sceneName);
+    });
+
     return config;
 }
 
@@ -115,6 +123,14 @@ bool WriteProjectConfig(const ProjectConfig& config, Core::TlsfAllocator* alloc)
         w.Key("set", p.bSet);
         w.Key("t", p.translation);
         w.Key("r", p.rotation);
+        w.EndBlock();
+    }
+
+    w.Count("sceneSlots", MAX_SCENE_SLOTS);
+    for (const SceneSlot& s : config.sceneSlots) {
+        w.BeginBlock("s");
+        w.Key("id", s.sceneId.id);
+        w.KeyStr("name", s.sceneName.View());
         w.EndBlock();
     }
 

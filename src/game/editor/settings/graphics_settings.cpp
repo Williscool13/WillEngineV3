@@ -15,6 +15,7 @@
 
 #include "game/systems/debug_system.h"
 #include "game/systems/render_systems.h"
+#include "game/systems/scene_system.h"
 #include "game/systems/probe_bake_system.h"
 #include "game/systems/ddgi_converge_boost.h"
 #include "game/components/camera_components.h"
@@ -198,6 +199,40 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Editor camera bookmarks. Shift-click to save the current view; click to jump to a saved one. Green = occupied.");
+            }
+        } {
+            ImGui::Text("Scenes:");
+            for (int i = 0; i < Engine::MAX_SCENE_SLOTS; ++i) {
+                Engine::SceneSlot& slot = state->projectConfig.sceneSlots[i];
+                ImGui::SameLine();
+                ImGui::PushID(1000 + i);
+                const bool bTinted = static_cast<bool>(slot.sceneId);
+                if (bTinted) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.25f, 1.0f));
+                }
+                Core::InlineString<8> label;
+                label.Format("%d", i + 1);
+                if (ImGui::Button(label.c_str(), ImVec2(24.0f, 0.0f))) {
+                    if (ImGui::GetIO().KeyShift) {
+                        SaveSceneSlot(state, i);
+                    }
+                    else {
+                        LoadSceneSlot(ctx, state, i);
+                    }
+                }
+                if (bTinted) {
+                    ImGui::PopStyleColor();
+                }
+                if (ImGui::IsItemHovered()) {
+                    if (bTinted) {
+                        ImGui::SetTooltip("Numpad %d: '%s'\nClick or press Numpad %d to unload everything and load it.\nShift-click or Ctrl+Numpad %d to rebind to the current scene.", i + 1,
+                                          slot.sceneName.c_str(), i + 1, i + 1);
+                    }
+                    else {
+                        ImGui::SetTooltip("Numpad %d: empty.\nShift-click or Ctrl+Numpad %d to bind the current scene.", i + 1, i + 1);
+                    }
+                }
+                ImGui::PopID();
             }
         }
 

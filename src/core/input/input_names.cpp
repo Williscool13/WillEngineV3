@@ -22,6 +22,7 @@ static const char* const KEY_NAMES[] = {
     "Period", "Comma", "Semicolon", "Apostrophe",
     "Slash", "Backslash", "Minus", "Equals",
     "[", "]", "`",
+    "Numpad 0", "Numpad 1", "Numpad 2", "Numpad 3", "Numpad 4", "Numpad 5", "Numpad 6", "Numpad 7", "Numpad 8", "Numpad 9",
     "Unknown"
 };
 static_assert(std::size(KEY_NAMES) == static_cast<size_t>(Key::COUNT), "KEY_NAMES must match Core::Key");

@@ -350,6 +350,60 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
     return {true, sceneId, sceneName};
 }
 
+bool SaveSceneSlot(Engine::EngineState* state, int slotIndex)
+{
+    if (slotIndex < 0 || slotIndex >= Engine::MAX_SCENE_SLOTS) { return false; }
+    if (!state->scene.currentSceneId) {
+        LOG_WARN(Game, "Scene slot {}: no current scene to bind", slotIndex + 1);
+        return false;
+    }
+
+    Engine::SceneSlot& slot = state->projectConfig.sceneSlots[slotIndex];
+    slot.sceneId = state->scene.currentSceneId;
+    slot.sceneName = state->scene.currentSceneName;
+    Engine::WriteProjectConfig(state->projectConfig, state->allocator);
+
+    LOG_INFO(Game, "Scene slot {} bound to '{}'", slotIndex + 1, slot.sceneName.c_str());
+    return true;
+}
+
+bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int slotIndex)
+{
+    if (slotIndex < 0 || slotIndex >= Engine::MAX_SCENE_SLOTS) { return false; }
+
+    const Engine::SceneSlot& slot = state->projectConfig.sceneSlots[slotIndex];
+    if (!slot.sceneId) {
+        LOG_WARN(Game, "Scene slot {} is empty", slotIndex + 1);
+        return false;
+    }
+    if (!ctx->assetManager->GetSceneCache().Find(slot.sceneId)) {
+        LOG_WARN(Game, "Scene slot {} points at '{}', which is no longer registered", slotIndex + 1, slot.sceneName.c_str());
+        return false;
+    }
+
+    const bool bWasPlaying = IsPlaying(state);
+    if (bWasPlaying) {
+        PlayStop(ctx, state);
+    }
+
+    Core::InlineVector<StringID, 8> scenesToUnload;
+    for (const Engine::RuntimeSceneMetadata& scene : state->editor.loadedScenes) {
+        scenesToUnload.PushBack(scene.sceneId);
+    }
+    UnloadScenes(state, scenesToUnload);
+
+    const LoadSceneResult result = LoadSceneFromFile(state, ctx->assetManager, slot.sceneId);
+    if (result.bSuccess) {
+        state->scene.currentSceneId = result.sceneId;
+        state->scene.currentSceneName = result.sceneName;
+    }
+
+    if (bWasPlaying) {
+        PlayStart(ctx, state);
+    }
+    return result.bSuccess;
+}
+
 Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset)
 {
     ZoneScoped;

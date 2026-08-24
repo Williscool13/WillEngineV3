@@ -54,6 +54,16 @@ inline const Engine::ActionHandle ACTION_DEBUG_VIEW_8{SID("DebugView_8").id};
 inline const Engine::ActionHandle ACTION_DEBUG_VIEW_9{SID("DebugView_9").id};
 inline const Engine::ActionHandle ACTION_DEBUG_VIEW_0{SID("DebugView_0").id};
 
+inline const Engine::ActionHandle ACTION_SCENE_SLOT_1{SID("SceneSlot_1").id};
+inline const Engine::ActionHandle ACTION_SCENE_SLOT_2{SID("SceneSlot_2").id};
+inline const Engine::ActionHandle ACTION_SCENE_SLOT_3{SID("SceneSlot_3").id};
+inline const Engine::ActionHandle ACTION_SCENE_SLOT_4{SID("SceneSlot_4").id};
+inline const Engine::ActionHandle ACTION_SCENE_SLOT_5{SID("SceneSlot_5").id};
+inline const Engine::ActionHandle ACTION_SCENE_SLOT_6{SID("SceneSlot_6").id};
+inline const Engine::ActionHandle ACTION_SCENE_SLOT_7{SID("SceneSlot_7").id};
+inline const Engine::ActionHandle ACTION_SCENE_SLOT_8{SID("SceneSlot_8").id};
+inline const Engine::ActionHandle ACTION_SCENE_SLOT_9{SID("SceneSlot_9").id};
+
 inline const Engine::ActionHandle ACTION_UI_POINTER_DOWN{SID("UI_PointerDown").id};
 inline const Engine::ActionHandle ACTION_UI_SCROLL{SID("UI_Scroll").id};
 inline const Engine::ActionHandle ACTION_UI_PAGE_UP{SID("UI_PageUp").id};

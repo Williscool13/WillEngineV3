@@ -6,6 +6,7 @@
 #define WILL_ENGINE_PROJECT_CONFIG_H
 
 #include "core/containers/inline_string.h"
+#include "core/string_id.h"
 #include "core/types/math.h"
 #include "render/interface/render_interface.h"
 
@@ -17,12 +18,19 @@ class TlsfAllocator;
 namespace Engine
 {
 static constexpr int MAX_CAMERA_PRESETS = 8;
+static constexpr int MAX_SCENE_SLOTS = 9;
 
 struct CameraPreset
 {
     bool bSet{false};
     Vec3 translation{0.0f};
     Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+};
+
+struct SceneSlot
+{
+    StringID sceneId{0};
+    Core::InlineString<128> sceneName{};
 };
 
 /** Probe bake pipeline settings; bake-owned, deliberately outside every lighting profile. */
@@ -72,6 +80,8 @@ struct ProjectConfig
 
     /** Editor-camera transform bookmarks; shift-click a preset button to save, click to jump. */
     CameraPreset cameraPresets[MAX_CAMERA_PRESETS]{};
+
+    SceneSlot sceneSlots[MAX_SCENE_SLOTS]{};
 
     ProbeBakeSettings probeBake{};
 

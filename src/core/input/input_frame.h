@@ -36,6 +36,8 @@ enum class Key : uint32_t
     SLASH, BACKSLASH, MINUS, EQUALS,
     LEFTBRACKET, RIGHTBRACKET, BACKTICK,
 
+    KP_0, KP_1, KP_2, KP_3, KP_4, KP_5, KP_6, KP_7, KP_8, KP_9,
+
     UNKNOWN,
     COUNT
 };

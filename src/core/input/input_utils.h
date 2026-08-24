@@ -111,6 +111,17 @@ inline Key SDLKeyToKey(SDL_Keycode sdl)
         case SDLK_RIGHTBRACKET: return Key::RIGHTBRACKET;
         case SDLK_GRAVE:        return Key::BACKTICK;
 
+        case SDLK_KP_0: return Key::KP_0;
+        case SDLK_KP_1: return Key::KP_1;
+        case SDLK_KP_2: return Key::KP_2;
+        case SDLK_KP_3: return Key::KP_3;
+        case SDLK_KP_4: return Key::KP_4;
+        case SDLK_KP_5: return Key::KP_5;
+        case SDLK_KP_6: return Key::KP_6;
+        case SDLK_KP_7: return Key::KP_7;
+        case SDLK_KP_8: return Key::KP_8;
+        case SDLK_KP_9: return Key::KP_9;
+
         default: return Key::UNKNOWN;
     }
 }

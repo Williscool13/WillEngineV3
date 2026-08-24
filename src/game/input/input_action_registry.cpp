@@ -175,7 +175,15 @@ void RegisterInputActions(Engine::InputState& input)
     AddDefault(input, Actions::ACTION_DEBUG_VIEW_9, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_9));
     AddDefault(input, Actions::ACTION_DEBUG_VIEW_0, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_0));
 
-
+    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_1, Engine::BindingSource::FromKey(Key::KP_1));
+    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_2, Engine::BindingSource::FromKey(Key::KP_2));
+    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_3, Engine::BindingSource::FromKey(Key::KP_3));
+    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_4, Engine::BindingSource::FromKey(Key::KP_4));
+    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_5, Engine::BindingSource::FromKey(Key::KP_5));
+    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_6, Engine::BindingSource::FromKey(Key::KP_6));
+    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_7, Engine::BindingSource::FromKey(Key::KP_7));
+    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_8, Engine::BindingSource::FromKey(Key::KP_8));
+    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_9, Engine::BindingSource::FromKey(Key::KP_9));
 
     Engine::ApplyDefaultBindings(input);
     input.actionStates.Resize(input.actionIndex.Size());
