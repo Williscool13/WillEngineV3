@@ -155,11 +155,13 @@ public:
     void SetUploadStagingBudget(uint64_t budgetBytes)
     {
         stagingDepot.SetBudgetBytes(budgetBytes);
-        workCounter.fetch_add(1);
-        wakeCV.notify_one();
+        Wake();
     }
 
+    void Wake();
+
 private:
+
     enki::TaskScheduler* scheduler{};
     Core::MemoryManager* memoryManager{};
     Render::VulkanContext* context;

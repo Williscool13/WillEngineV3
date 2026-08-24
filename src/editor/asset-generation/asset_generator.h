@@ -239,7 +239,10 @@ public:
 
     void Wake()
     {
-        workCounter.fetch_add(1);
+        {
+            std::lock_guard lock(wakeMutex);
+            workCounter.fetch_add(1);
+        }
         wakeCV.notify_one();
     }
 

@@ -403,34 +403,55 @@ void AsyncAssetLoadManager::ThreadMain()
             }
         }
 
+        bool bTrimStaging = false;
         if (workCounter.load(std::memory_order_acquire) > 0) {
             workCounter.fetch_sub(1);
         }
         else {
             ZoneScopedN("Idle - Waiting for Work");
+            const bool bDecayArmed = stagingDepot.CanTrim(UPLOAD_STAGING_IDLE_FLOOR);
             std::unique_lock lock(wakeMutex);
-            // Timed wait: requeued requests (staging exhausted / slots full) don't bump workCounter, so guarantee a periodic re-poll
-            wakeCV.wait_for(lock, std::chrono::milliseconds(10), [&] {
+            auto bHasWork = [this] {
                 return workCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
-            });
+            };
+            if (bDecayArmed) {
+                bTrimStaging = !wakeCV.wait_for(lock, std::chrono::seconds(UPLOAD_STAGING_IDLE_TRIM_SECONDS), bHasWork);
+            }
+            else {
+                wakeCV.wait(lock, bHasWork);
+            }
             if (workCounter.load(std::memory_order_acquire) > 0) {
                 workCounter.fetch_sub(1);
             }
         }
+
+        if (bTrimStaging) {
+            stagingDepot.TrimIdle(UPLOAD_STAGING_IDLE_FLOOR);
+        }
     }
+}
+
+void AsyncAssetLoadManager::Wake()
+{
+    {
+        std::lock_guard lock(wakeMutex);
+        workCounter.fetch_add(1);
+    }
+    wakeCV.notify_one();
 }
 
 void AsyncAssetLoadManager::BeginShutdown()
 {
     bShouldExit.store(true, std::memory_order_release);
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AsyncAssetLoadManager::Join()
 {
     BeginShutdown();
     thisThread.join();
+    // Staging buffers outlive their checkouts now, so release them here rather than leaning on member destruction order
+    stagingDepot.TrimIdle(0);
 }
 
 void AsyncAssetLoadManager::RequestAudioLoad(Audio::WillAudio* audioEntry)
@@ -446,8 +467,7 @@ void AsyncAssetLoadManager::RequestAudioLoad(Audio::WillAudio* audioEntry)
     }
 
     audioRequestQueue.enqueue({audioEntry});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeueAudioComplete(AudioLoadComplete& outResult)
@@ -468,8 +488,7 @@ void AsyncAssetLoadManager::RequestPipelineLoad(Render::PipelineData* pipelineDa
     }
 
     pipelineRequestQueue.enqueue({pipelineData});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeuePipelineComplete(PipelineLoadComplete& outResult)
@@ -490,8 +509,7 @@ void AsyncAssetLoadManager::RequestModelLoad(Engine::StaticModel* model)
     }
 
     modelRequestQueue.enqueue({model});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeueModelComplete(StaticModelLoadComplete& outResult)
@@ -512,8 +530,7 @@ void AsyncAssetLoadManager::RequestProceduralModelLoad(Engine::StaticModel* mode
     }
 
     proceduralModelRequestQueue.enqueue({model});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeueProceduralModelComplete(StaticModelLoadComplete& outResult)
@@ -534,8 +551,7 @@ void AsyncAssetLoadManager::RequestPhysicsColliderLoad(Engine::PhysicsColliderAs
     }
 
     physicsColliderRequestQueue.enqueue({collider});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeuePhysicsColliderComplete(PhysicsColliderLoadComplete& outResult)
@@ -556,8 +572,7 @@ void AsyncAssetLoadManager::RequestTextureLoad(Engine::Texture* texture)
     }
 
     textureRequestQueue.enqueue({texture});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeueTextureComplete(TextureLoadComplete& outResult)
@@ -576,8 +591,7 @@ void AsyncAssetLoadManager::RequestCubemapLoad(Render::Cubemap* cubemap)
         return;
     }
     cubemapRequestQueue.enqueue({cubemap});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeueCubemapComplete(CubemapLoadComplete& outResult)
@@ -598,8 +612,7 @@ void AsyncAssetLoadManager::RequestFontCurveLoad(Engine::Font* font)
     }
 
     fontCurveRequestQueue.enqueue({font});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeueFontCurveComplete(FontCurveLoadComplete& outResult)
@@ -620,8 +633,7 @@ void AsyncAssetLoadManager::RequestSamplerLoad(Engine::Sampler* sampler)
     }
 
     samplerRequestQueue.enqueue({sampler});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeueSamplerComplete(SamplerLoadComplete& outResult)
@@ -642,8 +654,7 @@ void AsyncAssetLoadManager::RequestProceduralTextureLoad(Engine::Texture* textur
     }
 
     proceduralTextureRequestQueue.enqueue({texture, pipelineId});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 bool AsyncAssetLoadManager::TryDequeueProceduralTextureComplete(ProceduralTextureLoadComplete& outResult)
@@ -670,8 +681,7 @@ void AsyncAssetLoadManager::OnProceduralTextureLoadComplete(bool success, Proced
     slot.Clear();
     proceduralTextureLoadAllocator.Remove(slotHandle);
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle)
@@ -697,8 +707,7 @@ void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle sl
     bool removed = audioLoadAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AsyncAssetLoadManager::OnPipelineLoadComplete(bool success, PipelineSlotHandle slotHandle)
@@ -721,8 +730,7 @@ void AsyncAssetLoadManager::OnPipelineLoadComplete(bool success, PipelineSlotHan
     bool removed = pipelineLoadAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle)
@@ -747,8 +755,7 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
     slot.Clear();
     modelLoadAllocator.Remove(modelSlotHandle);
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AsyncAssetLoadManager::OnProceduralModelLoadComplete(bool success, ProceduralModelSlotHandle slotHandle)
@@ -773,8 +780,7 @@ void AsyncAssetLoadManager::OnProceduralModelLoadComplete(bool success, Procedur
     slot.Clear();
     proceduralModelLoadAllocator.Remove(slotHandle);
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AsyncAssetLoadManager::OnPhysicsColliderLoadComplete(bool success, PhysicsColliderSlotHandle slotHandle)
@@ -796,8 +802,7 @@ void AsyncAssetLoadManager::OnPhysicsColliderLoadComplete(bool success, PhysicsC
     slot.Clear();
     physicsColliderLoadAllocator.Remove(slotHandle);
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AsyncAssetLoadManager::OnFontCurveLoadComplete(bool success, FontCurveSlotHandle slotHandle)
@@ -822,8 +827,7 @@ void AsyncAssetLoadManager::OnFontCurveLoadComplete(bool success, FontCurveSlotH
     slot.Clear();
     fontCurveLoadAllocator.Remove(slotHandle);
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle)
@@ -848,8 +852,7 @@ void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandl
     slot.Clear();
     textureLoadAllocator.Remove(textureSlotHandle);
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle)
@@ -877,7 +880,6 @@ void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cu
     slot.Clear();
     cubemapLoadAllocator.Remove(cubemapSlotHandle);
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 } // AssetLoad

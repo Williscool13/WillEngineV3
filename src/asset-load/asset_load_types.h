@@ -59,6 +59,9 @@ public:
 
     void Destroy();
 
+    /** 0 when no buffer is resident. */
+    [[nodiscard]] uint64_t GetCapacity() const { return bStagingExists ? stagingAllocator.GetCapacity() : 0; }
+
     Core::LinearAllocator& GetStagingAllocator() { return stagingAllocator; }
     Render::AllocatedBuffer& GetStagingBuffer() { return stagingBuffer; }
 
@@ -68,9 +71,9 @@ private:
     Core::LinearAllocator stagingAllocator{1, "AssetUploadStaging"};
 };
 
-/** Staging buffer sized to content (clamped to [MIN,MAX]).
- * A shared byte budget gates concurrent checkouts
- * CheckOut returns null when the budget or slots are exhausted (caller requeues).
+/** Pool of staging buffers sized to content (clamped to [MIN,MAX]), kept across checkouts so the common case allocates nothing.
+ * Total resident capacity stays <= budgetBytes; growing past it evicts idle buffers least-recently-returned first.
+ * CheckOut returns null when no slot fits the budget (caller requeues) and is dispatcher-thread only.
 */
 class UploadStagingDepot
 {
@@ -83,11 +86,22 @@ public:
 
     void SetBudgetBytes(uint64_t newBudget);
 
+    /** No-op unless every slot has been returned. */
+    void TrimIdle(uint64_t targetBytes);
+
+    [[nodiscard]] bool CanTrim(uint64_t targetBytes) const;
+
 private:
+    using Evictions = Core::InlineVector<UploadStaging*, UPLOAD_STAGING_DEPOT_MAX>;
+
+    void CollectEvictions(uint64_t targetBytes, Evictions& out);
+
+    void DestroyAndRestore(const Evictions& evictions);
+
     Render::VulkanContext* context{nullptr};
-    std::mutex mutex;
+    mutable std::mutex mutex;
     uint64_t budgetBytes{0};
-    uint64_t usedBytes{0};
+    uint64_t residentBytes{0};
     Core::Array<UploadStaging, UPLOAD_STAGING_DEPOT_MAX> stagings{};
     Core::InlineVector<UploadStaging*, UPLOAD_STAGING_DEPOT_MAX> freeSlots{};
 };

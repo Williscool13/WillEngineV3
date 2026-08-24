@@ -35,9 +35,14 @@ inline constexpr uint64_t BLAS_SCRATCH_SLOT_SIZE = 4ull * 1024 * 1024;
 // During loading screens, game/engine can increase asset loading memory budget
 inline constexpr uint64_t UPLOAD_STAGING_BUDGET_DEFAULT = 128ull * 1024 * 1024;
 inline constexpr uint64_t UPLOAD_STAGING_BUDGET_LOADING_SCREEN = 256ull * 1024 * 1024;
+
+inline constexpr uint64_t UPLOAD_STAGING_IDLE_FLOOR = 32ull * 1024 * 1024;
+inline constexpr uint32_t UPLOAD_STAGING_IDLE_TRIM_SECONDS = 10;
+
 static_assert(UPLOAD_STAGING_BUDGET_DEFAULT >= UPLOAD_STAGING_MAX_SIZE, "budget must fit the largest single checkout");
 static_assert(UPLOAD_STAGING_BUDGET_LOADING_SCREEN >= UPLOAD_STAGING_MAX_SIZE, "budget must fit the largest single checkout");
 static_assert(UPLOAD_STAGING_MIN_SIZE <= UPLOAD_STAGING_MAX_SIZE, "staging clamp range is inverted");
+static_assert(UPLOAD_STAGING_IDLE_FLOOR <= UPLOAD_STAGING_BUDGET_DEFAULT, "idle floor must sit under the gameplay budget");
 }
 
 #endif //WILL_ENGINE_ASSET_LOAD_CONFIG_H

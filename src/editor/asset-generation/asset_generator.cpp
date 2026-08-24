@@ -226,8 +226,7 @@ void AssetGenerator::ThreadMain()
 void AssetGenerator::BeginShutdown()
 {
     bShouldExit.store(true, std::memory_order_release);
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AssetGenerator::Join()
@@ -262,8 +261,7 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
         }
     }
     modelGenerateRequestQueue.enqueue({gltfPath, outputPath, textureOutputPath, modelId, contentVersion, bSkipExistingTextures});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 AssetGenerator::RecoveredTextureIdentity AssetGenerator::RecoverTextureIdentity(const Core::Path& outputPath, uint64_t ownerModelId, uint32_t ownerImageIndex)
@@ -316,8 +314,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Pat
     req.ownerImageIndex = ownerImageIndex;
     req.imagePath = imagePath;
     textureGenerateRequestQueue.enqueue(std::move(req));
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
     return identity.id;
 }
 
@@ -344,8 +341,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArr
     req.sourceHeight = h;
     req.sourceBytesPerPixel = bytesPerPixel;
     textureGenerateRequestQueue.enqueue(std::move(req));
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
     return identity.id;
 }
 
@@ -365,8 +361,7 @@ void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, c
         }
     }
     environmentMapGenerateRequestQueue.enqueue({hdriPath, outputPath, id, contentVersion});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const Engine::ProbeBakeSnapshot& snapshot)
@@ -397,8 +392,7 @@ void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint
     req.snapshot = snapshot;
     req.contentVersion = contentVersion;
     probeAssembleRequestQueue.enqueue(std::move(req));
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 
@@ -462,8 +456,7 @@ void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHand
     bool removed = modelGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AssetGenerator::OnTextureGenerateComplete(bool success, TextureGenerateSlotHandle slotHandle)
@@ -489,8 +482,7 @@ void AssetGenerator::OnTextureGenerateComplete(bool success, TextureGenerateSlot
     bool removed = textureGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 void AssetGenerator::OnEnvironmentGenerateComplete(bool success, EnvironmentMapGenerateSlotHandle slotHandle)
@@ -516,8 +508,7 @@ void AssetGenerator::OnEnvironmentGenerateComplete(bool success, EnvironmentMapG
     bool removed = environmentMapGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 Engine::FontID AssetGenerator::RequestFontGenerate(const Core::Path& ttfPath, const Core::Path& outputPath)
@@ -536,8 +527,7 @@ Engine::FontID AssetGenerator::RequestFontGenerate(const Core::Path& ttfPath, co
         }
     }
     fontGenerateRequestQueue.enqueue({ttfPath, outputPath, id, contentVersion});
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
     return id;
 }
 
@@ -569,8 +559,7 @@ void AssetGenerator::OnFontGenerateComplete(bool success, FontGenerateSlotHandle
     bool removed = fontGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
+    Wake();
 }
 
 } // namespace Editor
