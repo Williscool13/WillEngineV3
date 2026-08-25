@@ -16,6 +16,7 @@
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
 #include "game/component-registry/component_editor.h"
+#include "game/editor/editor_materials.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include <ImGuizmo.h>
 
@@ -291,7 +292,6 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             }
 
             if (!slots.IsEmpty() && ImGui::TreeNode("Material Overrides")) {
-                const auto& allMaterials = ctx->materialManager->GetMaterials();
                 int32_t pendingChangeIdx = -1;
                 Engine::MaterialID pendingChangeMat{};
 
@@ -309,21 +309,17 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     ImGui::Text("%s", slot.name.c_str());
                     ImGui::SameLine();
 
-                    if (ImGui::BeginCombo("##override", currentLabel)) {
+                    if (ImGui::BeginCombo("##override", currentLabel, ImGuiComboFlags_HeightLarge)) {
                         if (ImGui::Selectable("(original)", !current.IsValid())) {
                             if (current.IsValid()) {
                                 pendingChangeIdx = slot.origIdx;
                                 pendingChangeMat = Engine::MaterialID::INVALID;
                             }
                         }
-                        for (const auto& [matId, mat] : allMaterials) {
-                            if (mat.immutable) continue;
-                            if (ImGui::Selectable(mat.name.c_str(), matId == current)) {
-                                if (matId != current) {
-                                    pendingChangeIdx = slot.origIdx;
-                                    pendingChangeMat = matId;
-                                }
-                            }
+                        const Engine::MaterialID picked = Game::DrawMaterialSelector(ctx, state, state->editor.materialSelector, current);
+                        if (picked.IsValid() && picked != current) {
+                            pendingChangeIdx = slot.origIdx;
+                            pendingChangeMat = picked;
                         }
                         ImGui::EndCombo();
                     }

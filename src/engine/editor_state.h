@@ -15,6 +15,8 @@
 #include "core/string_id.h"
 #include "core/types/math.h"
 #include "engine/asset_manager.h"
+#include "engine/core/material_id.h"
+#include "engine/core/text_material_id.h"
 #include "engine/core/texture_id.h"
 #include "engine/editor_texture_residency.h"
 #include "resources/scene/scene.h"
@@ -29,6 +31,31 @@ enum class LightDebugDrawMode : uint8_t { None, Selected, All };
 struct RuntimeSceneMetadata
 {
     StringID sceneId;
+};
+
+enum class MaterialSort : uint8_t { Name, Usage, Id };
+enum class MaterialGroup : uint8_t { Folder, Prefix, Flat };
+
+enum MaterialFilterBits : uint32_t
+{
+    MATERIAL_FILTER_NONE = 0,
+    MATERIAL_FILTER_IN_USE = 1u << 0,
+    MATERIAL_FILTER_UNUSED = 1u << 1,
+    MATERIAL_FILTER_EMISSIVE = 1u << 2,
+    MATERIAL_FILTER_MASKED = 1u << 3,
+    MATERIAL_FILTER_BLEND = 1u << 4,
+    MATERIAL_FILTER_UNLIT = 1u << 5,
+    MATERIAL_FILTER_CUSTOM_SAMPLER = 1u << 6,
+};
+
+/** One per material list; the browser and the inline selector keep independent filters. */
+struct MaterialBrowserState
+{
+    char search[64]{};
+    MaterialSort sort{MaterialSort::Name};
+    MaterialGroup group{MaterialGroup::Folder};
+    uint32_t filterFlags{MATERIAL_FILTER_NONE};
+    bool bFilterWasActive{false};
 };
 
 struct EditorState
@@ -85,6 +112,17 @@ struct EditorState
 
     // Folder selection
     Core::Vector<entt::entity> selectedFolders{};
+
+    // Material browser
+    MaterialBrowserState materialBrowser{};
+    MaterialBrowserState materialSelector{};
+    MaterialID selectedMaterial{MaterialID::INVALID};
+    TextMaterialID selectedTextMaterial{TextMaterialID::INVALID};
+    MaterialID renamingMaterial{MaterialID::INVALID};
+    TextMaterialID renamingTextMaterial{TextMaterialID::INVALID};
+    char materialRenameBuffer[128]{};
+    bool bMaterialRenameRequestFocus{false};
+    bool bMaterialListFocused{false};
 
     // ImGui textures
     EditorTextureResidency texResidency{};

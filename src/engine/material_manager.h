@@ -50,7 +50,18 @@ public:
 
     void ProcessRetirements();
 
-    void CreateMaterial(std::string_view name);
+    /**
+     * @param name
+     * @param subDirectory Folder under assets/materials to create the .wmaterial in. Empty means the materials root.
+     */
+    void CreateMaterial(std::string_view name, std::string_view subDirectory = {});
+
+    /**
+     * Moves the material's .wmaterial file on disk.
+     * @param id
+     * @param subDirectory Under assets/materials. Empty means the materials root.
+     */
+    bool MoveMutableMaterial(MaterialID id, std::string_view subDirectory);
 
     bool DeleteMutableMaterial(MaterialID id);
 

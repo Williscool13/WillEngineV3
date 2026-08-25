@@ -434,7 +434,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 if (!copies.IsEmpty()) { MarkSceneModified(state, state->scene.currentSceneId); }
             }
 
-            if (!popupOpen && state->input.GetActionState(Actions::ACTION_DELETE_SELECTED).pressed) {
+            if (!popupOpen && !state->editor.bMaterialListFocused && state->input.GetActionState(Actions::ACTION_DELETE_SELECTED).pressed) {
                 const bool hadSelection = !state->editor.selectedEntities.IsEmpty();
                 for (entt::entity entity : state->editor.selectedEntities) {
                     if (!state->registry.valid(entity)) continue;
@@ -450,7 +450,19 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
             }
 
             if (!popupOpen && state->input.GetActionState(Actions::ACTION_BEGIN_RENAME).pressed) {
-                if (state->editor.selectedFolders.Size() == 1 && state->registry.valid(state->editor.selectedFolders[0])) {
+                if (state->editor.bMaterialListFocused) {
+                    if (const Engine::Material* mat = ctx->materialManager->GetMaterial(state->editor.selectedMaterial)) {
+                        state->editor.renamingMaterial = state->editor.selectedMaterial;
+                        state->editor.bMaterialRenameRequestFocus = true;
+                        strncpy_s(state->editor.materialRenameBuffer, mat->name.c_str(), sizeof(state->editor.materialRenameBuffer) - 1);
+                    }
+                    else if (const Engine::TextMaterial* textMat = ctx->materialManager->GetTextMaterial(state->editor.selectedTextMaterial)) {
+                        state->editor.renamingTextMaterial = state->editor.selectedTextMaterial;
+                        state->editor.bMaterialRenameRequestFocus = true;
+                        strncpy_s(state->editor.materialRenameBuffer, textMat->name.c_str(), sizeof(state->editor.materialRenameBuffer) - 1);
+                    }
+                }
+                else if (state->editor.selectedFolders.Size() == 1 && state->registry.valid(state->editor.selectedFolders[0])) {
                     if (const auto* fc = state->registry.try_get<Component::SceneFolderComponent>(state->editor.selectedFolders[0])) {
                         state->editor.renamingEntity = state->editor.selectedFolders[0];
                         state->editor.renameRequestFocus = true;

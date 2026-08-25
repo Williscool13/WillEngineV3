@@ -385,6 +385,26 @@ RenderMaterial MaterialManager::GetRenderMaterial(MaterialID id) const
     return {mat->props, mat->fragmentShader, mat->lightingShader};
 }
 
+bool MaterialManager::MoveMutableMaterial(MaterialID id, std::string_view subDirectory)
+{
+    Material* mat = materials.Find(id);
+    if (!mat || mat->immutable || mat->sourcePath.IsEmpty()) { return false; }
+
+    Core::Path newDir = Platform::GetAssetPath() / "materials";
+    if (!subDirectory.empty()) {
+        newDir = newDir / subDirectory;
+    }
+    if (newDir == mat->sourcePath.Parent()) { return false; }
+
+    const Core::Path newPath = newDir / mat->sourcePath.Filename();
+    if (newPath.Exists()) { return false; }
+
+    Platform::CreateDirectories(newDir.c_str());
+    if (!Platform::RenameFile(mat->sourcePath, newPath)) { return false; }
+    mat->sourcePath = newPath;
+    return true;
+}
+
 bool MaterialManager::DeleteMutableMaterial(MaterialID id)
 {
     auto it = materials.Find(id);
@@ -435,9 +455,12 @@ bool MaterialManager::RenameMutableMaterial(MaterialID id, std::string_view newN
     return true;
 }
 
-void MaterialManager::CreateMaterial(std::string_view name)
+void MaterialManager::CreateMaterial(std::string_view name, std::string_view subDirectory)
 {
-    const Core::Path matDir = Platform::GetAssetPath() / "materials";
+    Core::Path matDir = Platform::GetAssetPath() / "materials";
+    if (!subDirectory.empty()) {
+        matDir = matDir / subDirectory;
+    }
     Platform::CreateDirectories(matDir.c_str());
     auto fileName = Core::InlineString(name);
     fileName.Append(".wmaterial");
