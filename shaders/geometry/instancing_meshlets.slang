@@ -64,6 +64,9 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
     Instance inst = pc.instanceBuffer[instanceIndex];
     Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model model = pc.modelBuffer[inst.modelIndex];
+    MaterialProperties material = pc.materialBuffer[inst.materialIndex];
+    uint alphaMode = uint(material.alphaProperties.y);
+    bool bTwoSided = material.alphaProperties.z != 0.0;
 
     uint lod = pc.instanceMeshletOffsets[instanceIndex].lod;
     Meshlet mlet = pc.meshletBuffer[prim.meshletOffset[lod] + meshletIndexWithinLOD];
@@ -80,10 +83,15 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
 
     // First cull in test order wins the tally
     bool bFrustumCulled = (pc.cullFlags & CULL_FLAG_MESHLET_FRUSTUM) != 0u && !IsSphereInFrustum(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds);
-    bool bConeCulled = !bFrustumCulled && (pc.cullFlags & CULL_FLAG_MESHLET_CONE) != 0u && !IsConeFrontFacing(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix);
+    bool bConeCulled = !bFrustumCulled && !bTwoSided && (pc.cullFlags & CULL_FLAG_MESHLET_CONE) != 0u && !IsConeFrontFacing(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix);
     bool bContributionCulled = !bFrustumCulled && !bConeCulled && (pc.cullFlags & CULL_FLAG_MESHLET_CONTRIBUTION) != 0u && IsContributionCulled(worldBounds, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, pc.sceneData[pc.sceneDataIndex].proj[1][1], pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y, CONTRIBUTION_CULL_MESHLET_MIN_PIXELS);
     bool bOccluded = !bFrustumCulled && !bConeCulled && !bContributionCulled && pc.bHiZ != 0u && IsOccludedHiZ(worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].viewProj, pc.hizIndex, pc.hizMipCount, pc.hizExtent);
     bool bVisible = !bFrustumCulled && !bConeCulled && !bContributionCulled && !bOccluded;
+    // Blend has no consumer yet (OIT pending)
+    if (alphaMode == MATERIAL_ALPHA_BLEND) {
+        bVisible = false;
+    }
+    uint region = (alphaMode == MATERIAL_ALPHA_CUTOUT ? MESHLET_REGION_CUTOUT : MESHLET_REGION_OPAQUE) | (bTwoSided ? 1u : 0u);
 
     if (pc.cullStats != nullptr) {
         uint waveFrustum = WaveActiveCountBits(bFrustumCulled);
@@ -104,17 +112,16 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
                 InterlockedAdd(pc.cullStats[3], waveOccluded);
             }
         }
+        for (uint r = 0; r < MESHLET_REGION_COUNT; r++) {
+            uint waveRegion = WaveActiveCountBits(region == r);
+            if (WaveIsFirstLane() && waveRegion > 0) {
+                InterlockedAdd(pc.cullStats[4 + r], waveRegion);
+            }
+        }
     }
 
-    uint alphaMode = uint(pc.materialBuffer[inst.materialIndex].alphaProperties.y);
-    // Blend has no consumer yet (OIT pending); drop before the scan so the partition stays dense
-    if (alphaMode == MATERIAL_ALPHA_BLEND) {
-        bVisible = false;
-    }
-    bool bCutout = alphaMode == MATERIAL_ALPHA_CUTOUT;
-
-    // Bit 31 visibility, bit 30 cutout
-    uint packedInstanceIndex = (instanceIndex & 0x3FFFFFFF) | (bCutout ? 0x40000000 : 0) | (bVisible ? 0x80000000 : 0);
+    // Bit 31 visibility, bits 29..30 draw region
+    uint packedInstanceIndex = (instanceIndex & 0x1FFFFFFF) | (region << 29) | (bVisible ? 0x80000000 : 0);
     // Meshlet 2 greatest bit indicates which LOD to use,
     uint packedLocalMeshlet = (meshletIndexWithinLOD & 0x3FFFFFFF) | (lod << 30);
 
@@ -138,22 +145,15 @@ static void MeshletCountToDispatch(uint count, out uint x, out uint y)
 [numthreads(1, 1, 1)]
 void ComputeCompactedMeshletDispatch(uniform CompactedMeshletDispatchPushConstant pc)
 {
-    uint totalVisible = min(pc.compactedDispatchBuffer->totalVisibleMeshlets, pc.currentFrameBufferMeshletLimit);
-    uint totalCutout = min(pc.compactedDispatchBuffer->totalCutoutMeshlets, totalVisible);
-    uint totalOpaque = totalVisible - totalCutout;
-
-    uint x, y;
-    MeshletCountToDispatch(totalOpaque, x, y);
-    pc.compactedDispatchBuffer->x = x;
-    pc.compactedDispatchBuffer->y = y;
-    pc.compactedDispatchBuffer->z = 1;
-
-    uint cx, cy;
-    MeshletCountToDispatch(totalCutout, cx, cy);
-    pc.compactedDispatchBuffer->cutoutX = cx;
-    pc.compactedDispatchBuffer->cutoutY = cy;
-    pc.compactedDispatchBuffer->cutoutZ = 1;
-    pc.compactedDispatchBuffer->meshletCapacity = pc.currentFrameBufferMeshletLimit;
+    for (uint r = 0; r < MESHLET_REGION_COUNT; r++) {
+        uint count = min(pc.compactedDispatchBuffer->regionArgs[r].w, pc.currentFrameBufferMeshletLimit);
+        uint x, y;
+        MeshletCountToDispatch(count, x, y);
+        pc.compactedDispatchBuffer->regionArgs[r].xyz = uint3(x, y, 1);
+        if (pc.regionVisibleStats != nullptr) {
+            InterlockedAdd(pc.regionVisibleStats[r], count);
+        }
+    }
 }
 
 // =============== Instancing Step 4g: Gather total number of visible meshlets from final meshlet postfix sum ===============

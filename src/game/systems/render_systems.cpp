@@ -458,7 +458,6 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         Engine::Material emissive = *defaultMaterial; // black albedo so only emission shows
         emissive.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        emissive.props.alphaProperties.z = 1.0f;
         emissive.props.emissiveFactor = areaLight ? glm::vec4(areaLight->color, areaLight->intensity) : glm::vec4(sphereLight->color, sphereLight->intensity);
         const Engine::MaterialID materialID = ctx->materialManager->CreateImmutableMaterial(emissive);
 
@@ -1414,7 +1413,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         if (defaultMaterial) {
             emissiveMaterial = *defaultMaterial; // only emissiveFactor changes per light; black albedo so only emission shows
             emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-            emissiveMaterial.props.alphaProperties.z = 1.0f; // double sided
         }
 
         auto emitSurface = [&](entt::entity lightEntity, Component::LightSurfaceRuntime& surfaceRuntime, const glm::vec3& color, float intensity, bool draw, uint32_t lightSlot) {

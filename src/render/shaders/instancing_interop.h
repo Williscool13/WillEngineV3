@@ -61,9 +61,16 @@ SHADER_PUBLIC struct InstancingMeshletDispatchIndirect
     SHADER_PUBLIC uint32_t totalMeshlets;
 };
 
+// Visible meshlets are partitioned into draw regions by material class x facing; index = (cutout ? 2 : 0) | (twoSided ? 1 : 0)
+SHADER_PUBLIC SHADER_CONST uint32_t MESHLET_REGION_OPAQUE = 0;
+SHADER_PUBLIC SHADER_CONST uint32_t MESHLET_REGION_OPAQUE_TWO_SIDED = 1;
+SHADER_PUBLIC SHADER_CONST uint32_t MESHLET_REGION_CUTOUT = 2;
+SHADER_PUBLIC SHADER_CONST uint32_t MESHLET_REGION_CUTOUT_TWO_SIDED = 3;
+SHADER_PUBLIC SHADER_CONST uint32_t MESHLET_REGION_COUNT = 4;
+
 SHADER_PUBLIC struct IntermediateMeshlet
 {
-    SHADER_PUBLIC uint32_t instanceIndex; // bit 31 visible, bit 30 cutout, bits 0..29 instance index
+    SHADER_PUBLIC uint32_t instanceIndex; // bit 31 visible, bits 29..30 draw region, bits 0..28 instance index
     SHADER_PUBLIC uint32_t meshletIndexWithinLOD; // 2/30, greatest 2 bits are LOD
 };
 
@@ -75,16 +82,11 @@ SHADER_PUBLIC struct CompactedMeshlet
 
 SHADER_PUBLIC struct InstancingCompactedMeshletDispatchIndirect
 {
-    SHADER_PUBLIC uint32_t x;
-    SHADER_PUBLIC uint32_t y;
-    SHADER_PUBLIC uint32_t z;
-    SHADER_PUBLIC uint32_t totalVisibleMeshlets; // opaque + cutout
-    SHADER_PUBLIC uint32_t cutoutX;
-    SHADER_PUBLIC uint32_t cutoutY;
-    SHADER_PUBLIC uint32_t cutoutZ;
-    SHADER_PUBLIC uint32_t totalCutoutMeshlets;
-    // Cutout entries are written descending from the tail of the visible meshlet buffer; capacity anchors the tail
-    SHADER_PUBLIC uint32_t meshletCapacity;
+    // Per region: xyz = mesh task dispatch, w = meshlet count
+    SHADER_PUBLIC uint4 regionArgs[MESHLET_REGION_COUNT];
+    // Start of each region in the visible meshlet buffer
+    SHADER_PUBLIC uint4 regionBase;
+    SHADER_PUBLIC uint32_t totalVisibleMeshlets;
 };
 
 SHADER_PUBLIC struct PrimitiveCounters

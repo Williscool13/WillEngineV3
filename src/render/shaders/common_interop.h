@@ -151,6 +151,8 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t culledMeshletCone;
     SHADER_PUBLIC uint32_t culledMeshletContribution;
     SHADER_PUBLIC uint32_t culledMeshletOcclusion;
+    SHADER_PUBLIC uint32_t meshletRegionExpanded[4];
+    SHADER_PUBLIC uint32_t meshletRegionVisible[4];
 };
 
 SHADER_PUBLIC struct DrawMeshTasksIndirectCommand

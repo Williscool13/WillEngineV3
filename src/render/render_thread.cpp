@@ -408,6 +408,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     statisticsManager.scratch.culledMeshletCone = readbackData->culledMeshletCone;
     statisticsManager.scratch.culledMeshletContribution = readbackData->culledMeshletContribution;
     statisticsManager.scratch.culledMeshletOcclusion = readbackData->culledMeshletOcclusion;
+    for (uint32_t r = 0; r < 4; r++) {
+        statisticsManager.scratch.meshletRegionExpanded[r] = readbackData->meshletRegionExpanded[r];
+        statisticsManager.scratch.meshletRegionVisible[r] = readbackData->meshletRegionVisible[r];
+    }
     statisticsManager.scratch.shadingDispatches = readbackData->shadingDispatches;
     statisticsManager.scratch.lightingDispatches = readbackData->lightingDispatches;
     statisticsManager.scratch.radianceCache.occupiedSlots = readbackData->wcOccupied;
@@ -1650,7 +1654,10 @@ void RenderThread::RegisterDebugReadbacks()
         },
         [](const InstancingCompactedMeshletDispatchIndirect& d) {
             ImGui::Text("Total Visible Meshlets: %u", d.totalVisibleMeshlets);
-            ImGui::Text("Dispatch Groups: (%u, %u, %u)", d.x, d.y, d.z);
+            static constexpr const char* REGION_NAMES[MESHLET_REGION_COUNT] = {"Opaque", "Opaque 2S", "Cutout", "Cutout 2S"};
+            for (uint32_t r = 0; r < MESHLET_REGION_COUNT; r++) {
+                ImGui::Text("%-10s base %u count %u groups (%u, %u, %u)", REGION_NAMES[r], d.regionBase[r], d.regionArgs[r].w, d.regionArgs[r].x, d.regionArgs[r].y, d.regionArgs[r].z);
+            }
         }
     );
 }

@@ -34,6 +34,8 @@ struct RendererStatistics
     uint32_t culledMeshletCone{};
     uint32_t culledMeshletContribution{};
     uint32_t culledMeshletOcclusion{};
+    uint32_t meshletRegionExpanded[4]{};
+    uint32_t meshletRegionVisible[4]{};
 
     // Visibility bucketing
     uint32_t shadingDispatches{};

@@ -56,13 +56,12 @@ void MeshGeometryVisibilityBuffer(
     // Row width must match ComputeCompactedMeshletDispatch's grid layout (instancing_meshlets.slang), which dispatches rows of (limit / 2) + 1.
     uint globalMeshletIndex = gid.x + gid.y * ((MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1);
 
-    uint opaqueCount = pc.compactedDispatchBuffer->totalVisibleMeshlets - pc.compactedDispatchBuffer->totalCutoutMeshlets;
-    if (globalMeshletIndex >= opaqueCount) {
+    if (globalMeshletIndex >= pc.compactedDispatchBuffer->regionArgs[pc.drawRegion].w) {
         SetMeshOutputCounts(0, 0);
         return;
     }
 
-    CompactedMeshlet compacted = pc.visibleMeshlets[globalMeshletIndex];
+    CompactedMeshlet compacted = pc.visibleMeshlets[pc.compactedDispatchBuffer->regionBase[pc.drawRegion] + globalMeshletIndex];
     uint instanceIndex = compacted.instanceIndex;
     uint packedLocal = compacted.meshletIndexWithinLOD;
     uint meshletIndexWithinLOD = packedLocal & 0x3FFFFFFF;

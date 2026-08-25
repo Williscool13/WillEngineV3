@@ -1135,6 +1135,10 @@ void WillEngine::EditorImgui()
             ImGui::Text("Culled Mlet Cone:            %u", stats.culledMeshletCone);
             ImGui::Text("Culled Mlet Contribution:    %u", stats.culledMeshletContribution);
             ImGui::Text("Culled Mlet Occlusion:       %u", stats.culledMeshletOcclusion);
+            static constexpr const char* REGION_NAMES[4] = {"Opaque", "Opaque 2S", "Cutout", "Cutout 2S"};
+            for (uint32_t r = 0; r < 4; r++) {
+                ImGui::Text("Mlet %-11s drawn/expanded: %u / %u", REGION_NAMES[r], stats.meshletRegionVisible[r], stats.meshletRegionExpanded[r]);
+            }
             ImGui::Text("Shading Dispatches:          %u", stats.shadingDispatches);
             ImGui::Text("Lighting Dispatches:         %u", stats.lightingDispatches);
             ImGui::Separator();

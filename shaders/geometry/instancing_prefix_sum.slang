@@ -40,34 +40,34 @@ static uint BlockExclusiveScan(uint value, uint threadIdx)
     return localScan + gsScanWaveSums[waveID];
 }
 
-groupshared uint2 gsPairScanWaveSums[8];
+groupshared uint4 gsRegionScanWaveSums[8];
 
-// Pair variant for the meshlet visibility scan: x = visible, y = visible cutout
-static uint2 BlockExclusiveScan2(uint2 value, uint threadIdx)
+// Region variant for the meshlet visibility scan: one visible-count lane per draw region
+static uint4 BlockExclusiveScan4(uint4 value, uint threadIdx)
 {
-    uint2 localScan = WavePrefixSum(value);
+    uint4 localScan = WavePrefixSum(value);
     uint waveIdx = WaveGetLaneIndex();
     uint waveID = threadIdx / WaveGetLaneCount();
     uint numWaves = (INSTANCING_PREFIX_SUM_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
 
     if (waveIdx == WaveGetLaneCount() - 1) {
-        gsPairScanWaveSums[waveID] = localScan + value;
+        gsRegionScanWaveSums[waveID] = localScan + value;
     }
 
     GroupMemoryBarrierWithGroupSync();
 
     if (threadIdx == 0) {
-        uint2 runningSum = uint2(0, 0);
+        uint4 runningSum = uint4(0, 0, 0, 0);
         for (uint i = 0; i < numWaves; i++) {
-            uint2 temp = gsPairScanWaveSums[i];
-            gsPairScanWaveSums[i] = runningSum;
+            uint4 temp = gsRegionScanWaveSums[i];
+            gsRegionScanWaveSums[i] = runningSum;
             runningSum += temp;
         }
     }
 
     GroupMemoryBarrierWithGroupSync();
 
-    return localScan + gsPairScanWaveSums[waveID];
+    return localScan + gsRegionScanWaveSums[waveID];
 }
 
 // =============== Instancing Step 2a: Upsweep Level 1 ===============
@@ -166,7 +166,7 @@ void ComputePrefixSumDownsweep2(uniform PrefixSumDownsweep2PushConstant pc, uint
     pc.instanceMeshletOffsets[globalIdx].offset = pc.level1Sums[globalIdx] + blockOffset;
 }
 
-// Note: The meshlet visibility chain scans (visible, visibleCutout) pairs; its middle steps are the pair variants below.
+// Note: The meshlet visibility chain scans one visible-count lane per draw region (uint4); its middle steps are the region variants below.
 // =============== Instancing Step 4a: Meshlet Visibility Upsweep Level 1 ===============
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
@@ -175,16 +175,16 @@ void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSu
     uint globalIdx = dtid.x;
     uint threadIdx = gtid.x;
 
-    uint2 value = uint2(0, 0);
+    uint4 value = uint4(0, 0, 0, 0);
     uint limit = min(pc.currentFrameBufferMeshletLimit, pc.indirectDispatchBuffer->totalMeshlets);
     if (globalIdx < limit) {
         uint packed = pc.intermediateMeshlets[globalIdx].instanceIndex;
         uint visible = (packed >> 31) & 1;
-        uint cutout = (packed >> 30) & 1;
-        value = uint2(visible, visible & cutout);
+        uint region = (packed >> 29) & 3;
+        value[region] = visible;
     }
 
-    uint2 blockLocalScan = BlockExclusiveScan2(value, threadIdx);
+    uint4 blockLocalScan = BlockExclusiveScan4(value, threadIdx);
     if (globalIdx < limit) {
         pc.meshletLevel1Sums[globalIdx] = blockLocalScan;
     }
@@ -194,20 +194,20 @@ void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSu
     }
 }
 
-// =============== Instancing Step 4b: Pair Upsweep Level 2 (optional) ===============
+// =============== Instancing Step 4b: Region Upsweep Level 2 (optional) ===============
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
-void ComputePairPrefixSumUpsweep2(uniform PairPrefixSumUpsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
+void ComputeRegionPrefixSumUpsweep2(uniform RegionPrefixSumUpsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalIdx = dtid.x;
     uint threadIdx = gtid.x;
 
-    uint2 value = uint2(0, 0);
+    uint4 value = uint4(0, 0, 0, 0);
     if (globalIdx < pc.elementCount) {
         value = pc.level1BlockSums[globalIdx];
     }
 
-    uint2 blockLocalScan = BlockExclusiveScan2(value, threadIdx);
+    uint4 blockLocalScan = BlockExclusiveScan4(value, threadIdx);
     if (globalIdx < pc.elementCount) {
         pc.level2Sums[globalIdx] = blockLocalScan;
     }
@@ -217,28 +217,38 @@ void ComputePairPrefixSumUpsweep2(uniform PairPrefixSumUpsweep2PushConstant pc, 
     }
 }
 
-// =============== Instancing Step 4c: Pair Scan Block Sums ===============
+// =============== Instancing Step 4c: Region Scan Block Sums; single group, so the last block's inclusive scan is the grand total ===============
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
-void ComputePairPrefixSumScanBlocks(uniform PairPrefixSumScanBlocksPushConstant pc, uint3 gtid : SV_GroupThreadID)
+void ComputeRegionPrefixSumScanBlocks(uniform RegionPrefixSumScanBlocksPushConstant pc, uint3 gtid : SV_GroupThreadID)
 {
     uint threadIdx = gtid.x;
 
-    uint2 value = uint2(0, 0);
+    uint4 value = uint4(0, 0, 0, 0);
     if (threadIdx < pc.blockCount) {
         value = pc.level2BlockSums[threadIdx];
     }
 
-    uint2 blockLocalScan = BlockExclusiveScan2(value, threadIdx);
+    uint4 blockLocalScan = BlockExclusiveScan4(value, threadIdx);
     if (threadIdx < pc.blockCount) {
         pc.scannedLevel2BlockSums[threadIdx] = blockLocalScan;
     }
+
+    if (threadIdx == pc.blockCount - 1) {
+        uint4 totals = blockLocalScan + value;
+        uint4 bases = uint4(0, totals.x, totals.x + totals.y, totals.x + totals.y + totals.z);
+        for (uint r = 0; r < MESHLET_REGION_COUNT; r++) {
+            pc.compactedDispatchBuffer->regionArgs[r].w = totals[r];
+        }
+        pc.compactedDispatchBuffer->regionBase = bases;
+        pc.compactedDispatchBuffer->totalVisibleMeshlets = bases.w + totals.w;
+    }
 }
 
-// =============== Instancing Step 4d: Pair Downsweep Level 1 (Optional) ===============
+// =============== Instancing Step 4d: Region Downsweep Level 1 (Optional) ===============
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
-void ComputePairPrefixSumDownsweep1(uniform PairPrefixSumDownsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
+void ComputeRegionPrefixSumDownsweep1(uniform RegionPrefixSumDownsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalIdx = dtid.x;
 
@@ -246,7 +256,7 @@ void ComputePairPrefixSumDownsweep1(uniform PairPrefixSumDownsweep1PushConstant 
         return;
     }
 
-    uint2 blockOffset = pc.scannedLevel2BlockSums[gid.x];
+    uint4 blockOffset = pc.scannedLevel2BlockSums[gid.x];
     pc.level2Sums[globalIdx] += blockOffset;
 }
 
@@ -262,26 +272,19 @@ void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefix
         return;
     }
 
-    uint blockIdx = globalIdx / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    uint2 blockOffset = pc.meshletLevel2Sums[blockIdx];
-    uint2 ranks = pc.meshletLevel1Sums[globalIdx] + blockOffset; // x = visible rank, y = cutout rank
-
     uint packedInstance = pc.intermediateMeshlets[globalIdx].instanceIndex;
     bool visible = bool((packedInstance >> 31) & 1);
-    bool cutout = bool((packedInstance >> 30) & 1);
-
-    // Opaque compacts from the front, cutout descends from the buffer tail; totals never overlap since their sum <= limit <= capacity
-    if (visible) {
-        uint compactOffset = cutout ? pc.currentFrameBufferMeshletLimit - 1 - ranks.y : ranks.x - ranks.y;
-        if (compactOffset < pc.currentFrameBufferMeshletLimit) {
-            pc.visibleMeshlets[compactOffset].instanceIndex = packedInstance & 0x3FFFFFFF;
-            pc.visibleMeshlets[compactOffset].meshletIndexWithinLOD = pc.intermediateMeshlets[globalIdx].meshletIndexWithinLOD;
-        }
+    if (!visible) {
+        return;
     }
+    uint region = (packedInstance >> 29) & 3;
 
-    // Final thread does a postfix sum so we can get total visible meshlets
-    if (globalIdx == limit - 1) {
-        pc.compactedDispatchBuffer->totalVisibleMeshlets = ranks.x + (visible ? 1 : 0);
-        pc.compactedDispatchBuffer->totalCutoutMeshlets = ranks.y + ((visible && cutout) ? 1 : 0);
+    uint blockIdx = globalIdx / INSTANCING_PREFIX_SUM_DISPATCH_X;
+    uint4 ranks = pc.meshletLevel1Sums[globalIdx] + pc.meshletLevel2Sums[blockIdx];
+    uint compactOffset = pc.compactedDispatchBuffer->regionBase[region] + ranks[region];
+
+    if (compactOffset < limit) {
+        pc.visibleMeshlets[compactOffset].instanceIndex = packedInstance & 0x1FFFFFFF;
+        pc.visibleMeshlets[compactOffset].meshletIndexWithinLOD = pc.intermediateMeshlets[globalIdx].meshletIndexWithinLOD;
     }
 }

@@ -9,11 +9,7 @@ import bindless_declarations;
 
 import shader_functions;
 
-// =============== Shader Summary ============
-/* Cutout variant of the visibility buffer pass (geometry_visibility_buffer.slang).
-*  Separate module: two mesh entries in one module trip slang's duplicate PerPrimitiveEXT decoration on SV_PrimitiveID.
-*  Consumes the cutout region of the visible meshlet buffer, descending from the tail (see instancing_prefix_sum.slang).
-*/
+// Cutout variant of geometry_visibility_buffer.slang. Separate module: two mesh entries in one module trip slang's duplicate PerPrimitiveEXT decoration on SV_PrimitiveID.
 
 // ==================== Mesh Shader ====================
 struct VertexOutputCutout
@@ -28,7 +24,6 @@ struct VertexOutputCutout
     float clipDistance[1] : SV_ClipDistance;
 };
 
-// See slang issue 7019 workaround note in geometry_visibility_buffer.slang
 struct PrimitiveOutput
 {
      [[vk::location(0)]] uint primitiveID : SV_PrimitiveID;
@@ -47,13 +42,12 @@ void MeshGeometryVisibilityBufferCutout(
 {
     uint globalMeshletIndex = gid.x + gid.y * ((MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1);
 
-    if (globalMeshletIndex >= pc.compactedDispatchBuffer->totalCutoutMeshlets) {
+    if (globalMeshletIndex >= pc.compactedDispatchBuffer->regionArgs[pc.drawRegion].w) {
         SetMeshOutputCounts(0, 0);
         return;
     }
 
-    // Cutout entries descend from the tail of the visible meshlet buffer
-    CompactedMeshlet compacted = pc.visibleMeshlets[pc.compactedDispatchBuffer->meshletCapacity - 1 - globalMeshletIndex];
+    CompactedMeshlet compacted = pc.visibleMeshlets[pc.compactedDispatchBuffer->regionBase[pc.drawRegion] + globalMeshletIndex];
     uint instanceIndex = compacted.instanceIndex;
     uint packedLocal = compacted.meshletIndexWithinLOD;
     uint meshletIndexWithinLOD = packedLocal & 0x3FFFFFFF;

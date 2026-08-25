@@ -413,12 +413,12 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ExpandMeshletsPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_up_1"), src / "instancing_prefix_sum.spv", "ComputeMeshletVisibilityPrefixSumUpsweep1",
                             sizeof(MeshletVisibilityPrefixSumUpsweep1PushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_pair_prefix_sum_up_2"), src / "instancing_prefix_sum.spv", "ComputePairPrefixSumUpsweep2",
-                            sizeof(PairPrefixSumUpsweep2PushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_pair_scan_blocks"), src / "instancing_prefix_sum.spv", "ComputePairPrefixSumScanBlocks",
-                            sizeof(PairPrefixSumScanBlocksPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline(SID("instancing_pair_prefix_sum_down_1"), src / "instancing_prefix_sum.spv", "ComputePairPrefixSumDownsweep1",
-                            sizeof(PairPrefixSumDownsweep1PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_region_prefix_sum_up_2"), src / "instancing_prefix_sum.spv", "ComputeRegionPrefixSumUpsweep2",
+                            sizeof(RegionPrefixSumUpsweep2PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_region_scan_blocks"), src / "instancing_prefix_sum.spv", "ComputeRegionPrefixSumScanBlocks",
+                            sizeof(RegionPrefixSumScanBlocksPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_region_prefix_sum_down_1"), src / "instancing_prefix_sum.spv", "ComputeRegionPrefixSumDownsweep1",
+                            sizeof(RegionPrefixSumDownsweep1PushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_down_2"), src / "instancing_prefix_sum.spv", "ComputeMeshletVisibilityPrefixSumDownsweep2",
                             sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("instancing_compacted_meshlet_dispatch"), src / "instancing_meshlets.spv", "ComputeCompactedMeshletDispatch",
@@ -749,6 +749,7 @@ void PipelineManager::RegisterPipelines()
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
         builder.AddDynamicState(VK_DYNAMIC_STATE_POLYGON_MODE_EXT);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_CULL_MODE);
 
         builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
@@ -770,6 +771,7 @@ void PipelineManager::RegisterPipelines()
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
         builder.AddDynamicState(VK_DYNAMIC_STATE_POLYGON_MODE_EXT);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_CULL_MODE);
 
         builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
