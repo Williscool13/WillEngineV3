@@ -3,6 +3,7 @@ import push_constant_interop;
 import constants_interop;
 import model_interop;
 import lights_interop;
+import light_index_common;
 import restir_interop;
 import reflection_interop;
 import instance_mask_interop;
@@ -80,8 +81,11 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
 
     prop.Acquire(worldPos, cameraPos, scene.view, camDist, h);
 
-    if (lightCount > 0) {
-        float invLightCount = 1.0 / float(lightCount);
+    int analyticCount = pc.lightData->analyticLightCount;
+    int liveCount = int(LiveLightCount(lightCount, analyticCount));
+
+    if (liveCount > 0) {
+        float invLightCount = 1.0 / float(liveCount);
         for (int i = 0; i < RESTIR_M_LIGHT; i++) {
             uint candLightIdx = ~0u;
             float3 candXi = float3(0.0);
@@ -90,9 +94,9 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
 
             int lightIdx;
             float pSelect;
-            if (!prop.Draw(uint(i), uint(RESTIR_M_LIGHT), lightCount, h, lightIdx, pSelect)) {
+            if (!prop.Draw(uint(i), uint(RESTIR_M_LIGHT), liveCount, h, lightIdx, pSelect)) {
                 float u = (float(i) + HashStep(h)) / float(RESTIR_M_LIGHT);
-                lightIdx = clamp(int(u * float(lightCount)), 0, lightCount - 1);
+                lightIdx = int(LiveLightIndex(uint(clamp(int(u * float(liveCount)), 0, liveCount - 1)), analyticCount));
                 pSelect = invLightCount;
             }
 
@@ -174,7 +178,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     bool bOwnedByReSTIR = false;
                     if (hitInst.emissiveTriLightBase != ~0u) {
                         uint idx = hitInst.emissiveTriLightBase + q.CommittedPrimitiveIndex();
-                        if (idx < uint(lightCount)) {
+                        if (IsLiveLight(idx, lightCount, analyticCount)) {
                             hitLightIdx = int(idx);
                             hitVS = UnpackLightVS(pc.lightVS[idx]);
                             float2 bary = q.CommittedTriangleBarycentrics();
@@ -185,7 +189,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                         bOwnedByReSTIR = true;
                     } else {
                         uint hl = hitInst.lightIndex;
-                        if (hl != ~0u && hl < uint(lightCount)) {
+                        if (hl != ~0u && IsLiveLight(hl, lightCount, analyticCount)) {
                             LightView lvs = UnpackLightVS(pc.lightVS[hl]);
                             float t;
                             if (RayIntersectLight(lvs, viewPosition, brdfL, t)) {
@@ -226,7 +230,8 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                 }
 #else
                 float nearestT = 1e30;
-                for (int li2 = 0; li2 < lightCount; li2++) {
+                for (int i2 = 0; i2 < liveCount; i2++) {
+                    int li2 = int(LiveLightIndex(uint(i2), analyticCount));
                     float t;
                     if (RayIntersectLight(UnpackLightVS(pc.lightVS[li2]), viewPosition, brdfL, t) && t < nearestT) {
                         nearestT = t;
@@ -244,7 +249,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     Xi = bTriHit ? triXi : viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                     // Backend-specific marginal light-selection pdf for the BRDF-hit light (ReGIR: cell-average model; Bin: exact top-K membership).
-                    float pSelect = prop.Marginal(hitLightIdx, vs, lightCount);
+                    float pSelect = prop.Marginal(hitLightIdx, vs, liveCount);
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, LIGHT_GEOM_MIN_DIST2)) : 0.0;
                     float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
@@ -291,6 +296,8 @@ void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, u
     prop.hashEntries = pc.hashEntries;
     prop.reservoirs = pc.reservoirs;
     prop.cellData = pc.cellData;
+    prop.analyticCount = pc.lightData->analyticLightCount;
+    prop.realLightCount = pc.lightData->lightCount;
     ReSTIRDIBase(prop, pc, threadID);
 }
 

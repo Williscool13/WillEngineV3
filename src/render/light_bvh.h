@@ -42,12 +42,12 @@ struct LightAliasScratch
  * Builds a Vose alias table over the lights weighted by power (intensity * area * max(colorRGB) (see light_bvh.cpp).
  *
  * @param lights World-space light array.
- * @param count Number of lights (<= MAX_LIGHTS).
+ * @param count Live light count; entry i maps to light LiveLightIndex(i, analyticCount).
  * @param scratch Persistent MAX_LIGHTS-sized scratch, contents clobbered.
  * @param outEntries Receives `count` entries; caller allocates `count`. Write-only (may be write-combined upload memory). When total power is 0 (or count is 0) the table degenerates to a uniform 1/count sampler so the estimator stays well-defined.
  * @return count (number of valid entries), or 0 when count == 0.
  */
-uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, LightAliasScratch& scratch, LightAliasEntry* outEntries);
+uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, uint32_t analyticCount, LightAliasScratch& scratch, LightAliasEntry* outEntries);
 } // namespace Render
 
 #endif // WILL_ENGINE_LIGHT_BVH_H

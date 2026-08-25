@@ -2,6 +2,7 @@ import common_interop;
 import push_constant_interop;
 import constants_interop;
 import lights_interop;
+import light_index_common;
 import restir_interop;
 
 import shader_functions;
@@ -41,12 +42,11 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     float3 cellCenterWS = ReGIRCellCenterFromKey(key);
     float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
 
-    // Skip the dead [analyticCount, MAX_ANALYTIC_LIGHTS) gap: analytic slots end at the watermark, triangles start at the fixed boundary
     uint analyticCount = uint(pc.lightData->analyticLightCount);
-    uint triCount = uint(max(lightCount - MAX_ANALYTIC_LIGHTS, 0));
+    uint liveCount = LiveLightCount(lightCount, int(analyticCount));
     float localSum = 0.0;
-    for (uint i = localID.x; i < analyticCount + triCount; i += 64u) {
-        uint li = (i < analyticCount) ? i : (i - analyticCount) + uint(MAX_ANALYTIC_LIGHTS);
+    for (uint i = localID.x; i < liveCount; i += 64u) {
+        uint li = LiveLightIndex(i, int(analyticCount));
         LightView vsl = UnpackLightVS(pc.lightVS[li]);
         localSum += EvalCellLightTarget(vsl, cellCenterVS, UnpackUnorm4x8(vsl.packedColor).rgb);
     }
@@ -90,7 +90,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
             uint slotInTile = (startSlot + i) % REGIR_TILE_SIZE;
             ReGIRTileSlot cand = pc.tiles[tileBase + slotInTile];
             float uSelect = HashStep(h);
-            if (cand.lightIdx == ~0u || cand.lightIdx >= uint(lightCount) || cand.sourcePdf <= 0.0) { continue; }
+            if (cand.lightIdx == ~0u || !IsLiveLight(cand.lightIdx, lightCount, int(analyticCount)) || cand.sourcePdf <= 0.0) { continue; }
 
             LightView vs = UnpackLightVS(pc.lightVS[cand.lightIdx]);
             float target = EvalCellLightTarget(vs, sampleVS, UnpackUnorm4x8(vs.packedColor).rgb);
@@ -107,7 +107,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
             ReGIRReservoir prev = pc.reservoirsPrev[prevBase + r];
             // Empty input still counts toward merge M (else surviving side inflates un-halved); only an
             // externally invalidated prev index (light list shrank) drops out entirely.
-            bool prevInvalidated = (prev.lightIdx != ~0u && prev.lightIdx >= uint(lightCount));
+            bool prevInvalidated = (prev.lightIdx != ~0u && !IsLiveLight(prev.lightIdx, lightCount, int(analyticCount)));
             if (!prevInvalidated) {
                 ReservoirAccum accumM = ReservoirAccumEmpty();
                 ReGIRReservoir merged = ReGIRReservoirEmpty();

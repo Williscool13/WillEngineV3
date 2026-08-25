@@ -53,6 +53,15 @@ public: // Render Thread
     Array<uint32_t, FRAME_BUFFER_COUNT> renderFrameBuffer{};
 
 
+    void SignalRenderFrame()
+    {
+        {
+            std::lock_guard lock(renderMutex);
+            renderFrames.fetch_add(1);
+        }
+        renderCV.notify_one();
+    }
+
     std::atomic<uint32_t> gameFrames{3};
     std::mutex renderMutex;
     std::condition_variable renderCV;

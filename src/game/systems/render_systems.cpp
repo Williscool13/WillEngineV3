@@ -1795,8 +1795,11 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         Engine::InstanceStore& store = state->instanceStore;
         vf.triLightBaseBySlot.Resize(store.GetWatermark());
         memset(vf.triLightBaseBySlot.Data(), 0xFF, vf.triLightBaseBySlot.Size() * sizeof(uint32_t));
-        if (state->triLightStore.GetWatermark() > 0) {
-            vf.lights.Resize(static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + state->triLightStore.GetWatermark());
+        const uint32_t triWatermark = state->triLightStore.GetWatermark();
+        if (triWatermark > 0) {
+            constexpr auto triBase = static_cast<size_t>(MAX_ANALYTIC_LIGHTS);
+            vf.lights.ResizeUninitialized(triBase + triWatermark);
+            memset(vf.lights.Data() + triBase, 0, triWatermark * sizeof(LightInfo));
         }
         const auto maxPerPrimitive = static_cast<uint32_t>(glm::max(state->debug.restir.emissiveTriMaxPerPrimitive, 1));
         for (const auto& [entity, runtime, renderTransform] : view.each()) {

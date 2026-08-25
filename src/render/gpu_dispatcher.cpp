@@ -59,8 +59,7 @@ void GPUDispatcher::Enqueue(DispatchChannel channel, VkCommandBuffer cmd, VkFenc
 
     if (worker && worker->queue != VK_NULL_HANDLE) {
         worker->requests.enqueue(request);
-        worker->workCounter.fetch_add(1);
-        worker->wakeCV.notify_one();
+        worker->Wake();
     }
     else {
         graphicsRequests.enqueue(request);
@@ -131,8 +130,7 @@ void GPUDispatcher::WorkerThreadMain(WorkerChannel& channel, const char* threadN
 void GPUDispatcher::JoinWorker(WorkerChannel& channel)
 {
     if (channel.thread.joinable()) {
-        channel.workCounter.fetch_add(1);
-        channel.wakeCV.notify_one();
+        channel.Wake();
         channel.thread.join();
     }
 }

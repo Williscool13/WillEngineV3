@@ -3,6 +3,7 @@ import push_constant_interop;
 import constants_interop;
 import model_interop;
 import lights_interop;
+import light_index_common;
 import restir_interop;
 
 import shader_functions;
@@ -55,7 +56,8 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
 #endif
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    uint lightCount = uint(pc.lightData->lightCount);
+    int lightCount = pc.lightData->lightCount;
+    int analyticCount = pc.lightData->analyticLightCount;
     uint2 fullPixel = pixel;
 
     uint pixelIdx = reservoirCoord.y * stride + reservoirCoord.x;
@@ -170,7 +172,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         uint2 histRPos = PixelPosToReservoirPos(historyPixel, field);
         Reservoir candidate = pc.historyBuffer[histRPos.y * stride + histRPos.x];
         if (isnan(candidate.W) || isinf(candidate.W)) { candidate = ReservoirEmpty(); }
-        if (candidate.lightIdx != ~0u && candidate.lightIdx < lightCount) {
+        if (candidate.lightIdx != ~0u && IsLiveLight(candidate.lightIdx, lightCount, analyticCount)) {
             history = candidate;
         }
     }

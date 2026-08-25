@@ -1,6 +1,7 @@
 import common_interop;
 import push_constant_interop;
 import lights_interop;
+import light_index_common;
 import instance_mask_interop;
 import bindless_declarations;
 import constants_interop;
@@ -99,14 +100,18 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
 
     float3 directLight = float3(0.0);
 
-    if (lightCount > 0) {
+    int analyticCount = int(pc.lightData->analyticLightCount);
+    int liveCount = int(LiveLightCount(lightCount, analyticCount));
+
+    if (liveCount > 0) {
         // Range-culled uniform NEE
         int inRange = 0;
         int lightIdx = -1;
         for (int pass = 0; pass < 2 && lightIdx < 0; pass++) {
             int target = (pass == 1 && inRange > 0) ? clamp(int(rng0 * float(inRange)), 0, inRange - 1) : 0;
             int seen = 0;
-            for (int li = 0; li < lightCount; li++) {
+            for (int i = 0; i < liveCount; i++) {
+                int li = int(LiveLightIndex(uint(i), analyticCount));
                 LightInfo cand = pc.lightData->lights[li];
                 float extent;
                 if (cand.type == LIGHT_TYPE_SPHERE) {

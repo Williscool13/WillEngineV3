@@ -222,6 +222,13 @@ public:
         size_ = newSize;
     }
 
+    void ResizeUninitialized(size_t newSize)
+    {
+        static_assert(std::is_trivial_v<T>, "ResizeUninitialized leaves elements unconstructed");
+        if (newSize > capacity_) { Reserve(newSize); }
+        size_ = newSize;
+    }
+
     void Append(const T* first, const T* last)
     {
         size_t count = static_cast<size_t>(last - first);

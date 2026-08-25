@@ -18,7 +18,13 @@ static float LightColorMax(uint32_t packedColor)
     return glm::max(r, glm::max(g, b));
 }
 
-uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, LightAliasScratch& scratch, LightAliasEntry* outEntries)
+/** Mirrors LiveLightIndex in shaders/lighting/light_index_common.slang. */
+static uint32_t LiveLightIndex(uint32_t i, uint32_t analyticCount)
+{
+    return i < analyticCount ? i : (i - analyticCount) + static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS);
+}
+
+uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, uint32_t analyticCount, LightAliasScratch& scratch, LightAliasEntry* outEntries)
 {
     if (count == 0u) { return 0u; }
 
@@ -33,7 +39,7 @@ uint32_t BuildLightPowerAlias(const LightInfo* lights, uint32_t count, LightAlia
     // Power metric: intensity * area * max(colorRGB)
     double total = 0.0;
     for (uint32_t i = 0; i < count; i++) {
-        const LightInfo& L = lights[i];
+        const LightInfo& L = lights[LiveLightIndex(i, analyticCount)];
         float area;
         if (L.type == LIGHT_TYPE_SPHERE) {
             const float radius = L.right.w;

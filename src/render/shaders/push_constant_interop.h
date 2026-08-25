@@ -481,7 +481,8 @@ SHADER_PUBLIC struct ReGIRPresampleTilesPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(LightAliasEntry) aliasEntries;
     SHADER_PUBLIC SHADER_PTR(ReGIRTileSlot) tiles;
-    SHADER_PUBLIC uint32_t lightCount;
+    SHADER_PUBLIC uint32_t liveCount;
+    SHADER_PUBLIC int32_t analyticCount;
     SHADER_PUBLIC uint32_t frameIndex;
 };
 

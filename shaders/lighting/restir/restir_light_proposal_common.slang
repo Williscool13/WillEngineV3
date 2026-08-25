@@ -2,6 +2,7 @@ module restir_light_proposal_common;
 
 import restir_interop;
 import restir_common;
+import light_index_common;
 import regir_hash_common;
 import binning_common;
 import lights_interop;
@@ -19,10 +20,10 @@ public interface ILightProposal
     [mutating] void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h);
 
     /** Draw candidate i of m. Returns false when the cell cannot supply one (caller does the shared uniform fallback). Advances h. */
-    bool Draw(uint i, uint m, int lightCount, inout uint h, out int lightIdx, out float pSelect);
+    bool Draw(uint i, uint m, int liveCount, inout uint h, out int lightIdx, out float pSelect);
 
     /** Marginal light-selection pdf for an arbitrary (BRDF-hit) light; feeds the Talbot-MIS denominator. */
-    float Marginal(int lightIdx, LightView vs, int lightCount);
+    float Marginal(int lightIdx, LightView vs, int liveCount);
 }
 
 /** ReGIR: per-cell RIS reservoirs from the hash grid. Grid-tap source pdf is the exact per-reservoir targetPdf/totalWeight. */
@@ -31,6 +32,8 @@ public struct ReGIRProposal : ILightProposal
     public uint* hashEntries;
     public ReGIRReservoir* reservoirs;
     public float2* cellData;
+    public int analyticCount;
+    public int realLightCount;
 
     bool useGrid;
     uint gridBase;
@@ -69,7 +72,7 @@ public struct ReGIRProposal : ILightProposal
         }
     }
 
-    public bool Draw(uint i, uint m, int lightCount, inout uint h, out int lightIdx, out float pSelect)
+    public bool Draw(uint i, uint m, int liveCount, inout uint h, out int lightIdx, out float pSelect)
     {
         lightIdx = -1;
         pSelect = 0.0;
@@ -78,7 +81,7 @@ public struct ReGIRProposal : ILightProposal
         float uStrat = (float(i) + HashStep(h)) / float(m);
         uint slotInCell = min(uint(uStrat * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
         ReGIRReservoir gr = reservoirs[gridBase + slotInCell];
-        if (gr.lightIdx != ~0u && gr.lightIdx < uint(lightCount) && gr.totalWeight > 0.0) {
+        if (gr.lightIdx != ~0u && IsLiveLight(gr.lightIdx, realLightCount, analyticCount) && gr.totalWeight > 0.0) {
             lightIdx = int(gr.lightIdx);
             pSelect = gr.targetPdf / gr.totalWeight;
             return true;
@@ -86,12 +89,12 @@ public struct ReGIRProposal : ILightProposal
         return false;
     }
 
-    public float Marginal(int lightIdx, LightView vs, int lightCount)
+    public float Marginal(int lightIdx, LightView vs, int liveCount)
     {
         // Modeled from cell-average occupancy, not the exact per-reservoir pdf, so it does not partition unity when mBrdf > 0.
-        if (!useGrid) { return 1.0 / float(lightCount); }
+        if (!useGrid) { return 1.0 / float(liveCount); }
         float3 color = UnpackUnorm4x8(vs.packedColor).rgb;
-        return cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, color) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(lightCount));
+        return cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, color) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(liveCount));
     }
 }
 
@@ -147,7 +150,7 @@ public struct WorldGridProposal : ILightProposal
         return analyticPow + groupPow > 0.0;
     }
 
-    public bool Draw(uint i, uint m, int lightCount, inout uint h, out int lightIdx, out float pSelect)
+    public bool Draw(uint i, uint m, int liveCount, inout uint h, out int lightIdx, out float pSelect)
     {
         lightIdx = -1;
         pSelect = 0.0;
@@ -164,7 +167,7 @@ public struct WorldGridProposal : ILightProposal
             if (groupCount == 0u || (cellCount > 0u && u < pA)) {
                 uint j = min(uint((u / max(pA, 1e-8)) * float(cellCount)), cellCount - 1u);
                 uint idx = indexList[cellOffset + j];
-                if (idx >= uint(lightCount)) { return false; }
+                if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
                 lightIdx = int(idx);
                 pSelect = pA / float(cellCount);
                 return true;
@@ -180,7 +183,7 @@ public struct WorldGridProposal : ILightProposal
             if (group.lightCount == 0u) { return false; }
             uint t = min(uint(HashStep(h) * float(group.lightCount)), group.lightCount - 1u);
             uint idx = group.firstLight + t;
-            if (idx >= uint(lightCount)) { return false; }
+            if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
             lightIdx = int(idx);
             pSelect = (group.power / T) / float(group.lightCount);
             return true;
@@ -189,7 +192,7 @@ public struct WorldGridProposal : ILightProposal
         uint j = min(uint(u * float(total)), total - 1u);
         if (j < cellCount) {
             uint idx = indexList[cellOffset + j];
-            if (idx >= uint(lightCount)) { return false; }
+            if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
             lightIdx = int(idx);
             pSelect = 1.0 / float(total);
             return true;
@@ -200,17 +203,17 @@ public struct WorldGridProposal : ILightProposal
         if (group.lightCount == 0u) { return false; }
         uint t = min(uint(HashStep(h) * float(group.lightCount)), group.lightCount - 1u);
         uint idx = group.firstLight + t;
-        if (idx >= uint(lightCount)) { return false; }
+        if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
         lightIdx = int(idx);
         pSelect = 1.0 / (float(total) * float(group.lightCount));
         return true;
     }
 
-    public float Marginal(int lightIdx, LightView vs, int lightCount)
+    public float Marginal(int lightIdx, LightView vs, int liveCount)
     {
         // Exact: a light is a candidate iff it survived its cell list, at the same pdf the draw used
         uint total = cellCount + groupCount;
-        if (total == 0u) { return 1.0 / float(lightCount); }
+        if (total == 0u) { return 1.0 / float(liveCount); }
 
         bool bPowerSplit = UsePowerSplit();
         float T = analyticPow + groupPow;

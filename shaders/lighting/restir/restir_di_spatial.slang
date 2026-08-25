@@ -2,6 +2,7 @@ import common_interop;
 import push_constant_interop;
 import constants_interop;
 import lights_interop;
+import light_index_common;
 import restir_interop;
 
 import packing_functions;
@@ -48,8 +49,9 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
     Reservoir center = pc.inputBuffer[centerIdx];
     if (isnan(center.W) || isinf(center.W)) { center = ReservoirEmpty(); }
-    uint lightCount = uint(pc.lightData->lightCount);
-    bool validCenter = center.lightIdx != ~0u && center.lightIdx < lightCount;
+    int lightCount = pc.lightData->lightCount;
+    int analyticCount = pc.lightData->analyticLightCount;
+    bool validCenter = center.lightIdx != ~0u && IsLiveLight(center.lightIdx, lightCount, analyticCount);
     bool centerHasSample = center.lightIdx != ~0u;
 
     float Mc = centerHasSample ? float(center.M) : 0.0;
@@ -116,7 +118,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         uint2 nrPos = PixelPosToReservoirPos(uint2(neighborPixel), field);
         Reservoir neighbor = pc.inputBuffer[nrPos.y * stride + nrPos.x];
         if (isnan(neighbor.W) || isinf(neighbor.W)) { neighbor = ReservoirEmpty(); }
-        if (neighbor.lightIdx == ~0u || neighbor.lightIdx >= lightCount || neighbor.M == 0u) {
+        if (neighbor.lightIdx == ~0u || !IsLiveLight(neighbor.lightIdx, lightCount, analyticCount) || neighbor.M == 0u) {
             continue;
         }
         if (validCenter && center.M >= 4u && neighbor.M < 2u) {

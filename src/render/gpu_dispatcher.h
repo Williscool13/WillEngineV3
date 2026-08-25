@@ -79,6 +79,15 @@ public:
 private:
     struct WorkerChannel
     {
+        void Wake()
+        {
+            {
+                std::lock_guard lock(wakeMutex);
+                workCounter.fetch_add(1);
+            }
+            wakeCV.notify_one();
+        }
+
         Core::ConcurrentQueue<GPUDispatchRequest> requests;
         std::jthread thread;
         std::atomic<uint32_t> workCounter{0};

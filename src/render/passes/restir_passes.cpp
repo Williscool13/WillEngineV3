@@ -62,11 +62,15 @@ void SetupReSTIRPasses(RenderGraph& graph,
     // Transform all lights (area + sphere) to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
     graph.CreateBuffer(SID("restir_lights_vs"), MAX_LIGHTS * sizeof(LightVSData), false);
 
+    const auto viewFamilyLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
+    const uint32_t liveLightCount = viewFamily.analyticLightCount
+                                    + (viewFamilyLightCount > static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) ? viewFamilyLightCount - static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) : 0u);
+
     RenderPass& transformPass = graph.AddPass(SID("[ReSTIR DI] Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     transformPass.ReadBuffer(SCENE_DATA_BUFFER);
     transformPass.ReadBuffer(SID("light_data"));
     transformPass.WriteBuffer(SID("restir_lights_vs"));
-    transformPass.Execute([&, pipelineManager, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    transformPass.Execute([&, pipelineManager, sceneIndex, liveLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_transform_lights"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -77,7 +81,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             .sceneDataIndex = sceneIndex,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, (MAX_LIGHTS + 63) / 64, 1, 1);
+        vkCmdDispatch(cmd, (liveLightCount + 63u) / 64u, 1, 1);
     });
 
     if (bReGIRProposal)
@@ -144,21 +148,25 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, 1, 1, 1);
         });
 
-        const uint32_t fillLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
+        const auto totalLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
+        const uint32_t analyticLightCount = viewFamily.analyticLightCount;
+        const uint32_t fillLightCount = analyticLightCount
+                                        + (totalLightCount > static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) ? totalLightCount - static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) : 0u);
 
         // Presample tiles
         {
             RenderPass& presamplePass = graph.AddPass(SID("[ReGIR] Presample Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
             presamplePass.ReadBuffer(LIGHT_ALIAS_BUFFER);
             presamplePass.WriteBuffer(SID("regir_tiles"));
-            presamplePass.Execute([pipelineManager, frameNumber, fillLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            presamplePass.Execute([pipelineManager, frameNumber, fillLightCount, analyticLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_presample_tiles"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
                 ReGIRPresampleTilesPushConstant pc{
                     .aliasEntries = graph.GetBufferAddress(LIGHT_ALIAS_BUFFER),
                     .tiles = graph.GetBufferAddress(SID("regir_tiles")),
-                    .lightCount = fillLightCount,
+                    .liveCount = fillLightCount,
+                    .analyticCount = static_cast<int32_t>(analyticLightCount),
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

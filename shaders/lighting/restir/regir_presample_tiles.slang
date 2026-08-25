@@ -1,5 +1,6 @@
 import push_constant_interop;
 import restir_interop;
+import light_index_common;
 
 import random_common;
 
@@ -11,7 +12,7 @@ void ComputeReGIRPresampleTiles(uniform ReGIRPresampleTilesPushConstant pc, uint
     uint totalSlots = REGIR_TILE_COUNT * REGIR_TILE_SIZE;
     if (slotIdx >= totalSlots) { return; }
 
-    uint count = pc.lightCount;
+    uint count = pc.liveCount;
 
     ReGIRTileSlot slot;
     if (count == 0u) {
@@ -27,10 +28,10 @@ void ComputeReGIRPresampleTiles(uniform ReGIRPresampleTilesPushConstant pc, uint
     LightAliasEntry e = pc.aliasEntries[bin];
     float u = HashStep(h);
     if (u < e.prob) {
-        slot.lightIdx = bin;
+        slot.lightIdx = LiveLightIndex(bin, pc.analyticCount);
         slot.sourcePdf = e.pdf;
     } else {
-        slot.lightIdx = e.alias;
+        slot.lightIdx = LiveLightIndex(e.alias, pc.analyticCount);
         slot.sourcePdf = e.pdfAlias;
     }
 

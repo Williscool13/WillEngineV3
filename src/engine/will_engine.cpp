@@ -1696,8 +1696,7 @@ void WillEngine::Run()
                 // Clear the frame buffer to be accumulated until the next render frame
                 engineRenderSynchronization->GetCurrentFrameBuffer()->Reinitialize();
 
-                engineRenderSynchronization->renderFrames.fetch_add(1, std::memory_order_release);
-                engineRenderSynchronization->renderCV.notify_one();
+                engineRenderSynchronization->SignalRenderFrame();
             }
         }
 

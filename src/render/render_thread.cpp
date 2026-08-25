@@ -128,8 +128,7 @@ void RenderThread::Start()
 void RenderThread::RequestShutdown()
 {
     bShouldExit.store(true, std::memory_order_release);
-    engineRenderSynchronization->renderFrames.fetch_add(1);
-    engineRenderSynchronization->renderCV.notify_one();
+    engineRenderSynchronization->SignalRenderFrame();
 }
 
 void RenderThread::Join()
@@ -1707,11 +1706,11 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     }
 
     // Power alias table (rebuilt every frame on the CPU, world space)
-    const auto lightCount = static_cast<uint32_t>(viewFamily.lights.Size());
-    if (bBuildLightAlias && lightCount > 0) {
+    const uint32_t liveLightCount = analyticLightCount + triLightCount;
+    if (bBuildLightAlias && liveLightCount > 0) {
         ZoneScopedN("Light Alias Table");
         auto* aliasEntries = static_cast<LightAliasEntry*>(renderGraph->OpenHostBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE));
-        BuildLightPowerAlias(viewFamily.lights.Data(), lightCount, lightAliasScratch, aliasEntries);
+        BuildLightPowerAlias(viewFamily.lights.Data(), liveLightCount, analyticLightCount, lightAliasScratch, aliasEntries);
     }
 
     // Reflection probes
