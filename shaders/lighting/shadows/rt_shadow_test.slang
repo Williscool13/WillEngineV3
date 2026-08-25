@@ -30,8 +30,7 @@ void ComputeRTShadowTest(uint3 dtid : SV_DispatchThreadID, uniform RTShadowTestP
     ray.TMin = 0.0001;
     ray.TMax = length(worldPos - cameraPos) + 0.1;
 
-    //RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-    RayQuery<> q;
+    RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
     q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
     q.Proceed();
 

@@ -614,9 +614,14 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude);
         }
         ImGui::SameLine();
-        bool motionBlurExclude = renderFlags.Has(RenderFlagsComponent::NO_MOTION_BLUR);
+        bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
         if (ImGui::Checkbox("Motion Blur Exclude##proceduralmesh", &motionBlurExclude)) {
-            renderFlags.Set(RenderFlagsComponent::NO_MOTION_BLUR, motionBlurExclude);
+            renderFlags.Set(RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude);
+        }
+        ImGui::SameLine();
+        bool alphaCutoutExclude = !renderFlags.Has(RenderFlagsComponent::ALPHA_CUTOUT);
+        if (ImGui::Checkbox("Alpha Cutout Exclude##proceduralmesh", &alphaCutoutExclude)) {
+            renderFlags.Set(RenderFlagsComponent::ALPHA_CUTOUT, !alphaCutoutExclude);
         }
 
         if (std::holds_alternative<std::monostate>(component.params)) {

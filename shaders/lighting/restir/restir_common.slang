@@ -561,7 +561,7 @@ public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 wor
     shadowRay.Direction = toLight / lightDist;
     shadowRay.TMin = 0.0;
     shadowRay.TMax = max(0.0, lightDist - max(0.002, lightDist * 0.005));
-    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
     q.Proceed();
     return q.CommittedStatus() == COMMITTED_NOTHING;
@@ -634,7 +634,7 @@ public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 
     shadowRay.Direction = worldLsun;
     shadowRay.TMin = 0.0;
     shadowRay.TMax = 1e30;
-    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     q.TraceRayInline(tlas, 0, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
     q.Proceed();
     return q.CommittedStatus() == COMMITTED_NOTHING;
@@ -649,7 +649,7 @@ public float RestirSunShadowBlockerT(RaytracingAccelerationStructure tlas, float
     shadowRay.Direction = worldLsun;
     shadowRay.TMin = 0.0;
     shadowRay.TMax = 1e30;
-    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
     q.TraceRayInline(tlas, 0, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
     q.Proceed();
     return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? q.CommittedRayT() : -1.0;

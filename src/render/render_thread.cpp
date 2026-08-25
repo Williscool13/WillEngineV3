@@ -1761,7 +1761,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 .stableId = inst.stableId,
                 .lightIndex = inst.lightIndex,
                 .emissiveTriLightBase = inst.emissiveTriLightBase,
-                .flags = inst.noMotionBlur ? INSTANCE_FLAG_NO_MOTION_BLUR : 0u,
+                .flags = (inst.motionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u) | (inst.alphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u),
             };
         }
     }

@@ -143,7 +143,8 @@ struct PrimitiveInstanceData
     uint32_t lightIndex{0xFFFFFFFFu};
     uint32_t emissiveTriLightBase{0xFFFFFFFFu};
     bool ddgiVisible{true};
-    bool noMotionBlur{false};
+    bool motionBlur{true};
+    bool alphaCutout{true};
 };
 
 struct ActiveMaterial

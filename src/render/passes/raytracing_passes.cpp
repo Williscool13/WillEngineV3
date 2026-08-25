@@ -19,6 +19,7 @@
 #include "render/interface/render_interface.h"
 #include "render/shaders/push_constant_interop.h"
 #include "render/shaders/instance_mask_interop.h"
+#include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace Render
@@ -63,6 +64,11 @@ void SetupTLASBuild(RenderGraph& graph,
     const size_t instanceBufferSize = limits.highestTLASInstanceCount * sizeof(VkAccelerationStructureInstanceKHR);
     auto* instanceData = static_cast<VkAccelerationStructureInstanceKHR*>(graph.OpenHostBuffer(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR));
 
+    Core::Array<bool, BINDLESS_MATERIAL_BUFFER_COUNT> materialCutout{};
+    for (const Core::ActiveMaterial& active : viewFamily.activeMaterials) {
+        materialCutout[active.stableIndex] = static_cast<uint32_t>(active.material.props.alphaProperties.y) == MATERIAL_ALPHA_CUTOUT;
+    }
+
     size_t instanceSlot = 0;
     for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
         const Core::PrimitiveInstanceData& src = viewFamily.primitiveInstances[i];
@@ -87,7 +93,8 @@ void SetupTLASBuild(RenderGraph& graph,
         if (!isLightProxy) { mask |= INSTANCE_MASK_SUN_OCCLUDER; }
         inst.mask = static_cast<uint8_t>(mask);
         inst.instanceShaderBindingTableRecordOffset = 0;
-        inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+        const bool cutout = src.alphaCutout && materialCutout[src.materialIndex];
+        inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | (cutout ? VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR : 0u);
         inst.accelerationStructureReference = src.blasDeviceAddress;
 
         instanceData[instanceSlot++] = inst;

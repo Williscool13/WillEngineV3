@@ -282,7 +282,8 @@ def c_motion_blur(w, j):
 
 
 def c_render_flags(w, j):
-    opt_i(w, "flags", j, "flags", 7)
+    for k in ("visible", "probeBake", "ddgi", "motionBlur", "alphaCutout"):
+        opt_b(w, k, j, k, True)
 
 
 def c_checkpoint(w, j):

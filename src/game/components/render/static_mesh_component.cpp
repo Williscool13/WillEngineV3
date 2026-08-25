@@ -180,9 +180,14 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude);
         }
         ImGui::SameLine();
-        bool motionBlurExclude = renderFlags.Has(RenderFlagsComponent::NO_MOTION_BLUR);
+        bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
         if (ImGui::Checkbox("Motion Blur Exclude", &motionBlurExclude)) {
-            renderFlags.Set(RenderFlagsComponent::NO_MOTION_BLUR, motionBlurExclude);
+            renderFlags.Set(RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude);
+        }
+        ImGui::SameLine();
+        bool alphaCutoutExclude = !renderFlags.Has(RenderFlagsComponent::ALPHA_CUTOUT);
+        if (ImGui::Checkbox("Alpha Cutout Exclude", &alphaCutoutExclude)) {
+            renderFlags.Set(RenderFlagsComponent::ALPHA_CUTOUT, !alphaCutoutExclude);
         }
 
         auto* runtime = registry.try_get<MeshRuntime>(entity);

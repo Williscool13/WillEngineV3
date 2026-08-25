@@ -4,6 +4,7 @@ import shader_functions;
 import instancing_interop;
 import push_constant_interop;
 import constants_interop;
+import flags_interop;
 
 import limits_declarations;
 import bindless_declarations;
@@ -91,7 +92,8 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
     if (alphaMode == MATERIAL_ALPHA_BLEND) {
         bVisible = false;
     }
-    uint region = (alphaMode == MATERIAL_ALPHA_CUTOUT ? MESHLET_REGION_CUTOUT : MESHLET_REGION_OPAQUE) | (bTwoSided ? 1u : 0u);
+    bool bCutout = alphaMode == MATERIAL_ALPHA_CUTOUT && (inst.flags & INSTANCE_FLAG_ALPHA_CUTOUT) != 0u;
+    uint region = (bCutout ? MESHLET_REGION_CUTOUT : MESHLET_REGION_OPAQUE) | (bTwoSided ? 1u : 0u);
 
     if (pc.cullStats != nullptr) {
         uint waveFrustum = WaveActiveCountBits(bFrustumCulled);

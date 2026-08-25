@@ -181,7 +181,7 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 shadowRay.TMin = 0.0;
                 shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
-                RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+                RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
                 q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
                 q.Proceed();
 
@@ -229,7 +229,7 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 sunRay.TMin = 0.0;
                 sunRay.TMax = 10000.0;
 
-                RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+                RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
                 q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, sunRay);
                 q.Proceed();
 

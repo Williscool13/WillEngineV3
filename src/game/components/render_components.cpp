@@ -17,14 +17,26 @@
 
 namespace Game::Component
 {
+static constexpr struct { const char* key; uint32_t bit; } RENDER_FLAG_KEYS[] = {
+    {"visible", RenderFlagsComponent::VISIBLE},
+    {"probeBake", RenderFlagsComponent::PROBE_BAKE_INCLUDE},
+    {"ddgi", RenderFlagsComponent::DDGI_CONTRIBUTE},
+    {"motionBlur", RenderFlagsComponent::MOTION_BLUR},
+    {"alphaCutout", RenderFlagsComponent::ALPHA_CUTOUT},
+};
+
 void RenderFlagsComponent::Serialize(const RenderFlagsComponent& comp, Engine::TextWriter& w)
 {
-    w.KeyOpt("flags", comp.flags, DEFAULT_FLAGS);
+    for (const auto& f : RENDER_FLAG_KEYS) {
+        w.KeyOpt(f.key, comp.Has(f.bit), (DEFAULT_FLAGS & f.bit) != 0);
+    }
 }
 
 void RenderFlagsComponent::Deserialize(RenderFlagsComponent& comp, const Engine::TextReader& r)
 {
-    comp.flags = r.UInt("flags", comp.flags);
+    for (const auto& f : RENDER_FLAG_KEYS) {
+        comp.Set(f.bit, r.Bool(f.key, (DEFAULT_FLAGS & f.bit) != 0));
+    }
 }
 
 void MeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)

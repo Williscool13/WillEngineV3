@@ -45,7 +45,7 @@ SPLINE = component_key("SplineMeshComponent")               # profile/railing/sp
 MODULE = component_key("ModuleMeshComponent")               # parts[]{type, <shape fields>, offset[3], rotation[wxyz], slot}, slotMaterials[8]; see add_module()
 STATIC_MESH = component_key("StaticMeshComponent")          # modelId, materialOverrides{slot:id}, primitiveBlacklist[], renderOffset, renderRotation. ONE entity = one whole model.
 STATIC_MESH_PRIMITIVE = component_key("StaticMeshPrimitiveComponent")  # modelId, primitiveOrdinal, renderOffset, renderRotation
-RENDER_FLAGS = component_key("RenderFlagsComponent")        # flags bitfield: 1=visible, 2=probe bake include, 4=ddgi contribute. Absent entry = all set (engine default); see add_render_flags()
+RENDER_FLAGS = component_key("RenderFlagsComponent")        # visible, probeBake, ddgi, motionBlur, alphaCutout bools; absent key = true (engine default); see add_render_flags()
 SPAWN = component_key("PlayerSpawnComponent")               # offset, priority
 LIGHT_DIRECTIONAL = component_key("DirectionalLightComponent")  # color, intensity, priority, angularRadiusDegrees; direction = rotation*(0,0,1), highest priority wins
 LIGHT_AREA = component_key("AreaLightComponent")            # color[3], intensity, halfWidth, halfHeight, range, drawEmissiveSurface; world extent = half*transform.scale, emissive quad = unit XZ plane
@@ -239,17 +239,11 @@ def next_sort():
 
 RENDER_DEFAULTS = {"material": 0, "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
 
-RF_VISIBLE = 1
-RF_PROBE_BAKE_INCLUDE = 2
-RF_DDGI_CONTRIBUTE = 4
-
-def add_render_flags(entity, visible=True, probe_bake_include=True, ddgi_contribute=True):
+def add_render_flags(entity, visible=True, probe_bake_include=True, ddgi_contribute=True, motion_blur=True, alpha_cutout=True):
     """RenderFlagsComponent entry. Only needed for NON-default flags; entities without one
     get all bits set on load (engine OnConstruct default)."""
-    flags = ((RF_VISIBLE if visible else 0)
-             | (RF_PROBE_BAKE_INCLUDE if probe_bake_include else 0)
-             | (RF_DDGI_CONTRIBUTE if ddgi_contribute else 0))
-    entity[RENDER_FLAGS] = {"flags": flags}
+    entity[RENDER_FLAGS] = {"visible": visible, "probeBake": probe_bake_include, "ddgi": ddgi_contribute,
+                            "motionBlur": motion_blur, "alphaCutout": alpha_cutout}
     return entity
 
 def base_entity(name, pos, rot=(1.0, 0.0, 0.0, 0.0), scale=(1.0, 1.0, 1.0), folder_id=0):

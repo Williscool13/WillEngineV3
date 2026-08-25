@@ -148,8 +148,8 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
     if (ImGui::Checkbox("Probe Bake Exclude##text3d", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
     ImGui::SameLine();
-    bool motionBlurExclude = renderFlags.Has(RenderFlagsComponent::NO_MOTION_BLUR);
-    if (ImGui::Checkbox("Motion Blur Exclude##text3d", &motionBlurExclude)) { renderFlags.Set(RenderFlagsComponent::NO_MOTION_BLUR, motionBlurExclude); }
+    bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
+    if (ImGui::Checkbox("Motion Blur Exclude##text3d", &motionBlurExclude)) { renderFlags.Set(RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude); }
 
     bool modified = false;
     ImGui::BeginDisabled(busy);
