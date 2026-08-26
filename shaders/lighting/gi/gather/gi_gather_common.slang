@@ -7,6 +7,7 @@ import shader_functions;
 
 public static const float GI_GATHER_MAX_ACCUM = 64.0;
 public static const float GI_GATHER_DISOCCLUSION_SENSITIVITY = 0.01;
+public static const float GI_GATHER_BACKFACE_GUARD_DISTANCE = 0.1;
 // R8 encode range for the variance guide (relative deviation of incident ray luma, from the DDGI atlas alpha): stored as relDev / SCALE, saturating at SCALE. It drives thresholds, so saturation only means "maximally noisy here".
 public static const float GI_GATHER_VARIANCE_GUIDE_SCALE = 4.0;
 // Adaptive ray count ignores relDev below this: the sky-vs-ground baseline sits at ~0.3-0.8 even on lit surfaces, and paying extra rays there buys nothing visible. Only the ray mapping; the upscale prior keeps the full guide.

@@ -414,6 +414,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
         RenderPass& sunPass = graph.AddPass(SID("[ReSTIR DI] Sun"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         sunPass.ReadBuffer(SCENE_DATA_BUFFER);
         sunPass.ReadBuffer(SID("light_data"));
+        sunPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+        sunPass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+        sunPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+        sunPass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
+        sunPass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
         sunPass.ReadSampledImage(targets.gbufferOne);
         sunPass.ReadSampledImage(targets.gbufferTwo);
         sunPass.ReadSampledImage(targets.depthCopy);
@@ -425,13 +430,18 @@ void SetupReSTIRPasses(RenderGraph& graph,
         if (bConfidence) { sunPass.WriteStorageImage(SID("restir_signal")); }
         if (bConfidence) { sunPass.WriteStorageImage(SID("restir_sun_blocker")); }
         if (bHasPrevBlocker) { sunPass.ReadSampledImage(SID("restir_sun_blocker_prev")); }
-        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bSunReproject, bHasPrevTlas, bConfidence, bHasPrevBlocker, field = sunCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bSunReproject, bHasPrevTlas, bConfidence, bHasPrevBlocker, field = sunCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_sun"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             ReSTIRDISunPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(SID("light_data")),
+                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+                .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
+                .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
@@ -447,6 +457,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .activeCheckerboardField = field,
+                .bAlphaTest = bAlphaTest ? 1u : 0u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

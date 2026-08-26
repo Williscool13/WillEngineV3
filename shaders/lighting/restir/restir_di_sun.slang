@@ -22,6 +22,7 @@ import visibility_lighting_common;
 import bindless_declarations;
 import restir_common;
 import random_common;
+import rt_alpha_test_common;
 
 #include "restir_features_macros.h"
 
@@ -77,10 +78,12 @@ void ComputeReSTIRDISun(uniform ReSTIRDISunPushConstant pc, uint3 threadID : SV_
     float3 candDirW = SampleSunConeDirection(SunDirectionWorld(sun), sun.angularRadius, candXi.x, candXi.y);
     float3 candDirV = normalize(mul(float3x3(scene.view), candDirW));
 
+    RTAlphaTestBuffers alphaBuffers = { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
+    bool bAlphaTest = pc.bAlphaTest != 0u;
     bool bTraced = dot(N, candDirV) > 0.0;
     float blockerT = -1.0;
     if (bTraced) {
-        blockerT = RestirSunShadowBlockerT(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, candDirW, worldTexelSize);
+        blockerT = RestirSunShadowBlockerT(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, candDirW, worldTexelSize, alphaBuffers, bAlphaTest);
     }
     bool bOccluded = blockerT >= 0.0;
 
@@ -166,7 +169,7 @@ void ComputeReSTIRDISun(uniform ReSTIRDISunPushConstant pc, uint3 threadID : SV_
     if (pc.signalIndex != ~0u) {
         float visPrev = winnerVis;
         if (pc.prevTlasIndex != ~0u) {
-            visPrev = RestirSunShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, candDirW, worldTexelSize) ? 1.0 : 0.0;
+            visPrev = RestirSunShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, candDirW, worldTexelSize, alphaBuffers, bAlphaTest) ? 1.0 : 0.0;
         }
         float sunFlip = clamp((winnerVis - visPrev) + blockerFlip, -1.0, 1.0);
         float sunMag = max(max(winnerVis, visPrev), abs(blockerFlip));

@@ -26,7 +26,8 @@ import bindless_declarations;
 /** Trace passes hit cutout as solid (no geometry buffers there); alpha-test the mirror hit here and finish the ray past any transparent texel. */
 static void ResolveCutoutHit(ReflectionShadePushConstant pc, float3 rayOrigin, inout ReflectionHitDescriptor hit)
 {
-    if (RTAlphaTestPasses(pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer, hit.instanceID, hit.primIndex, hit.bary)) {
+    RTAlphaTestBuffers alphaBuffers = { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
+    if (RTAlphaTestPasses(alphaBuffers, hit.instanceID, hit.primIndex, hit.bary)) {
         return;
     }
 
@@ -38,12 +39,7 @@ static void ResolveCutoutHit(ReflectionShadePushConstant pc, float3 rayOrigin, i
 
     RayQuery<> q;
     q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_ALL, ray);
-    while (q.Proceed()) {
-        if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
-            RTAlphaTestPasses(pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer, q.CandidateInstanceID(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics())) {
-            q.CommitNonOpaqueTriangleHit();
-        }
-    }
+    RTProceedAlphaTested(q, alphaBuffers);
 
     if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
         hit.hitT = q.CommittedRayT();

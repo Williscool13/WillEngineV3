@@ -368,7 +368,14 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                     }
 
                     if (!bFrontFace) {
-                        tier = GI_GATHER_TIER_BACKFACE;
+                        // Near backface = origin buried in geometry (leak guard).
+                        // Far backface = open space behind a single-sided surface: shade its back through the world tiers.
+                        if (hitT > GI_GATHER_BACKFACE_GUARD_DISTANCE) {
+                            hit.normal = -hit.normal;
+                            radiance = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, originCellKey, tier);
+                        } else {
+                            tier = GI_GATHER_TIER_BACKFACE;
+                        }
                     } else if (!bResolved) {
                         radiance = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, originCellKey, tier);
                     }

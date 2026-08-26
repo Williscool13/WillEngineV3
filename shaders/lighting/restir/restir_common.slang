@@ -4,6 +4,7 @@ import shader_constants;
 import lights_interop;
 import restir_interop;
 import instance_mask_interop;
+import rt_alpha_test_common;
 import pbr_functions;
 import bindless_declarations;
 import constants_interop;
@@ -625,7 +626,7 @@ public float EvalSunPHat(float3 LsunView, float3 V, float3 N, float3 albedo, flo
     return brdf * cosShade * sunMax;
 }
 
-public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize)
+public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize, RTAlphaTestBuffers alphaBuffers, bool bAlphaTest)
 {
     // Matches the SIGMA sun trace: footprint-scaled normal offset, no NoL division.
     float3 rayOrigin = OffsetGBufferRayOrigin(worldShadingPos, worldN, worldTexelSize, 1.0);
@@ -634,13 +635,13 @@ public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 
     shadowRay.Direction = worldLsun;
     shadowRay.TMin = 0.0;
     shadowRay.TMax = 1e30;
-    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-    q.TraceRayInline(tlas, 0, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
-    q.Proceed();
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    q.TraceRayInline(tlas, bAlphaTest ? 0u : RAY_FLAG_FORCE_OPAQUE, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
+    RTProceedAlphaTested(q, alphaBuffers);
     return q.CommittedStatus() == COMMITTED_NOTHING;
 }
 
-public float RestirSunShadowBlockerT(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize)
+public float RestirSunShadowBlockerT(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize, RTAlphaTestBuffers alphaBuffers, bool bAlphaTest)
 {
     // First accepted hit, not nearest (same as the SIGMA trace): an approximate blocker distance is enough.
     float3 rayOrigin = OffsetGBufferRayOrigin(worldShadingPos, worldN, worldTexelSize, 1.0);
@@ -649,9 +650,9 @@ public float RestirSunShadowBlockerT(RaytracingAccelerationStructure tlas, float
     shadowRay.Direction = worldLsun;
     shadowRay.TMin = 0.0;
     shadowRay.TMax = 1e30;
-    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-    q.TraceRayInline(tlas, 0, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
-    q.Proceed();
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    q.TraceRayInline(tlas, bAlphaTest ? 0u : RAY_FLAG_FORCE_OPAQUE, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
+    RTProceedAlphaTested(q, alphaBuffers);
     return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? q.CommittedRayT() : -1.0;
 }
 

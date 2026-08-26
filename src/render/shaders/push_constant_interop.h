@@ -568,6 +568,11 @@ SHADER_PUBLIC struct ReSTIRDISunPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
@@ -583,7 +588,7 @@ SHADER_PUBLIC struct ReSTIRDISunPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t activeCheckerboardField;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t bAlphaTest;
 };
 
 SHADER_PUBLIC struct ReSTIRBoilingFilterPushConstant
