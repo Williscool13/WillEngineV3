@@ -7,14 +7,13 @@ import reflection_probe_common;
 import reflection_probe_interop;
 import ddgi_interop;
 
-// Probe influence volume vs cell AABB. Sphere: point-AABB distance. Box: 15-axis OBB/AABB SAT (RTCD 4.4.1), OBB derived from worldToLocal (rows have length 1/extent_i; center solves Linear*c + t = 0).
+// Probe influence volume vs cell AABB. Sphere: point-AABB distance. Box: 15-axis OBB/AABB SAT (RTCD 4.4.1), OBB derived from worldToLocal (math row i = axis_i / extent_i; center solves Linear*c + t = 0).
 static bool ReflectionProbeIntersectsCellAABB(ReflectionProbeGPU probe, float3 aabbMin, float3 aabbMax)
 {
-    float4x4 rows = transpose(probe.worldToLocal);
     float3 extent = ReflectionProbeWorldExtent(probe);
-    float3 axis0 = normalize(rows[0].xyz);
-    float3 axis1 = normalize(rows[1].xyz);
-    float3 axis2 = normalize(rows[2].xyz);
+    float3 axis0 = normalize(probe.worldToLocal[0].xyz);
+    float3 axis1 = normalize(probe.worldToLocal[1].xyz);
+    float3 axis2 = normalize(probe.worldToLocal[2].xyz);
     float3 t = mul(probe.worldToLocal, float4(0.0, 0.0, 0.0, 1.0)).xyz;
     float3 obbCenter = -(axis0 * extent.x * t.x + axis1 * extent.y * t.y + axis2 * extent.z * t.z);
 

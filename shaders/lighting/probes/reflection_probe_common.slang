@@ -7,14 +7,13 @@ import pbr_functions;
 import world_grid_interop;
 import binning_common;
 
-/** Per-axis world half-extent. worldToLocal = inverse(R*S); its mathematical rows have length 1/halfExtent_i, and since matrix subscripting returns columns here, transpose exposes those rows. */
+/** Per-axis world half-extent. worldToLocal = inverse(R*S) = S^-1 R^T; row i is box axis i scaled by 1/halfExtent_i. Subscripting is the math row (mul(M, v) convention engine-wide). */
 public float3 ReflectionProbeWorldExtent(ReflectionProbeGPU probe)
 {
-    float4x4 worldToLocalRows = transpose(probe.worldToLocal);
     return float3(
-        1.0 / max(length(worldToLocalRows[0].xyz), 1e-8),
-        1.0 / max(length(worldToLocalRows[1].xyz), 1e-8),
-        1.0 / max(length(worldToLocalRows[2].xyz), 1e-8));
+        1.0 / max(length(probe.worldToLocal[0].xyz), 1e-8),
+        1.0 / max(length(probe.worldToLocal[1].xyz), 1e-8),
+        1.0 / max(length(probe.worldToLocal[2].xyz), 1e-8));
 }
 
 /** Influence-volume measure used for the smallest-wins pick tie-break; single source for the world-grid binning kernel. sphere = (4/3)pi r^3, box = 8*ex*ey*ez. */
