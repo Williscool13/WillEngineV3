@@ -18,6 +18,7 @@ add_library(core STATIC
         time/time_manager.h
         time/time_frame.cpp
         time/time_frame.h
+        time/frame_stamp.h
         math/constants.cpp
         math/constants.h
         memory/linear_allocator.cpp

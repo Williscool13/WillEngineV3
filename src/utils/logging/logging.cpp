@@ -4,17 +4,31 @@
 
 #include "logging.h"
 
+#include "core/time/frame_stamp.h"
 #include "platform/file_utils.h"
 
 #include <chrono>
 #include <ctime>
+#include <iterator>
 
+#include <spdlog/pattern_formatter.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <fmt/format.h>
 
 namespace Utils
 {
+class FrameStampFlag final : public spdlog::custom_flag_formatter
+{
+public:
+    void format(const spdlog::details::log_msg&, const std::tm&, spdlog::memory_buf_t& dest) override
+    {
+        fmt::format_to(std::back_inserter(dest), "{:>6}|{:>6}", Core::gGameFrame.load(std::memory_order_relaxed), Core::gRenderFrame.load(std::memory_order_relaxed));
+    }
+
+    [[nodiscard]] std::unique_ptr<custom_flag_formatter> clone() const override { return spdlog::details::make_unique<FrameStampFlag>(); }
+};
+
 Logger::Logger(const Core::Path& _logPath)
     : logPath(_logPath)
 {
@@ -24,7 +38,11 @@ Logger::Logger(const Core::Path& _logPath)
         auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.c_str(), true);
         auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
 
-        fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] [%n] [%!] %v");
+        auto fileFormatter = std::make_unique<spdlog::pattern_formatter>();
+        fileFormatter->add_flag<FrameStampFlag>('N');
+        fileFormatter->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%N] [%^%l%$] [%t] [%n] [%!] %v");
+        fileSink->set_formatter(std::move(fileFormatter));
+
         consoleSink->set_pattern("[%^%l%$] [%n] %v");
 
         sinks.PushBack(fileSink);

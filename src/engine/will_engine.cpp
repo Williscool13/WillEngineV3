@@ -23,6 +23,7 @@
 #include "input/input_rebinding.h"
 #include "input_config.h"
 #include "core/time/time_manager.h"
+#include "core/time/frame_stamp.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
 #include "core/containers/arena_fixed_vector.h"
@@ -1461,6 +1462,7 @@ void WillEngine::Run()
 
         inputManager->UpdateFocus(SDL_GetWindowFlags(window));
         timeManager->UpdateGame();
+        Core::gGameFrame.store(timeManager->GetTime().frameCount, std::memory_order_relaxed);
 
 
 #if !GAME_STATIC

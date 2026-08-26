@@ -38,6 +38,7 @@
 #include "core/containers/span.h"
 #include "core/memory/memory_manager.h"
 #include "core/string_id.h"
+#include "core/time/frame_stamp.h"
 #include "core/math/math_helpers.h"
 #include "engine/logging/engine_log.h"
 #include "pipelines/pipeline_manager.h"
@@ -208,6 +209,7 @@ void RenderThread::ThreadMain()
                 RenderFrame(currentFrameInFlight, currentRenderSynchronization, frameBuffer, imguiSnapshot);
 
                 frameNumber++;
+                Core::gRenderFrame.store(frameNumber, std::memory_order_relaxed);
             }
 
             FrameMark;
