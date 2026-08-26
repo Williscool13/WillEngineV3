@@ -75,7 +75,7 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
-        albedo *= assetTextures[material.textureImageIndices.x].SampleLevel(assetSamplers[material.textureSamplerIndices.x], colorUV, HIT_SHADING_TEXTURE_LOD);
+        albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, HIT_SHADING_TEXTURE_LOD);
     }
     GatherHitSurface s;
     s.normal = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));

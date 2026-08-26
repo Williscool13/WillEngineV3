@@ -117,12 +117,12 @@ static GTFullSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance in
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
-        albedo *= assetTextures[material.textureImageIndices.x].SampleLevel(assetSamplers[material.textureSamplerIndices.x], colorUV, 0);
+        albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, 0);
     }
     float3 emissive = material.emissiveFactor.rgb * material.emissiveFactor.w;
     if (material.textureImageIndices.w >= 0) {
         float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
-        emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, 0).rgb;
+        emissive *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.w)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.w)], emissiveUV, 0).rgb;
     }
 
     float metallic;

@@ -1,5 +1,5 @@
 defaultScene|New Scene
-bLimitFps|1
+bLimitFps|0
 frameLimitTarget|60
 bAutoSaveProjectConfig|0
 bAutoSaveLighting|0

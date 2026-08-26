@@ -162,12 +162,12 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
-        albedo *= assetTextures[material.textureImageIndices.x].SampleLevel(assetSamplers[material.textureSamplerIndices.x], colorUV, HIT_SHADING_TEXTURE_LOD);
+        albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, HIT_SHADING_TEXTURE_LOD);
     }
     float3 emissive = material.emissiveFactor.rgb * material.emissiveFactor.w;
     if (material.textureImageIndices.w >= 0) {
         float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
-        emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
+        emissive *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.w)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.w)], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
     }
     float metallic;
     float mrRoughness;
@@ -255,12 +255,12 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
-        albedo *= assetTextures[material.textureImageIndices.x].SampleLevel(assetSamplers[material.textureSamplerIndices.x], colorUV, HIT_SHADING_TEXTURE_LOD);
+        albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, HIT_SHADING_TEXTURE_LOD);
     }
     float3 emissive = material.emissiveFactor.rgb * material.emissiveFactor.w;
     if (material.textureImageIndices.w >= 0) {
         float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
-        emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
+        emissive *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.w)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.w)], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
     }
     float metallic;
     float mrRoughness;
@@ -377,12 +377,12 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
-        albedo *= assetTextures[material.textureImageIndices.x].SampleLevel(assetSamplers[material.textureSamplerIndices.x], colorUV, HIT_SHADING_TEXTURE_LOD);
+        albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, HIT_SHADING_TEXTURE_LOD);
     }
     float3 emissive = material.emissiveFactor.rgb * material.emissiveFactor.w;
     if (material.textureImageIndices.w >= 0) {
         float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
-        emissive *= assetTextures[material.textureImageIndices.w].SampleLevel(assetSamplers[material.textureSamplerIndices.w], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
+        emissive *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.w)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.w)], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
     }
     float metallic;
     float mrRoughness;

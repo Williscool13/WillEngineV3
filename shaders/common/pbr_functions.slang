@@ -15,7 +15,7 @@ public void SampleMetalRoughLod(MaterialProperties material, float2 uv, float lo
     roughness = material.metalRoughFactors.y;
     if (material.textureImageIndices.y >= 0) {
         float2 mrUv = uv * material.metalRoughUvTransform.xy + material.metalRoughUvTransform.zw;
-        float4 mr = assetTextures[material.textureImageIndices.y].SampleLevel(assetSamplers[material.textureSamplerIndices.y], mrUv, lod);
+        float4 mr = assetTextures[NonUniformResourceIndex(material.textureImageIndices.y)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.y)], mrUv, lod);
         roughness *= mr.g;
         metallic *= mr.b;
     }

@@ -47,7 +47,7 @@ void ComputeShadingDefaultLit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
     if (material.textureImageIndices.x >= 0) {
         float2 ddx = shadingInputs.uvDdx * material.colorUvTransform.xy;
         float2 ddy = shadingInputs.uvDdy * material.colorUvTransform.xy;
-        albedo *= assetTextures[material.textureImageIndices.x].SampleGrad(assetSamplers[material.textureSamplerIndices.x], colorUV, ddx, ddy);
+        albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleGrad(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, ddx, ddy);
     }
 
     float metallic  = material.metalRoughFactors.x;
@@ -57,7 +57,7 @@ void ComputeShadingDefaultLit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
         float2 ddxM = shadingInputs.uvDdx * material.metalRoughUvTransform.xy;
         float2 ddyM = shadingInputs.uvDdy * material.metalRoughUvTransform.xy;
         // glTF packs roughness in G and metalness in B.
-        float4 mr = assetTextures[material.textureImageIndices.y].SampleGrad(assetSamplers[material.textureSamplerIndices.y], mrUV, ddxM, ddyM);
+        float4 mr = assetTextures[NonUniformResourceIndex(material.textureImageIndices.y)].SampleGrad(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.y)], mrUV, ddxM, ddyM);
         roughness *= mr.g;
         metallic *= mr.b;
     }
@@ -67,7 +67,7 @@ void ComputeShadingDefaultLit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
         float2 normalUV = shadingInputs.interp.uv * material.normalUvTransform.xy + material.normalUvTransform.zw;
         float2 ddxN = shadingInputs.uvDdx * material.normalUvTransform.xy;
         float2 ddyN = shadingInputs.uvDdy * material.normalUvTransform.xy;
-        float2 normalRG = assetTextures[material.textureImageIndices.z].SampleGrad(assetSamplers[material.textureSamplerIndices.z], normalUV, ddxN, ddyN).xy;
+        float2 normalRG = assetTextures[NonUniformResourceIndex(material.textureImageIndices.z)].SampleGrad(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.z)], normalUV, ddxN, ddyN).xy;
         float3 tsNormal;
         tsNormal.xy = normalRG * 2.0 - 1.0;
         tsNormal.z  = sqrt(saturate(1.0 - dot(tsNormal.xy, tsNormal.xy)));
@@ -82,7 +82,7 @@ void ComputeShadingDefaultLit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
         float2 emissiveUV = shadingInputs.interp.uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
         float2 ddx = shadingInputs.uvDdx * material.emissiveUvTransform.xy;
         float2 ddy = shadingInputs.uvDdy * material.emissiveUvTransform.xy;
-        emissiveColor *= assetTextures[material.textureImageIndices.w].SampleGrad(assetSamplers[material.textureSamplerIndices.w], emissiveUV, ddx, ddy).rgb;
+        emissiveColor *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.w)].SampleGrad(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.w)], emissiveUV, ddx, ddy).rgb;
     }
 
     uint4 gbufferOne = uint4(
