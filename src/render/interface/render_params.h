@@ -262,6 +262,7 @@ struct RELAXParams
 struct SIGMAParams
 {
     bool bHalfRes{false};
+    bool bAlphaTest{true};
     bool enablePostBlur{true};
     float historyWeight{0.8f};
     float maxKernelPixels{32.f};
@@ -467,6 +468,7 @@ struct ReflectionConfiguration
     bool bMergedDenoise{true};
     bool bScreenSpaceLighting{true};
     bool bScreenSpaceTrace{false};
+    bool bAlphaTest{true};
     SunMode sunMode{SunMode::ShadowRay};
 
     float tracedRoughnessMax{0.3f};

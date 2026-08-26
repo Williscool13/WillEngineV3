@@ -18,8 +18,45 @@ import hit_shading_common;
 import reflection_probe_common;
 import random_common;
 import binning_common;
+import rt_alpha_test_common;
+import instance_mask_interop;
 
 import bindless_declarations;
+
+/** Trace passes hit cutout as solid (no geometry buffers there); alpha-test the mirror hit here and finish the ray past any transparent texel. */
+static void ResolveCutoutHit(ReflectionShadePushConstant pc, float3 rayOrigin, inout ReflectionHitDescriptor hit)
+{
+    if (RTAlphaTestPasses(pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer, hit.instanceID, hit.primIndex, hit.bary)) {
+        return;
+    }
+
+    RayDesc ray;
+    ray.Origin = rayOrigin;
+    ray.Direction = hit.rayDir;
+    ray.TMin = hit.hitT + max(1e-4, hit.hitT * 1e-4);
+    ray.TMax = 1e30;
+
+    RayQuery<> q;
+    q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_ALL, ray);
+    while (q.Proceed()) {
+        if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
+            RTAlphaTestPasses(pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer, q.CandidateInstanceID(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics())) {
+            q.CommitNonOpaqueTriangleHit();
+        }
+    }
+
+    if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
+        hit.hitT = q.CommittedRayT();
+        hit.bary = q.CommittedTriangleBarycentrics();
+        hit.instanceID = q.CommittedInstanceID();
+        hit.primIndex = q.CommittedPrimitiveIndex();
+    } else {
+        hit.hitT = REFLECTION_HIT_T_SKY;
+        hit.bary = float2(0.0);
+        hit.instanceID = REFLECTION_INSTANCE_NONE;
+        hit.primIndex = ~0u;
+    }
+}
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -66,6 +103,9 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
     uint2 rcoord = PixelPosToReservoirPos(pixel, field);
     uint pixelIdx = ReservoirIndex(rcoord, pc.renderExtent.x, field);
     ReflectionHitDescriptor hit = pc.reflectionDescriptors[pixelIdx];
+    if (pc.bAlphaTest != 0u && roughness <= pc.mirrorRoughnessMax && hit.hitT >= 0.0 && hit.instanceID != REFLECTION_INSTANCE_NONE && pc.tlasIndex != ~0u) {
+        ResolveCutoutHit(pc, rayOrigin, hit);
+    }
 
     float3 radiance = float3(0.0);
     float hitTOut = 0.0;

@@ -372,6 +372,7 @@ void Serialize(const Core::ReflectionConfiguration& p, TextWriter& w)
     w.Key("bMergedDenoise", p.bMergedDenoise);
     w.Key("bScreenSpaceLighting", p.bScreenSpaceLighting);
     w.Key("bScreenSpaceTrace", p.bScreenSpaceTrace);
+    w.Key("bAlphaTest", p.bAlphaTest);
     w.Key("sunMode", static_cast<int32_t>(p.sunMode));
     w.Key("tracedRoughnessMax", p.tracedRoughnessMax);
     w.Key("lightSpecularFromReflectionsMax", p.lightSpecularFromReflectionsMax);
@@ -388,6 +389,7 @@ void Deserialize(const TextReader& r, Core::ReflectionConfiguration& p)
     p.bMergedDenoise = r.Bool("bMergedDenoise", p.bMergedDenoise);
     p.bScreenSpaceLighting = r.Bool("bScreenSpaceLighting", p.bScreenSpaceLighting);
     p.bScreenSpaceTrace = r.Bool("bScreenSpaceTrace", p.bScreenSpaceTrace);
+    p.bAlphaTest = r.Bool("bAlphaTest", p.bAlphaTest);
     const int32_t sunModeRaw = r.Int("sunMode", static_cast<int32_t>(p.sunMode));
     p.sunMode = static_cast<Core::ReflectionConfiguration::SunMode>(sunModeRaw < 0 ? 0 : (sunModeRaw > 2 ? 2 : sunModeRaw));
     p.tracedRoughnessMax = r.Float("tracedRoughnessMax", p.tracedRoughnessMax);

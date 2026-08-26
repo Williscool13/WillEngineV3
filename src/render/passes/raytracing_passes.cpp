@@ -193,6 +193,11 @@ void SetupRTSunShadow(RenderGraph& graph,
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
+    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+    pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+    pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
+    pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.WriteStorageImage(SID("rt_sun_shadow"));
@@ -200,7 +205,7 @@ void SetupRTSunShadow(RenderGraph& graph,
         pass.WriteStorageImage(SID("rt_sun_depth"));
         pass.WriteStorageImage(SID("rt_sun_gbuffer"));
     }
-    pass.Execute([pipelineManager, sceneIndex, shadowExtent, fullExtent, pixelScale, bHalfRes, frameNumber,
+    pass.Execute([pipelineManager, sceneIndex, shadowExtent, fullExtent, pixelScale, bHalfRes, frameNumber, bAlphaTest = viewFamily.sigmaParams.bAlphaTest,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_sun_shadow"));
         if (!pipeline) { return; }
@@ -209,6 +214,11 @@ void SetupRTSunShadow(RenderGraph& graph,
         RTSunShadowPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+            .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
+            .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
             .renderExtent = {shadowExtent[0], shadowExtent[1]},
             .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -220,6 +230,7 @@ void SetupRTSunShadow(RenderGraph& graph,
             .pixelScale = pixelScale,
             .outputDepthIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_depth")) : ~0x0u,
             .outputGbufferIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_gbuffer")) : ~0x0u,
+            .bAlphaTest = bAlphaTest ? 1u : 0u,
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

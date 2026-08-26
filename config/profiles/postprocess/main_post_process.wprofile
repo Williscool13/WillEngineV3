@@ -1,6 +1,6 @@
 postProcess
-bExposureEnabled|0
-exposureTargetLuminance|0x3e3851ec
+bExposureEnabled|1
+exposureTargetLuminance|0x3f1b027b
 exposureSpeedBrighten|0x40000000
 exposureSpeedDarken|0x40c00000
 exposureMinGainEV|0xc0c00000
@@ -13,7 +13,7 @@ bloomSoftThreshold|0x3f000000
 bloomRadius|0x3f800000
 bloomIntensity|0x3e800000
 bloomClamp|0x41200000
-tonemapOperator|9
+tonemapOperator|10
 uchimuraP|0x3f800000
 uchimuraA|0x3f800000
 uchimuraM|0x3e6147ae
@@ -39,8 +39,8 @@ motionBlurVelocityScale|0x3f4ccccd
 motionBlurTargetFps|0x42700000
 motionBlurDepthScale|0x3f800000
 motionBlurMaxRadiusPx|0x42000000
-bColorGradingEnabled|0
-colorGradingExposure|0x3ecccccd
+bColorGradingEnabled|1
+colorGradingExposure|0x00000000
 colorGradingContrast|0x3f8ccccd
 colorGradingSaturation|0x3f8ccccd
 colorGradingTemperature|0x00000000

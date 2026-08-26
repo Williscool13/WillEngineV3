@@ -211,6 +211,8 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .sunMode = sunMode,
                 .maxRayIntensity = reflectionConfig.maxRayIntensity,
                 .iblIntensity = iblIntensity,
+                .mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax,
+                .bAlphaTest = reflectionConfig.bAlphaTest ? 1u : 0u,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_shade"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

@@ -19,6 +19,7 @@ import shader_functions;
 import restir_common;
 import sigma_common;
 import random_common;
+import rt_alpha_test_common;
 
 /** Uniformly sample a ray direction inside the sun's angular cone (half-angle = angularRadius) around the mean direction. */
 static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float u1, float u2)
@@ -113,9 +114,14 @@ void ComputeRTSunShadow(uint3 dtid : SV_DispatchThreadID, uniform RTSunShadowPus
     ray.TMax = 10000.0;
 
     // First hit, not closest: SIGMA only needs a blocker distance for the penumbra radius, and any-hit traversal ends as soon as the ray is occluded.
-    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-    q.TraceRayInline(tlas, 0, INSTANCE_MASK_SUN_OCCLUDER, ray);
-    q.Proceed();
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    q.TraceRayInline(tlas, pc.bAlphaTest != 0u ? 0u : RAY_FLAG_FORCE_OPAQUE, INSTANCE_MASK_SUN_OCCLUDER, ray);
+    while (q.Proceed()) {
+        if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
+            RTAlphaTestPasses(pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer, q.CandidateInstanceID(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics())) {
+            q.CommitNonOpaqueTriangleHit();
+        }
+    }
 
     if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
         float hitDist = q.CommittedRayT();

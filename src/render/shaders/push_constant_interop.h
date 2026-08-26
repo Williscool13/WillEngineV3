@@ -975,6 +975,8 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC uint32_t sunMode; // REFLECTION_SUN_* for the analytic hit-shading fallback
     SHADER_PUBLIC float maxRayIntensity;
     SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC float mirrorRoughnessMax;
+    SHADER_PUBLIC uint32_t bAlphaTest;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
@@ -2158,6 +2160,11 @@ SHADER_PUBLIC struct RTSunShadowPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC uint32_t depthIndex;
@@ -2169,6 +2176,7 @@ SHADER_PUBLIC struct RTSunShadowPushConstant
     SHADER_PUBLIC uint32_t pixelScale;
     SHADER_PUBLIC uint32_t outputDepthIndex; // for half res
     SHADER_PUBLIC uint32_t outputGbufferIndex; // for half res
+    SHADER_PUBLIC uint32_t bAlphaTest;
 };
 
 SHADER_PUBLIC struct DirectionalLightPushConstant

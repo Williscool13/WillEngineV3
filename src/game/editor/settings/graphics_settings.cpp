@@ -1155,6 +1155,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reproject the reflection hit into last frame's lit image and reuse that fully shadowed color; falls back to unshadowed analytic hit shading when the hit is off-screen or occluded."); }
             if (ImGui::Checkbox("Screen-Space Trace", &reflection.bScreenSpaceTrace)) { changed = true; }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Default mode only: march the reflection ray against the depth buffer instead of the TLAS. Off-screen and occluded rays fall back to reflection probes then the skybox."); }
+            if (ImGui::Checkbox("Alpha Test Mirror Hits", &reflection.bAlphaTest)) { changed = true; }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("At/below Mirror Roughness Max, alpha-test cutout surfaces the reflection ray hit and continue the ray through transparent texels. Off: cutout reflects as solid."); }
 
             static const char* reflectionSunModes[] = {"Shadow Ray", "Always Lit", "Always Unlit"};
             int reflectionSunMode = static_cast<int>(reflection.sunMode);
@@ -1423,6 +1425,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
                 if (ImGui::Checkbox("Half Res##sigma", &sigma.bHalfRes)) { changed = true; }
                 sigmaTip("Trace + denoise the sun shadow at half resolution, then bilaterally upsample. Cuts the trace/temporal cost; softens contact shadows. Matches half-res ReSTIR.");
+                if (ImGui::Checkbox("Alpha Test Cutout##sigma", &sigma.bAlphaTest)) { changed = true; }
+                sigmaTip("Sun shadow rays alpha-test cutout surfaces (foliage, fences) instead of treating them as solid. Costs a texture fetch per cutout candidate along the ray.");
                 if (ImGui::Checkbox("Post-Blur##sigma", &sigma.enablePostBlur)) { changed = true; }
                 sigmaTip("Second decorrelated spatial pass after the main blur. The single largest quality lever; cleans residual penumbra noise. Default on.");
 

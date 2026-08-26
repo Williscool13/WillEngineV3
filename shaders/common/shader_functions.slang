@@ -345,9 +345,9 @@ float Luma(float3 c)
     return dot(c, float3(0.2126, 0.7152, 0.0722));
 }
 
-// Target-to-adapted luminance ratio, clamped to [0.25, 32]; scales noise thresholds with exposure
+// Target-to-adapted luminance ratio, clamped to [1, 32]; tightens noise thresholds in dim scenes, never loosens them in bright ones
 float ExposureNoiseScale(float adaptedLuminance, float targetLuminance)
 {
-    return clamp(targetLuminance / max(adaptedLuminance, 1e-3), 0.25, 32.0);
+    return clamp(targetLuminance / max(adaptedLuminance, 1e-3), 1.0, 32.0);
 }
 
