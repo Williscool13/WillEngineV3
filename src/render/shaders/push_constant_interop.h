@@ -982,6 +982,7 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC float mirrorRoughnessMax;
     SHADER_PUBLIC uint32_t bAlphaTest;
+    SHADER_PUBLIC uint32_t hitLocalShadowRays;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
@@ -2122,6 +2123,11 @@ SHADER_PUBLIC struct RTGroundTruthDIPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(float4) accumulationBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t depthIndex;

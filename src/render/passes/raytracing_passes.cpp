@@ -274,6 +274,11 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(SID("light_data"));
+    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+    pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+    pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
+    pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     pass.ReadWriteBuffer(SID("rt_gt_di_accum"));
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
@@ -290,6 +295,11 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(SID("light_data")),
             .accumulationBuffer = graph.GetBufferAddress(SID("rt_gt_di_accum")),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+            .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
+            .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
             .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
             .skyboxIndex = skyboxIndex,
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),

@@ -11,6 +11,12 @@ import shader_functions;
 import pbr_functions;
 import packing_functions;
 import random_common;
+import rt_alpha_test_common;
+
+static RTAlphaTestBuffers GTAlphaBuffers(RTGroundTruthDIPushConstant pc)
+{
+    return { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
+}
 
 /** Uniformly sample a ray direction inside the sun's angular cone (half-angle = angularRadius) around the mean direction. */
 static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float u1, float u2)
@@ -181,9 +187,9 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 shadowRay.TMin = 0.0;
                 shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
-                RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+                RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
                 q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
-                q.Proceed();
+                RTProceedAlphaTested(q, GTAlphaBuffers(pc));
 
                 bool visible = (q.CommittedStatus() == COMMITTED_NOTHING);
                 if (visible) {
@@ -229,9 +235,9 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 sunRay.TMin = 0.0;
                 sunRay.TMax = 10000.0;
 
-                RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+                RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
                 q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, sunRay);
-                q.Proceed();
+                RTProceedAlphaTested(q, GTAlphaBuffers(pc));
 
                 if (q.CommittedStatus() == COMMITTED_NOTHING) {
                     float3 H = normalize(V + L);

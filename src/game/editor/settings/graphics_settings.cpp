@@ -27,6 +27,7 @@
 #include "engine/engine_api.h"
 #include "engine/profiles/profile_library.h"
 #include "render/passes/ddgi_passes.h"
+#include "render/shaders/reflection_interop.h"
 #include "render/passes/final_gather_passes.h"
 
 #include "render/shaders/restir_features_macros.h"
@@ -1156,7 +1157,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Checkbox("Screen-Space Trace", &reflection.bScreenSpaceTrace)) { changed = true; }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Default mode only: march the reflection ray against the depth buffer instead of the TLAS. Off-screen and occluded rays fall back to reflection probes then the skybox."); }
             if (ImGui::Checkbox("Alpha Test Mirror Hits", &reflection.bAlphaTest)) { changed = true; }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("At/below Mirror Roughness Max, alpha-test cutout surfaces the reflection ray hit and continue the ray through transparent texels. Off: cutout reflects as solid."); }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("At/below Mirror Roughness Max, alpha-test cutout surfaces the reflection ray hit and continue the ray through transparent texels. Also alpha-tests the sun and local shadow rays at analytic hits. Off: cutout reflects and shadows as solid."); }
 
             static const char* reflectionSunModes[] = {"Shadow Ray", "Always Lit", "Always Unlit"};
             int reflectionSunMode = static_cast<int>(reflection.sunMode);
@@ -1178,6 +1179,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             reflF("Max Ray Intensity##reflection", &reflection.maxRayIntensity, reflectionDefaults.maxRayIntensity, 0.0f, 1000.0f, "%.0f", "Luminance clamp on a single reflection ray's radiance (before demodulation). Bounds what one emitter hit can inject into the denoiser; biased darker on bright emitters. 0 = off. Default 0.");
             reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "Screen-space trace only: view-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
             if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Screen-space trace only: maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
+            if (Widgets::SliderInt("Hit Local Shadow Rays##reflection", &reflection.hitLocalShadowRays, 0, static_cast<int>(REFLECTION_HIT_SHADOW_RAYS_MAX), {.tooltip = "Analytic hit shading: shadow rays spent on the brightest local-light contributions at the hit (sun has its own ray via Hit Sun Mode). Remaining lights stay unshadowed. 0 = none. Default 1.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.hitLocalShadowRays)})) { changed = true; }
 
 
             ImGui::Spacing();

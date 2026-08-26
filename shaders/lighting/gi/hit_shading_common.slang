@@ -19,6 +19,7 @@ import radiance_cache_hash_common;
 import reflection_probe_interop;
 import reflection_probe_common;
 import reflection_interop;
+import rt_alpha_test_common;
 
 // Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
@@ -234,6 +235,41 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
 }
 
 /** Used by the reflection shade pass. */
+/** Top-N unshadowed local-light contributions at a reflection hit, sorted by luma; the local shadow-ray budget is spent on these. */
+struct HitShadowCandidates
+{
+    float3 contribution[REFLECTION_HIT_SHADOW_RAYS_MAX];
+    float3 direction[REFLECTION_HIT_SHADOW_RAYS_MAX];
+    float tMax[REFLECTION_HIT_SHADOW_RAYS_MAX];
+    float luma[REFLECTION_HIT_SHADOW_RAYS_MAX];
+    uint count;
+
+    [mutating] void Push(uint capacity, float3 c, float3 d, float t)
+    {
+        float l = Luma(c);
+        if (capacity == 0u || l <= 0.0) {
+            return;
+        }
+        if (count < capacity) {
+            count++;
+        } else if (l <= luma[capacity - 1]) {
+            return;
+        }
+        uint i = count - 1;
+        while (i > 0u && luma[i - 1] < l) {
+            contribution[i] = contribution[i - 1];
+            direction[i] = direction[i - 1];
+            tMax[i] = tMax[i - 1];
+            luma[i] = luma[i - 1];
+            i--;
+        }
+        contribution[i] = c;
+        direction[i] = d;
+        tMax[i] = t;
+        luma[i] = l;
+    }
+};
+
 public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias, float3 cameraWorldPos)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
@@ -271,6 +307,10 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
     float NoV = max(dot(N, V), 0.0);
 
     float3 radiance = emissive;
+    float3 shadowOrigin = OffsetHitRayOrigin(worldPosition, N);
+    RTAlphaTestBuffers alphaBuffers = { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
+    uint shadowRayFlags = pc.bAlphaTest != 0u ? 0u : RAY_FLAG_FORCE_OPAQUE;
+
     DirectionalLightData sun = pc.lightData->directionalLight;
     if (sun.directionIntensity.w > 0.0 && pc.sunMode != REFLECTION_SUN_ALWAYS_UNLIT) {
         float3 L = normalize(-sun.directionIntensity.xyz);
@@ -279,14 +319,14 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
             bool bVisible = true;
             if (pc.sunMode == REFLECTION_SUN_SHADOW_RAY) {
                 RayDesc shadowRay;
-                shadowRay.Origin = OffsetHitRayOrigin(worldPosition, N);
+                shadowRay.Origin = shadowOrigin;
                 shadowRay.Direction = L;
                 shadowRay.TMin = 0.0;
                 shadowRay.TMax = 10000.0;
 
-                RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-                shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
-                shadow.Proceed();
+                RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+                shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], shadowRayFlags, INSTANCE_MASK_DDGI, shadowRay);
+                RTProceedAlphaTested(shadow, alphaBuffers);
                 bVisible = shadow.CommittedStatus() == COMMITTED_NOTHING;
             }
             if (bVisible) {
@@ -295,6 +335,9 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
         }
     }
 
+    uint shadowRayBudget = pc.tlasIndex != ~0u ? min(pc.hitLocalShadowRays, REFLECTION_HIT_SHADOW_RAYS_MAX) : 0u;
+    HitShadowCandidates candidates;
+    candidates.count = 0u;
     if (worldGridLights.grid != nullptr) {
         WorldGridKey key = WorldGridResolveCell(worldPosition, worldGridLights.camPos);
         uint2 gridEntry = worldGridLights.grid[key.cellIndex];
@@ -304,13 +347,34 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
         float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, metallic);
         for (uint j = 0; j < gridEntry.y; j++) {
             uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
-            PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], worldGridLights.view);
-            radiance += ShadePunctual(punctual, viewN, viewV, viewPos, albedo.rgb, metallic, roughness, F0);
+            LightInfo light = pc.lightData->lights[lightIndex];
+            PunctualLight punctual = DegenerateLight(light, worldGridLights.view);
+            float3 contribution = ShadePunctual(punctual, viewN, viewV, viewPos, albedo.rgb, metallic, roughness, F0);
+            radiance += contribution;
+            float3 toLight = light.position.xyz - shadowOrigin;
+            float lightDist = max(length(toLight), 1e-5);
+            candidates.Push(shadowRayBudget, contribution, toLight / lightDist, lightDist - max(0.002, lightDist * 0.005));
         }
     }
 
+    for (uint i = 0; i < candidates.count; i++) {
+        RayDesc shadowRay;
+        shadowRay.Origin = shadowOrigin;
+        shadowRay.Direction = candidates.direction[i];
+        shadowRay.TMin = 0.0;
+        shadowRay.TMax = candidates.tMax[i];
+
+        RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+        shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], shadowRayFlags, INSTANCE_MASK_DDGI, shadowRay);
+        RTProceedAlphaTested(shadow, alphaBuffers);
+        if (shadow.CommittedStatus() != COMMITTED_NOTHING) {
+            radiance -= candidates.contribution[i];
+        }
+    }
+
+    float4 gi = float4(0.0);
     if (pc.bDDGIApply != 0u) {
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.ddgiCascades, maxBias);
+        gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.ddgiCascades, maxBias);
         radiance += diffuseColor * gi.rgb;
     }
 
@@ -321,6 +385,12 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
     float3 specRadiance = float3(0.0);
     if (pc.skyboxIndex >= 0) {
         specRadiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(R), sqrt(roughness) * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1)).rgb * pc.iblIntensity;
+        if (pc.bDDGIApply != 0u) {
+            // Same sky-visibility ratio as remodulate's GI_SKY_SPECULAR_OCCLUSION
+            float3 skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], N) * pc.iblIntensity;
+            float3 indirectDiffuse = gi.rgb * gi.w + skyIrradiance * (1.0 - gi.w);
+            specRadiance *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
+        }
     }
     if (pc.reflectionProbeCount > 0u) {
         ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);

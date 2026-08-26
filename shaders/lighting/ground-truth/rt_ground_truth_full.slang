@@ -11,6 +11,12 @@ import shader_functions;
 import pbr_functions;
 import packing_functions;
 import random_common;
+import rt_alpha_test_common;
+
+static RTAlphaTestBuffers GTAlphaBuffers(RTGroundTruthGIPushConstant pc)
+{
+    return { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
+}
 
 // =============== Shader Summary ============
 // Full path-traced reference: direct illumination (analytic light + cone-sampled sun, full BRDF) plus a complete indirect path that carries BOTH diffuse and
@@ -187,9 +193,9 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
             shadowRay.TMin = 0.0;
             shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+            RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
             shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
-            shadow.Proceed();
+            RTProceedAlphaTested(shadow, GTAlphaBuffers(pc));
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 float3 H = normalize(V + L);
                 float NDF = D_GGX(N, H, roughness);
@@ -225,9 +231,9 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
             sunRay.TMin = 0.0;
             sunRay.TMax = 10000.0;
 
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+            RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
             shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, sunRay);
-            shadow.Proceed();
+            RTProceedAlphaTested(shadow, GTAlphaBuffers(pc));
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 float3 H = normalize(V + L);
                 float NDF = D_GGX(N, H, roughness);
@@ -415,9 +421,9 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
                 ray.TMin = 0.0;
                 ray.TMax = 10000.0;
 
-                RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+                RayQuery<> q;
                 q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
-                q.Proceed();
+                RTProceedAlphaTested(q, GTAlphaBuffers(pc));
 
                 const bool bTriangleHit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
                 float segmentT = bTriangleHit ? q.CommittedRayT() : ray.TMax;
@@ -556,9 +562,9 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
         ray.TMax = 10000.0;
 
         // Light proxies excluded from the TLAS trace; analytic light emission along the segment is collected by CollectAnalyticLightHits (MIS partner to NEE).
-        RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+        RayQuery<> q;
         q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
-        q.Proceed();
+        RTProceedAlphaTested(q, GTAlphaBuffers(pc));
 
         const bool bTriangleHit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
         float segmentT = bTriangleHit ? q.CommittedRayT() : ray.TMax;

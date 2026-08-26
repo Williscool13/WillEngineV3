@@ -11,6 +11,12 @@ import shader_functions;
 import pbr_functions;
 import packing_functions;
 import random_common;
+import rt_alpha_test_common;
+
+static RTAlphaTestBuffers GTAlphaBuffers(RTGroundTruthGIPushConstant pc)
+{
+    return { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
+}
 
 // =============== Shader Summary ============
 // Progressive path-traced reference for the DDGI indirect diffuse: primary surface from the gbuffer, direct = one NEE light sample + cone-sampled sun (identical estimator to rt_ground_truth_di),
@@ -112,9 +118,9 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             shadowRay.TMin = 0.0;
             shadowRay.TMax = 10000.0;
 
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+            RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
             shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
-            shadow.Proceed();
+            RTProceedAlphaTested(shadow, GTAlphaBuffers(pc));
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
             }
@@ -164,9 +170,9 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             shadowRay.TMin = 0.0;
             shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
+            RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
             shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
-            shadow.Proceed();
+            RTProceedAlphaTested(shadow, GTAlphaBuffers(pc));
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
             }
@@ -271,9 +277,9 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             shadowRay.TMin = 0.0;
             shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
-            RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+            RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
             q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
-            q.Proceed();
+            RTProceedAlphaTested(q, GTAlphaBuffers(pc));
             if (q.CommittedStatus() == COMMITTED_NOTHING) {
                 float3 H = normalize(V + L);
                 float NDF = D_GGX(N, H, roughness);
@@ -308,9 +314,9 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 sunRay.TMin = 0.0;
                 sunRay.TMax = 10000.0;
 
-                RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+                RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
                 q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, sunRay);
-                q.Proceed();
+                RTProceedAlphaTested(q, GTAlphaBuffers(pc));
                 if (q.CommittedStatus() == COMMITTED_NOTHING) {
                     float3 H = normalize(V + L);
                     float NDF = D_GGX(N, H, roughness);
@@ -353,9 +359,9 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
         ray.TMax = 10000.0;
 
         // Light proxies excluded. NEE owns all light emission.
-        RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+        RayQuery<> q;
         q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, ray);
-        q.Proceed();
+        RTProceedAlphaTested(q, GTAlphaBuffers(pc));
 
         if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT) {
             if (pc.skyboxIndex >= 0) {

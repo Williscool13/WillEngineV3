@@ -478,6 +478,7 @@ struct ReflectionConfiguration
     float maxRayIntensity{0.0f};
     float ssrThickness{0.3f};
     int32_t ssrMaxSteps{64};
+    int32_t hitLocalShadowRays{1};
 };
 
 struct ReflectionProbeConfiguration
