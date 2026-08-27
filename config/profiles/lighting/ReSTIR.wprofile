@@ -171,6 +171,7 @@ bEnabled|1
 bMergedDenoise|1
 bScreenSpaceLighting|0
 bScreenSpaceTrace|0
+bAlphaTest|1
 sunMode|0
 tracedRoughnessMax|0x3e4ccccd
 lightSpecularFromReflectionsMax|0x3e4ccccd
@@ -179,6 +180,8 @@ intensity|0x3f800000
 maxRayIntensity|0x00000000
 ssrThickness|0x3e99999a
 ssrMaxSteps|64
+hitLocalShadowRays|1
+hitTextureLod|0x00000000
 ;
 reflectionProbe
 bEnabled|1
@@ -200,6 +203,7 @@ sliceCount|0x40400000
 stepsPerSlice|0x40400000
 denoiseBlurBeta|0x3f99999a
 denoisePasses|0x40000000
+temporalMaxAccum|0x41800000
 ;
 iblIntensity|0x3f800000
 indirectIntensity|0x3f333333

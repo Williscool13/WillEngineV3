@@ -180,6 +180,8 @@ struct GTAOConfiguration
     float denoiseBlurBeta{1.2f};
     /** Edge-aware denoise passes over the raw AO, clamped to [1, 8]. Stored as float to match the slider widget. */
     float denoisePasses{2.0f};
+    /** Frames of MV-reprojected history the AO accumulates (shadows_resolve), 0 disables. */
+    float temporalMaxAccum{16.0f};
 };
 
 enum class LightingMode : uint8_t
@@ -479,6 +481,7 @@ struct ReflectionConfiguration
     float ssrThickness{0.3f};
     int32_t ssrMaxSteps{64};
     int32_t hitLocalShadowRays{1};
+    float hitTextureLod{3.0f};
 };
 
 struct ReflectionProbeConfiguration

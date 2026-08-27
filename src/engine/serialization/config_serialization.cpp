@@ -383,6 +383,7 @@ void Serialize(const Core::ReflectionConfiguration& p, TextWriter& w)
     w.Key("ssrThickness", p.ssrThickness);
     w.Key("ssrMaxSteps", p.ssrMaxSteps);
     w.Key("hitLocalShadowRays", p.hitLocalShadowRays);
+    w.Key("hitTextureLod", p.hitTextureLod);
 }
 
 void Deserialize(const TextReader& r, Core::ReflectionConfiguration& p)
@@ -403,6 +404,7 @@ void Deserialize(const TextReader& r, Core::ReflectionConfiguration& p)
     p.ssrMaxSteps = r.Int("ssrMaxSteps", p.ssrMaxSteps);
     const int32_t hitLocalShadowRaysRaw = r.Int("hitLocalShadowRays", p.hitLocalShadowRays);
     p.hitLocalShadowRays = hitLocalShadowRaysRaw < 0 ? 0 : (hitLocalShadowRaysRaw > static_cast<int32_t>(REFLECTION_HIT_SHADOW_RAYS_MAX) ? static_cast<int32_t>(REFLECTION_HIT_SHADOW_RAYS_MAX) : hitLocalShadowRaysRaw);
+    p.hitTextureLod = r.Float("hitTextureLod", p.hitTextureLod);
 }
 
 void Serialize(const Core::ReflectionProbeConfiguration& p, TextWriter& w)
@@ -437,6 +439,7 @@ void Serialize(const Core::GTAOConfiguration& p, TextWriter& w)
     w.Key("stepsPerSlice", p.stepsPerSlice);
     w.Key("denoiseBlurBeta", p.denoiseBlurBeta);
     w.Key("denoisePasses", p.denoisePasses);
+    w.Key("temporalMaxAccum", p.temporalMaxAccum);
 }
 
 void Deserialize(const TextReader& r, Core::GTAOConfiguration& p)
@@ -453,6 +456,7 @@ void Deserialize(const TextReader& r, Core::GTAOConfiguration& p)
     p.stepsPerSlice = r.Float("stepsPerSlice", p.stepsPerSlice);
     p.denoiseBlurBeta = r.Float("denoiseBlurBeta", p.denoiseBlurBeta);
     p.denoisePasses = r.Float("denoisePasses", p.denoisePasses);
+    p.temporalMaxAccum = r.Float("temporalMaxAccum", p.temporalMaxAccum);
 }
 
 void Serialize(const Core::SMAAConfiguration& p, TextWriter& w)

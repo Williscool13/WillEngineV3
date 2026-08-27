@@ -70,6 +70,28 @@ static float3 GIGatherSampleHistoryCatmullRom(uint historyIndex, float2 samplePo
     return color / sum;
 }
 
+/** Per-tap reprojection gate shared by every full-res history fetch: plane-distance disocclusion (the compared |dz|*NoV already projects out slant, so the tolerance is flat) plus a normal test. */
+public bool GIGatherHistoryTapValid(SceneData scene, uint depthHistoryIndex, uint gbufferOneHistoryIndex, int2 tap, float expectedPrevViewZ, float NoV, float disocclusionThreshold, float3 worldN)
+{
+    float prevRawDepth = rdgTexturesFloat[depthHistoryIndex].Load(int3(tap, 0)).r;
+    if (prevRawDepth <= 0.0) {
+        return false;
+    }
+    float prevViewZ = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    if (abs(prevViewZ - expectedPrevViewZ) * NoV > disocclusionThreshold) {
+        return false;
+    }
+    float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[gbufferOneHistoryIndex].Load(int3(tap, 0)).r)));
+    // 60 degrees, matching the tier-0 screen gate: the plane test is blind to old surfaces CROSSING the current plane (buried pillar faces at ground level), and those arrive with perpendicular normals (dot ~ 0).
+    return dot(worldN, prevWorldN) >= 0.5;
+}
+
+/** Flat plane-distance tolerance for GIGatherHistoryTapValid. The NRD-style 1/lerp(0.05,1,NoV) expansion inflated the accepted raw mismatch to ~2x viewZ at grazing (ground history never rejected); do not reintroduce it. */
+public float GIGatherDisocclusionThreshold(SceneData scene, float centerViewZ)
+{
+    return GI_GATHER_DISOCCLUSION_SENSITIVITY * abs(scene.ndcToViewMul.y) * abs(centerViewZ);
+}
+
 /** MV-reprojected 2x2 bilinear history fetch with per-tap depth/backface validity and weight renormalization. quality is the surviving bilinear weight; 0 means no usable history. */
 public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
 {
@@ -81,9 +103,7 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
     }
 
     float expectedPrevViewZ = centerViewZ + UnpackViewZDelta(gt1.w);
-    float frustumSize = abs(scene.ndcToViewMul.y) * abs(centerViewZ);
-    // Flat plane-distance tolerance: the compared |dz|*NoV already projects out slant, and the NRD-style 1/lerp(0.05,1,NoV) expansion inflated the accepted raw mismatch to ~2x viewZ at grazing (ground history never rejected).
-    float disocclusionThreshold = GI_GATHER_DISOCCLUSION_SENSITIVITY * frustumSize;
+    float disocclusionThreshold = GIGatherDisocclusionThreshold(scene, centerViewZ);
 
     float2 prevPos = historyUv * float2(renderExtent) - 0.5;
     int2 origin = int2(floor(prevPos));
@@ -105,17 +125,7 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
         if (any(tap < int2(0)) || any(tap >= int2(renderExtent))) {
             continue;
         }
-        float prevRawDepth = rdgTexturesFloat[depthHistoryIndex].Load(int3(tap, 0)).r;
-        if (prevRawDepth <= 0.0) {
-            continue;
-        }
-        float prevViewZ = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-        if (abs(prevViewZ - expectedPrevViewZ) * NoV > disocclusionThreshold) {
-            continue;
-        }
-        float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[gbufferOneHistoryIndex].Load(int3(tap, 0)).r)));
-        // 60 degrees, matching the tier-0 screen gate: the plane test is blind to old surfaces CROSSING the current plane (buried pillar faces at ground level), and those arrive with perpendicular normals (dot ~ 0).
-        if (dot(worldN, prevWorldN) < 0.5) {
+        if (!GIGatherHistoryTapValid(scene, depthHistoryIndex, gbufferOneHistoryIndex, tap, expectedPrevViewZ, NoV, disocclusionThreshold, worldN)) {
             continue;
         }
         float4 history = rdgTexturesFloat4[historyIndex].Load(int3(tap, 0));
@@ -134,6 +144,58 @@ public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, 
         if (weightSum > 0.999) {
             result.color = clamp(GIGatherSampleHistoryCatmullRom(historyIndex, prevPos + 0.5, 1.0 / float2(renderExtent)), colorMin, colorMax);
         }
+    }
+    return result;
+}
+
+public struct GIGatherScalarHistory
+{
+    public float value;
+    public float count;
+    public float quality;
+};
+
+/** GIGatherFetchHistory for a float2 (value, count) history such as the AO accumulator; same reprojection and tap gates, bilinear only. count is returned as stored. */
+public GIGatherScalarHistory GIGatherFetchScalarHistory(SceneData scene, uint historyIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
+{
+    GIGatherScalarHistory result = { 0.0, 0.0, 0.0 };
+
+    float2 historyUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
+    if (any(historyUv < float2(0.0)) || any(historyUv > float2(1.0))) {
+        return result;
+    }
+
+    float expectedPrevViewZ = centerViewZ + UnpackViewZDelta(gt1.w);
+    float disocclusionThreshold = GIGatherDisocclusionThreshold(scene, centerViewZ);
+
+    float2 prevPos = historyUv * float2(renderExtent) - 0.5;
+    int2 origin = int2(floor(prevPos));
+    float2 f = prevPos - float2(origin);
+    float4 bilinearW = float4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    const int2 tapOffsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
+
+    float2 sum = float2(0.0);
+    float weightSum = 0.0;
+    [unroll]
+    for (uint i = 0; i < 4; i++) {
+        if (bilinearW[i] <= 1e-4) {
+            continue;
+        }
+        int2 tap = origin + tapOffsets[i];
+        if (any(tap < int2(0)) || any(tap >= int2(renderExtent))) {
+            continue;
+        }
+        if (!GIGatherHistoryTapValid(scene, depthHistoryIndex, gbufferOneHistoryIndex, tap, expectedPrevViewZ, NoV, disocclusionThreshold, worldN)) {
+            continue;
+        }
+        sum += rdgTexturesFloat2[historyIndex].Load(int3(tap, 0)).rg * bilinearW[i];
+        weightSum += bilinearW[i];
+    }
+
+    if (weightSum > 0.01) {
+        result.value = sum.x / weightSum;
+        result.count = sum.y / weightSum;
+        result.quality = saturate(weightSum);
     }
     return result;
 }

@@ -31,9 +31,25 @@ void SetupShadowsResolve(RenderGraph& graph,
         shadowsResolvePass.ReadSampledImage(SID("gtao_filtered"));
     }
 
+    const float temporalMaxAccum = viewFamily.gtaoConfig.temporalMaxAccum;
+    const bool bTemporal = bHasGTAO && temporalMaxAccum > 0.0f;
+    const bool bHistoryValid = bTemporal && graph.HasTexture(SID("gtao_temporal_prev")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
+    if (bTemporal) {
+        graph.CreateTexture(SID("gtao_temporal"), TextureInfo{VK_FORMAT_R16G16_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+        shadowsResolvePass.ReadSampledImage(targets.depthCopy);
+        shadowsResolvePass.ReadSampledImage(targets.gbufferOne);
+        shadowsResolvePass.WriteStorageImage(SID("gtao_temporal"));
+    }
+    if (bHistoryValid) {
+        shadowsResolvePass.ReadSampledImage(SID("gtao_temporal_prev"));
+        shadowsResolvePass.ReadSampledImage(SID("depth_history"));
+        shadowsResolvePass.ReadSampledImage(SID("gbuffer_one_history"));
+    }
+
     shadowsResolvePass.ReadBuffer(SID("scene_data"));
     shadowsResolvePass.WriteStorageImage(SID("shadows_resolve_target"));
-    shadowsResolvePass.Execute([&, pipelineManager, bHasGTAO,
+    shadowsResolvePass.Execute([&, pipelineManager, bHasGTAO, bTemporal, bHistoryValid, temporalMaxAccum,
+            depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
             width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shadows_resolve"));
 
@@ -43,6 +59,14 @@ void SetupShadowsResolve(RenderGraph& graph,
                 .sceneData = graph.GetBufferAddress(SID("scene_data")) + sizeof(SceneData) * sceneIndex,
                 .gtaoFilteredIndex = gtaoIndex,
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("shadows_resolve_target")),
+                .depthIndex = bTemporal ? graph.GetSampledImageViewDescriptorIndex(depth) : ~0x0u,
+                .gbufferOneIndex = bTemporal ? graph.GetSampledImageViewDescriptorIndex(gbufferOne) : ~0x0u,
+                .historyIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("gtao_temporal_prev")) : ~0x0u,
+                .depthHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : ~0x0u,
+                .gbufferOneHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0x0u,
+                .temporalOutputIndex = bTemporal ? graph.GetStorageImageViewDescriptorIndex(SID("gtao_temporal")) : ~0x0u,
+                .bHistoryValid = bHistoryValid ? 1u : 0u,
+                .temporalMaxAccum = temporalMaxAccum,
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -52,6 +76,10 @@ void SetupShadowsResolve(RenderGraph& graph,
             uint32_t yDispatch = (height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
+
+    if (bTemporal) {
+        graph.CarryTextureToNextFrame(SID("gtao_temporal"), SID("gtao_temporal_prev"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    }
 }
 
 static void AddSigmaBlurPass(RenderGraph& graph,

@@ -437,6 +437,14 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC int32_t gtaoFilteredIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t historyIndex;
+    SHADER_PUBLIC uint32_t depthHistoryIndex;
+    SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
+    SHADER_PUBLIC uint32_t temporalOutputIndex;
+    SHADER_PUBLIC uint32_t bHistoryValid;
+    SHADER_PUBLIC float temporalMaxAccum;
 };
 
 SHADER_PUBLIC struct ReSTIRTransformLightsPushConstant
@@ -983,6 +991,7 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC float mirrorRoughnessMax;
     SHADER_PUBLIC uint32_t bAlphaTest;
     SHADER_PUBLIC uint32_t hitLocalShadowRays;
+    SHADER_PUBLIC float hitTextureLod;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant

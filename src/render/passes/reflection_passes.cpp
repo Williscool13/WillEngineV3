@@ -214,6 +214,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax,
                 .bAlphaTest = reflectionConfig.bAlphaTest ? 1u : 0u,
                 .hitLocalShadowRays = bHasTLAS ? static_cast<uint32_t>(reflectionConfig.hitLocalShadowRays) : 0u,
+                .hitTextureLod = reflectionConfig.hitTextureLod,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_shade"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

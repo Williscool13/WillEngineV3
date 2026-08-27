@@ -581,6 +581,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("GTAO AO")) setDebugTarget("gtao_ao", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Edges")) setDebugTarget("gtao_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Filtered")) setDebugTarget("gtao_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("GTAO Temporal")) setDebugTarget("gtao_temporal", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Bent Normals")) setDebugTarget("gtao_bent_normals", DebugTransformationType::BentNormal, Core::DebugViewAspect::None);
         }
 
@@ -1137,6 +1138,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             gtaoF("Steps Per Slice##gtao", &gtao.stepsPerSlice, gtaoDefaults.stepsPerSlice, 1.0f, 9.0f, "%.0f", "Horizon-march steps taken along each slice. More = finer occluder detection, higher cost. Default 3.");
             gtaoF("Denoise Blur Beta##gtao", &gtao.denoiseBlurBeta, gtaoDefaults.denoiseBlurBeta, 0.0f, 10.0f, "%.2f", "Edge-stopping strength of the final denoise blur. Higher = preserves edges but leaves more noise; lower = smoother but softer. Default 1.2.");
             gtaoF("Denoise Passes##gtao", &gtao.denoisePasses, gtaoDefaults.denoisePasses, 1.0f, 8.0f, "%.0f", "Edge-aware denoise passes over the raw AO. Each is a full-res dispatch; intermediate passes blur harder than the last. The XeGTAO default of 1 assumes TAA finishes the job. Default 2.");
+            gtaoF("Temporal Max Accum##gtao", &gtao.temporalMaxAccum, gtaoDefaults.temporalMaxAccum, 0.0f, 64.0f, "%.0f", "Frames of motion-reprojected AO history blended in shadows_resolve, separate from TAA. Higher = smoother, more ghosting on movers; 0 = off. Default 16.");
 
             ImGui::Spacing();
             if (ImGui::Button("Reset GTAO")) {
@@ -1180,6 +1182,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "Screen-space trace only: view-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
             if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Screen-space trace only: maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
             if (Widgets::SliderInt("Hit Local Shadow Rays##reflection", &reflection.hitLocalShadowRays, 0, static_cast<int>(REFLECTION_HIT_SHADOW_RAYS_MAX), {.tooltip = "Analytic hit shading: shadow rays spent on the brightest local-light contributions at the hit (sun has its own ray via Hit Sun Mode). Remaining lights stay unshadowed. 0 = none. Default 1.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.hitLocalShadowRays)})) { changed = true; }
+            reflF("Hit Texture LOD##reflection", &reflection.hitTextureLod, reflectionDefaults.hitTextureLod, 0.0f, 8.0f, "%.1f", "Analytic hit shading: fixed mip level for albedo/emissive/metal-rough sampling at the hit. 0 = full-res (sharper, more cache pressure). Default 3.");
 
 
             ImGui::Spacing();
