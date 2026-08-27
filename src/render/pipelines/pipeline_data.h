@@ -34,6 +34,7 @@ struct LightingPipelineInfo
 {
     StringID id{};
     LightingShaderType type{LightingShaderType::Default};
+    uint32_t index{};
 };
 
 inline LightingShaderType RequiredLightingShaderType(Core::LightingMode mode)

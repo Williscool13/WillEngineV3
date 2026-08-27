@@ -46,7 +46,7 @@ float ComputeRelaxJitterDelta(Core::AntiAliasingMode aaMode, uint64_t frameNumbe
 void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineManager, Core::Arena* arena);
 
 /**
- * Prepare render family with transient data needed for rendering down the lime. E.g. lightingBuckets (unique lighting shader usages w/ their bucket index)
+ * Prepare render family with transient data needed for rendering down the lime. E.g. text draw call batching.
  * @param viewFamily
  */
 void PrepareRenderFamily(Core::ViewFamily& viewFamily);

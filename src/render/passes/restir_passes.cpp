@@ -648,19 +648,6 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     ZoneScoped;
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
-    struct LightingEntry
-    {
-        uint32_t bucketIndex{};
-        StringID lightingShader;
-    };
-
-    const auto lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size());
-    auto buckets = arena.AllocArray<LightingEntry>(lightingCount);
-    uint32_t idx = 0;
-    for (const auto& [shader, bucketIndex] : viewFamily.lightingBuckets) {
-        buckets[idx++] = {bucketIndex, shader};
-    }
-
     const bool bMergedReflections = reflectionConfig.bMergedDenoise && ComputeReflectionRoughnessMax(reflectionConfig) >= 0.0f && graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET);
 
     RenderPass& lightingResolve = graph.AddPass(SID("[ReSTIR DI] Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
@@ -694,14 +681,13 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
             depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
             field = activeCheckerboardField, packed = bCheckerboardPacked, fullRate = bFullRateResolve,
-            buckets, lightingCount, bMergedReflections](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            bMergedReflections](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
 
-            for (uint32_t i = 0; i < lightingCount; ++i) {
-                const LightingEntry& entry = buckets[i];
-                if (!entry.lightingShader) { continue; }
+            for (const LightingPipelineInfo& entry : pipelineManager->GetLightingPipelines()) {
+                if (!entry.id) { continue; }
 
-                StringID shaderToUse = viewFamily.lightingShaderOverride ? viewFamily.lightingShaderOverride : entry.lightingShader;
+                StringID shaderToUse = viewFamily.lightingShaderOverride ? viewFamily.lightingShaderOverride : entry.id;
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(shaderToUse);
                 if (!pipelineEntry) { continue; }
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -722,7 +708,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .primaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(diffuseOut),
                     .secondaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(specularOut),
                     .sceneDataIndex = sceneIndex,
-                    .lightingIndex = entry.bucketIndex,
+                    .lightingIndex = entry.index,
                     .renderExtent = {renderExtent[0], renderExtent[1]},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                     .activeCheckerboardField = field,
@@ -734,7 +720,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-                                      entry.bucketIndex * sizeof(LightingDispatchParameters) + offsetof(LightingDispatchParameters, xDispatch));
+                                      entry.index * sizeof(LightingDispatchParameters) + offsetof(LightingDispatchParameters, xDispatch));
             }
         });
 }

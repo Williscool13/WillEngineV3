@@ -1743,7 +1743,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
     Core::Array<uint32_t, Render::BINDLESS_MATERIAL_BUFFER_COUNT> lightingIndexByStable{};
     for (const Core::ActiveMaterial& active : viewFamily.activeMaterials) {
-        lightingIndexByStable[active.stableIndex] = viewFamily.lightingBuckets[active.material.lightingShader];
+        lightingIndexByStable[active.stableIndex] = pipelineManager->GetLightingShaderIndex(active.material.lightingShader);
     }
 
     {
@@ -1780,9 +1780,8 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         memset(materialByStable.Data(), 0xFF, sizeof(materialByStable));
         uint16_t activeSlot = 0;
         for (Core::ActiveMaterial& active : viewFamily.activeMaterials) {
-            assert(viewFamily.lightingBuckets.Contains(active.material.lightingShader) && "Lighting bucket missing lighting model for a material");
             active.material.props.shadingBucketIndex = active.stableIndex;
-            active.material.props.lightingBucketIndex = viewFamily.lightingBuckets.At(active.material.lightingShader);
+            active.material.props.lightingBucketIndex = pipelineManager->GetLightingShaderIndex(active.material.lightingShader);
             materialByStable[active.stableIndex] = activeSlot++;
         }
 
@@ -1812,7 +1811,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         }
 
         auto* lightDispatchBuffer = static_cast<LightingDispatchParameters*>(renderGraph->OpenHostBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.lightingDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
-        for (size_t i = 0; i < viewFamily.lightingBuckets.Size(); ++i) {
+        for (size_t i = 0; i < pipelineManager->GetLightingPipelines().Size(); ++i) {
             lightDispatchBuffer[i] = {
                 .xDispatch = 0,
                 .yDispatch = 0,

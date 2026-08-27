@@ -167,17 +167,6 @@ void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineM
 
 void PrepareRenderFamily(Core::ViewFamily& viewFamily)
 {
-    // Lighting bucket finalization
-    {
-        uint32_t runningLightingBucketIndex{0};
-        for (const Core::ActiveMaterial& active : viewFamily.activeMaterials) {
-            auto [lightingVal, lightingInserted] = viewFamily.lightingBuckets.TryEmplace(active.material.lightingShader, runningLightingBucketIndex);
-            if (lightingInserted) {
-                runningLightingBucketIndex++;
-            }
-        }
-    }
-
     // Text finalization
     {
         // Sort quads by (fontCurveByteOffset, textMaterialIndex) so each dispatch is wave-uniform on font curve data.
@@ -242,7 +231,7 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.bCanRender = _pipelineManager->IsCategoryReady(PipelineCategory::Critical);
 
     _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.modelMatrices.Size()));
-    _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(viewFamily.lightingBuckets.Size()));
+    _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(_pipelineManager->GetLightingPipelines().Size()));
 
     uint32_t totalInstanceCountThisFrame = viewFamily.primitiveInstances.Size();
     _limits.highestInstanceCount = std::max(_limits.highestInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));

@@ -55,6 +55,8 @@ public:
 
     void RegisterComputePipeline(StringID pipelineId, Core::Path shaderPath, const char* entryPoint, uint32_t pushConstantSize, PipelineCategory category);
 
+    void RegisterLightingPipeline(StringID pipelineId, LightingShaderType type);
+
     void RegisterComputePipelineCustomLayout(StringID pipelineId, Core::Path shaderPath, const char* entryPoint, uint32_t pushConstantSize, PipelineCategory category,
                                              Core::Span<const VkDescriptorSetLayout> customLayouts);
 
@@ -94,6 +96,11 @@ public:
      * @param pipelineId
      */
     LightingShaderType GetLightingShaderType(StringID pipelineId) const;
+
+    Core::Span<const LightingPipelineInfo> GetLightingPipelines() const { return Core::Span{lightingPipelines.Data(), lightingPipelines.Size()}; }
+
+    /** Bucket index of a lighting shader. Unregistered ids report 0, matching GetLightingShaderType's fallback. */
+    uint32_t GetLightingShaderIndex(StringID pipelineId) const;
 
     /**
      * Lighting pipelines whose output contract matches the mode, in registration order. Anything outside this set is

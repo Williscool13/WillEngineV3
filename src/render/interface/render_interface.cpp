@@ -4,6 +4,8 @@
 
 #include "render_interface.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "core/math/math_helpers.h"
 #include "engine/logging/engine_log.h"
 
@@ -24,7 +26,6 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, wm.worldGlyphQuads);
     textInstances = ArenaVector<TextInstanceDataFull>(&arena, wm.textInstances);
 
-    lightingBuckets = ArenaFixedMap<StringID, uint32_t>(&arena, 256);
     textDrawCalls = ArenaVector<TextDrawCall>(&arena, wm.textDrawCalls);
 
     activeMaterials = ArenaVector<ActiveMaterial>(&arena, wm.activeMaterials);
@@ -109,6 +110,7 @@ static ViewFamilyWatermarks MaxWatermarks(const ViewFamilyWatermarks& a, const V
 
 void FrameBuffer::Reinitialize()
 {
+    ZoneScoped;
     const Arena::Stats arenaStats = frameArena.Get().GetStats();
     if (!bArenaPeakWarned && arenaStats.peakBytes * 4 > arenaStats.totalBytes * 3) {
         LOG_WARN(Renderer, "Frame arena peak {:.1f} MB crossed 75% of {:.0f} MB reserved", arenaStats.peakBytes / (1024.0f * 1024.0f), arenaStats.totalBytes / (1024.0f * 1024.0f));

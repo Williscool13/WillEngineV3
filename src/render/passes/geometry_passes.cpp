@@ -748,7 +748,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
 
     RenderPass& lightResolvePass = graph.AddPass(SID("Light Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     lightResolvePass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-    lightResolvePass.Execute([&, pipelineManager, lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    lightResolvePass.Execute([&, pipelineManager, lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         LightingBucketingResolvePushConstant pc{
             .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
             .lightingCount = lightingCount,
@@ -770,7 +770,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     dispatchCountPass.ReadWriteBuffer(SID("readback_buffer"));
     dispatchCountPass.Execute([&, pipelineManager,
             materialCount = viewFamily.materialWatermark,
-            lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BucketDispatchCountPushConstant pc{
                 .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
                 .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
@@ -952,7 +952,7 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferTwo);
     lightBucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("lighting_bucket_visualize"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 

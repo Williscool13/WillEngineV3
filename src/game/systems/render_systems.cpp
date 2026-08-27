@@ -1359,11 +1359,13 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     frameBuffer->mainViewFamily.primitiveInstances.Clear();
     frameBuffer->mainViewFamily.primitiveInstances.Resize(state->instanceStore.GetWatermark());
 
-
-    const uint32_t modelWatermark = state->modelStore.GetWatermark();
-    frameBuffer->mainViewFamily.modelMatrices.Clear();
-    frameBuffer->mainViewFamily.modelMatrices.Resize(modelWatermark);
-    memcpy(frameBuffer->mainViewFamily.modelMatrices.Data(), state->modelStore.Models(), modelWatermark * sizeof(Model));
+    {
+        ZoneScopedN("ModelMatrices");
+        const uint32_t modelWatermark = state->modelStore.GetWatermark();
+        frameBuffer->mainViewFamily.modelMatrices.Clear();
+        frameBuffer->mainViewFamily.modelMatrices.Resize(modelWatermark);
+        memcpy(frameBuffer->mainViewFamily.modelMatrices.Data(), state->modelStore.Models(), modelWatermark * sizeof(Model));
+    }
 
 
     // Gather regular renderables

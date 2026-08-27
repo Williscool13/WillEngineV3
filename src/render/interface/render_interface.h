@@ -527,8 +527,6 @@ struct ViewFamily
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
 
-    /** Written by the render thread, not the game; here only to share the frame arena. */
-    ArenaFixedMap<StringID, uint32_t> lightingBuckets{};
     ArenaVector<TextDrawCall> textDrawCalls{};
     ArenaVector<SpriteBatch> spriteBatches{};
 };
