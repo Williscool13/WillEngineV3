@@ -22,7 +22,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     probePreviews = ArenaFixedVector<ProbePreviewSphere>(&arena, MAX_REFLECTION_PROBES);
     localDDGIVolumes = ArenaFixedVector<LocalDDGIVolume>(&arena, MAX_LOCAL_DDGI_VOLUMES);
 
-    primitiveInstances = ArenaVector<PrimitiveInstanceData>(&arena, wm.primitiveInstances);
+    primitiveInstances = ArenaVector<Instance>(&arena, wm.primitiveInstances);
     worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, wm.worldGlyphQuads);
     textInstances = ArenaVector<TextInstanceDataFull>(&arena, wm.textInstances);
 

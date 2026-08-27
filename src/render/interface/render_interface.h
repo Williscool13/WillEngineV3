@@ -462,7 +462,7 @@ struct ViewFamily
     RenderView mainView{};
     ArenaFixedVector<PortalView> portalViews{};
 
-    ArenaVector<PrimitiveInstanceData> primitiveInstances{};
+    ArenaVector<Instance> primitiveInstances{};
     ArenaVector<Model> modelMatrices{};
     ArenaVector<ActiveMaterial> activeMaterials{};
     uint32_t materialWatermark{0};

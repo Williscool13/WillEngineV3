@@ -11,6 +11,7 @@
 #include "core/memory/range_allocator.h"
 #include "core/types/math.h"
 #include "engine/core/material_id.h"
+#include "render/shaders/flags_interop.h"
 #include "render/shaders/model_interop.h"
 
 namespace Engine
@@ -57,11 +58,15 @@ struct InstanceFill
 
 /**
  * The stable instance slot space: one slot per flattened mesh primitive (static, static-primitive, procedural, spline, text3d, light surfaces). A RangeAllocator hands out one contiguous run per entity; the slot index IS the GPU instance index. Raw Allocate/Free leave material lifetimes to callers; AllocateSingleMeshRange/ReleaseAndFree manage the per-entry material refs. Callers own GPU uploads. Not thread-safe.
+ * InstanceSource and the GPU Instance record are parallel slot arrays written together, so no mutable InstanceSource is handed out.
  */
 class InstanceStore
 {
 public:
     using Range = Core::RangeAllocator::Range;
+
+    /** Unallocated, freed and hidden slots. */
+    static constexpr Instance DEAD_INSTANCE{.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
 
     void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag = Core::AllocTag::RenderMesh);
 
@@ -78,13 +83,18 @@ public:
     /** Releases each entry's material ref and tri-light range, frees the range, and invalidates it. No-op on an invalid range. */
     void ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range);
 
-    InstanceSource* Get(Range range) { return range.IsValid() ? &instances_[range.offset] : nullptr; }
+    /** Repoints a filled slot at another material. Leaves the material refs to the caller, unlike FillEntry. */
+    void SetMaterial(uint32_t slot, MaterialManager* materialManager, MaterialID material);
 
-    InstanceSource& operator[](uint32_t i) { return instances_[i]; }
+    void SetLightIndex(uint32_t slot, uint32_t lightIndex) { gpuInstances_[slot].lightIndex = lightIndex; }
+
+    const InstanceSource* Get(Range range) const { return range.IsValid() ? &instances_[range.offset] : nullptr; }
+
     const InstanceSource& operator[](uint32_t i) const { return instances_[i]; }
 
-    InstanceSource* Data() { return instances_.Data(); }
     const InstanceSource* Data() const { return instances_.Data(); }
+
+    const Instance& GetInstance(uint32_t i) const { return gpuInstances_[i]; }
 
     [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
     [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
@@ -92,6 +102,7 @@ public:
 
 private:
     Core::VirtualArray<InstanceSource> instances_{};
+    Core::VirtualArray<Instance> gpuInstances_{};
     Core::RangeAllocator ranges_{};
 };
 } // Engine

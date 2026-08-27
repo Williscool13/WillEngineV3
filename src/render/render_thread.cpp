@@ -1741,25 +1741,9 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         instanceBuffer = static_cast<Instance*>(renderGraph->OpenHostBuffer(GEOMETRY_INSTANCE_BUFFER, totalInstanceCount * sizeof(Instance)));
     }
 
-    {
+    if (totalInstanceCount > 0) {
         ZoneScopedN("Instances");
-        for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
-            auto& inst = viewFamily.primitiveInstances[i];
-            if (inst.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) {
-                instanceBuffer[i] = {.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
-                continue;
-            }
-            instanceBuffer[i] = {
-                .primitiveIndex = inst.primitiveIndex,
-                .modelIndex = inst.modelIndex,
-                .materialIndex = inst.materialIndex,
-                .flags = (inst.motionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u) | (inst.alphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u) | (inst.ddgiVisible ? INSTANCE_FLAG_DDGI_VISIBLE : 0u),
-                .stableId = inst.stableId,
-                .lightIndex = inst.lightIndex,
-                .emissiveTriLightBase = inst.emissiveTriLightBase,
-                .blasDeviceAddress = inst.blasDeviceAddress,
-            };
-        }
+        memcpy(instanceBuffer, viewFamily.primitiveInstances.Data(), totalInstanceCount * sizeof(Instance));
     }
 
     if (!viewFamily.modelMatrices.IsEmpty()) {

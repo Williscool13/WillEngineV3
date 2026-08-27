@@ -14,6 +14,7 @@ namespace Engine
 void InstanceStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag)
 {
     instances_ = Core::VirtualArray<InstanceSource>(vm, tag, capacity, "InstanceStore");
+    gpuInstances_ = Core::VirtualArray<Instance>(vm, tag, capacity, "InstanceStoreGPU");
     ranges_.Init(capacity, alloc, tag, "InstanceStore");
 }
 
@@ -22,14 +23,24 @@ InstanceStore::Range InstanceStore::Allocate(uint32_t count)
     const Range range = ranges_.Allocate(count);
     if (range.IsValid()) {
         instances_.EnsureCommitted(ranges_.GetWatermark());
+        gpuInstances_.EnsureCommitted(ranges_.GetWatermark());
+        for (uint32_t i = 0; i < range.count; ++i) {
+            gpuInstances_[range.offset + i] = DEAD_INSTANCE;
+        }
     }
     return range;
 }
 
 void InstanceStore::Free(Range range)
 {
+    if (range.IsValid()) {
+        for (uint32_t i = 0; i < range.count; ++i) {
+            gpuInstances_[range.offset + i] = DEAD_INSTANCE;
+        }
+    }
     ranges_.Free(range);
     instances_.Trim(ranges_.GetWatermark());
+    gpuInstances_.Trim(ranges_.GetWatermark());
 }
 
 InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot)
@@ -64,18 +75,37 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, T
     const MaterialProperties props = materialManager->GetProperties(fill.material);
     const float maxEmissive = glm::max(props.emissiveFactor.x, glm::max(props.emissiveFactor.y, props.emissiveFactor.z));
     const bool bEmissive = props.emissiveFactor.w > 0.0f && (maxEmissive > 0.0f || props.textureImageIndices.w >= 0);
+    const uint32_t materialIndex = materialManager->GetMaterialIndex(fill.material);
     instances_[slot] = {
         .primitiveIndex = primitive.index,
         .originalMaterialIndex = fill.originalMaterialIndex,
         .sourceNodeIndex = fill.sourceNodeIndex,
         .modelPrimitiveOrdinal = fill.modelPrimitiveOrdinal,
         .modelSlot = fill.modelSlot,
-        .materialIndex = materialManager->GetMaterialIndex(fill.material),
+        .materialIndex = materialIndex,
         .materialID = fill.material,
         .blasDeviceAddress = primitive.blasDeviceAddress,
         .modelSpaceTransform = fill.modelSpaceTransform,
         .triLightRange = bEmissive && triLightStore ? triLightStore->AllocateForPrimitive(*model, primitive.index) : TriLightStore::Range{},
     };
+    gpuInstances_[slot] = {
+        .primitiveIndex = primitive.index,
+        .modelIndex = fill.modelSlot,
+        .materialIndex = materialIndex,
+        .flags = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE,
+        .stableId = 0,
+        .lightIndex = ~0u,
+        .emissiveTriLightBase = ~0u,
+        .blasDeviceAddress = primitive.blasDeviceAddress,
+    };
+}
+
+void InstanceStore::SetMaterial(uint32_t slot, MaterialManager* materialManager, MaterialID material)
+{
+    const uint32_t materialIndex = materialManager->GetMaterialIndex(material);
+    instances_[slot].materialID = material;
+    instances_[slot].materialIndex = materialIndex;
+    gpuInstances_[slot].materialIndex = materialIndex;
 }
 
 void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range)

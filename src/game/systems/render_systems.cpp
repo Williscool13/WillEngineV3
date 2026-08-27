@@ -775,18 +775,13 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
             continue;
         }
 
-        materialManager->AcquireMaterial(matID);
-        store[range.offset] = {
-            .primitiveIndex = targetPrim->index,
+        store.FillEntry(range.offset, materialManager, nullptr, model, *targetPrim, {
+            .material = matID,
+            .modelSlot = modelRange.offset,
             .originalMaterialIndex = targetPrim->materialIndex,
             .sourceNodeIndex = targetNode,
             .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
-            .modelSlot = modelRange.offset,
-            .materialIndex = materialManager->GetMaterialIndex(matID),
-            .materialID = matID,
-            .blasDeviceAddress = targetPrim->blasDeviceAddress,
-            .modelSpaceTransform = glm::mat4(1.0f),
-        };
+        });
         runtime->range = range;
         runtime->modelRange = modelRange;
         state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
@@ -917,18 +912,13 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
                 matID = slotMat;
             }
         }
-        ctx->materialManager->AcquireMaterial(matID);
-        store[writeIndex] = {
-            .primitiveIndex = primitive.index,
+        store.FillEntry(writeIndex, ctx->materialManager, nullptr, model, primitive, {
+            .material = matID,
+            .modelSlot = modelRange.offset,
             .originalMaterialIndex = primitive.materialIndex,
             .sourceNodeIndex = 0,
             .modelPrimitiveOrdinal = j,
-            .modelSlot = modelRange.offset,
-            .materialIndex = ctx->materialManager->GetMaterialIndex(matID),
-            .materialID = matID,
-            .blasDeviceAddress = primitive.blasDeviceAddress,
-            .modelSpaceTransform = glm::mat4(1.0f),
-        };
+        });
         ++writeIndex;
     }
     runtime->range = range;
@@ -1356,8 +1346,15 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
-    frameBuffer->mainViewFamily.primitiveInstances.Clear();
-    frameBuffer->mainViewFamily.primitiveInstances.Resize(state->instanceStore.GetWatermark());
+    //
+    {
+        Core::ArenaVector<Instance>& instances = frameBuffer->mainViewFamily.primitiveInstances;
+        instances.Clear();
+        instances.ResizeUninitialized(state->instanceStore.GetWatermark());
+        for (size_t i = 0; i < instances.Size(); ++i) {
+            instances[i] = Engine::InstanceStore::DEAD_INSTANCE;
+        }
+    }
 
     {
         ZoneScopedN("ModelMatrices");
@@ -1389,24 +1386,16 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
 
+            const uint32_t flags = (runtime.motionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u) | (runtime.alphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u) | (runtime.ddgiVisible ? INSTANCE_FLAG_DDGI_VISIBLE : 0u);
             const uint32_t base = runtime.range.offset;
             const uint32_t count = runtime.range.count;
             for (uint32_t i = 0; i < count; ++i) {
-                const Engine::InstanceSource& inst = store[base + i];
                 const uint32_t slot = base + i;
-                const uint32_t triBase = slot < frameBuffer->mainViewFamily.triLightBaseBySlot.Size() ? frameBuffer->mainViewFamily.triLightBaseBySlot[slot] : 0xFFFFFFFFu;
-                frameBuffer->mainViewFamily.primitiveInstances[slot] = {
-                    .primitiveIndex = inst.primitiveIndex,
-                    .materialID = inst.materialID,
-                    .materialIndex = inst.materialIndex,
-                    .modelIndex = inst.modelSlot,
-                    .stableId = stableId,
-                    .blasDeviceAddress = inst.blasDeviceAddress,
-                    .emissiveTriLightBase = triBase,
-                    .ddgiVisible = runtime.ddgiVisible,
-                    .motionBlur = runtime.motionBlur,
-                    .alphaCutout = runtime.alphaCutout,
-                };
+                Instance& dst = frameBuffer->mainViewFamily.primitiveInstances[slot];
+                dst = store.GetInstance(slot);
+                dst.stableId = stableId;
+                dst.emissiveTriLightBase = slot < frameBuffer->mainViewFamily.triLightBaseBySlot.Size() ? frameBuffer->mainViewFamily.triLightBaseBySlot[slot] : 0xFFFFFFFFu;
+                dst.flags = flags;
             }
         }
     } {
@@ -1428,8 +1417,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 materialManager->CreateImmutableMaterial(emissiveMaterial);
                 materialManager->AcquireMaterial(materialID);
                 materialManager->ReleaseMaterial(surfaceRuntime.materialID);
-                store[surfaceRuntime.range.offset].materialID = materialID;
-                store[surfaceRuntime.range.offset].materialIndex = materialManager->GetMaterialIndex(materialID);
+                store.SetMaterial(surfaceRuntime.range.offset, materialManager, materialID);
                 surfaceRuntime.materialID = materialID;
             }
 
@@ -1437,17 +1425,11 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(lightEntity)) {
                 stableId = stable->id.id;
             }
-            const Engine::InstanceSource& inst = store[surfaceRuntime.range.offset];
+            store.SetLightIndex(surfaceRuntime.range.offset, lightSlot);
 
-            frameBuffer->mainViewFamily.primitiveInstances[surfaceRuntime.range.offset] = {
-                .primitiveIndex = inst.primitiveIndex,
-                .materialID = inst.materialID,
-                .materialIndex = inst.materialIndex,
-                .modelIndex = inst.modelSlot,
-                .stableId = stableId,
-                .blasDeviceAddress = inst.blasDeviceAddress,
-                .lightIndex = lightSlot,
-            };
+            Instance& dst = frameBuffer->mainViewFamily.primitiveInstances[surfaceRuntime.range.offset];
+            dst = store.GetInstance(surfaceRuntime.range.offset);
+            dst.stableId = stableId;
         };
 
         for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::AreaLightComponent, Component::LightSurfaceRuntime>(entt::exclude<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>).each()) {
