@@ -2118,6 +2118,19 @@ SHADER_PUBLIC struct HiZDebugPushConstant
     SHADER_PUBLIC uint32_t mip;
 };
 
+SHADER_PUBLIC struct TLASInstancePushConstant
+{
+    // Read-Only
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(AccelerationStructureInstance) outInstances;
+
+    SHADER_PUBLIC uint32_t instanceCount;
+};
+
 SHADER_PUBLIC struct RTShadowTestPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;

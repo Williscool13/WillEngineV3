@@ -192,9 +192,23 @@ SHADER_PUBLIC struct Instance
     SHADER_PUBLIC uint32_t emissiveTriLightBase;
     SHADER_PUBLIC uint32_t flags;
     uint32_t pad0;
-    uint32_t pad1;
-    uint32_t pad2;
+    SHADER_PUBLIC uint64_t blasDeviceAddress;
 };
+
+/**  VkAccelerationStructureInstanceKHR */
+SHADER_PUBLIC struct AccelerationStructureInstance
+{
+    SHADER_PUBLIC float4 transformRow0;
+    SHADER_PUBLIC float4 transformRow1;
+    SHADER_PUBLIC float4 transformRow2;
+    SHADER_PUBLIC uint32_t instanceCustomIndexAndMask;
+    SHADER_PUBLIC uint32_t sbtOffsetAndFlags;
+    SHADER_PUBLIC uint64_t accelerationStructureReference;
+};
+
+// VkGeometryInstanceFlagBitsKHR
+SHADER_PUBLIC SHADER_CONST uint32_t GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE = 0x1u;
+SHADER_PUBLIC SHADER_CONST uint32_t GEOMETRY_INSTANCE_FORCE_NO_OPAQUE = 0x8u;
 
 SHADER_PUBLIC struct Model
 {

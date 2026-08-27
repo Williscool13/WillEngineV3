@@ -19,10 +19,11 @@ class PipelineManager;
 struct FrameResourceLimits;
 
 /**
- * Uploads per-frame TLAS instance data and builds the TLAS.
+ * Fills the TLAS instance buffer on the GPU from the instance, model and material buffers, then builds the TLAS.
  */
 void SetupTLASBuild(RenderGraph& graph,
                     VulkanContext* context,
+                    PipelineManager* pipelineManager,
                     const Core::ViewFamily& viewFamily,
                     Core::Array<uint32_t, 2> renderExtent,
                     const FrameResourceLimits& limits);

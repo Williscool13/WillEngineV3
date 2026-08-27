@@ -1456,17 +1456,15 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
-    // Material remap
     {
         ZoneScopedN("Material Recording");
-        Core::Array<bool, Render::BINDLESS_MATERIAL_BUFFER_COUNT> seen{};
         uint32_t watermark = 0;
-        for (auto& instance : frameBuffer->mainViewFamily.primitiveInstances) {
-            if (instance.primitiveIndex == DEAD_SLOT_PRIMITIVE_INDEX) { continue; }
-            if (seen[instance.materialIndex]) { continue; }
-            seen[instance.materialIndex] = true;
-            watermark = glm::max(watermark, instance.materialIndex + 1u);
-            frameBuffer->mainViewFamily.activeMaterials.PushBack({instance.materialIndex, materialManager->GetRenderMaterial(instance.materialID)});
+        const auto& entries = materialManager->GetActiveMaterials();
+        for (uint32_t i = 0; i < static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT); ++i) {
+            const Engine::MaterialEntry& entry = entries[i];
+            if (!entry.handle.IsValid() || entry.refCounter <= 0) { continue; }
+            watermark = i + 1u;
+            frameBuffer->mainViewFamily.activeMaterials.PushBack({i, materialManager->GetRenderMaterial(entry.id)});
         }
         frameBuffer->mainViewFamily.materialWatermark = watermark;
     } {

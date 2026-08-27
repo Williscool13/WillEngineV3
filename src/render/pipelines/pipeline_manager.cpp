@@ -551,6 +551,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(DDGIProbeRelocatePushConstant), PipelineCategory::Critical);
 
 
+    RegisterComputePipeline(SID("tlas_instances"), src / "tlas_instances.spv", "ComputeTLASInstances",
+                            sizeof(TLASInstancePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("rt_shadow_test"), src / "rt_shadow_test.spv", "ComputeRTShadowTest",
                             sizeof(RTShadowTestPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("rt_ground_truth_di"), src / "rt_ground_truth_di.spv", "ComputeRTGroundTruthDI",

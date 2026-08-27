@@ -1,7 +1,7 @@
 wprefab
 version 2 0
 id 4933586796549546436
-content_version 1
+content_version 2
 name Player Ball
 component_count 8
 end_header
@@ -10,7 +10,7 @@ name|[PLAYER] Ball
 ;
 5268930226829884326
 id|7821607683974761419
-sortOrder|18205
+sortOrder|18206
 ;
 14686032712917849647
 prefabId|4933586796549546436
@@ -19,10 +19,10 @@ bMasterPrefab|1
 17292893464993520385
 ;
 9797664509068339094
-translation|0xc0420f31|0xc1023d9d|0xc2689735
+translation|0x40874141|0xc06af71d|0xc246486b
 ;
 13305479425752038259
-flags|11
+ddgi|0
 ;
 16978062943051320070
 type|11

@@ -561,7 +561,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
 
 
-            SetupTLASBuild(*renderGraph, context, viewFamily, renderExtent, frameResourceLimits);
+            SetupTLASBuild(*renderGraph, context, pipelineManager, viewFamily, renderExtent, frameResourceLimits);
 
             const bool bNeedsWorldGrid = viewFamily.lightingMode == Core::LightingMode::Default
                                          || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled)
@@ -1763,7 +1763,8 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 .stableId = inst.stableId,
                 .lightIndex = inst.lightIndex,
                 .emissiveTriLightBase = inst.emissiveTriLightBase,
-                .flags = (inst.motionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u) | (inst.alphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u),
+                .flags = (inst.motionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u) | (inst.alphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u) | (inst.ddgiVisible ? INSTANCE_FLAG_DDGI_VISIBLE : 0u),
+                .blasDeviceAddress = inst.blasDeviceAddress,
             };
         }
     }

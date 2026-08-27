@@ -26,16 +26,15 @@ namespace Render
 {
 void SetupTLASBuild(RenderGraph& graph,
                     VulkanContext* context,
+                    PipelineManager* pipelineManager,
                     const Core::ViewFamily& viewFamily,
                     Core::Array<uint32_t, 2> renderExtent,
                     const FrameResourceLimits& limits)
 {
     ZoneScoped;
-    size_t instanceCount = 0;
-    for (const auto& p : viewFamily.primitiveInstances) {
-        if (p.blasDeviceAddress != 0) { ++instanceCount; }
-    }
-    if (instanceCount == 0) { return; }
+    const auto slotCount = static_cast<uint32_t>(viewFamily.primitiveInstances.Size());
+    if (slotCount == 0) { return; }
+    if (!graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return; }
 
     // Query required TLAS size
     VkAccelerationStructureGeometryKHR geometry{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
@@ -50,8 +49,8 @@ void SetupTLASBuild(RenderGraph& graph,
     buildInfo.geometryCount = 1;
     buildInfo.pGeometries = &geometry;
 
-    const uint32_t primitiveCount = static_cast<uint32_t>(instanceCount);
-    const uint32_t maxPrimitiveCount = static_cast<uint32_t>(limits.highestTLASInstanceCount);
+    const uint32_t primitiveCount = slotCount;
+    const uint32_t maxPrimitiveCount = glm::max(static_cast<uint32_t>(limits.highestTLASInstanceCount), slotCount);
 
     VkAccelerationStructureBuildSizesInfoKHR sizeInfo{.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
     vkGetAccelerationStructureBuildSizesKHR(context->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &maxPrimitiveCount, &sizeInfo);
@@ -61,44 +60,28 @@ void SetupTLASBuild(RenderGraph& graph,
 
     graph.CreateTLAS(RT_TLAS_BUFFER, alignedTLASSize);
 
-    const size_t instanceBufferSize = limits.highestTLASInstanceCount * sizeof(VkAccelerationStructureInstanceKHR);
-    auto* instanceData = static_cast<VkAccelerationStructureInstanceKHR*>(graph.OpenHostBuffer(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR));
+    const VkDeviceSize instanceBufferSize = static_cast<VkDeviceSize>(maxPrimitiveCount) * sizeof(VkAccelerationStructureInstanceKHR);
+    graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, 16, false);
 
-    Core::Array<bool, BINDLESS_MATERIAL_BUFFER_COUNT> materialCutout{};
-    for (const Core::ActiveMaterial& active : viewFamily.activeMaterials) {
-        materialCutout[active.stableIndex] = static_cast<uint32_t>(active.material.props.alphaProperties.y) == MATERIAL_ALPHA_CUTOUT;
-    }
+    RenderPass& fillPass = graph.AddPass(SID("RT TLAS Instances"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Untagged);
+    fillPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    fillPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    fillPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+    fillPass.WriteBuffer(RT_TLAS_INSTANCE_BUFFER);
+    fillPass.Execute([pipelineManager, slotCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("tlas_instances"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
-    size_t instanceSlot = 0;
-    for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
-        const Core::PrimitiveInstanceData& src = viewFamily.primitiveInstances[i];
-        if (src.blasDeviceAddress == 0) { continue; }
-        const Model& model = viewFamily.modelMatrices[src.modelIndex];
-
-        // VkTransformMatrixKHR is row-major 3x4; glm mat4 is column-major, so transpose and drop row 3
-        __m128 r0 = _mm_loadu_ps(&model.modelMatrix[0][0]);
-        __m128 r1 = _mm_loadu_ps(&model.modelMatrix[1][0]);
-        __m128 r2 = _mm_loadu_ps(&model.modelMatrix[2][0]);
-        __m128 r3 = _mm_loadu_ps(&model.modelMatrix[3][0]);
-        _MM_TRANSPOSE4_PS(r0, r1, r2, r3);
-
-        VkAccelerationStructureInstanceKHR inst{};
-        _mm_storeu_ps(inst.transform.matrix[0], r0);
-        _mm_storeu_ps(inst.transform.matrix[1], r1);
-        _mm_storeu_ps(inst.transform.matrix[2], r2);
-        inst.instanceCustomIndex = static_cast<uint32_t>(i);
-        const bool isLightProxy = src.lightIndex != 0xFFFFFFFFu;
-        uint32_t mask = isLightProxy ? INSTANCE_MASK_LIGHT_PROXY : INSTANCE_MASK_OCCLUDER;
-        if (!isLightProxy && src.ddgiVisible) { mask |= INSTANCE_MASK_DDGI; }
-        if (!isLightProxy) { mask |= INSTANCE_MASK_SUN_OCCLUDER; }
-        inst.mask = static_cast<uint8_t>(mask);
-        inst.instanceShaderBindingTableRecordOffset = 0;
-        const bool cutout = src.alphaCutout && materialCutout[src.materialIndex];
-        inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | (cutout ? VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR : 0u);
-        inst.accelerationStructureReference = src.blasDeviceAddress;
-
-        instanceData[instanceSlot++] = inst;
-    }
+        TLASInstancePushConstant pc{
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+            .outInstances = graph.GetBufferAddress(RT_TLAS_INSTANCE_BUFFER),
+            .instanceCount = slotCount,
+        };
+        vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (slotCount + 63) / 64, 1, 1);
+    });
 
     const VkDeviceSize scratchAlignment = VulkanContext::deviceInfo.accelerationStructureProps.minAccelerationStructureScratchOffsetAlignment;
     graph.CreateBufferAligned(RT_TLAS_SCRATCH_BUFFER, scratchSize, scratchAlignment, false);
