@@ -578,11 +578,20 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (ImGui::CollapsingHeader("Lighting")) {
             if (ImGui::Button("Shading Output")) setDebugTarget("shading_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("GTAO Depth")) setDebugTarget("gtao_depth", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("GTAO AO")) setDebugTarget("gtao_ao", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
             if (ImGui::Button("GTAO Edges")) setDebugTarget("gtao_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("GTAO Filtered")) setDebugTarget("gtao_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("GTAO Temporal")) setDebugTarget("gtao_temporal", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
             if (ImGui::Button("GTAO Bent Normals")) setDebugTarget("gtao_bent_normals", DebugTransformationType::BentNormal, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("GTAO AO")) setDebugTarget("gtao_ao", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("GTAO Filtered")) setDebugTarget("gtao_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("GTAO Temporal")) setDebugTarget("gtao_temporal", DebugTransformationType::GTAOTemporalAO, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("GTAO Resolved")) setDebugTarget("shadows_resolve_target", DebugTransformationType::GTAOResolved, Core::DebugViewAspect::None);
+
+            if (ImGui::Button("GTAO Temporal Count")) setDebugTarget("gtao_temporal", DebugTransformationType::GTAOTemporalCount, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("SIGMA")) {
@@ -1139,6 +1148,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             gtaoF("Denoise Blur Beta##gtao", &gtao.denoiseBlurBeta, gtaoDefaults.denoiseBlurBeta, 0.0f, 10.0f, "%.2f", "Edge-stopping strength of the final denoise blur. Higher = preserves edges but leaves more noise; lower = smoother but softer. Default 1.2.");
             gtaoF("Denoise Passes##gtao", &gtao.denoisePasses, gtaoDefaults.denoisePasses, 1.0f, 8.0f, "%.0f", "Edge-aware denoise passes over the raw AO. Each is a full-res dispatch; intermediate passes blur harder than the last. The XeGTAO default of 1 assumes TAA finishes the job. Default 2.");
             gtaoF("Temporal Max Accum##gtao", &gtao.temporalMaxAccum, gtaoDefaults.temporalMaxAccum, 0.0f, 64.0f, "%.0f", "Frames of motion-reprojected AO history blended in shadows_resolve, separate from TAA. Higher = smoother, more ghosting on movers; 0 = off. Default 16.");
+            gtaoF("Temporal Clamp Scale##gtao", &gtao.temporalClampScale, gtaoDefaults.temporalClampScale, 0.0f, 4.0f, "%.2f", "Width of the 3x3 neighborhood box the AO history is pulled into. Lower = less ghosting behind movers, more residual noise; 0 = no clamp. Default 1.");
 
             ImGui::Spacing();
             if (ImGui::Button("Reset GTAO")) {

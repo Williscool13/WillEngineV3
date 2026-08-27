@@ -85,6 +85,9 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     DofTileMax = 43,
     AlphaOnly = 44,
     DofZones = 45,
+    GTAOTemporalAO = 46,
+    GTAOTemporalCount = 47,
+    GTAOResolved = 48,
 };
 
 SHADER_PUBLIC struct Frustum

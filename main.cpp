@@ -11,6 +11,11 @@
 
 #include <SDL3/SDL_main.h>
 
+#ifdef TRACY_ENABLE
+#include <thread>
+#include <tracy/Tracy.hpp>
+#endif
+
 /**
  * --scene <name>   load this scene (by .wscene header name) instead of projectConfig.defaultScene
  * --shots <file>   shot-list JSON; activates the capture run
@@ -73,6 +78,13 @@ int main(int argc, char* argv[])
 
 #if LOGGING_ENABLED
     logger.ArchiveLogs();
+#endif
+
+#ifdef TRACY_ENABLE
+    tracy::GetProfiler().RequestShutdown();
+    while (!tracy::GetProfiler().HasShutdownFinished()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
 #endif
     return 0;
 }

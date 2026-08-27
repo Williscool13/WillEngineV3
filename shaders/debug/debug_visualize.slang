@@ -356,6 +356,18 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             else { srcPixel.xyz = lerp(float3(0.0, 0.05, 0.1), float3(0.0, 0.8, 1.0), coc / farR); }
             break;
         }
+        case 46: { // GTAOTemporalAO: gtao_temporal.x accumulated visibility (white open, black occluded); A/Bs against GTAO Filtered
+            srcPixel.xyz = float3(srcPixel.x);
+            break;
+        }
+        case 47: { // GTAOTemporalCount: gtao_temporal.y is count/64; black = fresh disocclusion, white = fully converged
+            srcPixel.xyz = float3(srcPixel.y);
+            break;
+        }
+        case 48: { // GTAOResolved: shadows_resolve_target.y, the AO term lighting multiplies
+            srcPixel.xyz = float3(srcPixel.y);
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

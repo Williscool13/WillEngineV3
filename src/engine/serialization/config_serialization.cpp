@@ -440,6 +440,7 @@ void Serialize(const Core::GTAOConfiguration& p, TextWriter& w)
     w.Key("denoiseBlurBeta", p.denoiseBlurBeta);
     w.Key("denoisePasses", p.denoisePasses);
     w.Key("temporalMaxAccum", p.temporalMaxAccum);
+    w.Key("temporalClampScale", p.temporalClampScale);
 }
 
 void Deserialize(const TextReader& r, Core::GTAOConfiguration& p)
@@ -457,6 +458,7 @@ void Deserialize(const TextReader& r, Core::GTAOConfiguration& p)
     p.denoiseBlurBeta = r.Float("denoiseBlurBeta", p.denoiseBlurBeta);
     p.denoisePasses = r.Float("denoisePasses", p.denoisePasses);
     p.temporalMaxAccum = r.Float("temporalMaxAccum", p.temporalMaxAccum);
+    p.temporalClampScale = r.Float("temporalClampScale", p.temporalClampScale);
 }
 
 void Serialize(const Core::SMAAConfiguration& p, TextWriter& w)

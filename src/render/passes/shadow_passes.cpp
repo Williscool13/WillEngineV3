@@ -24,7 +24,7 @@ void SetupShadowsResolve(RenderGraph& graph,
 {
     ZoneScoped;
     graph.CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
+    RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AmbientOcclusion);
 
     bool bHasGTAO = graph.HasTexture(SID("gtao_filtered"));
     if (bHasGTAO) {
@@ -32,6 +32,7 @@ void SetupShadowsResolve(RenderGraph& graph,
     }
 
     const float temporalMaxAccum = viewFamily.gtaoConfig.temporalMaxAccum;
+    const float temporalClampScale = viewFamily.gtaoConfig.temporalClampScale;
     const bool bTemporal = bHasGTAO && temporalMaxAccum > 0.0f;
     const bool bHistoryValid = bTemporal && graph.HasTexture(SID("gtao_temporal_prev")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
     if (bTemporal) {
@@ -48,7 +49,7 @@ void SetupShadowsResolve(RenderGraph& graph,
 
     shadowsResolvePass.ReadBuffer(SID("scene_data"));
     shadowsResolvePass.WriteStorageImage(SID("shadows_resolve_target"));
-    shadowsResolvePass.Execute([&, pipelineManager, bHasGTAO, bTemporal, bHistoryValid, temporalMaxAccum,
+    shadowsResolvePass.Execute([&, pipelineManager, bHasGTAO, bTemporal, bHistoryValid, temporalMaxAccum, temporalClampScale,
             depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
             width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shadows_resolve"));
@@ -67,6 +68,7 @@ void SetupShadowsResolve(RenderGraph& graph,
                 .temporalOutputIndex = bTemporal ? graph.GetStorageImageViewDescriptorIndex(SID("gtao_temporal")) : ~0x0u,
                 .bHistoryValid = bHistoryValid ? 1u : 0u,
                 .temporalMaxAccum = temporalMaxAccum,
+                .temporalClampScale = temporalClampScale,
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
