@@ -99,7 +99,7 @@ public:
 
     Core::Span<const LightingPipelineInfo> GetLightingPipelines() const { return Core::Span{lightingPipelines.Data(), lightingPipelines.Size()}; }
 
-    /** Bucket index of a lighting shader. Unregistered ids report 0, matching GetLightingShaderType's fallback. */
+    /** Bucket index of a lighting shader. Unregistered ids report 0, matching GetLightingShaderType. */
     uint32_t GetLightingShaderIndex(StringID pipelineId) const;
 
     /**

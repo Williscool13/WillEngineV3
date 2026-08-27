@@ -667,6 +667,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     }
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightingResolve.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    lightingResolve.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     lightingResolve.ReadSampledImage(targets.visibility);
     lightingResolve.ReadSampledImage(targets.gbufferOne);
     lightingResolve.ReadSampledImage(targets.gbufferTwo);
@@ -698,6 +699,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .lightVS = graph.TryGetBufferAddress(SID("restir_lights_vs")),
                     .lightDispatchBuffer = lightDispatchAddress,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                     .reservoirBuffer = graph.TryGetBufferAddress(SID("restir_reservoir_final")),
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),

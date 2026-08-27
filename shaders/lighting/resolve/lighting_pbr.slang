@@ -35,7 +35,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadI
         return;
     }
 
-    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, pc.lightingIndex, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, pc.shadowsIndex);
+    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, pc.lightingIndex, pc.instanceBuffer, pc.materialBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, pc.shadowsIndex);
     if (!li.valid) {
         return;
     }

@@ -1741,11 +1741,6 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         instanceBuffer = static_cast<Instance*>(renderGraph->OpenHostBuffer(GEOMETRY_INSTANCE_BUFFER, totalInstanceCount * sizeof(Instance)));
     }
 
-    Core::Array<uint32_t, Render::BINDLESS_MATERIAL_BUFFER_COUNT> lightingIndexByStable{};
-    for (const Core::ActiveMaterial& active : viewFamily.activeMaterials) {
-        lightingIndexByStable[active.stableIndex] = pipelineManager->GetLightingShaderIndex(active.material.lightingShader);
-    }
-
     {
         ZoneScopedN("Instances");
         for (size_t i = 0; i < viewFamily.primitiveInstances.Size(); ++i) {
@@ -1754,16 +1749,14 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 instanceBuffer[i] = {.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
                 continue;
             }
-            uint32_t lightingIndex = lightingIndexByStable[inst.materialIndex];
             instanceBuffer[i] = {
                 .primitiveIndex = inst.primitiveIndex,
                 .modelIndex = inst.modelIndex,
                 .materialIndex = inst.materialIndex,
-                .lightingIndex = lightingIndex,
+                .flags = (inst.motionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u) | (inst.alphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u) | (inst.ddgiVisible ? INSTANCE_FLAG_DDGI_VISIBLE : 0u),
                 .stableId = inst.stableId,
                 .lightIndex = inst.lightIndex,
                 .emissiveTriLightBase = inst.emissiveTriLightBase,
-                .flags = (inst.motionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u) | (inst.alphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u) | (inst.ddgiVisible ? INSTANCE_FLAG_DDGI_VISIBLE : 0u),
                 .blasDeviceAddress = inst.blasDeviceAddress,
             };
         }

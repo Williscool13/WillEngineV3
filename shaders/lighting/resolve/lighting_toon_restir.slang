@@ -13,9 +13,22 @@ import restir_common;
 
 import bindless_declarations;
 
+// =============== Shader Summary ============
+// lighting_pbr_restir with the diffuse posterized. The demodulated outputs and hitT must stay identical or the denoiser breaks.
+
 // Directional-light hit distance for the denoiser's specular hitT channel; matches the sun trace TMax.
 static const float SUN_SPEC_HIT_T = 10000.0;
 static const float NEIGHBOR_REJECT_DISTANCE = 3.0e+38;
+static const float TOON_DIFFUSE_BANDS = 4.0;
+
+float3 ToonBandDiffuse(float3 demodulatedDiffuse) {
+    float lum = dot(demodulatedDiffuse, float3(0.2126, 0.7152, 0.0722));
+    if (lum <= 1e-4) {
+        return demodulatedDiffuse;
+    }
+    float banded = ceil(lum * TOON_DIFFUSE_BANDS) / TOON_DIFFUSE_BANDS;
+    return demodulatedDiffuse * (banded / lum);
+}
 
 float3 SanitizeRadiance(float3 c) {
     c.x = (isnan(c.x) || isinf(c.x)) ? 0.0 : c.x;
@@ -34,7 +47,7 @@ float MergeSpecHitT(float acc, float hitT) {
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
+void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
     uint2 pixel = threadID.xy + uint2(lightParams.minX, lightParams.minY);
     if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {
@@ -191,7 +204,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 t
         }
     }
 
-    float3 diffuseOut = diffuseRadiance / max(li.albedo.rgb, float3(0.01, 0.01, 0.01));
+    float3 diffuseOut = ToonBandDiffuse(diffuseRadiance / max(li.albedo.rgb, float3(0.01, 0.01, 0.01)));
 
     float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
     float3 specReflectance = F0 * envBRDF.x + envBRDF.y;

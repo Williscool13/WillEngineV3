@@ -184,14 +184,12 @@ SHADER_PUBLIC struct Instance
     SHADER_PUBLIC uint32_t primitiveIndex;
     SHADER_PUBLIC uint32_t modelIndex;
     SHADER_PUBLIC uint32_t materialIndex;
-    SHADER_PUBLIC uint32_t lightingIndex;
+    SHADER_PUBLIC uint32_t flags;
     SHADER_PUBLIC uint64_t stableId;
     // Index into LightData.lights for an instance that is a light's representative emissive mesh
     SHADER_PUBLIC uint32_t lightIndex;
     // Base index into LightData.lights of this instance's emissive-triangle lights (+PrimitiveIndex())
     SHADER_PUBLIC uint32_t emissiveTriLightBase;
-    SHADER_PUBLIC uint32_t flags;
-    uint32_t pad0;
     SHADER_PUBLIC uint64_t blasDeviceAddress;
 };
 

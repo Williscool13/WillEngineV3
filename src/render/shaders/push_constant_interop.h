@@ -639,6 +639,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;
     SHADER_PUBLIC SHADER_PTR(float4) accumulationBuffer;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;

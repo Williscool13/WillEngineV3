@@ -29,7 +29,7 @@ void ComputeLightingGroundTruth(uniform VisibilityLightingPushConstant pc, uint3
         return;
     }
 
-    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, ~0u, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, pc.shadowsIndex);
+    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, ~0u, pc.instanceBuffer, pc.materialBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, pc.shadowsIndex);
     if (!li.valid) {
         rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(0.0, 0.0, 0.0, 1.0);
         return;

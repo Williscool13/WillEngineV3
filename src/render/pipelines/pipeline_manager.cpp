@@ -510,6 +510,9 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("default_toon"_sid, src / "lighting_toon.spv", "ComputeLightingToon",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     RegisterLightingPipeline("default_toon"_sid, LightingShaderType::Default);
+    RegisterComputePipeline("default_toon_restir"_sid, src / "lighting_toon_restir.spv", "ComputeLightingToonRestir",
+                            sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
+    RegisterLightingPipeline("default_toon_restir"_sid, LightingShaderType::ReSTIR);
     RegisterComputePipeline("default_unlit"_sid, src / "lighting_unlit.spv", "ComputeLightingUnlit",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
     RegisterLightingPipeline("default_unlit"_sid, LightingShaderType::Default);

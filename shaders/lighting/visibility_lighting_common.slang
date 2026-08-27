@@ -22,6 +22,7 @@ public LightingInputs ReconstructLightingInputs(
     uint32_t visibilityBufferIndex,
     uint32_t lightingIndex,
     Instance* instanceBuffer,
+    MaterialProperties* materialBuffer,
     uint32_t gbufferOneIndex,
     uint32_t gbufferTwoIndex,
     uint32_t shadowsIndex
@@ -38,7 +39,7 @@ public LightingInputs ReconstructLightingInputs(
 
         uint instanceIndex = vis.y;
         Instance instance = instanceBuffer[instanceIndex];
-        if (lightingIndex != ~0u && instance.lightingIndex != lightingIndex) {
+        if (materialBuffer[instance.materialIndex].lightingBucketIndex != lightingIndex) {
             return result;
         }
     }

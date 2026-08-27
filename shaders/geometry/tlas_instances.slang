@@ -5,8 +5,7 @@ import instance_mask_interop;
 import push_constant_interop;
 
 // =============== Shader Summary ============
-// Writes one VkAccelerationStructureInstanceKHR per instance slot, replacing the CPU loop that used to fill the TLAS instance buffer.
-// Dead slots get a null acceleration structure reference, which the build treats as an inactive instance, so no compaction is needed.
+// One VkAccelerationStructureInstanceKHR per instance slot. Dead slots get a null reference, which the build skips, so nothing compacts.
 
 [shader("compute")]
 [numthreads(64, 1, 1)]

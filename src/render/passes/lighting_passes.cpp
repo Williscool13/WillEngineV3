@@ -172,6 +172,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     RenderPass& lightingResolve = graph.AddPass(SID("Visibility Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::LightingResolve);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
     lightingResolve.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    lightingResolve.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
     lightingResolve.ReadBuffer(REFLECTION_PROBE_BUFFER);
     if (bWorldGrid) {
@@ -224,6 +225,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .lightData = graph.GetBufferAddress(SID("light_data")),
                     .lightDispatchBuffer = lightDispatchAddress,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                     .reservoirBuffer = graph.TryGetBufferAddress(SID("restir_reservoir_final")),
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
@@ -290,6 +292,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(SID("light_data"));
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     pass.ReadWriteBuffer(SID("gt_accum"));
     pass.ReadSampledImage(targets.visibility);
     pass.ReadSampledImage(targets.gbufferOne);
@@ -313,6 +316,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                 .lightData = graph.GetBufferAddress(SID("light_data")),
                 .lightDispatchBuffer = 0,
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                 .reservoirBuffer = 0,
                 .accumulationBuffer = graph.GetBufferAddress(SID("gt_accum")),
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
