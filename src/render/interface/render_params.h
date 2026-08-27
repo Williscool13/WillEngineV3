@@ -182,6 +182,8 @@ struct GTAOConfiguration
     float denoisePasses{2.0f};
     /** Frames of MV-reprojected history the AO accumulates (shadows_resolve), 0 disables. */
     float temporalMaxAccum{16.0f};
+    /** Scale on the 3x3 neighborhood box the AO history is clamped into; smaller cuts ghosting harder, 0 disables the clamp. */
+    float temporalClampScale{1.0f};
 };
 
 enum class LightingMode : uint8_t

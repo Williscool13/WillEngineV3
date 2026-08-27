@@ -243,6 +243,7 @@ inline ImageChannelType GetImageChannelType(VkFormat format, VkImageAspectFlags 
             return ImageChannelType::Float4;
         case VK_FORMAT_R32G32_SFLOAT:
         case VK_FORMAT_R16G16_SFLOAT:
+        case VK_FORMAT_R16G16_UNORM:
         case VK_FORMAT_R8G8_UNORM:
             return ImageChannelType::Float2;
         case VK_FORMAT_R32_SFLOAT:

@@ -199,11 +199,12 @@ sampleDistributionPower|0x40000000
 thinOccluderCompensation|0x00000000
 finalValuePower|0x400ccccd
 depthMipSamplingOffset|0x40533333
-sliceCount|0x40400000
+sliceCount|0x40000000
 stepsPerSlice|0x40400000
 denoiseBlurBeta|0x3f99999a
-denoisePasses|0x40000000
+denoisePasses|0x3f800000
 temporalMaxAccum|0x41800000
+temporalClampScale|0x3f800000
 ;
 iblIntensity|0x3f800000
 indirectIntensity|0x3f333333

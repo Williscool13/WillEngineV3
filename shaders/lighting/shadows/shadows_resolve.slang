@@ -4,8 +4,10 @@ import bindless_declarations;
 import shader_functions;
 import gi_gather_common;
 
-// R16 count channel stores count / GTAO_TEMPORAL_COUNT_SCALE.
 static const float GTAO_TEMPORAL_COUNT_SCALE = 64.0;
+static const float GTAO_TEMPORAL_MOTION_PIXELS = 1.5;
+static const float GTAO_TEMPORAL_MOVING_MAX_ACCUM = 4.0;
+static const float GTAO_TEMPORAL_CLAMP_EPS = 0.02;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -36,7 +38,34 @@ void ComputeShadowsResolve(uniform ShadowsResolvePushConstant pc, uint3 threadID
             float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
             GIGatherScalarHistory history = GIGatherFetchScalarHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent);
             if (history.quality > 0.0) {
-                float n = min(history.count * GTAO_TEMPORAL_COUNT_SCALE, pc.temporalMaxAccum - 1.0) * history.quality;
+                float motionPixels = length(UnpackMotionVectors(gt1.g) * 0.5 * scene.mainRenderTargetSize);
+                float n = min(history.count * GTAO_TEMPORAL_COUNT_SCALE, pc.temporalMaxAccum - 1.0);
+                if (motionPixels > GTAO_TEMPORAL_MOTION_PIXELS) {
+                    n = min(n, GTAO_TEMPORAL_MOVING_MAX_ACCUM);
+                }
+                n *= history.quality;
+
+                if (pc.temporalClampScale > 0.0) {
+                    float aoMin = gtao;
+                    float aoMax = gtao;
+                    [unroll]
+                    for (int dy = -1; dy <= 1; dy++) {
+                        [unroll]
+                        for (int dx = -1; dx <= 1; dx++) {
+                            int2 tap = clamp(int2(pixel) + int2(dx, dy), int2(0), int2(renderExtent) - 1);
+                            float v = rdgTexturesFloat[pc.gtaoFilteredIndex].Load(int3(tap, 0)).x;
+                            aoMin = min(aoMin, v);
+                            aoMax = max(aoMax, v);
+                        }
+                    }
+                    // Reprojection blur under motion reads as change; widen the box with velocity (Jimenez) so it cuts trails, not moving-but-valid history.
+                    float center = 0.5 * (aoMin + aoMax);
+                    float halfWidth = (0.5 * (aoMax - aoMin) + GTAO_TEMPORAL_CLAMP_EPS) * pc.temporalClampScale * (1.0 + 0.5 * min(motionPixels, 2.0));
+                    float histDist = abs(history.value - center) / halfWidth;
+                    float closest = clamp(history.value, center - halfWidth, center + halfWidth);
+                    history.value = lerp(history.value, closest, smoothstep(1.0, 3.0, histDist));
+                }
+
                 ao = (n * history.value + gtao) / (n + 1.0);
                 count = n + 1.0;
             }

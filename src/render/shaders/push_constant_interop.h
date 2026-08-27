@@ -445,6 +445,7 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC uint32_t temporalOutputIndex;
     SHADER_PUBLIC uint32_t bHistoryValid;
     SHADER_PUBLIC float temporalMaxAccum;
+    SHADER_PUBLIC float temporalClampScale;
 };
 
 SHADER_PUBLIC struct ReSTIRTransformLightsPushConstant
