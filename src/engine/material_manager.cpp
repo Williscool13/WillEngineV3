@@ -80,7 +80,7 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
     defaultMat.samplerDesc[3] = SamplerDesc{};
     defaultMat.samplerDesc[4] = SamplerDesc{};
     defaultMat.samplerDesc[5] = SamplerDesc{};
-    defaultMaterial = CreateImmutableMaterial(defaultMat);
+    defaultMaterial = CreateSynthesizedMaterial(defaultMat);
 
     // Default material is always resident
     AcquireMaterial(defaultMaterial);
@@ -88,7 +88,7 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
     LoadMutableMaterials();
 }
 
-MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
+MaterialID MaterialManager::CreateSynthesizedMaterial(const Material& mat)
 {
     MaterialID matId = HashMaterial(mat);
     if (materials.Contains(matId)) {
@@ -96,9 +96,9 @@ MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
     }
 
     Material m = mat;
-    m.name = Core::InlineString<128>("__immutable__");
+    m.name = Core::InlineString<128>("__synthesized__");
     m.id = matId;
-    m.immutable = true;
+    m.bSynthesized = true;
 
     materials[matId] = m;
     pendingMaterialLoadLogCount++;
@@ -238,6 +238,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
 
     auto it = materials.Find(id);
     if (!it) { return; }
+    if (it->immutable && newMat.immutable) { return; }
 
     Material& mat = *it;
 
@@ -388,7 +389,7 @@ RenderMaterial MaterialManager::GetRenderMaterial(MaterialID id) const
 bool MaterialManager::MoveMutableMaterial(MaterialID id, std::string_view subDirectory)
 {
     Material* mat = materials.Find(id);
-    if (!mat || mat->immutable || mat->sourcePath.IsEmpty()) { return false; }
+    if (!mat || mat->bSynthesized || mat->sourcePath.IsEmpty()) { return false; }
 
     Core::Path newDir = Platform::GetAssetPath() / "materials";
     if (!subDirectory.empty()) {
@@ -409,7 +410,7 @@ bool MaterialManager::DeleteMutableMaterial(MaterialID id)
 {
     auto it = materials.Find(id);
     if (it == nullptr) { return false; }
-    if (it->immutable) { return false; }
+    if (it->bSynthesized) { return false; }
 
     if (!it->sourcePath.IsEmpty()) {
         Platform::DeleteSingleFile(it->sourcePath.c_str());
@@ -424,7 +425,7 @@ bool MaterialManager::DeleteMutableMaterial(MaterialID id)
 bool MaterialManager::RenameMutableMaterial(MaterialID id, std::string_view newName)
 {
     Material* mat = materials.Find(id);
-    if (!mat || mat->immutable) { return false; }
+    if (!mat || mat->bSynthesized) { return false; }
 
     const StringID newSid(newName.data(), newName.size());
     if (nameToMaterialMap.Contains(newSid)) { return false; }

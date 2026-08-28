@@ -553,7 +553,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                     }
                 }
                 for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
-                    if (mat.immutable) { continue; }
+                    if (mat.bSynthesized) { continue; }
                     if (ImGui::Selectable(mat.name.c_str(), matId == component.material)) {
                         if (matId != component.material) {
                             component.material = matId;

@@ -77,6 +77,8 @@ private:
 
     static VkFilter ExtractFilter(cgltf_filter_type filter);
 
+    static VkFilter ExtractMinFilter(cgltf_filter_type filter);
+
     static VkSamplerMipmapMode ExtractMipmapMode(cgltf_filter_type filter);
 
     static VkSamplerAddressMode ExtractAddressMode(cgltf_wrap_mode wrap);

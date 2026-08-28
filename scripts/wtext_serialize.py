@@ -284,6 +284,8 @@ def c_motion_blur(w, j):
 def c_render_flags(w, j):
     for k in ("visible", "probeBake", "ddgi", "motionBlur", "alphaCutout"):
         opt_b(w, k, j, k, True)
+    # Out of DEFAULT_FLAGS, so it defaults off rather than on like the rest.
+    opt_b(w, "emissiveLight", j, "emissiveLight", False)
 
 
 def c_checkpoint(w, j):

@@ -121,6 +121,13 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
         if (ImGui::Checkbox("Visible##modulemesh", &visible)) { renderFlags.Set(RenderFlagsComponent::VISIBLE, visible); }
         bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
         if (ImGui::Checkbox("Probe Bake Exclude##modulemesh", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
+        bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
+        if (ImGui::Checkbox("Emissive Light##modulemesh", &emissiveLight)) {
+            renderFlags.Set(RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
+            registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
+            state->assetLoad.bPendingModelResolve = true;
+            modified = true;
+        }
 
         // Parts are script-authored; the editor only re-skins slots
         int32_t maxSlot = -1;
@@ -148,7 +155,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
                     }
                 }
                 for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
-                    if (mat.immutable) { continue; }
+                    if (mat.bSynthesized) { continue; }
                     if (ImGui::Selectable(mat.name.c_str(), matId == component.slotMaterials[slot])) {
                         if (matId != component.slotMaterials[slot]) {
                             component.slotMaterials[slot] = matId;

@@ -241,7 +241,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
                 modified = true;
             }
             for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
-                if (mat.immutable) { continue; }
+                if (mat.bSynthesized) { continue; }
                 if (ImGui::Selectable(mat.name.c_str(), matId == comp.material) && matId != comp.material) {
                     comp.material = matId;
                     registry.emplace_or_replace<Text3DLoadingTag>(entity);

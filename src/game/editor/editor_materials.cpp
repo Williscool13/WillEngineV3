@@ -20,6 +20,12 @@
 #include "engine/material_manager.h"
 #include "engine/asset_manager.h"
 #include "engine/resources/texture/texture.h"
+#include "game/components/render/module_mesh_component.h"
+#include "game/components/render/procedural_mesh_component.h"
+#include "game/components/render/spline_mesh_component.h"
+#include "game/components/render/static_mesh_component.h"
+#include "game/components/render/static_mesh_primitive_component.h"
+#include "game/components/render/text3d_component.h"
 #include "platform/paths.h"
 
 namespace Game
@@ -209,7 +215,7 @@ static void BuildMaterialEntries(Engine::EngineContext* ctx, const Engine::Mater
     const Engine::MaterialManager* materialManager = ctx->materialManager;
 
     for (const auto& [id, mat] : materialManager->GetMaterials()) {
-        if (mat.immutable) { continue; }
+        if (mat.bSynthesized) { continue; }
         const int32_t refCount = MaterialRefCount(materialManager, id);
         if (!PassesFilters(mat, refCount, view.filterFlags)) { continue; }
         if (!MatchesSearch(mat.name.c_str(), view.search)) { continue; }
@@ -689,11 +695,37 @@ static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineS
     }
 }
 
+template<typename C, typename Tag>
+static void RetagIfUsingMaterial(Engine::EngineState* state, Engine::MaterialID id)
+{
+    const Engine::InstanceStore& store = state->instanceStore;
+    for (const auto& [entity, component, runtime] : state->registry.view<C, Component::MeshRuntime>().each()) {
+        if (!runtime.range.IsValid()) { continue; }
+        for (uint32_t i = 0; i < runtime.range.count; ++i) {
+            if (store[runtime.range.offset + i].materialID != id) { continue; }
+            state->registry.emplace_or_replace<Tag>(entity);
+            break;
+        }
+    }
+}
+
+/** The tri-light range is decided at fill time from the material's immutability, so unlocking one has to re-resolve every mesh using it. */
+static void RetagMeshesUsingMaterial(Engine::EngineState* state, Engine::MaterialID id)
+{
+    RetagIfUsingMaterial<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>(state, id);
+    RetagIfUsingMaterial<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingTag>(state, id);
+    RetagIfUsingMaterial<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>(state, id);
+    RetagIfUsingMaterial<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>(state, id);
+    RetagIfUsingMaterial<Component::Text3DComponent, Component::Text3DLoadingTag>(state, id);
+    RetagIfUsingMaterial<Component::ModuleMeshComponent, Component::ModuleMeshLoadingTag>(state, id);
+    state->assetLoad.bPendingModelResolve = true;
+}
+
 static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     Engine::MaterialManager* materialManager = ctx->materialManager;
     const Engine::Material* selected = materialManager->GetMaterial(state->editor.selectedMaterial);
-    if (!selected || selected->immutable) {
+    if (!selected || selected->bSynthesized) {
         ImGui::TextDisabled("Select a material");
         return;
     }
@@ -713,6 +745,18 @@ static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineSta
     Engine::Material editMat = mat;
     MaterialProperties& props = editMat.props;
     bool changed = false;
+
+    bool immutable = editMat.immutable;
+    if (ImGui::Checkbox("Immutable", &immutable)) {
+        editMat.immutable = immutable;
+        changed = true;
+        if (!immutable) {
+            RetagMeshesUsingMaterial(state, id);
+        }
+    }
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Contents never change at runtime. Locks the fields below."); }
+
+    ImGui::BeginDisabled(immutable);
 
     ImGui::SeparatorText("Base");
     changed |= ImGui::ColorEdit4("Color Factor", &props.colorFactor.x);
@@ -831,6 +875,8 @@ static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineSta
     }
 
     DrawMaterialTextureSlots(ctx, state, id, mat);
+
+    ImGui::EndDisabled();
 
     if (changed) {
         materialManager->UpdateMutableMaterial(id, editMat, true);

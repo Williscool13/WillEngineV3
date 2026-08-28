@@ -31,7 +31,7 @@ class MaterialManager
 public:
     MaterialManager(Core::MemoryManager& memoryManager, EngineContext* ctx, AssetManager* assetManager);
 
-    MaterialID CreateImmutableMaterial(const Material& mat);
+    MaterialID CreateSynthesizedMaterial(const Material& mat);
 
     /**
      * Update a mutable material's contents. Textures and Samplers will resolve changes with the asset manager.

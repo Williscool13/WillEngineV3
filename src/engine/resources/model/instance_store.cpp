@@ -73,11 +73,27 @@ InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* mat
 void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill)
 {
     materialManager->AcquireMaterial(fill.material);
-    const MaterialProperties props = materialManager->GetProperties(fill.material);
+    const Material* material = materialManager->GetMaterial(fill.material);
+    const MaterialProperties& props = material->props;
     const float maxEmissive = glm::max(props.emissiveFactor.x, glm::max(props.emissiveFactor.y, props.emissiveFactor.z));
     const bool bIsMaterialEmissive = props.emissiveFactor.w * maxEmissive > 0.0f;
+    // Editable materials get a range even while black: nothing re-resolves the mesh when one lights up.
+    const bool bMayEmitLater = !material->bSynthesized && !material->immutable;
     const uint32_t materialIndex = materialManager->GetMaterialIndex(fill.material);
-    const TriLightStore::Range triLightRange = fill.bEmissiveLight && bIsMaterialEmissive && triLightStore ? triLightStore->Allocate(primitive.triangleCount) : TriLightStore::Range{};
+
+    TriLightStore::Range triLightRange{};
+    if (fill.bEmissiveLight && (bIsMaterialEmissive || bMayEmitLater) && triLightStore) {
+        if (emissiveInstanceCount_ < static_cast<uint32_t>(MAX_EMISSIVE_GROUPS)) {
+            triLightRange = triLightStore->Allocate(primitive.triangleCount);
+            if (triLightRange.IsValid()) {
+                ++emissiveInstanceCount_;
+            }
+        }
+        else if (!bEmissiveCapWarned_) {
+            bEmissiveCapWarned_ = true;
+            LOG_WARN(Engine, "Emissive instance cap ({}) reached; further emissive primitives will not light, starting with model ({})", MAX_EMISSIVE_GROUPS, model->name.c_str());
+        }
+    }
 
     instances_[slot] = {
         .primitiveIndex = primitive.index,
@@ -141,8 +157,11 @@ void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, TriLightSto
 {
     if (!range.IsValid()) { return; }
     for (uint32_t i = 0; i < range.count; ++i) {
-        materialManager->ReleaseMaterial(instances_[range.offset + i].materialID);
-        triLightStore->Free(instances_[range.offset + i].triLightRange);
+        InstanceSource& instance = instances_[range.offset + i];
+        materialManager->ReleaseMaterial(instance.materialID);
+        // TriLightStore::Free clears the range in place, so the counter has to move while it is still valid.
+        if (instance.triLightRange.IsValid()) { --emissiveInstanceCount_; }
+        triLightStore->Free(instance.triLightRange);
     }
     Free(range);
     range = {};

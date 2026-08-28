@@ -19,6 +19,7 @@
 #include "game/systems/probe_bake_system.h"
 #include "game/systems/ddgi_converge_boost.h"
 #include "game/components/camera_components.h"
+#include "game/components/common_components.h"
 #include "game/components/core_components.h"
 #include "game/components/render/reflection_probe_component.h"
 #include "core/string_id.h"
@@ -27,6 +28,7 @@
 #include "engine/engine_api.h"
 #include "engine/profiles/profile_library.h"
 #include "render/passes/ddgi_passes.h"
+#include "render/shaders/lights_interop.h"
 #include "render/shaders/reflection_interop.h"
 #include "render/passes/final_gather_passes.h"
 
@@ -311,6 +313,97 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
     ImGui::End();
 }
 
+static const char* EmissiveDispatchStateName(Engine::EmissiveDispatchState dispatchState)
+{
+    switch (dispatchState) {
+        case Engine::EmissiveDispatchState::Dispatched: return "dispatched";
+        case Engine::EmissiveDispatchState::EntityHidden: return "hidden";
+        case Engine::EmissiveDispatchState::ProbeBakeHidden: return "probe-hidden";
+        case Engine::EmissiveDispatchState::WorkListFull: return "list full";
+    }
+    return "?";
+}
+
+static void DrawEmissiveTriLightSection(Engine::EngineState* state)
+{
+    Engine::EmissiveDebugState& emissive = state->debug.emissive;
+    const uint32_t triLightCapacity = static_cast<uint32_t>(MAX_LIGHTS - MAX_ANALYTIC_LIGHTS);
+
+    if (!state->debug.restir.bEmissiveTriangleLights) {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Emissive Triangle Lights is OFF (Lighting > ReSTIR DI)");
+    }
+    ImGui::Text("Reserved instances    %u / %d groups", emissive.reservedInstances, MAX_EMISSIVE_GROUPS);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("TriLightStore reservations held at fill time. Refused past the group cap."); }
+    ImGui::Text("Dispatched groups     %u", emissive.dispatchedGroups);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Work items handed to the build pass, one workgroup each. Visible instances only, so a gap against reserved is visibility or the cap, not the store."); }
+    ImGui::Text("Dispatched triangles  %u", emissive.dispatchedTriangles);
+    ImGui::Text("TriLightStore         %u / %u (%.1f%%)", emissive.triLightWatermark, triLightCapacity,
+                triLightCapacity > 0u ? 100.0f * static_cast<float>(emissive.triLightWatermark) / static_cast<float>(triLightCapacity) : 0.0f);
+    ImGui::Text("Analytic lights       %u / %d", emissive.analyticLightCount, MAX_ANALYTIC_LIGHTS);
+    const uint32_t lightCountFed = emissive.triLightCountFed > 0u ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + emissive.triLightCountFed : emissive.analyticLightCount;
+    ImGui::Text("LightData.lightCount  %u / %d", lightCountFed, MAX_LIGHTS);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("What the GPU is told. Triangles live at [MAX_ANALYTIC_LIGHTS, lightCount); the gap below holds nothing."); }
+
+    if (emissive.reservedInstances > emissive.dispatchedGroups) {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%u reserved instance(s) not dispatched", emissive.reservedInstances - emissive.dispatchedGroups);
+    }
+
+    ImGui::Checkbox("Capture Per-Instance List", &emissive.bCapture);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Every instance holding a reservation, dispatched or not, with the values the build pass reads."); }
+    if (!emissive.bCapture) { return; }
+
+    static bool bOnlyProblems = false;
+    ImGui::Checkbox("Only Non-Dispatched", &bOnlyProblems);
+    if (emissive.bEntriesTruncated) {
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "list truncated at %u entries", Engine::EmissiveDebugState::MAX_ENTRIES);
+    }
+
+    constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+    if (ImGui::BeginTable("##emissive_entries", 7, tableFlags, ImVec2(0.0f, 320.0f))) {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Entity");
+        ImGui::TableSetupColumn("Slot");
+        ImGui::TableSetupColumn("Base");
+        ImGui::TableSetupColumn("Tris");
+        ImGui::TableSetupColumn("Mat");
+        ImGui::TableSetupColumn("Emissive");
+        ImGui::TableSetupColumn("State");
+        ImGui::TableHeadersRow();
+
+        for (const Engine::EmissiveDebugEntry& entry : emissive.entries) {
+            const bool bDispatched = entry.dispatchState == Engine::EmissiveDispatchState::Dispatched;
+            if (bOnlyProblems && bDispatched) { continue; }
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            const auto* nameComponent = state->registry.try_get<Component::NameComponent>(entry.entity);
+            ImGui::TextUnformatted(nameComponent ? nameComponent->name.c_str() : "<unnamed>");
+            ImGui::TableNextColumn();
+            ImGui::Text("%u", entry.instanceSlot);
+            ImGui::TableNextColumn();
+            ImGui::Text("%u", entry.firstLight);
+            ImGui::TableNextColumn();
+            ImGui::Text("%u", entry.triangleCount);
+            ImGui::TableNextColumn();
+            ImGui::Text("%u", entry.materialIndex);
+            ImGui::TableNextColumn();
+            // The build pass writes w * max(rgb) as the intensity, so show the product rather than the fields.
+            const float maxChannel = glm::max(entry.emissiveFactor.x, glm::max(entry.emissiveFactor.y, entry.emissiveFactor.z));
+            const float intensity = entry.emissiveFactor.w * maxChannel;
+            if (intensity <= 0.0f) {
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%.2f %.2f %.2f x%.1f = 0", entry.emissiveFactor.x, entry.emissiveFactor.y, entry.emissiveFactor.z, entry.emissiveFactor.w);
+            }
+            else {
+                ImGui::Text("%.2f %.2f %.2f x%.1f = %.2f", entry.emissiveFactor.x, entry.emissiveFactor.y, entry.emissiveFactor.z, entry.emissiveFactor.w, intensity);
+            }
+            ImGui::TableNextColumn();
+            if (bDispatched) { ImGui::TextUnformatted("dispatched"); }
+            else { ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", EmissiveDispatchStateName(entry.dispatchState)); }
+        }
+        ImGui::EndTable();
+    }
+}
+
 void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ImGui::Begin("Debug View")) {
@@ -510,6 +603,10 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             for (size_t i = 0; i < std::size(DEBUG_HOTKEYS); ++i) {
                 ImGui::Text("%s: %s (%s)", keyNames[i], DEBUG_HOTKEYS[i].name, DEBUG_HOTKEYS[i].resourceName);
             }
+        }
+
+        if (ImGui::CollapsingHeader("Emissive Tri Lights")) {
+            DrawEmissiveTriLightSection(state);
         }
 
         auto setDebugTarget = [&](const char* name, DebugTransformationType _transform, Core::DebugViewAspect aspect) {

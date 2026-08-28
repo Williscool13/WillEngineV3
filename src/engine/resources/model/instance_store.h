@@ -77,8 +77,6 @@ public:
 
     Range Allocate(uint32_t count);
 
-    void Free(Range range);
-
     /** Range over model mesh[0]'s primitives with a uniform material (acquired per entry), identity transforms, a shared ModelStore slot, and a tri-light range per emissive primitive. Invalid range on an empty model or full store. Null triLightStore suppresses tri-light allocation (light proxy surfaces resolve BRDF hits via their analytic light). */
     Range AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight);
 
@@ -109,13 +107,21 @@ public:
     [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
     [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
     [[nodiscard]] bool IsInitialized() const { return ranges_.IsInitialized(); }
+    /** Reservations held, not groups dispatched: the work list only carries visible instances. */
+    [[nodiscard]] uint32_t GetEmissiveInstanceCount() const { return emissiveInstanceCount_; }
 
 private:
+    /** Private because it returns the slots without releasing their materials or tri-light runs. */
+    void Free(Range range);
+
     void WriteRecord(uint32_t slot);
 
     Core::VirtualArray<InstanceSource> instances_{};
     Core::VirtualArray<Instance> gpuInstances_{};
     Core::RangeAllocator ranges_{};
+
+    uint32_t emissiveInstanceCount_{0};
+    bool bEmissiveCapWarned_{false};
 };
 } // Engine
 

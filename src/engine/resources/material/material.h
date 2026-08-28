@@ -42,7 +42,9 @@ struct Material
     StringID lightingShader{"default_pbr"_sid};
     bool bIsRuntimeLoaded{false};
 
-    // Runtime specific fields
+    /** Synthesized from a model's baked material. */
+    bool bSynthesized{false};
+
     bool immutable{false};
 };
 

@@ -200,7 +200,7 @@ bool StaticModelGenerateSlot::LoadGltf()
             rawModel.samplerInfos[i].maxLod = VK_LOD_CLAMP_NONE;
             rawModel.samplerInfos[i].minLod = 0;
             rawModel.samplerInfos[i].magFilter = ExtractFilter(gltfSampler.mag_filter != cgltf_filter_type_undefined ? gltfSampler.mag_filter : cgltf_filter_type_nearest);
-            rawModel.samplerInfos[i].minFilter = ExtractFilter(gltfSampler.min_filter != cgltf_filter_type_undefined ? gltfSampler.min_filter : cgltf_filter_type_nearest);
+            rawModel.samplerInfos[i].minFilter = ExtractMinFilter(gltfSampler.min_filter != cgltf_filter_type_undefined ? gltfSampler.min_filter : cgltf_filter_type_nearest);
             rawModel.samplerInfos[i].mipmapMode = ExtractMipmapMode(gltfSampler.min_filter != cgltf_filter_type_undefined ? gltfSampler.min_filter : cgltf_filter_type_linear);
             rawModel.samplerInfos[i].addressModeU = ExtractAddressMode(gltfSampler.wrap_s);
             rawModel.samplerInfos[i].addressModeV = ExtractAddressMode(gltfSampler.wrap_t);
@@ -370,7 +370,7 @@ bool StaticModelGenerateSlot::LoadGltf()
             // mat.id             not relevant for model-based materials
             // mat.sourcePath     not relevant for model-based materials
             // mat.pipelineID = ; not yet used, but will likely just point to the ID of the "generic lit shader"
-            rawModel.materials[i].immutable = true;
+            rawModel.materials[i].bSynthesized = true;
             rawModel.materials[i].props = ExtractMaterial(gltf, gltf.materials[i]);
         }
     }
@@ -1254,6 +1254,14 @@ VkFilter StaticModelGenerateSlot::ExtractFilter(cgltf_filter_type filter)
         default:
             return VK_FILTER_LINEAR;
     }
+}
+
+VkFilter StaticModelGenerateSlot::ExtractMinFilter(cgltf_filter_type filter)
+{
+    if (filter == cgltf_filter_type_nearest) {
+        return VK_FILTER_NEAREST;
+    }
+    return VK_FILTER_LINEAR;
 }
 
 VkSamplerAddressMode StaticModelGenerateSlot::ExtractAddressMode(cgltf_wrap_mode wrap)

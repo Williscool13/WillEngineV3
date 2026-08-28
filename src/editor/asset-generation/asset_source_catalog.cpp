@@ -81,6 +81,11 @@ static AssetOutputState ComputeOutputState(AssetSourceKind kind, const Core::Pat
             if (!header || header->major != Engine::FONT_MAJOR_VERSION || header->minor > Engine::FONT_MINOR_VERSION) { return AssetOutputState::Outdated; }
             break;
         }
+        case AssetSourceKind::Model: {
+            auto header = Engine::ReadWStaticModelHeaderAnyVersion(output);
+            if (!header || header->version != Engine::STATICMODEL_VERSION) { return AssetOutputState::Outdated; }
+            break;
+        }
         default: {
             break;
         }

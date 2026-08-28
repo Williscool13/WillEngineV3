@@ -110,6 +110,13 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         if (ImGui::Checkbox("Visible", &visible)) { renderFlags.Set(RenderFlagsComponent::VISIBLE, visible); }
         bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
         if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
+        bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
+        if (ImGui::Checkbox("Emissive Light##staticmeshprimitive", &emissiveLight)) {
+            renderFlags.Set(RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
+            registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
+            state->assetLoad.bPendingModelResolve = true;
+            modified = true;
+        }
 
         if (!component.modelId.IsValid()) {
             if (ImGui::BeginCombo("Select Model", "")) {
@@ -190,7 +197,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                 if (component.materialOverride.IsValid()) { clear = true; }
             }
             for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
-                if (mat.immutable) { continue; }
+                if (mat.bSynthesized) { continue; }
                 if (ImGui::Selectable(mat.name.c_str(), matId == component.materialOverride)) {
                     if (matId != component.materialOverride) { pendingMat = matId; changed = true; }
                 }

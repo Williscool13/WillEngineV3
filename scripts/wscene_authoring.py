@@ -239,11 +239,13 @@ def next_sort():
 
 RENDER_DEFAULTS = {"material": 0, "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
 
-def add_render_flags(entity, visible=True, probe_bake_include=True, ddgi_contribute=True, motion_blur=True, alpha_cutout=True):
-    """RenderFlagsComponent entry. Only needed for NON-default flags; entities without one
-    get all bits set on load (engine OnConstruct default)."""
+def add_render_flags(entity, visible=True, probe_bake_include=True, ddgi_contribute=True, motion_blur=True,
+                     alpha_cutout=True, emissive_light=False):
+    """RenderFlagsComponent entry. Only needed for NON-default flags; a missing key reads back as
+    that bit's DEFAULT_FLAGS state, which is set for every bit EXCEPT emissive_light (opt-in: it
+    allocates a TriLightStore range per emissive primitive, so it cannot default on)."""
     entity[RENDER_FLAGS] = {"visible": visible, "probeBake": probe_bake_include, "ddgi": ddgi_contribute,
-                            "motionBlur": motion_blur, "alphaCutout": alpha_cutout}
+                            "motionBlur": motion_blur, "alphaCutout": alpha_cutout, "emissiveLight": emissive_light}
     return entity
 
 def base_entity(name, pos, rot=(1.0, 0.0, 0.0, 0.0), scale=(1.0, 1.0, 1.0), folder_id=0):

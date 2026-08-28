@@ -465,7 +465,7 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         Engine::Material emissive = *defaultMaterial; // black albedo so only emission shows
         emissive.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
         emissive.props.emissiveFactor = areaLight ? glm::vec4(areaLight->color, areaLight->intensity) : glm::vec4(sphereLight->color, sphereLight->intensity);
-        const Engine::MaterialID materialID = ctx->materialManager->CreateImmutableMaterial(emissive);
+        const Engine::MaterialID materialID = ctx->materialManager->CreateSynthesizedMaterial(emissive);
 
         const auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
         glm::mat4 m(1.0f);
@@ -627,12 +627,12 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                             matID = materialOverride;
                         }
                         else {
-                            matID = materialManager->CreateImmutableMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
+                            matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
                             LOG_WARN(Engine, "Mesh was resolved with a material override that does not exist in the registry.");
                         }
                     }
                     else {
-                        matID = materialManager->CreateImmutableMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
+                        matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
                     }
                 }
 
@@ -767,7 +767,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
             matID = materialManager->GetDefaultMaterialID();
         }
         else {
-            matID = materialManager->CreateImmutableMaterial(applyShaderOverrides(model->modelData.materials[targetPrim->materialIndex]));
+            matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[targetPrim->materialIndex]));
         }
 
         Engine::InstanceStore& store = state->instanceStore;
@@ -784,12 +784,13 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
             continue;
         }
 
-        store.FillEntry(range.offset, materialManager, nullptr, model, *targetPrim, {
+        store.FillEntry(range.offset, materialManager, &state->triLightStore, model, *targetPrim, {
                             .material = matID,
                             .modelSlot = modelRange.offset,
                             .materialSlot = targetPrim->materialIndex,
                             .sourceNodeIndex = targetNode,
                             .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
+                            .bEmissiveLight = HasEmissiveLightFlag(state->registry, entity),
                         });
         runtime->range = range;
         runtime->modelRange = modelRange;
@@ -889,7 +890,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 }
 
-static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState* state, Component::MeshRuntime* runtime, Engine::StaticModel* model, const Component::ModuleMeshComponent& meshComponent)
+static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState* state, Component::MeshRuntime* runtime, Engine::StaticModel* model, const Component::ModuleMeshComponent& meshComponent, bool bEmissiveLight)
 {
     state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
     state->modelStore.Free(runtime->modelRange);
@@ -921,12 +922,13 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
                 matID = slotMat;
             }
         }
-        store.FillEntry(writeIndex, ctx->materialManager, nullptr, model, primitive, {
+        store.FillEntry(writeIndex, ctx->materialManager, &state->triLightStore, model, primitive, {
                             .material = matID,
                             .modelSlot = modelRange.offset,
                             .materialSlot = primitive.materialIndex,
                             .sourceNodeIndex = 0,
                             .modelPrimitiveOrdinal = j,
+                            .bEmissiveLight = bEmissiveLight,
                         });
         ++writeIndex;
     }
@@ -989,7 +991,7 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             continue;
         }
 
-        FillModuleMeshRange(ctx, state, runtime, model, meshComponent);
+        FillModuleMeshRange(ctx, state, runtime, model, meshComponent, HasEmissiveLightFlag(state->registry, entity));
         state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
 
         resolved.PushBack(entity);
@@ -1397,7 +1399,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 emissiveMaterial.props.emissiveFactor = glm::vec4(color, intensity);
                 const Engine::MaterialID materialID = Engine::HashMaterial(emissiveMaterial);
                 if (materialID != surfaceRuntime.materialID) {
-                    materialManager->CreateImmutableMaterial(emissiveMaterial);
+                    materialManager->CreateSynthesizedMaterial(emissiveMaterial);
                     materialManager->AcquireMaterial(materialID);
                     materialManager->ReleaseMaterial(surfaceRuntime.materialID);
                     store.SetMaterial(surfaceRuntime.range.offset, materialManager, materialID);
@@ -1773,6 +1775,34 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         };
     }
 
+    Engine::EmissiveDebugState& emissiveDebug = state->debug.emissive;
+    emissiveDebug.entries.Clear();
+    emissiveDebug.bEntriesTruncated = false;
+    emissiveDebug.dispatchedTriangles = 0;
+    emissiveDebug.reservedInstances = state->instanceStore.GetEmissiveInstanceCount();
+    emissiveDebug.triLightWatermark = state->triLightStore.GetWatermark();
+    emissiveDebug.analyticLightCount = vf.analyticLightCount;
+    const bool bEmissiveCapture = emissiveDebug.bCapture;
+
+    auto recordEmissive = [&](entt::entity entity, uint32_t slot, const Engine::InstanceSource& inst, Engine::EmissiveDispatchState dispatchState) {
+        if (emissiveDebug.entries.Size() >= Engine::EmissiveDebugState::MAX_ENTRIES) {
+            emissiveDebug.bEntriesTruncated = true;
+            return;
+        }
+        const Engine::Material* material = ctx->materialManager->GetMaterial(inst.materialID);
+        emissiveDebug.entries.PushBack(Engine::EmissiveDebugEntry{
+            .entity = entity,
+            .instanceSlot = slot,
+            .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + inst.triLightRange.offset,
+            .triangleCount = inst.triLightRange.count,
+            .materialIndex = inst.materialIndex,
+            .modelSlot = inst.modelSlot,
+            .emissiveFactor = material ? material->props.emissiveFactor : glm::vec4(0.0f),
+            .materialID = inst.materialID,
+            .dispatchState = dispatchState,
+        });
+    };
+
     vf.triLightCount = state->triLightStore.GetWatermark();
     if (state->debug.restir.bEmissiveTriangleLights) {
         ZoneScopedN("EmissiveTriangleLights");
@@ -1780,22 +1810,46 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         Engine::InstanceStore& store = state->instanceStore;
 
         for (const auto& [entity, runtime] : view.each()) {
-            if (!runtime.range.IsValid() || !runtime.visible) { continue; }
+            if (!runtime.range.IsValid()) { continue; }
             for (uint32_t i = 0; i < runtime.range.count; ++i) {
                 const uint32_t slot = runtime.range.offset + i;
                 const Engine::InstanceSource& inst = store[slot];
-                if (!inst.triLightRange.IsValid() || vf.emissiveTriWork.IsFull()) { continue; }
+                if (!inst.triLightRange.IsValid()) { continue; }
+                if (!runtime.visible) {
+                    if (bEmissiveCapture) { recordEmissive(entity, slot, inst, Engine::EmissiveDispatchState::EntityHidden); }
+                    continue;
+                }
+                if (vf.emissiveTriWork.IsFull()) {
+                    if (bEmissiveCapture) { recordEmissive(entity, slot, inst, Engine::EmissiveDispatchState::WorkListFull); }
+                    continue;
+                }
                 vf.emissiveTriWork.PushBack(EmissiveTriLightWork{
                     .instanceSlot = slot,
                     .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + inst.triLightRange.offset,
                     .triangleCount = inst.triLightRange.count,
                 });
+                emissiveDebug.dispatchedTriangles += inst.triLightRange.count;
+                if (bEmissiveCapture) { recordEmissive(entity, slot, inst, Engine::EmissiveDispatchState::Dispatched); }
+            }
+        }
+
+        if (bEmissiveCapture) {
+            for (const auto& [entity, runtime] : state->registry.view<Component::MeshRuntime, Component::ProbeBakeHiddenTag>().each()) {
+                if (!runtime.range.IsValid()) { continue; }
+                for (uint32_t i = 0; i < runtime.range.count; ++i) {
+                    const uint32_t slot = runtime.range.offset + i;
+                    const Engine::InstanceSource& inst = store[slot];
+                    if (!inst.triLightRange.IsValid()) { continue; }
+                    recordEmissive(entity, slot, inst, Engine::EmissiveDispatchState::ProbeBakeHidden);
+                }
             }
         }
     }
     else {
         vf.triLightCount = 0;
     }
+    emissiveDebug.dispatchedGroups = static_cast<uint32_t>(vf.emissiveTriWork.Size());
+    emissiveDebug.triLightCountFed = vf.triLightCount;
 
     //
     {

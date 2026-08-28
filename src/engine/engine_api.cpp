@@ -122,6 +122,7 @@ EngineState::EngineState(Core::TlsfAllocator* allocator, Core::VirtualMemoryMana
     modelStore.Init(MAX_MODEL_SLOTS, allocator, virtualMemory, Core::AllocTag::RenderMesh);
     analyticLightStore.Init(MAX_ANALYTIC_LIGHTS, allocator, Core::AllocTag::Render);
     triLightStore.Init(MAX_LIGHTS - MAX_ANALYTIC_LIGHTS, allocator, Core::AllocTag::Render);
+    debug.emissive.entries = Core::Vector<EmissiveDebugEntry>(allocator, Core::AllocTag::EngineState);
 
     const uint64_t clayMemorySize = Clay_MinMemorySize();
     void* clayMemory = allocator->Alloc(clayMemorySize, Core::AllocTag::Clay);

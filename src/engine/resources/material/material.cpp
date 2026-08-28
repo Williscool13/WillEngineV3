@@ -51,13 +51,14 @@ MaterialID HashMaterial(const Material& m)
 
 void SerializeMaterial(const Material& mat, TextWriter& w)
 {
-    assert(!mat.immutable);
+    assert(!mat.bSynthesized);
     static const SamplerDesc DEFAULT_SAMPLER{};
 
     w.KeyStr("name", mat.name.View());
     w.Key("id", mat.id.id);
     w.Key("fragmentShader", mat.fragmentShader.id);
     w.Key("lightingShader", mat.lightingShader.id);
+    w.KeyOpt("immutable", mat.immutable, false);
 
     const MaterialProperties& p = mat.props;
     w.Key("colorFactor", p.colorFactor);
@@ -136,7 +137,8 @@ Material DeserializeMaterial(const TextReader& r, const Core::Path& sourcePath)
         ++slot;
     });
 
-    mat.immutable = false;
+    mat.bSynthesized = false;
+    mat.immutable = r.Bool("immutable", false);
     mat.sourcePath = sourcePath;
 
     return mat;
