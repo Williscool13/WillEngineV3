@@ -1663,7 +1663,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
                 featureSection("Emissive Triangle Lights", &restir.bEmissiveTriangleLights, [&] {
                     if (Widgets::SliderFloat("Emissive Range Multiplier", &restir.emissiveTriRangeMultiplier, 0.0f, 64.0f,
-                                             {.format = "%.1f", .tooltip = "Attenuation cutoff per triangle: range = multiplier * sqrt(intensity * area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 8.0f})) {
+                                             {.format = "%.1f", .tooltip = "Attenuation cutoff per emissive mesh, shared by all its triangles: range = multiplier * sqrt(intensity * total area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 8.0f})) {
                         changed = true;
                     }
                 });

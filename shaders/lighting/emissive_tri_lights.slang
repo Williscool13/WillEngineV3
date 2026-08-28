@@ -12,7 +12,6 @@ static const uint TRI_LIGHT_GROUP_SIZE = 64;
 groupshared float3 gsMin[TRI_LIGHT_GROUP_SIZE];
 groupshared float3 gsMax[TRI_LIGHT_GROUP_SIZE];
 groupshared float gsPower[TRI_LIGHT_GROUP_SIZE];
-groupshared float gsRange[TRI_LIGHT_GROUP_SIZE];
 
 static uint PackColorRGB8(float3 c)
 {
@@ -63,7 +62,6 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
     float3 laneMin = float3(1e30);
     float3 laneMax = float3(-1e30);
     float lanePower = 0.0;
-    float laneRange = 0.0;
 
     for (uint t = lane; t < work.triangleCount; t += TRI_LIGHT_GROUP_SIZE) {
         uint firstIndex = prim.indexOffset + t * 3;
@@ -78,13 +76,11 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
         float area = 0.5 * length(cr);
         // Degenerate triangles still occupy a slot (zero intensity) so base + PrimitiveIndex() stays aligned
         bool bDegenerate = area <= 1e-8 || intensity <= 0.0;
-        float triRange = pc.rangeMultiplier * sqrt(max(intensity * area, 0.0));
 
         if (!bDegenerate) {
             laneMin = min(laneMin, min(v0, min(v0 + e1, v0 + e2)));
             laneMax = max(laneMax, max(v0, max(v0 + e1, v0 + e2)));
             lanePower += intensity * area;
-            laneRange = max(laneRange, triRange);
         }
 
         LightInfo light;
@@ -94,7 +90,7 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
         light.up = float4(e2, 0.0);
         light.packedColor = packedColor;
         light.intensity = bDegenerate ? 0.0 : intensity;
-        light.range = triRange;
+        light.range = 0.0;
         light.type = LIGHT_TYPE_TRIANGLE;
         pc.lightData->lights[work.firstLight + t] = light;
     }
@@ -102,7 +98,6 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
     gsMin[lane] = laneMin;
     gsMax[lane] = laneMax;
     gsPower[lane] = lanePower;
-    gsRange[lane] = laneRange;
     GroupMemoryBarrierWithGroupSync();
 
     for (uint stride = TRI_LIGHT_GROUP_SIZE / 2; stride > 0; stride >>= 1) {
@@ -110,9 +105,14 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
             gsMin[lane] = min(gsMin[lane], gsMin[lane + stride]);
             gsMax[lane] = max(gsMax[lane], gsMax[lane + stride]);
             gsPower[lane] += gsPower[lane + stride];
-            gsRange[lane] = max(gsRange[lane], gsRange[lane + stride]);
         }
         GroupMemoryBarrierWithGroupSync();
+    }
+
+    // Range is a property of the whole emitter, not of its tessellation: per-triangle sqrt(intensity * area) shrinks by sqrt(N) as a mesh is subdivided.
+    float groupRange = pc.rangeMultiplier * sqrt(max(gsPower[0], 0.0));
+    for (uint t = lane; t < work.triangleCount; t += TRI_LIGHT_GROUP_SIZE) {
+        pc.lightData->lights[work.firstLight + t].range = groupRange;
     }
 
     if (lane != 0) { return; }
@@ -122,8 +122,8 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
     group.lightCount = work.triangleCount;
     group.power = gsPower[0];
     if (gsPower[0] > 0.0) {
-        group.aabbMin = gsMin[0] - gsRange[0];
-        group.aabbMax = gsMax[0] + gsRange[0];
+        group.aabbMin = gsMin[0] - groupRange;
+        group.aabbMax = gsMax[0] + groupRange;
     }
     else {
         group.aabbMin = float3(1e30);
