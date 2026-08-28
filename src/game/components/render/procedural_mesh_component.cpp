@@ -619,6 +619,13 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             renderFlags.Set(RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude);
         }
         ImGui::SameLine();
+        bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
+        if (ImGui::Checkbox("Emissive Light##proceduralmesh", &emissiveLight)) {
+            renderFlags.Set(RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
+            registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
+            state->assetLoad.bPendingModelResolve = true;
+            modified = true;
+        }
         bool alphaCutoutExclude = !renderFlags.Has(RenderFlagsComponent::ALPHA_CUTOUT);
         if (ImGui::Checkbox("Alpha Cutout Exclude##proceduralmesh", &alphaCutoutExclude)) {
             renderFlags.Set(RenderFlagsComponent::ALPHA_CUTOUT, !alphaCutoutExclude);

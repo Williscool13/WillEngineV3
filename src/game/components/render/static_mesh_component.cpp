@@ -189,6 +189,13 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         if (ImGui::Checkbox("Alpha Cutout Exclude", &alphaCutoutExclude)) {
             renderFlags.Set(RenderFlagsComponent::ALPHA_CUTOUT, !alphaCutoutExclude);
         }
+        bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
+        if (ImGui::Checkbox("Emissive Light", &emissiveLight)) {
+            renderFlags.Set(RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
+            registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
+            state->assetLoad.bPendingModelResolve = true;
+            modified = true;
+        }
 
         auto* runtime = registry.try_get<MeshRuntime>(entity);
 
@@ -282,7 +289,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             Core::InlineVector<SlotInfo, 128> slots;
             bool seen[128] = {};
             for (uint32_t i = 0; i < primCount; ++i) {
-                int32_t idx = store[runtime->range.offset + i].originalMaterialIndex;
+                int32_t idx = store[runtime->range.offset + i].materialSlot;
                 if (idx < 0 || idx >= 128 || seen[idx]) continue;
                 seen[idx] = true;
                 Core::InlineString<128> slotName;

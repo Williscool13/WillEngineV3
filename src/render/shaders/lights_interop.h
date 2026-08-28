@@ -113,6 +113,17 @@ SHADER_PUBLIC struct EmissiveGroup
     float _pad2;
 };
 
+/**
+ * One emissive primitive instance handed to the tri-light build. Bounded by MAX_EMISSIVE_GROUPS because each item produces exactly one EmissiveGroup.
+ */
+SHADER_PUBLIC struct EmissiveTriLightWork
+{
+    SHADER_PUBLIC uint instanceSlot;
+    SHADER_PUBLIC uint firstLight; // absolute index into LightData::lights
+    SHADER_PUBLIC uint triangleCount;
+    SHADER_PUBLIC uint _pad0;
+};
+
 SHADER_PUBLIC struct LightData
 {
     SHADER_PUBLIC int lightCount;

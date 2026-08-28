@@ -62,9 +62,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     // Transform all lights (area + sphere) to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
     graph.CreateBuffer(SID("restir_lights_vs"), MAX_LIGHTS * sizeof(LightVSData), false);
 
-    const auto viewFamilyLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
-    const uint32_t liveLightCount = viewFamily.analyticLightCount
-                                    + (viewFamilyLightCount > static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) ? viewFamilyLightCount - static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) : 0u);
+    const uint32_t liveLightCount = viewFamily.analyticLightCount + viewFamily.triLightCount;
 
     RenderPass& transformPass = graph.AddPass(SID("[ReSTIR DI] Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     transformPass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -148,10 +146,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, 1, 1, 1);
         });
 
-        const auto totalLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
         const uint32_t analyticLightCount = viewFamily.analyticLightCount;
-        const uint32_t fillLightCount = analyticLightCount
-                                        + (totalLightCount > static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) ? totalLightCount - static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) : 0u);
+        // Matches the alias table, which is analytic-only until its build moves to the GPU
+        const uint32_t fillLightCount = analyticLightCount;
 
         // Presample tiles
         {

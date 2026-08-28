@@ -382,10 +382,12 @@ void StaticModelLoadSlot::PrepareUploadData()
 
     uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(Primitive);
 
-    AssetLoad::ExtractEmissiveTriangles(rawData, outputModel, memoryManager, primitiveOffsetCount, false);
     for (auto& mesh : rawData.allMeshes) {
         for (auto& primitiveIndex : mesh.primitiveProperties) {
-            const Primitive& prim = rawData.primitives[primitiveIndex.index];
+            const uint32_t localPi = primitiveIndex.index;
+            const Primitive& prim = rawData.primitives[localPi];
+            const size_t indexEnd = localPi + 1 < rawData.primitives.Size() ? rawData.primitives[localPi + 1].indexOffset : rawData.indices.Size();
+            primitiveIndex.triangleCount = static_cast<uint32_t>((indexEnd - prim.indexOffset) / 3);
             primitiveIndex.boundingBoxMin = prim.boundingBoxMin;
             primitiveIndex.boundingBoxMax = prim.boundingBoxMax;
             primitiveIndex.boundingSphere = prim.boundingSphere;

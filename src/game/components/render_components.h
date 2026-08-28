@@ -34,6 +34,7 @@ struct RenderFlagsComponent
     static constexpr uint32_t DDGI_CONTRIBUTE = 1u << 2;
     static constexpr uint32_t MOTION_BLUR = 1u << 3;
     static constexpr uint32_t ALPHA_CUTOUT = 1u << 4;
+    static constexpr uint32_t EMISSIVE_LIGHT = 1u << 5;
     static constexpr uint32_t DEFAULT_FLAGS = VISIBLE | PROBE_BAKE_INCLUDE | DDGI_CONTRIBUTE | MOTION_BLUR | ALPHA_CUTOUT;
 
     uint32_t flags{DEFAULT_FLAGS};

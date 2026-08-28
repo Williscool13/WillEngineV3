@@ -198,7 +198,6 @@ void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
     w.Key("lightProposal", static_cast<uint32_t>(p.lightProposal));
     w.Key("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
     w.Key("emissiveTriRangeMultiplier", p.emissiveTriRangeMultiplier);
-    w.Key("emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive);
     w.Key("bEnableConfidence", p.bEnableConfidence);
     w.Key("confidenceStrength", p.confidenceStrength);
     w.Key("confidenceSensitivity", p.confidenceSensitivity);
@@ -252,7 +251,6 @@ void Deserialize(const TextReader& r, Core::ReSTIRParams& p)
     p.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(r.UInt("lightProposal", static_cast<uint32_t>(p.lightProposal)));
     p.bEmissiveTriangleLights = r.Bool("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
     p.emissiveTriRangeMultiplier = r.Float("emissiveTriRangeMultiplier", p.emissiveTriRangeMultiplier);
-    p.emissiveTriMaxPerPrimitive = r.Int("emissiveTriMaxPerPrimitive", p.emissiveTriMaxPerPrimitive);
     p.bEnableConfidence = r.Bool("bEnableConfidence", p.bEnableConfidence);
     p.confidenceStrength = r.Float("confidenceStrength", p.confidenceStrength);
     p.confidenceSensitivity = r.Float("confidenceSensitivity", p.confidenceSensitivity);

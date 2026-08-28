@@ -27,10 +27,10 @@ struct PrimitiveProperty;
 struct InstanceSource
 {
     uint32_t primitiveIndex{0};
-    int32_t originalMaterialIndex{-1};
     uint32_t sourceNodeIndex{~0u};
     uint32_t modelPrimitiveOrdinal{~0u};
     uint32_t modelSlot{~0u};
+    int32_t materialSlot{-1};
     uint32_t materialIndex{~0u};
     MaterialID materialID{};
     uint64_t blasDeviceAddress{0};
@@ -41,7 +41,7 @@ struct InstanceSource
     bool bVisible{true};
 
     /**
-     * TriLightStore range covering this primitive's full emissive triangle set
+     * TriLightStore range covering this primitive's full emissive triangle set.
      */
     Core::RangeAllocator::Range triLightRange{};
 };
@@ -53,10 +53,11 @@ struct InstanceFill
 {
     MaterialID material{};
     uint32_t modelSlot{~0u};
-    int32_t originalMaterialIndex{-1};
+    int32_t materialSlot{-1};
     uint32_t sourceNodeIndex{0};
     uint32_t modelPrimitiveOrdinal{~0u};
     Mat4 modelSpaceTransform{1.0f};
+    bool bEmissiveLight{false};
 };
 
 
@@ -79,7 +80,7 @@ public:
     void Free(Range range);
 
     /** Range over model mesh[0]'s primitives with a uniform material (acquired per entry), identity transforms, a shared ModelStore slot, and a tri-light range per emissive primitive. Invalid range on an empty model or full store. Null triLightStore suppresses tri-light allocation (light proxy surfaces resolve BRDF hits via their analytic light). */
-    Range AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot);
+    Range AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight);
 
     /** The single writer for InstanceSource entries: acquires the material, stamps the stable material index, and allocates the primitive's tri-light range (skipped when triLightStore is null). */
     void FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill);

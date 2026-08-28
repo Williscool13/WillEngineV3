@@ -1569,9 +1569,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                                              {.format = "%.1f", .tooltip = "Attenuation cutoff per triangle: range = multiplier * sqrt(intensity * area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 8.0f})) {
                         changed = true;
                     }
-                    if (Widgets::SliderInt("Max Tris Per Emissive Primitive", &restir.emissiveTriMaxPerPrimitive, 1, 16384)) {
-                        changed = true;
-                    }
                 });
 
                 if (bReGIR && restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {

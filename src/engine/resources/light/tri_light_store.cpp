@@ -15,19 +15,15 @@ void TriLightStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::Al
     pendingFrees_ = Core::Vector<PendingFree>(alloc, tag);
 }
 
-TriLightStore::Range TriLightStore::AllocateForPrimitive(const StaticModel& model, uint32_t primitiveIndex)
+TriLightStore::Range TriLightStore::Allocate(uint32_t triangleCount)
 {
-    for (const EmissiveTriangleSet& set : model.modelData.emissiveTriangles) {
-        if (set.primitiveIndex == primitiveIndex && !set.verts.IsEmpty()) {
-            Range range = ranges_.Allocate(static_cast<uint32_t>(set.verts.Size() / 3));
-            if (!range.IsValid() && !bWarnedFull_) {
-                LOG_WARN(Engine, "Tri light store full; model ({}) primitives get no triangle lights", model.name.c_str());
-                bWarnedFull_ = true;
-            }
-            return range;
-        }
+    if (triangleCount == 0) { return {}; }
+    Range range = ranges_.Allocate(triangleCount);
+    if (!range.IsValid() && !bWarnedFull_) {
+        LOG_WARN(Engine, "Tri light store full; further emissive primitives get no triangle lights");
+        bWarnedFull_ = true;
     }
-    return {};
+    return range;
 }
 
 void TriLightStore::Free(Range& range)

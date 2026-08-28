@@ -88,7 +88,6 @@ confidenceHistoryLength|0x40800000
 confidenceSensitivity|0x40400000
 confidenceStrength|0x00000000
 denoiserMode|3
-emissiveTriMaxPerPrimitive|256
 emissiveTriRangeMultiplier|0x42417a18
 lightProposal|0
 reblur

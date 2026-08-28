@@ -486,8 +486,9 @@ struct ViewFamily
     ArenaFixedVector<LocalDDGIVolume> localDDGIVolumes{};
 
     uint32_t analyticLightCount{0};
-    ArenaFixedVector<EmissiveGroup> emissiveGroups{};
-    ArenaVector<uint32_t> triLightBaseBySlot{};
+    /** TriLightStore watermark. The triangle region of LightData is written by the GPU, so the CPU only reports how far it extends. */
+    uint32_t triLightCount{0};
+    ArenaFixedVector<EmissiveTriLightWork> emissiveTriWork{};
 
     GTAOConfiguration gtaoConfig{};
     AntiAliasingConfiguration aaConfig{};

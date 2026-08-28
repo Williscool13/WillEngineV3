@@ -15,7 +15,7 @@ namespace Engine
 struct StaticModel;
 
 /**
- * Stable range space for emissive-triangle lights. A range covers one emissive primitive's full triangle set and the GPU light index is MAX_ANALYTIC_LIGHTS + range offset.
+ * Stable range space for emissive-triangle lights. A range covers one emissive primitive's full triangle set, so base + PrimitiveIndex() resolves a ray hit to its own light, and the GPU light index is MAX_ANALYTIC_LIGHTS + range offset.
  */
 class TriLightStore
 {
@@ -26,7 +26,7 @@ public:
 
     void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::AllocTag tag = Core::AllocTag::Render);
 
-    Range AllocateForPrimitive(const StaticModel& model, uint32_t primitiveIndex);
+    Range Allocate(uint32_t triangleCount);
 
     void Free(Range& range);
 

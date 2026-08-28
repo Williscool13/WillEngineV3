@@ -2119,6 +2119,29 @@ SHADER_PUBLIC struct HiZDebugPushConstant
     SHADER_PUBLIC uint32_t mip;
 };
 
+SHADER_PUBLIC struct EmissiveTriLightClearPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC uint firstLight;
+    SHADER_PUBLIC uint lightCount;
+};
+
+SHADER_PUBLIC struct EmissiveTriLightPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(EmissiveTriLightWork) workBuffer;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) indexBuffer;
+    SHADER_PUBLIC uint workCount;
+    SHADER_PUBLIC float rangeMultiplier;
+    SHADER_PUBLIC uint _pad0;
+    SHADER_PUBLIC uint _pad1;
+};
+
 SHADER_PUBLIC struct TLASInstancePushConstant
 {
     // Read-Only

@@ -148,6 +148,12 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
     if (ImGui::Checkbox("Probe Bake Exclude##text3d", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
     ImGui::SameLine();
+    bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
+    if (ImGui::Checkbox("Emissive Light##text3d", &emissiveLight)) {
+        renderFlags.Set(RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
+        registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
+        state->assetLoad.bPendingModelResolve = true;
+    }
     bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
     if (ImGui::Checkbox("Motion Blur Exclude##text3d", &motionBlurExclude)) { renderFlags.Set(RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude); }
 

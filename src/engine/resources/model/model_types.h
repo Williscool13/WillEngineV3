@@ -36,6 +36,7 @@ struct PrimitiveProperty
 {
     uint32_t index;
     int32_t materialIndex;
+    uint32_t triangleCount{0};
 
     Vec3 boundingBoxMin{};
     Vec3 boundingBoxMax{};
@@ -54,19 +55,6 @@ struct MeshInformation
     Core::InlineString<> name;
     // todo perhaps increase this limit.
     Core::InlineVector<PrimitiveProperty, MAX_PRIMITIVES_PER_MESH> primitiveProperties;
-};
-
-/**
- * Local-space emissive triangles of one primitive, extracted at load for ReSTIR light gathering.
- * verts holds 3 entries per triangle (v0, e1 = v1-v0, e2 = v2-v0) in BLAS index order so a RayQuery
- * PrimitiveIndex() equals the triangle index. bTruncated marks a tail cut by the extraction cap. truncated sets never get a BRDF-ray light-index mapping (base + PrimitiveIndex() would misalign).
- */
-struct EmissiveTriangleSet
-{
-    // Global mega-buffer primitive index (post-rebase, matches InstanceSource.primitiveIndex).
-    uint32_t primitiveIndex{~0u};
-    bool bTruncated{false};
-    Core::HeapArray<Vec3> verts{};
 };
 
 struct Node
@@ -88,7 +76,6 @@ struct StaticModelData
     Core::HeapArray<MeshInformation> meshes{};
     Core::HeapArray<Node> nodes{};
     Core::HeapArray<Material> materials{};
-    Core::HeapArray<EmissiveTriangleSet> emissiveTriangles{};
 
     OffsetAllocator::Allocation vertexPositionAllocation{};
     OffsetAllocator::Allocation indexAllocation{};

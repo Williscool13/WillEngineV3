@@ -21,7 +21,6 @@ restirWClamp|0x00000000
 lightProposal|0
 bEmissiveTriangleLights|1
 emissiveTriRangeMultiplier|0x41000000
-emissiveTriMaxPerPrimitive|256
 bEnableConfidence|0
 confidenceStrength|0x3e17b426
 confidenceSensitivity|0x3f000000

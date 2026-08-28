@@ -419,6 +419,12 @@ void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState*
     }
 }
 
+static bool HasEmissiveLightFlag(const entt::registry& registry, entt::entity entity)
+{
+    const auto* renderFlags = registry.try_get<Component::RenderFlagsComponent>(entity);
+    return renderFlags && renderFlags->Has(Component::RenderFlagsComponent::EMISSIVE_LIGHT);
+}
+
 static glm::mat4 ComposeNodeModelSpace(const Core::HeapArray<Engine::Node>& nodes, uint32_t nodeIndex)
 {
     auto local = [](const Engine::Node& n) -> glm::mat4 {
@@ -473,7 +479,7 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             resolved.PushBack(entity);
             continue;
         }
-        const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, nullptr, model, materialID, modelRange.offset);
+        const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, nullptr, model, materialID, modelRange.offset, false);
         if (!range.IsValid()) {
             state->modelStore.Free(modelRange);
             resolved.PushBack(entity);
@@ -588,6 +594,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             return mat;
         };
 
+        const bool bEmissiveLight = HasEmissiveLightFlag(state->registry, entity);
         uint32_t writeIndex = range.offset;
         uint32_t ordinal = 0;
         uint32_t nodeModelSlot = modelRange.offset - 1;
@@ -632,10 +639,11 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                 store.FillEntry(writeIndex, materialManager, &state->triLightStore, model, primitive, {
                                     .material = matID,
                                     .modelSlot = nodeModelSlot,
-                                    .originalMaterialIndex = primitive.materialIndex,
+                                    .materialSlot = primitive.materialIndex,
                                     .sourceNodeIndex = n,
                                     .modelPrimitiveOrdinal = thisOrdinal,
                                     .modelSpaceTransform = nodeModelSpace,
+                                    .bEmissiveLight = bEmissiveLight,
                                 });
                 ++writeIndex;
             }
@@ -779,7 +787,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
         store.FillEntry(range.offset, materialManager, nullptr, model, *targetPrim, {
                             .material = matID,
                             .modelSlot = modelRange.offset,
-                            .originalMaterialIndex = targetPrim->materialIndex,
+                            .materialSlot = targetPrim->materialIndex,
                             .sourceNodeIndex = targetNode,
                             .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
                         });
@@ -860,7 +868,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset);
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
         }
 
@@ -916,7 +924,7 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
         store.FillEntry(writeIndex, ctx->materialManager, nullptr, model, primitive, {
                             .material = matID,
                             .modelSlot = modelRange.offset,
-                            .originalMaterialIndex = primitive.materialIndex,
+                            .materialSlot = primitive.materialIndex,
                             .sourceNodeIndex = 0,
                             .modelPrimitiveOrdinal = j,
                         });
@@ -1053,7 +1061,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset);
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
         }
 
@@ -1140,7 +1148,7 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->modelStore.Free(runtime->modelRange);
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset);
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
         }
 
@@ -1433,17 +1441,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         frameBuffer->mainViewFamily.modelMatrices.Clear();
         frameBuffer->mainViewFamily.modelMatrices.Resize(modelWatermark);
         memcpy(frameBuffer->mainViewFamily.modelMatrices.Data(), state->modelStore.Models(), modelWatermark * sizeof(Model));
-    }
-
-    //
-    {
-        ZoneScopedN("EmissiveTriLightBase");
-        Core::ArenaVector<Instance>& instances = frameBuffer->mainViewFamily.primitiveInstances;
-        const Core::ArenaVector<uint32_t>& triBases = frameBuffer->mainViewFamily.triLightBaseBySlot;
-        const size_t count = std::min(instances.Size(), triBases.Size());
-        for (size_t slot = 0; slot < count; ++slot) {
-            instances[slot].emissiveTriLightBase = triBases[slot];
-        }
     }
 
     //
@@ -1776,107 +1773,33 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         };
     }
 
+    vf.triLightCount = state->triLightStore.GetWatermark();
     if (state->debug.restir.bEmissiveTriangleLights) {
         ZoneScopedN("EmissiveTriangleLights");
-        auto view = state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent>(
-            entt::exclude<Component::ProbeBakeHiddenTag>);
-
+        auto view = state->registry.view<Component::MeshRuntime>(entt::exclude<Component::ProbeBakeHiddenTag>);
         Engine::InstanceStore& store = state->instanceStore;
-        vf.triLightBaseBySlot.Resize(store.GetWatermark());
-        memset(vf.triLightBaseBySlot.Data(), 0xFF, vf.triLightBaseBySlot.Size() * sizeof(uint32_t));
-        const uint32_t triWatermark = state->triLightStore.GetWatermark();
-        if (triWatermark > 0) {
-            constexpr auto triBase = static_cast<size_t>(MAX_ANALYTIC_LIGHTS);
-            vf.lights.ResizeUninitialized(triBase + triWatermark);
-            memset(vf.lights.Data() + triBase, 0, triWatermark * sizeof(LightInfo));
-        }
-        const auto maxPerPrimitive = static_cast<uint32_t>(glm::max(state->debug.restir.emissiveTriMaxPerPrimitive, 1));
-        for (const auto& [entity, runtime, renderTransform] : view.each()) {
-            if (!runtime.range.IsValid() || !runtime.visible) { continue; }
-            const Engine::StaticModel* model = ctx->assetManager->GetModel(runtime.modelHandle);
-            if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded || model->modelData.emissiveTriangles.IsEmpty()) { continue; }
-            const Core::HeapArray<Engine::EmissiveTriangleSet>& sets = model->modelData.emissiveTriangles;
 
+        for (const auto& [entity, runtime] : view.each()) {
+            if (!runtime.range.IsValid() || !runtime.visible) { continue; }
             for (uint32_t i = 0; i < runtime.range.count; ++i) {
                 const uint32_t slot = runtime.range.offset + i;
                 const Engine::InstanceSource& inst = store[slot];
-                if (!inst.triLightRange.IsValid()) { continue; }
-
-                const Engine::EmissiveTriangleSet* set = nullptr;
-                for (const auto& candidate : sets) {
-                    if (candidate.primitiveIndex == inst.primitiveIndex) {
-                        set = &candidate;
-                        break;
-                    }
-                }
-                if (!set || set->verts.IsEmpty()) { continue; }
-
-                const MaterialProperties props = ctx->materialManager->GetProperties(inst.materialID);
-                const glm::vec3 emissive = glm::vec3(props.emissiveFactor);
-                const float maxEmissive = glm::max(emissive.r, glm::max(emissive.g, emissive.b));
-                const float intensity = props.emissiveFactor.w * maxEmissive;
-                if (intensity <= 0.0f) { continue; }
-
-                const auto setTris = static_cast<uint32_t>(set->verts.Size() / 3);
-                const uint32_t gpuBase = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + inst.triLightRange.offset;
-                const uint32_t pushCount = glm::min(setTris, maxPerPrimitive);
-                // BRDF-ray hits map via base + PrimitiveIndex(); only valid when the push covers the full BLAS triangle range
-                const bool bFullPush = !set->bTruncated && pushCount == setTris;
-                if (bFullPush) {
-                    vf.triLightBaseBySlot[slot] = gpuBase;
-                }
-
-                const glm::vec3 color = emissive / maxEmissive;
-                const uint32_t packedColor = Render::PackColorRGB8(color);
-                const glm::mat4 m = renderTransform.modelMatrix * inst.modelSpaceTransform;
-                const glm::mat3 m3 = glm::mat3(m);
-                glm::vec3 groupMin{FLT_MAX};
-                glm::vec3 groupMax{-FLT_MAX};
-                float groupPower = 0.0f;
-                float groupMaxRange = 0.0f;
-                for (uint32_t t = 0; t < pushCount; ++t) {
-                    const glm::vec3 v0 = glm::vec3(m * glm::vec4(set->verts[t * 3 + 0], 1.0f));
-                    const glm::vec3 e1 = m3 * set->verts[t * 3 + 1];
-                    const glm::vec3 e2 = m3 * set->verts[t * 3 + 2];
-                    const glm::vec3 cr = glm::cross(e1, e2);
-                    const float area = 0.5f * glm::length(cr);
-                    // Degenerate triangles still occupy a slot (zero intensity) so base + PrimitiveIndex() stays aligned
-                    const bool bDegenerate = area <= 1e-8f;
-                    const float triRange = state->debug.restir.emissiveTriRangeMultiplier * glm::sqrt(intensity * area);
-                    if (!bDegenerate) {
-                        groupMin = glm::min(groupMin, glm::min(v0, glm::min(v0 + e1, v0 + e2)));
-                        groupMax = glm::max(groupMax, glm::max(v0, glm::max(v0 + e1, v0 + e2)));
-                        groupPower += intensity * area;
-                        groupMaxRange = glm::max(groupMaxRange, triRange);
-                    }
-                    vf.lights[gpuBase + t] = LightInfo{
-                        .position = {v0, 0.0f},
-                        .normal = {bDegenerate ? glm::vec3(0.0f, 1.0f, 0.0f) : cr / (2.0f * area), 0.0f},
-                        .right = {e1, 0.0f},
-                        .up = {e2, 0.0f},
-                        .packedColor = packedColor,
-                        .intensity = bDegenerate ? 0.0f : intensity,
-                        .range = triRange,
-                        .type = LIGHT_TYPE_TRIANGLE,
-                    };
-                }
-
-                if (groupPower > 0.0f && !vf.emissiveGroups.IsFull()) {
-                    // Influence AABB
-                    vf.emissiveGroups.PushBack(EmissiveGroup{
-                        .aabbMin = groupMin - groupMaxRange,
-                        .firstLight = gpuBase,
-                        .aabbMax = groupMax + groupMaxRange,
-                        .lightCount = pushCount,
-                        .power = groupPower,
-                    });
-                }
+                if (!inst.triLightRange.IsValid() || vf.emissiveTriWork.IsFull()) { continue; }
+                vf.emissiveTriWork.PushBack(EmissiveTriLightWork{
+                    .instanceSlot = slot,
+                    .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + inst.triLightRange.offset,
+                    .triangleCount = inst.triLightRange.count,
+                });
             }
         }
+    }
+    else {
+        vf.triLightCount = 0;
     }
 
     //
     {
+        ZoneScopedN("DirectionalLight");
         int32_t bestPriority = INT32_MIN;
         bool found = false;
         auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();

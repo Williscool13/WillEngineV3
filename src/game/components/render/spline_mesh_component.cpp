@@ -213,6 +213,13 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
         if (ImGui::Checkbox("Visible##splinemesh", &visible)) { renderFlags.Set(RenderFlagsComponent::VISIBLE, visible); }
         bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
         if (ImGui::Checkbox("Probe Bake Exclude##splinemesh", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
+        bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
+        if (ImGui::Checkbox("Emissive Light##splinemesh", &emissiveLight)) {
+            renderFlags.Set(RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
+            registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
+            state->assetLoad.bPendingModelResolve = true;
+            modified = true;
+        }
 
         bool dirty = false;
 

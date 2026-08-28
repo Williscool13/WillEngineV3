@@ -28,7 +28,6 @@ void StaticModelData::Reset(Render::ResourceManager* resourceManager)
     meshes.Reset();
     nodes.Reset();
     materials.Reset();
-    emissiveTriangles.Reset();
 
     {
         std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);

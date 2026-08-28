@@ -24,6 +24,11 @@ void SetupFrustumBinningPass(RenderGraph& graph,
                              float clusterZFar);
 
 /**
+ * Writes a LightInfo per triangle for every emissive primitive instance, plus one EmissiveGroup each, straight from the geometry buffers. Must run before anything that reads LightData's triangle region or its groups.
+ */
+void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, float emissiveTriRangeMultiplier);
+
+/**
  * Camera-centered cascaded world-space grid, rebuilt every frame; see world_grid_interop.h for the cascade layout.
  * Bins analytic lights, emissive groups, reflection probes and DDGI world volumes.
  * @param ddgiCascades this frame's cascade set; its resident world volumes are binned so DDGISampleIrradianceCascaded can visit a cell's overlaps instead of every slot

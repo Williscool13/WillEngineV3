@@ -7,6 +7,7 @@
 #include "engine/material_manager.h"
 #include "engine/resources/light/tri_light_store.h"
 #include "engine/resources/model/static_model.h"
+#include "render/shaders/lights_interop.h"
 #include "engine/logging/engine_log.h"
 
 namespace Engine
@@ -43,7 +44,7 @@ void InstanceStore::Free(Range range)
     gpuInstances_.Trim(ranges_.GetWatermark());
 }
 
-InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot)
+InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight)
 {
     if (model->modelData.meshes.IsEmpty()) { return {}; }
     MeshInformation& mesh = model->modelData.meshes[0];
@@ -62,6 +63,7 @@ InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* mat
             .material = material,
             .modelSlot = modelSlot,
             .modelPrimitiveOrdinal = j,
+            .bEmissiveLight = bEmissiveLight,
         });
         ++writeIndex;
     }
@@ -71,22 +73,23 @@ InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* mat
 void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill)
 {
     materialManager->AcquireMaterial(fill.material);
-    // Determine whether an instance should contribute as an emissive based on material properties at fill-time (so we don't saturate)
     const MaterialProperties props = materialManager->GetProperties(fill.material);
     const float maxEmissive = glm::max(props.emissiveFactor.x, glm::max(props.emissiveFactor.y, props.emissiveFactor.z));
-    const bool bEmissive = props.emissiveFactor.w > 0.0f && (maxEmissive > 0.0f || props.textureImageIndices.w >= 0);
+    const bool bIsMaterialEmissive = props.emissiveFactor.w * maxEmissive > 0.0f;
     const uint32_t materialIndex = materialManager->GetMaterialIndex(fill.material);
+    const TriLightStore::Range triLightRange = fill.bEmissiveLight && bIsMaterialEmissive && triLightStore ? triLightStore->Allocate(primitive.triangleCount) : TriLightStore::Range{};
+
     instances_[slot] = {
         .primitiveIndex = primitive.index,
-        .originalMaterialIndex = fill.originalMaterialIndex,
         .sourceNodeIndex = fill.sourceNodeIndex,
         .modelPrimitiveOrdinal = fill.modelPrimitiveOrdinal,
         .modelSlot = fill.modelSlot,
+        .materialSlot = fill.materialSlot,
         .materialIndex = materialIndex,
         .materialID = fill.material,
         .blasDeviceAddress = primitive.blasDeviceAddress,
         .modelSpaceTransform = fill.modelSpaceTransform,
-        .triLightRange = bEmissive && triLightStore ? triLightStore->AllocateForPrimitive(*model, primitive.index) : TriLightStore::Range{},
+        .triLightRange = triLightRange,
     };
     WriteRecord(slot);
 }
@@ -105,7 +108,7 @@ void InstanceStore::WriteRecord(uint32_t slot)
         .flags = src.flags,
         .stableId = src.stableId,
         .lightIndex = src.lightIndex,
-        .emissiveTriLightBase = ~0u,
+        .emissiveTriLightBase = src.triLightRange.IsValid() ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + src.triLightRange.offset : ~0u,
         .blasDeviceAddress = src.blasDeviceAddress,
     };
 }

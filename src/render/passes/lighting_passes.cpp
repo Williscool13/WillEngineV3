@@ -59,6 +59,60 @@ void SetupFrustumBinningPass(RenderGraph& graph,
     });
 }
 
+void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, float emissiveTriRangeMultiplier)
+{
+    ZoneScoped;
+    if (viewFamily.triLightCount == 0 || !graph.HasBuffer(LIGHT_DATA_BUFFER)) { return; }
+
+    RenderPass& clearPass = graph.AddPass(SID("Emissive Tri Lights Clear"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::ReSTIRDI);
+    clearPass.WriteBuffer(LIGHT_DATA_BUFFER);
+    clearPass.Execute([pipelineManager, lightCount = viewFamily.triLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("emissive_tri_lights_clear"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        EmissiveTriLightClearPushConstant pc{
+            .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
+            .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS),
+            .lightCount = lightCount,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (lightCount + 63u) / 64u, 1, 1);
+    });
+
+    const auto workCount = static_cast<uint32_t>(viewFamily.emissiveTriWork.Size());
+    if (workCount == 0 || !graph.HasBuffer(EMISSIVE_TRI_WORK_BUFFER)) { return; }
+    if (!graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return; }
+
+    RenderPass& pass = graph.AddPass(SID("Emissive Tri Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::ReSTIRDI);
+    pass.ReadBuffer(EMISSIVE_TRI_WORK_BUFFER);
+    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    pass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+    pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+    pass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
+    pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
+    pass.WriteBuffer(LIGHT_DATA_BUFFER);
+    pass.Execute([pipelineManager, workCount, emissiveTriRangeMultiplier](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("emissive_tri_lights"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        EmissiveTriLightPushConstant pc{
+            .workBuffer = graph.GetBufferAddress(EMISSIVE_TRI_WORK_BUFFER),
+            .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+            .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+            .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
+            .workCount = workCount,
+            .rangeMultiplier = emissiveTriRangeMultiplier,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, workCount, 1, 1);
+    });
+}
+
 void SetupWorldGridBinningPass(RenderGraph& graph,
                                PipelineManager* pipelineManager,
                                const Core::ViewFamily& viewFamily,

@@ -571,6 +571,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, viewFamily.localDDGIVolumes.Data(), static_cast<uint32_t>(viewFamily.localDDGIVolumes.Size()), ddgiPreviousCascades, frameNumber, frameBuffer.debug.bFreezeGIField);
 
+            // ReSTIR reads the triangle region whether or not the grid is built
+            SetupEmissiveTriLightPass(*renderGraph, pipelineManager, viewFamily, frameBuffer.restir.emissiveTriRangeMultiplier);
+
             if (bNeedsWorldGrid) {
                 SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0, renderArena.Get(), ddgiCascades);
                 if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bWorldGridDebug && !frameBuffer.debug.bLockGPUDebug) {
@@ -1680,14 +1683,13 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     }
 
     const uint32_t analyticLightCount = viewFamily.analyticLightCount;
-    const auto totalLightCount = static_cast<uint32_t>(viewFamily.lights.Size());
-    const uint32_t triLightCount = totalLightCount > static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) ? totalLightCount - static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) : 0u;
+    const uint32_t triLightCount = viewFamily.triLightCount;
+    const uint32_t totalLightLimit = triLightCount > 0 ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + triLightCount : analyticLightCount;
     const size_t analyticLightBytes = analyticLightCount * sizeof(LightInfo);
-    const size_t triLightBytes = triLightCount * sizeof(LightInfo);
-    const size_t emissiveGroupCount = glm::min(viewFamily.emissiveGroups.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS));
-    const size_t emissiveGroupBytes = emissiveGroupCount * sizeof(EmissiveGroup);
+    const size_t emissiveGroupCount = glm::min(viewFamily.emissiveTriWork.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS));
 
     auto* lightData = static_cast<LightData*>(renderGraph->OpenHostBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE));
+    //
     {
         ZoneScopedN("Lights");
         const glm::vec3& dir = viewFamily.directionalLight.direction;
@@ -1701,25 +1703,23 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
 
         // lightData is write-combined upload memory: never read through it (loop bounds included), only stream writes
-        lightData->lightCount = static_cast<int32_t>(totalLightCount);
+        lightData->lightCount = static_cast<int32_t>(totalLightLimit);
         lightData->emissiveGroupCount = static_cast<int32_t>(emissiveGroupCount);
         if (analyticLightBytes > 0) {
             memcpy(lightData->lights, viewFamily.lights.Data(), analyticLightBytes);
         }
-        if (triLightBytes > 0) {
-            memcpy(lightData->lights + MAX_ANALYTIC_LIGHTS, viewFamily.lights.Data() + MAX_ANALYTIC_LIGHTS, triLightBytes);
-        }
-        if (emissiveGroupBytes > 0) {
-            memcpy(lightData->emissiveGroups, viewFamily.emissiveGroups.Data(), emissiveGroupBytes);
-        }
     }
 
-    // Power alias table (rebuilt every frame on the CPU, world space)
-    const uint32_t liveLightCount = analyticLightCount + triLightCount;
-    if (bBuildLightAlias && liveLightCount > 0) {
+    if (emissiveGroupCount > 0) {
+        auto* work = static_cast<EmissiveTriLightWork*>(renderGraph->OpenHostBuffer(EMISSIVE_TRI_WORK_BUFFER, emissiveGroupCount * sizeof(EmissiveTriLightWork)));
+        memcpy(work, viewFamily.emissiveTriWork.Data(), emissiveGroupCount * sizeof(EmissiveTriLightWork));
+    }
+
+    // Power alias table (rebuilt every frame on the CPU, world space).
+    if (bBuildLightAlias && analyticLightCount > 0) {
         ZoneScopedN("Light Alias Table");
         auto* aliasEntries = static_cast<LightAliasEntry*>(renderGraph->OpenHostBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE));
-        BuildLightPowerAlias(viewFamily.lights.Data(), liveLightCount, analyticLightCount, lightAliasScratch, aliasEntries);
+        BuildLightPowerAlias(viewFamily.lights.Data(), analyticLightCount, analyticLightCount, lightAliasScratch, aliasEntries);
     }
 
     // Reflection probes

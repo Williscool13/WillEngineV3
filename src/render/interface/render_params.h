@@ -367,7 +367,6 @@ struct ReSTIRParams
     // Emissive triangle lights
     bool bEmissiveTriangleLights{true};
     float emissiveTriRangeMultiplier{8.0f};
-    int32_t emissiveTriMaxPerPrimitive{1024};
     // Temporal-gradient antilag confidence (RELAX only)
     bool bEnableConfidence{true};
     float confidenceStrength{0.75f};

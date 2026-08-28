@@ -23,6 +23,7 @@ static constexpr struct { const char* key; uint32_t bit; } RENDER_FLAG_KEYS[] = 
     {"ddgi", RenderFlagsComponent::DDGI_CONTRIBUTE},
     {"motionBlur", RenderFlagsComponent::MOTION_BLUR},
     {"alphaCutout", RenderFlagsComponent::ALPHA_CUTOUT},
+    {"emissiveLight", RenderFlagsComponent::EMISSIVE_LIGHT},
 };
 
 void RenderFlagsComponent::Serialize(const RenderFlagsComponent& comp, Engine::TextWriter& w)

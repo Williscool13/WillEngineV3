@@ -3037,8 +3037,6 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
 
 void ProceduralModelLoadSlot::PrepareUploadData()
 {
-    ExtractEmissiveTriangles(rawData, outputModel, memoryManager, outputModel->modelData.primitiveAllocation.offset / sizeof(Primitive), true);
-
     uint32_t vertexOffset = outputModel->modelData.vertexPositionAllocation.offset / sizeof(VertexPosition);
     uint32_t meshletVerticesOffset = outputModel->modelData.meshletVertexAllocation.offset / sizeof(uint32_t);
     uint32_t meshletTriangleOffset = outputModel->modelData.meshletTriangleAllocation.offset / sizeof(uint32_t);
@@ -3052,6 +3050,14 @@ void ProceduralModelLoadSlot::PrepareUploadData()
     uint32_t meshletOffset = outputModel->modelData.meshletAllocation.offset / sizeof(Meshlet);
     for (auto& primitive : rawData.primitives) {
         primitive.meshletOffset += meshletOffset;
+    }
+
+    for (auto& mesh : rawData.allMeshes) {
+        for (auto& primitiveIndex : mesh.primitiveProperties) {
+            const uint32_t localPi = primitiveIndex.index;
+            const size_t indexEnd = localPi + 1 < rawData.primitives.Size() ? rawData.primitives[localPi + 1].indexOffset : rawData.indices.Size();
+            primitiveIndex.triangleCount = static_cast<uint32_t>((indexEnd - rawData.primitives[localPi].indexOffset) / 3);
+        }
     }
 
     // Rebase indices and indexOffset to global for ray-query triangle fetch
