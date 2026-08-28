@@ -29,8 +29,6 @@ struct FloorTag
 {
     static constexpr const char* COMPONENT_NAME = "FloorTag";
 };
-
-struct CubemapVisualizeTag{};
 }
 
 #endif //WILL_ENGINE_DEBUG_COMPONENTS_H

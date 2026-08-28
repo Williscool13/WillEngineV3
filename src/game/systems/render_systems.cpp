@@ -480,6 +480,7 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             continue;
         }
         state->modelStore.Models()[modelRange.offset] = {m, m};
+        state->instanceStore.SetLightIndex(range.offset, areaLight ? areaLight->lightSlot : sphereLight->lightSlot);
         state->registry.emplace<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
         resolved.PushBack(entity);
     }
@@ -629,13 +630,13 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                 }
 
                 store.FillEntry(writeIndex, materialManager, &state->triLightStore, model, primitive, {
-                    .material = matID,
-                    .modelSlot = nodeModelSlot,
-                    .originalMaterialIndex = primitive.materialIndex,
-                    .sourceNodeIndex = n,
-                    .modelPrimitiveOrdinal = thisOrdinal,
-                    .modelSpaceTransform = nodeModelSpace,
-                });
+                                    .material = matID,
+                                    .modelSlot = nodeModelSlot,
+                                    .originalMaterialIndex = primitive.materialIndex,
+                                    .sourceNodeIndex = n,
+                                    .modelPrimitiveOrdinal = thisOrdinal,
+                                    .modelSpaceTransform = nodeModelSpace,
+                                });
                 ++writeIndex;
             }
         }
@@ -776,12 +777,12 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
         }
 
         store.FillEntry(range.offset, materialManager, nullptr, model, *targetPrim, {
-            .material = matID,
-            .modelSlot = modelRange.offset,
-            .originalMaterialIndex = targetPrim->materialIndex,
-            .sourceNodeIndex = targetNode,
-            .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
-        });
+                            .material = matID,
+                            .modelSlot = modelRange.offset,
+                            .originalMaterialIndex = targetPrim->materialIndex,
+                            .sourceNodeIndex = targetNode,
+                            .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
+                        });
         runtime->range = range;
         runtime->modelRange = modelRange;
         state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
@@ -913,12 +914,12 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
             }
         }
         store.FillEntry(writeIndex, ctx->materialManager, nullptr, model, primitive, {
-            .material = matID,
-            .modelSlot = modelRange.offset,
-            .originalMaterialIndex = primitive.materialIndex,
-            .sourceNodeIndex = 0,
-            .modelPrimitiveOrdinal = j,
-        });
+                            .material = matID,
+                            .modelSlot = modelRange.offset,
+                            .originalMaterialIndex = primitive.materialIndex,
+                            .sourceNodeIndex = 0,
+                            .modelPrimitiveOrdinal = j,
+                        });
         ++writeIndex;
     }
     runtime->range = range;
@@ -1336,26 +1337,96 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    auto& materialManager = ctx->materialManager; {
-        ZoneScopedN("SyncMeshVisibility");
+    auto& materialManager = ctx->materialManager;
+
+    //
+    {
+        ZoneScopedN("SyncInstanceRecords");
+        Engine::InstanceStore& store = state->instanceStore;
+        const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0;
+
         for (auto [entity, renderFlags, runtime] : state->registry.view<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
             runtime.visible = renderFlags.Has(Component::RenderFlagsComponent::VISIBLE);
-            runtime.ddgiVisible = renderFlags.Has(Component::RenderFlagsComponent::DDGI_CONTRIBUTE);
-            runtime.motionBlur = renderFlags.Has(Component::RenderFlagsComponent::MOTION_BLUR);
-            runtime.alphaCutout = renderFlags.Has(Component::RenderFlagsComponent::ALPHA_CUTOUT);
+            if (!runtime.range.IsValid()) { continue; }
+
+            bool bVisible = runtime.visible;
+            if (bVisible && bAnyHideTags) {
+                bVisible = !state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
+            }
+            const uint32_t flags = (renderFlags.Has(Component::RenderFlagsComponent::MOTION_BLUR) ? INSTANCE_FLAG_MOTION_BLUR : 0u)
+                                   | (renderFlags.Has(Component::RenderFlagsComponent::ALPHA_CUTOUT) ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u)
+                                   | (renderFlags.Has(Component::RenderFlagsComponent::DDGI_CONTRIBUTE) ? INSTANCE_FLAG_DDGI_VISIBLE : 0u);
+            uint64_t stableId = 1234567890;
+            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                stableId = stable->id.id;
+            }
+
+            const Engine::InstanceSource& src = store[runtime.range.offset];
+            if (src.bVisible == bVisible && src.flags == flags && src.stableId == stableId) { continue; }
+            store.SetRenderState(runtime.range, bVisible, flags, stableId);
+        }
+    }
+    //
+    {
+        ZoneScopedN("SyncLightSurfaces");
+        Engine::InstanceStore& store = state->instanceStore;
+        Engine::Material emissiveMaterial = *materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
+        emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // black albedo so only emission shows
+        constexpr uint32_t SURFACE_FLAGS = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE;
+
+        const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0
+                                  || state->registry.view<Component::ProbeBakeProxyHiddenTag>().size() > 0;
+
+        auto emitSurface = [&](entt::entity lightEntity, Component::LightSurfaceRuntime& surfaceRuntime, const glm::vec3& color, float intensity, bool draw) {
+            if (!surfaceRuntime.range.IsValid()) { return; }
+
+            bool bDraw = draw;
+            if (bDraw && bAnyHideTags) {
+                bDraw = !state->registry.any_of<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>(lightEntity);
+            }
+
+            if (bDraw) {
+                emissiveMaterial.props.emissiveFactor = glm::vec4(color, intensity);
+                const Engine::MaterialID materialID = Engine::HashMaterial(emissiveMaterial);
+                if (materialID != surfaceRuntime.materialID) {
+                    materialManager->CreateImmutableMaterial(emissiveMaterial);
+                    materialManager->AcquireMaterial(materialID);
+                    materialManager->ReleaseMaterial(surfaceRuntime.materialID);
+                    store.SetMaterial(surfaceRuntime.range.offset, materialManager, materialID);
+                    surfaceRuntime.materialID = materialID;
+                }
+            }
+
+            uint64_t stableId = 1234567890;
+            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(lightEntity)) {
+                stableId = stable->id.id;
+            }
+
+            const Engine::InstanceSource& src = store[surfaceRuntime.range.offset];
+            if (src.bVisible != bDraw || src.flags != SURFACE_FLAGS || src.stableId != stableId) {
+                store.SetRenderState(surfaceRuntime.range, bDraw, SURFACE_FLAGS, stableId);
+            }
+        };
+
+        for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::AreaLightComponent, Component::LightSurfaceRuntime>().each()) {
+            emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
+        }
+        for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::SphereLightComponent, Component::LightSurfaceRuntime>(entt::exclude<Component::AreaLightComponent>).each()) {
+            emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
         }
     }
 
     //
     {
         Core::ArenaVector<Instance>& instances = frameBuffer->mainViewFamily.primitiveInstances;
+        const uint32_t watermark = state->instanceStore.GetWatermark();
         instances.Clear();
-        instances.ResizeUninitialized(state->instanceStore.GetWatermark());
-        for (size_t i = 0; i < instances.Size(); ++i) {
-            instances[i] = Engine::InstanceStore::DEAD_INSTANCE;
+        instances.ResizeUninitialized(watermark);
+        if (watermark > 0) {
+            memcpy(instances.Data(), state->instanceStore.Instances(), watermark * sizeof(Instance));
         }
     }
-
+    //
     {
         ZoneScopedN("ModelMatrices");
         const uint32_t modelWatermark = state->modelStore.GetWatermark();
@@ -1364,82 +1435,18 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         memcpy(frameBuffer->mainViewFamily.modelMatrices.Data(), state->modelStore.Models(), modelWatermark * sizeof(Model));
     }
 
-
-    // Gather regular renderables
+    //
     {
-        ZoneScopedN("MeshRuntimeGather");
-        auto view = state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent>(
-            entt::exclude<
-                Component::PortalPlaneTag,
-                Component::CubemapVisualizeTag,
-                Component::ProbeBakeHiddenTag
-            >);
-
-        Engine::InstanceStore& store = state->instanceStore;
-
-        for (const auto& [entity, runtime, renderTransform] : view.each()) {
-            if (!runtime.range.IsValid()) { continue; }
-            if (!runtime.visible) { continue; }
-
-            uint64_t stableId = 1234567890;
-            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-                stableId = stable->id.id;
-            }
-
-            const uint32_t flags = (runtime.motionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u) | (runtime.alphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u) | (runtime.ddgiVisible ? INSTANCE_FLAG_DDGI_VISIBLE : 0u);
-            const uint32_t base = runtime.range.offset;
-            const uint32_t count = runtime.range.count;
-            for (uint32_t i = 0; i < count; ++i) {
-                const uint32_t slot = base + i;
-                Instance& dst = frameBuffer->mainViewFamily.primitiveInstances[slot];
-                dst = store.GetInstance(slot);
-                dst.stableId = stableId;
-                dst.emissiveTriLightBase = slot < frameBuffer->mainViewFamily.triLightBaseBySlot.Size() ? frameBuffer->mainViewFamily.triLightBaseBySlot[slot] : 0xFFFFFFFFu;
-                dst.flags = flags;
-            }
-        }
-    } {
-        ZoneScopedN("LightSurfaces");
-        Engine::InstanceStore& store = state->instanceStore;
-        const Engine::Material* defaultMaterial = materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
-        Engine::Material emissiveMaterial{};
-        if (defaultMaterial) {
-            emissiveMaterial = *defaultMaterial; // only emissiveFactor changes per light; black albedo so only emission shows
-            emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        }
-
-        auto emitSurface = [&](entt::entity lightEntity, Component::LightSurfaceRuntime& surfaceRuntime, const glm::vec3& color, float intensity, bool draw, uint32_t lightSlot) {
-            if (!draw || !defaultMaterial || !surfaceRuntime.range.IsValid()) { return; }
-
-            emissiveMaterial.props.emissiveFactor = glm::vec4(color, intensity);
-            const Engine::MaterialID materialID = Engine::HashMaterial(emissiveMaterial);
-            if (materialID != surfaceRuntime.materialID) {
-                materialManager->CreateImmutableMaterial(emissiveMaterial);
-                materialManager->AcquireMaterial(materialID);
-                materialManager->ReleaseMaterial(surfaceRuntime.materialID);
-                store.SetMaterial(surfaceRuntime.range.offset, materialManager, materialID);
-                surfaceRuntime.materialID = materialID;
-            }
-
-            uint64_t stableId = 1234567890;
-            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(lightEntity)) {
-                stableId = stable->id.id;
-            }
-            store.SetLightIndex(surfaceRuntime.range.offset, lightSlot);
-
-            Instance& dst = frameBuffer->mainViewFamily.primitiveInstances[surfaceRuntime.range.offset];
-            dst = store.GetInstance(surfaceRuntime.range.offset);
-            dst.stableId = stableId;
-        };
-
-        for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::AreaLightComponent, Component::LightSurfaceRuntime>(entt::exclude<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>).each()) {
-            emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface, light.lightSlot);
-        }
-        for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::SphereLightComponent, Component::LightSurfaceRuntime>(entt::exclude<Component::AreaLightComponent, Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>).each()) {
-            emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface, light.lightSlot);
+        ZoneScopedN("EmissiveTriLightBase");
+        Core::ArenaVector<Instance>& instances = frameBuffer->mainViewFamily.primitiveInstances;
+        const Core::ArenaVector<uint32_t>& triBases = frameBuffer->mainViewFamily.triLightBaseBySlot;
+        const size_t count = std::min(instances.Size(), triBases.Size());
+        for (size_t slot = 0; slot < count; ++slot) {
+            instances[slot].emissiveTriLightBase = triBases[slot];
         }
     }
 
+    //
     {
         ZoneScopedN("Material Recording");
         uint32_t watermark = 0;
@@ -1451,7 +1458,11 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             frameBuffer->mainViewFamily.activeMaterials.PushBack({i, materialManager->GetRenderMaterial(entry.id)});
         }
         frameBuffer->mainViewFamily.materialWatermark = watermark;
-    } {
+    }
+
+    //
+    {
+        ZoneScopedN("Skybox Selection");
         int32_t bestPriority = INT32_MIN;
         Render::Cubemap* bestCubemap = nullptr;
         float bestIntensity = 1.0f;
@@ -1768,11 +1779,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     if (state->debug.restir.bEmissiveTriangleLights) {
         ZoneScopedN("EmissiveTriangleLights");
         auto view = state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent>(
-            entt::exclude<
-                Component::PortalPlaneTag,
-                Component::CubemapVisualizeTag,
-                Component::ProbeBakeHiddenTag
-            >);
+            entt::exclude<Component::ProbeBakeHiddenTag>);
 
         Engine::InstanceStore& store = state->instanceStore;
         vf.triLightBaseBySlot.Resize(store.GetWatermark());

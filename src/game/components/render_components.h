@@ -70,9 +70,6 @@ struct MeshRuntime
     Engine::ModelStore::Range modelRange{};
     Engine::StaticModelHandle modelHandle{};
     bool visible{true};
-    bool ddgiVisible{true};
-    bool motionBlur{true};
-    bool alphaCutout{true};
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };

@@ -35,6 +35,10 @@ struct InstanceSource
     MaterialID materialID{};
     uint64_t blasDeviceAddress{0};
     Mat4 modelSpaceTransform{1.0f};
+    uint64_t stableId{0};
+    uint32_t lightIndex{~0u};
+    uint32_t flags{INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE};
+    bool bVisible{true};
 
     /**
      * TriLightStore range covering this primitive's full emissive triangle set
@@ -58,7 +62,7 @@ struct InstanceFill
 
 /**
  * The stable instance slot space: one slot per flattened mesh primitive (static, static-primitive, procedural, spline, text3d, light surfaces). A RangeAllocator hands out one contiguous run per entity; the slot index IS the GPU instance index. Raw Allocate/Free leave material lifetimes to callers; AllocateSingleMeshRange/ReleaseAndFree manage the per-entry material refs. Callers own GPU uploads. Not thread-safe.
- * InstanceSource and the GPU Instance record are parallel slot arrays written together, so no mutable InstanceSource is handed out.
+ * InstanceSource is the authority; the GPU Instance array is a projection of it rewritten on every mutation, dead while the slot is not visible. Nothing hands out a mutable InstanceSource.
  */
 class InstanceStore
 {
@@ -86,7 +90,10 @@ public:
     /** Repoints a filled slot at another material. Leaves the material refs to the caller, unlike FillEntry. */
     void SetMaterial(uint32_t slot, MaterialManager* materialManager, MaterialID material);
 
-    void SetLightIndex(uint32_t slot, uint32_t lightIndex) { gpuInstances_[slot].lightIndex = lightIndex; }
+    void SetLightIndex(uint32_t slot, uint32_t lightIndex);
+
+    /** Per-frame render state for a whole entity range. Hidden slots project to DEAD_INSTANCE and keep their source record for the next reveal. */
+    void SetRenderState(Range range, bool bVisible, uint32_t flags, uint64_t stableId);
 
     const InstanceSource* Get(Range range) const { return range.IsValid() ? &instances_[range.offset] : nullptr; }
 
@@ -96,11 +103,15 @@ public:
 
     const Instance& GetInstance(uint32_t i) const { return gpuInstances_[i]; }
 
+    const Instance* Instances() const { return gpuInstances_.Data(); }
+
     [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
     [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
     [[nodiscard]] bool IsInitialized() const { return ranges_.IsInitialized(); }
 
 private:
+    void WriteRecord(uint32_t slot);
+
     Core::VirtualArray<InstanceSource> instances_{};
     Core::VirtualArray<Instance> gpuInstances_{};
     Core::RangeAllocator ranges_{};

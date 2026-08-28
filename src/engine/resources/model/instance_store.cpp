@@ -88,24 +88,50 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, T
         .modelSpaceTransform = fill.modelSpaceTransform,
         .triLightRange = bEmissive && triLightStore ? triLightStore->AllocateForPrimitive(*model, primitive.index) : TriLightStore::Range{},
     };
+    WriteRecord(slot);
+}
+
+void InstanceStore::WriteRecord(uint32_t slot)
+{
+    const InstanceSource& src = instances_[slot];
+    if (!src.bVisible) {
+        gpuInstances_[slot] = DEAD_INSTANCE;
+        return;
+    }
     gpuInstances_[slot] = {
-        .primitiveIndex = primitive.index,
-        .modelIndex = fill.modelSlot,
-        .materialIndex = materialIndex,
-        .flags = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE,
-        .stableId = 0,
-        .lightIndex = ~0u,
+        .primitiveIndex = src.primitiveIndex,
+        .modelIndex = src.modelSlot,
+        .materialIndex = src.materialIndex,
+        .flags = src.flags,
+        .stableId = src.stableId,
+        .lightIndex = src.lightIndex,
         .emissiveTriLightBase = ~0u,
-        .blasDeviceAddress = primitive.blasDeviceAddress,
+        .blasDeviceAddress = src.blasDeviceAddress,
     };
 }
 
 void InstanceStore::SetMaterial(uint32_t slot, MaterialManager* materialManager, MaterialID material)
 {
-    const uint32_t materialIndex = materialManager->GetMaterialIndex(material);
     instances_[slot].materialID = material;
-    instances_[slot].materialIndex = materialIndex;
-    gpuInstances_[slot].materialIndex = materialIndex;
+    instances_[slot].materialIndex = materialManager->GetMaterialIndex(material);
+    WriteRecord(slot);
+}
+
+void InstanceStore::SetLightIndex(uint32_t slot, uint32_t lightIndex)
+{
+    instances_[slot].lightIndex = lightIndex;
+    WriteRecord(slot);
+}
+
+void InstanceStore::SetRenderState(Range range, bool bVisible, uint32_t flags, uint64_t stableId)
+{
+    for (uint32_t i = 0; i < range.count; ++i) {
+        const uint32_t slot = range.offset + i;
+        instances_[slot].bVisible = bVisible;
+        instances_[slot].flags = flags;
+        instances_[slot].stableId = stableId;
+        WriteRecord(slot);
+    }
 }
 
 void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range)

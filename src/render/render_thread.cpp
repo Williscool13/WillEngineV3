@@ -707,7 +707,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                             SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, frameBuffer.reflection);
                         }
                         SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, bDDGIApply, false, frameBuffer.debug.bFreezeScreenFeedback);
-                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, bDDGIApply, giGatherMode, frameBuffer.reflection);
+                        SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, bDDGIApply, giGatherMode, frameBuffer.reflection);
                         break;
                     }
                     case Core::LightingMode::ReSTIR:
@@ -732,7 +732,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         const bool bMergedReflections = frameBuffer.reflection.bMergedDenoise;
                         const bool bReflectionCheckerboardPacked = bMergedReflections && restirCheckerboardPacked != 0u;
                         SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, frameBuffer.debug.bFreezeScreenFeedback);
-                        SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restirCheckerboardField, restirCheckerboardPacked, bRestirFullRateResolve ? 1u : 0u, frameBuffer.reflection);
+                        SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, restirCheckerboardPacked, bRestirFullRateResolve ? 1u : 0u, frameBuffer.reflection);
 
                         const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
