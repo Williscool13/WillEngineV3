@@ -609,6 +609,13 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             DrawEmissiveTriLightSection(state);
         }
 
+#ifdef WDEBUG
+        if (ImGui::Button("Verify Dirty Stores")) {
+            state->debug.bVerifyStoresOnce = true;
+        }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Runs for one frame: reports lights and instances that drifted from their store, and re-sends every live model and instance. Geometry twitching means a mutation skipped its dirty mark."); }
+#endif
+
         auto setDebugTarget = [&](const char* name, DebugTransformationType _transform, Core::DebugViewAspect aspect) {
             if (state->debug.resourceName == name && state->debug.viewAspect == aspect && state->debug.transformationType == _transform) {
                 state->debug.resourceName.Clear();

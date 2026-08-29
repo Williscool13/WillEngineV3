@@ -144,6 +144,8 @@ struct DebugState
     bool bProbePreviewIrradiance{false};
     float probePreviewRoughness{0.0f};
 
+    bool bVerifyStoresOnce{false};
+
     Core::ReSTIRParams restir{};
     EmissiveDebugState emissive{};
     StringID shadingShaderOverride{};

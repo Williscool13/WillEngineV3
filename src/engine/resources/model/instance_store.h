@@ -8,6 +8,7 @@
 #include <cstdint>
 
 #include "core/containers/virtual_array.h"
+#include "core/memory/dirty_bits.h"
 #include "core/memory/range_allocator.h"
 #include "core/types/math.h"
 #include "engine/core/material_id.h"
@@ -104,6 +105,13 @@ public:
 
     const Instance* Instances() const { return gpuInstances_.Data(); }
 
+    template<typename Fn>
+    void DrainDirty(uint32_t setIndex, Fn&& emit) { dirty_.Drain(setIndex, GetWatermark(), std::forward<Fn>(emit)); }
+
+    void MarkAllDirty() { dirty_.MarkRange(0, GetWatermark()); }
+
+    [[nodiscard]] uint32_t VerifyRecords() const;
+
     [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
     [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
     [[nodiscard]] bool IsInitialized() const { return ranges_.IsInitialized(); }
@@ -114,11 +122,14 @@ private:
     /** Private because it returns the slots without releasing their materials or tri-light runs. */
     void Free(Range range);
 
+    [[nodiscard]] Instance MakeRecord(uint32_t slot) const;
+
     void WriteRecord(uint32_t slot);
 
     Core::VirtualArray<InstanceSource> instances_{};
     Core::VirtualArray<Instance> gpuInstances_{};
     Core::RangeAllocator ranges_{};
+    Core::DirtyBits dirty_{};
 
     uint32_t emissiveInstanceCount_{0};
     bool bEmissiveCapWarned_{false};

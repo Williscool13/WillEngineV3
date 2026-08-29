@@ -32,7 +32,7 @@ void SetupTLASBuild(RenderGraph& graph,
                     const FrameResourceLimits& limits)
 {
     ZoneScoped;
-    const auto slotCount = static_cast<uint32_t>(viewFamily.primitiveInstances.Size());
+    const uint32_t slotCount = viewFamily.instanceCount;
     if (slotCount == 0) { return; }
     if (!graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return; }
 

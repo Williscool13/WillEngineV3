@@ -4,10 +4,13 @@
 
 #include "engine/resources/model/instance_store.h"
 
+#include <cstring>
+
 #include "engine/material_manager.h"
 #include "engine/resources/light/tri_light_store.h"
 #include "engine/resources/model/static_model.h"
 #include "render/shaders/lights_interop.h"
+#include "render/interface/render_interface.h"
 #include "engine/logging/engine_log.h"
 
 namespace Engine
@@ -17,6 +20,7 @@ void InstanceStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::Vi
     instances_ = Core::VirtualArray<InstanceSource>(vm, tag, capacity, "InstanceStore");
     gpuInstances_ = Core::VirtualArray<Instance>(vm, tag, capacity, "InstanceStoreGPU");
     ranges_.Init(capacity, alloc, tag, "InstanceStore");
+    dirty_.Init(capacity, Core::FRAME_BUFFER_COUNT, alloc, tag);
 }
 
 InstanceStore::Range InstanceStore::Allocate(uint32_t count)
@@ -27,6 +31,7 @@ InstanceStore::Range InstanceStore::Allocate(uint32_t count)
         gpuInstances_.EnsureCommitted(ranges_.GetWatermark());
         for (uint32_t i = 0; i < range.count; ++i) {
             gpuInstances_[range.offset + i] = DEAD_INSTANCE;
+            dirty_.Mark(range.offset + i);
         }
     }
     return range;
@@ -37,6 +42,7 @@ void InstanceStore::Free(Range range)
     if (range.IsValid()) {
         for (uint32_t i = 0; i < range.count; ++i) {
             gpuInstances_[range.offset + i] = DEAD_INSTANCE;
+            dirty_.Mark(range.offset + i);
         }
     }
     ranges_.Free(range);
@@ -110,14 +116,11 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, T
     WriteRecord(slot);
 }
 
-void InstanceStore::WriteRecord(uint32_t slot)
+Instance InstanceStore::MakeRecord(uint32_t slot) const
 {
     const InstanceSource& src = instances_[slot];
-    if (!src.bVisible) {
-        gpuInstances_[slot] = DEAD_INSTANCE;
-        return;
-    }
-    gpuInstances_[slot] = {
+    if (!src.bVisible) { return DEAD_INSTANCE; }
+    return {
         .primitiveIndex = src.primitiveIndex,
         .modelIndex = src.modelSlot,
         .materialIndex = src.materialIndex,
@@ -127,6 +130,22 @@ void InstanceStore::WriteRecord(uint32_t slot)
         .emissiveTriLightBase = src.triLightRange.IsValid() ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + src.triLightRange.offset : ~0u,
         .blasDeviceAddress = src.blasDeviceAddress,
     };
+}
+
+void InstanceStore::WriteRecord(uint32_t slot)
+{
+    dirty_.Mark(slot);
+    gpuInstances_[slot] = MakeRecord(slot);
+}
+
+uint32_t InstanceStore::VerifyRecords() const
+{
+    uint32_t stale = 0;
+    for (uint32_t slot = 0; slot < ranges_.GetWatermark(); ++slot) {
+        const Instance expected = MakeRecord(slot);
+        if (memcmp(&expected, &gpuInstances_[slot], sizeof(Instance)) != 0) { ++stale; }
+    }
+    return stale;
 }
 
 void InstanceStore::SetMaterial(uint32_t slot, MaterialManager* materialManager, MaterialID material)

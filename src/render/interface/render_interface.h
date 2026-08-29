@@ -396,10 +396,12 @@ struct UIDrawCommand
 
 struct ViewFamilyWatermarks
 {
-    size_t primitiveInstances{128};
+    size_t instancePayload{128};
+    size_t instanceRuns{64};
     size_t worldGlyphQuads{256};
     size_t textInstances{32};
-    size_t modelMatrices{256};
+    size_t modelPayload{256};
+    size_t modelRuns{64};
     size_t lightPayload{256};
     size_t lightRuns{64};
     size_t activeMaterials{256};
@@ -464,8 +466,14 @@ struct ViewFamily
     RenderView mainView{};
     ArenaFixedVector<PortalView> portalViews{};
 
-    ArenaVector<Instance> primitiveInstances{};
-    ArenaVector<Model> modelMatrices{};
+    uint32_t instanceCount{0};
+    ArenaVector<Instance> instancePayload{};
+    ArenaVector<DirtyRun> instanceRuns{};
+
+    uint32_t modelCount{0};
+    ArenaVector<Model> modelPayload{};
+    ArenaVector<DirtyRun> modelRuns{};
+
     ArenaVector<ActiveMaterial> activeMaterials{};
     uint32_t materialWatermark{0};
 

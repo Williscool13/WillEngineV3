@@ -15,7 +15,8 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
 {
     portalViews = ArenaFixedVector<PortalView>(&arena, Render::VIEW_COUNT - 1);
 
-    modelMatrices = ArenaVector<Model>(&arena, wm.modelMatrices);
+    modelPayload = ArenaVector<Model>(&arena, wm.modelPayload);
+    modelRuns = ArenaVector<DirtyRun>(&arena, wm.modelRuns);
     lightPayload = ArenaVector<LightInfo>(&arena, wm.lightPayload);
     lightRuns = ArenaVector<DirtyRun>(&arena, wm.lightRuns);
     reflectionProbes = ArenaFixedVector<ReflectionProbeGPU>(&arena, MAX_REFLECTION_PROBES);
@@ -23,7 +24,8 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     probePreviews = ArenaFixedVector<ProbePreviewSphere>(&arena, MAX_REFLECTION_PROBES);
     localDDGIVolumes = ArenaFixedVector<LocalDDGIVolume>(&arena, MAX_LOCAL_DDGI_VOLUMES);
 
-    primitiveInstances = ArenaVector<Instance>(&arena, wm.primitiveInstances);
+    instancePayload = ArenaVector<Instance>(&arena, wm.instancePayload);
+    instanceRuns = ArenaVector<DirtyRun>(&arena, wm.instanceRuns);
     worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, wm.worldGlyphQuads);
     textInstances = ArenaVector<TextInstanceDataFull>(&arena, wm.textInstances);
 
@@ -59,10 +61,12 @@ void FrameBuffer::Initialize(VirtualMemoryManager& vm, AllocTag tag, const char*
 static ViewFamilyWatermarks ObservedWatermarks(const ViewFamily& vf)
 {
     ViewFamilyWatermarks w{};
-    w.primitiveInstances = NextPowerOfTwo(vf.primitiveInstances.Size());
+    w.instancePayload = NextPowerOfTwo(vf.instancePayload.Size());
+    w.instanceRuns = NextPowerOfTwo(vf.instanceRuns.Size());
     w.worldGlyphQuads = NextPowerOfTwo(vf.worldGlyphQuads.Size());
     w.textInstances = NextPowerOfTwo(vf.textInstances.Size());
-    w.modelMatrices = NextPowerOfTwo(vf.modelMatrices.Size());
+    w.modelPayload = NextPowerOfTwo(vf.modelPayload.Size());
+    w.modelRuns = NextPowerOfTwo(vf.modelRuns.Size());
     w.lightPayload = NextPowerOfTwo(vf.lightPayload.Size());
     w.lightRuns = NextPowerOfTwo(vf.lightRuns.Size());
     w.activeMaterials = vf.activeMaterials.Size();
@@ -86,10 +90,12 @@ static ViewFamilyWatermarks ObservedWatermarks(const ViewFamily& vf)
 static ViewFamilyWatermarks MaxWatermarks(const ViewFamilyWatermarks& a, const ViewFamilyWatermarks& b)
 {
     ViewFamilyWatermarks w{};
-    w.primitiveInstances = std::max(a.primitiveInstances, b.primitiveInstances);
+    w.instancePayload = std::max(a.instancePayload, b.instancePayload);
+    w.instanceRuns = std::max(a.instanceRuns, b.instanceRuns);
     w.worldGlyphQuads = std::max(a.worldGlyphQuads, b.worldGlyphQuads);
     w.textInstances = std::max(a.textInstances, b.textInstances);
-    w.modelMatrices = std::max(a.modelMatrices, b.modelMatrices);
+    w.modelPayload = std::max(a.modelPayload, b.modelPayload);
+    w.modelRuns = std::max(a.modelRuns, b.modelRuns);
     w.lightPayload = std::max(a.lightPayload, b.lightPayload);
     w.lightRuns = std::max(a.lightRuns, b.lightRuns);
     w.activeMaterials = std::max(a.activeMaterials, b.activeMaterials);

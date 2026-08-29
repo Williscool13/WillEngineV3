@@ -230,10 +230,10 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.viewFamily = &viewFamily;
     renderFamilyProperties.bCanRender = _pipelineManager->IsCategoryReady(PipelineCategory::Critical);
 
-    _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.modelMatrices.Size()));
+    _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.modelCount));
     _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(_pipelineManager->GetLightingPipelines().Size()));
 
-    uint32_t totalInstanceCountThisFrame = viewFamily.primitiveInstances.Size();
+    uint32_t totalInstanceCountThisFrame = viewFamily.instanceCount;
     _limits.highestInstanceCount = std::max(_limits.highestInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestTLASInstanceCount = std::max(_limits.highestTLASInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));

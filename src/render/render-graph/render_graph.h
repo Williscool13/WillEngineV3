@@ -248,6 +248,12 @@ public: // Persistent Per-FIF Buffers
      */
     void* OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);
 
+    /**
+     * OpenHostBuffer for a caller that writes only the parts that changed. Returns every destination the write has to reach, so the buffer survives a reallocation and works without REBAR.
+     * Only use it for a buffer whose unwritten bytes must persist: a buffer rewritten in full every frame must stay on OpenHostBuffer, or it pays for a mirror that only goes stale.
+     */
+    HostBufferWrite OpenHostBufferMirrored(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);
+
 public:
     void CreateTLAS(StringID name, VkDeviceSize asSize, RenderCategory category = RenderCategory::Untagged);
 
@@ -287,6 +293,11 @@ private:
     bool EnsureHostBufferCapacity(StringID name, VkDeviceSize requiredSize);
 
     HostBuffer& GetHostBuffer(StringID name);
+
+    HostBufferSlots& GetHostBufferSlots(StringID name);
+
+    /** Queues the pass that carries a non-REBAR slot's mirror into its device buffer. */
+    void QueueHostBufferStagingCopy(StringID name, VkDeviceSize size);
 
     /** Imports the current frame's slot into the pass system so passes can declare reads against it. */
     void ImportHostBuffer(StringID name);

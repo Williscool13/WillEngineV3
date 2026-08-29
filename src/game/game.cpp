@@ -431,6 +431,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::GatherRenderables(ctx, state, frameBuffer);
     Game::GatherTextRenderables(ctx, state, frameBuffer);
     Game::GatherUIRenderables(ctx, state, frameBuffer);
+    state->debug.bVerifyStoresOnce = false;
 
 #if WILL_EDITOR
     Game::DrawEditorInterface(ctx, state, frameBuffer);

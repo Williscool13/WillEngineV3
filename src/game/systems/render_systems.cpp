@@ -7,6 +7,7 @@
 #include <tracy/Tracy.hpp>
 
 #include "scene_system.h"
+#include "render_systems_helpers.h"
 #include "game/console/console.h"
 #include "game/ui/ui_zindex.h"
 #include "core/containers/arena_fixed_vector.h"
@@ -485,7 +486,7 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             resolved.PushBack(entity);
             continue;
         }
-        state->modelStore.Models()[modelRange.offset] = {m, m};
+        state->modelStore.SetModel(modelRange.offset, {m, m});
         state->instanceStore.SetLightIndex(range.offset, areaLight ? areaLight->lightSlot : sphereLight->lightSlot);
         state->registry.emplace<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
         resolved.PushBack(entity);
@@ -1301,7 +1302,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     // Dirty entities write their node matrices into their stable model slots
     {
         Engine::InstanceStore& store = state->instanceStore;
-        Model* models = state->modelStore.Models();
+        Engine::ModelStore& modelStore = state->modelStore;
         for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>().each()) {
             if (!runtime.range.IsValid()) { continue; }
             uint32_t lastSlot = ~0u;
@@ -1309,7 +1310,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
                 const Engine::InstanceSource& inst = store[runtime.range.offset + i];
                 if (inst.modelSlot == lastSlot) { continue; }
                 lastSlot = inst.modelSlot;
-                models[inst.modelSlot] = {renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform};
+                modelStore.SetModel(inst.modelSlot, {renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform});
             }
         }
     }
@@ -1317,23 +1318,21 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     // Area light emissive quads
     for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>().each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
-        Model& m = state->modelStore.Models()[surfaceRuntime.modelRange.offset];
-        m.prevModelMatrix = m.modelMatrix;
-        m.modelMatrix = Component::ComputeAreaLightQuadMatrix(transform, light);
+        const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
+        state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeAreaLightQuadMatrix(transform, light), previous.modelMatrix});
     }
 
     // Sphere light emissive meshes
     for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>(entt::exclude<Component::AreaLightComponent>).each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
-        Model& m = state->modelStore.Models()[surfaceRuntime.modelRange.offset];
-        m.prevModelMatrix = m.modelMatrix;
-        m.modelMatrix = Component::ComputeSphereLightMatrix(transform, light);
+        const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
+        state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeSphereLightMatrix(transform, light), previous.modelMatrix});
     }
 
     // Text quads
     for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::TextRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>().each()) {
         if (!runtime.modelRange.IsValid()) { continue; }
-        state->modelStore.Models()[runtime.modelRange.offset] = {renderTransform.modelMatrix, renderTransform.previousMatrix};
+        state->modelStore.SetModel(runtime.modelRange.offset, {renderTransform.modelMatrix, renderTransform.previousMatrix});
     }
 
     // Analytic light payload. A bake-hidden light writes dead, so the store stays the only authority on what the GPU sees.
@@ -1443,23 +1442,37 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
+#ifdef WDEBUG
+    VerifyGeometryStores(state);
+#endif
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     //
     {
-        Core::ArenaVector<Instance>& instances = frameBuffer->mainViewFamily.primitiveInstances;
-        const uint32_t watermark = state->instanceStore.GetWatermark();
-        instances.Clear();
-        instances.ResizeUninitialized(watermark);
-        if (watermark > 0) {
-            memcpy(instances.Data(), state->instanceStore.Instances(), watermark * sizeof(Instance));
-        }
+        ZoneScopedN("Instances");
+        const Instance* storeInstances = state->instanceStore.Instances();
+        vf.instanceCount = state->instanceStore.GetWatermark();
+        vf.instancePayload.Clear();
+        vf.instanceRuns.Clear();
+        state->instanceStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
+            const size_t base = vf.instancePayload.Size();
+            vf.instancePayload.ResizeUninitialized(base + count);
+            memcpy(vf.instancePayload.Data() + base, storeInstances + offset, count * sizeof(Instance));
+            vf.instanceRuns.PushBack(Core::DirtyRun{offset, count});
+        });
     }
     //
     {
         ZoneScopedN("ModelMatrices");
-        const uint32_t modelWatermark = state->modelStore.GetWatermark();
-        frameBuffer->mainViewFamily.modelMatrices.Clear();
-        frameBuffer->mainViewFamily.modelMatrices.Resize(modelWatermark);
-        memcpy(frameBuffer->mainViewFamily.modelMatrices.Data(), state->modelStore.Models(), modelWatermark * sizeof(Model));
+        const Model* storeModels = state->modelStore.Models();
+        vf.modelCount = state->modelStore.GetWatermark();
+        vf.modelPayload.Clear();
+        vf.modelRuns.Clear();
+        state->modelStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
+            const size_t base = vf.modelPayload.Size();
+            vf.modelPayload.ResizeUninitialized(base + count);
+            memcpy(vf.modelPayload.Data() + base, storeModels + offset, count * sizeof(Model));
+            vf.modelRuns.PushBack(Core::DirtyRun{offset, count});
+        });
     }
 
     //
@@ -1756,37 +1769,6 @@ void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
     state->registry.clear<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>();
     MarkAnalyticLightsDirty(state->registry);
 }
-
-#ifdef WDEBUG
-/** Catches a light mutated without marking MultiframeDirtyComponent, which nothing else would notice until the light looked wrong. */
-static void VerifyAnalyticLightStore(Engine::EngineState* state)
-{
-    ZoneScoped;
-    const LightInfo* lights = state->analyticLightStore.Lights();
-    uint32_t staleCount = 0;
-    uint32_t firstStaleSlot = 0;
-
-    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
-        if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
-        const LightInfo expected = Component::ComputeAreaLightInfo(transform, light);
-        if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {
-            if (staleCount++ == 0) { firstStaleSlot = light.lightSlot; }
-        }
-    }
-
-    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
-        if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
-        const LightInfo expected = Component::ComputeSphereLightInfo(transform, light);
-        if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {
-            if (staleCount++ == 0) { firstStaleSlot = light.lightSlot; }
-        }
-    }
-
-    if (staleCount > 0) {
-        LOG_ERROR(Engine, "{} analytic light(s) stale in the store, first at slot {}; a mutation did not mark MultiframeDirtyComponent", staleCount, firstStaleSlot);
-    }
-}
-#endif
 
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {

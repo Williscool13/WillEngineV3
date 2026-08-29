@@ -13,6 +13,8 @@ set(GAME_SOURCES
         systems/physics_system.h
         systems/render_systems.h
         systems/render_systems.cpp
+        systems/render_systems_helpers.h
+        systems/render_systems_helpers.cpp
         editor/editor_systems.cpp
         editor/editor_systems.h
         editor/editor_scene_browser.cpp

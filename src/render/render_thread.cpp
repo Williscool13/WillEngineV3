@@ -542,7 +542,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
 
         // Geometry
-        if (!viewFamily.primitiveInstances.IsEmpty()) {
+        if (viewFamily.instanceCount > 0) {
             SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, renderFamilyProperties, renderExtent, targets, 0);
 
             SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
@@ -1732,21 +1732,26 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 {
     ZoneScoped;
 
-    size_t totalInstanceCount = viewFamily.primitiveInstances.Size();
-    Instance* instanceBuffer = nullptr;
-    if (totalInstanceCount > 0) {
-        instanceBuffer = static_cast<Instance*>(renderGraph->OpenHostBuffer(GEOMETRY_INSTANCE_BUFFER, totalInstanceCount * sizeof(Instance)));
-    }
-
-    if (totalInstanceCount > 0) {
+    if (viewFamily.instanceCount > 0) {
         ZoneScopedN("Instances");
-        memcpy(instanceBuffer, viewFamily.primitiveInstances.Data(), totalInstanceCount * sizeof(Instance));
+        const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_INSTANCE_BUFFER, renderFamilyProperties.instanceBufferSize);
+        const Instance* payload = viewFamily.instancePayload.Data();
+        size_t cursor = 0;
+        for (const Core::DirtyRun& run : viewFamily.instanceRuns) {
+            dst.Write(run.offset * sizeof(Instance), payload + cursor, run.count * sizeof(Instance));
+            cursor += run.count;
+        }
     }
 
-    if (!viewFamily.modelMatrices.IsEmpty()) {
+    if (viewFamily.modelCount > 0) {
         ZoneScopedN("Models");
-        void* modelDst = renderGraph->OpenHostBuffer(GEOMETRY_MODEL_BUFFER, renderFamilyProperties.modelBufferSize);
-        memcpy(modelDst, viewFamily.modelMatrices.Data(), viewFamily.modelMatrices.Size() * sizeof(Model));
+        const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MODEL_BUFFER, renderFamilyProperties.modelBufferSize);
+        const Model* payload = viewFamily.modelPayload.Data();
+        size_t cursor = 0;
+        for (const Core::DirtyRun& run : viewFamily.modelRuns) {
+            dst.Write(run.offset * sizeof(Model), payload + cursor, run.count * sizeof(Model));
+            cursor += run.count;
+        }
     }
 
     if (!viewFamily.activeMaterials.IsEmpty()) {

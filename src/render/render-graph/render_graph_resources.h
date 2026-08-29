@@ -5,12 +5,14 @@
 #ifndef WILL_ENGINE_RENDER_GRAPH_RESOURCES_H
 #define WILL_ENGINE_RENDER_GRAPH_RESOURCES_H
 
+#include <cstring>
 #include <string>
 
 #include <volk.h>
 #include <vulkan/vk_enum_string_helper.h>
 
 #include "core/containers/array.h"
+#include "core/containers/heap_array.h"
 #include "core/containers/inline_function.h"
 #include "core/containers/inline_string.h"
 #include "core/memory/handle.h"
@@ -497,11 +499,27 @@ struct HostBuffer
     bool bContentsValid{false};
 };
 
+/** Both destinations a host buffer write has to reach. Absent ones are skipped, so a caller never branches on REBAR or on whether a mirror exists. */
+struct HostBufferWrite
+{
+    void* mapped{nullptr};
+    void* mirror{nullptr};
+
+    void Write(size_t byteOffset, const void* src, size_t byteSize) const
+    {
+        if (mapped != nullptr) { memcpy(static_cast<uint8_t*>(mapped) + byteOffset, src, byteSize); }
+        if (mirror != nullptr) { memcpy(static_cast<uint8_t*>(mirror) + byteOffset, src, byteSize); }
+    }
+};
+
 struct HostBufferSlots
 {
     StringID name{};
     VkBufferUsageFlags usage{};
     Core::Array<HostBuffer, Core::FRAME_BUFFER_COUNT> slots{};
+
+    Core::HeapArray<uint8_t> mirror{};
+    bool bMirrored{false};
 };
 
 /** A buffer replaced by a larger one. Destruction waits out the frames in flight that may still reference it. */

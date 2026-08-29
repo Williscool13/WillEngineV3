@@ -2325,6 +2325,17 @@ bool RenderGraph::EnsureHostBufferCapacity(StringID name, VkDeviceSize requiredS
         HostBuffer& slot = entry.slots[currentFrameIndex];
         if (requiredSize <= slot.capacity) { return false; }
 
+        // The one BAR read in the design, and it only ever happens once per mirrored buffer: at the first growth, when the old capacity is still tiny.
+        if (entry.bMirrored && entry.mirror.IsEmpty() && slot.mappedData != nullptr) {
+            entry.mirror = Core::HeapArray<uint8_t>(alloc, Core::AllocTag::Render, slot.capacity);
+            memcpy(entry.mirror.Data(), slot.mappedData, slot.capacity);
+        }
+        if (!entry.mirror.IsEmpty() && entry.mirror.Size() < requiredSize) {
+            Core::HeapArray<uint8_t> grown(alloc, Core::AllocTag::Render, requiredSize);
+            memcpy(grown.Data(), entry.mirror.Data(), entry.mirror.Size());
+            entry.mirror = std::move(grown);
+        }
+
         if (slot.buffer != VK_NULL_HANDLE) {
             RetireBuffer(slot.buffer, slot.allocation);
             slot = {};
@@ -2349,7 +2360,14 @@ bool RenderGraph::EnsureHostBufferCapacity(StringID name, VkDeviceSize requiredS
 
         slot.bREBAR = IsREBAR(context->allocator, slot.allocation);
         slot.mappedData = slot.bREBAR ? _alloc.mappedData : nullptr;
-        slot.bContentsValid = false;
+        if (slot.mappedData == nullptr && entry.mirror.IsEmpty()) {
+            entry.mirror = Core::HeapArray<uint8_t>(alloc, Core::AllocTag::Render, requiredSize);
+        }
+        slot.bContentsValid = !entry.mirror.IsEmpty();
+        if (slot.mappedData != nullptr && slot.bContentsValid) {
+            const size_t seedSize = entry.mirror.Size() < requiredSize ? entry.mirror.Size() : requiredSize;
+            memcpy(slot.mappedData, entry.mirror.Data(), seedSize);
+        }
         LOG_INFO(Renderer, "Host buffer '{}' slot {}: {}, {} KiB", name.ToString(), currentFrameIndex, slot.bREBAR ? "REBAR" : "staged upload", requiredSize / 1024);
         return true;
     }
@@ -2374,6 +2392,26 @@ void RenderGraph::RetireBuffer(VkBuffer buffer, VmaAllocation allocation)
     retired.framesRemaining = Core::FRAME_BUFFER_COUNT + 1;
 }
 
+HostBufferWrite RenderGraph::OpenHostBufferMirrored(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage)
+{
+    ENGINE_ASSERT(Renderer, size > 0, "OpenHostBufferMirrored: buffer '{}' requested with zero size", name.ToString());
+
+    RegisterHostBuffer(name, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | extraUsage);
+    GetHostBufferSlots(name).bMirrored = true;
+    EnsureHostBufferCapacity(name, size);
+    ImportHostBuffer(name);
+
+    HostBufferSlots& entry = GetHostBufferSlots(name);
+    HostBuffer& slot = entry.slots[currentFrameIndex];
+    slot.bContentsValid = true;
+    if (slot.mappedData != nullptr) {
+        return {.mapped = slot.mappedData, .mirror = entry.mirror.IsEmpty() ? nullptr : entry.mirror.Data()};
+    }
+
+    QueueHostBufferStagingCopy(name, size);
+    return {.mapped = nullptr, .mirror = entry.mirror.Data()};
+}
+
 void* RenderGraph::OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage)
 {
     ENGINE_ASSERT(Renderer, size > 0, "OpenHostBuffer: buffer '{}' requested with zero size", name.ToString());
@@ -2382,20 +2420,29 @@ void* RenderGraph::OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsag
     EnsureHostBufferCapacity(name, size);
     ImportHostBuffer(name);
 
-    HostBuffer& slot = GetHostBuffer(name);
+    HostBufferSlots& entry = GetHostBufferSlots(name);
+    HostBuffer& slot = entry.slots[currentFrameIndex];
+    slot.bContentsValid = true;
     if (slot.mappedData != nullptr) {
-        slot.bContentsValid = true;
         return slot.mappedData;
     }
 
-    // No REBAR, so the write lands in the upload arena and a copy carries it into the slot.
+    // No REBAR, so the write lands in the mirror and a copy carries it into the slot.
+    QueueHostBufferStagingCopy(name, size);
+    return entry.mirror.Data();
+}
+
+/** Staging is filled at record time rather than now, so a partial writer's earlier frames survive in the mirror. */
+void RenderGraph::QueueHostBufferStagingCopy(StringID name, VkDeviceSize size)
+{
     UploadAllocation upload = AllocateTransient(size);
 
     auto passName = Core::InlineString<64>("Upload ");
     passName.Append(name.ToString());
     RenderPass& pass = AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Upload);
     pass.WriteTransferBuffer(name);
-    pass.Execute([name, srcOffset = upload.offset, size](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([name, srcOffset = upload.offset, size, dst = upload.ptr](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        memcpy(dst, graph.GetHostBufferSlots(name).mirror.Data(), size);
         VkBufferCopy2 copy{
             .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
             .srcOffset = srcOffset,
@@ -2411,9 +2458,16 @@ void* RenderGraph::OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsag
         };
         vkCmdCopyBuffer2(cmd, &copyInfo);
     });
+}
 
-    slot.bContentsValid = true;
-    return upload.ptr;
+HostBufferSlots& RenderGraph::GetHostBufferSlots(StringID name)
+{
+    for (auto& entry : hostBuffers) {
+        if (entry.name == name) { return entry; }
+    }
+    ENGINE_ASSERT(Renderer, false, "GetHostBufferSlots: buffer '{}' not registered", name.ToString());
+    static HostBufferSlots dummy{};
+    return dummy;
 }
 
 HostBuffer& RenderGraph::GetHostBuffer(StringID name)
