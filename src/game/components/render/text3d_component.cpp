@@ -48,7 +48,7 @@ void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 
 void Text3DComponent::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -62,7 +62,7 @@ void Text3DComponent::OnConstruct(entt::registry& registry, entt::entity entity)
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 
 void Text3DComponent::OnDestroy(entt::registry& registry, entt::entity entity)
@@ -258,7 +258,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
         modified = true;
         if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
             rt->renderOffset = comp.renderOffset;
-            registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+            registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
         }
     }
     glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(comp.renderRotation));
@@ -267,7 +267,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
         comp.renderRotation = glm::quat(glm::radians(renderEuler));
         if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
             rt->renderRotation = comp.renderRotation;
-            registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+            registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
         }
     }
 

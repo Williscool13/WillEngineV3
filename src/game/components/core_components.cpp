@@ -33,13 +33,13 @@ void Game::Component::TransformComponent::Deserialize(TransformComponent& comp, 
 
 void Game::Component::TransformComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<WorldTransformComponent>(entity);
 }
 
 void Game::Component::TransformComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    registry.remove<MultiframeDirtyTransformComponent>(entity);
+    registry.remove<MultiframeDirtyComponent>(entity);
     registry.remove<WorldTransformComponent>(entity);
 }
 

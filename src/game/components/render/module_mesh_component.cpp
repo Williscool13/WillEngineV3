@@ -33,7 +33,7 @@ void ModuleMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 
 void ModuleMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)

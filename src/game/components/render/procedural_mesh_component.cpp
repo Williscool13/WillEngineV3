@@ -55,7 +55,7 @@ void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& 
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 }
 
@@ -1199,7 +1199,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
                 rt->renderOffset = component.renderOffset;
-                registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+                registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
             }
         }
 
@@ -1214,7 +1214,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
                 rt->renderRotation = component.renderRotation;
-                registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+                registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
             }
         }
 
@@ -1263,7 +1263,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 if (rt) {
                     rt->renderOffset = component.renderOffset;
                     rt->renderRotation = component.renderRotation;
-                    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+                    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
                 }
             }
             if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }

@@ -7,14 +7,16 @@
 
 #include <cstdint>
 
+#include "core/containers/heap_array.h"
 #include "core/containers/vector.h"
 #include "core/memory/range_allocator.h"
+#include "render/shaders/lights_interop.h"
 
 namespace Engine
 {
 /**
- * Stable slot space for analytic (area/sphere) lights over [0, MAX_ANALYTIC_LIGHTS). The slot is the GPU light index and dead slots upload as zeroed LightInfo (intensity 0).
- * Owners hold the slot on their light component. Freed slots are quarantined for REUSE_DELAY_FRAMES ticks so carried ReSTIR/ReGIR reservoirs (history depth <= 2 with checkerboarding) re-evaluate them as dead instead of aliasing a newly spawned light. Not thread-safe.
+ * Stable slot space for analytic (area/sphere) lights over [0, MAX_ANALYTIC_LIGHTS), plus the LightInfo payload per slot. The slot is the GPU light index and a dead slot holds a zeroed LightInfo. Owners write the payload in place on dirty; consumers snapshot [0, watermark).
+ * Freed slots are quarantined for REUSE_DELAY_FRAMES ticks so carried ReSTIR/ReGIR reservoirs (history depth <= 2 with checkerboarding) re-evaluate them as dead instead of aliasing a newly spawned light. Not thread-safe.
  */
 class AnalyticLightStore
 {
@@ -30,6 +32,9 @@ public:
 
     void Tick(uint64_t frame);
 
+    LightInfo* Lights() { return lights_.Data(); }
+    const LightInfo* Lights() const { return lights_.Data(); }
+
     [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
     [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
     [[nodiscard]] uint32_t GetPendingFreeCount() const { return static_cast<uint32_t>(pendingFrees_.Size()); }
@@ -43,6 +48,7 @@ private:
     };
 
     Core::RangeAllocator ranges_{};
+    Core::HeapArray<LightInfo> lights_{};
     Core::Vector<PendingFree> pendingFrees_{};
     uint64_t frame_{0};
 };

@@ -651,7 +651,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         runtime->range = range;
         runtime->modelRange = modelRange;
-        state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         resolved.PushBack(entity);
     }
 
@@ -794,7 +794,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
                         });
         runtime->range = range;
         runtime->modelRange = modelRange;
-        state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
 
         resolved.PushBack(entity);
     }
@@ -870,7 +870,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
-            state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+            state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
 
         resolved.PushBack(entity);
@@ -992,7 +992,7 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         FillModuleMeshRange(ctx, state, runtime, model, meshComponent, HasEmissiveLightFlag(state->registry, entity));
-        state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
 
         resolved.PushBack(entity);
     }
@@ -1064,7 +1064,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
-            state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+            state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
 
         resolved.PushBack(entity);
@@ -1151,7 +1151,7 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
-            state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+            state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
 
         resolved.PushBack(entity);
@@ -1166,7 +1166,7 @@ void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* 
 {
     auto transformDirtyView = state->registry.view<Component::TransformComponent, Component::DirtyTransformTag>();
     for (auto entity : transformDirtyView) {
-        state->registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
     }
 }
 
@@ -1184,7 +1184,7 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
     const float alpha = state->physics.interpolationAlpha;
 
     // Roots (no parent), non-physics
-    for (auto [entity, local, world, dirty] : registry.view<Component::TransformComponent, Component::WorldTransformComponent, Component::MultiframeDirtyTransformComponent>(
+    for (auto [entity, local, world, dirty] : registry.view<Component::TransformComponent, Component::WorldTransformComponent, Component::MultiframeDirtyComponent>(
              entt::exclude<Component::HierarchyComponent, Component::DynamicPhysicsBodyComponent>).each()) {
         world.translation = local.translation;
         world.rotation = local.rotation;
@@ -1197,7 +1197,7 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
         world.translation = glm::mix(physics.previousPosition, physics.currentPosition, alpha);
         world.rotation = NlerpPose(physics.previousRotation, physics.currentRotation, alpha);
         world.scale = local.scale;
-        registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
     }
 
     // Children in depth order. EnsureHierarchyOrder re-sorts only if a topology change flagged it dirty (cheap bool check otherwise).
@@ -1214,17 +1214,17 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
             local.translation = world.translation;
             local.rotation = world.rotation;
             local.scale = world.scale;
-            registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+            registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
             orphans.PushBack(entity);
             continue;
         }
 
         auto* physics = registry.try_get<Component::DynamicPhysicsBodyComponent>(entity);
-        const bool selfDirty = physics || registry.all_of<Component::MultiframeDirtyTransformComponent>(entity);
-        const bool parentDirty = registry.all_of<Component::MultiframeDirtyTransformComponent>(node.parent);
+        const bool selfDirty = physics || registry.all_of<Component::MultiframeDirtyComponent>(entity);
+        const bool parentDirty = registry.all_of<Component::MultiframeDirtyComponent>(node.parent);
         if (!selfDirty && !parentDirty) { continue; }
-        if (!registry.all_of<Component::MultiframeDirtyTransformComponent>(entity)) {
-            registry.emplace_or_replace<Component::MultiframeDirtyTransformComponent>(entity);
+        if (!registry.all_of<Component::MultiframeDirtyComponent>(entity)) {
+            registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
 
         // Physics (interpolated Jolt pose)
@@ -1259,7 +1259,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
 {
     ZoneScoped;
 
-    auto dirtyView = state->registry.view<Component::WorldTransformComponent, Component::RenderTransformComponent, Component::MultiframeDirtyTransformComponent>();
+    auto dirtyView = state->registry.view<Component::WorldTransformComponent, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>();
     constexpr size_t TASK_THRESHOLD = 1000;
     size_t dirtyViewCount = dirtyView.size_hint();
     if (dirtyViewCount < TASK_THRESHOLD) {
@@ -1302,7 +1302,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     {
         Engine::InstanceStore& store = state->instanceStore;
         Model* models = state->modelStore.Models();
-        for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyTransformComponent>().each()) {
+        for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>().each()) {
             if (!runtime.range.IsValid()) { continue; }
             uint32_t lastSlot = ~0u;
             for (uint32_t i = 0; i < runtime.range.count; ++i) {
@@ -1315,7 +1315,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 
     // Area light emissive quads
-    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyTransformComponent>().each()) {
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>().each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
         Model& m = state->modelStore.Models()[surfaceRuntime.modelRange.offset];
         m.prevModelMatrix = m.modelMatrix;
@@ -1323,7 +1323,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 
     // Sphere light emissive meshes
-    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyTransformComponent>(entt::exclude<Component::AreaLightComponent>).each()) {
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>(entt::exclude<Component::AreaLightComponent>).each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
         Model& m = state->modelStore.Models()[surfaceRuntime.modelRange.offset];
         m.prevModelMatrix = m.modelMatrix;
@@ -1331,15 +1331,29 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 
     // Text quads
-    for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::TextRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyTransformComponent>().each()) {
+    for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::TextRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>().each()) {
         if (!runtime.modelRange.IsValid()) { continue; }
         state->modelStore.Models()[runtime.modelRange.offset] = {renderTransform.modelMatrix, renderTransform.previousMatrix};
     }
 
-    for (auto [entity, dirty] : state->registry.view<Component::MultiframeDirtyTransformComponent>().each()) {
+    // Analytic light payload
+    {
+        LightInfo* lights = state->analyticLightStore.Lights();
+        for (auto [entity, light, transform, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::MultiframeDirtyComponent>().each()) {
+            if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+            lights[light.lightSlot] = Component::ComputeAreaLightInfo(transform, light);
+        }
+
+        for (auto [entity, light, transform, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::MultiframeDirtyComponent>().each()) {
+            if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+            lights[light.lightSlot] = Component::ComputeSphereLightInfo(transform, light);
+        }
+    }
+
+    for (auto [entity, dirty] : state->registry.view<Component::MultiframeDirtyComponent>().each()) {
         dirty.counter--;
         if (dirty.counter <= 0) {
-            state->registry.remove<Component::MultiframeDirtyTransformComponent>(entity);
+            state->registry.remove<Component::MultiframeDirtyComponent>(entity);
         }
     }
 }
@@ -1727,6 +1741,37 @@ void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
     state->registry.clear<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>();
 }
 
+#ifdef WDEBUG
+/** Catches a light mutated without marking MultiframeDirtyComponent, which nothing else would notice until the light looked wrong. */
+static void VerifyAnalyticLightStore(Engine::EngineState* state)
+{
+    ZoneScoped;
+    const LightInfo* lights = state->analyticLightStore.Lights();
+    uint32_t staleCount = 0;
+    uint32_t firstStaleSlot = 0;
+
+    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>().each()) {
+        if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+        const LightInfo expected = Component::ComputeAreaLightInfo(transform, light);
+        if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {
+            if (staleCount++ == 0) { firstStaleSlot = light.lightSlot; }
+        }
+    }
+
+    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>().each()) {
+        if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+        const LightInfo expected = Component::ComputeSphereLightInfo(transform, light);
+        if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {
+            if (staleCount++ == 0) { firstStaleSlot = light.lightSlot; }
+        }
+    }
+
+    if (staleCount > 0) {
+        LOG_WARN(Engine, "{} analytic light(s) stale in the store, first at slot {}; a mutation did not mark MultiframeDirtyComponent", staleCount, firstStaleSlot);
+    }
+}
+#endif
+
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
@@ -1735,44 +1780,24 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     state->analyticLightStore.Tick(ctx->currentRenderFrame);
     state->triLightStore.Tick(ctx->currentRenderFrame);
 
-    vf.lights.Clear();
-    vf.lights.Resize(state->analyticLightStore.GetWatermark());
-    vf.analyticLightCount = static_cast<uint32_t>(vf.lights.Size());
+#ifdef WDEBUG
+    VerifyAnalyticLightStore(state);
+#endif
 
-    auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
-    for (auto [entity, light, transform] : areaView.each()) {
-        if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
-        if (state->registry.all_of<Component::ProbeBakeHiddenTag>(entity)) { continue; }
-        const glm::mat3 rot = glm::mat3_cast(transform.rotation);
-        const glm::vec3 normal = rot[2];
-        const glm::vec3 right = rot[0];
-        const glm::vec3 up = rot[1];
-        vf.lights[light.lightSlot] = LightInfo{
-            .position = {transform.translation, 0.0f},
-            .normal = {normal, 0.0f},
-            .right = {right, light.halfWidth * transform.scale.x},
-            .up = {up, light.halfHeight * transform.scale.y},
-            .packedColor = Render::PackColorRGB8(light.color),
-            .intensity = light.intensity,
-            .range = light.range,
-            .type = LIGHT_TYPE_AREA,
-        };
+    const uint32_t analyticWatermark = state->analyticLightStore.GetWatermark();
+    vf.lights.Clear();
+    vf.lights.Resize(analyticWatermark);
+    vf.analyticLightCount = analyticWatermark;
+    if (analyticWatermark > 0) {
+        memcpy(vf.lights.Data(), state->analyticLightStore.Lights(), analyticWatermark * sizeof(LightInfo));
     }
 
-    auto sphereView = state->registry.view<Component::SphereLightComponent, Component::TransformComponent>();
-    for (auto [entity, light, transform] : sphereView.each()) {
-        if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
-        if (state->registry.all_of<Component::ProbeBakeHiddenTag>(entity)) { continue; }
-        vf.lights[light.lightSlot] = LightInfo{
-            .position = {transform.translation, 0.0f},
-            .normal = {0.0f, 0.0f, 0.0f, 0.0f},
-            .right = {0.0f, 0.0f, 0.0f, light.radius * transform.scale.x},
-            .up = {0.0f, 0.0f, 0.0f, 0.0f},
-            .packedColor = Render::PackColorRGB8(light.color),
-            .intensity = light.intensity,
-            .range = light.range,
-            .type = LIGHT_TYPE_SPHERE,
-        };
+    // Hiding is per view, not a property of the light, so it overlays the snapshot instead of writing the store.
+    for (const auto& [entity, light] : state->registry.view<Component::AreaLightComponent, Component::ProbeBakeHiddenTag>().each()) {
+        if (light.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT) { vf.lights[light.lightSlot] = LightInfo{}; }
+    }
+    for (const auto& [entity, light] : state->registry.view<Component::SphereLightComponent, Component::ProbeBakeHiddenTag>().each()) {
+        if (light.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT) { vf.lights[light.lightSlot] = LightInfo{}; }
     }
 
     Engine::EmissiveDebugState& emissiveDebug = state->debug.emissive;

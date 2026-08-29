@@ -60,7 +60,7 @@ void TextComponent::OnConstruct(entt::registry& registry, entt::entity entity)
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
     registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
-    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 
 void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
@@ -69,7 +69,7 @@ void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
     UnloadTextComponent(comp, registry, entity);
     registry.remove<TextRuntime>(entity);
     registry.remove<RenderTransformComponent>(entity);
-    registry.remove<MultiframeDirtyTransformComponent>(entity);
+    registry.remove<MultiframeDirtyComponent>(entity);
 }
 
 void TextComponent::Serialize(const TextComponent& comp, Engine::TextWriter& w)

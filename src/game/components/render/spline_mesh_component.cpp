@@ -67,7 +67,7 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
-    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 
 void SplineMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)

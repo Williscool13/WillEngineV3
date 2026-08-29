@@ -55,6 +55,8 @@ struct AreaLightComponent
  */
 glm::mat4 ComputeAreaLightQuadMatrix(const TransformComponent& transform, const AreaLightComponent& light);
 
+LightInfo ComputeAreaLightInfo(const TransformComponent& transform, const AreaLightComponent& light);
+
 struct SphereLightComponent
 {
     static constexpr const char* COMPONENT_NAME = "SphereLightComponent";
@@ -87,6 +89,8 @@ struct SphereLightComponent
  * @return
  */
 glm::mat4 ComputeSphereLightMatrix(const TransformComponent& transform, const SphereLightComponent& light);
+
+LightInfo ComputeSphereLightInfo(const TransformComponent& transform, const SphereLightComponent& light);
 
 struct LightSurfaceRuntime
 {

@@ -44,7 +44,7 @@ void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, entt::regi
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 
 void StaticMeshPrimitiveComponent::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -141,7 +141,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             component.modelId = Engine::ModelID::INVALID;
             component.primitiveOrdinal = ~0u;
             registry.remove<RenderTransformComponent>(entity);
-            registry.remove<MultiframeDirtyTransformComponent>(entity);
+            registry.remove<MultiframeDirtyComponent>(entity);
             return {.bRequestRemoval = remove, .bModified = true};
         }
 
@@ -267,7 +267,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                 if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
                     rt->renderOffset = component.renderOffset;
                     rt->renderRotation = component.renderRotation;
-                    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+                    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
                 }
             }
         }

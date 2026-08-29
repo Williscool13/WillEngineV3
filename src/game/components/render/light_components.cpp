@@ -13,6 +13,7 @@
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
 #include "engine/include/engine_context.h"
+#include "render/types/render_types.h"
 
 namespace Game
 {
@@ -44,10 +45,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         bool extentChanged = false;
         extentChanged |= ImGui::DragFloat("Half Width##al", &comp.halfWidth, 0.05f, 0.01f, 100.0f);
         extentChanged |= ImGui::DragFloat("Half Height##al", &comp.halfHeight, 0.05f, 0.01f, 100.0f);
-        if (extentChanged) {
-            modified = true;
-            registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); // recompute the emissive quad matrix; extents don't dirty the transform on their own
-        }
+        modified |= extentChanged;
         ImGui::EndDisabled();
         modified |= ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
         modified |= ImGui::Checkbox("Draw Emissive Surface##al", &comp.drawEmissiveSurface);
@@ -82,15 +80,17 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         const Vec3 widthPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, right) * right);
         Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 0, center + right * comp.halfWidth * transform->scale.x, widthPlaneNormal,
                           vd.view, vd.proj, viewport, vd.cameraPos, state,
-                          [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); modified = true; },
+                          [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); modified = true; },
                           Editor::COLOR_AXIS_X);
 
         const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
         Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 1, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
                           vd.view, vd.proj, viewport, vd.cameraPos, state,
-                          [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); modified = true; },
+                          [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); modified = true; },
                           Editor::COLOR_AXIS_Y);
     }
+
+    if (modified) { registry.emplace_or_replace<MultiframeDirtyComponent>(entity); }
 
     return {.bRequestRemoval = remove, .bModified = modified};
 }
@@ -172,10 +172,26 @@ glm::mat4 Component::ComputeAreaLightQuadMatrix(const TransformComponent& transf
     return m;
 }
 
+LightInfo Component::ComputeAreaLightInfo(const TransformComponent& transform, const AreaLightComponent& light)
+{
+    const glm::mat3 rot = glm::mat3_cast(transform.rotation);
+    return LightInfo{
+        .position = {transform.translation, 0.0f},
+        .normal = {rot[2], 0.0f},
+        .right = {rot[0], light.halfWidth * transform.scale.x},
+        .up = {rot[1], light.halfHeight * transform.scale.y},
+        .packedColor = Render::PackColorRGB8(light.color),
+        .intensity = light.intensity,
+        .range = light.range,
+        .type = LIGHT_TYPE_AREA,
+    };
+}
+
 void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
     registry.get<AreaLightComponent>(entity).lightSlot = state->analyticLightStore.Allocate();
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
     state->assetLoad.bPendingModelResolve = true;
 }
@@ -201,14 +217,13 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         auto& comp = registry.get<SphereLightComponent>(entity);
         modified |= ImGui::ColorEdit3("Color##sl", &comp.color.r);
         modified |= ImGui::DragFloat("Intensity##sl", &comp.intensity, 0.05f, 0.0f, 100.0f);
-        if (ImGui::DragFloat("Radius##sl", &comp.radius, 0.05f, 0.01f, 100.0f)) {
-            modified = true;
-            registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity); // recompute the emissive mesh matrix; radius doesn't dirty the transform on its own
-        }
+        modified |= ImGui::DragFloat("Radius##sl", &comp.radius, 0.05f, 0.01f, 100.0f);
         modified |= ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
         modified |= ImGui::Checkbox("Draw Emissive Surface##sl", &comp.drawEmissiveSurface);
         modified |= ImGui::Checkbox("Probe Bake Exclude##sl", &comp.bExcludeFromProbeBake);
     }
+
+    if (modified) { registry.emplace_or_replace<MultiframeDirtyComponent>(entity); }
 
     return {.bRequestRemoval = remove, .bModified = modified};
 }
@@ -245,10 +260,25 @@ glm::mat4 Component::ComputeSphereLightMatrix(const TransformComponent& transfor
     return m;
 }
 
+LightInfo Component::ComputeSphereLightInfo(const TransformComponent& transform, const SphereLightComponent& light)
+{
+    return LightInfo{
+        .position = {transform.translation, 0.0f},
+        .normal = {0.0f, 0.0f, 0.0f, 0.0f},
+        .right = {0.0f, 0.0f, 0.0f, light.radius * transform.scale.x},
+        .up = {0.0f, 0.0f, 0.0f, 0.0f},
+        .packedColor = Render::PackColorRGB8(light.color),
+        .intensity = light.intensity,
+        .range = light.range,
+        .type = LIGHT_TYPE_SPHERE,
+    };
+}
+
 void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
     registry.get<SphereLightComponent>(entity).lightSlot = state->analyticLightStore.Allocate();
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
     state->assetLoad.bPendingModelResolve = true;
 }

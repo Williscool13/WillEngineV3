@@ -51,7 +51,7 @@ void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, en
     auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 
 Engine::MaterialID StaticMeshComponent::GetMaterialOverride(uint32_t slot) const
@@ -221,7 +221,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             Component::UnloadStaticMesh(registry, entity);
             component.modelId = Engine::ModelID::INVALID;
             registry.remove<RenderTransformComponent>(entity);
-            registry.remove<MultiframeDirtyTransformComponent>(entity);
+            registry.remove<MultiframeDirtyComponent>(entity);
             return {.bRequestRemoval = remove, .bModified = true};
         }
 
@@ -439,7 +439,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
                 rt->renderOffset = component.renderOffset;
-                registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+                registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
             }
         }
 
@@ -454,7 +454,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             auto* rt = registry.try_get<RenderTransformComponent>(entity);
             if (rt) {
                 rt->renderRotation = component.renderRotation;
-                registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+                registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
             }
         }
 
@@ -503,7 +503,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 if (rt) {
                     rt->renderOffset = component.renderOffset;
                     rt->renderRotation = component.renderRotation;
-                    registry.emplace_or_replace<MultiframeDirtyTransformComponent>(entity);
+                    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
                 }
             }
             if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }

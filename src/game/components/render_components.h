@@ -16,13 +16,14 @@
 #include "engine/resources/model/model_types.h"
 #include "engine/resources/model/instance_store.h"
 #include "engine/resources/model/model_store.h"
+#include "render/interface/render_interface.h"
 
 namespace Game::Component
 {
-struct MultiframeDirtyTransformComponent
+struct MultiframeDirtyComponent
 {
-    // 2 to update Prev next frame.
-    int32_t counter{2};
+    // FRAME_BUFFER_COUNT to update all 3 host buffers. +1 for prevModeLmatrix
+    int32_t counter{Core::FRAME_BUFFER_COUNT + 1};
 };
 
 struct RenderFlagsComponent
