@@ -17,6 +17,7 @@
 #include "core/containers/inline_string.h"
 #include "core/memory/handle.h"
 #include "core/containers/inline_vector.h"
+#include "core/containers/vector.h"
 #include "core/memory/linear_allocator.h"
 #include "render/render_config.h"
 #include "render/interface/render_interface.h"
@@ -504,11 +505,21 @@ struct HostBufferWrite
 {
     void* mapped{nullptr};
     void* mirror{nullptr};
+    Core::Vector<VkBufferCopy2>* regions{nullptr};
+    VkDeviceSize stagingBase{0};
 
     void Write(size_t byteOffset, const void* src, size_t byteSize) const
     {
         if (mapped != nullptr) { memcpy(static_cast<uint8_t*>(mapped) + byteOffset, src, byteSize); }
         if (mirror != nullptr) { memcpy(static_cast<uint8_t*>(mirror) + byteOffset, src, byteSize); }
+        if (regions != nullptr) {
+            regions->PushBack(VkBufferCopy2{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .srcOffset = stagingBase + byteOffset,
+                .dstOffset = byteOffset,
+                .size = byteSize,
+            });
+        }
     }
 };
 
@@ -520,6 +531,9 @@ struct HostBufferSlots
 
     Core::HeapArray<uint8_t> mirror{};
     bool bMirrored{false};
+
+    Core::Vector<VkBufferCopy2> stagingRegions{};
+    bool bStagingFullCopy{true};
 };
 
 /** A buffer replaced by a larger one. Destruction waits out the frames in flight that may still reference it. */

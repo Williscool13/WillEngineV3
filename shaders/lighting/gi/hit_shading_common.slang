@@ -128,9 +128,8 @@ static float3 ShadeLocalLightsRIS(WorldGridPunctualLights worldGridLights, Light
     shadowRay.TMin = 0.0;
     shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
 
-    // INSTANCE_MASK_DDGI excludes light proxies; tracing against the proxy would let a light occlude itself.
     RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-    shadow.TraceRayInline(rdgAccelerationStructures[tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
+    shadow.TraceRayInline(rdgAccelerationStructures[tlasIndex], 0, INSTANCE_MASK_OCCLUDER, shadowRay);
     shadow.Proceed();
     if (shadow.CommittedStatus() != COMMITTED_NOTHING) {
         return float3(0.0);
@@ -195,7 +194,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
             shadowRay.TMax = 10000.0;
 
             RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
+            shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
             shadow.Proceed();
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                 radiance += diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
@@ -325,7 +324,7 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
                 shadowRay.TMax = 10000.0;
 
                 RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-                shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], shadowRayFlags, INSTANCE_MASK_DDGI, shadowRay);
+                shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], shadowRayFlags, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
                 RTProceedAlphaTested(shadow, alphaBuffers);
                 bVisible = shadow.CommittedStatus() == COMMITTED_NOTHING;
             }
@@ -365,7 +364,7 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
         shadowRay.TMax = candidates.tMax[i];
 
         RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-        shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], shadowRayFlags, INSTANCE_MASK_DDGI, shadowRay);
+        shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], shadowRayFlags, INSTANCE_MASK_OCCLUDER, shadowRay);
         RTProceedAlphaTested(shadow, alphaBuffers);
         if (shadow.CommittedStatus() != COMMITTED_NOTHING) {
             radiance -= candidates.contribution[i];
@@ -488,7 +487,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
                 shadowRay.TMax = 10000.0;
 
                 RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> shadow;
-                shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_DDGI, shadowRay);
+                shadow.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_SUN_OCCLUDER, shadowRay);
                 shadow.Proceed();
                 if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
                     sunVisibility += 1.0;

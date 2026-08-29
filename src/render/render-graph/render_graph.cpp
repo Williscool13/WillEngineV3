@@ -2299,6 +2299,7 @@ void RenderGraph::RegisterHostBuffer(StringID name, VkBufferUsageFlags usage)
     }
     HostBufferSlots& entry = hostBuffers.EmplaceBack();
     entry.name = name;
+    entry.stagingRegions = Core::Vector<VkBufferCopy2>(alloc, Core::AllocTag::Render);
 
     entry.usage = usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 }
@@ -2398,7 +2399,8 @@ HostBufferWrite RenderGraph::OpenHostBufferMirrored(StringID name, VkDeviceSize 
 
     RegisterHostBuffer(name, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | extraUsage);
     GetHostBufferSlots(name).bMirrored = true;
-    EnsureHostBufferCapacity(name, size);
+
+    const bool bReallocated = EnsureHostBufferCapacity(name, size);
     ImportHostBuffer(name);
 
     HostBufferSlots& entry = GetHostBufferSlots(name);
@@ -2408,8 +2410,13 @@ HostBufferWrite RenderGraph::OpenHostBufferMirrored(StringID name, VkDeviceSize 
         return {.mapped = slot.mappedData, .mirror = entry.mirror.IsEmpty() ? nullptr : entry.mirror.Data()};
     }
 
-    QueueHostBufferStagingCopy(name, size);
-    return {.mapped = nullptr, .mirror = entry.mirror.Data()};
+    const VkDeviceSize stagingBase = QueueHostBufferStagingCopy(name, size, bReallocated);
+    return {
+        .mapped = nullptr,
+        .mirror = entry.mirror.Data(),
+        .regions = bReallocated ? nullptr : &entry.stagingRegions,
+        .stagingBase = stagingBase,
+    };
 }
 
 void* RenderGraph::OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage)
@@ -2428,36 +2435,60 @@ void* RenderGraph::OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsag
     }
 
     // No REBAR, so the write lands in the mirror and a copy carries it into the slot.
-    QueueHostBufferStagingCopy(name, size);
+    QueueHostBufferStagingCopy(name, size, true);
     return entry.mirror.Data();
 }
 
-/** Staging is filled at record time rather than now, so a partial writer's earlier frames survive in the mirror. */
-void RenderGraph::QueueHostBufferStagingCopy(StringID name, VkDeviceSize size)
+VkDeviceSize RenderGraph::QueueHostBufferStagingCopy(StringID name, VkDeviceSize size, bool bFullCopy)
 {
     UploadAllocation upload = AllocateTransient(size);
+
+    HostBufferSlots& entry = GetHostBufferSlots(name);
+    entry.stagingRegions.Clear();
+    entry.bStagingFullCopy = bFullCopy;
 
     auto passName = Core::InlineString<64>("Upload ");
     passName.Append(name.ToString());
     RenderPass& pass = AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Upload);
     pass.WriteTransferBuffer(name);
     pass.Execute([name, srcOffset = upload.offset, size, dst = upload.ptr](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        memcpy(dst, graph.GetHostBufferSlots(name).mirror.Data(), size);
-        VkBufferCopy2 copy{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-            .srcOffset = srcOffset,
-            .dstOffset = 0,
-            .size = size,
-        };
+        HostBufferSlots& slots = graph.GetHostBufferSlots(name);
+        const auto* mirror = slots.mirror.Data();
+
+        if (slots.bStagingFullCopy) {
+            memcpy(dst, mirror, size);
+            VkBufferCopy2 copy{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .srcOffset = srcOffset,
+                .dstOffset = 0,
+                .size = size,
+            };
+            VkCopyBufferInfo2 copyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = graph.GetTransientUploadBuffer(),
+                .dstBuffer = graph.GetBufferHandle(name),
+                .regionCount = 1,
+                .pRegions = &copy,
+            };
+            vkCmdCopyBuffer2(cmd, &copyInfo);
+            return;
+        }
+
+        if (slots.stagingRegions.Size() == 0) { return; }
+        for (const VkBufferCopy2& region : slots.stagingRegions) {
+            memcpy(static_cast<uint8_t*>(dst) + region.dstOffset, mirror + region.dstOffset, region.size);
+        }
         VkCopyBufferInfo2 copyInfo{
             .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
             .srcBuffer = graph.GetTransientUploadBuffer(),
             .dstBuffer = graph.GetBufferHandle(name),
-            .regionCount = 1,
-            .pRegions = &copy,
+            .regionCount = static_cast<uint32_t>(slots.stagingRegions.Size()),
+            .pRegions = slots.stagingRegions.Data(),
         };
         vkCmdCopyBuffer2(cmd, &copyInfo);
     });
+
+    return upload.offset;
 }
 
 HostBufferSlots& RenderGraph::GetHostBufferSlots(StringID name)

@@ -296,8 +296,8 @@ private:
 
     HostBufferSlots& GetHostBufferSlots(StringID name);
 
-    /** Queues the pass that carries a non-REBAR slot's mirror into its device buffer. */
-    void QueueHostBufferStagingCopy(StringID name, VkDeviceSize size);
+    /** Queues the pass that carries a non-REBAR slot's mirror into its device buffer. Returns the staging offset the caller's regions are relative to. */
+    VkDeviceSize QueueHostBufferStagingCopy(StringID name, VkDeviceSize size, bool bFullCopy);
 
     /** Imports the current frame's slot into the pass system so passes can declare reads against it. */
     void ImportHostBuffer(StringID name);

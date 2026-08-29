@@ -6,6 +6,9 @@
 
 namespace Core
 {
+static constexpr uint64_t MAX_GAME_DELTA_MS = 100;
+static constexpr float FALLBACK_GAME_DELTA = 0.01f;
+
 TimeManager::TimeManager()
 {
     startTime = std::chrono::steady_clock::now();
@@ -26,10 +29,13 @@ void TimeManager::UpdateGame()
     const auto now = std::chrono::steady_clock::now();
     const auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTime);
 
-    uint64_t deltaMs = delta.count();
-    if (deltaMs > 1000) { deltaMs = 333; }
-
-    currentTime.deltaTime = static_cast<float>(deltaMs) / 1000.0f;
+    const auto deltaMs = static_cast<uint64_t>(delta.count());
+    if (deltaMs > MAX_GAME_DELTA_MS) {
+        currentTime.deltaTime = currentTime.deltaTime > 0.0f ? currentTime.deltaTime : FALLBACK_GAME_DELTA;
+    }
+    else {
+        currentTime.deltaTime = static_cast<float>(deltaMs) / 1000.0f;
+    }
 
     const float dt = currentTime.deltaTime;
     if (dt > 0.0f) {
