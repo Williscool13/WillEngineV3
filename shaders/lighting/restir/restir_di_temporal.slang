@@ -186,7 +186,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
 
-    float Mc = (r_gen.lightIdx != ~0u) ? float(r_gen.M) : 0.0;
+    float Mc = float(r_gen.M);
     clampedHistoryM = validHistoryReservoir ? min(history.M, pc.mCap) : 0u;
     float Mi = float(clampedHistoryM);
 

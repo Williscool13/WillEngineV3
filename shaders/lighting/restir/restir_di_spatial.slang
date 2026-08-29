@@ -52,9 +52,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
     int lightCount = pc.lightData->lightCount;
     int analyticCount = pc.lightData->analyticLightCount;
     bool validCenter = center.lightIdx != ~0u && IsLiveLight(center.lightIdx, lightCount, analyticCount);
-    bool centerHasSample = center.lightIdx != ~0u;
-
-    float Mc = centerHasSample ? float(center.M) : 0.0;
+    float Mc = float(center.M);
 
     LightView centerVS;
     float p_hat_center_atCenter = 0.0;
@@ -70,7 +68,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
     float centerMisAccum = 0.0;
     uint neighborCount = 0;
-    combined.M = centerHasSample ? center.M : 0u;
+    combined.M = center.M;
 
 #if RESTIR_ENABLE_SPATIAL_DILATE
     float convergence = saturate(Mc / float(max(pc.adaptiveMReference, 1u)));
