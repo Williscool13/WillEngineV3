@@ -75,7 +75,6 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 
     tempBufferBarriers = Core::Vector<VkBufferMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
     tempImageBarriers = Core::Vector<VkImageMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
-    lightAliasScratch = LightAliasScratch(&renderAlloc);
 
     for (RenderSynchronization& frameSync : frameSynchronization) {
         frameSync = RenderSynchronization(context);
@@ -454,7 +453,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     //
     {
         ZoneScopedN("SetupUniforms");
-        UploadFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime, frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR);
+        UploadFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
         UploadModelUniforms(viewFamily, renderFamilyProperties);
         UploadTextUniforms(viewFamily, renderFamilyProperties);
         UploadUIUniforms(viewFamily, renderFamilyProperties);
@@ -565,7 +564,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             const bool bNeedsWorldGrid = viewFamily.lightingMode == Core::LightingMode::Default
                                          || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled)
-                                         || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin)
+                                         || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && (!Core::ReSTIRParams::REGIR_AVAILABLE || frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin))
                                          || frameBuffer.ddgi.bEnabled
                                          || viewFamily.reflectionProbes.Size() > 0u;
 
@@ -1002,6 +1001,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     SID("restir_reservoir_history"),
                     REFLECTION_PROBE_BUFFER,
                     SID("world_grid_probe_grid"),
+                    LIGHT_DATA_BUFFER,
                 };
                 for (const StringID bufferId : debugVisBuffers) {
                     if (renderGraph->HasBuffer(bufferId)) {
@@ -1088,6 +1088,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
                         .dofPackedRadii = glm::packHalf2x16(glm::vec2(viewFamily.postProcessConfig.dofNearRadiusPx, viewFamily.postProcessConfig.dofFarRadiusPx)),
                         .worldGridProbeGrid = viewFamily.bReflectionProbeBruteForce ? 0 : renderGraph->TryGetBufferAddress(SID("world_grid_probe_grid")),
+                        .lightData = renderGraph->TryGetBufferAddress(LIGHT_DATA_BUFFER),
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -1668,7 +1669,7 @@ void RenderThread::RegisterDebugReadbacks()
 }
 #endif
 
-void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime, bool bBuildLightAlias) const
+void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const
 {
     ZoneScoped;
     // Scene Data
@@ -1685,7 +1686,6 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     const uint32_t analyticLightCount = viewFamily.analyticLightCount;
     const uint32_t triLightCount = viewFamily.triLightCount;
     const uint32_t totalLightLimit = triLightCount > 0 ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + triLightCount : analyticLightCount;
-    const size_t analyticLightBytes = analyticLightCount * sizeof(LightInfo);
     const size_t emissiveGroupCount = glm::min(viewFamily.emissiveTriWork.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS));
 
     auto* lightData = static_cast<LightData*>(renderGraph->OpenHostBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE));
@@ -1705,21 +1705,18 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         // lightData is write-combined upload memory: never read through it (loop bounds included), only stream writes
         lightData->lightCount = static_cast<int32_t>(totalLightLimit);
         lightData->emissiveGroupCount = static_cast<int32_t>(emissiveGroupCount);
-        if (analyticLightBytes > 0) {
-            memcpy(lightData->lights, viewFamily.lights.Data(), analyticLightBytes);
+
+        const LightInfo* payload = viewFamily.lightPayload.Data();
+        size_t cursor = 0;
+        for (const Core::DirtyRun& run : viewFamily.lightRuns) {
+            memcpy(lightData->lights + run.offset, payload + cursor, run.count * sizeof(LightInfo));
+            cursor += run.count;
         }
     }
 
     if (emissiveGroupCount > 0) {
         auto* work = static_cast<EmissiveTriLightWork*>(renderGraph->OpenHostBuffer(EMISSIVE_TRI_WORK_BUFFER, emissiveGroupCount * sizeof(EmissiveTriLightWork)));
         memcpy(work, viewFamily.emissiveTriWork.Data(), emissiveGroupCount * sizeof(EmissiveTriLightWork));
-    }
-
-    // Power alias table (rebuilt every frame on the CPU, world space).
-    if (bBuildLightAlias && analyticLightCount > 0) {
-        ZoneScopedN("Light Alias Table");
-        auto* aliasEntries = static_cast<LightAliasEntry*>(renderGraph->OpenHostBuffer(LIGHT_ALIAS_BUFFER, LIGHT_ALIAS_BUFFER_SIZE));
-        BuildLightPowerAlias(viewFamily.lights.Data(), analyticLightCount, analyticLightCount, lightAliasScratch, aliasEntries);
     }
 
     // Reflection probes

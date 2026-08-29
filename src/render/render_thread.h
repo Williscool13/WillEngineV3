@@ -141,10 +141,7 @@ public:
     void ReleaseProbeCapture() { screenCapture->ReleaseProbeCapture(); }
 
 private:
-    /**
-     * @param bBuildLightAlias Whether to build the power alias table. At the moment, its only consumer is the ReGIR presample pass.
-     */
-    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime, bool bBuildLightAlias) const;
+    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
     void UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
 
@@ -198,7 +195,6 @@ private:
 
     Core::Vector<VkBufferMemoryBarrier2> tempBufferBarriers;
     Core::Vector<VkImageMemoryBarrier2> tempImageBarriers;
-    mutable LightAliasScratch lightAliasScratch{};
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};

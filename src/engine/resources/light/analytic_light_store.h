@@ -9,6 +9,7 @@
 
 #include "core/containers/heap_array.h"
 #include "core/containers/vector.h"
+#include "core/memory/dirty_bits.h"
 #include "core/memory/range_allocator.h"
 #include "render/shaders/lights_interop.h"
 
@@ -32,8 +33,17 @@ public:
 
     void Tick(uint64_t frame);
 
-    LightInfo* Lights() { return lights_.Data(); }
+    void SetLight(uint32_t slot, const LightInfo& light)
+    {
+        lights_[slot] = light;
+        dirty_.Mark(slot);
+    }
+
     const LightInfo* Lights() const { return lights_.Data(); }
+
+    template<typename Fn>
+    void DrainDirty(uint32_t setIndex, Fn&& emit) { dirty_.Drain(setIndex, GetWatermark(), std::forward<Fn>(emit)); }
+
 
     [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
     [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
@@ -49,6 +59,7 @@ private:
 
     Core::RangeAllocator ranges_{};
     Core::HeapArray<LightInfo> lights_{};
+    Core::DirtyBits dirty_{};
     Core::Vector<PendingFree> pendingFrees_{};
     uint64_t frame_{0};
 };

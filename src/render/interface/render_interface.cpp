@@ -16,7 +16,8 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     portalViews = ArenaFixedVector<PortalView>(&arena, Render::VIEW_COUNT - 1);
 
     modelMatrices = ArenaVector<Model>(&arena, wm.modelMatrices);
-    lights = ArenaVector<LightInfo>(&arena, wm.lights);
+    lightPayload = ArenaVector<LightInfo>(&arena, wm.lightPayload);
+    lightRuns = ArenaVector<DirtyRun>(&arena, wm.lightRuns);
     reflectionProbes = ArenaFixedVector<ReflectionProbeGPU>(&arena, MAX_REFLECTION_PROBES);
     emissiveTriWork = ArenaFixedVector<EmissiveTriLightWork>(&arena, MAX_EMISSIVE_GROUPS);
     probePreviews = ArenaFixedVector<ProbePreviewSphere>(&arena, MAX_REFLECTION_PROBES);
@@ -62,7 +63,8 @@ static ViewFamilyWatermarks ObservedWatermarks(const ViewFamily& vf)
     w.worldGlyphQuads = NextPowerOfTwo(vf.worldGlyphQuads.Size());
     w.textInstances = NextPowerOfTwo(vf.textInstances.Size());
     w.modelMatrices = NextPowerOfTwo(vf.modelMatrices.Size());
-    w.lights = vf.lights.Size();
+    w.lightPayload = NextPowerOfTwo(vf.lightPayload.Size());
+    w.lightRuns = NextPowerOfTwo(vf.lightRuns.Size());
     w.activeMaterials = vf.activeMaterials.Size();
     w.activeTextMaterials = vf.activeTextMaterials.Size();
     w.textMaterials = vf.textMaterials.Size();
@@ -88,7 +90,8 @@ static ViewFamilyWatermarks MaxWatermarks(const ViewFamilyWatermarks& a, const V
     w.worldGlyphQuads = std::max(a.worldGlyphQuads, b.worldGlyphQuads);
     w.textInstances = std::max(a.textInstances, b.textInstances);
     w.modelMatrices = std::max(a.modelMatrices, b.modelMatrices);
-    w.lights = std::max(a.lights, b.lights);
+    w.lightPayload = std::max(a.lightPayload, b.lightPayload);
+    w.lightRuns = std::max(a.lightRuns, b.lightRuns);
     w.activeMaterials = std::max(a.activeMaterials, b.activeMaterials);
     w.activeTextMaterials = std::max(a.activeTextMaterials, b.activeTextMaterials);
     w.textMaterials = std::max(a.textMaterials, b.textMaterials);

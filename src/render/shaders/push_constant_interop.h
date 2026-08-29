@@ -100,6 +100,7 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint reflectionProbeCount;
     SHADER_PUBLIC uint dofPackedRadii;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
 };
 
 SHADER_PUBLIC struct InstanceLODPushConstant

@@ -9,6 +9,7 @@
 #include <glm/detail/type_quat.hpp>
 
 #include "core/string_id.h"
+#include "core/memory/dirty_bits.h"
 #include "core/containers/arena_fixed_map.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/arena_map.h"
@@ -399,7 +400,8 @@ struct ViewFamilyWatermarks
     size_t worldGlyphQuads{256};
     size_t textInstances{32};
     size_t modelMatrices{256};
-    size_t lights{256};
+    size_t lightPayload{256};
+    size_t lightRuns{64};
     size_t activeMaterials{256};
     size_t activeTextMaterials{32};
     size_t textMaterials{256};
@@ -479,16 +481,17 @@ struct ViewFamily
     int32_t skyboxLOD{0};
 
     DirectionalLight directionalLight{};
-    ArenaVector<LightInfo> lights{};
+    uint32_t analyticLightCount{0};
+    /** Only the analytic slots that changed, concatenated in lightRuns order. */
+    ArenaVector<LightInfo> lightPayload{};
+    ArenaVector<DirtyRun> lightRuns{};
+    uint32_t triLightCount{0};
+    ArenaFixedVector<EmissiveTriLightWork> emissiveTriWork{};
+
     ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};
     ProbePreviewSettings probePreviewSettings{};
     ArenaFixedVector<ProbePreviewSphere> probePreviews{};
     ArenaFixedVector<LocalDDGIVolume> localDDGIVolumes{};
-
-    uint32_t analyticLightCount{0};
-    /** TriLightStore watermark. The triangle region of LightData is written by the GPU, so the CPU only reports how far it extends. */
-    uint32_t triLightCount{0};
-    ArenaFixedVector<EmissiveTriLightWork> emissiveTriWork{};
 
     GTAOConfiguration gtaoConfig{};
     AntiAliasingConfiguration aaConfig{};

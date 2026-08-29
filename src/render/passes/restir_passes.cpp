@@ -52,7 +52,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     const bool bAntilag = bTemporalReuse && RESTIR_ENABLE_ANTILAG && restirParams.bEnableAntilag;
     const bool bShadowVis = bAntilag;
 
-    const bool bReGIRProposal = restirParams.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR;
+    const bool bReGIRProposal = Core::ReSTIRParams::REGIR_AVAILABLE && restirParams.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR;
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
 
     // Temporal-gradient confidence runs at 1/GRAD_FACTOR of the half-res ReSTIR grid (must match GRAD_FACTOR in the confidence shaders).

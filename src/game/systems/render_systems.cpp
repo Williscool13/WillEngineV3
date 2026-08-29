@@ -1336,17 +1336,20 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         state->modelStore.Models()[runtime.modelRange.offset] = {renderTransform.modelMatrix, renderTransform.previousMatrix};
     }
 
-    // Analytic light payload
+    // Analytic light payload. A bake-hidden light writes dead, so the store stays the only authority on what the GPU sees.
     {
-        LightInfo* lights = state->analyticLightStore.Lights();
+        Engine::AnalyticLightStore& lightStore = state->analyticLightStore;
+        const bool bAnyHidden = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0;
+        auto bHiddenLight = [&](entt::entity entity) { return bAnyHidden && state->registry.all_of<Component::ProbeBakeHiddenTag>(entity); };
+
         for (auto [entity, light, transform, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::MultiframeDirtyComponent>().each()) {
             if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
-            lights[light.lightSlot] = Component::ComputeAreaLightInfo(transform, light);
+            lightStore.SetLight(light.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeAreaLightInfo(transform, light));
         }
 
         for (auto [entity, light, transform, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::MultiframeDirtyComponent>().each()) {
             if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
-            lights[light.lightSlot] = Component::ComputeSphereLightInfo(transform, light);
+            lightStore.SetLight(light.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeSphereLightInfo(transform, light));
         }
     }
 
@@ -1711,6 +1714,16 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
+static void MarkAnalyticLightsDirty(entt::registry& registry)
+{
+    for (auto entity : registry.view<Component::AreaLightComponent>()) {
+        registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+    }
+    for (auto entity : registry.view<Component::SphereLightComponent>()) {
+        registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+    }
+}
+
 void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     entt::registry& registry = state->registry;
@@ -1734,11 +1747,14 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
     for (const auto& [entity, body] : registry.view<Component::PhysicsBodyDesc>().each()) {
         if (body.motionType != Component::PhysicsMotionType::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
+
+    MarkAnalyticLightsDirty(registry);
 }
 
 void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     state->registry.clear<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>();
+    MarkAnalyticLightsDirty(state->registry);
 }
 
 #ifdef WDEBUG
@@ -1750,7 +1766,7 @@ static void VerifyAnalyticLightStore(Engine::EngineState* state)
     uint32_t staleCount = 0;
     uint32_t firstStaleSlot = 0;
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
         if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
         const LightInfo expected = Component::ComputeAreaLightInfo(transform, light);
         if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {
@@ -1758,7 +1774,7 @@ static void VerifyAnalyticLightStore(Engine::EngineState* state)
         }
     }
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
         if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
         const LightInfo expected = Component::ComputeSphereLightInfo(transform, light);
         if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {
@@ -1767,7 +1783,7 @@ static void VerifyAnalyticLightStore(Engine::EngineState* state)
     }
 
     if (staleCount > 0) {
-        LOG_WARN(Engine, "{} analytic light(s) stale in the store, first at slot {}; a mutation did not mark MultiframeDirtyComponent", staleCount, firstStaleSlot);
+        LOG_ERROR(Engine, "{} analytic light(s) stale in the store, first at slot {}; a mutation did not mark MultiframeDirtyComponent", staleCount, firstStaleSlot);
     }
 }
 #endif
@@ -1785,20 +1801,17 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 #endif
 
     const uint32_t analyticWatermark = state->analyticLightStore.GetWatermark();
-    vf.lights.Clear();
-    vf.lights.Resize(analyticWatermark);
+    const LightInfo* storeLights = state->analyticLightStore.Lights();
     vf.analyticLightCount = analyticWatermark;
-    if (analyticWatermark > 0) {
-        memcpy(vf.lights.Data(), state->analyticLightStore.Lights(), analyticWatermark * sizeof(LightInfo));
-    }
+    vf.lightRuns.Clear();
+    vf.lightPayload.Clear();
 
-    // Hiding is per view, not a property of the light, so it overlays the snapshot instead of writing the store.
-    for (const auto& [entity, light] : state->registry.view<Component::AreaLightComponent, Component::ProbeBakeHiddenTag>().each()) {
-        if (light.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT) { vf.lights[light.lightSlot] = LightInfo{}; }
-    }
-    for (const auto& [entity, light] : state->registry.view<Component::SphereLightComponent, Component::ProbeBakeHiddenTag>().each()) {
-        if (light.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT) { vf.lights[light.lightSlot] = LightInfo{}; }
-    }
+    state->analyticLightStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
+        const size_t base = vf.lightPayload.Size();
+        vf.lightPayload.ResizeUninitialized(base + count);
+        memcpy(vf.lightPayload.Data() + base, storeLights + offset, count * sizeof(LightInfo));
+        vf.lightRuns.PushBack(Core::DirtyRun{offset, count});
+    });
 
     Engine::EmissiveDebugState& emissiveDebug = state->debug.emissive;
     emissiveDebug.entries.Clear();

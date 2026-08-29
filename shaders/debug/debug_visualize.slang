@@ -1,6 +1,7 @@
 import push_constant_interop;
 import constants_interop;
 import restir_interop;
+import lights_interop;
 
 import bindless_declarations;
 import shader_functions;
@@ -10,6 +11,32 @@ import reflection_probe_common;
 
 [[vk::push_constant]]
 DebugVisualizePushConstant pc;
+
+static float3 HueToRgb(float hue)
+{
+    float3 k = frac(hue + float3(0.0, 2.0 / 3.0, 1.0 / 3.0));
+    return saturate(abs(k * 6.0 - 3.0) - 1.0);
+}
+
+// Analytic lights get a hue each. Emissive triangles share their group's hue so a mesh reads as one light, with a brightness step per triangle so its faces stay separable.
+static float3 LightIdxColor(uint lightIdx)
+{
+    if (lightIdx == ~0u) { return float3(0.0); }
+    const float GOLDEN = 0.6180339887;
+    if (lightIdx < uint(MAX_ANALYTIC_LIGHTS) || pc.lightData == nullptr) {
+        return HueToRgb(frac(float(lightIdx) * GOLDEN));
+    }
+    int groupCount = pc.lightData->emissiveGroupCount;
+    for (int g = 0; g < groupCount; g++) {
+        EmissiveGroup group = pc.lightData->emissiveGroups[g];
+        if (lightIdx >= group.firstLight && lightIdx < group.firstLight + group.lightCount) {
+            float3 hueColor = HueToRgb(frac(0.35 + float(g) * GOLDEN));
+            float triStep = 0.45 + 0.55 * frac(float(lightIdx - group.firstLight) * GOLDEN);
+            return hueColor * triStep;
+        }
+    }
+    return float3(0.5);
+}
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -26,14 +53,16 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
     bool bPixelInRenderBounds = threadID.x < uint(pc.srcExtent.x) && threadID.y < uint(pc.srcExtent.y);
     uint2 pixelXY = threadID.xy;
 
-    bool bCurrentReservoir = bPixelInRenderBounds && IsActiveCheckerboardPixel(int2(pixelXY), false, pc.checkerboardField);
-    uint2 currentReservoirPos = PixelPosToReservoirPos(pixelXY, pc.checkerboardField);
+    int2 srcMax = pc.srcExtent - 1;
+    uint2 currentActivePixel = uint2(clamp(ActivateCheckerboardPixel(int2(pixelXY), false, pc.checkerboardField), int2(0), srcMax));
+    uint2 currentReservoirPos = PixelPosToReservoirPos(currentActivePixel, pc.checkerboardField);
     uint currentStride = RestirCheckerboardStride(uint(pc.srcExtent.x), pc.checkerboardField);
     uint reservoirPixelIdx = currentReservoirPos.y * currentStride + currentReservoirPos.x;
-    bool bInReservoirBounds = bCurrentReservoir;
+    bool bInReservoirBounds = bPixelInRenderBounds;
 
-    bool bHistoryReservoir = bPixelInRenderBounds && IsActiveCheckerboardPixel(int2(pixelXY), false, pc.historyCheckerboardField);
-    uint2 historyReservoirPos = PixelPosToReservoirPos(pixelXY, pc.historyCheckerboardField);
+    bool bHistoryReservoir = bPixelInRenderBounds;
+    uint2 historyActivePixel = uint2(clamp(ActivateCheckerboardPixel(int2(pixelXY), false, pc.historyCheckerboardField), int2(0), srcMax));
+    uint2 historyReservoirPos = PixelPosToReservoirPos(historyActivePixel, pc.historyCheckerboardField);
     uint historyStride = RestirCheckerboardStride(uint(pc.srcExtent.x), pc.historyCheckerboardField);
     uint historyReservoirPixelIdx = historyReservoirPos.y * historyStride + historyReservoirPos.x;
 
@@ -155,24 +184,12 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
         }
         case 17: { // ReservoirLightIdx - hash-color the selected light index from the reservoir buffer
             if (!bInReservoirBounds) { srcPixel.xyz = float3(0.0, 0.0, 0.0); break; }
-            Reservoir r = pc.reservoirBuffer[reservoirPixelIdx];
-            if (r.lightIdx == ~0u) {
-                srcPixel.xyz = float3(0.0, 0.0, 0.0);
-            } else {
-                uint h = (r.lightIdx + 1u) * 2654435761u;
-                srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
-            }
+            srcPixel.xyz = LightIdxColor(pc.reservoirBuffer[reservoirPixelIdx].lightIdx);
             break;
         }
         case 18: { // ReservoirTemporalLightIdx - hash-color the selected light index from the temporal reservoir buffer
             if (!bInReservoirBounds) { srcPixel.xyz = float3(0.0, 0.0, 0.0); break; }
-            Reservoir r = pc.reservoirTemporalBuffer[reservoirPixelIdx];
-            if (r.lightIdx == ~0u) {
-                srcPixel.xyz = float3(0.0, 0.0, 0.0);
-            } else {
-                uint h = (r.lightIdx + 1u) * 2654435761u;
-                srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
-            }
+            srcPixel.xyz = LightIdxColor(pc.reservoirTemporalBuffer[reservoirPixelIdx].lightIdx);
             break;
         }
         case 19: { // ReservoirTemporalW - visualize W with range coloring: red [0,100), blue [100,500), green [500,inf)
@@ -195,13 +212,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
         }
         case 21: { // ReservoirSpatialLightIdx - hash-color the selected light index from the spatial reservoir buffer
             if (!bInReservoirBounds) { srcPixel.xyz = float3(0.0, 0.0, 0.0); break; }
-            Reservoir r = pc.reservoirSpatialBuffer[reservoirPixelIdx];
-            if (r.lightIdx == ~0u) {
-                srcPixel.xyz = float3(0.0, 0.0, 0.0);
-            } else {
-                uint h = (r.lightIdx + 1u) * 2654435761u;
-                srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
-            }
+            srcPixel.xyz = LightIdxColor(pc.reservoirSpatialBuffer[reservoirPixelIdx].lightIdx);
             break;
         }
         case 22: { // ReservoirSpatialW - visualize W with range coloring: red [0,100), blue [100,500), green [500,inf)
@@ -215,13 +226,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
         }
         case 23: { // ReservoirHistoryLightIdx - hash-color the selected light index from the history reservoir buffer
             if (!bHistoryReservoir) { srcPixel.xyz = float3(0.0, 0.0, 0.0); break; }
-            Reservoir r = pc.reservoirHistoryBuffer[historyReservoirPixelIdx];
-            if (r.lightIdx == ~0u) {
-                srcPixel.xyz = float3(0.0, 0.0, 0.0);
-            } else {
-                uint h = (r.lightIdx + 1u) * 2654435761u;
-                srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
-            }
+            srcPixel.xyz = LightIdxColor(pc.reservoirHistoryBuffer[historyReservoirPixelIdx].lightIdx);
             break;
         }
         case 24: { // ReservoirHistoryW - visualize W with range coloring: red [0,100), blue [100,500), green [500,inf)

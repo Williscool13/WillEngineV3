@@ -362,6 +362,8 @@ struct ReSTIRParams
     bool bResetReGIR{false};
     // WorldGridBin = cascaded strongest-K analytic bin (default, sparse analytic scenes)
     // ReGIR = reservoir hash grid (retained for dense/emissive-triangle scenes). Only ReGIR schedules the presample/fill producer chain.
+    // ReGIR is DISABLED
+    static constexpr bool REGIR_AVAILABLE = false;
     enum class LightProposal : uint32_t { WorldGridBin = 0, ReGIR = 1 };
     LightProposal lightProposal{LightProposal::WorldGridBin};
     // Emissive triangle lights

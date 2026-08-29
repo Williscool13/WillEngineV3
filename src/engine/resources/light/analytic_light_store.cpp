@@ -5,6 +5,7 @@
 #include "engine/resources/light/analytic_light_store.h"
 
 #include "engine/logging/engine_log.h"
+#include "render/interface/render_interface.h"
 
 namespace Engine
 {
@@ -12,6 +13,7 @@ void AnalyticLightStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Cor
 {
     ranges_.Init(capacity, alloc, tag, "AnalyticLightStore");
     lights_ = Core::HeapArray<LightInfo>(alloc, tag, capacity);
+    dirty_.Init(capacity, Core::FRAME_BUFFER_COUNT, alloc, tag);
     pendingFrees_ = Core::Vector<PendingFree>(alloc, tag);
 }
 
@@ -28,7 +30,7 @@ uint32_t AnalyticLightStore::Allocate()
 void AnalyticLightStore::Free(uint32_t& slot)
 {
     if (slot == INVALID_SLOT) { return; }
-    lights_[slot] = LightInfo{};
+    SetLight(slot, LightInfo{});
     pendingFrees_.PushBack({{slot, 1}, frame_});
     slot = INVALID_SLOT;
 }
