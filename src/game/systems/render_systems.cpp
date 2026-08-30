@@ -51,7 +51,9 @@ void ConnectRenderObservers(entt::registry& registry)
     registry.on_construct<Component::TransformComponent>().connect<&Component::TransformComponent::OnConstruct>();
     registry.on_destroy<Component::TransformComponent>().connect<&Component::TransformComponent::OnDestroy>();
 
+    registry.on_construct<Component::MeshRuntime>().connect<&Component::MeshRuntime::OnConstruct>();
     registry.on_destroy<Component::MeshRuntime>().connect<&Component::MeshRuntime::OnDestroy>();
+    registry.on_construct<Component::LightSurfaceRuntime>().connect<&Component::LightSurfaceRuntime::OnConstruct>();
     registry.on_destroy<Component::LightSurfaceRuntime>().connect<&Component::LightSurfaceRuntime::OnDestroy>();
     registry.on_destroy<Component::TextRuntime>().connect<&Component::TextRuntime::OnDestroy>();
 
@@ -96,7 +98,9 @@ void DisconnectRenderObservers(entt::registry& registry)
     registry.on_construct<Component::TransformComponent>().disconnect<&Component::TransformComponent::OnConstruct>();
     registry.on_destroy<Component::TransformComponent>().disconnect<&Component::TransformComponent::OnDestroy>();
 
+    registry.on_construct<Component::MeshRuntime>().disconnect<&Component::MeshRuntime::OnConstruct>();
     registry.on_destroy<Component::MeshRuntime>().disconnect<&Component::MeshRuntime::OnDestroy>();
+    registry.on_construct<Component::LightSurfaceRuntime>().disconnect<&Component::LightSurfaceRuntime::OnConstruct>();
     registry.on_destroy<Component::LightSurfaceRuntime>().disconnect<&Component::LightSurfaceRuntime::OnDestroy>();
     registry.on_destroy<Component::TextRuntime>().disconnect<&Component::TextRuntime::OnDestroy>();
 
@@ -426,6 +430,50 @@ static bool HasEmissiveLightFlag(const entt::registry& registry, entt::entity en
     return renderFlags && renderFlags->Has(Component::RenderFlagsComponent::EMISSIVE_LIGHT);
 }
 
+static uint32_t InstanceFlagsFrom(const Component::RenderFlagsComponent& renderFlags)
+{
+    return (renderFlags.Has(Component::RenderFlagsComponent::MOTION_BLUR) ? INSTANCE_FLAG_MOTION_BLUR : 0u)
+           | (renderFlags.Has(Component::RenderFlagsComponent::ALPHA_CUTOUT) ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u)
+           | (renderFlags.Has(Component::RenderFlagsComponent::DDGI_CONTRIBUTE) ? INSTANCE_FLAG_DDGI_VISIBLE : 0u);
+}
+
+void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity)
+{
+    auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+    const auto* renderFlags = state->registry.try_get<Component::RenderFlagsComponent>(entity);
+    if (!runtime || !renderFlags) { return; }
+
+    if (!runtime->range.IsValid()) { return; }
+
+    const bool bVisible = renderFlags->Has(Component::RenderFlagsComponent::VISIBLE) && !state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
+    const uint32_t flags = InstanceFlagsFrom(*renderFlags);
+
+    const Engine::InstanceSource& src = state->instanceStore[runtime->range.offset];
+    if (src.bVisible == bVisible && src.flags == flags && src.stableId == runtime->stableId) { return; }
+    state->instanceStore.SetRenderState(runtime->range, bVisible, flags, runtime->stableId);
+}
+
+void EvaluateAllInstanceRenderStates(Engine::EngineState* state)
+{
+    ZoneScoped;
+    Engine::InstanceStore& store = state->instanceStore;
+    const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0;
+
+    for (auto [entity, renderFlags, runtime] : state->registry.view<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
+        if (!runtime.range.IsValid()) { continue; }
+
+        bool bVisible = renderFlags.Has(Component::RenderFlagsComponent::VISIBLE);
+        if (bVisible && bAnyHideTags) {
+            bVisible = !state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
+        }
+        const uint32_t flags = InstanceFlagsFrom(renderFlags);
+
+        const Engine::InstanceSource& src = store[runtime.range.offset];
+        if (src.bVisible == bVisible && src.flags == flags && src.stableId == runtime.stableId) { continue; }
+        store.SetRenderState(runtime.range, bVisible, flags, runtime.stableId);
+    }
+}
+
 static glm::mat4 ComposeNodeModelSpace(const Core::HeapArray<Engine::Node>& nodes, uint32_t nodeIndex)
 {
     auto local = [](const Engine::Node& n) -> glm::mat4 {
@@ -652,6 +700,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         runtime->range = range;
         runtime->modelRange = modelRange;
+        EvaluateInstanceRenderState(state, entity);
         state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         resolved.PushBack(entity);
     }
@@ -795,6 +844,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
                         });
         runtime->range = range;
         runtime->modelRange = modelRange;
+        EvaluateInstanceRenderState(state, entity);
         state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
 
         resolved.PushBack(entity);
@@ -871,6 +921,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
+            EvaluateInstanceRenderState(state, entity);
             state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
 
@@ -993,6 +1044,7 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         FillModuleMeshRange(ctx, state, runtime, model, meshComponent, HasEmissiveLightFlag(state->registry, entity));
+        EvaluateInstanceRenderState(state, entity);
         state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
 
         resolved.PushBack(entity);
@@ -1065,6 +1117,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
+            EvaluateInstanceRenderState(state, entity);
             state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
 
@@ -1152,6 +1205,7 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
+            EvaluateInstanceRenderState(state, entity);
             state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
 
@@ -1367,33 +1421,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
 
     //
     {
-        ZoneScopedN("SyncInstanceRecords");
-        Engine::InstanceStore& store = state->instanceStore;
-        const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0;
-
-        for (auto [entity, renderFlags, runtime] : state->registry.view<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
-            runtime.visible = renderFlags.Has(Component::RenderFlagsComponent::VISIBLE);
-            if (!runtime.range.IsValid()) { continue; }
-
-            bool bVisible = runtime.visible;
-            if (bVisible && bAnyHideTags) {
-                bVisible = !state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
-            }
-            const uint32_t flags = (renderFlags.Has(Component::RenderFlagsComponent::MOTION_BLUR) ? INSTANCE_FLAG_MOTION_BLUR : 0u)
-                                   | (renderFlags.Has(Component::RenderFlagsComponent::ALPHA_CUTOUT) ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u)
-                                   | (renderFlags.Has(Component::RenderFlagsComponent::DDGI_CONTRIBUTE) ? INSTANCE_FLAG_DDGI_VISIBLE : 0u);
-            uint64_t stableId = 1234567890;
-            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-                stableId = stable->id.id;
-            }
-
-            const Engine::InstanceSource& src = store[runtime.range.offset];
-            if (src.bVisible == bVisible && src.flags == flags && src.stableId == stableId) { continue; }
-            store.SetRenderState(runtime.range, bVisible, flags, stableId);
-        }
-    }
-    //
-    {
         ZoneScopedN("SyncLightSurfaces");
         Engine::InstanceStore& store = state->instanceStore;
         Engine::Material emissiveMaterial = *materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
@@ -1423,14 +1450,9 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 }
             }
 
-            uint64_t stableId = 1234567890;
-            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(lightEntity)) {
-                stableId = stable->id.id;
-            }
-
             const Engine::InstanceSource& src = store[surfaceRuntime.range.offset];
-            if (src.bVisible != bDraw || src.flags != SURFACE_FLAGS || src.stableId != stableId) {
-                store.SetRenderState(surfaceRuntime.range, bDraw, SURFACE_FLAGS, stableId);
+            if (src.bVisible != bDraw || src.flags != SURFACE_FLAGS || src.stableId != surfaceRuntime.stableId) {
+                store.SetRenderState(surfaceRuntime.range, bDraw, SURFACE_FLAGS, surfaceRuntime.stableId);
             }
         };
 
@@ -1761,12 +1783,14 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (body.motionType != Component::PhysicsMotionType::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
 
+    EvaluateAllInstanceRenderStates(state);
     MarkAnalyticLightsDirty(registry);
 }
 
 void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     state->registry.clear<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>();
+    EvaluateAllInstanceRenderStates(state);
     MarkAnalyticLightsDirty(state->registry);
 }
 
@@ -1826,41 +1850,39 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     vf.triLightCount = state->triLightStore.GetWatermark();
     if (state->debug.restir.bEmissiveTriangleLights) {
         ZoneScopedN("EmissiveTriangleLights");
-        auto view = state->registry.view<Component::MeshRuntime>(entt::exclude<Component::ProbeBakeHiddenTag>);
         Engine::InstanceStore& store = state->instanceStore;
 
-        for (const auto& [entity, runtime] : view.each()) {
-            if (!runtime.range.IsValid()) { continue; }
-            for (uint32_t i = 0; i < runtime.range.count; ++i) {
-                const uint32_t slot = runtime.range.offset + i;
-                const Engine::InstanceSource& inst = store[slot];
-                if (!inst.triLightRange.IsValid()) { continue; }
-                if (!runtime.visible) {
-                    if (bEmissiveCapture) { recordEmissive(entity, slot, inst, Engine::EmissiveDispatchState::EntityHidden); }
-                    continue;
-                }
-                if (vf.emissiveTriWork.IsFull()) {
-                    if (bEmissiveCapture) { recordEmissive(entity, slot, inst, Engine::EmissiveDispatchState::WorkListFull); }
-                    continue;
-                }
-                vf.emissiveTriWork.PushBack(EmissiveTriLightWork{
-                    .instanceSlot = slot,
-                    .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + inst.triLightRange.offset,
-                    .triangleCount = inst.triLightRange.count,
-                });
-                emissiveDebug.dispatchedTriangles += inst.triLightRange.count;
-                if (bEmissiveCapture) { recordEmissive(entity, slot, inst, Engine::EmissiveDispatchState::Dispatched); }
-            }
+        for (const uint32_t slot : store.EmissiveSlots()) {
+            const Engine::InstanceSource& inst = store[slot];
+            if (!inst.bVisible) { continue; }
+            if (vf.emissiveTriWork.IsFull()) { break; }
+            vf.emissiveTriWork.PushBack(EmissiveTriLightWork{
+                .instanceSlot = slot,
+                .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + inst.triLightRange.offset,
+                .triangleCount = inst.triLightRange.count,
+            });
+            emissiveDebug.dispatchedTriangles += inst.triLightRange.count;
         }
 
         if (bEmissiveCapture) {
-            for (const auto& [entity, runtime] : state->registry.view<Component::MeshRuntime, Component::ProbeBakeHiddenTag>().each()) {
+            for (const auto& [entity, runtime] : state->registry.view<Component::MeshRuntime>().each()) {
                 if (!runtime.range.IsValid()) { continue; }
+                const bool bBakeHidden = state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
                 for (uint32_t i = 0; i < runtime.range.count; ++i) {
                     const uint32_t slot = runtime.range.offset + i;
                     const Engine::InstanceSource& inst = store[slot];
                     if (!inst.triLightRange.IsValid()) { continue; }
-                    recordEmissive(entity, slot, inst, Engine::EmissiveDispatchState::ProbeBakeHidden);
+                    Engine::EmissiveDispatchState dispatchState;
+                    if (bBakeHidden) { dispatchState = Engine::EmissiveDispatchState::ProbeBakeHidden; }
+                    else if (!inst.bVisible) { dispatchState = Engine::EmissiveDispatchState::EntityHidden; }
+                    else {
+                        bool bDispatched = false;
+                        for (size_t w = 0; w < vf.emissiveTriWork.Size() && !bDispatched; ++w) {
+                            bDispatched = vf.emissiveTriWork[w].instanceSlot == slot;
+                        }
+                        dispatchState = bDispatched ? Engine::EmissiveDispatchState::Dispatched : Engine::EmissiveDispatchState::WorkListFull;
+                    }
+                    recordEmissive(entity, slot, inst, dispatchState);
                 }
             }
         }

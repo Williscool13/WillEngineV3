@@ -107,12 +107,12 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
     if (open) {
         auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
         bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
-        if (ImGui::Checkbox("Visible", &visible)) { renderFlags.Set(RenderFlagsComponent::VISIBLE, visible); }
+        if (ImGui::Checkbox("Visible", &visible)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::VISIBLE, visible); }
         bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
-        if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
+        if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
         bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
         if (ImGui::Checkbox("Emissive Light##staticmeshprimitive", &emissiveLight)) {
-            renderFlags.Set(RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
+            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
             registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
             state->assetLoad.bPendingModelResolve = true;
             modified = true;

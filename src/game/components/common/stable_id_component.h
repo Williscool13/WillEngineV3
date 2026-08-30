@@ -30,6 +30,8 @@ struct StableIdComponent
 {
     static constexpr const char* COMPONENT_NAME = "StableIdComponent";
 
+    static constexpr uint64_t NO_ID = 1234567890;
+
     StringID id;
     uint64_t sortOrder{0};
 

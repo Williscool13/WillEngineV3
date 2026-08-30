@@ -7,6 +7,7 @@
 #include <tracy/Tracy.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 
 #include <glm/gtx/matrix_decompose.hpp>
@@ -41,6 +42,7 @@ namespace Game
 {
 Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName)
 {
+    ZoneScoped;
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     Core::TlsfAllocator* alloc = &ctx->memoryManager->General();
 
@@ -121,35 +123,73 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::regi
     return outScene;
 }
 
+static constexpr size_t MAX_PROFILED_COMPONENT_TYPES = 128;
+
+static void LogDeserializeBreakdown(const Engine::ComponentRegistry& componentRegistry, uint32_t entityCount, uint64_t createNanos, const uint64_t* typeNanos, const uint32_t* typeHits)
+{
+    const size_t typeCount = std::min(componentRegistry.registry.Size(), MAX_PROFILED_COMPONENT_TYPES);
+
+    size_t order[MAX_PROFILED_COMPONENT_TYPES];
+    size_t used = 0;
+    uint64_t total = 0;
+    uint32_t blocks = 0;
+    for (size_t i = 0; i < typeCount; ++i) {
+        total += typeNanos[i];
+        blocks += typeHits[i];
+        if (typeHits[i] > 0) { order[used++] = i; }
+    }
+    std::sort(order, order + used, [&](size_t a, size_t b) { return typeNanos[a] > typeNanos[b]; });
+
+    LOG_INFO(Game, "Scene deserialize: {} entities, {} component blocks, {:.2f}ms in deserializers, {:.2f}ms in registry.create",
+             entityCount, blocks, static_cast<double>(total) / 1e6, static_cast<double>(createNanos) / 1e6);
+    for (size_t i = 0; i < used; ++i) {
+        const size_t t = order[i];
+        LOG_INFO(Game, "  {:<34} {:>8} x {:>9.3f}ms", componentRegistry.registry[t].name, typeHits[t], static_cast<double>(typeNanos[t]) / 1e6);
+    }
+}
+
 StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, const Engine::TextReader& scene)
 {
+    ZoneScoped;
     auto sceneId = StringID(scene.U64("scene_id"));
 
+    uint64_t typeNanos[MAX_PROFILED_COMPONENT_TYPES]{};
+    uint32_t typeHits[MAX_PROFILED_COMPONENT_TYPES]{};
+    uint32_t entityCount = 0;
+    uint64_t createNanos = 0;
+
     scene.ForEachRecord("entities", [&](const Engine::TextReader& entityReader) {
+        const auto createStart = std::chrono::steady_clock::now();
         auto entity = registry.create();
+        createNanos += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - createStart).count();
+        ++entityCount;
+
         entityReader.ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
             uint64_t typeId = 0;
             std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
-            bool bFound = false;
-            for (Engine::ComponentEntry& entry : componentRegistry.registry) {
-                if (entry.typeId.id == typeId) {
-                    entry.deserialize(registry, entity, compReader);
-                    bFound = true;
-                    break;
-                }
-            }
-            if (!bFound) {
+            const size_t* index = componentRegistry.registryMapping.Find(StringID{typeId});
+            if (index == nullptr) {
                 LOG_WARN(Game, "Scene component key {} matches no registered component; dropped on load", typeId);
+                return;
+            }
+
+            const auto start = std::chrono::steady_clock::now();
+            componentRegistry.registry[*index].deserialize(registry, entity, compReader);
+            if (*index < MAX_PROFILED_COMPONENT_TYPES) {
+                typeNanos[*index] += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+                typeHits[*index]++;
             }
         });
         registry.emplace<Component::SceneComponent>(entity, sceneId);
     });
 
+    LogDeserializeBreakdown(componentRegistry, entityCount, createNanos, typeNanos, typeHits);
     return sceneId;
 }
 
 Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, Core::Span<Engine::RuntimeSceneMetadata> loadedScenes)
 {
+    ZoneScoped;
     Core::InlineVector<Engine::Scene, 8> snapshots;
     for (int i = 0; i < loadedScenes.Size(); ++i) {
         auto& meta = loadedScenes[i];
@@ -161,22 +201,26 @@ Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& com
 
 void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots)
 {
+    ZoneScoped;
     for (Engine::Scene& scene : snapshots) {
         StringID loadedId = LoadScene(state->componentRegistry, state->registry, Engine::TextReader(scene.content.Data(), scene.content.Size()));
-        uint64_t maxSortOrder = 0;
-        auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
-        for (auto entity : sortView) {
-            if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
-                maxSortOrder = std::max(maxSortOrder, sortView.get<Component::StableIdComponent>(entity).sortOrder);
+        {
+            ZoneScopedN("SortOrder");
+            uint64_t maxSortOrder = 0;
+            auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
+            for (auto entity : sortView) {
+                if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+                    maxSortOrder = std::max(maxSortOrder, sortView.get<Component::StableIdComponent>(entity).sortOrder);
+                }
             }
-        }
-        // For those without a valid sort order
-        for (auto entity : sortView) {
-            if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
-                auto& stable = sortView.get<Component::StableIdComponent>(entity);
-                if (stable.sortOrder == 0) {
-                    maxSortOrder += 1;
-                    stable.sortOrder = maxSortOrder;
+            // For those without a valid sort order
+            for (auto entity : sortView) {
+                if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+                    auto& stable = sortView.get<Component::StableIdComponent>(entity);
+                    if (stable.sortOrder == 0) {
+                        maxSortOrder += 1;
+                        stable.sortOrder = maxSortOrder;
+                    }
                 }
             }
         }
@@ -191,6 +235,7 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
 
 void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes)
 {
+    ZoneScoped;
     for (const StringID sceneId : scenes) {
         UnloadScene(state, sceneId);
         LOG_INFO(Game, "Unloaded scene '{}'", sceneId.ToString());
@@ -199,6 +244,7 @@ void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes)
 
 void UnloadScene(Engine::EngineState* state, StringID sceneId)
 {
+    ZoneScoped;
     auto* ctx = state->registry.ctx().get<Engine::EngineContext*>();
     auto view = state->registry.view<Component::SceneComponent>();
 
@@ -210,8 +256,11 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId)
         }
     }
 
-    for (entt::entity entity : toDestroy) {
-        state->registry.destroy(entity);
+    {
+        ZoneScopedN("Destroy");
+        for (entt::entity entity : toDestroy) {
+            state->registry.destroy(entity);
+        }
     }
 
     state->editor.selectedEntities.Clear();
@@ -282,6 +331,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
 
 LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId)
 {
+    ZoneScoped;
     if (std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == sceneId; })) {
         LOG_WARN(Game, "Scene '{}' is already loaded", sceneId.ToString());
         return {false, sceneId, {}};
@@ -312,6 +362,7 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
     StringID loadedId = LoadScene(state->componentRegistry, state->registry, sceneReader);
     assert(loadedId == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
     uint64_t maxSortOrder = 0; {
+        ZoneScopedN("SortOrder");
         auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
         for (auto entity : sortView) {
             if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
@@ -369,6 +420,7 @@ bool SaveSceneSlot(Engine::EngineState* state, int slotIndex)
 
 bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int slotIndex)
 {
+    ZoneScoped;
     if (slotIndex < 0 || slotIndex >= Engine::MAX_SCENE_SLOTS) { return false; }
 
     const Engine::SceneSlot& slot = state->projectConfig.sceneSlots[slotIndex];
@@ -733,17 +785,12 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
     prefabData->Body().ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
         uint64_t typeId = 0;
         std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
-        bool bFound = false;
-        for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
-            if (entry.typeId.id == typeId) {
-                entry.deserialize(state->registry, entity, compReader);
-                bFound = true;
-                break;
-            }
-        }
-        if (!bFound) {
+        const size_t* index = state->componentRegistry.registryMapping.Find(StringID{typeId});
+        if (index == nullptr) {
             LOG_WARN(Game, "Prefab component key {} matches no registered component; dropped on spawn", typeId);
+            return;
         }
+        state->componentRegistry.registry[*index].deserialize(state->registry, entity, compReader);
     });
 
     if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
@@ -763,6 +810,7 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
 
 void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager)
 {
+    ZoneScoped;
     auto* ctx = state->registry.ctx().get<Engine::EngineContext*>();
 
     // Cache prefab bodies so each file is read once even with many instances
@@ -791,25 +839,23 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
         cacheIt->Body().ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
             uint64_t typeId = 0;
             std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
-            bool bFound = false;
-            for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
-                if (entry.typeId.id == typeId) {
-                    if (!entry.has(state->registry, entity)) {
-                        entry.deserialize(state->registry, entity, compReader);
-                    }
-                    bFound = true;
-                    break;
-                }
-            }
-            if (!bFound) {
+            const size_t* index = state->componentRegistry.registryMapping.Find(StringID{typeId});
+            if (index == nullptr) {
                 LOG_WARN(Game, "Prefab component key {} matches no registered component; skipped", typeId);
+                return;
+            }
+
+            Engine::ComponentEntry& entry = state->componentRegistry.registry[*index];
+            if (!entry.has(state->registry, entity)) {
+                entry.deserialize(state->registry, entity, compReader);
             }
         });
     }
 }
 
 void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
-{ {
+{
+    ZoneScoped; {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
@@ -855,6 +901,7 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
+    ZoneScoped;
     PhysicsPlayerController& playerController = ctx->GetGameState<GameState>()->playerController;
     if (playerController.GetCharacter()) {
         playerController.Shutdown(ctx->physicsSystem);

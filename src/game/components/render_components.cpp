@@ -14,6 +14,7 @@
 #include "engine/engine_api.h"
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
+#include "game/systems/render_systems.h"
 
 namespace Game::Component
 {
@@ -36,7 +37,23 @@ void RenderFlagsComponent::Serialize(const RenderFlagsComponent& comp, Engine::T
 void RenderFlagsComponent::Deserialize(RenderFlagsComponent& comp, const Engine::TextReader& r)
 {
     for (const auto& f : RENDER_FLAG_KEYS) {
-        comp.Set(f.bit, r.Bool(f.key, (DEFAULT_FLAGS & f.bit) != 0));
+        if (r.Bool(f.key, (DEFAULT_FLAGS & f.bit) != 0)) { comp.flags |= f.bit; }
+        else { comp.flags &= ~f.bit; }
+    }
+}
+
+void SetRenderFlag(Engine::EngineState* state, entt::entity entity, RenderFlagsComponent& renderFlags, uint32_t bit, bool value)
+{
+    if (value) { renderFlags.flags |= bit; }
+    else { renderFlags.flags &= ~bit; }
+
+    EvaluateInstanceRenderState(state, entity);
+}
+
+void MeshRuntime::OnConstruct(entt::registry& registry, entt::entity entity)
+{
+    if (const auto* stable = registry.try_get<StableIdComponent>(entity)) {
+        registry.get<MeshRuntime>(entity).stableId = stable->id.id;
     }
 }
 

@@ -89,10 +89,10 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, T
 
     TriLightStore::Range triLightRange{};
     if (fill.bEmissiveLight && (bIsMaterialEmissive || bMayEmitLater) && triLightStore) {
-        if (emissiveInstanceCount_ < static_cast<uint32_t>(MAX_EMISSIVE_GROUPS)) {
+        if (!emissiveSlots_.IsFull()) {
             triLightRange = triLightStore->Allocate(primitive.triangleCount);
             if (triLightRange.IsValid()) {
-                ++emissiveInstanceCount_;
+                emissiveSlots_.PushBack(slot);
             }
         }
         else if (!bEmissiveCapWarned_) {
@@ -172,14 +172,23 @@ void InstanceStore::SetRenderState(Range range, bool bVisible, uint32_t flags, u
     }
 }
 
+void InstanceStore::RemoveEmissiveSlot(uint32_t slot)
+{
+    for (size_t i = 0; i < emissiveSlots_.Size(); ++i) {
+        if (emissiveSlots_[i] != slot) { continue; }
+        emissiveSlots_.SwapRemove(i);
+        return;
+    }
+}
+
 void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range)
 {
     if (!range.IsValid()) { return; }
     for (uint32_t i = 0; i < range.count; ++i) {
         InstanceSource& instance = instances_[range.offset + i];
         materialManager->ReleaseMaterial(instance.materialID);
-        // TriLightStore::Free clears the range in place, so the counter has to move while it is still valid.
-        if (instance.triLightRange.IsValid()) { --emissiveInstanceCount_; }
+        // TriLightStore::Free clears the range in place, so the index has to drop the slot while it is still valid.
+        if (instance.triLightRange.IsValid()) { RemoveEmissiveSlot(range.offset + i); }
         triLightStore->Free(instance.triLightRange);
     }
     Free(range);

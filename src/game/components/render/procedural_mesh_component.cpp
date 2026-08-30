@@ -603,32 +603,32 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
         bool ddgiContribution = renderFlags.Has(RenderFlagsComponent::DDGI_CONTRIBUTE);
         if (ImGui::Checkbox("Visible##proceduralmesh", &visible)) {
-            renderFlags.Set(RenderFlagsComponent::VISIBLE, visible);
+            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::VISIBLE, visible);
         }
         ImGui::SameLine();
         if (ImGui::Checkbox("DDGI Contribution##proceduralmesh", &ddgiContribution)) {
-            renderFlags.Set(RenderFlagsComponent::DDGI_CONTRIBUTE, ddgiContribution);
+            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::DDGI_CONTRIBUTE, ddgiContribution);
         }
         bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
         if (ImGui::Checkbox("Probe Bake Exclude##proceduralmesh", &probeBakeExclude)) {
-            renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude);
+            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude);
         }
         ImGui::SameLine();
         bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
         if (ImGui::Checkbox("Motion Blur Exclude##proceduralmesh", &motionBlurExclude)) {
-            renderFlags.Set(RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude);
+            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude);
         }
         ImGui::SameLine();
         bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
         if (ImGui::Checkbox("Emissive Light##proceduralmesh", &emissiveLight)) {
-            renderFlags.Set(RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
+            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
             registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
             state->assetLoad.bPendingModelResolve = true;
             modified = true;
         }
         bool alphaCutoutExclude = !renderFlags.Has(RenderFlagsComponent::ALPHA_CUTOUT);
         if (ImGui::Checkbox("Alpha Cutout Exclude##proceduralmesh", &alphaCutoutExclude)) {
-            renderFlags.Set(RenderFlagsComponent::ALPHA_CUTOUT, !alphaCutoutExclude);
+            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::ALPHA_CUTOUT, !alphaCutoutExclude);
         }
 
         if (std::holds_alternative<std::monostate>(component.params)) {

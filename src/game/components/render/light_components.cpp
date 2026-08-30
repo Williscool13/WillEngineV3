@@ -291,6 +291,13 @@ void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::
     registry.remove<LightSurfaceRuntime>(entity);
 }
 
+void Component::LightSurfaceRuntime::OnConstruct(entt::registry& registry, entt::entity entity)
+{
+    if (const auto* stable = registry.try_get<StableIdComponent>(entity)) {
+        registry.get<LightSurfaceRuntime>(entity).stableId = stable->id.id;
+    }
+}
+
 void Component::LightSurfaceRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto& runtime = registry.get<LightSurfaceRuntime>(entity);

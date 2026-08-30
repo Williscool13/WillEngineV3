@@ -142,20 +142,20 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
     bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
     bool ddgiContribution = renderFlags.Has(RenderFlagsComponent::DDGI_CONTRIBUTE);
-    if (ImGui::Checkbox("Visible##text3d", &visible)) { renderFlags.Set(RenderFlagsComponent::VISIBLE, visible); }
+    if (ImGui::Checkbox("Visible##text3d", &visible)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::VISIBLE, visible); }
     ImGui::SameLine();
-    if (ImGui::Checkbox("DDGI Contribution##text3d", &ddgiContribution)) { renderFlags.Set(RenderFlagsComponent::DDGI_CONTRIBUTE, ddgiContribution); }
+    if (ImGui::Checkbox("DDGI Contribution##text3d", &ddgiContribution)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::DDGI_CONTRIBUTE, ddgiContribution); }
     bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
-    if (ImGui::Checkbox("Probe Bake Exclude##text3d", &probeBakeExclude)) { renderFlags.Set(RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
+    if (ImGui::Checkbox("Probe Bake Exclude##text3d", &probeBakeExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
     ImGui::SameLine();
     bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
     if (ImGui::Checkbox("Emissive Light##text3d", &emissiveLight)) {
-        renderFlags.Set(RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
+        SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
         registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
         state->assetLoad.bPendingModelResolve = true;
     }
     bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
-    if (ImGui::Checkbox("Motion Blur Exclude##text3d", &motionBlurExclude)) { renderFlags.Set(RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude); }
+    if (ImGui::Checkbox("Motion Blur Exclude##text3d", &motionBlurExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude); }
 
     bool modified = false;
     ImGui::BeginDisabled(busy);

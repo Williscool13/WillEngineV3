@@ -8,6 +8,7 @@
 #include <entt/entt.hpp>
 
 #include "engine/engine_api.h"
+#include "game/components/common/stable_id_component.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/environment_map_id.h"
 #include "engine/resources/model/instance_store.h"
@@ -97,7 +98,9 @@ struct LightSurfaceRuntime
     Engine::InstanceStore::Range range{};
     Engine::ModelStore::Range modelRange{};
     Engine::MaterialID materialID{};
+    uint64_t stableId{StableIdComponent::NO_ID};
 
+    static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 

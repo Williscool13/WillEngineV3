@@ -28,6 +28,10 @@ namespace Game
 void ConnectRenderObservers(entt::registry& registry);
 void DisconnectRenderObservers(entt::registry& registry);
 
+/** Recomputes one entity's effective render state and writes it to the instance store. */
+void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity);
+void EvaluateAllInstanceRenderStates(Engine::EngineState* state);
+
 // Editor-only (generate while engine is running)
 void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);
 void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state);

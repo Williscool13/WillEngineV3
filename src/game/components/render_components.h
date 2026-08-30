@@ -11,12 +11,18 @@
 #include <entt/entt.hpp>
 
 #include "core/containers/inline_vector.h"
+#include "game/components/common/stable_id_component.h"
 #include "engine/material_manager.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
 #include "engine/resources/model/instance_store.h"
 #include "engine/resources/model/model_store.h"
 #include "render/interface/render_interface.h"
+
+namespace Engine
+{
+struct EngineState;
+}
 
 namespace Game::Component
 {
@@ -42,15 +48,11 @@ struct RenderFlagsComponent
 
     [[nodiscard]] bool Has(uint32_t bit) const { return (flags & bit) != 0; }
 
-    void Set(uint32_t bit, bool value)
-    {
-        if (value) { flags |= bit; }
-        else { flags &= ~bit; }
-    }
-
     static void Serialize(const RenderFlagsComponent& comp, Engine::TextWriter& w);
     static void Deserialize(RenderFlagsComponent& comp, const Engine::TextReader& r);
 };
+
+void SetRenderFlag(Engine::EngineState* state, entt::entity entity, RenderFlagsComponent& renderFlags, uint32_t bit, bool value);
 
 struct RenderTransformComponent
 {
@@ -71,8 +73,10 @@ struct MeshRuntime
      */
     Engine::ModelStore::Range modelRange{};
     Engine::StaticModelHandle modelHandle{};
-    bool visible{true};
 
+    uint64_t stableId{StableIdComponent::NO_ID};
+
+    static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 }
