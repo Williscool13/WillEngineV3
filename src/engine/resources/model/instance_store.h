@@ -7,14 +7,12 @@
 
 #include <cstdint>
 
-#include "core/containers/inline_vector.h"
 #include "core/containers/virtual_array.h"
 #include "core/memory/dirty_bits.h"
 #include "core/memory/range_allocator.h"
 #include "core/types/math.h"
 #include "engine/core/material_id.h"
 #include "render/shaders/flags_interop.h"
-#include "render/shaders/lights_interop.h"
 #include "render/shaders/model_interop.h"
 
 namespace Engine
@@ -117,10 +115,6 @@ public:
     [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
     [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
     [[nodiscard]] bool IsInitialized() const { return ranges_.IsInitialized(); }
-    /** Reservations held, not groups dispatched: the work list only carries visible instances. */
-    [[nodiscard]] uint32_t GetEmissiveInstanceCount() const { return static_cast<uint32_t>(emissiveSlots_.Size()); }
-
-    [[nodiscard]] const Core::InlineVector<uint32_t, MAX_EMISSIVE_GROUPS>& EmissiveSlots() const { return emissiveSlots_; }
 
 private:
     /** Private because it returns the slots without releasing their materials or tri-light runs. */
@@ -130,15 +124,10 @@ private:
 
     void WriteRecord(uint32_t slot);
 
-    void RemoveEmissiveSlot(uint32_t slot);
-
     Core::VirtualArray<InstanceSource> instances_{};
     Core::VirtualArray<Instance> gpuInstances_{};
     Core::RangeAllocator ranges_{};
     Core::DirtyBits dirty_{};
-
-    Core::InlineVector<uint32_t, MAX_EMISSIVE_GROUPS> emissiveSlots_{};
-    bool bEmissiveCapWarned_{false};
 };
 } // Engine
 

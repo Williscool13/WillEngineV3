@@ -15,22 +15,40 @@ void TriLightStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::Al
     pendingFrees_ = Core::Vector<PendingFree>(alloc, tag);
 }
 
-TriLightStore::Range TriLightStore::Allocate(uint32_t triangleCount)
+TriLightStore::Range TriLightStore::Reserve(uint32_t instanceSlot, uint32_t triangleCount, const char* ownerName)
 {
     if (triangleCount == 0) { return {}; }
-    Range range = ranges_.Allocate(triangleCount);
-    if (!range.IsValid() && !bWarnedFull_) {
-        LOG_WARN(Engine, "Tri light store full; further emissive primitives get no triangle lights");
-        bWarnedFull_ = true;
+
+    if (reservations_.IsFull()) {
+        if (!bWarnedCapReached_) {
+            bWarnedCapReached_ = true;
+            LOG_WARN(Engine, "Emissive instance cap ({}) reached; further emissive primitives will not light, starting with model ({})", MAX_EMISSIVE_GROUPS, ownerName);
+        }
+        return {};
     }
+
+    const Range range = ranges_.Allocate(triangleCount);
+    if (!range.IsValid()) {
+        if (!bWarnedFull_) {
+            bWarnedFull_ = true;
+            LOG_WARN(Engine, "Tri light store full; further emissive primitives get no triangle lights");
+        }
+        return {};
+    }
+
+    reservations_.PushBack({instanceSlot, range});
     return range;
 }
 
-void TriLightStore::Free(Range& range)
+void TriLightStore::Release(uint32_t instanceSlot)
 {
-    if (!range.IsValid()) { return; }
-    pendingFrees_.PushBack({range, frame_});
-    range = {};
+    for (size_t i = 0; i < reservations_.Size(); ++i) {
+        if (reservations_[i].instanceSlot != instanceSlot) { continue; }
+        pendingFrees_.PushBack({reservations_[i].range, frame_});
+        reservations_.SwapRemove(i);
+        bWarnedCapReached_ = false;
+        return;
+    }
 }
 
 void TriLightStore::Tick(uint64_t frame)
