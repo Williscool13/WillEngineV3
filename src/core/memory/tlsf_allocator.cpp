@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 
 #include "tlsf.h"
 
@@ -159,8 +160,7 @@ void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
         raw = tlsf_malloc(tlsf, kHeaderSize + size);
     }
     if (raw == nullptr) {
-        fprintf(stderr, "TlsfAllocator '%s' OOM: Alloc %zu bytes (tag %s), used %zu / %zu\n", name_.buf, size, AllocTagName(tag), usedBytes_, poolBytes);
-        assert(false && "OOM: TLSF pool exhausted");
+        ReportOOMAndAbort("Alloc", size, tag);
     }
 
     auto* header = static_cast<AllocHeader*>(raw);
@@ -195,8 +195,7 @@ void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag tag)
         raw = tlsf_realloc(tlsf, header, kHeaderSize + newSize);
     }
     if (raw == nullptr) {
-        fprintf(stderr, "TlsfAllocator '%s' OOM: Realloc %zu bytes (tag %s), used %zu / %zu\n", name_.buf, newSize, AllocTagName(savedTag), usedBytes_, poolBytes);
-        assert(false && "OOM: TLSF pool exhausted");
+        ReportOOMAndAbort("Realloc", newSize, savedTag);
     }
 
     header = static_cast<AllocHeader*>(raw);
@@ -238,8 +237,7 @@ void* TlsfAllocator::AlignedAlloc(size_t size, size_t alignment, AllocTag tag)
         raw = tlsf_malloc(tlsf, total);
     }
     if (raw == nullptr) {
-        fprintf(stderr, "TlsfAllocator '%s' OOM: AlignedAlloc %zu bytes align %zu (tag %s), used %zu / %zu\n", name_.buf, size, alignment, AllocTagName(tag), usedBytes_, poolBytes);
-        assert(false && "OOM: TLSF pool exhausted");
+        ReportOOMAndAbort("AlignedAlloc", size, tag);
     }
 
     auto* header = static_cast<AllocHeader*>(raw);
@@ -319,6 +317,68 @@ void TlsfAllocator::TagWalker(void* ptr, size_t /*size*/, int used, void* user)
     entry.tag = header->tag;
     entry.count += 1;
     entry.usedBytes += header->size;
+}
+
+void TlsfAllocator::ReportOOMAndAbort(const char* op, size_t size, AllocTag tag)
+{
+    constexpr auto count = static_cast<size_t>(AllocTag::Count);
+    TagStats stats[count]{};
+    for (size_t i = 0; i < count; ++i) { stats[i].tag = static_cast<AllocTag>(i); }
+    TagWalkCtx ctx{stats};
+    if (bGrowable_) {
+        for (size_t i = 0; i < chunkCount_; ++i) { tlsf_walk_pool(chunks_[i].pool, TagWalker, &ctx); }
+    }
+    else {
+        tlsf_walk_pool(tlsf_get_pool(tlsf), TagWalker, &ctx);
+    }
+
+    InlineString<4096> report("\n==== TlsfAllocator '");
+    report.Append(name_.buf);
+    report.Append("' OOM ====\n  ");
+    report.Append(op);
+    report.Append(" ");
+    report.Append(static_cast<uint64_t>(size));
+    report.Append(" bytes (tag ");
+    report.Append(AllocTagName(tag));
+    report.Append(")\n  used ");
+    report.Append(static_cast<uint64_t>(usedBytes_));
+    report.Append(" / pool ");
+    report.Append(static_cast<uint64_t>(poolBytes));
+    report.Append(" / budget ");
+    report.Append(static_cast<uint64_t>(budgetBytes_));
+    report.Append(", highWater ");
+    report.Append(static_cast<uint64_t>(highWaterBytes_));
+    report.Append(", allocs ");
+    report.Append(static_cast<uint64_t>(allocCount_));
+    report.Append("\n  chunks ");
+    report.Append(static_cast<uint64_t>(chunkCount_));
+    report.Append(" / ");
+    report.Append(static_cast<uint64_t>(MAX_CHUNKS));
+    report.Append("\n");
+    for (size_t i = 0; i < chunkCount_; ++i) {
+        report.Append("    chunk ");
+        report.Append(static_cast<uint64_t>(i));
+        report.Append(": ");
+        report.Append(static_cast<uint64_t>(chunks_[i].bytes));
+        report.Append(" bytes\n");
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (stats[i].count == 0) { continue; }
+        report.Append("  ");
+        report.Append(AllocTagName(stats[i].tag));
+        report.Append(" x");
+        report.Append(static_cast<uint64_t>(stats[i].count));
+        report.Append(" = ");
+        report.Append(static_cast<uint64_t>(stats[i].usedBytes));
+        report.Append(" bytes\n");
+    }
+
+    fputs(report.c_str(), stderr);
+    fflush(stderr);
+    std::ofstream file("tlsf_oom.txt", std::ios::binary | std::ios::trunc);
+    file.write(report.c_str(), static_cast<std::streamsize>(report.Size()));
+    file.close();
+    abort();
 }
 
 void TlsfAllocator::GetTagStats(TagStats out[static_cast<size_t>(AllocTag::Count)])

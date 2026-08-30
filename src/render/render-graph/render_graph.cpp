@@ -2451,9 +2451,10 @@ VkDeviceSize RenderGraph::QueueHostBufferStagingCopy(StringID name, VkDeviceSize
     passName.Append(name.ToString());
     RenderPass& pass = AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Upload);
     pass.WriteTransferBuffer(name);
-    pass.Execute([name, srcOffset = upload.offset, size, dst = upload.ptr](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([name, srcOffset = upload.offset, size](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         HostBufferSlots& slots = graph.GetHostBufferSlots(name);
         const auto* mirror = slots.mirror.Data();
+        auto* dst = static_cast<uint8_t*>(graph.GetTransientUploadMapped()) + srcOffset;
 
         if (slots.bStagingFullCopy) {
             memcpy(dst, mirror, size);

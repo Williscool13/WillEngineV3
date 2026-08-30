@@ -268,6 +268,8 @@ public: // Transient Uploader
 
     [[nodiscard]] VkBuffer GetTransientUploadBuffer() const { return uploadArenas[currentFrameIndex].buffer; }
 
+    [[nodiscard]] void* GetTransientUploadMapped() const { return uploadArenas[currentFrameIndex].mappedData; }
+
 public: // Readback
     [[nodiscard]] VkBuffer GetReadback() const { return meshletCountReadbacks[currentFrameIndex].buffer; }
 

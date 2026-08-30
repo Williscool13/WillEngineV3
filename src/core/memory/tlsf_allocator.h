@@ -160,6 +160,9 @@ private:
 
     static void TagWalker(void* ptr, size_t size, int used, void* user);
 
+    /** Dumps the pool, chunk and per-tag state, then aborts. Call only with the mutex already held; it walks the pools without taking it. */
+    [[noreturn]] void ReportOOMAndAbort(const char* op, size_t size, AllocTag tag);
+
     struct Chunk
     {
         void* mem;

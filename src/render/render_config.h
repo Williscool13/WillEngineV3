@@ -96,7 +96,7 @@ inline constexpr int32_t MEGA_BLAS_BUFFER_SIZE = 1 << 29; // 512MB for BLAS stor
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_COUNT = 65536; // Important for instancing - it's 256x256
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE = sizeof(Primitive) * MEGA_PRIMITIVE_BUFFER_COUNT;
 
-inline constexpr int32_t VIEW_COUNT = 4; // Up to 4 views per frame, 0 is main view. 1 is portal. Idk what 2/3 are (maybe remove)
+inline constexpr int32_t VIEW_COUNT = 2; // 0 is the main view, 1 is the portal.
 inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * VIEW_COUNT;
 inline constexpr int32_t LIGHT_DATA_BUFFER_SIZE = sizeof(LightData) * VIEW_COUNT;
 inline constexpr int32_t REFLECTION_PROBE_BUFFER_SIZE = sizeof(ReflectionProbeGPU) * MAX_REFLECTION_PROBES;
